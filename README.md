@@ -905,6 +905,4 @@ For questions or issues:
 - Azure DevOps: https://dev.azure.com/CassInfoSys/Telecom
 - Repository: dev.azure.com/CassInfoSys/Telecom/_git/Net%20Applications
 
-## License
 
-Internal use only - Cass Information Systems, Inc.
