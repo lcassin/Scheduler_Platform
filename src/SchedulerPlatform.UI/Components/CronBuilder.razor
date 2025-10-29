@@ -1,0 +1,737 @@
+@using System.Text
+
+<MudCard>
+    <MudCardContent>
+        <MudSelect Value="_frequency" ValueChanged="OnFrequencyChanged" Label="Frequency" T="ScheduleFrequency">
+            <MudSelectItem Value="ScheduleFrequency.Manual">Manual</MudSelectItem>
+            <MudSelectItem Value="ScheduleFrequency.Daily">Daily</MudSelectItem>
+            <MudSelectItem Value="ScheduleFrequency.Weekly">Weekly</MudSelectItem>
+            <MudSelectItem Value="ScheduleFrequency.Monthly">Monthly</MudSelectItem>
+            <MudSelectItem Value="ScheduleFrequency.Quarterly">Quarterly</MudSelectItem>
+            <MudSelectItem Value="ScheduleFrequency.Annually">Annually</MudSelectItem>
+            <MudSelectItem Value="ScheduleFrequency.Custom">Custom</MudSelectItem>
+        </MudSelect>
+        
+        @if (_frequency == ScheduleFrequency.Quarterly)
+        {
+            <MudSelect Value="_fiscalStartMonth" ValueChanged="@((int value) => { _fiscalStartMonth = value; GenerateCronExpression(); })" Label="Fiscal Quarter Start Month" T="int" Class="mt-4">
+                @foreach (var m in Enumerable.Range(1, 12))
+                {
+                    <MudSelectItem Value="m">@_monthNames[m]</MudSelectItem>
+                }
+            </MudSelect>
+            
+            <MudText Typo="Typo.subtitle1" Class="mt-4">Select Days of Month</MudText>
+            <MudGrid>
+                @for (int i = 1; i <= 31; i++)
+                {
+                    var day = i;
+                    <MudItem xs="3" sm="2" md="1">
+                        <MudCheckBox Value="@_selectedQuarterlyDaysOfMonth[day]" 
+                                     ValueChanged="@((bool value) => { _selectedQuarterlyDaysOfMonth[day] = value; OnQuarterlyDaysChanged(); })"
+                                     Label="@day.ToString()" 
+                                     Color="Color.Primary" Dense="true" Size="Size.Small" />
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+
+        @if (_frequency == ScheduleFrequency.Weekly)
+        {
+            <MudText Typo="Typo.subtitle1" Class="mt-4">Select Days of Week</MudText>
+            <MudGrid>
+                @foreach (var day in _daysOfWeek)
+                {
+                    var currentDay = day.Key;
+                    <MudItem xs="6" sm="4" md="3">
+                        <MudCheckBox Value="@_selectedDays[currentDay]" 
+                                     ValueChanged="@((bool value) => { _selectedDays[currentDay] = value; OnDaysChanged(); })"
+                                     Label="@day.Value" 
+                                     Color="Color.Primary" />
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+
+        @if (_frequency == ScheduleFrequency.Annually)
+        {
+            <MudSelect Value="_selectedAnnualMonth" ValueChanged="@((int value) => { _selectedAnnualMonth = value; GenerateCronExpression(); })" Label="Month" T="int" Class="mt-4">
+                @foreach (var m in Enumerable.Range(1, 12))
+                {
+                    <MudSelectItem Value="m">@_monthNames[m]</MudSelectItem>
+                }
+            </MudSelect>
+            
+            <MudText Typo="Typo.subtitle1" Class="mt-4">Select Days of Month</MudText>
+            <MudGrid>
+                @for (int i = 1; i <= 31; i++)
+                {
+                    var day = i;
+                    <MudItem xs="3" sm="2" md="1">
+                        <MudCheckBox Value="@_selectedAnnualDaysOfMonth[day]" 
+                                     ValueChanged="@((bool value) => { _selectedAnnualDaysOfMonth[day] = value; OnAnnualDaysChanged(); })"
+                                     Label="@day.ToString()" 
+                                     Color="Color.Primary" Dense="true" Size="Size.Small" />
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+
+        @if (_frequency == ScheduleFrequency.Daily || _frequency == ScheduleFrequency.Weekly || _frequency == ScheduleFrequency.Quarterly || _frequency == ScheduleFrequency.Annually)
+        {
+            <MudText Typo="Typo.subtitle1" Class="mt-4">Select Hours (12-hour format)</MudText>
+            <MudGrid>
+                @foreach (var hour in Enumerable.Range(0, 24))
+                {
+                    <MudItem xs="3" sm="2" md="1">
+                        <MudCheckBox Value="@_selectedHours[hour]" 
+                                     ValueChanged="@((bool value) => { _selectedHours[hour] = value; OnHoursChanged(); })"
+                                     Label="@FormatHourAmPm(hour)" 
+                                     Color="Color.Primary" Dense="true" Size="Size.Small" />
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+
+        @if (_frequency == ScheduleFrequency.Daily || _frequency == ScheduleFrequency.Weekly || _frequency == ScheduleFrequency.Quarterly || _frequency == ScheduleFrequency.Annually)
+        {
+            <MudSelect Value="_selectedMinute" ValueChanged="@((int value) => { _selectedMinute = value; GenerateCronExpression(); })" Label="Minute" T="int" Class="mt-4">
+                @for (int i = 0; i < 60; i++)
+                {
+                    var minute = i;
+                    <MudSelectItem Value="minute">@minute</MudSelectItem>
+                }
+            </MudSelect>
+        }
+
+        @if (_frequency == ScheduleFrequency.Monthly)
+        {
+            <MudText Typo="Typo.subtitle1" Class="mt-4">Select Days of Month</MudText>
+            <MudGrid>
+                @for (int i = 1; i <= 31; i++)
+                {
+                    var day = i;
+                    <MudItem xs="3" sm="2" md="1">
+                        <MudCheckBox Value="@_selectedDaysOfMonth[day]" 
+                                     ValueChanged="@((bool value) => { _selectedDaysOfMonth[day] = value; OnMonthlyDaysChanged(); })"
+                                     Label="@day.ToString()" 
+                                     Color="Color.Primary" Dense="true" Size="Size.Small" />
+                    </MudItem>
+                }
+            </MudGrid>
+            
+            <MudText Typo="Typo.subtitle1" Class="mt-4">Select Hours (12-hour format)</MudText>
+            <MudGrid>
+                @foreach (var hour in Enumerable.Range(0, 24))
+                {
+                    <MudItem xs="3" sm="2" md="1">
+                        <MudCheckBox Value="@_selectedMonthlyHours[hour]" 
+                                     ValueChanged="@((bool value) => { _selectedMonthlyHours[hour] = value; OnMonthlyHoursChanged(); })"
+                                     Label="@FormatHourAmPm(hour)" 
+                                     Color="Color.Primary" Dense="true" Size="Size.Small" />
+                    </MudItem>
+                }
+            </MudGrid>
+            
+            <MudSelect Value="_selectedMinute" ValueChanged="@((int value) => { _selectedMinute = value; GenerateCronExpression(); })" Label="Minute" T="int" Class="mt-4">
+                @for (int i = 0; i < 60; i++)
+                {
+                    var minute = i;
+                    <MudSelectItem Value="minute">@minute</MudSelectItem>
+                }
+            </MudSelect>
+        }
+        
+        @if (_frequency == ScheduleFrequency.Manual)
+        {
+            <MudText Typo="Typo.body2" Class="mt-4">Manual execution only - no automatic schedule</MudText>
+        }
+        
+        @if (_frequency == ScheduleFrequency.Custom)
+        {
+            <MudText Typo="Typo.body2" Class="mt-4">Using custom cron expression entered above</MudText>
+        }
+
+        <MudDivider Class="my-4" />
+        
+        <MudTextField Value="_cronExpression" Label="Cron Expression" ReadOnly="true" 
+                      HelperText="Generated Quartz.NET cron expression" />
+        
+        <MudText Typo="Typo.body2" Color="Color.Primary" Class="mt-2">
+            @_scheduleDescription
+        </MudText>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter]
+    public string CronExpression { get; set; } = "0 0 9 * * ?";
+
+    [Parameter]
+    public EventCallback<string> CronExpressionChanged { get; set; }
+
+    [Parameter]
+    public ScheduleFrequency Frequency { get; set; } = ScheduleFrequency.Daily;
+
+    [Parameter]
+    public EventCallback<ScheduleFrequency> FrequencyChanged { get; set; }
+
+    private ScheduleFrequency _frequency = ScheduleFrequency.Daily;
+    private string _cronExpression = "0 0 9 * * ?";
+    private string _scheduleDescription = "";
+
+    private int _selectedMinute = 0;
+    private Dictionary<int, bool> _selectedHours = new();
+    private Dictionary<string, bool> _selectedDays = new();
+    private Dictionary<int, bool> _selectedDaysOfMonth = new();
+    private Dictionary<int, bool> _selectedMonthlyHours = new();
+    private Dictionary<int, bool> _selectedQuarterlyDaysOfMonth = new();
+    private int _fiscalStartMonth = 1;
+    private int _selectedAnnualMonth = 1;
+    private Dictionary<int, bool> _selectedAnnualDaysOfMonth = new();
+
+    private readonly Dictionary<string, string> _daysOfWeek = new()
+    {
+        { "MON", "Monday" },
+        { "TUE", "Tuesday" },
+        { "WED", "Wednesday" },
+        { "THU", "Thursday" },
+        { "FRI", "Friday" },
+        { "SAT", "Saturday" },
+        { "SUN", "Sunday" }
+    };
+    
+    private readonly Dictionary<int, string> _monthNames = new()
+    {
+        {1, "January"}, {2, "February"}, {3, "March"}, {4, "April"},
+        {5, "May"}, {6, "June"}, {7, "July"}, {8, "August"},
+        {9, "September"}, {10, "October"}, {11, "November"}, {12, "December"}
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        _frequency = Frequency;
+        _cronExpression = CronExpression;
+
+        for (int i = 0; i < 24; i++)
+        {
+            _selectedHours[i] = i == 9;
+            _selectedMonthlyHours[i] = i == 9;
+        }
+
+        foreach (var day in _daysOfWeek.Keys)
+        {
+            _selectedDays[day] = day == "MON";
+        }
+
+        for (int i = 1; i <= 31; i++)
+        {
+            _selectedDaysOfMonth[i] = i == 1;
+        }
+
+        for (int i = 1; i <= 31; i++)
+        {
+            _selectedQuarterlyDaysOfMonth[i] = i == 1;
+        }
+
+        for (int i = 1; i <= 31; i++)
+        {
+            _selectedAnnualDaysOfMonth[i] = i == 1;
+        }
+
+        ParseCronExpression(_cronExpression);
+        await GenerateCronExpression();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_cronExpression != CronExpression)
+        {
+            _cronExpression = CronExpression;
+            _frequency = Frequency;
+            ParseCronExpression(_cronExpression);
+            await Task.CompletedTask;
+        }
+    }
+
+    private async Task OnFrequencyChanged(ScheduleFrequency newFrequency)
+    {
+        _frequency = newFrequency;
+        await FrequencyChanged.InvokeAsync(newFrequency);
+        await GenerateCronExpression();
+    }
+
+    private async Task OnHoursChanged()
+    {
+        await GenerateCronExpression();
+    }
+
+    private async Task OnDaysChanged()
+    {
+        await GenerateCronExpression();
+    }
+
+    private async Task OnMonthlyDaysChanged()
+    {
+        await GenerateCronExpression();
+    }
+
+    private async Task OnMonthlyHoursChanged()
+    {
+        await GenerateCronExpression();
+    }
+
+    private async Task OnQuarterlyDaysChanged()
+    {
+        await GenerateCronExpression();
+    }
+
+    private async Task OnAnnualDaysChanged()
+    {
+        await GenerateCronExpression();
+    }
+
+    private async Task GenerateCronExpression()
+    {
+        switch (_frequency)
+        {
+            case ScheduleFrequency.Manual:
+                _cronExpression = "0 0 0 1 1 ? 2099";
+                _scheduleDescription = "Manual execution only - will not run automatically";
+                break;
+
+            case ScheduleFrequency.Daily:
+                var hours = string.Join(",", _selectedHours.Where(h => h.Value).Select(h => h.Key).OrderBy(h => h));
+                if (string.IsNullOrEmpty(hours)) hours = "9";
+                _cronExpression = $"0 {_selectedMinute} {hours} * * ?";
+                _scheduleDescription = GetScheduleDescription();
+                break;
+
+            case ScheduleFrequency.Weekly:
+                var weekHours = string.Join(",", _selectedHours.Where(h => h.Value).Select(h => h.Key).OrderBy(h => h));
+                if (string.IsNullOrEmpty(weekHours)) weekHours = "9";
+                var days = string.Join(",", _selectedDays.Where(d => d.Value).Select(d => d.Key).OrderBy(d => d));
+                if (string.IsNullOrEmpty(days)) days = "MON";
+                _cronExpression = $"0 {_selectedMinute} {weekHours} ? * {days}";
+                _scheduleDescription = GetScheduleDescription();
+                break;
+
+            case ScheduleFrequency.Monthly:
+                var monthlyHours = string.Join(",", _selectedMonthlyHours.Where(h => h.Value).Select(h => h.Key).OrderBy(h => h));
+                if (string.IsNullOrEmpty(monthlyHours)) monthlyHours = "9";
+                var daysOfMonth = string.Join(",", _selectedDaysOfMonth.Where(d => d.Value).Select(d => d.Key).OrderBy(d => d));
+                if (string.IsNullOrEmpty(daysOfMonth)) daysOfMonth = "1";
+                _cronExpression = $"0 {_selectedMinute} {monthlyHours} {daysOfMonth} * ?";
+                _scheduleDescription = GetScheduleDescription();
+                break;
+
+            case ScheduleFrequency.Quarterly:
+                var quarterlyHours = string.Join(",", _selectedHours.Where(h => h.Value).Select(h => h.Key).OrderBy(h => h));
+                if (string.IsNullOrEmpty(quarterlyHours)) quarterlyHours = "9";
+                var qMonths = GetQuarterMonths(_fiscalStartMonth);
+                var monthsField = string.Join(",", qMonths);
+                var quarterlyDays = string.Join(",", _selectedQuarterlyDaysOfMonth.Where(d => d.Value).Select(d => d.Key).OrderBy(d => d));
+                if (string.IsNullOrEmpty(quarterlyDays)) quarterlyDays = "1";
+                _cronExpression = $"0 {_selectedMinute} {quarterlyHours} {quarterlyDays} {monthsField} ?";
+                _scheduleDescription = GetScheduleDescription();
+                break;
+
+            case ScheduleFrequency.Annually:
+                var annuallyHours = string.Join(",", _selectedHours.Where(h => h.Value).Select(h => h.Key).OrderBy(h => h));
+                if (string.IsNullOrEmpty(annuallyHours)) annuallyHours = "9";
+                var annualDays = string.Join(",", _selectedAnnualDaysOfMonth.Where(d => d.Value).Select(d => d.Key).OrderBy(d => d));
+                if (string.IsNullOrEmpty(annualDays)) annualDays = "1";
+                _cronExpression = $"0 {_selectedMinute} {annuallyHours} {annualDays} {_selectedAnnualMonth} ?";
+                _scheduleDescription = GetScheduleDescription();
+                break;
+
+            case ScheduleFrequency.Custom:
+                _scheduleDescription = "Custom cron expression";
+                break;
+        }
+
+        await CronExpressionChanged.InvokeAsync(_cronExpression);
+    }
+
+    private void ParseCronExpression(string cron)
+    {
+        if (string.IsNullOrWhiteSpace(cron)) return;
+
+        var parts = cron.Split(' ');
+        if (parts.Length < 6) return;
+
+        try
+        {
+            var minute = parts[1];
+            var hour = parts[2];
+            var dayOfMonth = parts[3];
+            var month = parts[4];
+            var dayOfWeek = parts[5];
+
+            if (cron.Contains("2099"))
+            {
+                _frequency = ScheduleFrequency.Manual;
+            }
+            else if (dayOfMonth == "*" && month == "*" && dayOfWeek == "?")
+            {
+                _frequency = ScheduleFrequency.Daily;
+                if (int.TryParse(minute, out int min))
+                    _selectedMinute = min;
+                ParseHours(hour);
+            }
+            else if (dayOfMonth == "?" && dayOfWeek != "?")
+            {
+                _frequency = ScheduleFrequency.Weekly;
+                if (int.TryParse(minute, out int min))
+                    _selectedMinute = min;
+                ParseHours(hour);
+                ParseDaysOfWeek(dayOfWeek);
+            }
+            else if (dayOfMonth != "*" && dayOfMonth != "?" && dayOfWeek == "?" && month == "*")
+            {
+                _frequency = ScheduleFrequency.Monthly;
+                if (int.TryParse(minute, out int min))
+                    _selectedMinute = min;
+                ParseMonthlyHours(hour);
+                ParseDaysOfMonth(dayOfMonth);
+            }
+            else if (dayOfMonth != "*" && dayOfMonth != "?" && dayOfWeek == "?" && month.Contains(","))
+            {
+                var monthTokens = month.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                if (monthTokens.Length == 4 && monthTokens.All(t => int.TryParse(t, out _)))
+                {
+                    var months = monthTokens.Select(int.Parse).ToList();
+                    bool isQuarter = true;
+                    for (int i = 0; i < 4; i++)
+                    {
+                        var current = months[i];
+                        var next = months[(i + 1) % 4];
+                        var diff = (next - current + 12) % 12;
+                        if (diff != 3) { isQuarter = false; break; }
+                    }
+                    if (isQuarter)
+                    {
+                        _frequency = ScheduleFrequency.Quarterly;
+                        if (int.TryParse(minute, out int min)) _selectedMinute = min;
+                        ParseHours(hour);
+                        _fiscalStartMonth = months[0];
+                        ParseQuarterlyDaysOfMonth(dayOfMonth);
+                    }
+                }
+            }
+            else if (dayOfMonth != "*" && dayOfMonth != "?" && month != "*" && !month.Contains(","))
+            {
+                _frequency = ScheduleFrequency.Annually;
+                if (int.TryParse(minute, out int min))
+                    _selectedMinute = min;
+                ParseHours(hour);
+                if (int.TryParse(month, out int m) && m >= 1 && m <= 12)
+                    _selectedAnnualMonth = m;
+                ParseAnnualDaysOfMonth(dayOfMonth);
+            }
+            else
+            {
+                _frequency = ScheduleFrequency.Custom;
+            }
+        }
+        catch
+        {
+            _frequency = ScheduleFrequency.Custom;
+        }
+    }
+
+    private void ParseHours(string hourPart)
+    {
+        foreach (var key in _selectedHours.Keys.ToList())
+        {
+            _selectedHours[key] = false;
+        }
+
+        if (hourPart.Contains(','))
+        {
+            var hours = hourPart.Split(',');
+            foreach (var h in hours)
+            {
+                if (int.TryParse(h.Trim(), out int hour) && hour >= 0 && hour < 24)
+                {
+                    _selectedHours[hour] = true;
+                }
+            }
+        }
+        else if (int.TryParse(hourPart, out int singleHour) && singleHour >= 0 && singleHour < 24)
+        {
+            _selectedHours[singleHour] = true;
+        }
+    }
+
+    private void ParseDaysOfWeek(string dayPart)
+    {
+        foreach (var key in _selectedDays.Keys.ToList())
+        {
+            _selectedDays[key] = false;
+        }
+
+        if (dayPart.Contains(','))
+        {
+            var days = dayPart.Split(',');
+            foreach (var d in days)
+            {
+                var day = d.Trim().ToUpper();
+                if (_selectedDays.ContainsKey(day))
+                {
+                    _selectedDays[day] = true;
+                }
+            }
+        }
+        else
+        {
+            var day = dayPart.Trim().ToUpper();
+            if (_selectedDays.ContainsKey(day))
+            {
+                _selectedDays[day] = true;
+            }
+        }
+    }
+
+    private void ParseMonthlyHours(string hourPart)
+    {
+        foreach (var key in _selectedMonthlyHours.Keys.ToList())
+        {
+            _selectedMonthlyHours[key] = false;
+        }
+
+        if (hourPart.Contains(','))
+        {
+            var hours = hourPart.Split(',');
+            foreach (var h in hours)
+            {
+                if (int.TryParse(h.Trim(), out int hour) && hour >= 0 && hour < 24)
+                {
+                    _selectedMonthlyHours[hour] = true;
+                }
+            }
+        }
+        else if (int.TryParse(hourPart, out int singleHour) && singleHour >= 0 && singleHour < 24)
+        {
+            _selectedMonthlyHours[singleHour] = true;
+        }
+    }
+
+    private void ParseDaysOfMonth(string dayPart)
+    {
+        foreach (var key in _selectedDaysOfMonth.Keys.ToList())
+        {
+            _selectedDaysOfMonth[key] = false;
+        }
+
+        if (dayPart.Contains(','))
+        {
+            var days = dayPart.Split(',');
+            foreach (var d in days)
+            {
+                if (int.TryParse(d.Trim(), out int day) && day >= 1 && day <= 31)
+                {
+                    _selectedDaysOfMonth[day] = true;
+                }
+            }
+        }
+        else if (int.TryParse(dayPart, out int singleDay) && singleDay >= 1 && singleDay <= 31)
+        {
+            _selectedDaysOfMonth[singleDay] = true;
+        }
+    }
+
+    private void ParseQuarterlyDaysOfMonth(string dayPart)
+    {
+        foreach (var key in _selectedQuarterlyDaysOfMonth.Keys.ToList())
+        {
+            _selectedQuarterlyDaysOfMonth[key] = false;
+        }
+
+        if (dayPart.Contains(','))
+        {
+            var days = dayPart.Split(',');
+            foreach (var d in days)
+            {
+                if (int.TryParse(d.Trim(), out int day) && day >= 1 && day <= 31)
+                {
+                    _selectedQuarterlyDaysOfMonth[day] = true;
+                }
+            }
+        }
+        else if (int.TryParse(dayPart, out int singleDay) && singleDay >= 1 && singleDay <= 31)
+        {
+            _selectedQuarterlyDaysOfMonth[singleDay] = true;
+        }
+    }
+
+    private void ParseAnnualDaysOfMonth(string dayPart)
+    {
+        foreach (var key in _selectedAnnualDaysOfMonth.Keys.ToList())
+        {
+            _selectedAnnualDaysOfMonth[key] = false;
+        }
+
+        if (dayPart.Contains(','))
+        {
+            var days = dayPart.Split(',');
+            foreach (var d in days)
+            {
+                if (int.TryParse(d.Trim(), out int day) && day >= 1 && day <= 31)
+                {
+                    _selectedAnnualDaysOfMonth[day] = true;
+                }
+            }
+        }
+        else if (int.TryParse(dayPart, out int singleDay) && singleDay >= 1 && singleDay <= 31)
+        {
+            _selectedAnnualDaysOfMonth[singleDay] = true;
+        }
+    }
+
+    private static List<int> GetQuarterMonths(int startMonth)
+    {
+        var list = new List<int>();
+        var m = startMonth;
+        for (int i = 0; i < 4; i++)
+        {
+            list.Add(((m - 1) % 12) + 1);
+            m += 3;
+        }
+        return list;
+    }
+    
+    private string FormatHourAmPm(int hour)
+    {
+        if (hour == 0) return "12 AM";
+        if (hour < 12) return $"{hour} AM";
+        if (hour == 12) return "12 PM";
+        return $"{hour - 12} PM";
+    }
+
+    private string FormatTimeAmPm(int hour, int minute)
+    {
+        var period = hour < 12 ? "AM" : "PM";
+        var displayHour = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
+        return $"{displayHour}:{minute:D2} {period}";
+    }
+
+    private string GetScheduleDescription()
+    {
+        var sb = new StringBuilder("Runs ");
+
+        if (_frequency == ScheduleFrequency.Daily || _frequency == ScheduleFrequency.Weekly || _frequency == ScheduleFrequency.Quarterly || _frequency == ScheduleFrequency.Annually)
+        {
+            var selectedHoursList = _selectedHours.Where(h => h.Value).Select(h => h.Key).OrderBy(h => h).ToList();
+            if (selectedHoursList.Count == 0)
+            {
+                sb.Append("at 9:00 AM");
+            }
+            else if (selectedHoursList.Count == 1)
+            {
+                sb.Append($"at {FormatTimeAmPm(selectedHoursList[0], _selectedMinute)}");
+            }
+            else
+            {
+                var times = selectedHoursList.Select(h => FormatTimeAmPm(h, _selectedMinute)).ToList();
+                sb.Append($"at {string.Join(", ", times.Take(times.Count - 1))} and {times.Last()}");
+            }
+        }
+        else if (_frequency == ScheduleFrequency.Monthly)
+        {
+            var selectedHoursList = _selectedMonthlyHours.Where(h => h.Value).Select(h => h.Key).OrderBy(h => h).ToList();
+            if (selectedHoursList.Count == 0)
+            {
+                sb.Append("at 9:00 AM");
+            }
+            else if (selectedHoursList.Count == 1)
+            {
+                sb.Append($"at {FormatTimeAmPm(selectedHoursList[0], _selectedMinute)}");
+            }
+            else
+            {
+                var times = selectedHoursList.Select(h => FormatTimeAmPm(h, _selectedMinute)).ToList();
+                sb.Append($"at {string.Join(", ", times.Take(times.Count - 1))} and {times.Last()}");
+            }
+        }
+
+        if (_frequency == ScheduleFrequency.Weekly)
+        {
+            var selectedDaysList = _selectedDays.Where(d => d.Value).Select(d => _daysOfWeek[d.Key]).ToList();
+            if (selectedDaysList.Count == 0)
+            {
+                sb.Append(" on Mondays");
+            }
+            else if (selectedDaysList.Count == 1)
+            {
+                sb.Append($" on {selectedDaysList[0]}s");
+            }
+            else if (selectedDaysList.Count == 7)
+            {
+                sb.Append(" every day");
+            }
+            else
+            {
+                sb.Append($" on {string.Join(", ", selectedDaysList.Take(selectedDaysList.Count - 1))} and {selectedDaysList.Last()}");
+            }
+        }
+        else if (_frequency == ScheduleFrequency.Daily)
+        {
+            sb.Append(" every day");
+        }
+        else if (_frequency == ScheduleFrequency.Monthly)
+        {
+            var selectedDaysList = _selectedDaysOfMonth.Where(d => d.Value).Select(d => d.Key).OrderBy(d => d).ToList();
+            if (selectedDaysList.Count == 0)
+            {
+                sb.Append(" on day 1 of every month");
+            }
+            else if (selectedDaysList.Count == 1)
+            {
+                sb.Append($" on day {selectedDaysList[0]} of every month");
+            }
+            else
+            {
+                sb.Append($" on days {string.Join(", ", selectedDaysList.Take(selectedDaysList.Count - 1))} and {selectedDaysList.Last()} of every month");
+            }
+        }
+        else if (_frequency == ScheduleFrequency.Quarterly)
+        {
+            var months = GetQuarterMonths(_fiscalStartMonth).Select(m => _monthNames[m]).ToList();
+            var selectedDaysList = _selectedQuarterlyDaysOfMonth.Where(d => d.Value).Select(d => d.Key).OrderBy(d => d).ToList();
+            
+            if (selectedDaysList.Count == 0)
+            {
+                sb.Append($" on day 1 of {string.Join(", ", months.Take(months.Count - 1))} and {months.Last()}");
+            }
+            else if (selectedDaysList.Count == 1)
+            {
+                sb.Append($" on day {selectedDaysList[0]} of {string.Join(", ", months.Take(months.Count - 1))} and {months.Last()}");
+            }
+            else
+            {
+                sb.Append($" on days {string.Join(", ", selectedDaysList.Take(selectedDaysList.Count - 1))} and {selectedDaysList.Last()} of {string.Join(", ", months.Take(months.Count - 1))} and {months.Last()}");
+            }
+        }
+        else if (_frequency == ScheduleFrequency.Annually)
+        {
+            var monthName = _monthNames[_selectedAnnualMonth];
+            var selectedDaysList = _selectedAnnualDaysOfMonth.Where(d => d.Value).Select(d => d.Key).OrderBy(d => d).ToList();
+            
+            if (selectedDaysList.Count == 0)
+            {
+                sb.Append($" on {monthName} 1 every year");
+            }
+            else if (selectedDaysList.Count == 1)
+            {
+                sb.Append($" on {monthName} {selectedDaysList[0]} every year");
+            }
+            else
+            {
+                sb.Append($" on {monthName} {string.Join(", ", selectedDaysList.Take(selectedDaysList.Count - 1))} and {selectedDaysList.Last()} every year");
+            }
+        }
+
+        return sb.ToString();
+    }
+}

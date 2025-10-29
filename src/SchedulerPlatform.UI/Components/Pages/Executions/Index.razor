@@ -1,0 +1,308 @@
+@page "/executions"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject IJobExecutionService ExecutionService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IJSRuntime JSRuntime
+@using SchedulerPlatform.Core.Domain.Enums
+
+<PageTitle>Job Executions</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Job Executions</MudText>
+
+<MudPaper Class="pa-4">
+    <MudGrid>
+        <MudItem xs="12" md="3">
+            <MudSelect Value="_statusFilter" ValueChanged="OnFilterChanged" Label="Status Filter" T="string">
+                <MudSelectItem Value="@("All")">All</MudSelectItem>
+                <MudSelectItem Value="@("Success")">Success</MudSelectItem>
+                <MudSelectItem Value="@("Failed")">Failed</MudSelectItem>
+                <MudSelectItem Value="@("Running")">Running</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        
+        <MudItem xs="12" md="2">
+            <MudDatePicker Date="_startDate" DateChanged="@((date) => _startDate = date)" Label="Start Date" />
+        </MudItem>
+        
+        <MudItem xs="12" md="2">
+            <MudDatePicker Date="_endDate" DateChanged="@((date) => _endDate = date)" Label="End Date" />
+        </MudItem>
+        
+        <MudItem xs="12" md="5" Class="d-flex align-center gap-2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters">
+                Apply Filters
+            </MudButton>
+            <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+                <ActivatorContent>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download">
+                        Export
+                    </MudButton>
+                </ActivatorContent>
+                <ChildContent>
+                    <MudMenuItem OnClick="@(() => ExportExecutions("excel"))">Excel</MudMenuItem>
+                    <MudMenuItem OnClick="@(() => ExportExecutions("csv"))">CSV</MudMenuItem>
+                </ChildContent>
+            </MudMenu>
+        </MudItem>
+    </MudGrid>
+
+    @if (_loading)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" Class="my-4" />
+    }
+    else if (_executions.Any())
+    {
+        <MudTable Items="@_executions" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true" Class="mt-4">
+            <HeaderContent>
+                <MudTh>Schedule</MudTh>
+                <MudTh>Started</MudTh>
+                <MudTh>Completed</MudTh>
+                <MudTh>Duration</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Details</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Schedule">@context.ScheduleName</MudTd>
+                <MudTd DataLabel="Started">@($"{context.StartTime.ToLocalTime():g} ({GetLocalTimeZoneAbbreviation()})")</MudTd>
+                <MudTd DataLabel="Completed">@(context.EndTime.HasValue ? $"{context.EndTime.Value.ToLocalTime():g} ({GetLocalTimeZoneAbbreviation()})" : "Running...")</MudTd>
+                <MudTd DataLabel="Duration">
+                    @if (context.EndTime.HasValue)
+                    {
+                        var duration = context.EndTime.Value - context.StartTime;
+                        <span>@duration.ToString(@"hh\:mm\:ss")</span>
+                    }
+                    else
+                    {
+                        <span>-</span>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    @switch (context.Status)
+                    {
+                        case JobStatus.Completed:
+                            <MudChip T="string" Color="Color.Success" Size="Size.Small">Completed</MudChip>
+                            break;
+                        case JobStatus.Failed:
+                            <MudChip T="string" Color="Color.Error" Size="Size.Small">Failed</MudChip>
+                            break;
+                        case JobStatus.Running:
+                            <MudChip T="string" Color="Color.Info" Size="Size.Small">Running</MudChip>
+                            break;
+                        default:
+                            <MudChip T="string" Color="Color.Default" Size="Size.Small">@context.Status</MudChip>
+                            break;
+                    }
+                </MudTd>
+                <MudTd DataLabel="Details">
+                    @if (!string.IsNullOrEmpty(context.ErrorMessage))
+                    {
+                        <MudTooltip Text="@context.ErrorMessage">
+                            <MudIcon Icon="@Icons.Material.Filled.Error" Color="Color.Error" Size="Size.Small" />
+                        </MudTooltip>
+                    }
+                    else
+                    {
+                        <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
+                    }
+                </MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
+                        @if (context.Status == JobStatus.Running)
+                        {
+                            <MudMenuItem Icon="@Icons.Material.Filled.Cancel" OnClick="() => CancelExecution(context)">Cancel</MudMenuItem>
+                        }
+                        <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewExecutionDetails(context.Id)">View Details</MudMenuItem>
+                    </MudMenu>
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+
+        <MudPagination Class="mt-4" Count="_totalPages" Selected="_currentPage" SelectedChanged="OnPageChanged" />
+    }
+    else
+    {
+        <MudText Align="Align.Center" Class="my-8">
+            <MudIcon Icon="@Icons.Material.Filled.History" Size="Size.Large" Class="mb-2" />
+            <MudText Typo="Typo.h6">No executions found</MudText>
+            <MudText Typo="Typo.body2">Job executions will appear here once schedules start running.</MudText>
+        </MudText>
+    }
+</MudPaper>
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "scheduleId")]
+    public int? ScheduleIdParam { get; set; }
+
+    private List<JobExecution> _executions = new();
+    private bool _loading = true;
+    private string _statusFilter = "All";
+    private DateTime? _startDate;
+    private DateTime? _endDate;
+    private int _currentPage = 1;
+    private int _totalPages = 1;
+    private int PageSize => ScheduleIdParam.HasValue ? 100 : int.MaxValue;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadExecutions();
+    }
+
+    private async Task LoadExecutions()
+    {
+        _loading = true;
+        try
+        {
+            JobStatus? status = _statusFilter == "All" ? null : Enum.Parse<JobStatus>(_statusFilter);
+            
+            var result = await ExecutionService.GetJobExecutionsPagedAsync(
+                scheduleId: ScheduleIdParam,
+                status: status,
+                startDate: _startDate,
+                endDate: _endDate,
+                pageNumber: _currentPage,
+                pageSize: PageSize);
+            
+            _executions = result.Items;
+            _totalPages = (int)Math.Ceiling((double)result.TotalCount / PageSize);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading executions: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task OnFilterChanged(string newStatus)
+    {
+        _statusFilter = newStatus;
+        _currentPage = 1;
+        await LoadExecutions();
+    }
+
+    private async Task ApplyFilters()
+    {
+        _currentPage = 1;
+        await LoadExecutions();
+    }
+
+    private async Task OnPageChanged(int page)
+    {
+        _currentPage = page;
+        await LoadExecutions();
+    }
+
+    private async Task ExportExecutions(string format)
+    {
+        try
+        {
+            var bytes = await ExecutionService.DownloadJobExecutionsExportAsync(
+                ScheduleIdParam,
+                _statusFilter,
+                _startDate,
+                _endDate,
+                format);
+            
+            var contentType = format.Equals("excel", StringComparison.OrdinalIgnoreCase) 
+                ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" 
+                : "text/csv";
+            
+            var filename = $"executions_{DateTime.UtcNow:yyyyMMddHHmmss}.{(format.Equals("excel", StringComparison.OrdinalIgnoreCase) ? "xlsx" : "csv")}";
+            
+            var base64 = Convert.ToBase64String(bytes);
+            await JSRuntime.InvokeVoidAsync("downloadFile", filename, contentType, base64);
+            
+            Snackbar.Add($"Export downloaded: {filename}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Export failed: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task CancelExecution(JobExecution execution)
+    {
+        bool? result = await DialogService.ShowMessageBox(
+            "Cancel Job Execution", 
+            $"Are you sure you want to cancel the running job '{execution.ScheduleName}'?",
+            yesText: "Cancel Job", 
+            cancelText: "Keep Running");
+        
+        if (result == true)
+        {
+            try
+            {
+                await ExecutionService.CancelJobExecutionAsync(execution.Id);
+                Snackbar.Add("Job execution cancelled successfully", Severity.Success);
+                await LoadExecutions();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Failed to cancel job: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task ViewExecutionDetails(int executionId)
+    {
+        try
+        {
+            var execution = await ExecutionService.GetJobExecutionAsync(executionId);
+            if (execution == null)
+            {
+                Snackbar.Add("Execution not found", Severity.Error);
+                return;
+            }
+
+            var parameters = new DialogParameters
+            {
+                { "Execution", execution }
+            };
+
+            var options = new DialogOptions
+            {
+                MaxWidth = MaxWidth.Medium,
+                FullWidth = true,
+                CloseButton = true
+            };
+
+            await DialogService.ShowAsync<ExecutionDetailsDialog>("Job Execution Details", parameters, options);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading execution details: {ex.Message}", Severity.Error);
+        }
+    }
+    
+    private string GetLocalTimeZoneAbbreviation()
+    {
+        var localTimeZone = TimeZoneInfo.Local;
+        var timeZoneId = localTimeZone.Id;
+        
+        var tzMap = new Dictionary<string, string>
+        {
+            { "Eastern Standard Time", "ET" },
+            { "Central Standard Time", "CT" },
+            { "Mountain Standard Time", "MT" },
+            { "Pacific Standard Time", "PT" },
+            { "US Mountain Standard Time", "MST" },
+            { "Alaskan Standard Time", "AKT" },
+            { "Hawaiian Standard Time", "HST" },
+            { "US Eastern Standard Time", "ET" }
+        };
+        
+        if (tzMap.TryGetValue(timeZoneId, out var abbr))
+            return abbr;
+        
+        return localTimeZone.IsDaylightSavingTime(DateTime.Now) 
+            ? localTimeZone.DaylightName 
+            : localTimeZone.StandardName;
+    }
+}

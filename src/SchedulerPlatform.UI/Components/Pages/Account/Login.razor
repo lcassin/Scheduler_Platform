@@ -1,0 +1,16 @@
+@page "/Account/Login"
+@rendermode InteractiveServer
+@inject NavigationManager Navigation
+
+@code {
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Redirect to the schedules page, which is protected with [Authorize]
+            // If the user is not authenticated, the OIDC middleware will automatically
+            // redirect them to IdentityServer for login
+            Navigation.NavigateTo("/schedules", forceLoad: true);
+        }
+    }
+}

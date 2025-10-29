@@ -1,0 +1,410 @@
+@page "/schedules"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using SchedulerPlatform.Core.Domain.Enums
+@inject IScheduleService ScheduleService
+@inject IClientService ClientService
+@inject NavigationManager Navigation
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Schedules</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Schedules</MudText>
+
+<MudPaper Class="pa-4">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateSchedule" Class="mb-4">
+        Add New Schedule
+    </MudButton>
+
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" md="3">
+            <MudTextField @bind-Value="_searchTerm" Label="Search by Name" Placeholder="e.g. Vendor_Account" 
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudAutocomplete T="Client" 
+                             Label="Filter by Client" 
+                             @bind-Value="_selectedClient"
+                             SearchFunc="SearchClients"
+                             ToStringFunc="@(c => c?.ClientName ?? "All Clients")"
+                             Variant="Variant.Outlined" 
+                             Margin="Margin.Dense" 
+                             Clearable="true"
+                             ResetValueOnEmptyText="true"
+                             CoerceText="false"
+                             AdornmentIcon="@Icons.Material.Filled.Search"
+                             AdornmentColor="Color.Primary" />
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudDatePicker @bind-Date="_selectedDate" 
+                           Label="Filter by Date" 
+                           Variant="Variant.Outlined" 
+                           Margin="Margin.Dense" 
+                           Clearable="true"
+                           Placeholder="Select a date" />
+        </MudItem>
+        <MudItem xs="12" md="3" Class="d-flex align-center gap-2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters">
+                Apply Filters
+            </MudButton>
+            <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+                <ActivatorContent>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download">
+                        Export
+                    </MudButton>
+                </ActivatorContent>
+                <ChildContent>
+                    <MudMenuItem OnClick="@(() => ExportSchedules("excel"))">Excel</MudMenuItem>
+                    <MudMenuItem OnClick="@(() => ExportSchedules("csv"))">CSV</MudMenuItem>
+                </ChildContent>
+            </MudMenu>
+        </MudItem>
+    </MudGrid>
+    
+    @if (_filterDate.HasValue)
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-2" CloseIconClicked="ClearDateFilter" ShowCloseIcon="true">
+            Showing schedules for <strong>@_filterDate?.ToString("MMMM dd, yyyy")</strong>
+        </MudAlert>
+    }
+
+    @if (_loading)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    }
+    else
+    {
+        <MudTable T="Schedule" ServerData="@ServerReload" 
+                  @ref="_table" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
+            <HeaderContent>
+                <MudTh>Name</MudTh>
+                <MudTh>Type</MudTh>
+                <MudTh>Frequency</MudTh>
+                <MudTh>Next Run</MudTh>
+                <MudTh>Last Run Status</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Name">
+                    <MudText Typo="Typo.body1"><strong>@context.Name</strong></MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">@context.Description</MudText>
+                </MudTd>
+                <MudTd DataLabel="Type">
+                    <MudChip T="string" Size="Size.Small">@context.JobType.ToString()</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Frequency">@context.Frequency.ToString()</MudTd>
+                <MudTd DataLabel="Next Run">
+                    @if (context.NextRunTime.HasValue)
+                    {
+                        var tz = GetTimeZoneAbbreviation(context.TimeZone);
+                        <text>@context.NextRunTime.Value.ToString("g") @(!string.IsNullOrEmpty(tz) ? $"({tz})" : "")</text>
+                    }
+                    else
+                    {
+                        <text>N/A</text>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Last Run Status">
+                    @if (context.LastRunStatus.HasValue)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.LastRunStatus.Value)">
+                            @context.LastRunStatus.Value.ToString()
+                        </MudChip>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">N/A</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <MudSwitch T="bool" Value="context.IsEnabled" ValueChanged="@((bool value) => HandleToggleSchedule(context, value))" Color="Color.Primary" />
+                </MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
+                        <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => EditSchedule(context.Id)">Edit</MudMenuItem>
+                        <MudMenuItem Icon="@Icons.Material.Filled.History" OnClick="() => ViewExecutions(context.Id)">View History</MudMenuItem>
+                        <MudMenuItem Icon="@Icons.Material.Filled.PlayArrow" OnClick="() => TriggerSchedule(context)">Trigger Now</MudMenuItem>
+                        <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="() => DeleteSchedule(context)">Delete</MudMenuItem>
+                    </MudMenu>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Align="Align.Center" Class="my-8">
+                    <MudIcon Icon="@Icons.Material.Filled.EventNote" Size="Size.Large" Class="mb-2" />
+                    <MudText Typo="Typo.h6">No schedules found</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-4">
+                        @if (!string.IsNullOrWhiteSpace(_searchTerm) || _selectedClientId.HasValue)
+                        {
+                            <span>Try adjusting your filters or create a new schedule.</span>
+                        }
+                        else
+                        {
+                            <span>Create your first schedule to get started.</span>
+                        }
+                    </MudText>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateSchedule">Create Schedule</MudButton>
+                </MudText>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new int[] { 20, 50, 100 }" />
+            </PagerContent>
+        </MudTable>
+    }
+</MudPaper>
+
+@code {
+    private MudTable<Schedule> _table = null!;
+    private List<Client> _clients = new();
+    private bool _loading = true;
+    private string? _searchTerm;
+    private Client? _selectedClient;
+    private int? _selectedClientId => _selectedClient?.Id;
+    private DateTime? _selectedDate;
+    private DateTime? _filterDate;
+    
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "date")]
+    public string? DateParam { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(DateParam) && DateTime.TryParse(DateParam, out var parsedDate))
+        {
+            _selectedDate = parsedDate;
+            _filterDate = parsedDate;
+        }
+        
+        try
+        {
+            _clients = await ClientService.GetClientsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading clients: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task<TableData<Schedule>> ServerReload(TableState state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            var pageNumber = state.Page + 1;
+            var pageSize = state.PageSize;
+            
+            var result = await ScheduleService.GetSchedulesPagedAsync(
+                pageNumber,
+                pageSize,
+                _selectedClientId,
+                _searchTerm);
+
+            var items = result.Items;
+            
+            if (_filterDate.HasValue)
+            {
+                items = items.Where(s => s.NextRunTime.HasValue && 
+                                        s.NextRunTime.Value.Date == _filterDate.Value.Date).ToList();
+            }
+
+            return new TableData<Schedule>
+            {
+                Items = items,
+                TotalItems = _filterDate.HasValue ? items.Count : result.TotalCount
+            };
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading schedules: {ex.Message}", Severity.Error);
+            return new TableData<Schedule> { Items = new List<Schedule>(), TotalItems = 0 };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task<IEnumerable<Client>> SearchClients(string value, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(value))
+            return _clients;
+        
+        return _clients.Where(c => c.ClientName.Contains(value, StringComparison.OrdinalIgnoreCase));
+    }
+    
+    private void ClearDateFilter()
+    {
+        _selectedDate = null;
+        _filterDate = null;
+        Navigation.NavigateTo("/schedules");
+    }
+
+    private async Task ApplyFilters()
+    {
+        _filterDate = _selectedDate;
+        await _table.ReloadServerData();
+    }
+
+    private async Task ExportSchedules(string format)
+    {
+        try
+        {
+            var startDate = _filterDate?.Date;
+            var endDate = _filterDate?.Date.AddDays(1).AddTicks(-1);
+            
+            var bytes = await ScheduleService.DownloadSchedulesExportAsync(
+                _selectedClientId,
+                _searchTerm,
+                startDate,
+                endDate,
+                format);
+            
+            var contentType = format.Equals("excel", StringComparison.OrdinalIgnoreCase) 
+                ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" 
+                : "text/csv";
+            
+            var filename = $"schedules_{DateTime.UtcNow:yyyyMMddHHmmss}.{(format.Equals("excel", StringComparison.OrdinalIgnoreCase) ? "xlsx" : "csv")}";
+            
+            var base64 = Convert.ToBase64String(bytes);
+            await JSRuntime.InvokeVoidAsync("downloadFile", filename, contentType, base64);
+            
+            Snackbar.Add($"Export downloaded: {filename}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Export failed: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void CreateSchedule()
+    {
+        Navigation.NavigateTo("/schedules/create");
+    }
+
+    private void EditSchedule(int id)
+    {
+        Navigation.NavigateTo($"/schedules/edit/{id}");
+    }
+
+    private void ViewExecutions(int id)
+    {
+        Navigation.NavigateTo($"/executions?scheduleId={id}");
+    }
+
+    private async Task HandleToggleSchedule(Schedule schedule, bool newValue)
+    {
+        try
+        {
+            schedule.IsEnabled = newValue;
+            
+            if (schedule.IsEnabled)
+            {
+                await ScheduleService.ResumeScheduleAsync(schedule.Id);
+                Snackbar.Add($"Schedule '{schedule.Name}' enabled", Severity.Success);
+            }
+            else
+            {
+                await ScheduleService.PauseScheduleAsync(schedule.Id);
+                Snackbar.Add($"Schedule '{schedule.Name}' paused", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error toggling schedule: {ex.Message}", Severity.Error);
+            schedule.IsEnabled = !schedule.IsEnabled;
+        }
+    }
+
+    private async Task TriggerSchedule(Schedule schedule)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Trigger Schedule",
+            $"Are you sure you want to trigger '{schedule.Name}' now?",
+            yesText: "Trigger", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                await ScheduleService.TriggerScheduleAsync(schedule.Id);
+                Snackbar.Add($"Schedule '{schedule.Name}' triggered", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error triggering schedule: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task DeleteSchedule(Schedule schedule)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Delete Schedule",
+            $"Are you sure you want to delete '{schedule.Name}'? This action cannot be undone.",
+            yesText: "Delete", cancelText: "Cancel");
+
+        if (confirmed == true)
+        {
+            try
+            {
+                await ScheduleService.DeleteScheduleAsync(schedule.Id);
+                Snackbar.Add($"Schedule '{schedule.Name}' deleted", Severity.Success);
+                await _table.ReloadServerData();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error deleting schedule: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+    
+    private Color GetStatusColor(JobStatus status)
+    {
+        return status switch
+        {
+            JobStatus.Completed => Color.Success,
+            JobStatus.Failed => Color.Error,
+            JobStatus.Running => Color.Info,
+            JobStatus.Retrying => Color.Warning,
+            JobStatus.Cancelled => Color.Default,
+            _ => Color.Default
+        };
+    }
+    
+    private string GetTimeZoneAbbreviation(string? timeZoneId)
+    {
+        if (string.IsNullOrEmpty(timeZoneId))
+            return "";
+            
+        var tzMap = new Dictionary<string, string>
+        {
+            { "Eastern Standard Time", "ET" },
+            { "Central Standard Time", "CT" },
+            { "Mountain Standard Time", "MT" },
+            { "Pacific Standard Time", "PT" },
+            { "US Mountain Standard Time", "MST" },
+            { "Alaskan Standard Time", "AKT" },
+            { "Hawaiian Standard Time", "HST" },
+            { "US Eastern Standard Time", "ET" }
+        };
+        
+        if (tzMap.TryGetValue(timeZoneId, out var abbr))
+            return abbr;
+            
+        try
+        {
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+            return tz.IsDaylightSavingTime(DateTime.Now) ? tz.DaylightName : tz.StandardName;
+        }
+        catch
+        {
+            return timeZoneId;
+        }
+    }
+}

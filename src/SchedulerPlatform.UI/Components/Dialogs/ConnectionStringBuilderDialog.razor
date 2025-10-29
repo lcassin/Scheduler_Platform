@@ -1,0 +1,192 @@
+@using SchedulerPlatform.UI.Services
+@inject IScheduleService ScheduleService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_server" 
+                              Label="Server" 
+                              Required="true"
+                              HelperText="Server name or IP address"
+                              Class="mb-2" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_database" 
+                              Label="Database" 
+                              Required="true"
+                              HelperText="Database name"
+                              Class="mb-2" />
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudSelect T="string" 
+                           @bind-Value="_authType" 
+                           Label="Authentication Type"
+                           Class="mb-2">
+                    <MudSelectItem Value="@("SqlAuth")">SQL Server Authentication</MudSelectItem>
+                    <MudSelectItem Value="@("Windows")">Windows Authentication</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+
+            @if (_authType == "SqlAuth")
+            {
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_username" 
+                                  Label="Username" 
+                                  Required="true"
+                                  Class="mb-2" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_password" 
+                                  Label="Password" 
+                                  InputType="InputType.Password" 
+                                  Required="true"
+                                  Class="mb-2" />
+                </MudItem>
+            }
+
+            <MudItem xs="12" sm="6">
+                <MudSwitch @bind-Value="_encrypt" 
+                           Color="Color.Primary" 
+                           Label="Encrypt Connection (TLS)" 
+                           Class="mb-2" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSwitch @bind-Value="_trustServerCert" 
+                           Color="Color.Primary" 
+                           Label="Trust Server Certificate" 
+                           Class="mb-2" />
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_connectionString" 
+                              Label="Connection String" 
+                              Lines="3"
+                              HelperText="You can edit the connection string directly if needed"
+                              Class="mb-2" />
+            </MudItem>
+
+            <MudItem xs="12" class="d-flex gap-2">
+                <MudButton StartIcon="@Icons.Material.Filled.Build" 
+                           Color="Color.Primary" 
+                           Variant="Variant.Filled"
+                           OnClick="BuildConnectionString">
+                    Build
+                </MudButton>
+                <MudButton StartIcon="@Icons.Material.Filled.Bolt" 
+                           Color="Color.Secondary" 
+                           Variant="Variant.Filled"
+                           OnClick="TestConnection" 
+                           Disabled="@string.IsNullOrWhiteSpace(_connectionString)"
+                           Loading="_testing">
+                    Test Connection
+                </MudButton>
+            </MudItem>
+
+            @if (!string.IsNullOrEmpty(_testMessage))
+            {
+                <MudItem xs="12" class="mt-2">
+                    <MudAlert Severity="@(_testSuccess ? Severity.Success : Severity.Error)">
+                        @_testMessage
+                    </MudAlert>
+                </MudItem>
+            }
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" 
+                   Variant="Variant.Filled"
+                   Disabled="@string.IsNullOrWhiteSpace(_connectionString)" 
+                   OnClick="UseConnectionString">
+            Use Connection String
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    private string _server = "";
+    private string _database = "";
+    private string _authType = "SqlAuth";
+    private string _username = "";
+    private string _password = "";
+    private bool _encrypt = true;
+    private bool _trustServerCert = true;
+    private string _connectionString = "";
+
+    private bool _testing = false;
+    private bool _testSuccess = false;
+    private string _testMessage = "";
+
+    private void BuildConnectionString()
+    {
+        if (string.IsNullOrWhiteSpace(_server) || string.IsNullOrWhiteSpace(_database))
+        {
+            Snackbar.Add("Server and Database are required.", Severity.Warning);
+            return;
+        }
+
+        if (_authType == "SqlAuth")
+        {
+            if (string.IsNullOrWhiteSpace(_username) || string.IsNullOrWhiteSpace(_password))
+            {
+                Snackbar.Add("Username and Password are required for SQL Server Authentication.", Severity.Warning);
+                return;
+            }
+
+            _connectionString = $"Server={_server};Database={_database};User Id={_username};Password={_password};";
+        }
+        else
+        {
+            _connectionString = $"Server={_server};Database={_database};Trusted_Connection=True;";
+        }
+
+        _connectionString += _encrypt ? "Encrypt=True;" : "Encrypt=False;";
+        if (_trustServerCert)
+        {
+            _connectionString += "TrustServerCertificate=True;";
+        }
+
+        _testMessage = "";
+        _testSuccess = false;
+        
+        Snackbar.Add("Connection string built successfully.", Severity.Success);
+    }
+
+    private async Task TestConnection()
+    {
+        _testMessage = "";
+        _testSuccess = false;
+        _testing = true;
+
+        try
+        {
+            var result = await ScheduleService.TestConnectionAsync(_connectionString);
+            _testSuccess = result.Success;
+            _testMessage = result.Message;
+        }
+        catch (Exception ex)
+        {
+            _testSuccess = false;
+            _testMessage = $"Error testing connection: {ex.Message}";
+        }
+        finally
+        {
+            _testing = false;
+        }
+    }
+
+    private void UseConnectionString()
+    {
+        MudDialog.Close(DialogResult.Ok(_connectionString));
+    }
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+}

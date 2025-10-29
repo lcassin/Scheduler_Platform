@@ -1,0 +1,406 @@
+@using System.Text.Json
+@using System.Text.Json.Serialization
+
+<MudDialog>
+    <DialogContent>
+        <MudTabs Elevation="2" Rounded="true" ApplyEffectsToContainer="true" @bind-ActivePanelIndex="_activeTab">
+            <MudTabPanel Text="Form Editor" Icon="@Icons.Material.Filled.Edit">
+                <MudText Typo="Typo.body2" Class="mb-4">
+                    Build your JSON configuration using the hierarchical editor below. Add objects and arrays for nested structures.
+                </MudText>
+                
+                <div style="max-height: 500px; overflow-y: auto;">
+                    @RenderJsonItems(_jsonItems, 0, null)
+                </div>
+                
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" 
+                           OnClick="() => AddNewItem(_jsonItems, null)" Class="mt-2">Add Root Property</MudButton>
+            </MudTabPanel>
+            
+            <MudTabPanel Text="Raw JSON" Icon="@Icons.Material.Filled.Code">
+                <MudTextField @bind-Value="_rawJson" Label="JSON Configuration" Lines="15" 
+                              Variant="Variant.Outlined" Immediate="true" OnBlur="ParseRawJson" />
+                @if (!string.IsNullOrEmpty(_validationError))
+                {
+                    <MudAlert Severity="Severity.Error" Class="mt-2">@_validationError</MudAlert>
+                }
+            </MudTabPanel>
+        </MudTabs>
+        
+        <MudDivider Class="my-4" />
+        
+        <MudText Typo="Typo.h6" Class="mb-2">Preview</MudText>
+        <MudPaper Elevation="1" Class="pa-3">
+            <pre style="margin: 0; white-space: pre-wrap; word-wrap: break-word; font-family: monospace; font-size: 0.875rem;">@_previewJson</pre>
+        </MudPaper>
+    </DialogContent>
+    
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="!IsValid()">Save</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] 
+    private IMudDialogInstance MudDialog { get; set; }
+    
+    [Parameter]
+    public string? InitialJson { get; set; }
+    
+    private List<JsonItem> _jsonItems = new();
+    private string _rawJson = "";
+    private string _previewJson = "{}";
+    private string _validationError = "";
+    private int _activeTab = 0;
+    
+    protected override void OnInitialized()
+    {
+        if (!string.IsNullOrWhiteSpace(InitialJson))
+        {
+            _rawJson = InitialJson;
+            ParseRawJson();
+        }
+        else
+        {
+            AddNewItem(_jsonItems, null);
+        }
+        UpdateJsonPreview();
+    }
+    
+    private RenderFragment RenderJsonItems(List<JsonItem> items, int level, JsonItem? parent) => __builder =>
+    {
+        foreach (var item in items)
+        {
+            var indent = level * 20;
+            <div style="margin-left: @(indent)px; margin-bottom: 8px; border-left: @(level > 0 ? "2px solid #e0e0e0" : "none"); padding-left: @(level > 0 ? "8px" : "0");">
+                @if (item.Type == JsonValueType.Object || item.Type == JsonValueType.Array)
+                {
+                    <MudExpansionPanel @bind-IsExpanded="item.IsExpanded" Class="mb-2">
+                        <TitleContent>
+                            <div style="display: flex; align-items: center; width: 100%;">
+                                <MudIcon Icon="@(item.Type == JsonValueType.Object ? Icons.Material.Filled.DataObject : Icons.Material.Filled.DataArray)" Size="Size.Small" Class="mr-2" />
+                                <MudTextField @bind-Value="item.Key" Label="Key" Variant="Variant.Text" Margin="Margin.Dense" 
+                                              Immediate="true" OnBlur="UpdateJsonPreview" Style="flex: 1; max-width: 200px;" 
+                                              Disabled="@(parent?.Type == JsonValueType.Array)" />
+                                <MudChip T="string" Size="Size.Small" Color="Color.Info" Class="ml-2">@(item.Type == JsonValueType.Object ? "Object" : "Array")</MudChip>
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" 
+                                               OnClick="() => RemoveItem(item, items)" Size="Size.Small" Class="ml-auto" />
+                            </div>
+                        </TitleContent>
+                        <ChildContent>
+                            <div style="padding: 8px;">
+                                @if (item.Children != null && item.Children.Any())
+                                {
+                                    @RenderJsonItems(item.Children, level + 1, item)
+                                }
+                                <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Secondary" 
+                                           OnClick="() => AddNewItem(item.Children!, item)" Size="Size.Small" Class="mt-2">
+                                    @(item.Type == JsonValueType.Object ? "Add Property" : "Add Item")
+                                </MudButton>
+                            </div>
+                        </ChildContent>
+                    </MudExpansionPanel>
+                }
+                else
+                {
+                    <MudGrid>
+                        <MudItem xs="4">
+                            <MudTextField @bind-Value="item.Key" Label="Key" Required="true" Variant="Variant.Outlined" 
+                                          Immediate="true" OnBlur="UpdateJsonPreview" Margin="Margin.Dense"
+                                          Disabled="@(parent?.Type == JsonValueType.Array)" />
+                        </MudItem>
+                        <MudItem xs="4">
+                            <MudTextField @bind-Value="item.Value" Label="Value" Required="true" Variant="Variant.Outlined"
+                                          Immediate="true" OnBlur="UpdateJsonPreview" Margin="Margin.Dense" />
+                        </MudItem>
+                        <MudItem xs="3">
+                            <MudSelect Value="item.Type" Label="Type" T="JsonValueType" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                       ValueChanged="@((JsonValueType t) => { OnTypeChanged(item, t); })">
+                                <MudSelectItem Value="JsonValueType.String">String</MudSelectItem>
+                                <MudSelectItem Value="JsonValueType.Number">Number</MudSelectItem>
+                                <MudSelectItem Value="JsonValueType.Boolean">Boolean</MudSelectItem>
+                                <MudSelectItem Value="JsonValueType.Object">Object</MudSelectItem>
+                                <MudSelectItem Value="JsonValueType.Array">Array</MudSelectItem>
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="1" Class="d-flex align-center">
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" 
+                                           OnClick="() => RemoveItem(item, items)" Size="Size.Small" />
+                        </MudItem>
+                    </MudGrid>
+                }
+            </div>
+        }
+    };
+    
+    private void OnTypeChanged(JsonItem item, JsonValueType newType)
+    {
+        var wasContainer = item.Type == JsonValueType.Object || item.Type == JsonValueType.Array;
+        var isContainer = newType == JsonValueType.Object || newType == JsonValueType.Array;
+        
+        item.Type = newType;
+        
+        if (isContainer && !wasContainer)
+        {
+            item.Children = new List<JsonItem>();
+            item.Value = "";
+            item.IsExpanded = true;
+        }
+        else if (!isContainer && wasContainer)
+        {
+            item.Children = null;
+            item.IsExpanded = false;
+        }
+        
+        UpdateJsonPreview();
+    }
+    
+    private void AddNewItem(List<JsonItem> targetList, JsonItem? parent)
+    {
+        var newItem = new JsonItem 
+        { 
+            Key = parent?.Type == JsonValueType.Array ? targetList.Count.ToString() : "", 
+            Value = "", 
+            Type = JsonValueType.String 
+        };
+        targetList.Add(newItem);
+        StateHasChanged();
+    }
+    
+    private void RemoveItem(JsonItem item, List<JsonItem> fromList)
+    {
+        fromList.Remove(item);
+        
+        for (int i = 0; i < fromList.Count; i++)
+        {
+            if (fromList[i].Key == i.ToString() || string.IsNullOrEmpty(fromList[i].Key))
+            {
+                fromList[i].Key = i.ToString();
+            }
+        }
+        
+        UpdateJsonPreview();
+    }
+    
+    private void UpdateJsonPreview()
+    {
+        try
+        {
+            var result = BuildJsonObject(_jsonItems);
+            
+            _previewJson = JsonSerializer.Serialize(result, new JsonSerializerOptions 
+            { 
+                WriteIndented = true 
+            });
+            _rawJson = _previewJson;
+            _validationError = "";
+        }
+        catch (Exception ex)
+        {
+            _validationError = $"Error generating JSON: {ex.Message}";
+            _previewJson = "{ }";
+        }
+    }
+    
+    private object BuildJsonObject(List<JsonItem> items)
+    {
+        var dict = new Dictionary<string, object>();
+        
+        foreach (var item in items.Where(i => !string.IsNullOrWhiteSpace(i.Key)))
+        {
+            object value = item.Type switch
+            {
+                JsonValueType.Object => item.Children != null ? BuildJsonObject(item.Children) : new Dictionary<string, object>(),
+                JsonValueType.Array => item.Children != null ? BuildJsonArray(item.Children) : new List<object>(),
+                JsonValueType.Number => double.TryParse(item.Value, out var num) ? num : item.Value,
+                JsonValueType.Boolean => bool.TryParse(item.Value, out var boolean) ? boolean : item.Value,
+                _ => item.Value
+            };
+            
+            dict[item.Key] = value;
+        }
+        
+        return dict;
+    }
+    
+    private List<object> BuildJsonArray(List<JsonItem> items)
+    {
+        var list = new List<object>();
+        
+        foreach (var item in items.OrderBy(i => int.TryParse(i.Key, out var idx) ? idx : int.MaxValue))
+        {
+            object value = item.Type switch
+            {
+                JsonValueType.Object => item.Children != null ? BuildJsonObject(item.Children) : new Dictionary<string, object>(),
+                JsonValueType.Array => item.Children != null ? BuildJsonArray(item.Children) : new List<object>(),
+                JsonValueType.Number => double.TryParse(item.Value, out var num) ? num : item.Value,
+                JsonValueType.Boolean => bool.TryParse(item.Value, out var boolean) ? boolean : item.Value,
+                _ => item.Value
+            };
+            
+            list.Add(value);
+        }
+        
+        return list;
+    }
+    
+    private void ParseRawJson()
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_rawJson))
+            {
+                _jsonItems.Clear();
+                _previewJson = "{}";
+                _validationError = "";
+                return;
+            }
+            
+            using var doc = JsonDocument.Parse(_rawJson);
+            _jsonItems.Clear();
+            
+            if (doc.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var property in doc.RootElement.EnumerateObject())
+                {
+                    _jsonItems.Add(ParseJsonElement(property.Name, property.Value, false));
+                }
+            }
+            
+            _previewJson = JsonSerializer.Serialize(
+                JsonSerializer.Deserialize<object>(_rawJson),
+                new JsonSerializerOptions { WriteIndented = true }
+            );
+            _validationError = "";
+        }
+        catch (Exception ex)
+        {
+            _validationError = $"Invalid JSON: {ex.Message}";
+        }
+    }
+    
+    private JsonItem ParseJsonElement(string key, JsonElement element, bool isArrayItem)
+    {
+        var item = new JsonItem { Key = key };
+        
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                item.Type = JsonValueType.Object;
+                item.Children = new List<JsonItem>();
+                item.IsExpanded = false;
+                foreach (var property in element.EnumerateObject())
+                {
+                    item.Children.Add(ParseJsonElement(property.Name, property.Value, false));
+                }
+                break;
+                
+            case JsonValueKind.Array:
+                item.Type = JsonValueType.Array;
+                item.Children = new List<JsonItem>();
+                item.IsExpanded = false;
+                int index = 0;
+                foreach (var arrayElement in element.EnumerateArray())
+                {
+                    item.Children.Add(ParseJsonElement(index.ToString(), arrayElement, true));
+                    index++;
+                }
+                break;
+                
+            case JsonValueKind.String:
+                item.Type = JsonValueType.String;
+                item.Value = element.GetString() ?? "";
+                break;
+                
+            case JsonValueKind.Number:
+                item.Type = JsonValueType.Number;
+                item.Value = element.GetDouble().ToString();
+                break;
+                
+            case JsonValueKind.True:
+            case JsonValueKind.False:
+                item.Type = JsonValueType.Boolean;
+                item.Value = element.GetBoolean().ToString();
+                break;
+                
+            default:
+                item.Type = JsonValueType.String;
+                item.Value = element.GetRawText();
+                break;
+        }
+        
+        return item;
+    }
+    
+    private bool IsValid()
+    {
+        if (_activeTab == 0)
+        {
+            if (!_jsonItems.Any())
+            {
+                return true;
+            }
+            return ValidateItems(_jsonItems) && _jsonItems.Any(i => !string.IsNullOrWhiteSpace(i.Key));
+        }
+        else
+        {
+            return string.IsNullOrEmpty(_validationError);
+        }
+    }
+    
+    private bool ValidateItems(List<JsonItem> items)
+    {
+        var keys = items.Where(i => !string.IsNullOrWhiteSpace(i.Key)).Select(i => i.Key).ToList();
+        if (keys.Distinct().Count() != keys.Count)
+        {
+            return false;
+        }
+        
+        foreach (var item in items)
+        {
+            if (item.Children != null && !ValidateItems(item.Children))
+            {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+    
+    private void Save()
+    {
+        if (_activeTab == 0)
+        {
+            UpdateJsonPreview();
+        }
+        
+        if (IsValid())
+        {
+            MudDialog.Close(DialogResult.Ok(_previewJson));
+        }
+    }
+    
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+    
+    private class JsonItem
+    {
+        public string Key { get; set; } = "";
+        public string Value { get; set; } = "";
+        public JsonValueType Type { get; set; } = JsonValueType.String;
+        public List<JsonItem>? Children { get; set; }
+        public bool IsExpanded { get; set; } = false;
+    }
+    
+    private enum JsonValueType
+    {
+        String,
+        Number,
+        Boolean,
+        Object,
+        Array
+    }
+}

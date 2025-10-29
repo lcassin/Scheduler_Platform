@@ -1,0 +1,40 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36603.0 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{E24C65DC-7377-472B-9ABA-BC803B73C61A}") = "SchedulerPlatform.UI", "C:\Cass\Azure\Telecom\Repos\Net Applications\SchedulerPlatform\src\SchedulerPlatform.UI\", "{0A1EE8A0-CCBF-53C3-8458-C158A1C428E3}"
+	ProjectSection(WebsiteProperties) = preProject
+		TargetFrameworkMoniker = ".NETFramework,Version%3Dv4.0"
+		Debug.AspNetCompiler.VirtualPath = "/localhost_52567"
+		Debug.AspNetCompiler.PhysicalPath = "C:\Cass\Azure\Telecom\Repos\Net Applications\SchedulerPlatform\src\SchedulerPlatform.UI\"
+		Debug.AspNetCompiler.TargetPath = "PrecompiledWeb\localhost_52567\"
+		Debug.AspNetCompiler.Updateable = "true"
+		Debug.AspNetCompiler.ForceOverwrite = "true"
+		Debug.AspNetCompiler.FixedNames = "false"
+		Debug.AspNetCompiler.Debug = "True"
+		Release.AspNetCompiler.VirtualPath = "/localhost_52567"
+		Release.AspNetCompiler.PhysicalPath = "C:\Cass\Azure\Telecom\Repos\Net Applications\SchedulerPlatform\src\SchedulerPlatform.UI\"
+		Release.AspNetCompiler.TargetPath = "PrecompiledWeb\localhost_52567\"
+		Release.AspNetCompiler.Updateable = "true"
+		Release.AspNetCompiler.ForceOverwrite = "true"
+		Release.AspNetCompiler.FixedNames = "false"
+		Release.AspNetCompiler.Debug = "False"
+		VWDPort = "52567"
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{0A1EE8A0-CCBF-53C3-8458-C158A1C428E3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0A1EE8A0-CCBF-53C3-8458-C158A1C428E3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {A4730F9E-ACFA-40C5-9DDD-F3CBB082FA90}
+	EndGlobalSection
+EndGlobal

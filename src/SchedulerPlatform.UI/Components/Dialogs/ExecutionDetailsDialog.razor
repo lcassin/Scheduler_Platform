@@ -1,0 +1,141 @@
+@using MudBlazor
+@using SchedulerPlatform.Core.Domain.Enums
+@using SchedulerPlatform.UI.Models
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Execution ID</MudText>
+                <MudText Typo="Typo.body2">@Execution.Id</MudText>
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Schedule</MudText>
+                <MudText Typo="Typo.body2">@Execution.ScheduleName</MudText>
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Status</MudText>
+                @switch (Execution.Status)
+                {
+                    case JobStatus.Completed:
+                        <MudChip T="string" Color="Color.Success" Size="Size.Small">Completed</MudChip>
+                        break;
+                    case JobStatus.Failed:
+                        <MudChip T="string" Color="Color.Error" Size="Size.Small">Failed</MudChip>
+                        break;
+                    case JobStatus.Running:
+                        <MudChip T="string" Color="Color.Info" Size="Size.Small">Running</MudChip>
+                        break;
+                    case JobStatus.Cancelled:
+                        <MudChip T="string" Color="Color.Warning" Size="Size.Small">Cancelled</MudChip>
+                        break;
+                    default:
+                        <MudChip T="string" Color="Color.Default" Size="Size.Small">@Execution.Status</MudChip>
+                        break;
+                }
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Duration</MudText>
+                <MudText Typo="Typo.body2">
+                    @if (Execution.EndTime.HasValue)
+                    {
+                        var duration = Execution.EndTime.Value - Execution.StartTime;
+                        <text>@duration.ToString(@"hh\:mm\:ss")</text>
+                    }
+                    else
+                    {
+                        <text>Still running...</text>
+                    }
+                </MudText>
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Start Time</MudText>
+                <MudText Typo="Typo.body2">@($"{Execution.StartTime.ToLocalTime():g} ({GetLocalTimeZoneAbbreviation()})")</MudText>
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">End Time</MudText>
+                <MudText Typo="Typo.body2">
+                    @(Execution.EndTime.HasValue ? $"{Execution.EndTime.Value.ToLocalTime():g} ({GetLocalTimeZoneAbbreviation()})" : "N/A")
+                </MudText>
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Retry Count</MudText>
+                <MudText Typo="Typo.body2">@Execution.RetryCount</MudText>
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Triggered By</MudText>
+                <MudText Typo="Typo.body2">@(Execution.TriggeredBy ?? "Scheduler")</MudText>
+            </MudItem>
+            
+            @if (Execution.Status == JobStatus.Cancelled && !string.IsNullOrEmpty(Execution.CancelledBy))
+            {
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.subtitle2" Class="mb-1">Cancelled By</MudText>
+                    <MudText Typo="Typo.body2">@Execution.CancelledBy</MudText>
+                </MudItem>
+            }
+            
+            @if (!string.IsNullOrEmpty(Execution.ErrorMessage))
+            {
+                <MudItem xs="12">
+                    <MudText Typo="Typo.subtitle2" Class="mb-1" Color="Color.Error">Error Message</MudText>
+                    <MudAlert Severity="Severity.Error" Dense="true">@Execution.ErrorMessage</MudAlert>
+                </MudItem>
+            }
+            
+            @if (!string.IsNullOrEmpty(Execution.Output))
+            {
+                <MudItem xs="12">
+                    <MudText Typo="Typo.subtitle2" Class="mb-1">Output</MudText>
+                    <MudPaper Class="pa-2" Style="background-color: #f5f5f5; max-height: 300px; overflow-y: auto;">
+                        <MudText Typo="Typo.body2" Style="white-space: pre-wrap; font-family: monospace;">@Execution.Output</MudText>
+                    </MudPaper>
+                </MudItem>
+            }
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close" Color="Color.Primary">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; }
+    
+    [Parameter] public JobExecution Execution { get; set; } = null!;
+    
+    private void Close() => MudDialog.Close();
+    
+    private string GetLocalTimeZoneAbbreviation()
+    {
+        var localTimeZone = TimeZoneInfo.Local;
+        var timeZoneId = localTimeZone.Id;
+        
+        var tzMap = new Dictionary<string, string>
+        {
+            { "Eastern Standard Time", "ET" },
+            { "Central Standard Time", "CT" },
+            { "Mountain Standard Time", "MT" },
+            { "Pacific Standard Time", "PT" },
+            { "US Mountain Standard Time", "MST" },
+            { "Alaskan Standard Time", "AKT" },
+            { "Hawaiian Standard Time", "HST" },
+            { "US Eastern Standard Time", "ET" }
+        };
+        
+        if (tzMap.TryGetValue(timeZoneId, out var abbr))
+            return abbr;
+        
+        return localTimeZone.IsDaylightSavingTime(DateTime.Now) 
+            ? localTimeZone.DaylightName 
+            : localTimeZone.StandardName;
+    }
+}

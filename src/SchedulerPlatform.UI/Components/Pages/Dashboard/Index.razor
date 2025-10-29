@@ -1,0 +1,403 @@
+@page "/"
+@page "/dashboard"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using SchedulerPlatform.Core.Domain.Enums
+@inject IDashboardService DashboardService
+@inject IClientService ClientService
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+<PageTitle>Dashboard</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Dashboard</MudText>
+
+<MudGrid>
+    <MudItem xs="12">
+        <MudPaper Class="pa-4">
+            <MudGrid>
+                <MudItem xs="12" md="3">
+                    <MudSelect Value="_selectedTimeWindow" 
+                              Label="Time Window" 
+                              Variant="Variant.Outlined" 
+                              Margin="Margin.Dense"
+                              ValueChanged="@(async (int value) => await OnTimeWindowChanged(value))">
+                        <MudSelectItem Value="24">Last 24 Hours</MudSelectItem>
+                        <MudSelectItem Value="168">Last 7 Days</MudSelectItem>
+                        <MudSelectItem Value="720">Last 30 Days</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="3">
+                    <MudSelect Value="_selectedClientId" 
+                              Label="Filter by Client" 
+                              Variant="Variant.Outlined" 
+                              Margin="Margin.Dense" 
+                              Clearable="true"
+                              ValueChanged="@(async (int? value) => await OnClientChanged(value))">
+                        <MudSelectItem Value="@((int?)null)">All Clients</MudSelectItem>
+                        @foreach (var client in _clients)
+                        {
+                            <MudSelectItem Value="@((int?)client.Id)">@client.ClientName</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="4">
+                    <MudSelect T="JobStatus" 
+                              @bind-Value="_selectedStatusesValue"
+                              @bind-SelectedValues="SelectedStatuses"
+                              Label="Filter by Status" 
+                              Placeholder="All Statuses"
+                              MultiSelectionTextFunc="@(selectedItems => selectedItems.Any() ? $"{selectedItems.Count} selected" : "All Statuses")"
+                              Variant="Variant.Outlined" 
+                              Margin="Margin.Dense" 
+                              Clearable="true"
+                              MultiSelection="true">
+                        <MudSelectItem Value="@JobStatus.Failed">Failed</MudSelectItem>
+                        <MudSelectItem Value="@JobStatus.Running">Running</MudSelectItem>
+                        <MudSelectItem Value="@JobStatus.Completed">Completed</MudSelectItem>
+                        <MudSelectItem Value="@JobStatus.Retrying">Retrying</MudSelectItem>
+                        <MudSelectItem Value="@JobStatus.Cancelled">Cancelled</MudSelectItem>
+                        <MudSelectItem Value="@JobStatus.Scheduled">Scheduled</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" md="2" Class="d-flex align-center justify-end">
+                    <MudIconButton Icon="@Icons.Material.Filled.Refresh" 
+                                  Color="Color.Primary" 
+                                  OnClick="RefreshData"
+                                  Disabled="@_loading"
+                                  Title="Refresh Dashboard">
+                    </MudIconButton>
+                </MudItem>
+            </MudGrid>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                Auto-refresh every @(_refreshInterval) seconds
+            </MudText>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudGrid Class="mt-4">
+    @if (_loading && _overview == null)
+    {
+        <MudItem xs="12" Class="d-flex justify-center py-8">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+        </MudItem>
+    }
+    else if (_overview != null)
+    {
+        <MudItem xs="12" md="3">
+            <MudCard>
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Color="Color.Primary">Total Schedules</MudText>
+                    <MudText Typo="Typo.h3">@_overview.TotalSchedules</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        @_overview.EnabledSchedules enabled, @_overview.DisabledSchedules disabled
+                    </MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="3">
+            <MudCard>
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Color="Color.Info">Running Now</MudText>
+                    <MudText Typo="Typo.h3">@_overview.RunningExecutions</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Peak: @_overview.PeakConcurrentExecutions concurrent
+                    </MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="3">
+            <MudCard>
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Color="Color.Success">Completed Today</MudText>
+                    <MudText Typo="Typo.h3">@_overview.CompletedToday</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Avg: @_overview.AverageDurationSeconds.ToString("F1")s
+                    </MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="3">
+            <MudCard>
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Color="Color.Error">Failed Today</MudText>
+                    <MudText Typo="Typo.h3">@_overview.FailedToday</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Total in window: @_overview.TotalExecutionsInWindow
+                    </MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4">
+                <MudText Typo="Typo.h6" Class="mb-4">Status Breakdown</MudText>
+                @if (_statusData.Any())
+                {
+                    <MudChart ChartType="ChartType.Donut" 
+                             InputData="@_statusData" 
+                             InputLabels="@_statusLabels"
+                             Width="100%" 
+                             Height="350px">
+                    </MudChart>
+                    <MudGrid Class="mt-2">
+                        @foreach (var item in _statusSeries)
+                        {
+                            <MudItem xs="6">
+                                <MudText Typo="Typo.body2">
+                                    <strong>@item.Status:</strong> @item.Count (@item.Percentage.ToString("F1")%)
+                                </MudText>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body1" Color="Color.Secondary">No execution data available</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4">
+                <MudText Typo="Typo.h6" Class="mb-4">Execution Duration Trends</MudText>
+                @if (_durationSeries.Any() && _durationLabels.Any())
+                {
+                    <MudChart ChartType="ChartType.Line" 
+                             ChartSeries="@_durationSeries" 
+                             XAxisLabels="@_durationLabels"
+                             ChartOptions="@_lineChartOptions"
+                             Width="100%" 
+                             Height="350px">
+                    </MudChart>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body1" Color="Color.Secondary">No trend data available</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4">
+                <MudText Typo="Typo.h6" Class="mb-4">Concurrent Executions Over Time</MudText>
+                @if (_concurrentSeries.Any() && _concurrentLabels.Any())
+                {
+                    <MudChart ChartType="ChartType.Line" 
+                             ChartSeries="@_concurrentSeries" 
+                             XAxisLabels="@_concurrentLabels"
+                             ChartOptions="@_lineChartOptions"
+                             Width="100%" 
+                             Height="350px">
+                    </MudChart>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body1" Color="Color.Secondary">No concurrent execution data available</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Class="pa-4">
+                <MudText Typo="Typo.h6" Class="mb-4">Top 10 Longest Running Schedules</MudText>
+                @if (_longestSeries.Any() && _longestLabels.Any())
+                {
+                    <MudChart ChartType="ChartType.Bar" 
+                             ChartSeries="@_longestSeries" 
+                             XAxisLabels="@_longestLabels"
+                             ChartOptions="@_barChartOptions"
+                             Width="100%" 
+                             Height="350px">
+                    </MudChart>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body1" Color="Color.Secondary">No execution data available</MudText>
+                }
+            </MudPaper>
+        </MudItem>
+    }
+</MudGrid>
+
+@code {
+    private DashboardOverview? _overview;
+    private List<Client> _clients = new();
+    private bool _loading = true;
+    private int _refreshInterval = 60;
+    private PeriodicTimer? _timer;
+
+    private int _selectedTimeWindow = 24;
+    private int? _selectedClientId;
+    private JobStatus _selectedStatusesValue;
+    private IEnumerable<JobStatus>? _selectedStatusesBackingField = null;
+    
+    private IEnumerable<JobStatus>? SelectedStatuses
+    {
+        get => _selectedStatusesBackingField;
+        set
+        {
+            _selectedStatusesBackingField = value?.Any() == true ? value : null;
+            _ = InvokeAsync(RefreshData);
+        }
+    }
+
+    private double[] _statusData = Array.Empty<double>();
+    private string[] _statusLabels = Array.Empty<string>();
+    private List<StatusBreakdownItem> _statusSeries = new();
+
+    private List<ChartSeries> _durationSeries = new();
+    private string[] _durationLabels = Array.Empty<string>();
+
+    private List<ChartSeries> _concurrentSeries = new();
+    private string[] _concurrentLabels = Array.Empty<string>();
+
+    private List<ChartSeries> _longestSeries = new();
+    private string[] _longestLabels = Array.Empty<string>();
+
+    private ChartOptions _lineChartOptions = new ChartOptions
+    {
+        YAxisTicks = 10,
+        LineStrokeWidth = 2
+    };
+
+    private ChartOptions _barChartOptions = new ChartOptions
+    {
+        YAxisTicks = 10
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _clients = await ClientService.GetClientsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading clients: {ex.Message}", Severity.Error);
+        }
+
+        await RefreshData();
+        StartAutoRefresh();
+    }
+
+    private void StartAutoRefresh()
+    {
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(_refreshInterval));
+        _ = Task.Run(async () =>
+        {
+            while (await _timer.WaitForNextTickAsync())
+            {
+                await InvokeAsync(async () =>
+                {
+                    await RefreshData();
+                    StateHasChanged();
+                });
+            }
+        });
+    }
+
+    private async Task OnTimeWindowChanged(int value)
+    {
+        _selectedTimeWindow = value;
+        await RefreshData();
+    }
+
+    private async Task OnClientChanged(int? value)
+    {
+        _selectedClientId = value;
+        await RefreshData();
+    }
+
+    private async Task RefreshData()
+    {
+        _loading = true;
+        try
+        {
+            var statusList = _selectedStatusesBackingField?.ToList();
+            
+            var overviewTask = DashboardService.GetOverviewAsync(_selectedClientId, _selectedTimeWindow);
+            var statusTask = DashboardService.GetStatusBreakdownAsync(_selectedTimeWindow, _selectedClientId);
+            var trendsTask = DashboardService.GetExecutionTrendsAsync(_selectedTimeWindow, _selectedClientId, statusList);
+            var longestTask = DashboardService.GetTopLongestExecutionsAsync(10, _selectedTimeWindow, _selectedClientId, statusList);
+
+            await Task.WhenAll(overviewTask, statusTask, trendsTask, longestTask);
+
+            _overview = await overviewTask;
+            
+            var statusData = await statusTask;
+            _statusSeries = statusData;
+            _statusData = statusData.Select(x => (double)x.Count).ToArray();
+            _statusLabels = statusData.Select(x => x.Status.ToString()).ToArray();
+
+            var trendsData = await trendsTask;
+            _durationSeries = new List<ChartSeries>
+            {
+                new ChartSeries
+                {
+                    Name = "Avg Duration (seconds)",
+                    Data = trendsData.Select(x => x.AverageDurationSeconds).ToArray()
+                }
+            };
+            _durationLabels = trendsData.Select(x => FormatDateLabel(x.Hour)).ToArray();
+
+            _concurrentSeries = new List<ChartSeries>
+            {
+                new ChartSeries
+                {
+                    Name = "Concurrent Executions",
+                    Data = trendsData.Select(x => (double)x.ConcurrentCount).ToArray()
+                }
+            };
+            _concurrentLabels = trendsData.Select(x => FormatDateLabel(x.Hour)).ToArray();
+
+            var longestData = await longestTask;
+            _longestSeries = new List<ChartSeries>
+            {
+                new ChartSeries
+                {
+                    Name = "Duration (seconds)",
+                    Data = longestData.Select(x => (double)x.DurationSeconds).ToArray()
+                }
+            };
+            _longestLabels = longestData.Select(x => 
+                x.ScheduleName.Length > 30 
+                    ? x.ScheduleName.Substring(0, 27) + "..." 
+                    : x.ScheduleName
+            ).ToArray();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading dashboard data: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private string FormatDateLabel(DateTime dateTime)
+    {
+        if (_selectedTimeWindow <= 24)
+        {
+            return dateTime.ToString("HH:mm");
+        }
+        else if (_selectedTimeWindow <= 168)
+        {
+            return dateTime.ToString("MMM dd HH:mm");
+        }
+        else
+        {
+            return dateTime.ToString("MMM dd");
+        }
+    }
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+    }
+}

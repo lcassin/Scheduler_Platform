@@ -1,0 +1,229 @@
+@page "/calendar"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject IScheduleService ScheduleService
+@inject IClientService ClientService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+
+<PageTitle>Calendar</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Calendar</MudText>
+
+<MudPaper Class="pa-4 mb-4">
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudAutocomplete T="Client" 
+                             Label="Filter by Client" 
+                             Value="_selectedClient"
+                             SearchFunc="SearchClients"
+                             ToStringFunc="@(c => c?.ClientName ?? "All Clients")"
+                             ValueChanged="OnClientFilterChanged"
+                             Variant="Variant.Outlined" 
+                             Margin="Margin.Dense" 
+                             Clearable="true"
+                             ResetValueOnEmptyText="true"
+                             CoerceText="false"
+                             AdornmentIcon="@Icons.Material.Filled.Search"
+                             AdornmentColor="Color.Primary" />
+        </MudItem>
+        <MudItem xs="12" md="6" Class="d-flex align-end justify-end">
+            <MudButton Variant="Variant.Filled" 
+                       Color="Color.Primary" 
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="NavigateToCreate">
+                Add New Schedule
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@if (_loading)
+{
+    <MudPaper Class="pa-4">
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    </MudPaper>
+}
+else
+{
+    <MudPaper Class="pa-4">
+        <MudCalendar T="ScheduleCalendarItem" 
+                     Items="_scheduleItems" 
+                     ItemClicked="OnScheduleClicked"
+                     MonthChanged="OnMonthChanged"
+                     Height="700"
+                     ShowToolbar="true"
+                     MonthCellMinHeight="100">
+            <CellTemplate>
+                @{
+                    var isPastDay = context.Start.Date < DateTime.Now.Date;
+                    var style = isPastDay 
+                        ? "padding: 4px; cursor: pointer; opacity: 0.5; background-color: #f5f5f5;" 
+                        : "padding: 4px; cursor: pointer;";
+                }
+                <div style="@style" title="@context.Text">
+                    <MudText Typo="Typo.caption" Style="font-weight: 500;">@context.Text</MudText>
+                    @if (!string.IsNullOrEmpty(context.ClientName))
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-size: 0.7rem;">@context.ClientName</MudText>
+                    }
+                </div>
+            </CellTemplate>
+        </MudCalendar>
+    </MudPaper>
+}
+
+@code {
+    private List<ScheduleCalendarItem> _scheduleItems = new();
+    private List<Client> _clients = new();
+    private bool _loading = true;
+    private Client? _selectedClient;
+    private int? _selectedClientId => _selectedClient?.Id;
+    private DateTime _currentMonth = DateTime.Now;
+    private TimeZoneInfo _centralTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Central Standard Time");
+    private TimeZoneInfo _easternTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadClients();
+        await LoadSchedules();
+    }
+
+    private async Task LoadClients()
+    {
+        try
+        {
+            _clients = await ClientService.GetClientsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading clients: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task<IEnumerable<Client>> SearchClients(string value, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(value))
+            return _clients;
+        
+        return _clients.Where(c => c.ClientName.Contains(value, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task OnClientFilterChanged(Client? client)
+    {
+        _selectedClient = client;
+        await LoadSchedules();
+    }
+
+    private async Task OnMonthChanged(DateTime month)
+    {
+        _currentMonth = month;
+        await LoadSchedules();
+    }
+
+    private async Task LoadSchedules()
+    {
+        _loading = true;
+        try
+        {
+            var startOfMonth = new DateTime(_currentMonth.Year, _currentMonth.Month, 1);
+            var endOfMonth = startOfMonth.AddMonths(1).AddDays(-1).AddHours(23).AddMinutes(59).AddSeconds(59);
+            
+            var schedules = await ScheduleService.GetSchedulesAsync(
+                startDate: startOfMonth,
+                endDate: endOfMonth,
+                clientId: _selectedClientId);
+            
+            var filteredSchedules = schedules.Where(s => s.NextRunTime.HasValue).ToList();
+            
+            var groupedByDate = filteredSchedules
+                .GroupBy(s => ConvertToLocalTime(s.NextRunTime!.Value, s.TimeZone).Date)
+                .ToList();
+            
+            _scheduleItems = new List<ScheduleCalendarItem>();
+            
+            foreach (var dateGroup in groupedByDate)
+            {
+                var schedulesForDay = dateGroup.OrderBy(s => s.NextRunTime).ToList();
+                
+                var itemsToDisplay = schedulesForDay.Take(20).ToList();
+                
+                foreach (var schedule in itemsToDisplay)
+                {
+                    var localTime = ConvertToLocalTime(schedule.NextRunTime!.Value, schedule.TimeZone);
+                    
+                    _scheduleItems.Add(new ScheduleCalendarItem
+                    {
+                        ScheduleId = schedule.Id,
+                        ClientId = schedule.ClientId,
+                        ClientName = _clients.FirstOrDefault(c => c.Id == schedule.ClientId)?.ClientName ?? "",
+                        Start = localTime,
+                        End = localTime.AddHours(1),
+                        Text = $"{schedule.Name} ({localTime:h:mm tt})",
+                        IsEnabled = schedule.IsEnabled
+                    });
+                }
+                
+                if (schedulesForDay.Count > 20)
+                {
+                    var overflowCount = schedulesForDay.Count - 20;
+                    _scheduleItems.Add(new ScheduleCalendarItem
+                    {
+                        ScheduleId = 0,
+                        ClientId = 0,
+                        ClientName = "",
+                        Start = dateGroup.Key,
+                        End = dateGroup.Key.AddHours(1),
+                        Text = $"+ {overflowCount} more schedules",
+                        IsEnabled = true
+                    });
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading schedules: {ex.Message}", Severity.Error);
+            _scheduleItems = new();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+    
+    private DateTime ConvertToLocalTime(DateTime utcTime, string? timeZone)
+    {
+        if (string.IsNullOrEmpty(timeZone))
+        {
+            return TimeZoneInfo.ConvertTimeFromUtc(utcTime, _centralTimeZone);
+        }
+        
+        TimeZoneInfo targetTimeZone;
+        if (timeZone.Contains("Eastern", StringComparison.OrdinalIgnoreCase))
+        {
+            targetTimeZone = _easternTimeZone;
+        }
+        else if (timeZone.Contains("Central", StringComparison.OrdinalIgnoreCase))
+        {
+            targetTimeZone = _centralTimeZone;
+        }
+        else
+        {
+            targetTimeZone = _centralTimeZone;
+        }
+        
+        return TimeZoneInfo.ConvertTimeFromUtc(utcTime, targetTimeZone);
+    }
+
+    private Task OnScheduleClicked(ScheduleCalendarItem item)
+    {
+        var dateStr = item.Start.Date.ToString("yyyy-MM-dd");
+        Navigation.NavigateTo($"/schedules?date={dateStr}");
+        return Task.CompletedTask;
+    }
+
+    private void NavigateToCreate()
+    {
+        Navigation.NavigateTo("/schedules/create");
+    }
+}

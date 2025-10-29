@@ -1,0 +1,778 @@
+@page "/schedules/create"
+@page "/schedules/edit/{Id:int}"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject IScheduleService ScheduleService
+@inject IClientService ClientService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject ILogger<Form> _logger
+@inject IJSRuntime JSRuntime
+@using System.Text.Json
+
+<PageTitle>@(_isEdit ? "Edit Schedule" : "Create Schedule")</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">@(_isEdit ? "Edit Schedule" : "Create Schedule")</MudText>
+
+<MudPaper Class="pa-4" Style="padding-bottom: 80px;">
+    <EditForm Model="@_schedule" OnValidSubmit="HandleSubmit">
+        <DataAnnotationsValidator />
+        
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="_schedule.Name" Label="Schedule Name" Required="true" />
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudSelect T="int" @bind-Value="_schedule.ClientId" Label="Client" Required="true">
+                    @foreach (var client in _clients)
+                    {
+                        <MudSelectItem Value="client.Id">@client.ClientName</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_schedule.Description" Label="Description" Lines="3" />
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudSelect Value="_schedule.JobType" ValueChanged="OnJobTypeChanged" Label="Job Type" Required="true" T="JobType">
+                    <MudSelectItem Value="JobType.Process">Process</MudSelectItem>
+                    <MudSelectItem Value="JobType.StoredProcedure">Stored Procedure</MudSelectItem>
+                    <MudSelectItem Value="JobType.ApiCall">API Call</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudSwitch @bind-Value="_schedule.IsEnabled" Label="Enabled" Color="Color.Primary" />
+            </MudItem>
+            
+            <MudItem xs="12" md="4">
+                <MudNumericField @bind-Value="_schedule.MaxRetries" 
+                                 @bind-Value:after="OnFormFieldChanged"
+                                 Label="Max Retries" 
+                                 HelperText="Maximum number of retry attempts"
+                                 Min="0"
+                                 Variant="Variant.Outlined"
+                                 Margin="Margin.Dense" />
+            </MudItem>
+            
+            <MudItem xs="12" md="4">
+                <MudNumericField @bind-Value="_schedule.RetryDelayMinutes" 
+                                 @bind-Value:after="OnFormFieldChanged"
+                                 Label="Retry Delay (minutes)" 
+                                 HelperText="Delay between retry attempts"
+                                 Min="1"
+                                 Variant="Variant.Outlined"
+                                 Margin="Margin.Dense" />
+            </MudItem>
+            
+            <MudItem xs="12" md="4">
+                <MudNumericField @bind-Value="_schedule.TimeoutMinutes" 
+                                 @bind-Value:after="OnFormFieldChanged"
+                                 Label="Timeout (minutes)" 
+                                 HelperText="Optional. Leave empty for default (5 minutes)"
+                                 Min="0"
+                                 Variant="Variant.Outlined"
+                                 Margin="Margin.Dense" />
+            </MudItem>
+            
+            <MudItem xs="12">
+                <MudText Typo="Typo.h6" Class="mb-2">Schedule Configuration</MudText>
+                <CronBuilder CronExpression="@_schedule.CronExpression" 
+                             CronExpressionChanged="@((value) => _schedule.CronExpression = value)"
+                             Frequency="@_schedule.Frequency"
+                             FrequencyChanged="@((value) => _schedule.Frequency = value)" />
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudDatePicker @bind-Date="_nextRunDate" 
+                               Label="Start Date" 
+                               HelperText="Select when this schedule should start firing (optional)"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               Clearable="true" />
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudTimePicker @bind-Time="_nextRunTime" 
+                               Label="Start Time" 
+                               HelperText="Select the time for schedule to start (optional)"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               Clearable="true" />
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudSelect @bind-Value="_schedule.TimeZone" 
+                           Label="Time Zone" 
+                           T="string"
+                           HelperText="Select the timezone for this schedule"
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense"
+                           Required="true">
+                    @foreach (var tz in _timezones)
+                    {
+                        <MudSelectItem Value="@tz.Id">@tz.DisplayName</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            
+            <MudItem xs="12">
+                <MudExpansionPanels MultiExpansion="true">
+                    <MudExpansionPanel Text="Notification Settings" @bind-Expanded="@_expandNotifications">
+                        <MudSwitch @bind-Value="_notifyOnSuccess" Label="Notify on Success" Color="Color.Success" Class="mb-2" />
+                        @if (_notifyOnSuccess)
+                        {
+                            <MudTextField @bind-Value="_successRecipients" Label="Success Recipients (comma-separated)" 
+                                          Required="@_notifyOnSuccess"
+                                          Validation="@(new Func<string, string>(ValidateEmailList))"
+                                          HelperText="Enter email addresses separated by commas" Class="mb-2" />
+                            <MudTextField @bind-Value="_successSubject" Label="Success Email Subject" 
+                                          Required="@_notifyOnSuccess"
+                                          HelperText="Subject line for success notification emails" />
+                        }
+                        
+                        <MudSwitch @bind-Value="_notifyOnFailure" Label="Notify on Failure" Color="Color.Error" Class="mb-2 mt-4" />
+                        @if (_notifyOnFailure)
+                        {
+                            <MudTextField @bind-Value="_failureRecipients" Label="Failure Recipients (comma-separated)" 
+                                          Required="@_notifyOnFailure"
+                                          Validation="@(new Func<string, string>(ValidateEmailList))"
+                                          HelperText="Enter email addresses separated by commas" Class="mb-2" />
+                            <MudTextField @bind-Value="_failureSubject" Label="Failure Email Subject" 
+                                          Required="@_notifyOnFailure"
+                                          HelperText="Subject line for failure notification emails" />
+                        }
+                    </MudExpansionPanel>
+                    
+                    <MudExpansionPanel Text="Job Configuration">
+                        @if (_schedule.JobType == JobType.Process)
+                        {
+                            <MudTextField @bind-Value="_processExecutablePath" 
+                                          @bind-Value:after="OnFormFieldChanged"
+                                          Label="Executable Path" 
+                                          Required="true"
+                                          HelperText="Full path to the executable file"
+                                          Class="mb-2" />
+                            <MudTextField @bind-Value="_processArguments" 
+                                          @bind-Value:after="OnFormFieldChanged"
+                                          Label="Arguments" 
+                                          HelperText="Command line arguments (optional)"
+                                          Class="mb-2" />
+                            <MudTextField @bind-Value="_processWorkingDirectory" 
+                                          @bind-Value:after="OnFormFieldChanged"
+                                          Label="Working Directory" 
+                                          HelperText="Working directory for the process (optional)"
+                                          Class="mb-2" />
+                            <MudTextField @bind-Value="_processEnvironmentVariables" 
+                                          @bind-Value:after="OnFormFieldChanged"
+                                          Label="Environment Variables" 
+                                          Lines="3"
+                                          HelperText="One per line in format: KEY=VALUE (optional)"
+                                          Class="mb-2" />
+                            <MudNumericField @bind-Value="_processTimeoutSeconds" 
+                                             @bind-Value:after="OnFormFieldChanged"
+                                             Label="Timeout (seconds)" 
+                                             HelperText="Maximum execution time in seconds"
+                                             Min="1"
+                                             Class="mb-2" />
+                        }
+                        else if (_schedule.JobType == JobType.StoredProcedure)
+                        {
+                            <MudGrid Class="mb-2">
+                                <MudItem xs="12" sm="9">
+                                    <MudTextField @bind-Value="_spConnectionString" 
+                                                  @bind-Value:after="OnFormFieldChanged"
+                                                  Label="Connection String" 
+                                                  Required="true"
+                                                  HelperText="Database connection string" />
+                                </MudItem>
+                                <MudItem xs="12" sm="3" Class="d-flex align-end">
+                                    <MudButton Color="Color.Primary" 
+                                               Variant="Variant.Filled" 
+                                               OnClick="OpenConnectionStringBuilder"
+                                               StartIcon="@Icons.Material.Filled.Build">
+                                        Build
+                                    </MudButton>
+                                </MudItem>
+                            </MudGrid>
+                            
+                            <MudTextField @bind-Value="_spProcedureName" 
+                                          @bind-Value:after="OnFormFieldChanged"
+                                          Label="Procedure Name" 
+                                          Required="true"
+                                          HelperText="Name of the stored procedure to execute"
+                                          Class="mb-2" />
+                            <MudNumericField @bind-Value="_spTimeoutSeconds" 
+                                             @bind-Value:after="OnFormFieldChanged"
+                                             Label="Timeout (seconds)" 
+                                             HelperText="Maximum execution time in seconds"
+                                             Min="1"
+                                             Class="mb-2" />
+                            <MudSwitch @bind-Value="_spReturnValue" 
+                                       @bind-Value:after="OnFormFieldChanged"
+                                       Label="Return Value" 
+                                       Color="Color.Primary"
+                                       HelperText="Whether to capture the return value from the stored procedure" />
+                        }
+                        else if (_schedule.JobType == JobType.ApiCall)
+                        {
+                            <MudTextField @bind-Value="_apiUrl" 
+                                          @bind-Value:after="OnFormFieldChanged"
+                                          Label="API URL" 
+                                          Required="true"
+                                          HelperText="Full URL of the API endpoint"
+                                          Class="mb-2" />
+                            <MudSelect @bind-Value="_apiMethod" 
+                                       @bind-Value:after="OnFormFieldChanged"
+                                       Label="HTTP Method" 
+                                       T="string"
+                                       Class="mb-2">
+                                <MudSelectItem Value="@("GET")">GET</MudSelectItem>
+                                <MudSelectItem Value="@("POST")">POST</MudSelectItem>
+                                <MudSelectItem Value="@("PUT")">PUT</MudSelectItem>
+                                <MudSelectItem Value="@("PATCH")">PATCH</MudSelectItem>
+                                <MudSelectItem Value="@("DELETE")">DELETE</MudSelectItem>
+                            </MudSelect>
+                            <MudTextField @bind-Value="_apiHeaders" 
+                                          @bind-Value:after="OnFormFieldChanged"
+                                          Label="Headers" 
+                                          Lines="3"
+                                          HelperText="One per line in format: HeaderName=HeaderValue (optional)"
+                                          Class="mb-2" />
+                            <MudTextField @bind-Value="_apiAuthorizationType" 
+                                          @bind-Value:after="OnFormFieldChanged"
+                                          Label="Authorization Type" 
+                                          HelperText="e.g., Bearer, Basic (optional)"
+                                          Class="mb-2" />
+                            <MudTextField @bind-Value="_apiAuthorizationValue" 
+                                          @bind-Value:after="OnFormFieldChanged"
+                                          Label="Authorization Value" 
+                                          HelperText="Token or credentials (optional)"
+                                          Class="mb-2" />
+                            <MudTextField @bind-Value="_apiRequestBody" 
+                                          @bind-Value:after="OnFormFieldChanged"
+                                          Label="Request Body" 
+                                          Lines="5"
+                                          HelperText="JSON request body for POST/PUT/PATCH (optional)"
+                                          Class="mb-2" />
+                            <MudTextField @bind-Value="_apiContentType" 
+                                          @bind-Value:after="OnFormFieldChanged"
+                                          Label="Content Type" 
+                                          HelperText="MIME type for request body"
+                                          Class="mb-2" />
+                            <MudNumericField @bind-Value="_apiTimeoutSeconds" 
+                                             @bind-Value:after="OnFormFieldChanged"
+                                             Label="Timeout (seconds)" 
+                                             HelperText="Maximum execution time in seconds"
+                                             Min="1"
+                                             Class="mb-2" />
+                        }
+                    </MudExpansionPanel>
+                    
+                    <MudExpansionPanel Text="Advanced: Raw JSON Override">
+                        <MudStack>
+                            <MudText Typo="Typo.body2" Class="mb-2">
+                                For power users: Override the auto-generated job configuration with custom JSON. 
+                                This is useful for complex scenarios like custom API headers, authentication, or stored procedure parameters.
+                            </MudText>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" 
+                                       StartIcon="@Icons.Material.Filled.Edit" OnClick="OpenJsonEditor">
+                                @(string.IsNullOrWhiteSpace(_schedule.JobDataJson) ? "Add Custom JSON" : "Edit Custom JSON")
+                            </MudButton>
+                            @if (!string.IsNullOrWhiteSpace(_schedule.JobDataJson))
+                            {
+                                <MudPaper Elevation="1" Class="pa-2 mt-2">
+                                    <MudText Typo="Typo.caption" Class="mb-1">Current JSON:</MudText>
+                                    <pre style="margin: 0; white-space: pre-wrap; word-wrap: break-word; font-family: monospace; font-size: 0.75rem; max-height: 150px; overflow-y: auto;">@_schedule.JobDataJson</pre>
+                                </MudPaper>
+                            }
+                        </MudStack>
+                    </MudExpansionPanel>
+                </MudExpansionPanels>
+            </MudItem>
+        </MudGrid>
+        
+        <div style="position: sticky; bottom: 0; left: 0; right: 0; background: white; border-top: 1px solid #e0e0e0; padding: 16px; margin-left: -16px; margin-right: -16px; z-index: 1000; display: flex; justify-content: flex-end; gap: 8px; box-shadow: 0 -2px 4px rgba(0,0,0,0.1);">
+            <MudButton Variant="Variant.Outlined" OnClick="Cancel">Cancel</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" ButtonType="ButtonType.Submit" 
+                       Disabled="_saving">
+                @if (_saving)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                }
+                @(_isEdit ? "Update" : "Create")
+            </MudButton>
+        </div>
+    </EditForm>
+</MudPaper>
+
+@code {
+    private List<TimeZoneInfo> _timezones = new();
+    private string? _browserTimeZone;
+    
+    [Parameter]
+    public int? Id { get; set; }
+
+    private Schedule _schedule = new() { ClientId = 1, IsEnabled = true, Frequency = ScheduleFrequency.Daily, JobType = JobType.Process, JobDataJson = "{}", TimeZone = "Central Standard Time" };
+    private List<Client> _clients = new();
+    private bool _isEdit => Id.HasValue;
+    private bool _saving = false;
+    private bool _notifyOnSuccess = false;
+    private bool _notifyOnFailure = true;
+    private string? _successRecipients;
+    private string? _successSubject;
+    private string? _failureRecipients;
+    private string? _failureSubject;
+    private bool _expandNotifications = false;
+    private DateTime? _nextRunDate;
+    private TimeSpan? _nextRunTime;
+    
+    private string _processExecutablePath = string.Empty;
+    private string _processArguments = string.Empty;
+    private string _processWorkingDirectory = string.Empty;
+    private string _processEnvironmentVariables = string.Empty;
+    private int _processTimeoutSeconds = 300;
+    
+    private string _spConnectionString = string.Empty;
+    private string _spProcedureName = string.Empty;
+    private int _spTimeoutSeconds = 300;
+    private bool _spReturnValue = false;
+    
+    private string _apiUrl = string.Empty;
+    private string _apiMethod = "GET";
+    private string _apiHeaders = string.Empty;
+    private string _apiAuthorizationType = string.Empty;
+    private string _apiAuthorizationValue = string.Empty;
+    private string _apiRequestBody = string.Empty;
+    private string _apiContentType = "application/json";
+    private int _apiTimeoutSeconds = 300;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _timezones = TimeZoneInfo.GetSystemTimeZones().ToList();
+        _clients = await ClientService.GetClientsAsync();
+        
+        if (_clients.Count > 0 && !_isEdit)
+        {
+            _schedule.ClientId = _clients[0].Id;
+            
+            try
+            {
+                _browserTimeZone = await JSRuntime.InvokeAsync<string>("getBrowserTimeZone");
+                _schedule.TimeZone = _browserTimeZone ?? "Central Standard Time";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to detect browser timezone, defaulting to Central Standard Time");
+                _schedule.TimeZone = "Central Standard Time";
+            }
+        }
+        
+        if (_isEdit && Id.HasValue)
+        {
+            try
+            {
+                var schedule = await ScheduleService.GetScheduleAsync(Id.Value);
+                if (schedule != null)
+                {
+                    _schedule = schedule;
+                    
+                    if (_schedule.NextRunTime.HasValue)
+                    {
+                        _nextRunDate = _schedule.NextRunTime.Value.Date;
+                        _nextRunTime = _schedule.NextRunTime.Value.TimeOfDay;
+                    }
+                    
+                    if (!string.IsNullOrWhiteSpace(_schedule.JobDataJson))
+                    {
+                        DeserializeJobConfiguration(_schedule.JobDataJson, _schedule.JobType);
+                    }
+                    
+                    if (_schedule.NotificationSetting != null)
+                    {
+                        _notifyOnSuccess = _schedule.NotificationSetting.EnableSuccessNotifications;
+                        _notifyOnFailure = _schedule.NotificationSetting.EnableFailureNotifications;
+                        _successRecipients = _schedule.NotificationSetting.SuccessEmailRecipients;
+                        _successSubject = _schedule.NotificationSetting.SuccessEmailSubject;
+                        _failureRecipients = _schedule.NotificationSetting.FailureEmailRecipients;
+                        _failureSubject = _schedule.NotificationSetting.FailureEmailSubject;
+                        _expandNotifications = _notifyOnSuccess || _notifyOnFailure;
+                    }
+                }
+                else
+                {
+                    Snackbar.Add("Schedule not found", Severity.Error);
+                    Navigation.NavigateTo("/schedules");
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error loading schedule: {ex.Message}", Severity.Error);
+                Navigation.NavigateTo("/schedules");
+            }
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        _saving = true;
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(_schedule.JobDataJson))
+            {
+                try
+                {
+                    JsonDocument.Parse(_schedule.JobDataJson);
+                }
+                catch (JsonException ex)
+                {
+                    Snackbar.Add($"Invalid JSON in Job Data: {ex.Message}", Severity.Error);
+                    _saving = false;
+                    return;
+                }
+            }
+            
+            if (string.IsNullOrWhiteSpace(_schedule.JobDataJson))
+            {
+                _schedule.JobDataJson = SerializeJobConfiguration(_schedule.JobType);
+            }
+            
+            if (_nextRunDate.HasValue && _nextRunTime.HasValue)
+            {
+                _schedule.NextRunTime = _nextRunDate.Value.Add(_nextRunTime.Value);
+            }
+            else if (_nextRunDate.HasValue)
+            {
+                _schedule.NextRunTime = _nextRunDate.Value;
+            }
+            else
+            {
+                _schedule.NextRunTime = null;
+            }
+            
+            if (_notifyOnSuccess || _notifyOnFailure)
+            {
+                _schedule.NotificationSetting = new NotificationSetting
+                {
+                    EnableSuccessNotifications = _notifyOnSuccess,
+                    EnableFailureNotifications = _notifyOnFailure,
+                    SuccessEmailRecipients = _successRecipients,
+                    SuccessEmailSubject = _successSubject,
+                    FailureEmailRecipients = _failureRecipients,
+                    FailureEmailSubject = _failureSubject
+                };
+            }
+
+            if (_isEdit && Id.HasValue)
+            {
+                await ScheduleService.UpdateScheduleAsync(Id.Value, _schedule);
+                Snackbar.Add("Schedule updated successfully", Severity.Success);
+            }
+            else
+            {
+                await ScheduleService.CreateScheduleAsync(_schedule);
+                Snackbar.Add("Schedule created successfully", Severity.Success);
+            }
+
+            Navigation.NavigateTo("/schedules");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving schedule: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        Navigation.NavigateTo("/schedules");
+    }
+
+    private string? ValidateEmailList(string? emailList)
+    {
+        if (string.IsNullOrWhiteSpace(emailList))
+        {
+            return null;
+        }
+
+        var emailRegex = new System.Text.RegularExpressions.Regex(
+            @"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+
+        var emails = emailList.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        
+        foreach (var email in emails)
+        {
+            if (!emailRegex.IsMatch(email))
+            {
+                return $"Invalid email address: {email}";
+            }
+        }
+
+        return null;
+    }
+    
+    private async Task OpenJsonEditor()
+    {
+        var parameters = new DialogParameters<JsonEditorDialog>
+        {
+            { x => x.InitialJson, _schedule.JobDataJson }
+        };
+        
+        var options = new DialogOptions 
+        { 
+            MaxWidth = MaxWidth.Large, 
+            FullWidth = true,
+            CloseButton = true
+        };
+        
+        var dialog = await DialogService.ShowAsync<JsonEditorDialog>("Job Data Editor", parameters, options);
+        var result = await dialog.Result;
+        
+        if (!result.Canceled && result.Data is string json)
+        {
+            _schedule.JobDataJson = json;
+            DeserializeJobConfiguration(json, _schedule.JobType);
+            StateHasChanged();
+        }
+    }
+    
+    private async Task OpenConnectionStringBuilder()
+    {
+        var options = new DialogOptions 
+        { 
+            MaxWidth = MaxWidth.Medium, 
+            FullWidth = true,
+            CloseButton = true
+        };
+        
+        var dialog = await DialogService.ShowAsync<ConnectionStringBuilderDialog>(
+            "Connection String Builder", 
+            new DialogParameters<ConnectionStringBuilderDialog>(), 
+            options);
+        var result = await dialog.Result;
+        
+        if (!result.Canceled && result.Data is string connectionString)
+        {
+            _spConnectionString = connectionString;
+            OnFormFieldChanged();
+            StateHasChanged();
+        }
+    }
+    
+    private void OnJobTypeChanged(JobType newJobType)
+    {
+        _schedule.JobType = newJobType;
+        _schedule.JobDataJson = string.Empty;
+        
+        _processExecutablePath = string.Empty;
+        _processArguments = string.Empty;
+        _processWorkingDirectory = string.Empty;
+        _processEnvironmentVariables = string.Empty;
+        _processTimeoutSeconds = 300;
+        
+        _spConnectionString = string.Empty;
+        _spProcedureName = string.Empty;
+        _spTimeoutSeconds = 300;
+        _spReturnValue = false;
+        
+        _apiUrl = string.Empty;
+        _apiMethod = "GET";
+        _apiHeaders = string.Empty;
+        _apiAuthorizationType = string.Empty;
+        _apiAuthorizationValue = string.Empty;
+        _apiRequestBody = string.Empty;
+        _apiContentType = "application/json";
+        _apiTimeoutSeconds = 300;
+        
+        StateHasChanged();
+    }
+    
+    private void DeserializeJobConfiguration(string json, JobType jobType)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+            
+            switch (jobType)
+            {
+                case JobType.Process:
+                    if (root.TryGetProperty("ExecutablePath", out var execPath))
+                        _processExecutablePath = execPath.GetString() ?? string.Empty;
+                    if (root.TryGetProperty("Arguments", out var args))
+                        _processArguments = args.GetString() ?? string.Empty;
+                    if (root.TryGetProperty("WorkingDirectory", out var workDir))
+                        _processWorkingDirectory = workDir.GetString() ?? string.Empty;
+                    if (root.TryGetProperty("TimeoutSeconds", out var procTimeout))
+                        _processTimeoutSeconds = procTimeout.GetInt32();
+                    if (root.TryGetProperty("EnvironmentVariables", out var envVars) && envVars.ValueKind == JsonValueKind.Object)
+                    {
+                        var envList = new List<string>();
+                        foreach (var prop in envVars.EnumerateObject())
+                        {
+                            envList.Add($"{prop.Name}={prop.Value.GetString()}");
+                        }
+                        _processEnvironmentVariables = string.Join(Environment.NewLine, envList);
+                    }
+                    break;
+                    
+                case JobType.StoredProcedure:
+                    if (root.TryGetProperty("ConnectionString", out var connStr))
+                        _spConnectionString = connStr.GetString() ?? string.Empty;
+                    if (root.TryGetProperty("ProcedureName", out var procName))
+                        _spProcedureName = procName.GetString() ?? string.Empty;
+                    if (root.TryGetProperty("TimeoutSeconds", out var spTimeout))
+                        _spTimeoutSeconds = spTimeout.GetInt32();
+                    if (root.TryGetProperty("ReturnValue", out var retVal))
+                        _spReturnValue = retVal.GetBoolean();
+                    break;
+                    
+                case JobType.ApiCall:
+                    if (root.TryGetProperty("Url", out var url))
+                        _apiUrl = url.GetString() ?? string.Empty;
+                    if (root.TryGetProperty("Method", out var method))
+                        _apiMethod = method.GetString() ?? "GET";
+                    if (root.TryGetProperty("AuthorizationType", out var authType))
+                        _apiAuthorizationType = authType.GetString() ?? string.Empty;
+                    if (root.TryGetProperty("AuthorizationValue", out var authVal))
+                        _apiAuthorizationValue = authVal.GetString() ?? string.Empty;
+                    if (root.TryGetProperty("RequestBody", out var reqBody))
+                        _apiRequestBody = reqBody.GetString() ?? string.Empty;
+                    if (root.TryGetProperty("ContentType", out var contentType))
+                        _apiContentType = contentType.GetString() ?? "application/json";
+                    if (root.TryGetProperty("TimeoutSeconds", out var apiTimeout))
+                        _apiTimeoutSeconds = apiTimeout.GetInt32();
+                    if (root.TryGetProperty("Headers", out var headers) && headers.ValueKind == JsonValueKind.Object)
+                    {
+                        var headerList = new List<string>();
+                        foreach (var prop in headers.EnumerateObject())
+                        {
+                            headerList.Add($"{prop.Name}={prop.Value.GetString()}");
+                        }
+                        _apiHeaders = string.Join(Environment.NewLine, headerList);
+                    }
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to deserialize job configuration");
+        }
+    }
+    
+    private string SerializeJobConfiguration(JobType jobType)
+    {
+        switch (jobType)
+        {
+            case JobType.Process:
+                var processConfig = new
+                {
+                    ExecutablePath = _processExecutablePath,
+                    Arguments = string.IsNullOrWhiteSpace(_processArguments) ? null : _processArguments,
+                    WorkingDirectory = string.IsNullOrWhiteSpace(_processWorkingDirectory) ? null : _processWorkingDirectory,
+                    EnvironmentVariables = ParseKeyValuePairs(_processEnvironmentVariables),
+                    TimeoutSeconds = _processTimeoutSeconds
+                };
+                return JsonSerializer.Serialize(processConfig, new JsonSerializerOptions { WriteIndented = false, DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull });
+                
+            case JobType.StoredProcedure:
+                var spConfig = new
+                {
+                    ConnectionString = _spConnectionString,
+                    ProcedureName = _spProcedureName,
+                    TimeoutSeconds = _spTimeoutSeconds,
+                    ReturnValue = _spReturnValue
+                };
+                return JsonSerializer.Serialize(spConfig, new JsonSerializerOptions { WriteIndented = false });
+                
+            case JobType.ApiCall:
+                var apiConfig = new
+                {
+                    Url = _apiUrl,
+                    Method = _apiMethod,
+                    Headers = ParseKeyValuePairs(_apiHeaders),
+                    AuthorizationType = string.IsNullOrWhiteSpace(_apiAuthorizationType) ? null : _apiAuthorizationType,
+                    AuthorizationValue = string.IsNullOrWhiteSpace(_apiAuthorizationValue) ? null : _apiAuthorizationValue,
+                    RequestBody = string.IsNullOrWhiteSpace(_apiRequestBody) ? null : _apiRequestBody,
+                    ContentType = _apiContentType,
+                    TimeoutSeconds = _apiTimeoutSeconds
+                };
+                return JsonSerializer.Serialize(apiConfig, new JsonSerializerOptions { WriteIndented = false, DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull });
+                
+            default:
+                return "{}";
+        }
+    }
+    
+    private Dictionary<string, string>? ParseKeyValuePairs(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+            return null;
+            
+        var dict = new Dictionary<string, string>();
+        var lines = input.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        
+        foreach (var line in lines)
+        {
+            var parts = line.Split('=', 2);
+            if (parts.Length == 2)
+            {
+                dict[parts[0].Trim()] = parts[1].Trim();
+            }
+        }
+        
+        return dict.Count > 0 ? dict : null;
+    }
+    
+    private string MergeJsonWithFormFields(JobType jobType)
+    {
+        var formFieldsJson = SerializeJobConfiguration(jobType);
+        
+        if (string.IsNullOrWhiteSpace(_schedule.JobDataJson))
+        {
+            return formFieldsJson;
+        }
+        
+        try
+        {
+            using var existingDoc = JsonDocument.Parse(_schedule.JobDataJson);
+            using var formFieldsDoc = JsonDocument.Parse(formFieldsJson);
+            
+            var merged = new Dictionary<string, JsonElement>();
+            
+            foreach (var prop in formFieldsDoc.RootElement.EnumerateObject())
+            {
+                merged[prop.Name] = prop.Value.Clone();
+            }
+            
+            foreach (var prop in existingDoc.RootElement.EnumerateObject())
+            {
+                if (!merged.ContainsKey(prop.Name))
+                {
+                    merged[prop.Name] = prop.Value.Clone();
+                }
+            }
+            
+            return JsonSerializer.Serialize(merged, new JsonSerializerOptions { WriteIndented = false });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to merge JSON with form fields, using form fields only");
+            return formFieldsJson;
+        }
+    }
+    
+    private void OnFormFieldChanged()
+    {
+        _schedule.JobDataJson = MergeJsonWithFormFields(_schedule.JobType);
+        StateHasChanged();
+    }
+}
