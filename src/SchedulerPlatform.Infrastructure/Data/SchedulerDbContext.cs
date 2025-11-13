@@ -12,6 +12,7 @@ public class SchedulerDbContext : DbContext
     public DbSet<Client> Clients { get; set; }
     public DbSet<User> Users { get; set; }
     public DbSet<UserPermission> UserPermissions { get; set; }
+    public DbSet<PasswordHistory> PasswordHistories { get; set; }
     public DbSet<Schedule> Schedules { get; set; }
     public DbSet<JobExecution> JobExecutions { get; set; }
     public DbSet<JobParameter> JobParameters { get; set; }
@@ -43,6 +44,9 @@ public class SchedulerDbContext : DbContext
             entity.Property(e => e.FirstName).IsRequired().HasMaxLength(100);
             entity.Property(e => e.LastName).IsRequired().HasMaxLength(100);
             entity.Property(e => e.ExternalUserId).HasMaxLength(255);
+            entity.Property(e => e.ExternalIssuer).HasMaxLength(500);
+            entity.Property(e => e.PasswordHash).HasMaxLength(500);
+            entity.HasIndex(e => new { e.ExternalIssuer, e.ExternalUserId });
             
             entity.HasOne(e => e.Client)
                 .WithMany(c => c.Users)
@@ -60,6 +64,20 @@ public class SchedulerDbContext : DbContext
                 .WithMany(u => u.Permissions)
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PasswordHistory>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.PasswordHash).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.ChangedAt).IsRequired();
+            
+            entity.HasOne(e => e.User)
+                .WithMany(u => u.PasswordHistories)
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+                
+            entity.HasIndex(e => new { e.UserId, e.ChangedAt });
         });
 
         modelBuilder.Entity<Schedule>(entity =>

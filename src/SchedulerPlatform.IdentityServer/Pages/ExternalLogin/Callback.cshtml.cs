@@ -11,6 +11,8 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using SchedulerPlatform.IdentityServer.Services;
+using SchedulerPlatform.Core.Domain.Entities;
 
 namespace SchedulerPlatform.IdentityServer.Pages.ExternalLogin;
 
@@ -18,23 +20,24 @@ namespace SchedulerPlatform.IdentityServer.Pages.ExternalLogin;
 [SecurityHeaders]
 public class Callback : PageModel
 {
-    private readonly TestUserStore _users;
+    private readonly TestUserStore? _users;
     private readonly IIdentityServerInteractionService _interaction;
     private readonly ILogger<Callback> _logger;
     private readonly IEventService _events;
+    private readonly IUserService _userService;
 
     public Callback(
         IIdentityServerInteractionService interaction,
         IEventService events,
         ILogger<Callback> logger,
+        IUserService userService,
         TestUserStore? users = null)
     {
-        // this is where you would plug in your own custom identity management library (e.g. ASP.NET Identity)
-        _users = users ?? throw new InvalidOperationException("Please call 'AddTestUsers(TestUsers.Users)' on the IIdentityServerBuilder in Startup or remove the TestUserStore from the AccountController.");
-
+        _users = users;
         _interaction = interaction;
         _logger = logger;
         _events = events;
+        _userService = userService;
     }
         
     public async Task<IActionResult> OnGet()
@@ -66,18 +69,86 @@ public class Callback : PageModel
         var provider = result.Properties.Items["scheme"] ?? throw new InvalidOperationException("Null scheme in authentiation properties");
         var providerUserId = userIdClaim.Value;
 
-        // find external user
-        var user = _users.FindByExternalProvider(provider, providerUserId);
-        if (user == null)
+        TestUser? user = null;
+        string subjectId;
+        string username;
+
+        if (_users != null)
         {
-            // this might be where you might initiate a custom workflow for user registration
-            // in this sample we don't show how that would be done, as our sample implementation
-            // simply auto-provisions new external user
-            //
-            // remove the user id claim so we don't include it as an extra claim if/when we provision the user
-            var claims = externalUser.Claims.ToList();
-            claims.Remove(userIdClaim);
-            user = _users.AutoProvisionUser(provider, providerUserId, claims.ToList());
+            user = _users.FindByExternalProvider(provider, providerUserId);
+        }
+
+        if (user == null && provider != "entra")
+        {
+            if (_users != null)
+            {
+                var claims = externalUser.Claims.ToList();
+                claims.Remove(userIdClaim);
+                user = _users.AutoProvisionUser(provider, providerUserId, claims.ToList());
+            }
+        }
+
+        if (user != null)
+        {
+            subjectId = user.SubjectId;
+            username = user.Username;
+        }
+        else
+        {
+            var issuer = externalUser.FindFirst("iss")?.Value ?? provider;
+            var oid = externalUser.FindFirst("oid")?.Value ?? 
+                      externalUser.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value ?? 
+                      providerUserId;
+            
+            var externalId = $"{issuer}|{oid}";
+            var dbUser = await _userService.GetUserByExternalIdAsync(externalId);
+
+            if (dbUser == null)
+            {
+                var email = externalUser.FindFirst("email")?.Value ?? 
+                           externalUser.FindFirst(ClaimTypes.Email)?.Value ?? 
+                           externalUser.FindFirst("preferred_username")?.Value ?? 
+                           $"{oid}@external.user";
+                
+                var givenName = externalUser.FindFirst("given_name")?.Value ?? 
+                               externalUser.FindFirst(ClaimTypes.GivenName)?.Value ?? "External";
+                
+                var familyName = externalUser.FindFirst("family_name")?.Value ?? 
+                                externalUser.FindFirst(ClaimTypes.Surname)?.Value ?? "User";
+                
+                var name = externalUser.FindFirst("name")?.Value ?? 
+                          externalUser.FindFirst(ClaimTypes.Name)?.Value ?? 
+                          $"{givenName} {familyName}";
+
+                dbUser = new User
+                {
+                    Username = email,
+                    Email = email,
+                    FirstName = givenName,
+                    LastName = familyName,
+                    ExternalUserId = externalId,
+                    ExternalIssuer = issuer,
+                    IsActive = true,
+                    ClientId = 1,
+                    CreatedAt = DateTime.UtcNow,
+                    CreatedBy = "System",
+                    IsDeleted = false,
+                    LastLoginAt = DateTime.UtcNow
+                };
+
+                await _userService.CreateUserAsync(dbUser);
+                await _userService.AssignDefaultPermissionsAsync(dbUser.Id);
+                
+                _logger.LogInformation("JIT provisioned new user {Email} from {Provider}", email, provider);
+            }
+            else
+            {
+                dbUser.LastLoginAt = DateTime.UtcNow;
+                await _userService.UpdateUserAsync(dbUser);
+            }
+
+            subjectId = dbUser.Id.ToString();
+            username = dbUser.Email;
         }
 
         // this allows us to collect any additional claims or properties
@@ -88,9 +159,9 @@ public class Callback : PageModel
         CaptureExternalLoginContext(result, additionalLocalClaims, localSignInProps);
             
         // issue authentication cookie for user
-        var isuser = new IdentityServerUser(user.SubjectId)
+        var isuser = new IdentityServerUser(subjectId)
         {
-            DisplayName = user.Username,
+            DisplayName = username,
             IdentityProvider = provider,
             AdditionalClaims = additionalLocalClaims
         };
@@ -105,7 +176,7 @@ public class Callback : PageModel
 
         // check if external login is in the context of an OIDC request
         var context = await _interaction.GetAuthorizationContextAsync(returnUrl);
-        await _events.RaiseAsync(new UserLoginSuccessEvent(provider, providerUserId, user.SubjectId, user.Username, true, context?.Client.ClientId));
+        await _events.RaiseAsync(new UserLoginSuccessEvent(provider, providerUserId, subjectId, username, true, context?.Client.ClientId));
         Telemetry.Metrics.UserLogin(context?.Client.ClientId, provider!);
 
         if (context != null)
