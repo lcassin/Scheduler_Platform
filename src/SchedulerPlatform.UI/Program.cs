@@ -71,6 +71,16 @@ app.UseAntiforgery();
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.MapGet("/logout", async (HttpContext context) =>
+{
+    await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+    await context.SignOutAsync(OpenIdConnectDefaults.AuthenticationScheme, 
+        new Microsoft.AspNetCore.Authentication.AuthenticationProperties 
+        { 
+            RedirectUri = "/" 
+        });
+});
+
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
