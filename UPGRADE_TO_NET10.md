@@ -37,14 +37,14 @@ All project files have been updated from `net9.0` to `net10.0`:
 
 **Important Package Changes:**
 - **Removed**: `Microsoft.AspNetCore.OpenApi` - Not needed when using Swashbuckle
-- **Added**: `Microsoft.OpenApi` 2.3.0 - Required by Swashbuckle 10.0.1 for `Microsoft.OpenApi.Models` namespace
+- **Added**: `Microsoft.OpenApi` 1.6.25 - Required by Swashbuckle 9.0.6 for `Microsoft.OpenApi.Models` namespace
 
 ### 3. Third-Party Package Updates
 
 All third-party packages have been updated to their latest versions:
 
-- **Swashbuckle.AspNetCore**: 9.0.6 → 10.0.1
-- **Microsoft.OpenApi**: Added at 2.3.0 (required by Swashbuckle 10.0.1)
+- **Swashbuckle.AspNetCore**: Kept at 9.0.6 (10.0.1 has compatibility issues with Microsoft.OpenApi)
+- **Microsoft.OpenApi**: Added at 1.6.25 (required by Swashbuckle 9.0.6)
 - **Microsoft.Data.SqlClient**: 6.1.2 → 6.1.3
 - **Quartz** (all packages): 3.15.0 → 3.15.1
 - **MudBlazor**: 8.13.0 → 8.14.0
@@ -75,18 +75,20 @@ dotnet run --project src/SchedulerPlatform.API/SchedulerPlatform.API.csproj
 
 **Issue**: `CS0234: The type or namespace name 'Models' does not exist in the namespace 'Microsoft.OpenApi'`
 
-**Root Cause**: Version incompatibility between Swashbuckle and Microsoft.OpenApi. Swashbuckle 9.x required Microsoft.OpenApi 1.x, but we initially tried 2.0.0 which had a different namespace structure.
+**Root Cause**: Compatibility issue between Swashbuckle.AspNetCore 10.0.1 and Microsoft.OpenApi 2.3.0. Despite Swashbuckle 10.0.1's nuspec declaring a dependency on Microsoft.OpenApi 2.3.0, the `Microsoft.OpenApi.Models` namespace is not available in that version, causing build failures.
 
 **Solution Applied**: 
-- Upgraded to **Swashbuckle.AspNetCore 10.0.1** (latest version)
-- Added explicit reference to **Microsoft.OpenApi 2.3.0** (required by Swashbuckle 10.0.1)
+- Kept **Swashbuckle.AspNetCore 9.0.6** (latest stable version that works with .NET 10)
+- Added explicit reference to **Microsoft.OpenApi 1.6.25** (required by Swashbuckle 9.0.6)
 - Removed `Microsoft.AspNetCore.OpenApi` package (not needed when using Swashbuckle)
+
+**Note**: We attempted to upgrade to Swashbuckle 10.0.1 but encountered the namespace error on both development environments. Swashbuckle 9.0.6 is fully compatible with .NET 10 and provides all necessary Swagger/OpenAPI functionality.
 
 This issue has been fully resolved. The existing Swagger configuration in Program.cs works without code changes.
 
 ### Swagger/OpenAPI - No Code Changes Required
 
-The upgrade to Swashbuckle 10.0.1 + Microsoft.OpenApi 2.3.0 is backward compatible. Your existing `AddSwaggerGen` configuration continues to work as-is:
+Swashbuckle 9.0.6 + Microsoft.OpenApi 1.6.25 works perfectly with .NET 10. Your existing `AddSwaggerGen` configuration continues to work as-is:
 
 ```csharp
 builder.Services.AddSwaggerGen(c =>
