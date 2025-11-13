@@ -43,6 +43,9 @@ public class SchedulerDbContext : DbContext
             entity.Property(e => e.FirstName).IsRequired().HasMaxLength(100);
             entity.Property(e => e.LastName).IsRequired().HasMaxLength(100);
             entity.Property(e => e.ExternalUserId).HasMaxLength(255);
+            entity.Property(e => e.ExternalIssuer).HasMaxLength(500);
+            entity.Property(e => e.PasswordHash).HasMaxLength(500);
+            entity.HasIndex(e => new { e.ExternalIssuer, e.ExternalUserId });
             
             entity.HasOne(e => e.Client)
                 .WithMany(c => c.Users)
