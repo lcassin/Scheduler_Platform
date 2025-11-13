@@ -21,6 +21,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SchedulerPlatform.LogCleanu
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SchedulerPlatform.ScheduleSync", "src\SchedulerPlatform.ScheduleSync\SchedulerPlatform.ScheduleSync.csproj", "{AC8DD96C-F5B5-4EAE-9C09-EA44BD8A13D6}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HashBecrypter", "src\SchedulerPlatform.BCrypter\HashBecrypter\HashBecrypter.csproj", "{18D08456-DBC5-4602-AE75-43D01395C6FA}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -59,6 +61,10 @@ Global
 		{AC8DD96C-F5B5-4EAE-9C09-EA44BD8A13D6}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AC8DD96C-F5B5-4EAE-9C09-EA44BD8A13D6}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AC8DD96C-F5B5-4EAE-9C09-EA44BD8A13D6}.Release|Any CPU.Build.0 = Release|Any CPU
+		{18D08456-DBC5-4602-AE75-43D01395C6FA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{18D08456-DBC5-4602-AE75-43D01395C6FA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{18D08456-DBC5-4602-AE75-43D01395C6FA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{18D08456-DBC5-4602-AE75-43D01395C6FA}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -72,6 +78,7 @@ Global
 		{AE322209-1399-69FE-75C4-DC9057F639DF} = {60069ED4-B8DC-4B65-A4A8-FDC9BC3EF1EE}
 		{A2AD3CC8-0E11-4E9B-A40F-2C2F2FC6B9F9} = {60069ED4-B8DC-4B65-A4A8-FDC9BC3EF1EE}
 		{AC8DD96C-F5B5-4EAE-9C09-EA44BD8A13D6} = {60069ED4-B8DC-4B65-A4A8-FDC9BC3EF1EE}
+		{18D08456-DBC5-4602-AE75-43D01395C6FA} = {60069ED4-B8DC-4B65-A4A8-FDC9BC3EF1EE}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {A1488D61-D2FD-4356-A482-E5E2D7D25656}

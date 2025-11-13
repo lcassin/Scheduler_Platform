@@ -1,17 +1,18 @@
+TRUNCATE Clients
 
 IF NOT EXISTS (SELECT 1 FROM Clients WHERE Id = 1)
 BEGIN
     SET IDENTITY_INSERT Clients ON;
     INSERT INTO Clients (Id, ClientName, ClientCode, IsActive, ContactEmail, CreatedAt, CreatedBy, IsDeleted)
-    VALUES (1, 'Internal', 'INTERNAL', 1, 'admin@company.com', GETUTCDATE(), 'System', 0);
+    VALUES (1, 'Cass Information Systems', 'INTERNAL', 1, 'admin@cassinfo.com', GETUTCDATE(), 'System', 0);
     SET IDENTITY_INSERT Clients OFF;
 END
 GO
 
-IF NOT EXISTS (SELECT 1 FROM Users WHERE Email = 'superadmin@company.com')
+IF NOT EXISTS (SELECT 1 FROM Users WHERE Email = 'superadmin@cassinfo.com')
 BEGIN
     INSERT INTO Users (Username, Email, FirstName, LastName, ClientId, IsActive, IsSystemAdmin, CreatedAt, CreatedBy, IsDeleted)
-    VALUES ('superadmin', 'superadmin@company.com', 'Super', 'Admin', 1, 1, 1, GETUTCDATE(), 'System', 0);
+    VALUES ('superadmin', 'superadmin@cassinfo.com', 'Super', 'Admin', 1, 1, 1, GETUTCDATE(), 'System', 0);
     
     DECLARE @SuperAdminId INT = SCOPE_IDENTITY();
     
@@ -23,10 +24,10 @@ BEGIN
 END
 GO
 
-IF NOT EXISTS (SELECT 1 FROM Users WHERE Email = 'admin@company.com')
+IF NOT EXISTS (SELECT 1 FROM Users WHERE Email = 'admin@cassinfo.com')
 BEGIN
     INSERT INTO Users (Username, Email, FirstName, LastName, ClientId, IsActive, IsSystemAdmin, CreatedAt, CreatedBy, IsDeleted)
-    VALUES ('admin', 'admin@company.com', 'Default', 'Admin', 1, 1, 0, GETUTCDATE(), 'System', 0);
+    VALUES ('admin', 'admin@cassinfo.com', 'Default', 'Admin', 1, 1, 0, GETUTCDATE(), 'System', 0);
     
     DECLARE @AdminId INT = SCOPE_IDENTITY();
     
@@ -38,10 +39,10 @@ BEGIN
 END
 GO
 
-IF NOT EXISTS (SELECT 1 FROM Users WHERE Email = 'viewer@company.com')
+IF NOT EXISTS (SELECT 1 FROM Users WHERE Email = 'viewer@cassinfo.com')
 BEGIN
     INSERT INTO Users (Username, Email, FirstName, LastName, ClientId, IsActive, IsSystemAdmin, CreatedAt, CreatedBy, IsDeleted)
-    VALUES ('viewer', 'viewer@company.com', 'View', 'Only', 1, 1, 0, GETUTCDATE(), 'System', 0);
+    VALUES ('viewer', 'viewer@cassinfo.com', 'View', 'Only', 1, 1, 0, GETUTCDATE(), 'System', 0);
     
     DECLARE @ViewerId INT = SCOPE_IDENTITY();
     
@@ -53,10 +54,10 @@ BEGIN
 END
 GO
 
-IF NOT EXISTS (SELECT 1 FROM Users WHERE Email = 'editor@company.com')
+IF NOT EXISTS (SELECT 1 FROM Users WHERE Email = 'editor@cassinfo.com')
 BEGIN
     INSERT INTO Users (Username, Email, FirstName, LastName, ClientId, IsActive, IsSystemAdmin, CreatedAt, CreatedBy, IsDeleted)
-    VALUES ('editor', 'editor@company.com', 'Schedule', 'Editor', 1, 1, 0, GETUTCDATE(), 'System', 0);
+    VALUES ('editor', 'editor@cassinfo.com', 'Schedule', 'Editor', 1, 1, 0, GETUTCDATE(), 'System', 0);
     
     DECLARE @EditorId INT = SCOPE_IDENTITY();
     
@@ -70,10 +71,10 @@ GO
 
 PRINT 'Database seed completed successfully!';
 PRINT 'Created users:';
-PRINT '  - superadmin@company.com (Super Admin - cannot be modified via UI)';
-PRINT '  - admin@company.com (Default Admin)';
-PRINT '  - viewer@company.com (Read-only access)';
-PRINT '  - editor@company.com (Can create/edit/delete schedules)';
+PRINT '  - superadmin@cassinfo.com (Super Admin - cannot be modified via UI)';
+PRINT '  - admin@cassinfo.com (Default Admin)';
+PRINT '  - viewer@cassinfo.com (Read-only access)';
+PRINT '  - editor@cassinfo.com (Can create/edit/delete schedules)';
 PRINT '';
 PRINT 'Permission Templates:';
 PRINT '  - Viewer: scheduler:read, schedules:read, jobs:read';

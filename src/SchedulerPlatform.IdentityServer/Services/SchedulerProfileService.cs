@@ -27,14 +27,6 @@ public class SchedulerProfileService : IProfileService
         
         try
         {
-            if (Config.Users.Any(u => u.SubjectId == subjectId))
-            {
-                _logger.LogInformation("Test user {SubjectId} detected, using in-memory claims", subjectId);
-                var claims = context.Subject.Claims.ToList();
-                context.IssuedClaims.AddRange(claims);
-                return;
-            }
-            
             if (int.TryParse(subjectId, out var userId))
             {
                 var user = await _userService.GetUserByIdAsync(userId);
@@ -87,13 +79,6 @@ public class SchedulerProfileService : IProfileService
 
         try
         {
-            if (Config.Users.Any(u => u.SubjectId == subjectId))
-            {
-                _logger.LogInformation("Test user {SubjectId} detected, skipping database check", subjectId);
-                context.IsActive = true;
-                return;
-            }
-
             if (int.TryParse(subjectId, out var userId))
             {
                 var user = await _userService.GetUserByIdAsync(userId);

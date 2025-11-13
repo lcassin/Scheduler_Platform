@@ -6,11 +6,11 @@ using Duende.IdentityServer.Events;
 using Duende.IdentityServer.Models;
 using Duende.IdentityServer.Services;
 using Duende.IdentityServer.Stores;
-using Duende.IdentityServer.Test;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using SchedulerPlatform.IdentityServer.Services;
 
 namespace SchedulerPlatform.IdentityServer.Pages.Login;
 
@@ -18,11 +18,13 @@ namespace SchedulerPlatform.IdentityServer.Pages.Login;
 [AllowAnonymous]
 public class Index : PageModel
 {
-    private readonly TestUserStore _users;
+    private readonly IUserService _userService;
     private readonly IIdentityServerInteractionService _interaction;
     private readonly IEventService _events;
     private readonly IAuthenticationSchemeProvider _schemeProvider;
     private readonly IIdentityProviderStore _identityProviderStore;
+    private readonly IWebHostEnvironment _environment;
+    private readonly ILogger<Index> _logger;
 
     public ViewModel View { get; set; } = default!;
 
@@ -30,23 +32,31 @@ public class Index : PageModel
     public InputModel Input { get; set; } = default!;
 
     public Index(
+        IUserService userService,
         IIdentityServerInteractionService interaction,
         IAuthenticationSchemeProvider schemeProvider,
         IIdentityProviderStore identityProviderStore,
         IEventService events,
-        TestUserStore? users = null)
+        IWebHostEnvironment environment,
+        ILogger<Index> logger)
     {
-        // this is where you would plug in your own custom identity management library (e.g. ASP.NET Identity)
-        _users = users ?? throw new InvalidOperationException("Please call 'AddTestUsers(TestUsers.Users)' on the IIdentityServerBuilder in Startup or remove the TestUserStore from the AccountController.");
-            
+        _userService = userService;
         _interaction = interaction;
         _schemeProvider = schemeProvider;
         _identityProviderStore = identityProviderStore;
         _events = events;
+        _environment = environment;
+        _logger = logger;
     }
 
     public async Task<IActionResult> OnGet(string? returnUrl)
     {
+        if (_environment.IsProduction())
+        {
+            _logger.LogWarning("Local login attempted in Production environment");
+            return NotFound();
+        }
+
         await BuildModelAsync(returnUrl);
             
         if (View.IsExternalLoginOnly)
@@ -60,6 +70,12 @@ public class Index : PageModel
         
     public async Task<IActionResult> OnPost()
     {
+        if (_environment.IsProduction())
+        {
+            _logger.LogWarning("Local login POST attempted in Production environment");
+            return NotFound();
+        }
+
         // check if we are in the context of an authorization request
         var context = await _interaction.GetAuthorizationContextAsync(Input.ReturnUrl);
 
@@ -95,11 +111,12 @@ public class Index : PageModel
 
         if (ModelState.IsValid)
         {
-            // validate username/password against in-memory store
-            if (_users.ValidateCredentials(Input.Username, Input.Password))
+            // validate username/password against database
+            var (isValid, user) = await _userService.ValidateCredentialsAsync(Input.Username, Input.Password);
+            
+            if (isValid && user != null)
             {
-                var user = _users.FindByUsername(Input.Username);
-                await _events.RaiseAsync(new UserLoginSuccessEvent(user.Username, user.SubjectId, user.Username, clientId: context?.Client.ClientId));
+                await _events.RaiseAsync(new UserLoginSuccessEvent(user.Email, user.Id.ToString(), user.Email, clientId: context?.Client.ClientId));
                 Telemetry.Metrics.UserLogin(context?.Client.ClientId, IdentityServerConstants.LocalIdentityProvider);
 
                 // only set explicit expiration here if user chooses "remember me". 
@@ -112,9 +129,9 @@ public class Index : PageModel
                 };
 
                 // issue authentication cookie with subject ID and username
-                var isuser = new IdentityServerUser(user.SubjectId)
+                var isuser = new IdentityServerUser(user.Id.ToString())
                 {
-                    DisplayName = user.Username
+                    DisplayName = user.Email
                 };
 
                 await HttpContext.SignInAsync(isuser, props);

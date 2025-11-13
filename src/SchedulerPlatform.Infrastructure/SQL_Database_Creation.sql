@@ -339,6 +339,25 @@ CREATE INDEX [IX_Users_ExternalIssuer_ExternalUserId] ON [Users] ([ExternalIssue
 INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
 VALUES (N'20251113180300_AddUserAuthenticationFields', N'10.0.0');
 
+CREATE TABLE [PasswordHistories] (
+    [Id] int NOT NULL IDENTITY,
+    [UserId] int NOT NULL,
+    [PasswordHash] nvarchar(500) NOT NULL,
+    [ChangedAt] datetime2 NOT NULL,
+    [CreatedAt] datetime2 NOT NULL,
+    [UpdatedAt] datetime2 NULL,
+    [CreatedBy] nvarchar(max) NULL,
+    [UpdatedBy] nvarchar(max) NULL,
+    [IsDeleted] bit NOT NULL,
+    CONSTRAINT [PK_PasswordHistories] PRIMARY KEY ([Id]),
+    CONSTRAINT [FK_PasswordHistories_Users_UserId] FOREIGN KEY ([UserId]) REFERENCES [Users] ([Id]) ON DELETE CASCADE
+);
+
+CREATE INDEX [IX_PasswordHistories_UserId_ChangedAt] ON [PasswordHistories] ([UserId], [ChangedAt]);
+
+INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+VALUES (N'20251113184700_AddPasswordHistory', N'10.0.0');
+
 COMMIT;
 GO
 
@@ -348,15 +367,15 @@ BEGIN TRANSACTION;
 IF NOT EXISTS (SELECT 1 FROM [Clients] WHERE [ClientCode] = 'INTERNAL')
 BEGIN
     INSERT INTO [Clients] ([ClientName], [ClientCode], [IsActive], [ContactEmail], [CreatedAt], [CreatedBy], [IsDeleted])
-    VALUES (N'Internal', N'INTERNAL', 1, N'admin@company.com', GETUTCDATE(), N'System', 0);
+    VALUES (N'Internal', N'INTERNAL', 1, N'admin@cassinfo.com', GETUTCDATE(), N'System', 0);
 END
 
 DECLARE @ClientId INT = (SELECT [Id] FROM [Clients] WHERE [ClientCode] = 'INTERNAL');
 
-IF NOT EXISTS (SELECT 1 FROM [Users] WHERE [Email] = 'superadmin@company.com')
+IF NOT EXISTS (SELECT 1 FROM [Users] WHERE [Email] = 'superadmin@cassinfo.com')
 BEGIN
     INSERT INTO [Users] ([Username], [Email], [FirstName], [LastName], [ClientId], [IsActive], [IsSystemAdmin], [CreatedAt], [CreatedBy], [IsDeleted])
-    VALUES (N'superadmin', N'superadmin@company.com', N'Super', N'Admin', @ClientId, 1, 1, GETUTCDATE(), N'System', 0);
+    VALUES (N'superadmin', N'superadmin@cassinfo.com', N'Super', N'Admin', @ClientId, 1, 1, GETUTCDATE(), N'System', 0);
     
     DECLARE @SuperAdminId INT = SCOPE_IDENTITY();
     
@@ -367,10 +386,10 @@ BEGIN
         (@SuperAdminId, N'jobs', 1, 1, 1, 1, 1, GETUTCDATE(), N'System', 0);
 END
 
-IF NOT EXISTS (SELECT 1 FROM [Users] WHERE [Email] = 'admin@company.com')
+IF NOT EXISTS (SELECT 1 FROM [Users] WHERE [Email] = 'admin@cassinfo.com')
 BEGIN
     INSERT INTO [Users] ([Username], [Email], [FirstName], [LastName], [ClientId], [IsActive], [IsSystemAdmin], [CreatedAt], [CreatedBy], [IsDeleted])
-    VALUES (N'admin', N'admin@company.com', N'Default', N'Admin', @ClientId, 1, 0, GETUTCDATE(), N'System', 0);
+    VALUES (N'admin', N'admin@cassinfo.com', N'Default', N'Admin', @ClientId, 1, 0, GETUTCDATE(), N'System', 0);
     
     DECLARE @AdminId INT = SCOPE_IDENTITY();
     
@@ -381,10 +400,10 @@ BEGIN
         (@AdminId, N'jobs', 1, 1, 1, 1, 1, GETUTCDATE(), N'System', 0);
 END
 
-IF NOT EXISTS (SELECT 1 FROM [Users] WHERE [Email] = 'viewer@company.com')
+IF NOT EXISTS (SELECT 1 FROM [Users] WHERE [Email] = 'viewer@cassinfo.com')
 BEGIN
     INSERT INTO [Users] ([Username], [Email], [FirstName], [LastName], [ClientId], [IsActive], [IsSystemAdmin], [CreatedAt], [CreatedBy], [IsDeleted])
-    VALUES (N'viewer', N'viewer@company.com', N'View', N'Only', @ClientId, 1, 0, GETUTCDATE(), N'System', 0);
+    VALUES (N'viewer', N'viewer@cassinfo.com', N'View', N'Only', @ClientId, 1, 0, GETUTCDATE(), N'System', 0);
     
     DECLARE @ViewerId INT = SCOPE_IDENTITY();
     
@@ -395,10 +414,10 @@ BEGIN
         (@ViewerId, N'jobs', 0, 1, 0, 0, 0, GETUTCDATE(), N'System', 0);
 END
 
-IF NOT EXISTS (SELECT 1 FROM [Users] WHERE [Email] = 'editor@company.com')
+IF NOT EXISTS (SELECT 1 FROM [Users] WHERE [Email] = 'editor@cassinfo.com')
 BEGIN
     INSERT INTO [Users] ([Username], [Email], [FirstName], [LastName], [ClientId], [IsActive], [IsSystemAdmin], [CreatedAt], [CreatedBy], [IsDeleted])
-    VALUES (N'editor', N'editor@company.com', N'Schedule', N'Editor', @ClientId, 1, 0, GETUTCDATE(), N'System', 0);
+    VALUES (N'editor', N'editor@cassinfo.com', N'Schedule', N'Editor', @ClientId, 1, 0, GETUTCDATE(), N'System', 0);
     
     DECLARE @EditorId INT = SCOPE_IDENTITY();
     
@@ -415,10 +434,10 @@ GO
 PRINT 'Database creation and seeding completed successfully!';
 PRINT '';
 PRINT 'Created users:';
-PRINT '  - superadmin@company.com (Super Admin - cannot be modified via UI)';
-PRINT '  - admin@company.com (Default Admin)';
-PRINT '  - viewer@company.com (Read-only access)';
-PRINT '  - editor@company.com (Can create/edit/delete schedules)';
+PRINT '  - superadmin@cassinfo.com (Super Admin - cannot be modified via UI)';
+PRINT '  - admin@cassinfo.com (Default Admin)';
+PRINT '  - viewer@cassinfo.com (Read-only access)';
+PRINT '  - editor@cassinfo.com (Can create/edit/delete schedules)';
 PRINT '';
 PRINT 'Permission Templates:';
 PRINT '  - Viewer: scheduler:read, schedules:read, jobs:read';
