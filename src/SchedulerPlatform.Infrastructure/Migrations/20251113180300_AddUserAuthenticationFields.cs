@@ -1,9 +1,13 @@
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using SchedulerPlatform.Infrastructure.Data;
 
 #nullable disable
 
 namespace SchedulerPlatform.Infrastructure.Migrations
 {
+    [DbContext(typeof(SchedulerDbContext))]
+    [Migration("20251113180300_AddUserAuthenticationFields")]
     public partial class AddUserAuthenticationFields : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)
