@@ -2,24 +2,21 @@
 # This .gitignore file was automatically created by Microsoft(R) Visual Studio.
 ################################################################################
 
+# Visual Studio
 /.vs
+.vs/
+
+# Scripts
 /scripts
-/src/.vs/SchedulerPlatform.UI
-/src/SchedulerPlatform.API/bin/Debug/net9.0
-/src/SchedulerPlatform.API/logs
-/src/SchedulerPlatform.API/obj
-/src/SchedulerPlatform.Core/bin/Debug
-/src/SchedulerPlatform.Core/obj
-/src/SchedulerPlatform.IdentityServer/bin/Debug
-/src/SchedulerPlatform.IdentityServer/logs
-/src/SchedulerPlatform.IdentityServer/obj
-/src/SchedulerPlatform.Infrastructure/bin/Debug
-/src/SchedulerPlatform.Infrastructure/obj
-/src/SchedulerPlatform.Jobs/bin/Debug
-/src/SchedulerPlatform.Jobs/obj
-/src/SchedulerPlatform.LogCleanup/bin/Debug
-/src/SchedulerPlatform.LogCleanup/obj
-/src/SchedulerPlatform.ScheduleSync/bin/Debug
-/src/SchedulerPlatform.ScheduleSync/obj
-/src/SchedulerPlatform.UI/bin/Debug/net9.0
-/src/SchedulerPlatform.UI/obj
+
+# Build outputs - use wildcards to cover all .NET versions
+**/bin/
+**/obj/
+
+# Logs
+**/logs/
+
+# User-specific files
+*.user
+*.suo
+*.userosscache
