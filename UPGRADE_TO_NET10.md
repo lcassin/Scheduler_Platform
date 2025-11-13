@@ -28,7 +28,7 @@ All project files have been updated from `net9.0` to `net10.0`:
 
 ### 2. NuGet Package Updates
 
-All Microsoft packages have been updated to version 10.0.0:
+**Microsoft packages updated to version 10.0.0:**
 
 - Microsoft.AspNetCore.Authentication.JwtBearer: 9.0.10 → 10.0.0
 - Microsoft.AspNetCore.Authentication.OpenIdConnect: 9.0.10 → 10.0.0
@@ -37,17 +37,22 @@ All Microsoft packages have been updated to version 10.0.0:
 
 **Important Package Changes:**
 - **Removed**: `Microsoft.AspNetCore.OpenApi` - Not needed when using Swashbuckle
-- **Added**: `Microsoft.OpenApi` 2.0.0 - Required for `Microsoft.OpenApi.Models` namespace used by Swashbuckle
+- **Added**: `Microsoft.OpenApi` 3.0.0 - Required for `Microsoft.OpenApi.Models` namespace
 
-### 3. Third-Party Packages (No Changes Required)
+### 3. Third-Party Package Updates
 
-The following packages remain at their current versions and are compatible with .NET 10:
+All third-party packages have been updated to their latest versions:
 
-- **Duende.IdentityServer**: 7.3.2 (supports .NET 8-10)
-- **Swashbuckle.AspNetCore**: 9.0.6 (compatible with .NET 10)
-- **MudBlazor**: 8.13.0 (compatible with .NET 10)
-- **Quartz**: 3.15.0 (compatible with .NET 10)
-- **Serilog.AspNetCore**: 9.0.0 (compatible with .NET 10)
+- **Swashbuckle.AspNetCore**: 9.0.6 → 10.0.1
+- **Microsoft.OpenApi**: Added at 3.0.0 (compatible with Swashbuckle 10.x)
+- **Microsoft.Data.SqlClient**: 6.1.2 → 6.1.3
+- **Quartz** (all packages): 3.15.0 → 3.15.1
+- **MudBlazor**: 8.13.0 → 8.14.0
+- **Heron.MudCalendar**: 3.2.0 → 3.3.0
+- **Duende.IdentityServer**: 7.3.2 (latest in 7.x series, no update needed)
+- **Serilog.AspNetCore**: 9.0.0 (no update needed)
+- **ClosedXML**: 0.105.0 (no update needed)
+- **Dapper**: 2.1.66 (no update needed)
 
 ## Building the Project
 
@@ -70,28 +75,29 @@ dotnet run --project src/SchedulerPlatform.API/SchedulerPlatform.API.csproj
 
 **Issue**: `CS0234: The type or namespace name 'Models' does not exist in the namespace 'Microsoft.OpenApi'`
 
-**Root Cause**: The `Microsoft.OpenApi.Models` namespace comes from the `Microsoft.OpenApi` NuGet package. When using Swashbuckle, this package is typically brought in transitively, but with the .NET 10 upgrade, an explicit reference was needed.
+**Root Cause**: Version incompatibility between Swashbuckle and Microsoft.OpenApi. Swashbuckle 9.x required Microsoft.OpenApi 1.x, but we initially tried 2.0.0 which had a different namespace structure.
 
 **Solution Applied**: 
-- Added explicit reference to `Microsoft.OpenApi` version 2.0.0 in the API project
-- Removed `Microsoft.AspNetCore.OpenApi` package (not needed when using Swashbuckle, can cause confusion)
+- Upgraded to **Swashbuckle.AspNetCore 10.0.1** (latest version)
+- Added explicit reference to **Microsoft.OpenApi 3.0.0** (compatible with Swashbuckle 10.x)
+- Removed `Microsoft.AspNetCore.OpenApi` package (not needed when using Swashbuckle)
 
-This issue has been resolved in the current PR.
+This issue has been fully resolved. The existing Swagger configuration in Program.cs works without code changes.
 
-### Swagger/OpenAPI Compatibility
+### Swagger/OpenAPI - No Code Changes Required
 
-The project uses Swashbuckle.AspNetCore 9.0.6, which is compatible with .NET 10. If you encounter other Swagger issues:
+The upgrade to Swashbuckle 10.0.1 + Microsoft.OpenApi 3.0.0 is backward compatible. Your existing `AddSwaggerGen` configuration continues to work as-is:
 
-**Option 1: Update Swashbuckle** (if newer version available)
-```bash
-dotnet add package Swashbuckle.AspNetCore --version <latest>
+```csharp
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo { ... });
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme { ... });
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement { ... });
+});
 ```
 
-**Option 2: Migrate to Microsoft's built-in OpenAPI** (larger change)
-- Remove Swashbuckle.AspNetCore and Microsoft.OpenApi
-- Add Microsoft.AspNetCore.OpenApi
-- Replace `AddSwaggerGen` configuration with `AddOpenApi` and transformers
-- This requires significant code changes in Program.cs
+No changes needed to Program.cs for the Swagger upgrade.
 
 ### Duende IdentityServer
 
