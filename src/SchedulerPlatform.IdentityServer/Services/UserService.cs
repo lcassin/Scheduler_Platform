@@ -1,5 +1,6 @@
 using SchedulerPlatform.Core.Domain.Entities;
 using SchedulerPlatform.Core.Domain.Interfaces;
+using Microsoft.AspNetCore.Identity;
 
 namespace SchedulerPlatform.IdentityServer.Services;
 
@@ -7,11 +8,14 @@ public class UserService : IUserService
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<UserService> _logger;
+    private readonly PasswordHasher<User> _passwordHasher;
+    private const int MaxPasswordHistory = 10;
 
     public UserService(IUnitOfWork unitOfWork, ILogger<UserService> logger)
     {
         _unitOfWork = unitOfWork;
         _logger = logger;
+        _passwordHasher = new PasswordHasher<User>();
     }
 
     public async Task<User?> GetUserByIdAsync(int id)
@@ -80,9 +84,119 @@ public class UserService : IUserService
         }
     }
 
-    public Task<bool> ValidateUserCredentialsAsync(string username, string password)
+    public async Task<(bool IsValid, User? User)> ValidateCredentialsAsync(string emailOrUsername, string password)
     {
-        return Task.FromResult(false);
+        try
+        {
+            var users = await _unitOfWork.Users.FindAsync(u => 
+                (u.Email == emailOrUsername || u.Username == emailOrUsername) && 
+                !u.IsDeleted && 
+                u.IsActive);
+            
+            var user = users.FirstOrDefault();
+            
+            if (user == null || string.IsNullOrEmpty(user.PasswordHash))
+            {
+                _logger.LogWarning("Login attempt for non-existent or external user: {EmailOrUsername}", emailOrUsername);
+                return (false, null);
+            }
+
+            var result = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, password);
+            
+            if (result == PasswordVerificationResult.Success || result == PasswordVerificationResult.SuccessRehashNeeded)
+            {
+                user.LastLoginAt = DateTime.UtcNow;
+                await UpdateUserAsync(user);
+                
+                _logger.LogInformation("Successful login for user: {Email}", user.Email);
+                return (true, user);
+            }
+
+            _logger.LogWarning("Failed login attempt for user: {Email}", user.Email);
+            return (false, null);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error validating credentials for {EmailOrUsername}", emailOrUsername);
+            return (false, null);
+        }
+    }
+
+    public async Task<bool> CanReusePasswordAsync(int userId, string newPassword)
+    {
+        try
+        {
+            var user = await GetUserByIdAsync(userId);
+            if (user == null) return true;
+
+            var passwordHistories = await _unitOfWork.PasswordHistories.FindAsync(
+                ph => ph.UserId == userId && !ph.IsDeleted);
+            
+            var recentPasswords = passwordHistories
+                .OrderByDescending(ph => ph.ChangedAt)
+                .Take(MaxPasswordHistory)
+                .ToList();
+
+            foreach (var history in recentPasswords)
+            {
+                var result = _passwordHasher.VerifyHashedPassword(user, history.PasswordHash, newPassword);
+                if (result == PasswordVerificationResult.Success || result == PasswordVerificationResult.SuccessRehashNeeded)
+                {
+                    _logger.LogWarning("User {UserId} attempted to reuse a recent password", userId);
+                    return false;
+                }
+            }
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking password reuse for user {UserId}", userId);
+            return true;
+        }
+    }
+
+    public async Task AddPasswordToHistoryAsync(int userId, string passwordHash)
+    {
+        try
+        {
+            var passwordHistory = new PasswordHistory
+            {
+                UserId = userId,
+                PasswordHash = passwordHash,
+                ChangedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = "System",
+                IsDeleted = false
+            };
+
+            await _unitOfWork.PasswordHistories.AddAsync(passwordHistory);
+            await _unitOfWork.SaveChangesAsync();
+
+            var allHistories = await _unitOfWork.PasswordHistories.FindAsync(
+                ph => ph.UserId == userId && !ph.IsDeleted);
+            
+            var historiesToDelete = allHistories
+                .OrderByDescending(ph => ph.ChangedAt)
+                .Skip(MaxPasswordHistory)
+                .ToList();
+
+            foreach (var history in historiesToDelete)
+            {
+                history.IsDeleted = true;
+                await _unitOfWork.PasswordHistories.UpdateAsync(history);
+            }
+
+            if (historiesToDelete.Any())
+            {
+                await _unitOfWork.SaveChangesAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error adding password to history for user {UserId}", userId);
+            throw;
+        }
     }
 
     public async Task<User> CreateUserAsync(User user)

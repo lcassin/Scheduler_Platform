@@ -20,4 +20,6 @@ public class User : BaseEntity
     public Client Client { get; set; } = null!;
     [JsonIgnore]
     public ICollection<UserPermission> Permissions { get; set; } = new List<UserPermission>();
+    [JsonIgnore]
+    public ICollection<PasswordHistory> PasswordHistories { get; set; } = new List<PasswordHistory>();
 }

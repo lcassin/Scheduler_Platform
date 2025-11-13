@@ -15,6 +15,7 @@ public class UnitOfWork : IUnitOfWork
     public IRepository<Client> Clients { get; }
     public IRepository<User> Users { get; }
     public IRepository<UserPermission> UserPermissions { get; }
+    public IRepository<PasswordHistory> PasswordHistories { get; }
     public IRepository<VendorCredential> VendorCredentials { get; }
     public IRepository<JobParameter> JobParameters { get; }
     public IRepository<NotificationSetting> NotificationSettings { get; }
@@ -27,6 +28,7 @@ public class UnitOfWork : IUnitOfWork
         Clients = new Repository<Client>(_context);
         Users = new Repository<User>(_context);
         UserPermissions = new Repository<UserPermission>(_context);
+        PasswordHistories = new Repository<PasswordHistory>(_context);
         VendorCredentials = new Repository<VendorCredential>(_context);
         JobParameters = new Repository<JobParameter>(_context);
         NotificationSettings = new Repository<NotificationSetting>(_context);
