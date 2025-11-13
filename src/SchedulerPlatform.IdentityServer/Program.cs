@@ -1,6 +1,5 @@
 using Duende.IdentityServer;
 using Duende.IdentityServer.Models;
-using Duende.IdentityServer.Test;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using SchedulerPlatform.IdentityServer;
@@ -50,7 +49,6 @@ builder.Services.AddIdentityServer(options =>
     .AddInMemoryIdentityResources(Config.IdentityResources)
     .AddInMemoryApiScopes(Config.ApiScopes)
     .AddInMemoryClients(Config.Clients)
-    .AddTestUsers(Config.Users)
     .AddProfileService<SchedulerProfileService>();
 
 var azureTenantId = builder.Configuration["AzureAd:TenantId"];

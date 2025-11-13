@@ -1,8 +1,5 @@
 using Duende.IdentityServer;
 using Duende.IdentityServer.Models;
-using Duende.IdentityServer.Test;
-using System.Security.Claims;
-using System.Text.Json;
 
 namespace SchedulerPlatform.IdentityServer;
 
@@ -93,42 +90,4 @@ public static class Config
             }
         };
 
-    public static List<TestUser> Users =>
-        new List<TestUser>
-        {
-            new TestUser
-            {
-                SubjectId = "1",
-                Username = "admin",
-                Password = "Admin123!",
-                Claims =
-                {
-                    new Claim("name", "Admin User"),
-                    new Claim("given_name", "Admin"),
-                    new Claim("family_name", "User"),
-                    new Claim("email", "admin@example.com"),
-                    new Claim("email_verified", "true", ClaimValueTypes.Boolean),
-                    new Claim("role", "Admin"),
-                    new Claim("client_id", "0"),
-                    new Claim("test_user", "true")
-                }
-            },
-            new TestUser
-            {
-                SubjectId = "2",
-                Username = "client1",
-                Password = "Client123!",
-                Claims =
-                {
-                    new Claim("name", "Client User"),
-                    new Claim("given_name", "Client"),
-                    new Claim("family_name", "User"),
-                    new Claim("email", "client@example.com"),
-                    new Claim("email_verified", "true", ClaimValueTypes.Boolean),
-                    new Claim("role", "Client"),
-                    new Claim("client_id", "1"),
-                    new Claim("test_user", "true")
-                }
-            }
-        };
 }
