@@ -31,10 +31,13 @@ All project files have been updated from `net9.0` to `net10.0`:
 All Microsoft packages have been updated to version 10.0.0:
 
 - Microsoft.AspNetCore.Authentication.JwtBearer: 9.0.10 → 10.0.0
-- Microsoft.AspNetCore.OpenApi: 9.0.10 → 10.0.0
 - Microsoft.AspNetCore.Authentication.OpenIdConnect: 9.0.10 → 10.0.0
 - Microsoft.EntityFrameworkCore.*: 9.0.10 → 10.0.0
 - Microsoft.Extensions.*: 9.0.10 → 10.0.0
+
+**Important Package Changes:**
+- **Removed**: `Microsoft.AspNetCore.OpenApi` - Not needed when using Swashbuckle
+- **Added**: `Microsoft.OpenApi` 2.0.0 - Required for `Microsoft.OpenApi.Models` namespace used by Swashbuckle
 
 ### 3. Third-Party Packages (No Changes Required)
 
@@ -63,19 +66,32 @@ dotnet run --project src/SchedulerPlatform.API/SchedulerPlatform.API.csproj
 
 ## Potential Issues and Solutions
 
+### Microsoft.OpenApi.Models Namespace Error (RESOLVED)
+
+**Issue**: `CS0234: The type or namespace name 'Models' does not exist in the namespace 'Microsoft.OpenApi'`
+
+**Root Cause**: The `Microsoft.OpenApi.Models` namespace comes from the `Microsoft.OpenApi` NuGet package. When using Swashbuckle, this package is typically brought in transitively, but with the .NET 10 upgrade, an explicit reference was needed.
+
+**Solution Applied**: 
+- Added explicit reference to `Microsoft.OpenApi` version 2.0.0 in the API project
+- Removed `Microsoft.AspNetCore.OpenApi` package (not needed when using Swashbuckle, can cause confusion)
+
+This issue has been resolved in the current PR.
+
 ### Swagger/OpenAPI Compatibility
 
-If you encounter issues with Swagger, note that .NET 9+ introduced native OpenAPI support which can sometimes conflict with Swashbuckle. The current version (9.0.6) should work fine, but if you experience issues:
+The project uses Swashbuckle.AspNetCore 9.0.6, which is compatible with .NET 10. If you encounter other Swagger issues:
 
 **Option 1: Update Swashbuckle** (if newer version available)
 ```bash
 dotnet add package Swashbuckle.AspNetCore --version <latest>
 ```
 
-**Option 2: Use Microsoft's built-in OpenAPI** (alternative approach)
-- Remove Swashbuckle.AspNetCore
-- The project already uses Microsoft.AspNetCore.OpenApi 10.0.0
-- Update Program.cs to use the built-in OpenAPI services
+**Option 2: Migrate to Microsoft's built-in OpenAPI** (larger change)
+- Remove Swashbuckle.AspNetCore and Microsoft.OpenApi
+- Add Microsoft.AspNetCore.OpenApi
+- Replace `AddSwaggerGen` configuration with `AddOpenApi` and transformers
+- This requires significant code changes in Program.cs
 
 ### Duende IdentityServer
 
