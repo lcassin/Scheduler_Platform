@@ -27,14 +27,6 @@ public class SchedulerProfileService : IProfileService
         
         try
         {
-            if (Config.Users.Any(u => u.SubjectId == subjectId))
-            {
-                _logger.LogInformation("Test user {SubjectId} detected, using in-memory claims", subjectId);
-                var claims = context.Subject.Claims.ToList();
-                context.IssuedClaims.AddRange(claims);
-                return;
-            }
-            
             if (int.TryParse(subjectId, out var userId))
             {
                 var user = await _userService.GetUserByIdAsync(userId);
@@ -50,6 +42,26 @@ public class SchedulerProfileService : IProfileService
                         new Claim("client_id", user.ClientId.ToString()),
                         new Claim("role", await _userService.GetUserRoleAsync(user.Id))
                     };
+
+                    var permissions = await _userService.GetUserPermissionsAsync(user.Id);
+                    foreach (var perm in permissions)
+                    {
+                        if (perm.CanRead)
+                            claims.Add(new Claim("permission", $"{perm.PermissionName}:read"));
+                        if (perm.CanCreate)
+                            claims.Add(new Claim("permission", $"{perm.PermissionName}:create"));
+                        if (perm.CanUpdate)
+                            claims.Add(new Claim("permission", $"{perm.PermissionName}:update"));
+                        if (perm.CanDelete)
+                            claims.Add(new Claim("permission", $"{perm.PermissionName}:delete"));
+                        if (perm.CanExecute)
+                            claims.Add(new Claim("permission", $"{perm.PermissionName}:execute"));
+                    }
+
+                    if (user.IsSystemAdmin)
+                    {
+                        claims.Add(new Claim("permission", "users:manage"));
+                    }
 
                     context.IssuedClaims.AddRange(claims.Where(c => context.RequestedClaimTypes.Contains(c.Type)));
                 }
@@ -67,13 +79,6 @@ public class SchedulerProfileService : IProfileService
 
         try
         {
-            if (Config.Users.Any(u => u.SubjectId == subjectId))
-            {
-                _logger.LogInformation("Test user {SubjectId} detected, skipping database check", subjectId);
-                context.IsActive = true;
-                return;
-            }
-
             if (int.TryParse(subjectId, out var userId))
             {
                 var user = await _userService.GetUserByIdAsync(userId);

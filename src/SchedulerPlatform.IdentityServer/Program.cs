@@ -1,6 +1,5 @@
 using Duende.IdentityServer;
 using Duende.IdentityServer.Models;
-using Duende.IdentityServer.Test;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using SchedulerPlatform.IdentityServer;
@@ -50,8 +49,32 @@ builder.Services.AddIdentityServer(options =>
     .AddInMemoryIdentityResources(Config.IdentityResources)
     .AddInMemoryApiScopes(Config.ApiScopes)
     .AddInMemoryClients(Config.Clients)
-    .AddTestUsers(Config.Users)
     .AddProfileService<SchedulerProfileService>();
+
+var azureTenantId = builder.Configuration["AzureAd:TenantId"];
+var azureClientId = builder.Configuration["AzureAd:ClientId"];
+var azureClientSecret = builder.Configuration["AzureAd:ClientSecret"];
+
+if (!string.IsNullOrEmpty(azureTenantId) && !string.IsNullOrEmpty(azureClientId))
+{
+    builder.Services.AddAuthentication()
+        .AddOpenIdConnect("entra", "Sign in with Microsoft", options =>
+        {
+            options.Authority = $"https://login.microsoftonline.com/{azureTenantId}/v2.0";
+            options.ClientId = azureClientId;
+            options.ClientSecret = azureClientSecret;
+            options.ResponseType = "code";
+            options.CallbackPath = "/signin-entra";
+            options.SignInScheme = IdentityServerConstants.ExternalCookieAuthenticationScheme;
+            options.SaveTokens = true;
+            options.Scope.Clear();
+            options.Scope.Add("openid");
+            options.Scope.Add("profile");
+            options.Scope.Add("email");
+            options.TokenValidationParameters.NameClaimType = "name";
+            options.TokenValidationParameters.RoleClaimType = "roles";
+        });
+}
 
 builder.Services.AddScoped<IRepository<User>, Repository<User>>();
 builder.Services.AddScoped<IRepository<DomainClient>, Repository<DomainClient>>();

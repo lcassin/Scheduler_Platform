@@ -57,6 +57,10 @@ CREATE TABLE [Users] (
     [ClientId] int NOT NULL,
     [IsActive] bit NOT NULL,
     [ExternalUserId] nvarchar(255) NULL,
+    [ExternalIssuer] nvarchar(500) NULL,
+    [PasswordHash] nvarchar(500) NULL,
+    [IsSystemAdmin] bit NOT NULL DEFAULT 0,
+    [LastLoginAt] datetime2 NULL,
     [CreatedAt] datetime2 NOT NULL,
     [UpdatedAt] datetime2 NULL,
     [CreatedBy] nvarchar(max) NOT NULL,
@@ -162,6 +166,8 @@ CREATE INDEX [IX_UserPermissions_UserId] ON [UserPermissions] ([UserId]);
 CREATE INDEX [IX_Users_ClientId] ON [Users] ([ClientId]);
 
 CREATE UNIQUE INDEX [IX_Users_Email] ON [Users] ([Email]);
+
+CREATE INDEX [IX_Users_ExternalIssuer_ExternalUserId] ON [Users] ([ExternalIssuer], [ExternalUserId]);
 
 CREATE INDEX [IX_VendorCredentials_ClientId] ON [VendorCredentials] ([ClientId]);
 
@@ -323,27 +329,131 @@ ALTER TABLE [Schedules] ADD [TimeoutMinutes] int NULL;
 INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
 VALUES (N'20251027162823_AddTimeoutMinutesToSchedule', N'9.0.10');
 
+ALTER TABLE [Users] ADD [ExternalIssuer] nvarchar(500) NULL;
+ALTER TABLE [Users] ADD [PasswordHash] nvarchar(500) NULL;
+ALTER TABLE [Users] ADD [IsSystemAdmin] bit NOT NULL DEFAULT 0;
+ALTER TABLE [Users] ADD [LastLoginAt] datetime2 NULL;
+
+CREATE INDEX [IX_Users_ExternalIssuer_ExternalUserId] ON [Users] ([ExternalIssuer], [ExternalUserId]);
+
+INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+VALUES (N'20251113180300_AddUserAuthenticationFields', N'10.0.0');
+
+CREATE TABLE [PasswordHistories] (
+    [Id] int NOT NULL IDENTITY,
+    [UserId] int NOT NULL,
+    [PasswordHash] nvarchar(500) NOT NULL,
+    [ChangedAt] datetime2 NOT NULL,
+    [CreatedAt] datetime2 NOT NULL,
+    [UpdatedAt] datetime2 NULL,
+    [CreatedBy] nvarchar(max) NULL,
+    [UpdatedBy] nvarchar(max) NULL,
+    [IsDeleted] bit NOT NULL,
+    CONSTRAINT [PK_PasswordHistories] PRIMARY KEY ([Id]),
+    CONSTRAINT [FK_PasswordHistories_Users_UserId] FOREIGN KEY ([UserId]) REFERENCES [Users] ([Id]) ON DELETE CASCADE
+);
+
+CREATE INDEX [IX_PasswordHistories_UserId_ChangedAt] ON [PasswordHistories] ([UserId], [ChangedAt]);
+
+INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+VALUES (N'20251113184700_AddPasswordHistory', N'10.0.0');
+
 COMMIT;
 GO
 
-/** Optional - Create Test Client **/
 
-INSERT INTO [Clients] ([Name], [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy], [IsDeleted])
-VALUES (N'Test Client', GETDATE(), GETDATE(), N'System', N'System', 0);
+BEGIN TRANSACTION;
 
-/** Optional - Create Test User **/
+IF NOT EXISTS (SELECT 1 FROM [Clients] WHERE [ClientCode] = 'INTERNAL')
+BEGIN
+    INSERT INTO [Clients] ([ClientName], [ClientCode], [IsActive], [ContactEmail], [CreatedAt], [CreatedBy], [IsDeleted])
+    VALUES (N'Internal', N'INTERNAL', 1, N'admin@cassinfo.com', GETUTCDATE(), N'System', 0);
+END
 
-INSERT INTO [Users] ([Username], [Email], [PasswordHash], [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy], [IsDeleted])
-VALUES (N'TestUser', N'testuser@example.com', N'hashed_password', GETDATE(), GETDATE(), N'System', N'System', 0);
+DECLARE @ClientId INT = (SELECT [Id] FROM [Clients] WHERE [ClientCode] = 'INTERNAL');
 
-/** Optional - Create Test Schedule **/
+IF NOT EXISTS (SELECT 1 FROM [Users] WHERE [Email] = 'superadmin@cassinfo.com')
+BEGIN
+    INSERT INTO [Users] ([Username], [Email], [FirstName], [LastName], [ClientId], [IsActive], [IsSystemAdmin], [CreatedAt], [CreatedBy], [IsDeleted])
+    VALUES (N'superadmin', N'superadmin@cassinfo.com', N'Super', N'Admin', @ClientId, 1, 1, GETUTCDATE(), N'System', 0);
+    
+    DECLARE @SuperAdminId INT = SCOPE_IDENTITY();
+    
+    INSERT INTO [UserPermissions] ([UserId], [PermissionName], [CanCreate], [CanRead], [CanUpdate], [CanDelete], [CanExecute], [CreatedAt], [CreatedBy], [IsDeleted])
+    VALUES 
+        (@SuperAdminId, N'scheduler', 1, 1, 1, 1, 1, GETUTCDATE(), N'System', 0),
+        (@SuperAdminId, N'schedules', 1, 1, 1, 1, 1, GETUTCDATE(), N'System', 0),
+        (@SuperAdminId, N'jobs', 1, 1, 1, 1, 1, GETUTCDATE(), N'System', 0);
+END
 
-INSERT INTO [Schedules] ([Name], [Description], [CronExpression], [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy], [IsDeleted])
-VALUES (N'Test Schedule', N'This is a test schedule.', N'0 0 * * *', GETDATE(), GETDATE(), N'System', N'System', 0);
+IF NOT EXISTS (SELECT 1 FROM [Users] WHERE [Email] = 'admin@cassinfo.com')
+BEGIN
+    INSERT INTO [Users] ([Username], [Email], [FirstName], [LastName], [ClientId], [IsActive], [IsSystemAdmin], [CreatedAt], [CreatedBy], [IsDeleted])
+    VALUES (N'admin', N'admin@cassinfo.com', N'Default', N'Admin', @ClientId, 1, 0, GETUTCDATE(), N'System', 0);
+    
+    DECLARE @AdminId INT = SCOPE_IDENTITY();
+    
+    INSERT INTO [UserPermissions] ([UserId], [PermissionName], [CanCreate], [CanRead], [CanUpdate], [CanDelete], [CanExecute], [CreatedAt], [CreatedBy], [IsDeleted])
+    VALUES 
+        (@AdminId, N'scheduler', 1, 1, 1, 1, 1, GETUTCDATE(), N'System', 0),
+        (@AdminId, N'schedules', 1, 1, 1, 1, 1, GETUTCDATE(), N'System', 0),
+        (@AdminId, N'jobs', 1, 1, 1, 1, 1, GETUTCDATE(), N'System', 0);
+END
 
-/** Optional - Create Test Vendor Credential **/
+IF NOT EXISTS (SELECT 1 FROM [Users] WHERE [Email] = 'viewer@cassinfo.com')
+BEGIN
+    INSERT INTO [Users] ([Username], [Email], [FirstName], [LastName], [ClientId], [IsActive], [IsSystemAdmin], [CreatedAt], [CreatedBy], [IsDeleted])
+    VALUES (N'viewer', N'viewer@cassinfo.com', N'View', N'Only', @ClientId, 1, 0, GETUTCDATE(), N'System', 0);
+    
+    DECLARE @ViewerId INT = SCOPE_IDENTITY();
+    
+    INSERT INTO [UserPermissions] ([UserId], [PermissionName], [CanCreate], [CanRead], [CanUpdate], [CanDelete], [CanExecute], [CreatedAt], [CreatedBy], [IsDeleted])
+    VALUES 
+        (@ViewerId, N'scheduler', 0, 1, 0, 0, 0, GETUTCDATE(), N'System', 0),
+        (@ViewerId, N'schedules', 0, 1, 0, 0, 0, GETUTCDATE(), N'System', 0),
+        (@ViewerId, N'jobs', 0, 1, 0, 0, 0, GETUTCDATE(), N'System', 0);
+END
 
-INSERT INTO [VendorCredentials] ([VendorId], [ClientId], [Credential], [CreatedAt], [UpdatedAt], [CreatedBy], [UpdatedBy], [IsDeleted])
+IF NOT EXISTS (SELECT 1 FROM [Users] WHERE [Email] = 'editor@cassinfo.com')
+BEGIN
+    INSERT INTO [Users] ([Username], [Email], [FirstName], [LastName], [ClientId], [IsActive], [IsSystemAdmin], [CreatedAt], [CreatedBy], [IsDeleted])
+    VALUES (N'editor', N'editor@cassinfo.com', N'Schedule', N'Editor', @ClientId, 1, 0, GETUTCDATE(), N'System', 0);
+    
+    DECLARE @EditorId INT = SCOPE_IDENTITY();
+    
+    INSERT INTO [UserPermissions] ([UserId], [PermissionName], [CanCreate], [CanRead], [CanUpdate], [CanDelete], [CanExecute], [CreatedAt], [CreatedBy], [IsDeleted])
+    VALUES 
+        (@EditorId, N'scheduler', 0, 1, 0, 0, 0, GETUTCDATE(), N'System', 0),
+        (@EditorId, N'schedules', 1, 1, 1, 1, 1, GETUTCDATE(), N'System', 0),
+        (@EditorId, N'jobs', 0, 1, 0, 0, 0, GETUTCDATE(), N'System', 0);
+END
+
+COMMIT;
+GO
+
+PRINT 'Database creation and seeding completed successfully!';
+PRINT '';
+PRINT 'Created users:';
+PRINT '  - superadmin@cassinfo.com (Super Admin - cannot be modified via UI)';
+PRINT '  - admin@cassinfo.com (Default Admin)';
+PRINT '  - viewer@cassinfo.com (Read-only access)';
+PRINT '  - editor@cassinfo.com (Can create/edit/delete schedules)';
+PRINT '';
+PRINT 'Permission Templates:';
+PRINT '  - Viewer: scheduler:read, schedules:read, jobs:read';
+PRINT '  - Editor: scheduler:read, schedules:*, jobs:read';
+PRINT '  - Admin: All permissions';
+PRINT '  - Super Admin: All permissions + users:manage (IsSystemAdmin=true)';
+PRINT '';
+PRINT 'Service Account Configuration:';
+PRINT '  - Client ID: svc-adrscheduler';
+PRINT '  - Configured in Duende IdentityServer Config.cs';
+PRINT '  - Permissions: Editor template (schedules:*)';
+PRINT '';
+PRINT 'Azure AD Configuration Required:';
+PRINT '  - Tenant ID: 08717c9a-7042-4ddf-b86a-e0a500d32cde';
+PRINT '  - Update appsettings.json with ClientId and ClientSecret';
+PRINT '  - See AZURE_AD_SETUP.md for complete setup instructions';
 VALUES (1, 1, N'test_credential', GETDATE(), GETDATE(), N'System', N'System', 0);
 
 /** Optional - Create Test Job Execution **/
