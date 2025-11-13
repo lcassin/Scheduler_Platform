@@ -69,6 +69,27 @@ public static class Config
                 },
                 AccessTokenLifetime = 3600,
                 RequireConsent = false
+            },
+            new Client
+            {
+                ClientId = "svc-adrscheduler",
+                ClientName = "ADR Scheduler Service Account",
+                AllowedGrantTypes = GrantTypes.ClientCredentials,
+                ClientSecrets = { new Secret("dev-secret-change-in-production".Sha256()) },
+                AllowedScopes = { "scheduler-api" },
+                Claims = new List<ClientClaim>
+                {
+                    new ClientClaim("permission", "scheduler:read"),
+                    new ClientClaim("permission", "schedules:read"),
+                    new ClientClaim("permission", "schedules:create"),
+                    new ClientClaim("permission", "schedules:update"),
+                    new ClientClaim("permission", "schedules:delete"),
+                    new ClientClaim("permission", "schedules:execute"),
+                    new ClientClaim("permission", "jobs:read")
+                },
+                AlwaysSendClientClaims = true,
+                ClientClaimsPrefix = string.Empty,
+                AccessTokenLifetime = 3600
             }
         };
 

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -105,10 +106,29 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+builder.Services.AddSingleton<IAuthorizationHandler, SchedulerPlatform.API.Authorization.PermissionAuthorizationHandler>();
+
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
     options.AddPolicy("ClientAccess", policy => policy.RequireAuthenticatedUser());
+    
+    options.AddPolicy("Scheduler.Access", policy => 
+        policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("scheduler:read")));
+    options.AddPolicy("Schedules.Read", policy => 
+        policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("schedules:read")));
+    options.AddPolicy("Schedules.Create", policy => 
+        policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("schedules:create")));
+    options.AddPolicy("Schedules.Update", policy => 
+        policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("schedules:update")));
+    options.AddPolicy("Schedules.Delete", policy => 
+        policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("schedules:delete")));
+    options.AddPolicy("Schedules.Execute", policy => 
+        policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("schedules:execute")));
+    options.AddPolicy("Jobs.Read", policy => 
+        policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("jobs:read")));
+    options.AddPolicy("Users.Manage", policy => 
+        policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("users:manage")));
 });
 
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();

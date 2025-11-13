@@ -9,4 +9,8 @@ public interface IUserService
     Task<User?> GetUserByExternalIdAsync(string externalId);
     Task<string> GetUserRoleAsync(int userId);
     Task<bool> ValidateUserCredentialsAsync(string username, string password);
+    Task<User> CreateUserAsync(User user);
+    Task<User> UpdateUserAsync(User user);
+    Task AssignDefaultPermissionsAsync(int userId);
+    Task<IEnumerable<UserPermission>> GetUserPermissionsAsync(int userId);
 }

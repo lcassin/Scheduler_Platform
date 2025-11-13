@@ -11,6 +11,10 @@ public class User : BaseEntity
     public int ClientId { get; set; }
     public bool IsActive { get; set; }
     public string? ExternalUserId { get; set; }
+    public string? ExternalIssuer { get; set; }
+    public string? PasswordHash { get; set; }
+    public bool IsSystemAdmin { get; set; }
+    public DateTime? LastLoginAt { get; set; }
     
     [JsonIgnore]
     public Client Client { get; set; } = null!;

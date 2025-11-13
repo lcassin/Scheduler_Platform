@@ -1,0 +1,310 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "SchedulerPlatform.UI/1.0.0": {
+        "dependencies": {
+          "Heron.MudCalendar": "3.3.0",
+          "Microsoft.AspNetCore.Authentication.OpenIdConnect": "10.0.0",
+          "MudBlazor": "8.14.0",
+          "SchedulerPlatform.Core": "1.0.0"
+        },
+        "runtime": {
+          "SchedulerPlatform.UI.dll": {}
+        }
+      },
+      "Heron.MudCalendar/3.3.0": {
+        "dependencies": {
+          "MudBlazor": "8.14.0"
+        },
+        "runtime": {
+          "lib/net9.0/Heron.MudCalendar.dll": {
+            "assemblyVersion": "3.3.0.0",
+            "fileVersion": "3.3.0.0"
+          }
+        },
+        "resources": {
+          "lib/net9.0/bg/Heron.MudCalendar.resources.dll": {
+            "locale": "bg"
+          },
+          "lib/net9.0/cs/Heron.MudCalendar.resources.dll": {
+            "locale": "cs"
+          },
+          "lib/net9.0/da/Heron.MudCalendar.resources.dll": {
+            "locale": "da"
+          },
+          "lib/net9.0/de/Heron.MudCalendar.resources.dll": {
+            "locale": "de"
+          },
+          "lib/net9.0/el/Heron.MudCalendar.resources.dll": {
+            "locale": "el"
+          },
+          "lib/net9.0/es/Heron.MudCalendar.resources.dll": {
+            "locale": "es"
+          },
+          "lib/net9.0/et/Heron.MudCalendar.resources.dll": {
+            "locale": "et"
+          },
+          "lib/net9.0/fa/Heron.MudCalendar.resources.dll": {
+            "locale": "fa"
+          },
+          "lib/net9.0/fi/Heron.MudCalendar.resources.dll": {
+            "locale": "fi"
+          },
+          "lib/net9.0/fr/Heron.MudCalendar.resources.dll": {
+            "locale": "fr"
+          },
+          "lib/net9.0/hr/Heron.MudCalendar.resources.dll": {
+            "locale": "hr"
+          },
+          "lib/net9.0/hu/Heron.MudCalendar.resources.dll": {
+            "locale": "hu"
+          },
+          "lib/net9.0/id/Heron.MudCalendar.resources.dll": {
+            "locale": "id"
+          },
+          "lib/net9.0/it/Heron.MudCalendar.resources.dll": {
+            "locale": "it"
+          },
+          "lib/net9.0/ja/Heron.MudCalendar.resources.dll": {
+            "locale": "ja"
+          },
+          "lib/net9.0/ko/Heron.MudCalendar.resources.dll": {
+            "locale": "ko"
+          },
+          "lib/net9.0/lt/Heron.MudCalendar.resources.dll": {
+            "locale": "lt"
+          },
+          "lib/net9.0/lv/Heron.MudCalendar.resources.dll": {
+            "locale": "lv"
+          },
+          "lib/net9.0/nb/Heron.MudCalendar.resources.dll": {
+            "locale": "nb"
+          },
+          "lib/net9.0/nl/Heron.MudCalendar.resources.dll": {
+            "locale": "nl"
+          },
+          "lib/net9.0/pl/Heron.MudCalendar.resources.dll": {
+            "locale": "pl"
+          },
+          "lib/net9.0/pt/Heron.MudCalendar.resources.dll": {
+            "locale": "pt"
+          },
+          "lib/net9.0/ro/Heron.MudCalendar.resources.dll": {
+            "locale": "ro"
+          },
+          "lib/net9.0/ru/Heron.MudCalendar.resources.dll": {
+            "locale": "ru"
+          },
+          "lib/net9.0/sk/Heron.MudCalendar.resources.dll": {
+            "locale": "sk"
+          },
+          "lib/net9.0/sl/Heron.MudCalendar.resources.dll": {
+            "locale": "sl"
+          },
+          "lib/net9.0/sv/Heron.MudCalendar.resources.dll": {
+            "locale": "sv"
+          },
+          "lib/net9.0/tr/Heron.MudCalendar.resources.dll": {
+            "locale": "tr"
+          },
+          "lib/net9.0/uk/Heron.MudCalendar.resources.dll": {
+            "locale": "uk"
+          },
+          "lib/net9.0/zh/Heron.MudCalendar.resources.dll": {
+            "locale": "zh"
+          }
+        }
+      },
+      "Microsoft.AspNetCore.Authentication.OpenIdConnect/10.0.0": {
+        "dependencies": {
+          "Microsoft.IdentityModel.Protocols.OpenIdConnect": "8.0.1"
+        },
+        "runtime": {
+          "lib/net10.0/Microsoft.AspNetCore.Authentication.OpenIdConnect.dll": {
+            "assemblyVersion": "10.0.0.0",
+            "fileVersion": "10.0.25.52411"
+          }
+        }
+      },
+      "Microsoft.IdentityModel.Abstractions/8.0.1": {
+        "runtime": {
+          "lib/net9.0/Microsoft.IdentityModel.Abstractions.dll": {
+            "assemblyVersion": "8.0.1.0",
+            "fileVersion": "8.0.1.50722"
+          }
+        }
+      },
+      "Microsoft.IdentityModel.JsonWebTokens/8.0.1": {
+        "dependencies": {
+          "Microsoft.IdentityModel.Tokens": "8.0.1"
+        },
+        "runtime": {
+          "lib/net9.0/Microsoft.IdentityModel.JsonWebTokens.dll": {
+            "assemblyVersion": "8.0.1.0",
+            "fileVersion": "8.0.1.50722"
+          }
+        }
+      },
+      "Microsoft.IdentityModel.Logging/8.0.1": {
+        "dependencies": {
+          "Microsoft.IdentityModel.Abstractions": "8.0.1"
+        },
+        "runtime": {
+          "lib/net9.0/Microsoft.IdentityModel.Logging.dll": {
+            "assemblyVersion": "8.0.1.0",
+            "fileVersion": "8.0.1.50722"
+          }
+        }
+      },
+      "Microsoft.IdentityModel.Protocols/8.0.1": {
+        "dependencies": {
+          "Microsoft.IdentityModel.Tokens": "8.0.1"
+        },
+        "runtime": {
+          "lib/net9.0/Microsoft.IdentityModel.Protocols.dll": {
+            "assemblyVersion": "8.0.1.0",
+            "fileVersion": "8.0.1.50722"
+          }
+        }
+      },
+      "Microsoft.IdentityModel.Protocols.OpenIdConnect/8.0.1": {
+        "dependencies": {
+          "Microsoft.IdentityModel.Protocols": "8.0.1",
+          "System.IdentityModel.Tokens.Jwt": "8.0.1"
+        },
+        "runtime": {
+          "lib/net9.0/Microsoft.IdentityModel.Protocols.OpenIdConnect.dll": {
+            "assemblyVersion": "8.0.1.0",
+            "fileVersion": "8.0.1.50722"
+          }
+        }
+      },
+      "Microsoft.IdentityModel.Tokens/8.0.1": {
+        "dependencies": {
+          "Microsoft.IdentityModel.Logging": "8.0.1"
+        },
+        "runtime": {
+          "lib/net9.0/Microsoft.IdentityModel.Tokens.dll": {
+            "assemblyVersion": "8.0.1.0",
+            "fileVersion": "8.0.1.50722"
+          }
+        }
+      },
+      "MudBlazor/8.14.0": {
+        "runtime": {
+          "lib/net9.0/MudBlazor.dll": {
+            "assemblyVersion": "8.14.0.0",
+            "fileVersion": "8.14.0.0"
+          }
+        }
+      },
+      "System.IdentityModel.Tokens.Jwt/8.0.1": {
+        "dependencies": {
+          "Microsoft.IdentityModel.JsonWebTokens": "8.0.1",
+          "Microsoft.IdentityModel.Tokens": "8.0.1"
+        },
+        "runtime": {
+          "lib/net9.0/System.IdentityModel.Tokens.Jwt.dll": {
+            "assemblyVersion": "8.0.1.0",
+            "fileVersion": "8.0.1.50722"
+          }
+        }
+      },
+      "SchedulerPlatform.Core/1.0.0": {
+        "runtime": {
+          "SchedulerPlatform.Core.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "SchedulerPlatform.UI/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Heron.MudCalendar/3.3.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-OBDOqcfx27aU7iWHMWcFVtrH/88ATtdeAbiWWtAnTXj1+5AH2KXuOTJmEzoaAiF7lb/J+ytqKe2+v0HOJcV33Q==",
+      "path": "heron.mudcalendar/3.3.0",
+      "hashPath": "heron.mudcalendar.3.3.0.nupkg.sha512"
+    },
+    "Microsoft.AspNetCore.Authentication.OpenIdConnect/10.0.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-6ATONu+5A2oh/vzmoFhf3cuQcclMaWGHrb1kvjVsYtml+gzuWD48MmbsItM4xAUQkJZ2t8XFmbGp8pZLPxKneA==",
+      "path": "microsoft.aspnetcore.authentication.openidconnect/10.0.0",
+      "hashPath": "microsoft.aspnetcore.authentication.openidconnect.10.0.0.nupkg.sha512"
+    },
+    "Microsoft.IdentityModel.Abstractions/8.0.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-OtlIWcyX01olfdevPKZdIPfBEvbcioDyBiE/Z2lHsopsMD7twcKtlN9kMevHmI5IIPhFpfwCIiR6qHQz1WHUIw==",
+      "path": "microsoft.identitymodel.abstractions/8.0.1",
+      "hashPath": "microsoft.identitymodel.abstractions.8.0.1.nupkg.sha512"
+    },
+    "Microsoft.IdentityModel.JsonWebTokens/8.0.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-s6++gF9x0rQApQzOBbSyp4jUaAlwm+DroKfL8gdOHxs83k8SJfUXhuc46rDB3rNXBQ1MVRxqKUrqFhO/M0E97g==",
+      "path": "microsoft.identitymodel.jsonwebtokens/8.0.1",
+      "hashPath": "microsoft.identitymodel.jsonwebtokens.8.0.1.nupkg.sha512"
+    },
+    "Microsoft.IdentityModel.Logging/8.0.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-UCPF2exZqBXe7v/6sGNiM6zCQOUXXQ9+v5VTb9gPB8ZSUPnX53BxlN78v2jsbIvK9Dq4GovQxo23x8JgWvm/Qg==",
+      "path": "microsoft.identitymodel.logging/8.0.1",
+      "hashPath": "microsoft.identitymodel.logging.8.0.1.nupkg.sha512"
+    },
+    "Microsoft.IdentityModel.Protocols/8.0.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-uA2vpKqU3I2mBBEaeJAWPTjT9v1TZrGWKdgK6G5qJd03CLx83kdiqO9cmiK8/n1erkHzFBwU/RphP83aAe3i3g==",
+      "path": "microsoft.identitymodel.protocols/8.0.1",
+      "hashPath": "microsoft.identitymodel.protocols.8.0.1.nupkg.sha512"
+    },
+    "Microsoft.IdentityModel.Protocols.OpenIdConnect/8.0.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-AQDbfpL+yzuuGhO/mQhKNsp44pm5Jv8/BI4KiFXR7beVGZoSH35zMV3PrmcfvSTsyI6qrcR898NzUauD6SRigg==",
+      "path": "microsoft.identitymodel.protocols.openidconnect/8.0.1",
+      "hashPath": "microsoft.identitymodel.protocols.openidconnect.8.0.1.nupkg.sha512"
+    },
+    "Microsoft.IdentityModel.Tokens/8.0.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-kDimB6Dkd3nkW2oZPDkMkVHfQt3IDqO5gL0oa8WVy3OP4uE8Ij+8TXnqg9TOd9ufjsY3IDiGz7pCUbnfL18tjg==",
+      "path": "microsoft.identitymodel.tokens/8.0.1",
+      "hashPath": "microsoft.identitymodel.tokens.8.0.1.nupkg.sha512"
+    },
+    "MudBlazor/8.14.0": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-cYqG3YvVZxYl0MtLaivYI2ilgd88Rv2noiVR/l6rkH71cBMtOOOD/zYxvF8haf5KAEjc/RGYJ0EpnV9rQn7MXw==",
+      "path": "mudblazor/8.14.0",
+      "hashPath": "mudblazor.8.14.0.nupkg.sha512"
+    },
+    "System.IdentityModel.Tokens.Jwt/8.0.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-GJw3bYkWpOgvN3tJo5X4lYUeIFA2HD293FPUhKmp7qxS+g5ywAb34Dnd3cDAFLkcMohy5XTpoaZ4uAHuw0uSPQ==",
+      "path": "system.identitymodel.tokens.jwt/8.0.1",
+      "hashPath": "system.identitymodel.tokens.jwt.8.0.1.nupkg.sha512"
+    },
+    "SchedulerPlatform.Core/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}
