@@ -37,14 +37,14 @@ All project files have been updated from `net9.0` to `net10.0`:
 
 **Important Package Changes:**
 - **Removed**: `Microsoft.AspNetCore.OpenApi` - Not needed when using Swashbuckle
-- **Added**: `Microsoft.OpenApi` 3.0.0 - Required for `Microsoft.OpenApi.Models` namespace
+- **Added**: `Microsoft.OpenApi` 2.3.0 - Required by Swashbuckle 10.0.1 for `Microsoft.OpenApi.Models` namespace
 
 ### 3. Third-Party Package Updates
 
 All third-party packages have been updated to their latest versions:
 
 - **Swashbuckle.AspNetCore**: 9.0.6 → 10.0.1
-- **Microsoft.OpenApi**: Added at 3.0.0 (compatible with Swashbuckle 10.x)
+- **Microsoft.OpenApi**: Added at 2.3.0 (required by Swashbuckle 10.0.1)
 - **Microsoft.Data.SqlClient**: 6.1.2 → 6.1.3
 - **Quartz** (all packages): 3.15.0 → 3.15.1
 - **MudBlazor**: 8.13.0 → 8.14.0
@@ -79,14 +79,14 @@ dotnet run --project src/SchedulerPlatform.API/SchedulerPlatform.API.csproj
 
 **Solution Applied**: 
 - Upgraded to **Swashbuckle.AspNetCore 10.0.1** (latest version)
-- Added explicit reference to **Microsoft.OpenApi 3.0.0** (compatible with Swashbuckle 10.x)
+- Added explicit reference to **Microsoft.OpenApi 2.3.0** (required by Swashbuckle 10.0.1)
 - Removed `Microsoft.AspNetCore.OpenApi` package (not needed when using Swashbuckle)
 
 This issue has been fully resolved. The existing Swagger configuration in Program.cs works without code changes.
 
 ### Swagger/OpenAPI - No Code Changes Required
 
-The upgrade to Swashbuckle 10.0.1 + Microsoft.OpenApi 3.0.0 is backward compatible. Your existing `AddSwaggerGen` configuration continues to work as-is:
+The upgrade to Swashbuckle 10.0.1 + Microsoft.OpenApi 2.3.0 is backward compatible. Your existing `AddSwaggerGen` configuration continues to work as-is:
 
 ```csharp
 builder.Services.AddSwaggerGen(c =>
