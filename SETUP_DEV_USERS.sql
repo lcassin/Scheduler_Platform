@@ -1,7 +1,7 @@
 -- 
 -- 
 
-USE [SchedulerPlatform];
+USE [SchedulerPlatform_Dev];
 GO
 
 BEGIN TRANSACTION;
@@ -17,7 +17,7 @@ DECLARE @ClientId INT = (SELECT [Id] FROM [Clients] WHERE [ClientCode] = 'INTERN
 
 IF NOT EXISTS (SELECT 1 FROM [Users] WHERE [Email] = 'dev-admin@cassinfo.com')
 BEGIN
-    DECLARE @DevAdminPasswordHash NVARCHAR(500) = 'PLACEHOLDER_HASH_FOR_DevAdmin!2025!!';
+    DECLARE @DevAdminPasswordHash NVARCHAR(500) = 'AQAAAAEAACcQAAAAECNH0oZr0igG+UTX7F2NIU3JC0DSysyPWQX+KQoq/fr0XMNeqxNlxbiWtGd2LFMamA==';
     
     INSERT INTO [Users] ([Username], [Email], [FirstName], [LastName], [ClientId], [IsActive], [IsSystemAdmin], [PasswordHash], [CreatedAt], [CreatedBy], [IsDeleted])
     VALUES (N'dev-admin', N'dev-admin@cassinfo.com', N'Dev', N'Admin', @ClientId, 1, 1, @DevAdminPasswordHash, GETUTCDATE(), N'DevSetup', 0);
@@ -39,7 +39,7 @@ END
 
 IF NOT EXISTS (SELECT 1 FROM [Users] WHERE [Email] = 'dev-editor@cassinfo.com')
 BEGIN
-    DECLARE @DevEditorPasswordHash NVARCHAR(500) = 'PLACEHOLDER_HASH_FOR_DevEditor!2025!!';
+    DECLARE @DevEditorPasswordHash NVARCHAR(500) = 'AQAAAAEAACcQAAAAEKluqq0CX8KwQmTEFtggSJWW9TXUHHg4q88ROzqeXivcBStj5DcvXZrpizNLxf00tA==';
     
     INSERT INTO [Users] ([Username], [Email], [FirstName], [LastName], [ClientId], [IsActive], [IsSystemAdmin], [PasswordHash], [CreatedAt], [CreatedBy], [IsDeleted])
     VALUES (N'dev-editor', N'dev-editor@cassinfo.com', N'Dev', N'Editor', @ClientId, 1, 0, @DevEditorPasswordHash, GETUTCDATE(), N'DevSetup', 0);
@@ -61,7 +61,7 @@ END
 
 IF NOT EXISTS (SELECT 1 FROM [Users] WHERE [Email] = 'dev-viewer@cassinfo.com')
 BEGIN
-    DECLARE @DevViewerPasswordHash NVARCHAR(500) = 'PLACEHOLDER_HASH_FOR_DevViewer!2025!!';
+    DECLARE @DevViewerPasswordHash NVARCHAR(500) = 'AQAAAAEAACcQAAAAEMJ24UU6gnEXVgabJEJuJdqqWFhhlVn3thwWSga2ugpNzsALvI8oKw+8YLzelgfqTA==';
     
     INSERT INTO [Users] ([Username], [Email], [FirstName], [LastName], [ClientId], [IsActive], [IsSystemAdmin], [PasswordHash], [CreatedAt], [CreatedBy], [IsDeleted])
     VALUES (N'dev-viewer', N'dev-viewer@cassinfo.com', N'Dev', N'Viewer', @ClientId, 1, 0, @DevViewerPasswordHash, GETUTCDATE(), N'DevSetup', 0);

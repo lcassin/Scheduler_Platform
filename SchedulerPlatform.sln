@@ -21,7 +21,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SchedulerPlatform.LogCleanu
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SchedulerPlatform.ScheduleSync", "src\SchedulerPlatform.ScheduleSync\SchedulerPlatform.ScheduleSync.csproj", "{AC8DD96C-F5B5-4EAE-9C09-EA44BD8A13D6}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HashBecrypter", "src\SchedulerPlatform.BCrypter\HashBecrypter\HashBecrypter.csproj", "{18D08456-DBC5-4602-AE75-43D01395C6FA}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HashBCryptor", "src\SchedulerPlatform.BCrypter\HashBecrypter\HashBCryptor.csproj", "{18D08456-DBC5-4602-AE75-43D01395C6FA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
