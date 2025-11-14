@@ -97,12 +97,12 @@
                 <MudText Typo="Typo.body2">@(Schedule.TimeoutMinutes?.ToString() ?? "Default (5)")</MudText>
             </MudItem>
             
-            @if (!string.IsNullOrWhiteSpace(Schedule.JobConfiguration))
+            @if (!string.IsNullOrWhiteSpace(Schedule.JobDataJson))
             {
                 <MudItem xs="12">
                     <MudText Typo="Typo.subtitle2" Class="mb-1">Job Configuration</MudText>
                     <MudPaper Class="pa-2" Style="background-color: #f5f5f5; max-height: 200px; overflow-y: auto;">
-                        <MudText Typo="Typo.body2" Style="white-space: pre-wrap; font-family: monospace; font-size: 0.75rem;">@Schedule.JobConfiguration</MudText>
+                        <MudText Typo="Typo.body2" Style="white-space: pre-wrap; font-family: monospace; font-size: 0.75rem;">@Schedule.JobDataJson</MudText>
                     </MudPaper>
                 </MudItem>
             }
