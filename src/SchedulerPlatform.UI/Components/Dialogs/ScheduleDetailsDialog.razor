@@ -1,0 +1,169 @@
+@using MudBlazor
+@using SchedulerPlatform.Core.Domain.Enums
+@using SchedulerPlatform.Core.Domain.Entities
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Schedule ID</MudText>
+                <MudText Typo="Typo.body2">@Schedule.Id</MudText>
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Name</MudText>
+                <MudText Typo="Typo.body2"><strong>@Schedule.Name</strong></MudText>
+            </MudItem>
+            
+            <MudItem xs="12">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Description</MudText>
+                <MudText Typo="Typo.body2">@(Schedule.Description ?? "N/A")</MudText>
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Job Type</MudText>
+                <MudChip T="string" Size="Size.Small">@Schedule.JobType.ToString()</MudChip>
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Frequency</MudText>
+                <MudText Typo="Typo.body2">@Schedule.Frequency.ToString()</MudText>
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">CRON Expression</MudText>
+                <MudText Typo="Typo.body2" Style="font-family: monospace;">@(Schedule.CronExpression ?? "N/A")</MudText>
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Time Zone</MudText>
+                <MudText Typo="Typo.body2">@(Schedule.TimeZone ?? "N/A")</MudText>
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Next Run Time</MudText>
+                <MudText Typo="Typo.body2">
+                    @if (Schedule.NextRunTime.HasValue)
+                    {
+                        <text>@Schedule.NextRunTime.Value.ToString("g")</text>
+                    }
+                    else
+                    {
+                        <text>N/A</text>
+                    }
+                </MudText>
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Last Run Time</MudText>
+                <MudText Typo="Typo.body2">
+                    @(Schedule.LastRunTime.HasValue ? Schedule.LastRunTime.Value.ToString("g") : "N/A")
+                </MudText>
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Status</MudText>
+                <MudChip T="string" Size="Size.Small" Color="@(Schedule.IsEnabled ? Color.Success : Color.Default)">
+                    @(Schedule.IsEnabled ? "Enabled" : "Disabled")
+                </MudChip>
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Last Run Status</MudText>
+                @if (Schedule.LastRunStatus.HasValue)
+                {
+                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(Schedule.LastRunStatus.Value)">
+                        @Schedule.LastRunStatus.Value.ToString()
+                    </MudChip>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2">N/A</MudText>
+                }
+            </MudItem>
+            
+            <MudItem xs="12" md="4">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Max Retries</MudText>
+                <MudText Typo="Typo.body2">@Schedule.MaxRetries</MudText>
+            </MudItem>
+            
+            <MudItem xs="12" md="4">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Retry Delay (minutes)</MudText>
+                <MudText Typo="Typo.body2">@Schedule.RetryDelayMinutes</MudText>
+            </MudItem>
+            
+            <MudItem xs="12" md="4">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Timeout (minutes)</MudText>
+                <MudText Typo="Typo.body2">@(Schedule.TimeoutMinutes?.ToString() ?? "Default (5)")</MudText>
+            </MudItem>
+            
+            @if (!string.IsNullOrWhiteSpace(Schedule.JobConfiguration))
+            {
+                <MudItem xs="12">
+                    <MudText Typo="Typo.subtitle2" Class="mb-1">Job Configuration</MudText>
+                    <MudPaper Class="pa-2" Style="background-color: #f5f5f5; max-height: 200px; overflow-y: auto;">
+                        <MudText Typo="Typo.body2" Style="white-space: pre-wrap; font-family: monospace; font-size: 0.75rem;">@Schedule.JobConfiguration</MudText>
+                    </MudPaper>
+                </MudItem>
+            }
+            
+            @if (!string.IsNullOrWhiteSpace(Schedule.JobDataJson))
+            {
+                <MudItem xs="12">
+                    <MudText Typo="Typo.subtitle2" Class="mb-1">Job Data JSON</MudText>
+                    <MudPaper Class="pa-2" Style="background-color: #f5f5f5; max-height: 200px; overflow-y: auto;">
+                        <MudText Typo="Typo.body2" Style="white-space: pre-wrap; font-family: monospace; font-size: 0.75rem;">@Schedule.JobDataJson</MudText>
+                    </MudPaper>
+                </MudItem>
+            }
+            
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Created At</MudText>
+                <MudText Typo="Typo.body2">@Schedule.CreatedAt.ToString("g")</MudText>
+            </MudItem>
+            
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Created By</MudText>
+                <MudText Typo="Typo.body2">@(Schedule.CreatedBy ?? "System")</MudText>
+            </MudItem>
+            
+            @if (Schedule.UpdatedAt.HasValue)
+            {
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.subtitle2" Class="mb-1">Updated At</MudText>
+                    <MudText Typo="Typo.body2">@Schedule.UpdatedAt.Value.ToString("g")</MudText>
+                </MudItem>
+                
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.subtitle2" Class="mb-1">Updated By</MudText>
+                    <MudText Typo="Typo.body2">@(Schedule.UpdatedBy ?? "System")</MudText>
+                </MudItem>
+            }
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Close" Color="Color.Primary">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+    
+    [Parameter] public Schedule Schedule { get; set; } = null!;
+    
+    private void Close() => MudDialog.Close();
+    
+    private Color GetStatusColor(JobStatus status)
+    {
+        return status switch
+        {
+            JobStatus.Completed => Color.Success,
+            JobStatus.Failed => Color.Error,
+            JobStatus.Running => Color.Info,
+            JobStatus.Retrying => Color.Warning,
+            JobStatus.Cancelled => Color.Default,
+            _ => Color.Default
+        };
+    }
+}

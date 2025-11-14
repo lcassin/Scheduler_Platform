@@ -8,15 +8,19 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject IJSRuntime JSRuntime
+@inject IPermissionService PermissionService
 
 <PageTitle>Schedules</PageTitle>
 
 <MudText Typo="Typo.h4" Class="mb-4">Schedules</MudText>
 
 <MudPaper Class="pa-4">
-    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateSchedule" Class="mb-4">
-        Add New Schedule
-    </MudButton>
+    @if (_canCreate)
+    {
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateSchedule" Class="mb-4">
+            Add New Schedule
+        </MudButton>
+    }
 
     <MudGrid Class="mb-4">
         <MudItem xs="12" md="3">
@@ -120,14 +124,24 @@
                     }
                 </MudTd>
                 <MudTd DataLabel="Status">
-                    <MudSwitch T="bool" Value="context.IsEnabled" ValueChanged="@((bool value) => HandleToggleSchedule(context, value))" Color="Color.Primary" />
+                    <MudSwitch T="bool" Value="context.IsEnabled" ValueChanged="@((bool value) => HandleToggleSchedule(context, value))" Color="Color.Primary" Disabled="@(!_canUpdate)" />
                 </MudTd>
                 <MudTd DataLabel="Actions">
                     <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
-                        <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => EditSchedule(context.Id)">Edit</MudMenuItem>
+                        <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewScheduleDetails(context)">View Details</MudMenuItem>
+                        @if (_canUpdate)
+                        {
+                            <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => EditSchedule(context.Id)">Edit</MudMenuItem>
+                        }
                         <MudMenuItem Icon="@Icons.Material.Filled.History" OnClick="() => ViewExecutions(context.Id)">View History</MudMenuItem>
-                        <MudMenuItem Icon="@Icons.Material.Filled.PlayArrow" OnClick="() => TriggerSchedule(context)">Trigger Now</MudMenuItem>
-                        <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="() => DeleteSchedule(context)">Delete</MudMenuItem>
+                        @if (_canExecute)
+                        {
+                            <MudMenuItem Icon="@Icons.Material.Filled.PlayArrow" OnClick="() => TriggerSchedule(context)">Trigger Now</MudMenuItem>
+                        }
+                        @if (_canDelete)
+                        {
+                            <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="() => DeleteSchedule(context)">Delete</MudMenuItem>
+                        }
                     </MudMenu>
                 </MudTd>
             </RowTemplate>
@@ -164,6 +178,10 @@
     private int? _selectedClientId => _selectedClient?.Id;
     private DateTime? _selectedDate;
     private DateTime? _filterDate;
+    private bool _canCreate = false;
+    private bool _canUpdate = false;
+    private bool _canDelete = false;
+    private bool _canExecute = false;
     
     [Parameter]
     [SupplyParameterFromQuery(Name = "date")]
@@ -176,6 +194,12 @@
             _selectedDate = parsedDate;
             _filterDate = parsedDate;
         }
+        
+        // Load permissions
+        _canCreate = await PermissionService.CanCreateAsync("schedules");
+        _canUpdate = await PermissionService.CanUpdateAsync("schedules");
+        _canDelete = await PermissionService.CanDeleteAsync("schedules");
+        _canExecute = await PermissionService.CanExecuteAsync("schedules");
         
         try
         {
@@ -295,6 +319,22 @@
     private void ViewExecutions(int id)
     {
         Navigation.NavigateTo($"/executions?scheduleId={id}");
+    }
+
+    private async Task ViewScheduleDetails(Schedule schedule)
+    {
+        var parameters = new DialogParameters<ScheduleDetailsDialog>
+        {
+            { x => x.Schedule, schedule }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true
+        };
+
+        await DialogService.ShowAsync<ScheduleDetailsDialog>("Schedule Details", parameters, options);
     }
 
     private async Task HandleToggleSchedule(Schedule schedule, bool newValue)
