@@ -241,6 +241,10 @@ dotnet ef migrations script --startup-project ../SchedulerPlatform.API
 
 ### Data Flow
 
+![Figure 4: Complete data flow for creating a schedule from API to database](diagram-4.png)
+
+This sequence diagram shows the complete flow of creating a schedule, from the API controller through the Unit of Work, repository, DbContext, and finally to the SQL Server database.
+
 ```mermaid
 sequenceDiagram
     participant API as API Controller
@@ -289,6 +293,10 @@ sequenceDiagram
 ### UML Class Diagrams
 
 #### Repository Layer
+
+![Figure 2: Repository class hierarchy implementing the repository pattern](diagram-2.png)
+
+This class diagram shows how the repository classes implement the IRepository interfaces, including the generic Repository<T> base class and specialized repositories.
 
 ```mermaid
 classDiagram

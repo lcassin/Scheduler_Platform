@@ -483,6 +483,10 @@ classDiagram
 
 #### Quartz.NET Integration
 
+![Figure 4: Job handler class hierarchy for different job types](diagram-4.png)
+
+This diagram shows the job handler classes (ProcessJobHandler, StoredProcedureJobHandler, ApiCallJobHandler) and how they implement the IJobHandler interface.
+
 ```mermaid
 classDiagram
     class IScheduler {
@@ -524,6 +528,10 @@ classDiagram
 ```
 
 ### Job Lifecycle States
+
+![Figure 5: Retry logic flowchart with exponential backoff](diagram-5.png)
+
+This flowchart shows the retry logic for failed job executions, including exponential backoff calculation and maximum retry limits.
 
 ```mermaid
 stateDiagram-v2
