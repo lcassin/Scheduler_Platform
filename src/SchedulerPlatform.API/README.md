@@ -491,6 +491,10 @@ builder.Host.UseSerilog();
 
 ### API Request Flow
 
+![Figure 1: Complete API request flow showing authentication, authorization, and data access](diagram-1.png)
+
+The diagram above illustrates the complete journey of an API request through the system, from initial CORS validation through authentication, authorization, model validation, controller execution, database operations, and finally the response back to the client.
+
 ```mermaid
 sequenceDiagram
     participant Client as Client (UI/Script)
@@ -564,6 +568,10 @@ sequenceDiagram
 ```
 
 ### Authentication Flow
+
+![Figure 2: OAuth2/OIDC authentication flow between UI, IdentityServer, and API](diagram-2.png)
+
+This diagram shows how users authenticate through the OAuth2/OpenID Connect flow, from initial login through token issuance and API access with JWT validation.
 
 ```mermaid
 sequenceDiagram
@@ -687,6 +695,10 @@ classDiagram
 ```
 
 #### Request/Response Models
+
+![Figure 4: API request and response model structures](diagram-4.png)
+
+This diagram illustrates the data transfer objects (DTOs) used for API requests and responses, showing how data flows between the client and server.
 
 ```mermaid
 classDiagram
