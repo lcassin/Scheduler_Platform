@@ -57,27 +57,27 @@
                         <MudText Typo="Typo.subtitle2" Class="mb-2">@group.Key</MudText>
                         <MudGrid>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox @bind-Checked="@group.Value.CanCreate"
+                                <MudCheckBox T="bool" @bind-Checked="@group.Value.CanCreate"
                                              Label="Create"
                                              Dense="true" />
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox @bind-Checked="@group.Value.CanRead"
+                                <MudCheckBox T="bool" @bind-Checked="@group.Value.CanRead"
                                              Label="Read"
                                              Dense="true" />
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox @bind-Checked="@group.Value.CanUpdate"
+                                <MudCheckBox T="bool" @bind-Checked="@group.Value.CanUpdate"
                                              Label="Update"
                                              Dense="true" />
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox @bind-Checked="@group.Value.CanDelete"
+                                <MudCheckBox T="bool" @bind-Checked="@group.Value.CanDelete"
                                              Label="Delete"
                                              Dense="true" />
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox @bind-Checked="@group.Value.CanExecute"
+                                <MudCheckBox T="bool" @bind-Checked="@group.Value.CanExecute"
                                              Label="Execute"
                                              Dense="true" />
                             </MudItem>
@@ -97,7 +97,7 @@
 </MudDialog>
 
 @code {
-    [CascadingParameter] MudDialogInstance? MudDialog { get; set; }
+    [CascadingParameter] IMudDialogInstance? MudDialog { get; set; }
     [Parameter] public int UserId { get; set; }
 
     private UserDetail? _user;

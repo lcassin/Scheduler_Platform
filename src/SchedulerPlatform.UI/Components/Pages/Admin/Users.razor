@@ -43,29 +43,29 @@
             <MudTd DataLabel="Status">
                 @if (context.IsActive)
                 {
-                    <MudChip Color="Color.Success" Size="Size.Small">Active</MudChip>
+                    <MudChip T="string" Color="Color.Success" Size="Size.Small">Active</MudChip>
                 }
                 else
                 {
-                    <MudChip Color="Color.Default" Size="Size.Small">Inactive</MudChip>
+                    <MudChip T="string" Color="Color.Default" Size="Size.Small">Inactive</MudChip>
                 }
             </MudTd>
             <MudTd DataLabel="Role">
                 @if (context.IsSystemAdmin)
                 {
-                    <MudChip Color="Color.Error" Size="Size.Small">Super Admin</MudChip>
+                    <MudChip T="string" Color="Color.Error" Size="Size.Small">Super Admin</MudChip>
                 }
                 else if (context.PermissionCount > 10)
                 {
-                    <MudChip Color="Color.Warning" Size="Size.Small">Admin</MudChip>
+                    <MudChip T="string" Color="Color.Warning" Size="Size.Small">Admin</MudChip>
                 }
                 else if (context.PermissionCount > 3)
                 {
-                    <MudChip Color="Color.Info" Size="Size.Small">Editor</MudChip>
+                    <MudChip T="string" Color="Color.Info" Size="Size.Small">Editor</MudChip>
                 }
                 else
                 {
-                    <MudChip Color="Color.Default" Size="Size.Small">Viewer</MudChip>
+                    <MudChip T="string" Color="Color.Default" Size="Size.Small">Viewer</MudChip>
                 }
             </MudTd>
             <MudTd DataLabel="Permissions">@context.PermissionCount</MudTd>
