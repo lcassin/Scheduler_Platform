@@ -22,6 +22,23 @@ SchedulerPlatform is a comprehensive job scheduling system that enables organiza
 
 ## Recent Features (2024-2025)
 
+### Platform Upgrades (November 2025)
+- **Upgraded to .NET 10**: Complete platform upgrade from .NET 9 to .NET 10 with all packages updated to latest versions
+- **Background Schedule Execution**: Schedules now fire automatically 24/7 via ScheduleHydrationService, independent of user sessions
+- **Schedule Hydration on Startup**: All enabled schedules are loaded into Quartz.NET when the API starts, ensuring continuous operation
+- **Deleted Schedule Filtering**: Soft-deleted schedules are properly filtered and no longer execute
+- **NextRunTime Calculation Fix**: Manual schedule triggers no longer incorrectly advance NextRunTime
+- **OIDC Error Handling**: Graceful handling of login cancellation with proper redirect instead of exception page
+
+### Authentication & Authorization (November 2025)
+- **Comprehensive Permission System**: Granular permission-based authorization with Create, Read, Update, Delete, Execute permissions per resource
+- **Admin User Management UI**: Complete admin interface for managing users, permissions, and system access
+- **Local Password Authentication**: Development environment supports local password authentication with BCrypt hashing
+- **Password History Tracking**: Last 10 passwords tracked to prevent reuse
+- **Service Account Authentication**: OAuth2 Client Credentials flow for external systems to access API
+- **Custom Claims in Access Tokens**: Permissions and system admin flags included in JWT tokens
+- **OIDC Logout Fix**: Proper logout flow for Blazor Server with session cleanup
+
 ### Execution Management & Monitoring
 - **Execution Details Dialog**: Comprehensive modal displaying job execution details including ID, schedule name, status, timestamps, duration, retry count, triggered by user, error messages, and output logs
 - **Cancellation Tracking**: New `CancelledBy` field captures the username when executions are manually cancelled, providing full audit trail
@@ -184,9 +201,9 @@ sequenceDiagram
 ## Getting Started
 
 ### Prerequisites
-- .NET 8.0 SDK
+- .NET 10.0 SDK
 - SQL Server 2019+ (LocalDB or full instance)
-- Visual Studio 2022 or JetBrains Rider
+- Visual Studio 2022 (17.13+) or JetBrains Rider
 - Node.js 18+ and npm (for any UI tooling if needed)
 
 ### Setup Instructions
@@ -258,9 +275,26 @@ sequenceDiagram
    - API Swagger: https://localhost:5001/swagger
    - IdentityServer Discovery: https://localhost:5000/.well-known/openid-configuration
 
-7. **Test credentials:**
-   - **Admin User**: Username: `admin` / Password: `Admin123!`
-   - **Client User**: Username: `client1` / Password: `Client123!`
+7. **Set up development users:**
+   
+   For local development, create users in the database with hashed passwords:
+   ```sql
+   -- Use the PasswordHashGen tool to generate BCrypt hashes
+   -- Located at: tools/PasswordHashGen
+   
+   INSERT INTO Users (Email, FirstName, LastName, PasswordHash, IsSystemAdmin, IsEnabled)
+   VALUES 
+   ('admin@cassinfo.com', 'Admin', 'User', '{bcrypt-hash}', 1, 1),
+   ('editor@cassinfo.com', 'Schedule', 'Editor', '{bcrypt-hash}', 0, 1),
+   ('viewer@cassinfo.com', 'Schedule', 'Viewer', '{bcrypt-hash}', 0, 1);
+   
+   -- Grant permissions (see SQL_Database_Creation.sql for complete setup)
+   ```
+   
+   **Development Test Credentials** (after setup):
+   - **Admin**: admin@cassinfo.com / {your-password}
+   - **Editor**: editor@cassinfo.com / {your-password}
+   - **Viewer**: viewer@cassinfo.com / {your-password}
 
 ## Project Structure
 
@@ -324,17 +358,18 @@ sequenceDiagram
 
 | Component | Technology | Version |
 |-----------|-----------|---------|
-| Framework | .NET | 8.0 |
-| ORM | Entity Framework Core | 9.0.10 |
+| Framework | .NET | 10.0 |
+| ORM | Entity Framework Core | 10.0.0 |
 | Query Library | Dapper | 2.1.66 |
-| Job Scheduling | Quartz.NET | 3.15.0 |
+| Job Scheduling | Quartz.NET | 3.15.1 |
 | Authentication | Duende IdentityServer | 7.3.2 |
-| UI Framework | Blazor Server | .NET 8 |
-| UI Components | MudBlazor | 8.13.0 |
+| UI Framework | Blazor Server | .NET 10 |
+| UI Components | MudBlazor | 8.14.0 |
 | Database | SQL Server | 2019+ |
 | Logging | Serilog | Latest |
-| API Documentation | Swagger/OpenAPI | Latest |
-| HTTP Client | IHttpClientFactory | .NET 8 |
+| API Documentation | Swashbuckle | 7.2.0 |
+| OpenAPI | Microsoft.OpenApi | 1.6.22 |
+| HTTP Client | IHttpClientFactory | .NET 10 |
 
 ## How to Implement New Scheduled Processes
 
