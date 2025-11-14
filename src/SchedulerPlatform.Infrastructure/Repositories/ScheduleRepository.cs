@@ -11,6 +11,13 @@ public class ScheduleRepository : Repository<Schedule>, IScheduleRepository
     {
     }
 
+    public override async Task<IEnumerable<Schedule>> GetAllAsync()
+    {
+        return await _dbSet
+            .Where(s => !s.IsDeleted)
+            .ToListAsync();
+    }
+
     public async Task<IEnumerable<Schedule>> GetByClientIdAsync(int clientId)
     {
         return await _dbSet
