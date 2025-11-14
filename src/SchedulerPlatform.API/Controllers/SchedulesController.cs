@@ -114,6 +114,7 @@ public class SchedulesController : ControllerBase
     }
 
     [HttpPost]
+    [Authorize(Policy = "Schedules.Create")]
     public async Task<ActionResult<Schedule>> CreateSchedule([FromBody] Schedule schedule)
     {
         try
@@ -169,6 +170,7 @@ public class SchedulesController : ControllerBase
     }
 
     [HttpPut("{id}")]
+    [Authorize(Policy = "Schedules.Update")]
     public async Task<IActionResult> UpdateSchedule(int id, [FromBody] Schedule schedule)
     {
         try
@@ -252,6 +254,7 @@ public class SchedulesController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [Authorize(Policy = "Schedules.Delete")]
     public async Task<IActionResult> DeleteSchedule(int id)
     {
         try
@@ -281,6 +284,7 @@ public class SchedulesController : ControllerBase
     }
 
     [HttpPost("{id}/trigger")]
+    [Authorize(Policy = "Schedules.Execute")]
     public async Task<IActionResult> TriggerSchedule(int id)
     {
         try
@@ -323,6 +327,7 @@ public class SchedulesController : ControllerBase
     }
 
     [HttpPost("{id}/pause")]
+    [Authorize(Policy = "Schedules.Update")]
     public async Task<IActionResult> PauseSchedule(int id)
     {
         try
@@ -345,6 +350,7 @@ public class SchedulesController : ControllerBase
     }
 
     [HttpPost("{id}/resume")]
+    [Authorize(Policy = "Schedules.Update")]
     public async Task<IActionResult> ResumeSchedule(int id)
     {
         try
