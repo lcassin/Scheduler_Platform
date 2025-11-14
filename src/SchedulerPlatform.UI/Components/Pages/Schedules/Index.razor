@@ -172,298 +172,310 @@
 </MudPaper>
 
 @code {
-    private MudTable<Schedule> _table = null!;
-    private List<Client> _clients = new();
-    private bool _loading = true;
-    private string? _searchTerm;
-    private Client? _selectedClient;
-    private int? _selectedClientId => _selectedClient?.Id;
-    private DateTime? _selectedDate;
-    private DateTime? _filterDate;
-    private bool _canCreate = false;
-    private bool _canUpdate = false;
-    private bool _canDelete = false;
-    private bool _canExecute = false;
-    
-    [Parameter]
-    [SupplyParameterFromQuery(Name = "date")]
-    public string? DateParam { get; set; }
+	private MudTable<Schedule> _table = null!;
+	private List<Client> _clients = new();
+	private bool _loading = true;
+	private string? _searchTerm;
+	private Client? _selectedClient;
+	private int? _selectedClientId => _selectedClient?.Id;
+	private DateTime? _selectedDate;
+	private DateTime? _filterDate;
+	private bool _canCreate = false;
+	private bool _canUpdate = false;
+	private bool _canDelete = false;
+	private bool _canExecute = false;
 
-    protected override async Task OnInitializedAsync()
-    {
-        if (!string.IsNullOrWhiteSpace(DateParam) && DateTime.TryParse(DateParam, out var parsedDate))
-        {
-            _selectedDate = parsedDate;
-            _filterDate = parsedDate;
-        }
-        
-        await LoadPermissionsAsync();
-        
-        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
-        
-        try
-        {
-            _clients = await ClientService.GetClientsAsync();
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error loading clients: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _loading = false;
-        }
-    }
+	[Parameter]
+	[SupplyParameterFromQuery(Name = "date")]
+	public string? DateParam { get; set; }
 
-    private async Task LoadPermissionsAsync()
-    {
-        _canCreate = await PermissionService.CanCreateAsync("schedules");
-        _canUpdate = await PermissionService.CanUpdateAsync("schedules");
-        _canDelete = await PermissionService.CanDeleteAsync("schedules");
-        _canExecute = await PermissionService.CanExecuteAsync("schedules");
-    }
+	protected override async Task OnInitializedAsync()
+	{
+		if (!string.IsNullOrWhiteSpace(DateParam) && DateTime.TryParse(DateParam, out var parsedDate))
+		{
+			_selectedDate = parsedDate;
+			_filterDate = parsedDate;
+		}
 
-    private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
-    {
-        await LoadPermissionsAsync();
-        await InvokeAsync(StateHasChanged);
-    }
+		await LoadPermissionsAsync();
 
-    public void Dispose()
-    {
-        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
-    }
+		// DEBUG: Log what permissions we got
+		var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+		var user = authState.User;
+		Console.WriteLine($"User: {user.Identity?.Name}, IsAuthenticated: {user.Identity?.IsAuthenticated}");
+		Console.WriteLine($"Claims count: {user.Claims.Count()}");
+		foreach (var claim in user.Claims)
+		{
+			Console.WriteLine($"  Claim: {claim.Type} = {claim.Value}");
+		}
+		Console.WriteLine($"Permissions: Create={_canCreate}, Update={_canUpdate}, Delete={_canDelete}, Execute={_canExecute}");
 
-    private async Task<TableData<Schedule>> ServerReload(TableState state, CancellationToken cancellationToken)
-    {
-        _loading = true;
-        try
-        {
-            var pageNumber = state.Page + 1;
-            var pageSize = state.PageSize;
-            
-            var result = await ScheduleService.GetSchedulesPagedAsync(
-                pageNumber,
-                pageSize,
-                _selectedClientId,
-                _searchTerm);
 
-            var items = result.Items;
-            
-            if (_filterDate.HasValue)
-            {
-                items = items.Where(s => s.NextRunTime.HasValue && 
-                                        s.NextRunTime.Value.Date == _filterDate.Value.Date).ToList();
-            }
+		AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
 
-            return new TableData<Schedule>
-            {
-                Items = items,
-                TotalItems = _filterDate.HasValue ? items.Count : result.TotalCount
-            };
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error loading schedules: {ex.Message}", Severity.Error);
-            return new TableData<Schedule> { Items = new List<Schedule>(), TotalItems = 0 };
-        }
-        finally
-        {
-            _loading = false;
-        }
-    }
+		try
+		{
+			_clients = await ClientService.GetClientsAsync();
+		}
+		catch (Exception ex)
+		{
+			Snackbar.Add($"Error loading clients: {ex.Message}", Severity.Error);
+		}
+		finally
+		{
+			_loading = false;
+		}
+	}
 
-    private async Task<IEnumerable<Client>> SearchClients(string value, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrEmpty(value))
-            return _clients;
-        
-        return _clients.Where(c => c.ClientName.Contains(value, StringComparison.OrdinalIgnoreCase));
-    }
-    
-    private void ClearDateFilter()
-    {
-        _selectedDate = null;
-        _filterDate = null;
-        Navigation.NavigateTo("/schedules");
-    }
+	private async Task LoadPermissionsAsync()
+	{
+		_canCreate = await PermissionService.CanCreateAsync("schedules");
+		_canUpdate = await PermissionService.CanUpdateAsync("schedules");
+		_canDelete = await PermissionService.CanDeleteAsync("schedules");
+		_canExecute = await PermissionService.CanExecuteAsync("schedules");
+	}
 
-    private async Task ApplyFilters()
-    {
-        _filterDate = _selectedDate;
-        await _table.ReloadServerData();
-    }
+	private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+	{
+		await LoadPermissionsAsync();
+		await InvokeAsync(StateHasChanged);
+	}
 
-    private async Task ExportSchedules(string format)
-    {
-        try
-        {
-            var startDate = _filterDate?.Date;
-            var endDate = _filterDate?.Date.AddDays(1).AddTicks(-1);
-            
-            var bytes = await ScheduleService.DownloadSchedulesExportAsync(
-                _selectedClientId,
-                _searchTerm,
-                startDate,
-                endDate,
-                format);
-            
-            var contentType = format.Equals("excel", StringComparison.OrdinalIgnoreCase) 
-                ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" 
-                : "text/csv";
-            
-            var filename = $"schedules_{DateTime.UtcNow:yyyyMMddHHmmss}.{(format.Equals("excel", StringComparison.OrdinalIgnoreCase) ? "xlsx" : "csv")}";
-            
-            var base64 = Convert.ToBase64String(bytes);
-            await JSRuntime.InvokeVoidAsync("downloadFile", filename, contentType, base64);
-            
-            Snackbar.Add($"Export downloaded: {filename}", Severity.Success);
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Export failed: {ex.Message}", Severity.Error);
-        }
-    }
+	public void Dispose()
+	{
+		AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+	}
 
-    private void CreateSchedule()
-    {
-        Navigation.NavigateTo("/schedules/create");
-    }
+	private async Task<TableData<Schedule>> ServerReload(TableState state, CancellationToken cancellationToken)
+	{
+		_loading = true;
+		try
+		{
+			var pageNumber = state.Page + 1;
+			var pageSize = state.PageSize;
 
-    private void EditSchedule(int id)
-    {
-        Navigation.NavigateTo($"/schedules/edit/{id}");
-    }
+			var result = await ScheduleService.GetSchedulesPagedAsync(
+				pageNumber,
+				pageSize,
+				_selectedClientId,
+				_searchTerm);
 
-    private void ViewExecutions(int id)
-    {
-        Navigation.NavigateTo($"/executions?scheduleId={id}");
-    }
+			var items = result.Items;
 
-    private async Task ViewScheduleDetails(Schedule schedule)
-    {
-        var parameters = new DialogParameters
-        {
-            { "Schedule", schedule }
-        };
+			if (_filterDate.HasValue)
+			{
+				items = items.Where(s => s.NextRunTime.HasValue &&
+										s.NextRunTime.Value.Date == _filterDate.Value.Date).ToList();
+			}
 
-        var options = new DialogOptions
-        {
-            MaxWidth = MaxWidth.Large,
-            FullWidth = true
-        };
+			return new TableData<Schedule>
+			{
+				Items = items,
+				TotalItems = _filterDate.HasValue ? items.Count : result.TotalCount
+			};
+		}
+		catch (Exception ex)
+		{
+			Snackbar.Add($"Error loading schedules: {ex.Message}", Severity.Error);
+			return new TableData<Schedule> { Items = new List<Schedule>(), TotalItems = 0 };
+		}
+		finally
+		{
+			_loading = false;
+		}
+	}
 
-        await DialogService.ShowAsync<ScheduleDetailsDialog>("Schedule Details", parameters, options);
-    }
+	private async Task<IEnumerable<Client>> SearchClients(string value, CancellationToken cancellationToken)
+	{
+		if (string.IsNullOrEmpty(value))
+			return _clients;
 
-    private async Task HandleToggleSchedule(Schedule schedule, bool newValue)
-    {
-        try
-        {
-            schedule.IsEnabled = newValue;
-            
-            if (schedule.IsEnabled)
-            {
-                await ScheduleService.ResumeScheduleAsync(schedule.Id);
-                Snackbar.Add($"Schedule '{schedule.Name}' enabled", Severity.Success);
-            }
-            else
-            {
-                await ScheduleService.PauseScheduleAsync(schedule.Id);
-                Snackbar.Add($"Schedule '{schedule.Name}' paused", Severity.Success);
-            }
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error toggling schedule: {ex.Message}", Severity.Error);
-            schedule.IsEnabled = !schedule.IsEnabled;
-        }
-    }
+		return _clients.Where(c => c.ClientName.Contains(value, StringComparison.OrdinalIgnoreCase));
+	}
 
-    private async Task TriggerSchedule(Schedule schedule)
-    {
-        var confirmed = await DialogService.ShowMessageBox(
-            "Trigger Schedule",
-            $"Are you sure you want to trigger '{schedule.Name}' now?",
-            yesText: "Trigger", cancelText: "Cancel");
+	private void ClearDateFilter()
+	{
+		_selectedDate = null;
+		_filterDate = null;
+		Navigation.NavigateTo("/schedules");
+	}
 
-        if (confirmed == true)
-        {
-            try
-            {
-                await ScheduleService.TriggerScheduleAsync(schedule.Id);
-                Snackbar.Add($"Schedule '{schedule.Name}' triggered", Severity.Success);
-            }
-            catch (Exception ex)
-            {
-                Snackbar.Add($"Error triggering schedule: {ex.Message}", Severity.Error);
-            }
-        }
-    }
+	private async Task ApplyFilters()
+	{
+		_filterDate = _selectedDate;
+		await _table.ReloadServerData();
+	}
 
-    private async Task DeleteSchedule(Schedule schedule)
-    {
-        var confirmed = await DialogService.ShowMessageBox(
-            "Delete Schedule",
-            $"Are you sure you want to delete '{schedule.Name}'? This action cannot be undone.",
-            yesText: "Delete", cancelText: "Cancel");
+	private async Task ExportSchedules(string format)
+	{
+		try
+		{
+			var startDate = _filterDate?.Date;
+			var endDate = _filterDate?.Date.AddDays(1).AddTicks(-1);
 
-        if (confirmed == true)
-        {
-            try
-            {
-                await ScheduleService.DeleteScheduleAsync(schedule.Id);
-                Snackbar.Add($"Schedule '{schedule.Name}' deleted", Severity.Success);
-                await _table.ReloadServerData();
-            }
-            catch (Exception ex)
-            {
-                Snackbar.Add($"Error deleting schedule: {ex.Message}", Severity.Error);
-            }
-        }
-    }
-    
-    private Color GetStatusColor(JobStatus status)
-    {
-        return status switch
-        {
-            JobStatus.Completed => Color.Success,
-            JobStatus.Failed => Color.Error,
-            JobStatus.Running => Color.Info,
-            JobStatus.Retrying => Color.Warning,
-            JobStatus.Cancelled => Color.Default,
-            _ => Color.Default
-        };
-    }
-    
-    private string GetTimeZoneAbbreviation(string? timeZoneId)
-    {
-        if (string.IsNullOrEmpty(timeZoneId))
-            return "";
-            
-        var tzMap = new Dictionary<string, string>
-        {
-            { "Eastern Standard Time", "ET" },
-            { "Central Standard Time", "CT" },
-            { "Mountain Standard Time", "MT" },
-            { "Pacific Standard Time", "PT" },
-            { "US Mountain Standard Time", "MST" },
-            { "Alaskan Standard Time", "AKT" },
-            { "Hawaiian Standard Time", "HST" },
-            { "US Eastern Standard Time", "ET" }
-        };
-        
-        if (tzMap.TryGetValue(timeZoneId, out var abbr))
-            return abbr;
-            
-        try
-        {
-            var tz = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
-            return tz.IsDaylightSavingTime(DateTime.Now) ? tz.DaylightName : tz.StandardName;
-        }
-        catch
-        {
-            return timeZoneId;
-        }
-    }
+			var bytes = await ScheduleService.DownloadSchedulesExportAsync(
+				_selectedClientId,
+				_searchTerm,
+				startDate,
+				endDate,
+				format);
+
+			var contentType = format.Equals("excel", StringComparison.OrdinalIgnoreCase)
+				? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+				: "text/csv";
+
+			var filename = $"schedules_{DateTime.UtcNow:yyyyMMddHHmmss}.{(format.Equals("excel", StringComparison.OrdinalIgnoreCase) ? "xlsx" : "csv")}";
+
+			var base64 = Convert.ToBase64String(bytes);
+			await JSRuntime.InvokeVoidAsync("downloadFile", filename, contentType, base64);
+
+			Snackbar.Add($"Export downloaded: {filename}", Severity.Success);
+		}
+		catch (Exception ex)
+		{
+			Snackbar.Add($"Export failed: {ex.Message}", Severity.Error);
+		}
+	}
+
+	private void CreateSchedule()
+	{
+		Navigation.NavigateTo("/schedules/create");
+	}
+
+	private void EditSchedule(int id)
+	{
+		Navigation.NavigateTo($"/schedules/edit/{id}");
+	}
+
+	private void ViewExecutions(int id)
+	{
+		Navigation.NavigateTo($"/executions?scheduleId={id}");
+	}
+
+	private async Task ViewScheduleDetails(Schedule schedule)
+	{
+		var parameters = new DialogParameters
+		{
+			{ "Schedule", schedule }
+		};
+
+		var options = new DialogOptions
+		{
+			MaxWidth = MaxWidth.Large,
+			FullWidth = true
+		};
+
+		await DialogService.ShowAsync<ScheduleDetailsDialog>("Schedule Details", parameters, options);
+	}
+
+	private async Task HandleToggleSchedule(Schedule schedule, bool newValue)
+	{
+		try
+		{
+			schedule.IsEnabled = newValue;
+
+			if (schedule.IsEnabled)
+			{
+				await ScheduleService.ResumeScheduleAsync(schedule.Id);
+				Snackbar.Add($"Schedule '{schedule.Name}' enabled", Severity.Success);
+			}
+			else
+			{
+				await ScheduleService.PauseScheduleAsync(schedule.Id);
+				Snackbar.Add($"Schedule '{schedule.Name}' paused", Severity.Success);
+			}
+		}
+		catch (Exception ex)
+		{
+			Snackbar.Add($"Error toggling schedule: {ex.Message}", Severity.Error);
+			schedule.IsEnabled = !schedule.IsEnabled;
+		}
+	}
+
+	private async Task TriggerSchedule(Schedule schedule)
+	{
+		var confirmed = await DialogService.ShowMessageBox(
+			"Trigger Schedule",
+			$"Are you sure you want to trigger '{schedule.Name}' now?",
+			yesText: "Trigger", cancelText: "Cancel");
+
+		if (confirmed == true)
+		{
+			try
+			{
+				await ScheduleService.TriggerScheduleAsync(schedule.Id);
+				Snackbar.Add($"Schedule '{schedule.Name}' triggered", Severity.Success);
+			}
+			catch (Exception ex)
+			{
+				Snackbar.Add($"Error triggering schedule: {ex.Message}", Severity.Error);
+			}
+		}
+	}
+
+	private async Task DeleteSchedule(Schedule schedule)
+	{
+		var confirmed = await DialogService.ShowMessageBox(
+			"Delete Schedule",
+			$"Are you sure you want to delete '{schedule.Name}'? This action cannot be undone.",
+			yesText: "Delete", cancelText: "Cancel");
+
+		if (confirmed == true)
+		{
+			try
+			{
+				await ScheduleService.DeleteScheduleAsync(schedule.Id);
+				Snackbar.Add($"Schedule '{schedule.Name}' deleted", Severity.Success);
+				await _table.ReloadServerData();
+			}
+			catch (Exception ex)
+			{
+				Snackbar.Add($"Error deleting schedule: {ex.Message}", Severity.Error);
+			}
+		}
+	}
+
+	private Color GetStatusColor(JobStatus status)
+	{
+		return status switch
+		{
+			JobStatus.Completed => Color.Success,
+			JobStatus.Failed => Color.Error,
+			JobStatus.Running => Color.Info,
+			JobStatus.Retrying => Color.Warning,
+			JobStatus.Cancelled => Color.Default,
+			_ => Color.Default
+		};
+	}
+
+	private string GetTimeZoneAbbreviation(string? timeZoneId)
+	{
+		if (string.IsNullOrEmpty(timeZoneId))
+			return "";
+
+		var tzMap = new Dictionary<string, string>
+		{
+			{ "Eastern Standard Time", "ET" },
+			{ "Central Standard Time", "CT" },
+			{ "Mountain Standard Time", "MT" },
+			{ "Pacific Standard Time", "PT" },
+			{ "US Mountain Standard Time", "MST" },
+			{ "Alaskan Standard Time", "AKT" },
+			{ "Hawaiian Standard Time", "HST" },
+			{ "US Eastern Standard Time", "ET" }
+		};
+
+		if (tzMap.TryGetValue(timeZoneId, out var abbr))
+			return abbr;
+
+		try
+		{
+			var tz = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+			return tz.IsDaylightSavingTime(DateTime.Now) ? tz.DaylightName : tz.StandardName;
+		}
+		catch
+		{
+			return timeZoneId;
+		}
+	}
 }
