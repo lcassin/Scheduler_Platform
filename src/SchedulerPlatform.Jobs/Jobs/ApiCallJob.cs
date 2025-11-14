@@ -266,7 +266,6 @@ public class ApiCallJob : IJob
             }
         }
     }
-}
 
     private string ValidateAndSecureConnectionString(string connectionString)
     {
