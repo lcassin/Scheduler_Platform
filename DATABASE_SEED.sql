@@ -1,11 +1,15 @@
-TRUNCATE Clients
-
 IF NOT EXISTS (SELECT 1 FROM Clients WHERE Id = 1)
 BEGIN
     SET IDENTITY_INSERT Clients ON;
     INSERT INTO Clients (Id, ClientName, ClientCode, IsActive, ContactEmail, CreatedAt, CreatedBy, IsDeleted)
     VALUES (1, 'Cass Information Systems', 'INTERNAL', 1, 'admin@cassinfo.com', GETUTCDATE(), 'System', 0);
     SET IDENTITY_INSERT Clients OFF;
+END
+ELSE
+BEGIN 
+    UPDATE Clients SET ClientName='Cass Information Systems',
+    ClientCode='INTERNAL', IsActive=1, ContactEmail='lcassin@cassinfo.com',IsDeleted=0
+    WHERE Id=1
 END
 GO
 
@@ -81,3 +85,11 @@ PRINT '  - Viewer: scheduler:read, schedules:read, jobs:read';
 PRINT '  - Editor: scheduler:read, schedules:*, jobs:read';
 PRINT '  - Admin: All permissions';
 PRINT '  - Super Admin: All permissions + users:manage (IsSystemAdmin=true)';
+
+SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH
+FROM INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_NAME = 'Users'
+AND COLUMN_NAME IN ('ExternalIssuer', 'PasswordHash', 'IsSystemAdmin', 'LastLoginAt')
+ORDER BY COLUMN_NAME;
+
+

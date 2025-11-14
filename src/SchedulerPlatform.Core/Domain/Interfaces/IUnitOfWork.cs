@@ -6,7 +6,7 @@ public interface IUnitOfWork : IDisposable
     IJobExecutionRepository JobExecutions { get; }
     IRepository<Entities.Client> Clients { get; }
     IRepository<Entities.User> Users { get; }
-    IRepository<Entities.UserPermission> UserPermissions { get; }
+    IUserPermissionRepository UserPermissions { get; }
     IRepository<Entities.PasswordHistory> PasswordHistories { get; }
     IRepository<Entities.VendorCredential> VendorCredentials { get; }
     IRepository<Entities.JobParameter> JobParameters { get; }
