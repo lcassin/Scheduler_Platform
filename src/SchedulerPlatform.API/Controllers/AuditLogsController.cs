@@ -37,7 +37,7 @@ public class AuditLogsController : ControllerBase
                 return NotFound($"Schedule with ID {scheduleId} not found");
             }
 
-            var query = _unitOfWork.GetDbContext().Set<SchedulerPlatform.Core.Domain.Entities.AuditLog>()
+            var query = _dbContext.Set<SchedulerPlatform.Core.Domain.Entities.AuditLog>()
                 .Where(a => a.EntityType == "Schedule" && a.EntityId == scheduleId);
 
             if (!string.IsNullOrEmpty(eventType))
@@ -115,7 +115,7 @@ public class AuditLogsController : ControllerBase
     {
         try
         {
-            var query = _unitOfWork.GetDbContext().Set<SchedulerPlatform.Core.Domain.Entities.AuditLog>().AsQueryable();
+            var query = _dbContext.Set<SchedulerPlatform.Core.Domain.Entities.AuditLog>().AsQueryable();
 
             if (!string.IsNullOrEmpty(entityType))
             {
