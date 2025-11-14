@@ -1,0 +1,160 @@
+@page "/admin/users"
+@using SchedulerPlatform.UI.Services
+@using SchedulerPlatform.UI.Models
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject IUserManagementService UserManagementService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>User Management</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">User Management</MudText>
+
+    <MudPaper Class="pa-4 mb-4">
+        <MudTextField @bind-Value="_searchTerm"
+                      Label="Search users"
+                      Placeholder="Search by name or email"
+                      Adornment="Adornment.End"
+                      AdornmentIcon="@Icons.Material.Filled.Search"
+                      OnKeyUp="@(async (e) => { if (e.Key == "Enter") await SearchUsers(); })"
+                      Immediate="false" />
+    </MudPaper>
+
+    <MudTable T="UserListItem"
+              @ref="_table"
+              ServerData="ServerReload"
+              Hover="true"
+              Breakpoint="Breakpoint.Sm"
+              Loading="@_loading"
+              LoadingProgressColor="Color.Info">
+        <HeaderContent>
+            <MudTh>Email</MudTh>
+            <MudTh>Name</MudTh>
+            <MudTh>Status</MudTh>
+            <MudTh>Role</MudTh>
+            <MudTh>Permissions</MudTh>
+            <MudTh>Last Login</MudTh>
+            <MudTh>Actions</MudTh>
+        </HeaderContent>
+        <RowTemplate>
+            <MudTd DataLabel="Email">@context.Email</MudTd>
+            <MudTd DataLabel="Name">@context.FullName</MudTd>
+            <MudTd DataLabel="Status">
+                @if (context.IsActive)
+                {
+                    <MudChip T="string" Color="Color.Success" Size="Size.Small">Active</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Color="Color.Default" Size="Size.Small">Inactive</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Role">
+                @if (context.IsSystemAdmin)
+                {
+                    <MudChip T="string" Color="Color.Error" Size="Size.Small">Super Admin</MudChip>
+                }
+                else if (context.PermissionCount > 10)
+                {
+                    <MudChip T="string" Color="Color.Warning" Size="Size.Small">Admin</MudChip>
+                }
+                else if (context.PermissionCount > 3)
+                {
+                    <MudChip T="string" Color="Color.Info" Size="Size.Small">Editor</MudChip>
+                }
+                else
+                {
+                    <MudChip T="string" Color="Color.Default" Size="Size.Small">Viewer</MudChip>
+                }
+            </MudTd>
+            <MudTd DataLabel="Permissions">@context.PermissionCount</MudTd>
+            <MudTd DataLabel="Last Login">
+                @if (context.LastLoginAt.HasValue)
+                {
+                    @context.LastLoginAt.Value.ToLocalTime().ToString("g")
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Default">Never</MudText>
+                }
+            </MudTd>
+            <MudTd DataLabel="Actions">
+                <MudButton Variant="Variant.Text"
+                           Color="Color.Primary"
+                           Size="Size.Small"
+                           OnClick="@(() => OpenPermissionsDialog(context.Id))">
+                    Manage
+                </MudButton>
+            </MudTd>
+        </RowTemplate>
+        <PagerContent>
+            <MudTablePager PageSizeOptions="new int[] { 10, 20, 50 }" />
+        </PagerContent>
+    </MudTable>
+</MudContainer>
+
+@code {
+    private MudTable<UserListItem>? _table;
+    private string _searchTerm = string.Empty;
+    private bool _loading = false;
+
+    private async Task<TableData<UserListItem>> ServerReload(TableState state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            var result = await UserManagementService.GetUsersAsync(
+                string.IsNullOrWhiteSpace(_searchTerm) ? null : _searchTerm,
+                state.Page + 1,
+                state.PageSize);
+
+            return new TableData<UserListItem>
+            {
+                Items = result.Items,
+                TotalItems = result.TotalCount
+            };
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading users: {ex.Message}", Severity.Error);
+            return new TableData<UserListItem> { Items = new List<UserListItem>(), TotalItems = 0 };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SearchUsers()
+    {
+        if (_table != null)
+        {
+            await _table.ReloadServerData();
+        }
+    }
+
+    private async Task OpenPermissionsDialog(int userId)
+    {
+        var parameters = new DialogParameters
+        {
+            ["UserId"] = userId
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        var dialog = await DialogService.ShowAsync<UserPermissionsDialog>("Manage User Permissions", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await _table!.ReloadServerData();
+        }
+    }
+}

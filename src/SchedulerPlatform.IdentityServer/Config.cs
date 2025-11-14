@@ -15,6 +15,13 @@ public static class Config
             {
                 Name = "role",
                 UserClaims = new List<string> {"role"}
+            },
+            new IdentityResource
+            {
+                Name = "permissions",
+                DisplayName = "User Permissions",
+                Description = "User permissions and admin status",
+                UserClaims = new List<string> { "permission", "is_system_admin" }
             }
         };
 
@@ -23,7 +30,7 @@ public static class Config
         {
             new ApiScope("scheduler-api", "Scheduler Platform API")
             {
-                UserClaims = { "name", "role", "email" }
+                UserClaims = { "name", "role", "email", "permission", "is_system_admin" }
             },
             new ApiScope("admin", "Admin Access"),
             new ApiScope("client", "Client Access")
@@ -36,7 +43,7 @@ public static class Config
             {
                 Scopes = { "scheduler-api", "admin", "client" },
                 ApiSecrets = { new Secret("api-secret-key".Sha256()) },
-                UserClaims = { "name", "role", "email", "client_id" }
+                UserClaims = { "name", "role", "email", "client_id", "permission", "is_system_admin" }
             }
         };
 
@@ -62,7 +69,8 @@ public static class Config
                     "scheduler-api",
                     "admin",
                     "client",
-                    "role"
+                    "role",
+                    "permissions"
                 },
                 AccessTokenLifetime = 3600,
                 RequireConsent = false

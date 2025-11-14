@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using MudBlazor.Services;
@@ -35,7 +36,11 @@ builder.Services.AddAuthentication(options =>
     options.Scope.Add("profile");
     options.Scope.Add("email");
     options.Scope.Add("scheduler-api");
+    options.Scope.Add("permissions");
     options.RequireHttpsMetadata = false;
+    
+    options.ClaimActions.MapJsonKey("permission", "permission");
+    options.ClaimActions.MapJsonKey("is_system_admin", "is_system_admin");
 });
 
 builder.Services.AddHttpContextAccessor();
@@ -51,6 +56,8 @@ builder.Services.AddScoped<IScheduleService, ScheduleService>();
 builder.Services.AddScoped<IJobExecutionService, JobExecutionService>();
 builder.Services.AddScoped<IClientService, ClientService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
+builder.Services.AddScoped<IUserManagementService, UserManagementService>();
+builder.Services.AddScoped<IPermissionService, PermissionService>();
 
 builder.Services.AddAuthorization();
 builder.Services.AddCascadingAuthenticationState();
