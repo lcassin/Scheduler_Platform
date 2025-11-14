@@ -60,6 +60,7 @@ public class SchedulerProfileService : IProfileService
 
                     if (user.IsSystemAdmin)
                     {
+                        claims.Add(new Claim("is_system_admin", "true"));
                         claims.Add(new Claim("permission", "users:manage"));
                     }
 

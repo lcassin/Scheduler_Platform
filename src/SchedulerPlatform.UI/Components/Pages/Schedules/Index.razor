@@ -9,6 +9,8 @@
 @inject ISnackbar Snackbar
 @inject IJSRuntime JSRuntime
 @inject IPermissionService PermissionService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@implements IDisposable
 
 <PageTitle>Schedules</PageTitle>
 
@@ -195,11 +197,9 @@
             _filterDate = parsedDate;
         }
         
-        // Load permissions
-        _canCreate = await PermissionService.CanCreateAsync("schedules");
-        _canUpdate = await PermissionService.CanUpdateAsync("schedules");
-        _canDelete = await PermissionService.CanDeleteAsync("schedules");
-        _canExecute = await PermissionService.CanExecuteAsync("schedules");
+        await LoadPermissionsAsync();
+        
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
         
         try
         {
@@ -213,6 +213,25 @@
         {
             _loading = false;
         }
+    }
+
+    private async Task LoadPermissionsAsync()
+    {
+        _canCreate = await PermissionService.CanCreateAsync("schedules");
+        _canUpdate = await PermissionService.CanUpdateAsync("schedules");
+        _canDelete = await PermissionService.CanDeleteAsync("schedules");
+        _canExecute = await PermissionService.CanExecuteAsync("schedules");
+    }
+
+    private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        await LoadPermissionsAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
     }
 
     private async Task<TableData<Schedule>> ServerReload(TableState state, CancellationToken cancellationToken)

@@ -1,5 +1,7 @@
 @using SchedulerPlatform.UI.Services
 @inject IPermissionService PermissionService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@implements IDisposable
 
 <MudNavMenu>
     <MudNavLink Href="/dashboard" Icon="@Icons.Material.Filled.Dashboard" IconColor="Color.Inherit" Match="NavLinkMatch.All">Dashboard</MudNavLink>
@@ -20,7 +22,24 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadPermissionsAsync();
+        AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+    }
+
+    private async Task LoadPermissionsAsync()
+    {
         _canManageUsers = await PermissionService.HasPermissionAsync("users:manage");
+    }
+
+    private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
+    {
+        await LoadPermissionsAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public void Dispose()
+    {
+        AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
     }
 }
 

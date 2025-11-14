@@ -36,7 +36,11 @@ builder.Services.AddAuthentication(options =>
     options.Scope.Add("profile");
     options.Scope.Add("email");
     options.Scope.Add("scheduler-api");
+    options.Scope.Add("permissions");
     options.RequireHttpsMetadata = false;
+    
+    options.ClaimActions.MapJsonKey("permission", "permission");
+    options.ClaimActions.MapJsonKey("is_system_admin", "is_system_admin");
 });
 
 builder.Services.AddHttpContextAccessor();
