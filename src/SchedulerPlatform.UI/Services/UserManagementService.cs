@@ -21,7 +21,7 @@ public class UserManagementService : IUserManagementService
         try
         {
             var client = CreateClient();
-            var query = $"api/Users?pageNumber={pageNumber}&pageSize={pageSize}";
+            var query = $"Users?pageNumber={pageNumber}&pageSize={pageSize}";
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 query += $"&searchTerm={Uri.EscapeDataString(searchTerm)}";
@@ -47,7 +47,7 @@ public class UserManagementService : IUserManagementService
         try
         {
             var client = CreateClient();
-            return await client.GetFromJsonAsync<UserDetail>($"api/Users/{id}");
+            return await client.GetFromJsonAsync<UserDetail>($"Users/{id}");
         }
         catch (Exception ex)
         {
@@ -62,7 +62,7 @@ public class UserManagementService : IUserManagementService
         {
             var client = CreateClient();
             var request = new { Permissions = permissions };
-            var response = await client.PutAsJsonAsync($"api/Users/{id}/permissions", request);
+            var response = await client.PutAsJsonAsync($"Users/{id}/permissions", request);
             response.EnsureSuccessStatusCode();
         }
         catch (Exception ex)
@@ -77,7 +77,7 @@ public class UserManagementService : IUserManagementService
         try
         {
             var client = CreateClient();
-            var response = await client.PostAsync($"api/Users/{id}/templates/{templateName}", null);
+            var response = await client.PostAsync($"Users/{id}/templates/{templateName}", null);
             response.EnsureSuccessStatusCode();
         }
         catch (Exception ex)
@@ -92,7 +92,7 @@ public class UserManagementService : IUserManagementService
         try
         {
             var client = CreateClient();
-            var templates = await client.GetFromJsonAsync<List<PermissionTemplate>>("api/Users/templates");
+            var templates = await client.GetFromJsonAsync<List<PermissionTemplate>>("Users/templates");
             return templates ?? new List<PermissionTemplate>();
         }
         catch (Exception ex)
