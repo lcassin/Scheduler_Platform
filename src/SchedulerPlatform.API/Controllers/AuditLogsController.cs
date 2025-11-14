@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SchedulerPlatform.Core.Domain.Interfaces;
+using SchedulerPlatform.Infrastructure.Data;
 
 namespace SchedulerPlatform.API.Controllers;
 
@@ -11,11 +12,13 @@ namespace SchedulerPlatform.API.Controllers;
 public class AuditLogsController : ControllerBase
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly SchedulerDbContext _dbContext;
     private readonly ILogger<AuditLogsController> _logger;
 
-    public AuditLogsController(IUnitOfWork unitOfWork, ILogger<AuditLogsController> logger)
+    public AuditLogsController(IUnitOfWork unitOfWork, SchedulerDbContext dbContext, ILogger<AuditLogsController> logger)
     {
         _unitOfWork = unitOfWork;
+        _dbContext = dbContext;
         _logger = logger;
     }
 
