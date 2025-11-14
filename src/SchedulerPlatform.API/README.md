@@ -1,5 +1,15 @@
 # SchedulerPlatform.API
 
+## Recent Updates (November 2025)
+
+- **Upgraded to .NET 10**: Complete upgrade from .NET 9 to .NET 10 with all packages updated
+- **Schedule Hydration Service**: Background service that loads all enabled schedules into Quartz on API startup, ensuring schedules fire automatically 24/7 without requiring user login
+- **Permission-Based Authorization**: JWT tokens now include custom claims for granular permission checking (Create, Read, Update, Delete, Execute per resource)
+- **Admin User Management**: New UsersController with endpoints for managing users and permissions (system admin only)
+- **Service Account Authentication**: OAuth2 Client Credentials flow support for external systems to access the API
+- **NextRunTime Calculation Fix**: Manual schedule triggers no longer incorrectly advance NextRunTime
+- **Deleted Schedule Filtering**: Soft-deleted schedules are properly filtered and no longer execute
+
 ## Business Overview
 
 The API project is the "control center" of the SchedulerPlatform - it provides the web interface that allows users and applications to manage schedules, monitor job executions, and configure system settings. Think of it as the front door through which all external interactions happen.

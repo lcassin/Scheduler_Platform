@@ -1,5 +1,14 @@
 # SchedulerPlatform.Core
 
+## Recent Updates (November 2025)
+
+- **Upgraded to .NET 10**: Complete upgrade from .NET 9 to .NET 10
+- **User Entity Enhancements**: Added PasswordHash, IsSystemAdmin, ExternalIssuer, LastLoginAt properties
+- **PasswordHistory Entity**: New entity to track password history for preventing reuse
+- **UserPermission Enhancements**: Added CanCreate, CanRead, CanUpdate, CanDelete, CanExecute properties for granular permissions
+- **JobExecution CancelledBy**: Added CancelledBy property to track who cancelled running executions
+- **Schedule TimeoutMinutes**: Added TimeoutMinutes property for job execution timeouts
+
 ## Business Overview
 
 The Core project is the heart of the SchedulerPlatform, containing the fundamental business entities and rules that define what the system can do. Think of it as the "dictionary" of the application - it defines what a Schedule is, what a Job Execution means, and what types of jobs we can run.
