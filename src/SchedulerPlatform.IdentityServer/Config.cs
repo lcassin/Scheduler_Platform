@@ -15,6 +15,13 @@ public static class Config
             {
                 Name = "role",
                 UserClaims = new List<string> {"role"}
+            },
+            new IdentityResource
+            {
+                Name = "permissions",
+                DisplayName = "User Permissions",
+                Description = "User permissions and admin status",
+                UserClaims = new List<string> { "permission", "is_system_admin" }
             }
         };
 
@@ -62,7 +69,8 @@ public static class Config
                     "scheduler-api",
                     "admin",
                     "client",
-                    "role"
+                    "role",
+                    "permissions"
                 },
                 AccessTokenLifetime = 3600,
                 RequireConsent = false
