@@ -1,5 +1,13 @@
 # SchedulerPlatform.Jobs
 
+## Recent Updates (November 2025)
+
+- **Upgraded to .NET 10**: Complete upgrade from .NET 9 to .NET 10 with Quartz.NET 3.15.1
+- **NextRunTime Calculation Fix**: Manual triggers no longer incorrectly advance NextRunTime; now calculated from cron expression using CronExpression.GetNextValidTimeAfter()
+- **Schedule Hydration on Startup**: ScheduleHydrationService loads all enabled schedules into Quartz when API starts, ensuring 24/7 automatic execution
+- **Deleted Schedule Filtering**: Soft-deleted schedules are no longer loaded into Quartz or executed
+- **Misfire Handling**: Configured WithMisfireHandlingInstructionFireAndProceed for missed schedules
+
 ## Business Overview
 
 The Jobs project is the "execution engine" of the SchedulerPlatform - it actually runs your scheduled tasks at the right time. When a schedule's time comes, this project springs into action to execute the configured process, call an API, or run a stored procedure.

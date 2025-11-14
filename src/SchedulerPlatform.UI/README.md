@@ -1,5 +1,14 @@
 # SchedulerPlatform.UI
 
+## Recent Updates (November 2025)
+
+- **Upgraded to .NET 10**: Complete upgrade from .NET 9 to .NET 10 with all packages updated
+- **OIDC Login Cancellation Handling**: Graceful error handling when users click Cancel on login page, redirects to home instead of showing exception
+- **Admin User Management Page**: New /admin/users page for managing users and permissions (system admin only)
+- **Permission-Based UI**: Buttons and menu items now respect user permissions (Create, Read, Update, Delete, Execute)
+- **OIDC Logout Fix**: Proper logout flow that clears session and redirects to home page
+- **HttpClient Authentication Fix**: API calls now properly include JWT tokens in Authorization header
+
 ## Business Overview
 
 The UI project is the "front door" of the SchedulerPlatform - it's the web application that users interact with to manage schedules, monitor job executions, and configure the system. Built with Blazor Server and MudBlazor components, it provides a modern, responsive interface that works seamlessly on desktop and mobile devices.

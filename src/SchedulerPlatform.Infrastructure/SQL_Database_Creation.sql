@@ -329,6 +329,11 @@ ALTER TABLE [Schedules] ADD [TimeoutMinutes] int NULL;
 INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
 VALUES (N'20251027162823_AddTimeoutMinutesToSchedule', N'9.0.10');
 
+ALTER TABLE [JobExecutions] ADD [CancelledBy] nvarchar(max) NULL;
+
+INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
+VALUES (N'20251027195050_AddCancelledByToJobExecution', N'9.0.10');
+
 ALTER TABLE [Users] ADD [ExternalIssuer] nvarchar(500) NULL;
 ALTER TABLE [Users] ADD [PasswordHash] nvarchar(500) NULL;
 ALTER TABLE [Users] ADD [IsSystemAdmin] bit NOT NULL DEFAULT 0;
