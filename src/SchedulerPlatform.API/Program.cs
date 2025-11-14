@@ -139,6 +139,7 @@ builder.Services.AddScoped<ISchedulerService, SchedulerService>();
 builder.Services.AddScoped<IEmailService, SchedulerPlatform.Infrastructure.Services.EmailService>();
 
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.StartupRecoveryService>();
+builder.Services.AddHostedService<SchedulerPlatform.API.Services.ScheduleHydrationService>();
 
 builder.Services.AddHttpClient("ApiCallJob");
 
