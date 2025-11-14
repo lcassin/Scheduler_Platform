@@ -5,26 +5,29 @@ namespace SchedulerPlatform.UI.Services;
 
 public class UserManagementService : IUserManagementService
 {
-    private readonly HttpClient _httpClient;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<UserManagementService> _logger;
 
-    public UserManagementService(HttpClient httpClient, ILogger<UserManagementService> logger)
+    public UserManagementService(IHttpClientFactory httpClientFactory, ILogger<UserManagementService> logger)
     {
-        _httpClient = httpClient;
+        _httpClientFactory = httpClientFactory;
         _logger = logger;
     }
+
+    private HttpClient CreateClient() => _httpClientFactory.CreateClient("SchedulerAPI");
 
     public async Task<PagedResult<UserListItem>> GetUsersAsync(string? searchTerm, int pageNumber, int pageSize)
     {
         try
         {
+            var client = CreateClient();
             var query = $"api/Users?pageNumber={pageNumber}&pageSize={pageSize}";
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 query += $"&searchTerm={Uri.EscapeDataString(searchTerm)}";
             }
 
-            var response = await _httpClient.GetFromJsonAsync<PagedResult<UserListItem>>(query);
+            var response = await client.GetFromJsonAsync<PagedResult<UserListItem>>(query);
             if (response == null)
             {
                 return new PagedResult<UserListItem>();
@@ -43,7 +46,8 @@ public class UserManagementService : IUserManagementService
     {
         try
         {
-            return await _httpClient.GetFromJsonAsync<UserDetail>($"api/Users/{id}");
+            var client = CreateClient();
+            return await client.GetFromJsonAsync<UserDetail>($"api/Users/{id}");
         }
         catch (Exception ex)
         {
@@ -56,8 +60,9 @@ public class UserManagementService : IUserManagementService
     {
         try
         {
+            var client = CreateClient();
             var request = new { Permissions = permissions };
-            var response = await _httpClient.PutAsJsonAsync($"api/Users/{id}/permissions", request);
+            var response = await client.PutAsJsonAsync($"api/Users/{id}/permissions", request);
             response.EnsureSuccessStatusCode();
         }
         catch (Exception ex)
@@ -71,7 +76,8 @@ public class UserManagementService : IUserManagementService
     {
         try
         {
-            var response = await _httpClient.PostAsync($"api/Users/{id}/templates/{templateName}", null);
+            var client = CreateClient();
+            var response = await client.PostAsync($"api/Users/{id}/templates/{templateName}", null);
             response.EnsureSuccessStatusCode();
         }
         catch (Exception ex)
@@ -85,7 +91,8 @@ public class UserManagementService : IUserManagementService
     {
         try
         {
-            var templates = await _httpClient.GetFromJsonAsync<List<PermissionTemplate>>("api/Users/templates");
+            var client = CreateClient();
+            var templates = await client.GetFromJsonAsync<List<PermissionTemplate>>("api/Users/templates");
             return templates ?? new List<PermissionTemplate>();
         }
         catch (Exception ex)
