@@ -337,9 +337,13 @@ app.UseAuthorization();
 
 ### Authentication Flow
 
+![Figure 1: Complete OAuth2/OIDC authentication flow from login to API access](diagram-1.png)
+
+This sequence diagram shows the complete authentication flow using OpenID Connect, from user login through token issuance and API access with JWT validation.
+
 ```mermaid
 sequenceDiagram
-    participant User as User (Browser)
+    participant Useras User (Browser)
     participant UI as Blazor UI
     participant Identity as IdentityServer
     participant API as SchedulerPlatform.API
@@ -442,6 +446,10 @@ sequenceDiagram
 
 #### Configuration Classes
 
+![Figure 3: IdentityServer configuration class structure](diagram-3.png)
+
+This class diagram shows the configuration classes that define clients, API resources, identity resources, and scopes for the OAuth2/OIDC server.
+
 ```mermaid
 classDiagram
     class Config {
@@ -502,6 +510,10 @@ classDiagram
 ```
 
 #### Test Users & Claims
+
+![Figure 4: JWT token structure with standard and custom claims](diagram-4.png)
+
+This diagram illustrates the structure of JWT access tokens issued by IdentityServer, including standard claims and custom claims for permissions and system admin status.
 
 ```mermaid
 classDiagram

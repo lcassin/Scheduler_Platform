@@ -331,6 +331,10 @@ Manages transactions and provides access to all repositories:
 
 ### Entity Relationships
 
+![Figure 1: Complete entity relationship diagram showing all domain entities and their relationships](diagram-1.png)
+
+This entity-relationship diagram shows how all the core business entities (Client, User, Schedule, JobExecution, etc.) relate to each other, including foreign key relationships and cardinality.
+
 ```mermaid
 erDiagram
     BaseEntity {
@@ -480,6 +484,10 @@ erDiagram
 ### UML Class Diagrams
 
 #### Core Domain Entities
+
+![Figure 2: Core domain entity class structure with properties and inheritance](diagram-2.png)
+
+This class diagram illustrates the structure of core domain entities, showing inheritance from BaseEntity, properties, and navigation relationships.
 
 ```mermaid
 classDiagram
@@ -631,6 +639,10 @@ classDiagram
 
 #### Domain Enums
 
+![Figure 4: Enumeration types used throughout the domain model](diagram-4.png)
+
+This diagram shows the enumeration types (JobType, JobStatus, ScheduleFrequency) that define valid values for various domain properties.
+
 ```mermaid
 classDiagram
     class JobType {
@@ -667,6 +679,10 @@ classDiagram
 ```
 
 #### Repository Interfaces
+
+![Figure 3: Repository interface hierarchy and Unit of Work pattern](diagram-3.png)
+
+This diagram shows the repository pattern interfaces, including the generic IRepository<T>, specialized repositories, and the IUnitOfWork that coordinates them.
 
 ```mermaid
 classDiagram
@@ -758,7 +774,7 @@ classDiagram
 
 **None!** This is a pure domain layer with zero external dependencies.
 
-**Framework**: .NET 8.0 (System.Text.Json for serialization attributes)
+**Framework**: .NET 10.0 (System.Text.Json for serialization attributes)
 
 ## Integration
 
