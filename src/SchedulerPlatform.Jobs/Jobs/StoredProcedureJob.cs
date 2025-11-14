@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Hosting;
 using Quartz;
 using SchedulerPlatform.Core.Domain.Entities;
 using SchedulerPlatform.Core.Domain.Enums;
@@ -18,13 +19,15 @@ public class StoredProcedureJob : IJob
     private readonly IUnitOfWork _unitOfWork;
     private readonly IEmailService _emailService;
     private readonly ISchedulerService _schedulerService;
+    private readonly IHostEnvironment _environment;
 
-    public StoredProcedureJob(ILogger<StoredProcedureJob> logger, IUnitOfWork unitOfWork, IEmailService emailService, ISchedulerService schedulerService)
+    public StoredProcedureJob(ILogger<StoredProcedureJob> logger, IUnitOfWork unitOfWork, IEmailService emailService, ISchedulerService schedulerService, IHostEnvironment environment)
     {
         _logger = logger;
         _unitOfWork = unitOfWork;
         _emailService = emailService;
         _schedulerService = schedulerService;
+        _environment = environment;
     }
 
     public async Task Execute(IJobExecutionContext context)
@@ -76,12 +79,7 @@ public class StoredProcedureJob : IJob
             var stopwatch = Stopwatch.StartNew();
             object? result = null;
 
-            var connectionString = jobConfig.ConnectionString;
-            if (!connectionString.Contains("TrustServerCertificate=True", StringComparison.OrdinalIgnoreCase) &&
-                !connectionString.Contains("Encrypt=False", StringComparison.OrdinalIgnoreCase))
-            {
-                connectionString += ";TrustServerCertificate=True";
-            }
+            var connectionString = ValidateAndSecureConnectionString(jobConfig.ConnectionString);
 
             using (var connection = new SqlConnection(connectionString))
             {
@@ -102,13 +100,7 @@ public class StoredProcedureJob : IJob
                         if (param.IsDynamic && !string.IsNullOrEmpty(param.SourceQuery) && 
                             !string.IsNullOrEmpty(param.SourceConnectionString))
                         {
-                            var sourceConnString = param.SourceConnectionString;
-                            
-                            if (!sourceConnString.Contains("TrustServerCertificate=True", StringComparison.OrdinalIgnoreCase) &&
-                                !sourceConnString.Contains("Encrypt=False", StringComparison.OrdinalIgnoreCase))
-                            {
-                                sourceConnString += ";TrustServerCertificate=True";
-                            }
+                            var sourceConnString = ValidateAndSecureConnectionString(param.SourceConnectionString);
                             
                             using (var sourceConn = new SqlConnection(sourceConnString))
                             {
@@ -289,6 +281,39 @@ public class StoredProcedureJob : IJob
                 parameter.SqlDbType = SqlDbType.NVarChar;
                 break;
         }
+    }
+
+    private string ValidateAndSecureConnectionString(string connectionString)
+    {
+        if (_environment.IsProduction())
+        {
+            if (connectionString.Contains("TrustServerCertificate=True", StringComparison.OrdinalIgnoreCase) ||
+                connectionString.Contains("Encrypt=False", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogError(
+                    "SECURITY: Insecure SQL connection settings detected in production. " +
+                    "Connection strings must use Encrypt=True and TrustServerCertificate=False with valid certificates.");
+                throw new InvalidOperationException(
+                    "Insecure SQL connection settings are not allowed in production. " +
+                    "Use Encrypt=True and TrustServerCertificate=False with a valid certificate.");
+            }
+            
+            if (!connectionString.Contains("Encrypt=", StringComparison.OrdinalIgnoreCase))
+            {
+                connectionString += ";Encrypt=True;TrustServerCertificate=False";
+                _logger.LogInformation("Added secure encryption settings to connection string");
+            }
+        }
+        else
+        {
+            if (!connectionString.Contains("TrustServerCertificate", StringComparison.OrdinalIgnoreCase) &&
+                !connectionString.Contains("Encrypt=False", StringComparison.OrdinalIgnoreCase))
+            {
+                connectionString += ";TrustServerCertificate=True";
+            }
+        }
+        
+        return connectionString;
     }
 }
 

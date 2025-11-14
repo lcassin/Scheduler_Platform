@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Hosting;
 using Quartz;
 using SchedulerPlatform.Core.Domain.Entities;
 using SchedulerPlatform.Core.Domain.Enums;
@@ -16,13 +17,15 @@ public class ProcessJob : IJob
     private readonly IUnitOfWork _unitOfWork;
     private readonly IEmailService _emailService;
     private readonly ISchedulerService _schedulerService;
+    private readonly IHostEnvironment _environment;
 
-    public ProcessJob(ILogger<ProcessJob> logger, IUnitOfWork unitOfWork, IEmailService emailService, ISchedulerService schedulerService)
+    public ProcessJob(ILogger<ProcessJob> logger, IUnitOfWork unitOfWork, IEmailService emailService, ISchedulerService schedulerService, IHostEnvironment environment)
     {
         _logger = logger;
         _unitOfWork = unitOfWork;
         _emailService = emailService;
         _schedulerService = schedulerService;
+        _environment = environment;
     }
 
     public async Task Execute(IJobExecutionContext context)

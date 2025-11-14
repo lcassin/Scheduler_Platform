@@ -104,6 +104,17 @@ public class SchedulesController : ControllerBase
                 return NotFound();
             }
 
+            var userClientId = User.FindFirst("client_id")?.Value;
+            var isSystemAdmin = User.FindFirst("is_system_admin")?.Value == "True";
+            
+            if (!isSystemAdmin && schedule.ClientId.ToString() != userClientId)
+            {
+                _logger.LogWarning(
+                    "Unauthorized access attempt: User with ClientId {UserClientId} attempted to access Schedule {ScheduleId} belonging to ClientId {ScheduleClientId}",
+                    userClientId, id, schedule.ClientId);
+                return Forbid();
+            }
+
             return Ok(schedule);
         }
         catch (Exception ex)
@@ -265,6 +276,17 @@ public class SchedulesController : ControllerBase
                 return NotFound();
             }
 
+            var userClientId = User.FindFirst("client_id")?.Value;
+            var isSystemAdmin = User.FindFirst("is_system_admin")?.Value == "True";
+            
+            if (!isSystemAdmin && schedule.ClientId.ToString() != userClientId)
+            {
+                _logger.LogWarning(
+                    "Unauthorized delete attempt: User with ClientId {UserClientId} attempted to delete Schedule {ScheduleId} belonging to ClientId {ScheduleClientId}",
+                    userClientId, id, schedule.ClientId);
+                return Forbid();
+            }
+
             await _schedulerService.UnscheduleJob(schedule.Id, schedule.ClientId);
 
             schedule.IsDeleted = true;
@@ -293,6 +315,17 @@ public class SchedulesController : ControllerBase
             if (schedule == null)
             {
                 return NotFound();
+            }
+
+            var userClientId = User.FindFirst("client_id")?.Value;
+            var isSystemAdmin = User.FindFirst("is_system_admin")?.Value == "True";
+            
+            if (!isSystemAdmin && schedule.ClientId.ToString() != userClientId)
+            {
+                _logger.LogWarning(
+                    "Unauthorized trigger attempt: User with ClientId {UserClientId} attempted to trigger Schedule {ScheduleId} belonging to ClientId {ScheduleClientId}",
+                    userClientId, id, schedule.ClientId);
+                return Forbid();
             }
 
             var jobKey = new JobKey($"Job_{schedule.Id}", $"Group_{schedule.ClientId}");
@@ -338,6 +371,17 @@ public class SchedulesController : ControllerBase
                 return NotFound();
             }
 
+            var userClientId = User.FindFirst("client_id")?.Value;
+            var isSystemAdmin = User.FindFirst("is_system_admin")?.Value == "True";
+            
+            if (!isSystemAdmin && schedule.ClientId.ToString() != userClientId)
+            {
+                _logger.LogWarning(
+                    "Unauthorized pause attempt: User with ClientId {UserClientId} attempted to pause Schedule {ScheduleId} belonging to ClientId {ScheduleClientId}",
+                    userClientId, id, schedule.ClientId);
+                return Forbid();
+            }
+
             await _schedulerService.PauseJob(schedule.Id, schedule.ClientId);
             
             return Ok(new { message = "Job paused successfully" });
@@ -359,6 +403,17 @@ public class SchedulesController : ControllerBase
             if (schedule == null)
             {
                 return NotFound();
+            }
+
+            var userClientId = User.FindFirst("client_id")?.Value;
+            var isSystemAdmin = User.FindFirst("is_system_admin")?.Value == "True";
+            
+            if (!isSystemAdmin && schedule.ClientId.ToString() != userClientId)
+            {
+                _logger.LogWarning(
+                    "Unauthorized resume attempt: User with ClientId {UserClientId} attempted to resume Schedule {ScheduleId} belonging to ClientId {ScheduleClientId}",
+                    userClientId, id, schedule.ClientId);
+                return Forbid();
             }
 
             await _schedulerService.ResumeJob(schedule.Id, schedule.ClientId);

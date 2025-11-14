@@ -174,32 +174,64 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseSerilogRequestLogging();
-// Request body logging middleware for debugging 400 errors
-app.Use(async (context, next) =>
+
+// Request body logging middleware - ONLY in Development to prevent logging sensitive data
+if (app.Environment.IsDevelopment())
 {
-    if (context.Request.Method == "POST" && context.Request.Path.StartsWithSegments("/api/schedules"))
+    app.Use(async (context, next) =>
     {
-        context.Request.EnableBuffering();
+        if (context.Request.Method == "POST" && context.Request.Path.StartsWithSegments("/api/schedules"))
+        {
+            context.Request.EnableBuffering();
+            
+            using var reader = new StreamReader(
+                context.Request.Body,
+                encoding: System.Text.Encoding.UTF8,
+                detectEncodingFromByteOrderMarks: false,
+                leaveOpen: true);
+            
+            var body = await reader.ReadToEndAsync();
+            context.Request.Body.Position = 0;
+            
+            var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+            logger.LogDebug("POST /api/schedules Request Body: {RequestBody}", body);
+        }
         
-        using var reader = new StreamReader(
-            context.Request.Body,
-            encoding: System.Text.Encoding.UTF8,
-            detectEncodingFromByteOrderMarks: false,
-            leaveOpen: true);
-        
-        var body = await reader.ReadToEndAsync();
-        context.Request.Body.Position = 0;
-        
-        var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
-        logger.LogInformation("POST /api/schedules Request Body: {RequestBody}", body);
-    }
-    
-    await next();
-});
+        await next();
+    });
+}
 
 
 
 app.UseHttpsRedirection();
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+    
+    app.Use(async (context, next) =>
+    {
+        context.Response.Headers.Append("Content-Security-Policy", 
+            "default-src 'self'; " +
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " +
+            "style-src 'self' 'unsafe-inline'; " +
+            "img-src 'self' data: https:; " +
+            "font-src 'self'; " +
+            "connect-src 'self'; " +
+            "frame-ancestors 'none';");
+        
+        context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
+        
+        context.Response.Headers.Append("X-Frame-Options", "DENY");
+        
+        context.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
+        
+        context.Response.Headers.Append("Permissions-Policy", 
+            "geolocation=(), microphone=(), camera=()");
+        
+        await next();
+    });
+}
 
 app.UseCors("AllowUI");
 
