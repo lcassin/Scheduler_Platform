@@ -1,5 +1,15 @@
 # SchedulerPlatform.Infrastructure
 
+## Recent Updates (November 2025)
+
+- **Upgraded to .NET 10**: Complete upgrade from .NET 9 to .NET 10 with Entity Framework Core 10.0.0
+- **User Authentication Tables**: Added Users.PasswordHash, Users.IsSystemAdmin, Users.ExternalIssuer, Users.LastLoginAt columns
+- **Password History Tracking**: New PasswordHistories table to prevent password reuse (last 10 passwords)
+- **UserPermissions Table**: Granular permission tracking with CanCreate, CanRead, CanUpdate, CanDelete, CanExecute per resource
+- **Deleted Schedule Filtering**: ScheduleRepository.GetAllAsync() now filters out soft-deleted schedules
+- **CancelledBy Tracking**: JobExecutions table now tracks who cancelled running executions
+- **SQL_Database_Creation.sql Updated**: Production creation script includes all latest migrations and user seeding
+
 ## Business Overview
 
 The Infrastructure project is the "data warehouse" of the SchedulerPlatform - it handles all interactions with the SQL Server database and external services like email. When the application needs to save a schedule, retrieve job execution history, or send an email notification, this project does the work.

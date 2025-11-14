@@ -41,6 +41,19 @@ builder.Services.AddAuthentication(options =>
     
     options.ClaimActions.MapJsonKey("permission", "permission");
     options.ClaimActions.MapJsonKey("is_system_admin", "is_system_admin");
+    
+    options.Events = new OpenIdConnectEvents
+    {
+        OnRemoteFailure = context =>
+        {
+            if (context.Failure?.Message.Contains("access_denied") == true)
+            {
+                context.Response.Redirect("/");
+                context.HandleResponse();
+            }
+            return Task.CompletedTask;
+        }
+    };
 });
 
 builder.Services.AddHttpContextAccessor();

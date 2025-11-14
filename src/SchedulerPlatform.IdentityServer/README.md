@@ -1,5 +1,14 @@
 # SchedulerPlatform.IdentityServer
 
+## Recent Updates (November 2025)
+
+- **Upgraded to .NET 10**: Complete upgrade from .NET 9 to .NET 10 with Duende IdentityServer 7.3.2
+- **Custom Claims in Access Tokens**: ProfileService now injects permission and is_system_admin claims into JWT tokens
+- **Database-Backed Users**: Integrated with Users table for authentication instead of only TestUsers
+- **Local Password Authentication**: BCrypt password hashing for development environment users
+- **Service Account Support**: OAuth2 Client Credentials flow configured for svc-adrscheduler service account
+- **Permission Claims**: Access tokens now include granular permission claims for API authorization
+
 ## Business Overview
 
 The IdentityServer project is the "security gate" of the SchedulerPlatform - it handles user authentication and controls who can access what. When users log in to the scheduling system, this component verifies their identity and issues security tokens that prove they are who they claim to be.
