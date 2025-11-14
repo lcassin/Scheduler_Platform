@@ -24,19 +24,13 @@ public class UserManagementService : IUserManagementService
                 query += $"&searchTerm={Uri.EscapeDataString(searchTerm)}";
             }
 
-            var response = await _httpClient.GetFromJsonAsync<PagedResponse<UserListItem>>(query);
+            var response = await _httpClient.GetFromJsonAsync<PagedResult<UserListItem>>(query);
             if (response == null)
             {
                 return new PagedResult<UserListItem>();
             }
 
-            return new PagedResult<UserListItem>
-            {
-                Items = response.Items,
-                TotalCount = response.TotalCount,
-                PageNumber = response.PageNumber,
-                PageSize = response.PageSize
-            };
+            return response;
         }
         catch (Exception ex)
         {

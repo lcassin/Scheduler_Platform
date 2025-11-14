@@ -162,7 +162,7 @@ public class UsersController : ControllerBase
 
             foreach (var permission in existingPermissions)
             {
-                await _unitOfWork.UserPermissions.DeleteAsync(permission.Id);
+                await _unitOfWork.UserPermissions.DeleteAsync(permission);
             }
 
             foreach (var permissionRequest in request.Permissions)
