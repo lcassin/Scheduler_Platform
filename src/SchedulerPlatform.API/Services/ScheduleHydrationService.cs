@@ -2,6 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using SchedulerPlatform.Core.Domain.Interfaces;
+using SchedulerPlatform.Jobs.Services;
 
 namespace SchedulerPlatform.API.Services;
 
