@@ -323,9 +323,9 @@
 
     private async Task ViewScheduleDetails(Schedule schedule)
     {
-        var parameters = new DialogParameters<ScheduleDetailsDialog>
+        var parameters = new DialogParameters
         {
-            { x => x.Schedule, schedule }
+            { "Schedule", schedule }
         };
 
         var options = new DialogOptions
