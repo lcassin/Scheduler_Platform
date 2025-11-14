@@ -143,16 +143,6 @@ public class SchedulerService : ISchedulerService
     {
         try
         {
-            var triggerKey = new TriggerKey($"Trigger_{scheduleId}", $"Group_{clientId}");
-            var trigger = await _scheduler.GetTrigger(triggerKey);
-
-            if (trigger == null)
-            {
-                _logger.LogWarning("Trigger not found for schedule {ScheduleId}, cannot update NextRunTime", scheduleId);
-                return;
-            }
-
-            var nextFireTime = trigger.GetNextFireTimeUtc();
             var schedule = await _unitOfWork.Schedules.GetByIdAsync(scheduleId);
 
             if (schedule == null)
@@ -161,14 +151,44 @@ public class SchedulerService : ISchedulerService
                 return;
             }
 
-            schedule.NextRunTime = nextFireTime?.DateTime;
-            schedule.UpdatedAt = DateTime.UtcNow;
-            
-            await _unitOfWork.Schedules.UpdateAsync(schedule);
-            await _unitOfWork.SaveChangesAsync();
+            if (string.IsNullOrWhiteSpace(schedule.CronExpression))
+            {
+                _logger.LogWarning("Schedule {ScheduleId} has no cron expression, cannot update NextRunTime", scheduleId);
+                return;
+            }
 
-            _logger.LogInformation("Updated NextRunTime for schedule {ScheduleId} to {NextRunTime}", 
-                scheduleId, schedule.NextRunTime?.ToString() ?? "null");
+            try
+            {
+                var cronExpression = new CronExpression(schedule.CronExpression);
+                
+                if (!string.IsNullOrWhiteSpace(schedule.TimeZone))
+                {
+                    try
+                    {
+                        cronExpression.TimeZone = TimeZoneInfo.FindSystemTimeZoneById(schedule.TimeZone);
+                    }
+                    catch (Exception tzEx)
+                    {
+                        _logger.LogWarning(tzEx, "Invalid time zone {TimeZone} for schedule {ScheduleId}, using UTC", 
+                            schedule.TimeZone, scheduleId);
+                    }
+                }
+                
+                var nextOccurrence = cronExpression.GetNextValidTimeAfter(DateTimeOffset.UtcNow);
+                schedule.NextRunTime = nextOccurrence?.UtcDateTime;
+                schedule.UpdatedAt = DateTime.UtcNow;
+                
+                await _unitOfWork.Schedules.UpdateAsync(schedule);
+                await _unitOfWork.SaveChangesAsync();
+
+                _logger.LogInformation("Updated NextRunTime for schedule {ScheduleId} to {NextRunTime} (calculated from cron expression)", 
+                    scheduleId, schedule.NextRunTime?.ToString("o") ?? "null");
+            }
+            catch (Exception cronEx)
+            {
+                _logger.LogError(cronEx, "Invalid cron expression {CronExpression} for schedule {ScheduleId}", 
+                    schedule.CronExpression, scheduleId);
+            }
         }
         catch (Exception ex)
         {
