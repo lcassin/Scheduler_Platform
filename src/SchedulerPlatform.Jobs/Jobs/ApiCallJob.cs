@@ -301,6 +301,7 @@ public class ApiCallJob : IJob
         return connectionString;
     }
 }
+}
 
 public class ApiCallJobConfig
 {
