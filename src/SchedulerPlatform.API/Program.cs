@@ -2,12 +2,15 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Quartz;
 using SchedulerPlatform.Core.Domain.Interfaces;
 using SchedulerPlatform.Infrastructure.Data;
+using SchedulerPlatform.Infrastructure.Interceptors;
 using SchedulerPlatform.Infrastructure.Repositories;
+using SchedulerPlatform.Infrastructure.Services;
 using SchedulerPlatform.Jobs.Quartz;
 using SchedulerPlatform.Jobs.Services;
 using Serilog;
@@ -84,10 +87,18 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-builder.Services.AddDbContext<SchedulerDbContext>(options =>
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentActor, CurrentActorService>();
+builder.Services.AddScoped<AuditLogInterceptor>();
+
+builder.Services.AddDbContext<SchedulerDbContext>((serviceProvider, options) =>
+{
+    var auditLogInterceptor = serviceProvider.GetRequiredService<AuditLogInterceptor>();
     options.UseSqlServer(
         builder.Configuration.GetConnectionString("DefaultConnection"),
-        sqlOptions => sqlOptions.MigrationsAssembly("SchedulerPlatform.Infrastructure")));
+        sqlOptions => sqlOptions.MigrationsAssembly("SchedulerPlatform.Infrastructure"))
+    .AddInterceptors(auditLogInterceptor);
+});
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -164,7 +175,9 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || 
+    app.Environment.IsEnvironment("UAT") || 
+    app.Environment.IsEnvironment("Staging"))
 {
     app.UseSwagger();
     app.UseSwaggerUI(c =>

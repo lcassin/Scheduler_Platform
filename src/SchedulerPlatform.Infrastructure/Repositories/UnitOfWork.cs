@@ -64,6 +64,11 @@ public class UnitOfWork : IUnitOfWork
         }
     }
 
+    public DbContext GetDbContext()
+    {
+        return _context;
+    }
+
     public void Dispose()
     {
         _transaction?.Dispose();
