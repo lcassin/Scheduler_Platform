@@ -107,16 +107,6 @@
                 </MudItem>
             }
             
-            @if (!string.IsNullOrWhiteSpace(Schedule.JobDataJson))
-            {
-                <MudItem xs="12">
-                    <MudText Typo="Typo.subtitle2" Class="mb-1">Job Data JSON</MudText>
-                    <MudPaper Class="pa-2" Style="background-color: #f5f5f5; max-height: 200px; overflow-y: auto;">
-                        <MudText Typo="Typo.body2" Style="white-space: pre-wrap; font-family: monospace; font-size: 0.75rem;">@Schedule.JobDataJson</MudText>
-                    </MudPaper>
-                </MudItem>
-            }
-            
             <MudItem xs="12" md="6">
                 <MudText Typo="Typo.subtitle2" Class="mb-1">Created At</MudText>
                 <MudText Typo="Typo.body2">@Schedule.CreatedAt.ToString("g")</MudText>
