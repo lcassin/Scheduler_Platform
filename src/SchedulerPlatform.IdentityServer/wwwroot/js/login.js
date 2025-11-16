@@ -1,16 +1,23 @@
 document.addEventListener('DOMContentLoaded', function () {
     const toggleButton = document.getElementById('togglePassword');
     const passwordInput = document.getElementById('passwordInput');
-    const toggleLabel = document.getElementById('toggleIcon');
+    const toggleIcon = document.getElementById('toggleIcon');
     
-    if (!toggleButton || !passwordInput || !toggleLabel) {
+    if (!toggleButton || !passwordInput || !toggleIcon) {
         return;
     }
     
     function setState(showPassword) {
         passwordInput.type = showPassword ? 'text' : 'password';
-        toggleLabel.textContent = showPassword ? 'Hide' : 'Show';
         toggleButton.setAttribute('aria-label', showPassword ? 'Hide password' : 'Show password');
+        
+        if (showPassword) {
+            toggleIcon.classList.remove('glyphicon-eye-close');
+            toggleIcon.classList.add('glyphicon-eye-open');
+        } else {
+            toggleIcon.classList.remove('glyphicon-eye-open');
+            toggleIcon.classList.add('glyphicon-eye-close');
+        }
     }
     
     setState(passwordInput.type === 'text');
