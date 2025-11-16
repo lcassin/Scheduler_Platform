@@ -1,5 +1,3 @@
-using Microsoft.EntityFrameworkCore;
-
 namespace SchedulerPlatform.Core.Domain.Interfaces;
 
 public interface IUnitOfWork : IDisposable
@@ -18,5 +16,4 @@ public interface IUnitOfWork : IDisposable
     Task BeginTransactionAsync();
     Task CommitTransactionAsync();
     Task RollbackTransactionAsync();
-    DbContext GetDbContext();
 }
