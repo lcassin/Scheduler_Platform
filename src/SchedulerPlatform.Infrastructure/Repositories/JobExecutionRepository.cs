@@ -12,6 +12,20 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
     {
     }
 
+    public async Task<JobExecution?> GetByIdAsync(long id)
+    {
+        var execution = await _dbSet
+            .Include(je => je.Schedule)
+            .FirstOrDefaultAsync(je => je.Id == id);
+        
+        if (execution != null)
+        {
+            execution.ScheduleName = execution.Schedule?.Name;
+        }
+        
+        return execution;
+    }
+
     public override async Task<IEnumerable<JobExecution>> GetAllAsync()
     {
         var executions = await _dbSet
