@@ -91,7 +91,7 @@ CREATE TABLE [VendorCredentials] (
 );
 
 CREATE TABLE [JobExecutions] (
-    [Id] int NOT NULL IDENTITY,
+    [Id] bigint NOT NULL IDENTITY,
     [ScheduleId] int NOT NULL,
     [StartTime] datetime2 NOT NULL,
     [EndTime] datetime2 NULL,
@@ -102,9 +102,10 @@ CREATE TABLE [JobExecutions] (
     [RetryCount] int NOT NULL,
     [DurationSeconds] int NULL,
     [TriggeredBy] nvarchar(100) NULL,
+    [CancelledBy] nvarchar(100) NULL,
     [CreatedAt] datetime2 NOT NULL,
     [UpdatedAt] datetime2 NULL,
-    [CreatedBy] nvarchar(max) NOT NULL,
+    [CreatedBy] nvarchar(max) NULL,
     [UpdatedBy] nvarchar(max) NULL,
     [IsDeleted] bit NOT NULL,
     CONSTRAINT [PK_JobExecutions] PRIMARY KEY ([Id]),
