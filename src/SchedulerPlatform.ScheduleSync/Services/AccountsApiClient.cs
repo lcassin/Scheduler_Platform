@@ -103,7 +103,7 @@ public class AccountsApiClient
 
     public async IAsyncEnumerable<AccountApiResponse> GetAllAccountsAsync(bool includeOnlyTandemAccounts = false)
     {
-        var pageNumber = 0;
+        var pageNumber = 1;
         AccountApiResponse? firstPage = null;
 
         while (true)
