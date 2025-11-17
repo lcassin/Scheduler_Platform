@@ -175,18 +175,23 @@ public class SchedulerDbContext : DbContext
         modelBuilder.Entity<ScheduleSyncSource>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.Vendor).IsRequired().HasMaxLength(200);
-            entity.Property(e => e.AccountNumber).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Id).HasColumnName("SyncId");
+            entity.Property(e => e.AccountNumber).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.AccountName).HasMaxLength(64);
+            entity.Property(e => e.VendorName).HasMaxLength(64);
+            entity.Property(e => e.ClientName).HasMaxLength(64);
+            entity.Property(e => e.TandemAccountId).HasMaxLength(64);
             
             entity.HasOne(e => e.Client)
                 .WithMany(c => c.ScheduleSyncSources)
                 .HasForeignKey(e => e.ClientId)
                 .OnDelete(DeleteBehavior.Restrict);
                 
-            entity.HasIndex(e => new { e.ClientId, e.Vendor, e.AccountNumber });
-            entity.HasIndex(e => e.ScheduleFrequency);
-            entity.HasIndex(e => e.ScheduleDate);
+            entity.HasIndex(e => e.AccountId).IsUnique();
             entity.HasIndex(e => e.ClientId);
+            entity.HasIndex(e => e.VendorId);
+            entity.HasIndex(e => e.LastSyncedAt);
+            entity.HasIndex(e => new { e.ClientId, e.VendorId, e.AccountNumber });
         });
     }
 }

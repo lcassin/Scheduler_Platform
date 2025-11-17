@@ -298,28 +298,36 @@ IF @var8 IS NOT NULL EXEC(N'ALTER TABLE [AuditLogs] DROP CONSTRAINT [' + @var8 +
 ALTER TABLE [AuditLogs] ALTER COLUMN [CreatedBy] nvarchar(max) NULL;
 
 CREATE TABLE [ScheduleSyncSources] (
-    [Id] int NOT NULL IDENTITY,
-    [ClientId] int NOT NULL,
-    [Vendor] nvarchar(200) NOT NULL,
-    [AccountNumber] nvarchar(100) NOT NULL,
+    [SyncId] int NOT NULL IDENTITY,
+    [AccountId] bigint NOT NULL,
+    [AccountNumber] nvarchar(128) NOT NULL,
+    [VendorId] bigint NOT NULL,
+    [ClientId] bigint NOT NULL,
     [ScheduleFrequency] int NOT NULL,
-    [ScheduleDate] datetime2 NOT NULL,
+    [LastInvoiceDate] datetime2 NOT NULL,
+    [AccountName] nvarchar(64) NULL,
+    [VendorName] nvarchar(64) NULL,
+    [ClientName] nvarchar(64) NULL,
+    [TandemAccountId] nvarchar(64) NULL,
+    [LastSyncedAt] datetime2 NULL,
     [CreatedAt] datetime2 NOT NULL,
     [UpdatedAt] datetime2 NULL,
     [CreatedBy] nvarchar(max) NULL,
     [UpdatedBy] nvarchar(max) NULL,
     [IsDeleted] bit NOT NULL,
-    CONSTRAINT [PK_ScheduleSyncSources] PRIMARY KEY ([Id]),
+    CONSTRAINT [PK_ScheduleSyncSources] PRIMARY KEY ([SyncId]),
     CONSTRAINT [FK_ScheduleSyncSources_Clients_ClientId] FOREIGN KEY ([ClientId]) REFERENCES [Clients] ([Id]) ON DELETE NO ACTION
 );
 
+CREATE UNIQUE INDEX [IX_ScheduleSyncSources_AccountId] ON [ScheduleSyncSources] ([AccountId]);
+
 CREATE INDEX [IX_ScheduleSyncSources_ClientId] ON [ScheduleSyncSources] ([ClientId]);
 
-CREATE INDEX [IX_ScheduleSyncSources_ClientId_Vendor_AccountNumber] ON [ScheduleSyncSources] ([ClientId], [Vendor], [AccountNumber]);
+CREATE INDEX [IX_ScheduleSyncSources_VendorId] ON [ScheduleSyncSources] ([VendorId]);
 
-CREATE INDEX [IX_ScheduleSyncSources_ScheduleDate] ON [ScheduleSyncSources] ([ScheduleDate]);
+CREATE INDEX [IX_ScheduleSyncSources_LastSyncedAt] ON [ScheduleSyncSources] ([LastSyncedAt]);
 
-CREATE INDEX [IX_ScheduleSyncSources_ScheduleFrequency] ON [ScheduleSyncSources] ([ScheduleFrequency]);
+CREATE INDEX [IX_ScheduleSyncSources_ClientId_VendorId_AccountNumber] ON [ScheduleSyncSources] ([ClientId], [VendorId], [AccountNumber]);
 
 INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
 VALUES (N'20251024190624_AddScheduleSyncSourceTable', N'9.0.10');
