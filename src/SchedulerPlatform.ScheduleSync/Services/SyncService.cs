@@ -111,7 +111,14 @@ public class SyncService
             result.Success = false;
             result.ErrorMessage = ex.Message;
             result.EndTime = DateTime.UtcNow;
-            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Client sync failed: {ex.Message}");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] !!! Client sync failed !!!");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Exception Type: {ex.GetType().FullName}");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Message: {ex.Message}");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Stack Trace: {ex.StackTrace}");
+            if (ex.InnerException != null)
+            {
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Inner Exception: {ex.InnerException.GetType().FullName} - {ex.InnerException.Message}");
+            }
             throw;
         }
     }
@@ -267,8 +274,15 @@ public class SyncService
             result.Success = false;
             result.ErrorMessage = ex.Message;
             result.EndTime = DateTime.UtcNow;
-            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Sync failed: {ex.Message}");
-            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Stack trace: {ex.StackTrace}");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] !!! Account sync failed !!!");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Exception Type: {ex.GetType().FullName}");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Message: {ex.Message}");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Stack Trace: {ex.StackTrace}");
+            if (ex.InnerException != null)
+            {
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Inner Exception: {ex.InnerException.GetType().FullName} - {ex.InnerException.Message}");
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Inner Stack Trace: {ex.InnerException.StackTrace}");
+            }
             throw;
         }
     }
