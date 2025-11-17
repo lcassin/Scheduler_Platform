@@ -6,7 +6,7 @@ namespace SchedulerPlatform.Core.Domain.Entities;
 
 public class JobExecution : BaseEntity
 {
-    public override long Id { get; set; }
+    public new long Id { get; set; }
     public int ScheduleId { get; set; }
     public DateTime StartTime { get; set; }
     public DateTime? EndTime { get; set; }
