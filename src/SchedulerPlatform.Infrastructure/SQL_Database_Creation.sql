@@ -308,6 +308,7 @@ CREATE TABLE [ScheduleSyncSources] (
     [ExternalVendorId] bigint NOT NULL,
     [ExternalClientId] int NOT NULL,
     [ClientId] int NULL,
+    [CredentialId] int NOT NULL,
     [ScheduleFrequency] int NOT NULL,
     [LastInvoiceDate] datetime2 NOT NULL,
     [AccountName] nvarchar(64) NULL,
@@ -331,6 +332,8 @@ CREATE INDEX [IX_ScheduleSyncSources_ExternalClientId] ON [ScheduleSyncSources] 
 CREATE INDEX [IX_ScheduleSyncSources_ExternalVendorId] ON [ScheduleSyncSources] ([ExternalVendorId]);
 
 CREATE INDEX [IX_ScheduleSyncSources_ClientId] ON [ScheduleSyncSources] ([ClientId]);
+
+CREATE INDEX [IX_ScheduleSyncSources_CredentialId] ON [ScheduleSyncSources] ([CredentialId]);
 
 CREATE INDEX [IX_ScheduleSyncSources_LastSyncedAt] ON [ScheduleSyncSources] ([LastSyncedAt]);
 

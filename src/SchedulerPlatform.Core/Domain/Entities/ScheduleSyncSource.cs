@@ -14,6 +14,7 @@ public class ScheduleSyncSource : BaseEntity
     public long ExternalVendorId { get; set; }
     public int ExternalClientId { get; set; }
     public int? ClientId { get; set; }
+    public int CredentialId { get; set; }
     public int ScheduleFrequency { get; set; }
     public DateTime LastInvoiceDate { get; set; }
     public string? AccountName { get; set; }
