@@ -11,11 +11,12 @@ GO
 BEGIN TRANSACTION;
 CREATE TABLE [Clients] (
     [Id] int NOT NULL IDENTITY,
+    [ExternalClientId] int NOT NULL,
     [ClientName] nvarchar(200) NOT NULL,
-    [ClientCode] nvarchar(50) NOT NULL,
     [IsActive] bit NOT NULL,
     [ContactEmail] nvarchar(255) NULL,
     [ContactPhone] nvarchar(50) NULL,
+    [LastSyncedAt] datetime2 NULL,
     [CreatedAt] datetime2 NOT NULL,
     [UpdatedAt] datetime2 NULL,
     [CreatedBy] nvarchar(max) NOT NULL,
@@ -149,7 +150,9 @@ CREATE TABLE [UserPermissions] (
     CONSTRAINT [FK_UserPermissions_Users_UserId] FOREIGN KEY ([UserId]) REFERENCES [Users] ([Id]) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX [IX_Clients_ClientCode] ON [Clients] ([ClientCode]);
+CREATE UNIQUE INDEX [IX_Clients_ExternalClientId] ON [Clients] ([ExternalClientId]);
+
+CREATE INDEX [IX_Clients_LastSyncedAt] ON [Clients] ([LastSyncedAt]);
 
 CREATE INDEX [IX_JobExecutions_ScheduleId] ON [JobExecutions] ([ScheduleId]);
 
@@ -299,10 +302,11 @@ ALTER TABLE [AuditLogs] ALTER COLUMN [CreatedBy] nvarchar(max) NULL;
 
 CREATE TABLE [ScheduleSyncSources] (
     [SyncId] int NOT NULL IDENTITY,
-    [AccountId] bigint NOT NULL,
+    [ExternalAccountId] bigint NOT NULL,
     [AccountNumber] nvarchar(128) NOT NULL,
-    [VendorId] bigint NOT NULL,
-    [ClientId] bigint NOT NULL,
+    [ExternalVendorId] bigint NOT NULL,
+    [ExternalClientId] int NOT NULL,
+    [ClientId] int NULL,
     [ScheduleFrequency] int NOT NULL,
     [LastInvoiceDate] datetime2 NOT NULL,
     [AccountName] nvarchar(64) NULL,
@@ -319,15 +323,17 @@ CREATE TABLE [ScheduleSyncSources] (
     CONSTRAINT [FK_ScheduleSyncSources_Clients_ClientId] FOREIGN KEY ([ClientId]) REFERENCES [Clients] ([Id]) ON DELETE NO ACTION
 );
 
-CREATE UNIQUE INDEX [IX_ScheduleSyncSources_AccountId] ON [ScheduleSyncSources] ([AccountId]);
+CREATE UNIQUE INDEX [IX_ScheduleSyncSources_ExternalAccountId] ON [ScheduleSyncSources] ([ExternalAccountId]);
+
+CREATE INDEX [IX_ScheduleSyncSources_ExternalClientId] ON [ScheduleSyncSources] ([ExternalClientId]);
+
+CREATE INDEX [IX_ScheduleSyncSources_ExternalVendorId] ON [ScheduleSyncSources] ([ExternalVendorId]);
 
 CREATE INDEX [IX_ScheduleSyncSources_ClientId] ON [ScheduleSyncSources] ([ClientId]);
 
-CREATE INDEX [IX_ScheduleSyncSources_VendorId] ON [ScheduleSyncSources] ([VendorId]);
-
 CREATE INDEX [IX_ScheduleSyncSources_LastSyncedAt] ON [ScheduleSyncSources] ([LastSyncedAt]);
 
-CREATE INDEX [IX_ScheduleSyncSources_ClientId_VendorId_AccountNumber] ON [ScheduleSyncSources] ([ClientId], [VendorId], [AccountNumber]);
+CREATE INDEX [IX_ScheduleSyncSources_ExternalClientId_ExternalVendorId_AccountNumber] ON [ScheduleSyncSources] ([ExternalClientId], [ExternalVendorId], [AccountNumber]);
 
 INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
 VALUES (N'20251024190624_AddScheduleSyncSourceTable', N'9.0.10');
@@ -377,13 +383,13 @@ GO
 
 BEGIN TRANSACTION;
 
-IF NOT EXISTS (SELECT 1 FROM [Clients] WHERE [ClientCode] = 'INTERNAL')
+IF NOT EXISTS (SELECT 1 FROM [Clients] WHERE [ExternalClientId] = 0)
 BEGIN
-    INSERT INTO [Clients] ([ClientName], [ClientCode], [IsActive], [ContactEmail], [CreatedAt], [CreatedBy], [IsDeleted])
-    VALUES (N'Internal', N'INTERNAL', 1, N'admin@cassinfo.com', GETUTCDATE(), N'System', 0);
+    INSERT INTO [Clients] ([ExternalClientId], [ClientName], [IsActive], [ContactEmail], [CreatedAt], [CreatedBy], [IsDeleted])
+    VALUES (0, N'Internal', 1, N'admin@cassinfo.com', GETUTCDATE(), N'System', 0);
 END
 
-DECLARE @ClientId INT = (SELECT [Id] FROM [Clients] WHERE [ClientCode] = 'INTERNAL');
+DECLARE @ClientId INT = (SELECT [Id] FROM [Clients] WHERE [ExternalClientId] = 0);
 
 IF NOT EXISTS (SELECT 1 FROM [Users] WHERE [Email] = 'superadmin@cassinfo.com')
 BEGIN

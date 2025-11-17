@@ -29,8 +29,9 @@ public class SchedulerDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.ClientName).IsRequired().HasMaxLength(200);
-            entity.Property(e => e.ClientCode).IsRequired().HasMaxLength(50);
-            entity.HasIndex(e => e.ClientCode).IsUnique();
+            entity.Property(e => e.ExternalClientId).IsRequired();
+            entity.HasIndex(e => e.ExternalClientId).IsUnique();
+            entity.HasIndex(e => e.LastSyncedAt);
             entity.Property(e => e.ContactEmail).HasMaxLength(255);
             entity.Property(e => e.ContactPhone).HasMaxLength(50);
         });
@@ -187,11 +188,12 @@ public class SchedulerDbContext : DbContext
                 .HasForeignKey(e => e.ClientId)
                 .OnDelete(DeleteBehavior.Restrict);
                 
-            entity.HasIndex(e => e.AccountId).IsUnique();
+            entity.HasIndex(e => e.ExternalAccountId).IsUnique();
+            entity.HasIndex(e => e.ExternalClientId);
+            entity.HasIndex(e => e.ExternalVendorId);
             entity.HasIndex(e => e.ClientId);
-            entity.HasIndex(e => e.VendorId);
             entity.HasIndex(e => e.LastSyncedAt);
-            entity.HasIndex(e => new { e.ClientId, e.VendorId, e.AccountNumber });
+            entity.HasIndex(e => new { e.ExternalClientId, e.ExternalVendorId, e.AccountNumber });
         });
     }
 }
