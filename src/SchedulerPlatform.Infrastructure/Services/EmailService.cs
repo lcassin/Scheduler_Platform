@@ -87,7 +87,7 @@ public class EmailService : IEmailService
         }
     }
 
-    public async Task SendJobExecutionNotificationAsync(int jobExecutionId, bool isSuccess)
+    public async Task SendJobExecutionNotificationAsync(long jobExecutionId, bool isSuccess)
     {
         try
         {
