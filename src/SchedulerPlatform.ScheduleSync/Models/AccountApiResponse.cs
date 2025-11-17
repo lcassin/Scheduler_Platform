@@ -20,4 +20,5 @@ public class AccountData
     public string? VendorName { get; set; }
     public string? ClientName { get; set; }
     public string? TandemAcctId { get; set; }
+    public int CredentialId { get; set; }
 }

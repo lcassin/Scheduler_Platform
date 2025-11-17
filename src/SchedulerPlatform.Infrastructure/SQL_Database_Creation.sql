@@ -91,7 +91,7 @@ CREATE TABLE [VendorCredentials] (
 );
 
 CREATE TABLE [JobExecutions] (
-    [Id] int NOT NULL IDENTITY,
+    [Id] bigint NOT NULL IDENTITY,
     [ScheduleId] int NOT NULL,
     [StartTime] datetime2 NOT NULL,
     [EndTime] datetime2 NULL,
@@ -102,9 +102,10 @@ CREATE TABLE [JobExecutions] (
     [RetryCount] int NOT NULL,
     [DurationSeconds] int NULL,
     [TriggeredBy] nvarchar(100) NULL,
+    [CancelledBy] nvarchar(100) NULL,
     [CreatedAt] datetime2 NOT NULL,
     [UpdatedAt] datetime2 NULL,
-    [CreatedBy] nvarchar(max) NOT NULL,
+    [CreatedBy] nvarchar(max) NULL,
     [UpdatedBy] nvarchar(max) NULL,
     [IsDeleted] bit NOT NULL,
     CONSTRAINT [PK_JobExecutions] PRIMARY KEY ([Id]),
@@ -307,6 +308,7 @@ CREATE TABLE [ScheduleSyncSources] (
     [ExternalVendorId] bigint NOT NULL,
     [ExternalClientId] int NOT NULL,
     [ClientId] int NULL,
+    [CredentialId] int NOT NULL,
     [ScheduleFrequency] int NOT NULL,
     [LastInvoiceDate] datetime2 NOT NULL,
     [AccountName] nvarchar(64) NULL,
@@ -330,6 +332,8 @@ CREATE INDEX [IX_ScheduleSyncSources_ExternalClientId] ON [ScheduleSyncSources] 
 CREATE INDEX [IX_ScheduleSyncSources_ExternalVendorId] ON [ScheduleSyncSources] ([ExternalVendorId]);
 
 CREATE INDEX [IX_ScheduleSyncSources_ClientId] ON [ScheduleSyncSources] ([ClientId]);
+
+CREATE INDEX [IX_ScheduleSyncSources_CredentialId] ON [ScheduleSyncSources] ([CredentialId]);
 
 CREATE INDEX [IX_ScheduleSyncSources_LastSyncedAt] ON [ScheduleSyncSources] ([LastSyncedAt]);
 

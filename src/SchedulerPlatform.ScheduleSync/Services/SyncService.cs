@@ -161,6 +161,7 @@ public class SyncService
                             existingRecord.AccountNumber = account.AccountNumber;
                             existingRecord.ExternalVendorId = account.VendorId;
                             existingRecord.ExternalClientId = (int)account.ClientId;
+                            existingRecord.CredentialId = account.CredentialId;
                             existingRecord.LastInvoiceDate = account.LastInvoiceDate ?? DateTime.MinValue;
                             existingRecord.AccountName = account.AccountName;
                             existingRecord.VendorName = account.VendorName;
@@ -191,8 +192,9 @@ public class SyncService
                             AccountNumber = account.AccountNumber,
                             ExternalVendorId = account.VendorId,
                             ExternalClientId = (int)account.ClientId,
-                            ClientId = null, // Will be populated later if needed
-                            ScheduleFrequency = (int)ScheduleFrequency.Monthly, // Default to monthly as per user
+                            ClientId = null,
+                            CredentialId = account.CredentialId,
+                            ScheduleFrequency = (int)ScheduleFrequency.Monthly,
                             LastInvoiceDate = account.LastInvoiceDate ?? DateTime.MinValue,
                             AccountName = account.AccountName,
                             VendorName = account.VendorName,
