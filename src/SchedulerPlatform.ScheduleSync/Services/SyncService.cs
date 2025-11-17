@@ -19,6 +19,103 @@ public class SyncService
         _saveBatchSize = saveBatchSize;
     }
 
+    public async Task<ClientSyncResult> SyncClientsAsync(List<AccountData> accounts)
+    {
+        var runStart = DateTime.UtcNow;
+        var result = new ClientSyncResult { StartTime = runStart };
+
+        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Starting client sync...");
+
+        try
+        {
+            var uniqueClients = accounts
+                .GroupBy(a => a.ClientId)
+                .Select(g => g.First())
+                .ToList();
+
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Found {uniqueClients.Count} unique clients in API data");
+
+            var externalClientIds = uniqueClients.Select(c => (int)c.ClientId).ToList();
+            
+            var existing = await _dbContext.Clients
+                .Where(c => externalClientIds.Contains(c.ExternalClientId))
+                .ToDictionaryAsync(c => c.ExternalClientId);
+
+            foreach (var clientData in uniqueClients)
+            {
+                var externalClientId = (int)clientData.ClientId;
+                
+                if (existing.TryGetValue(externalClientId, out var existingClient))
+                {
+                    var nameChanged = existingClient.ClientName != clientData.ClientName;
+                    var wasDeleted = existingClient.IsDeleted;
+
+                    if (nameChanged || wasDeleted)
+                    {
+                        existingClient.ClientName = clientData.ClientName ?? $"Client {externalClientId}";
+                        existingClient.UpdatedAt = DateTime.UtcNow;
+                        existingClient.UpdatedBy = "ApiSync";
+                        existingClient.LastSyncedAt = runStart;
+
+                        if (wasDeleted)
+                        {
+                            existingClient.IsDeleted = false;
+                            result.Reactivated++;
+                        }
+
+                        result.Updated++;
+                    }
+                    else
+                    {
+                        existingClient.LastSyncedAt = runStart;
+                    }
+                }
+                else
+                {
+                    var newClient = new Client
+                    {
+                        ExternalClientId = externalClientId,
+                        ClientName = clientData.ClientName ?? $"Client {externalClientId}",
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow,
+                        CreatedBy = "ApiSync",
+                        LastSyncedAt = runStart,
+                        IsDeleted = false
+                    };
+
+                    await _dbContext.Clients.AddAsync(newClient);
+                    result.Added++;
+                }
+            }
+
+            await _dbContext.SaveChangesAsync();
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Client sync: Added {result.Added}, Updated {result.Updated}, Reactivated {result.Reactivated}");
+
+            var deletedCount = await _dbContext.Clients
+                .Where(c => !c.IsDeleted && (c.LastSyncedAt == null || c.LastSyncedAt < runStart))
+                .ExecuteUpdateAsync(c => c
+                    .SetProperty(x => x.IsDeleted, true)
+                    .SetProperty(x => x.UpdatedAt, DateTime.UtcNow)
+                    .SetProperty(x => x.UpdatedBy, "ApiSync"));
+
+            result.Deleted = deletedCount;
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Marked {deletedCount} clients as deleted");
+
+            result.EndTime = DateTime.UtcNow;
+            result.Success = true;
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.ErrorMessage = ex.Message;
+            result.EndTime = DateTime.UtcNow;
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Client sync failed: {ex.Message}");
+            throw;
+        }
+    }
+
     public async Task<SyncResult> RunSyncAsync(bool includeOnlyTandemAccounts = false)
     {
         var runStart = DateTime.UtcNow;
@@ -32,6 +129,7 @@ public class SyncService
             var processedCount = 0;
             var expectedTotal = 0;
             var batchCount = 0;
+            var allAccounts = new List<AccountData>();
 
             await foreach (var page in _apiClient.GetAllAccountsAsync(includeOnlyTandemAccounts))
             {
@@ -40,11 +138,13 @@ public class SyncService
                     expectedTotal = page.Total;
                 }
 
+                allAccounts.AddRange(page.Data);
+
                 var accountIds = page.Data.Select(a => a.AccountId).ToList();
                 
                 var existing = await _dbContext.ScheduleSyncSources
-                    .Where(s => accountIds.Contains(s.AccountId))
-                    .ToDictionaryAsync(s => s.AccountId);
+                    .Where(s => accountIds.Contains(s.ExternalAccountId))
+                    .ToDictionaryAsync(s => s.ExternalAccountId);
 
                 Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Processing page {page.Page}: {page.Data.Count} records (Found {existing.Count} existing)");
 
@@ -59,8 +159,8 @@ public class SyncService
                         if (lastInvoiceDateChanged || wasDeleted)
                         {
                             existingRecord.AccountNumber = account.AccountNumber;
-                            existingRecord.VendorId = account.VendorId;
-                            existingRecord.ClientId = account.ClientId;
+                            existingRecord.ExternalVendorId = account.VendorId;
+                            existingRecord.ExternalClientId = (int)account.ClientId;
                             existingRecord.LastInvoiceDate = account.LastInvoiceDate ?? DateTime.MinValue;
                             existingRecord.AccountName = account.AccountName;
                             existingRecord.VendorName = account.VendorName;
@@ -87,10 +187,11 @@ public class SyncService
                     {
                         var newRecord = new ScheduleSyncSource
                         {
-                            AccountId = account.AccountId,
+                            ExternalAccountId = account.AccountId,
                             AccountNumber = account.AccountNumber,
-                            VendorId = account.VendorId,
-                            ClientId = account.ClientId,
+                            ExternalVendorId = account.VendorId,
+                            ExternalClientId = (int)account.ClientId,
+                            ClientId = null, // Will be populated later if needed
                             ScheduleFrequency = (int)ScheduleFrequency.Monthly, // Default to monthly as per user
                             LastInvoiceDate = account.LastInvoiceDate ?? DateTime.MinValue,
                             AccountName = account.AccountName,
@@ -122,6 +223,10 @@ public class SyncService
             await _dbContext.SaveChangesAsync();
             Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] All pages processed. Total records: {processedCount}");
 
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Syncing clients from {allAccounts.Count} accounts...");
+            var clientSyncResult = await SyncClientsAsync(allAccounts);
+            result.ClientSyncResult = clientSyncResult;
+
             result.ProcessedCount = processedCount;
             result.ExpectedTotal = expectedTotal;
 
@@ -150,7 +255,8 @@ public class SyncService
 
             Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Sync completed successfully");
             Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Duration: {(result.EndTime - result.StartTime).TotalMinutes:F2} minutes");
-            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Added: {result.Added}, Updated: {result.Updated}, Reactivated: {result.Reactivated}, Deleted: {result.Deleted}");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Accounts - Added: {result.Added}, Updated: {result.Updated}, Reactivated: {result.Reactivated}, Deleted: {result.Deleted}");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Clients - Added: {clientSyncResult.Added}, Updated: {clientSyncResult.Updated}, Reactivated: {clientSyncResult.Reactivated}, Deleted: {clientSyncResult.Deleted}");
 
             return result;
         }
@@ -179,4 +285,17 @@ public class SyncResult
     public int Deleted { get; set; }
     public string? ErrorMessage { get; set; }
     public List<string> Warnings { get; set; } = new();
+    public ClientSyncResult? ClientSyncResult { get; set; }
+}
+
+public class ClientSyncResult
+{
+    public DateTime StartTime { get; set; }
+    public DateTime EndTime { get; set; }
+    public bool Success { get; set; }
+    public int Added { get; set; }
+    public int Updated { get; set; }
+    public int Reactivated { get; set; }
+    public int Deleted { get; set; }
+    public string? ErrorMessage { get; set; }
 }

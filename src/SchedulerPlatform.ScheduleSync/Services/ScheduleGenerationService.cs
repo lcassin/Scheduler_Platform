@@ -30,11 +30,11 @@ public class ScheduleGenerationService
         {
             var syncGroups = await _dbContext.ScheduleSyncSources
                 .Where(s => !s.IsDeleted && s.LastSyncedAt >= syncRunStart)
-                .GroupBy(s => new { s.ClientId, s.VendorId, s.VendorName, s.AccountNumber, s.ScheduleFrequency })
+                .GroupBy(s => new { s.ExternalClientId, s.ExternalVendorId, s.VendorName, s.AccountNumber, s.ScheduleFrequency })
                 .Select(g => new
                 {
-                    g.Key.ClientId,
-                    g.Key.VendorId,
+                    g.Key.ExternalClientId,
+                    g.Key.ExternalVendorId,
                     g.Key.VendorName,
                     g.Key.AccountNumber,
                     g.Key.ScheduleFrequency,
@@ -53,12 +53,23 @@ public class ScheduleGenerationService
             {
                 try
                 {
-                    string vendorName = group.VendorName?.Trim() ?? $"Vendor{group.VendorId}";
+                    string vendorName = group.VendorName?.Trim() ?? $"Vendor{group.ExternalVendorId}";
                     string accountTrimmed = group.AccountNumber.Trim();
                     string scheduleName = $"{vendorName}_{accountTrimmed}";
 
+                    var client = await _dbContext.Clients
+                        .Where(c => c.ExternalClientId == group.ExternalClientId)
+                        .FirstOrDefaultAsync();
+
+                    if (client == null)
+                    {
+                        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Warning: Client not found for ExternalClientId {group.ExternalClientId}. Skipping schedule creation.");
+                        errors++;
+                        continue;
+                    }
+
                     var existingSchedule = await _dbContext.Schedules
-                        .Where(s => s.ClientId == group.ClientId && s.Name.Contains(scheduleName))
+                        .Where(s => s.ClientId == client.Id && s.Name.Contains(scheduleName))
                         .FirstOrDefaultAsync();
 
                     string cronExpression = CronExpressionGenerator.GenerateFromFrequency(
@@ -86,7 +97,7 @@ public class ScheduleGenerationService
                         {
                             Name = scheduleName,
                             Description = $"Auto-synced schedule for {vendorName} - Account {accountTrimmed} ({group.RecordCount} records)",
-                            ClientId = group.ClientId,
+                            ClientId = client.Id,
                             JobType = JobType.StoredProcedure,
                             Frequency = (ScheduleFrequency)group.ScheduleFrequency,
                             CronExpression = cronExpression,
@@ -116,7 +127,7 @@ public class ScheduleGenerationService
                 catch (Exception ex)
                 {
                     errors++;
-                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Error processing group (Client: {group.ClientId}, Vendor: {group.VendorId}, Account: {group.AccountNumber}): {ex.Message}");
+                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Error processing group (Client: {group.ExternalClientId}, Vendor: {group.ExternalVendorId}, Account: {group.AccountNumber}): {ex.Message}");
                 }
             }
 

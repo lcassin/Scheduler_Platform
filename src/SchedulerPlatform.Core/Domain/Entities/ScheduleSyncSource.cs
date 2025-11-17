@@ -9,10 +9,11 @@ public class ScheduleSyncSource : BaseEntity
     [Column("SyncId")]
     public override int Id { get; set; }
     
-    public long AccountId { get; set; }
+    public long ExternalAccountId { get; set; }
     public string AccountNumber { get; set; } = string.Empty;
-    public long VendorId { get; set; }
-    public long ClientId { get; set; }
+    public long ExternalVendorId { get; set; }
+    public int ExternalClientId { get; set; }
+    public int? ClientId { get; set; }
     public int ScheduleFrequency { get; set; }
     public DateTime LastInvoiceDate { get; set; }
     public string? AccountName { get; set; }
