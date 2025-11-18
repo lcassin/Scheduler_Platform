@@ -75,6 +75,7 @@ public class SyncService
                     var newClient = new Client
                     {
                         ExternalClientId = externalClientId,
+                        ClientCode = externalClientId.ToString(),
                         ClientName = clientData.ClientName ?? $"Client {externalClientId}",
                         IsActive = true,
                         CreatedAt = DateTime.UtcNow,
@@ -261,6 +262,7 @@ public class SyncService
                         var newClient = new Client
                         {
                             ExternalClientId = externalClientId,
+                            ClientCode = externalClientId.ToString(),
                             ClientName = clientName ?? $"Client {externalClientId}",
                             IsActive = true,
                             CreatedAt = DateTime.UtcNow,

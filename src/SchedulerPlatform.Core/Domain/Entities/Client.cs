@@ -6,6 +6,7 @@ namespace SchedulerPlatform.Core.Domain.Entities;
 public class Client : BaseEntity
 {
     public int ExternalClientId { get; set; }
+    public string ClientCode { get; set; } = string.Empty;
     public string ClientName { get; set; } = string.Empty;
     public bool IsActive { get; set; }
     public string? ContactEmail { get; set; }

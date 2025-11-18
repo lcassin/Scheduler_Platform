@@ -74,12 +74,17 @@ public class EmailService
         };
 
         Attachment? attachment = null;
+        MemoryStream? memoryStream = null;
         try
         {
             if (!string.IsNullOrEmpty(logFilePath) && File.Exists(logFilePath))
             {
-                var logBytes = await File.ReadAllBytesAsync(logFilePath);
-                var memoryStream = new MemoryStream(logBytes);
+                memoryStream = new MemoryStream();
+                using (var fileStream = new FileStream(logFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                {
+                    await fileStream.CopyToAsync(memoryStream);
+                }
+                memoryStream.Position = 0;
                 attachment = new Attachment(memoryStream, Path.GetFileName(logFilePath), "text/plain");
                 message.Attachments.Add(attachment);
             }
@@ -96,6 +101,7 @@ public class EmailService
         finally
         {
             attachment?.Dispose();
+            memoryStream?.Dispose();
         }
     }
 
