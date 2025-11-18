@@ -19,10 +19,10 @@ public class SyncService
         _saveBatchSize = saveBatchSize;
     }
 
-    public async Task<ClientSyncResult> SyncClientsAsync(List<AccountData> accounts)
+    public async Task<ClientSyncResult> SyncClientsAsync(List<AccountData> accounts, DateTime? runStart = null, bool performSoftDelete = true)
     {
-        var runStart = DateTime.UtcNow;
-        var result = new ClientSyncResult { StartTime = runStart };
+        var syncRunStart = runStart ?? DateTime.UtcNow;
+        var result = new ClientSyncResult { StartTime = syncRunStart };
 
         Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Starting client sync...");
 
@@ -55,6 +55,119 @@ public class SyncService
                         existingClient.ClientName = clientData.ClientName ?? $"Client {externalClientId}";
                         existingClient.UpdatedAt = DateTime.UtcNow;
                         existingClient.UpdatedBy = "ApiSync";
+                        existingClient.LastSyncedAt = syncRunStart;
+
+                        if (wasDeleted)
+                        {
+                            existingClient.IsDeleted = false;
+                            result.Reactivated++;
+                        }
+
+                        result.Updated++;
+                    }
+                    else
+                    {
+                        existingClient.LastSyncedAt = syncRunStart;
+                    }
+                }
+                else
+                {
+                    var newClient = new Client
+                    {
+                        ExternalClientId = externalClientId,
+                        ClientName = clientData.ClientName ?? $"Client {externalClientId}",
+                        IsActive = true,
+                        CreatedAt = DateTime.UtcNow,
+                        CreatedBy = "ApiSync",
+                        LastSyncedAt = syncRunStart,
+                        IsDeleted = false
+                    };
+
+                    await _dbContext.Clients.AddAsync(newClient);
+                    result.Added++;
+                }
+            }
+
+            await _dbContext.SaveChangesAsync();
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Client sync: Added {result.Added}, Updated {result.Updated}, Reactivated {result.Reactivated}");
+
+            if (performSoftDelete)
+            {
+                var deletedCount = await _dbContext.Clients
+                    .Where(c => !c.IsDeleted && (c.LastSyncedAt == null || c.LastSyncedAt < syncRunStart))
+                    .ExecuteUpdateAsync(c => c
+                        .SetProperty(x => x.IsDeleted, true)
+                        .SetProperty(x => x.UpdatedAt, DateTime.UtcNow)
+                        .SetProperty(x => x.UpdatedBy, "ApiSync"));
+
+                result.Deleted = deletedCount;
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Marked {deletedCount} clients as deleted");
+            }
+            else
+            {
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Soft delete skipped (performSoftDelete=false)");
+            }
+
+            result.EndTime = DateTime.UtcNow;
+            result.Success = true;
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            result.Success = false;
+            result.ErrorMessage = ex.Message;
+            result.EndTime = DateTime.UtcNow;
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] !!! Client sync failed !!!");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Exception Type: {ex.GetType().FullName}");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Message: {ex.Message}");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Stack Trace: {ex.StackTrace}");
+            if (ex.InnerException != null)
+            {
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Inner Exception: {ex.InnerException.GetType().FullName} - {ex.InnerException.Message}");
+            }
+            throw;
+        }
+    }
+
+    public async Task<ClientSyncResult> SyncClientsFromDatabaseAsync(DateTime runStart, bool performSoftDelete = true)
+    {
+        var result = new ClientSyncResult { StartTime = runStart };
+
+        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Starting client sync from database...");
+
+        try
+        {
+            var uniqueClients = await _dbContext.ScheduleSyncSources
+                .Where(s => !s.IsDeleted)
+                .GroupBy(s => s.ExternalClientId)
+                .Select(g => new
+                {
+                    ExternalClientId = g.Key,
+                    ClientName = g.First().ClientName
+                })
+                .ToListAsync();
+
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Found {uniqueClients.Count} unique clients in database");
+
+            var externalClientIds = uniqueClients.Select(c => c.ExternalClientId).ToList();
+            
+            var existing = await _dbContext.Clients
+                .Where(c => externalClientIds.Contains(c.ExternalClientId))
+                .ToDictionaryAsync(c => c.ExternalClientId);
+
+            foreach (var clientData in uniqueClients)
+            {
+                if (existing.TryGetValue(clientData.ExternalClientId, out var existingClient))
+                {
+                    var nameChanged = existingClient.ClientName != clientData.ClientName;
+                    var wasDeleted = existingClient.IsDeleted;
+
+                    if (nameChanged || wasDeleted)
+                    {
+                        existingClient.ClientName = clientData.ClientName ?? $"Client {clientData.ExternalClientId}";
+                        existingClient.UpdatedAt = DateTime.UtcNow;
+                        existingClient.UpdatedBy = "ApiSync";
                         existingClient.LastSyncedAt = runStart;
 
                         if (wasDeleted)
@@ -74,8 +187,8 @@ public class SyncService
                 {
                     var newClient = new Client
                     {
-                        ExternalClientId = externalClientId,
-                        ClientName = clientData.ClientName ?? $"Client {externalClientId}",
+                        ExternalClientId = clientData.ExternalClientId,
+                        ClientName = clientData.ClientName ?? $"Client {clientData.ExternalClientId}",
                         IsActive = true,
                         CreatedAt = DateTime.UtcNow,
                         CreatedBy = "ApiSync",
@@ -91,15 +204,22 @@ public class SyncService
             await _dbContext.SaveChangesAsync();
             Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Client sync: Added {result.Added}, Updated {result.Updated}, Reactivated {result.Reactivated}");
 
-            var deletedCount = await _dbContext.Clients
-                .Where(c => !c.IsDeleted && (c.LastSyncedAt == null || c.LastSyncedAt < runStart))
-                .ExecuteUpdateAsync(c => c
-                    .SetProperty(x => x.IsDeleted, true)
-                    .SetProperty(x => x.UpdatedAt, DateTime.UtcNow)
-                    .SetProperty(x => x.UpdatedBy, "ApiSync"));
+            if (performSoftDelete)
+            {
+                var deletedCount = await _dbContext.Clients
+                    .Where(c => !c.IsDeleted && (c.LastSyncedAt == null || c.LastSyncedAt < runStart))
+                    .ExecuteUpdateAsync(c => c
+                        .SetProperty(x => x.IsDeleted, true)
+                        .SetProperty(x => x.UpdatedAt, DateTime.UtcNow)
+                        .SetProperty(x => x.UpdatedBy, "ApiSync"));
 
-            result.Deleted = deletedCount;
-            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Marked {deletedCount} clients as deleted");
+                result.Deleted = deletedCount;
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Marked {deletedCount} clients as deleted");
+            }
+            else
+            {
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Soft delete skipped (performSoftDelete=false)");
+            }
 
             result.EndTime = DateTime.UtcNow;
             result.Success = true;
