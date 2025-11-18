@@ -137,12 +137,18 @@ public class SyncService
             var expectedTotal = 0;
             var batchCount = 0;
             var allAccounts = new List<AccountData>();
+            var batchStartTime = DateTime.UtcNow;
+            var totalBatchTime = TimeSpan.Zero;
+            var batchesProcessed = 0;
 
             await foreach (var page in _apiClient.GetAllAccountsAsync(includeOnlyTandemAccounts))
             {
+                var pageBatchStart = DateTime.UtcNow;
+                
                 if (expectedTotal == 0)
                 {
                     expectedTotal = page.Total;
+                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Expected total records: {expectedTotal:N0}");
                 }
 
                 allAccounts.AddRange(page.Data);
@@ -221,11 +227,23 @@ public class SyncService
                 }
 
                 batchCount++;
+                
+                var pageBatchTime = DateTime.UtcNow - pageBatchStart;
+                totalBatchTime += pageBatchTime;
+                batchesProcessed++;
 
                 if (batchCount % (_saveBatchSize / page.Batch) == 0 || processedCount >= expectedTotal)
                 {
                     await _dbContext.SaveChangesAsync();
-                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Saved batch. Progress: {processedCount}/{expectedTotal} ({(processedCount * 100.0 / expectedTotal):F1}%)");
+                    
+                    var elapsedTime = DateTime.UtcNow - runStart;
+                    var avgBatchTime = totalBatchTime / batchesProcessed;
+                    var recordsRemaining = expectedTotal - processedCount;
+                    var estimatedBatchesRemaining = (double)recordsRemaining / page.Batch;
+                    var estimatedTimeRemaining = TimeSpan.FromTicks((long)(avgBatchTime.Ticks * estimatedBatchesRemaining));
+                    
+                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Saved batch. Progress: {processedCount:N0}/{expectedTotal:N0} ({(processedCount * 100.0 / expectedTotal):F1}%)");
+                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}]   Elapsed: {FormatTimeSpan(elapsedTime)} | Avg batch: {avgBatchTime.TotalSeconds:F1}s | ETA: {FormatTimeSpan(estimatedTimeRemaining)}");
                 }
             }
 
@@ -284,6 +302,22 @@ public class SyncService
                 Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Inner Stack Trace: {ex.InnerException.StackTrace}");
             }
             throw;
+        }
+    }
+    
+    private static string FormatTimeSpan(TimeSpan ts)
+    {
+        if (ts.TotalHours >= 1)
+        {
+            return $"{ts.Hours}h {ts.Minutes}m {ts.Seconds}s";
+        }
+        else if (ts.TotalMinutes >= 1)
+        {
+            return $"{ts.Minutes}m {ts.Seconds}s";
+        }
+        else
+        {
+            return $"{ts.Seconds}s";
         }
     }
 }
