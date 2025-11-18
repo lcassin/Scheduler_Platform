@@ -137,14 +137,9 @@ public class SyncService
             var expectedTotal = 0;
             var batchCount = 0;
             var allAccounts = new List<AccountData>();
-            var batchStartTime = DateTime.UtcNow;
-            var totalBatchTime = TimeSpan.Zero;
-            var batchesProcessed = 0;
 
             await foreach (var page in _apiClient.GetAllAccountsAsync(includeOnlyTandemAccounts))
             {
-                var pageBatchStart = DateTime.UtcNow;
-                
                 if (expectedTotal == 0)
                 {
                     expectedTotal = page.Total;
@@ -227,23 +222,28 @@ public class SyncService
                 }
 
                 batchCount++;
-                
-                var pageBatchTime = DateTime.UtcNow - pageBatchStart;
-                totalBatchTime += pageBatchTime;
-                batchesProcessed++;
 
                 if (batchCount % (_saveBatchSize / page.Batch) == 0 || processedCount >= expectedTotal)
                 {
                     await _dbContext.SaveChangesAsync();
                     
                     var elapsedTime = DateTime.UtcNow - runStart;
-                    var avgBatchTime = totalBatchTime / batchesProcessed;
                     var recordsRemaining = expectedTotal - processedCount;
-                    var estimatedBatchesRemaining = (double)recordsRemaining / page.Batch;
-                    var estimatedTimeRemaining = TimeSpan.FromTicks((long)(avgBatchTime.Ticks * estimatedBatchesRemaining));
                     
-                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Saved batch. Progress: {processedCount:N0}/{expectedTotal:N0} ({(processedCount * 100.0 / expectedTotal):F1}%)");
-                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}]   Elapsed: {FormatTimeSpan(elapsedTime)} | Avg batch: {avgBatchTime.TotalSeconds:F1}s | ETA: {FormatTimeSpan(estimatedTimeRemaining)}");
+                    if (elapsedTime.TotalSeconds > 0 && processedCount > 0)
+                    {
+                        var recordsPerSecond = processedCount / elapsedTime.TotalSeconds;
+                        var estimatedSecondsRemaining = recordsRemaining / recordsPerSecond;
+                        var estimatedTimeRemaining = TimeSpan.FromSeconds(estimatedSecondsRemaining);
+                        
+                        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Saved batch. Progress: {processedCount:N0}/{expectedTotal:N0} ({(processedCount * 100.0 / expectedTotal):F1}%)");
+                        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}]   Elapsed: {FormatTimeSpan(elapsedTime)} | Rate: {recordsPerSecond:F1} rec/s | ETA: {FormatTimeSpan(estimatedTimeRemaining)}");
+                    }
+                    else
+                    {
+                        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Saved batch. Progress: {processedCount:N0}/{expectedTotal:N0} ({(processedCount * 100.0 / expectedTotal):F1}%)");
+                        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}]   Elapsed: {FormatTimeSpan(elapsedTime)} | Calculating ETA...");
+                    }
                 }
             }
 
