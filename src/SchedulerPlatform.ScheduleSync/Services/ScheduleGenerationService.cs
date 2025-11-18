@@ -25,6 +25,7 @@ public class ScheduleGenerationService
         var result = new ScheduleGenerationResult { StartTime = DateTime.UtcNow };
 
         Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Starting schedule generation from synced data...");
+        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Schedule staggering: 4:00 AM - midnight (72,000 possible time slots)");
 
         try
         {
@@ -107,9 +108,13 @@ public class ScheduleGenerationService
                         string accountTrimmed = group.AccountNumber.Trim();
                         string scheduleName = $"{vendorName}_{accountTrimmed}";
 
+                        string stableKey = $"{clientInfo.ClientId}|{scheduleName}";
                         string cronExpression = CronExpressionGenerator.GenerateFromFrequency(
                             (ScheduleFrequency)group.ScheduleFrequency,
-                            group.EarliestDate);
+                            stableKey,
+                            startHour: 4,
+                            endHour: 24,
+                            referenceDate: group.EarliestDate);
 
                         DateTime? nextRunTime = CalculateNextRunTime(cronExpression, _defaultTimeZone);
 
