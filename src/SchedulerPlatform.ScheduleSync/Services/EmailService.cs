@@ -73,19 +73,30 @@ public class EmailService
             IsBodyHtml = false
         };
 
-        if (!string.IsNullOrEmpty(logFilePath) && File.Exists(logFilePath))
+        Attachment? attachment = null;
+        try
         {
-            message.Attachments.Add(new Attachment(logFilePath));
+            if (!string.IsNullOrEmpty(logFilePath) && File.Exists(logFilePath))
+            {
+                var logBytes = await File.ReadAllBytesAsync(logFilePath);
+                var memoryStream = new MemoryStream(logBytes);
+                attachment = new Attachment(memoryStream, Path.GetFileName(logFilePath), "text/plain");
+                message.Attachments.Add(attachment);
+            }
+
+            using var client = new SmtpClient(_smtpHost, _smtpPort)
+            {
+                EnableSsl = _enableSsl,
+                UseDefaultCredentials = true
+            };
+
+            await client.SendMailAsync(message);
+            Console.WriteLine($"[Email] Email sent successfully to {_toAddress}");
         }
-
-        using var client = new SmtpClient(_smtpHost, _smtpPort)
+        finally
         {
-            EnableSsl = _enableSsl,
-            UseDefaultCredentials = true
-        };
-
-        await client.SendMailAsync(message);
-        Console.WriteLine($"[Email] Email sent successfully to {_toAddress}");
+            attachment?.Dispose();
+        }
     }
 
     public static string FormatSuccessEmail(

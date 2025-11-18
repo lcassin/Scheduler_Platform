@@ -138,93 +138,172 @@ public class SyncService
 
         try
         {
-            var uniqueClients = await _dbContext.ScheduleSyncSources
-                .Where(s => !s.IsDeleted)
-                .GroupBy(s => s.ExternalClientId)
-                .Select(g => new
-                {
-                    ExternalClientId = g.Key,
-                    ClientName = g.First().ClientName
-                })
-                .ToListAsync();
+            var originalTimeout = _dbContext.Database.GetCommandTimeout();
+            _dbContext.Database.SetCommandTimeout(TimeSpan.FromMinutes(5));
 
-            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Found {uniqueClients.Count} unique clients in database");
+            var oldAutoDetect = _dbContext.ChangeTracker.AutoDetectChangesEnabled;
+            _dbContext.ChangeTracker.AutoDetectChangesEnabled = false;
 
-            var externalClientIds = uniqueClients.Select(c => c.ExternalClientId).ToList();
-            
-            var existing = await _dbContext.Clients
-                .Where(c => externalClientIds.Contains(c.ExternalClientId))
-                .ToDictionaryAsync(c => c.ExternalClientId);
-
-            foreach (var clientData in uniqueClients)
+            try
             {
-                if (existing.TryGetValue(clientData.ExternalClientId, out var existingClient))
+                var uniqueClientsDict = new Dictionary<int, (string? ClientName, DateTime? LastSyncedAt)>();
+                const int pageSize = 100000;
+                int lastId = 0;
+                int totalScanned = 0;
+
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Scanning ScheduleSyncSources in batches of {pageSize:N0}...");
+
+                while (true)
                 {
-                    var nameChanged = existingClient.ClientName != clientData.ClientName;
-                    var wasDeleted = existingClient.IsDeleted;
-
-                    if (nameChanged || wasDeleted)
-                    {
-                        existingClient.ClientName = clientData.ClientName ?? $"Client {clientData.ExternalClientId}";
-                        existingClient.UpdatedAt = DateTime.UtcNow;
-                        existingClient.UpdatedBy = "ApiSync";
-                        existingClient.LastSyncedAt = runStart;
-
-                        if (wasDeleted)
+                    var page = await _dbContext.ScheduleSyncSources
+                        .AsNoTracking()
+                        .Where(s => !s.IsDeleted && s.Id > lastId)
+                        .OrderBy(s => s.Id)
+                        .Select(s => new
                         {
-                            existingClient.IsDeleted = false;
-                            result.Reactivated++;
-                        }
+                            s.Id,
+                            s.ExternalClientId,
+                            s.ClientName,
+                            s.LastSyncedAt
+                        })
+                        .Take(pageSize)
+                        .ToListAsync();
 
-                        result.Updated++;
+                    if (page.Count == 0)
+                        break;
+
+                    foreach (var row in page)
+                    {
+                        if (uniqueClientsDict.TryGetValue(row.ExternalClientId, out var existing))
+                        {
+                            if (!string.IsNullOrWhiteSpace(row.ClientName) &&
+                                (string.IsNullOrWhiteSpace(existing.ClientName) ||
+                                 (row.LastSyncedAt ?? DateTime.MinValue) > (existing.LastSyncedAt ?? DateTime.MinValue)))
+                            {
+                                uniqueClientsDict[row.ExternalClientId] = (row.ClientName, row.LastSyncedAt);
+                            }
+                        }
+                        else
+                        {
+                            uniqueClientsDict[row.ExternalClientId] = (row.ClientName, row.LastSyncedAt);
+                        }
+                    }
+
+                    lastId = page[^1].Id;
+                    totalScanned += page.Count;
+
+                    if (totalScanned % 500000 == 0)
+                    {
+                        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Scanned {totalScanned:N0} rows, found {uniqueClientsDict.Count:N0} unique clients so far...");
+                    }
+                }
+
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Scanned {totalScanned:N0} total rows, found {uniqueClientsDict.Count:N0} unique clients");
+
+                var externalClientIds = uniqueClientsDict.Keys.ToList();
+                var existingClients = new Dictionary<int, Client>();
+                const int chunkSize = 2000;
+
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Fetching existing clients in chunks of {chunkSize:N0}...");
+
+                for (int i = 0; i < externalClientIds.Count; i += chunkSize)
+                {
+                    var chunk = externalClientIds.Skip(i).Take(chunkSize).ToList();
+                    var chunkClients = await _dbContext.Clients
+                        .Where(c => chunk.Contains(c.ExternalClientId))
+                        .ToListAsync();
+
+                    foreach (var client in chunkClients)
+                    {
+                        existingClients[client.ExternalClientId] = client;
+                    }
+
+                    if ((i + chunkSize) % 10000 == 0)
+                    {
+                        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Fetched {Math.Min(i + chunkSize, externalClientIds.Count):N0} / {externalClientIds.Count:N0} client records...");
+                    }
+                }
+
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Found {existingClients.Count:N0} existing clients");
+
+                foreach (var kvp in uniqueClientsDict)
+                {
+                    var externalClientId = kvp.Key;
+                    var clientName = kvp.Value.ClientName;
+
+                    if (existingClients.TryGetValue(externalClientId, out var existingClient))
+                    {
+                        var nameChanged = existingClient.ClientName != clientName;
+                        var wasDeleted = existingClient.IsDeleted;
+
+                        if (nameChanged || wasDeleted)
+                        {
+                            existingClient.ClientName = clientName ?? $"Client {externalClientId}";
+                            existingClient.UpdatedAt = DateTime.UtcNow;
+                            existingClient.UpdatedBy = "ApiSync";
+                            existingClient.LastSyncedAt = runStart;
+
+                            if (wasDeleted)
+                            {
+                                existingClient.IsDeleted = false;
+                                result.Reactivated++;
+                            }
+
+                            result.Updated++;
+                        }
+                        else
+                        {
+                            existingClient.LastSyncedAt = runStart;
+                        }
                     }
                     else
                     {
-                        existingClient.LastSyncedAt = runStart;
+                        var newClient = new Client
+                        {
+                            ExternalClientId = externalClientId,
+                            ClientName = clientName ?? $"Client {externalClientId}",
+                            IsActive = true,
+                            CreatedAt = DateTime.UtcNow,
+                            CreatedBy = "ApiSync",
+                            LastSyncedAt = runStart,
+                            IsDeleted = false
+                        };
+
+                        await _dbContext.Clients.AddAsync(newClient);
+                        result.Added++;
                     }
+                }
+
+                await _dbContext.SaveChangesAsync();
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Client sync: Added {result.Added}, Updated {result.Updated}, Reactivated {result.Reactivated}");
+
+                if (performSoftDelete)
+                {
+                    var deletedCount = await _dbContext.Clients
+                        .Where(c => !c.IsDeleted && (c.LastSyncedAt == null || c.LastSyncedAt < runStart))
+                        .ExecuteUpdateAsync(c => c
+                            .SetProperty(x => x.IsDeleted, true)
+                            .SetProperty(x => x.UpdatedAt, DateTime.UtcNow)
+                            .SetProperty(x => x.UpdatedBy, "ApiSync"));
+
+                    result.Deleted = deletedCount;
+                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Marked {deletedCount} clients as deleted");
                 }
                 else
                 {
-                    var newClient = new Client
-                    {
-                        ExternalClientId = clientData.ExternalClientId,
-                        ClientName = clientData.ClientName ?? $"Client {clientData.ExternalClientId}",
-                        IsActive = true,
-                        CreatedAt = DateTime.UtcNow,
-                        CreatedBy = "ApiSync",
-                        LastSyncedAt = runStart,
-                        IsDeleted = false
-                    };
-
-                    await _dbContext.Clients.AddAsync(newClient);
-                    result.Added++;
+                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Soft delete skipped (performSoftDelete=false)");
                 }
+
+                result.EndTime = DateTime.UtcNow;
+                result.Success = true;
+
+                return result;
             }
-
-            await _dbContext.SaveChangesAsync();
-            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Client sync: Added {result.Added}, Updated {result.Updated}, Reactivated {result.Reactivated}");
-
-            if (performSoftDelete)
+            finally
             {
-                var deletedCount = await _dbContext.Clients
-                    .Where(c => !c.IsDeleted && (c.LastSyncedAt == null || c.LastSyncedAt < runStart))
-                    .ExecuteUpdateAsync(c => c
-                        .SetProperty(x => x.IsDeleted, true)
-                        .SetProperty(x => x.UpdatedAt, DateTime.UtcNow)
-                        .SetProperty(x => x.UpdatedBy, "ApiSync"));
-
-                result.Deleted = deletedCount;
-                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Marked {deletedCount} clients as deleted");
+                _dbContext.ChangeTracker.AutoDetectChangesEnabled = oldAutoDetect;
+                _dbContext.Database.SetCommandTimeout(originalTimeout);
             }
-            else
-            {
-                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Soft delete skipped (performSoftDelete=false)");
-            }
-
-            result.EndTime = DateTime.UtcNow;
-            result.Success = true;
-
-            return result;
         }
         catch (Exception ex)
         {
