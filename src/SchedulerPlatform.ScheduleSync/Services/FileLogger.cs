@@ -21,7 +21,8 @@ public class FileLogger : IDisposable
         var timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
         _logFilePath = Path.Combine(logDirectory, $"{filePrefix}_{timestamp}.log");
         
-        _writer = new StreamWriter(_logFilePath, append: true) { AutoFlush = true };
+        var fileStream = new FileStream(_logFilePath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite);
+        _writer = new StreamWriter(fileStream) { AutoFlush = true };
         
         LogInfo($"Log file created: {_logFilePath}");
     }
