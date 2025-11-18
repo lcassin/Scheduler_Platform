@@ -22,6 +22,11 @@ class Program
 
         try
         {
+            if (args.Any(a => a.Equals("--stagger-existing", StringComparison.OrdinalIgnoreCase)))
+            {
+                return await RunStaggerExistingAsync(args);
+            }
+
             var startStep = ParseStartStep(args);
 
             var configuration = new ConfigurationBuilder()
@@ -295,6 +300,128 @@ class Program
         }
 
         return StartStep.Accounts;
+    }
+
+    private static async Task<int> RunStaggerExistingAsync(string[] args)
+    {
+        FileLogger? logger = null;
+        EmailService? emailService = null;
+        var processStartTime = DateTime.UtcNow;
+
+        try
+        {
+            var configuration = new ConfigurationBuilder()
+                .SetBasePath(Directory.GetCurrentDirectory())
+                .AddJsonFile("appsettings.json", optional: false)
+                .Build();
+
+            string logDirectory = configuration.GetValue<string>("Logging:Directory", "./logs") ?? "./logs";
+            string logFilePrefix = configuration.GetValue<string>("Logging:FilePrefix", "SchedulerSync") ?? "SchedulerSync";
+            logger = new FileLogger(logDirectory, logFilePrefix, logToConsole: true);
+
+            logger.LogInfo("========================================");
+            logger.LogInfo("Stagger Existing Schedules");
+            logger.LogInfo("========================================");
+
+            bool emailEnabled = configuration.GetValue<bool>("Notifications:Enabled", true);
+            string smtpHost = configuration.GetValue<string>("Notifications:Smtp:Host", "smtp.cassinfo.com") ?? "smtp.cassinfo.com";
+            int smtpPort = configuration.GetValue<int>("Notifications:Smtp:Port", 25);
+            bool smtpEnableSsl = configuration.GetValue<bool>("Notifications:Smtp:EnableSsl", false);
+            string emailFrom = configuration.GetValue<string>("Notifications:From", "scheduler@cassinfo.com") ?? "scheduler@cassinfo.com";
+            string emailTo = configuration.GetValue<string>("Notifications:To", "lcassin@cassinfo.com") ?? "lcassin@cassinfo.com";
+
+            emailService = new EmailService(smtpHost, smtpPort, smtpEnableSsl, emailFrom, emailTo, emailEnabled);
+
+            string connectionString = configuration.GetConnectionString("DefaultConnection")
+                ?? throw new Exception("Connection string not found");
+
+            int batchSize = configuration.GetValue<int>("SyncSettings:StaggerBatchSize", 10000);
+            int startHour = configuration.GetValue<int>("SyncSettings:StaggerStartHour", 4);
+            int endHour = configuration.GetValue<int>("SyncSettings:StaggerEndHour", 24);
+
+            var optionsBuilder = new DbContextOptionsBuilder<SchedulerDbContext>();
+            optionsBuilder.UseSqlServer(connectionString);
+            await using var dbContext = new SchedulerDbContext(optionsBuilder.Options);
+
+            var staggerService = new ScheduleStaggerService(dbContext, batchSize);
+
+            logger.LogInfo($"Batch size: {batchSize:N0}");
+            logger.LogInfo($"Time window: {startHour:D2}:00 - {(endHour == 24 ? "midnight" : $"{endHour:D2}:00")}");
+            logger.LogInfo("");
+
+            var result = await staggerService.StaggerExistingSchedulesAsync(startHour, endHour);
+
+            var processEndTime = DateTime.UtcNow;
+            logger.LogInfo("");
+            logger.LogInfo("========================================");
+            logger.LogInfo(result.Success ? "STAGGER COMPLETED SUCCESSFULLY" : "STAGGER COMPLETED WITH ERRORS");
+            logger.LogInfo("========================================");
+            logger.LogInfo($"Total Duration: {(processEndTime - processStartTime).TotalMinutes:F2} minutes");
+            logger.LogInfo($"Schedules updated: {result.Updated:N0}");
+            logger.LogInfo($"Schedules unchanged: {result.Unchanged:N0}");
+            logger.LogInfo($"Errors: {result.Errors}");
+
+            var emailSubject = result.Success
+                ? $"[SUCCESS] ScheduleSync Stagger - {(processEndTime - processStartTime).TotalMinutes:F0}min"
+                : $"[ERROR] ScheduleSync Stagger - {result.Errors} errors";
+
+            var emailBody = $"Stagger Existing Schedules Operation\n" +
+                           $"====================================\n\n" +
+                           $"Start Time: {processStartTime:yyyy-MM-dd HH:mm:ss} UTC\n" +
+                           $"End Time: {processEndTime:yyyy-MM-dd HH:mm:ss} UTC\n" +
+                           $"Duration: {(processEndTime - processStartTime).TotalMinutes:F2} minutes\n\n" +
+                           $"Results:\n" +
+                           $"  Schedules updated: {result.Updated:N0}\n" +
+                           $"  Schedules unchanged: {result.Unchanged:N0}\n" +
+                           $"  Errors: {result.Errors}\n\n" +
+                           $"Time window: {startHour:D2}:00 - {(endHour == 24 ? "midnight" : $"{endHour:D2}:00")}\n" +
+                           $"Batch size: {batchSize:N0}\n\n" +
+                           $"See attached log file for detailed information.";
+
+            if (result.Success)
+            {
+                await emailService.SendSuccessEmailAsync(emailSubject, emailBody, logger.LogFilePath);
+            }
+            else
+            {
+                await emailService.SendErrorEmailAsync(emailSubject, emailBody, logger.LogFilePath);
+            }
+
+            return result.Errors > 0 ? 1 : 0;
+        }
+        catch (Exception ex)
+        {
+            var errorTime = DateTime.UtcNow;
+
+            if (logger != null)
+            {
+                logger.LogError("");
+                logger.LogError("========================================");
+                logger.LogError("FATAL ERROR");
+                logger.LogError("========================================");
+                logger.LogError("", ex);
+            }
+            else
+            {
+                Console.WriteLine($"\n[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] ========================================");
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] FATAL ERROR");
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] ========================================");
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Exception Type: {ex.GetType().FullName}");
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Message: {ex.Message}");
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Stack Trace:\n{ex.StackTrace}");
+            }
+
+            if (emailService != null)
+            {
+                await SendErrorEmail(emailService, "Stagger Existing", ex.Message, processStartTime, logger?.LogFilePath);
+            }
+
+            return 1;
+        }
+        finally
+        {
+            logger?.Dispose();
+        }
     }
 
     private static async Task SendErrorEmail(EmailService emailService, string phase, string errorMessage, DateTime startTime, string? logFilePath)
