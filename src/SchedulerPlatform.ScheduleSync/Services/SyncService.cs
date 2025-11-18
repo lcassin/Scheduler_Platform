@@ -49,13 +49,19 @@ public class SyncService
                 {
                     var nameChanged = existingClient.ClientName != clientData.ClientName;
                     var wasDeleted = existingClient.IsDeleted;
+                    var needsClientCode = string.IsNullOrEmpty(existingClient.ClientCode);
 
-                    if (nameChanged || wasDeleted)
+                    if (nameChanged || wasDeleted || needsClientCode)
                     {
                         existingClient.ClientName = clientData.ClientName ?? $"Client {externalClientId}";
                         existingClient.UpdatedAt = DateTime.UtcNow;
                         existingClient.UpdatedBy = "ApiSync";
                         existingClient.LastSyncedAt = syncRunStart;
+
+                        if (needsClientCode)
+                        {
+                            existingClient.ClientCode = externalClientId.ToString();
+                        }
 
                         if (wasDeleted)
                         {
@@ -75,6 +81,7 @@ public class SyncService
                     var newClient = new Client
                     {
                         ExternalClientId = externalClientId,
+                        ClientCode = externalClientId.ToString(),
                         ClientName = clientData.ClientName ?? $"Client {externalClientId}",
                         IsActive = true,
                         CreatedAt = DateTime.UtcNow,
@@ -235,13 +242,19 @@ public class SyncService
                     {
                         var nameChanged = existingClient.ClientName != clientName;
                         var wasDeleted = existingClient.IsDeleted;
+                        var needsClientCode = string.IsNullOrEmpty(existingClient.ClientCode);
 
-                        if (nameChanged || wasDeleted)
+                        if (nameChanged || wasDeleted || needsClientCode)
                         {
                             existingClient.ClientName = clientName ?? $"Client {externalClientId}";
                             existingClient.UpdatedAt = DateTime.UtcNow;
                             existingClient.UpdatedBy = "ApiSync";
                             existingClient.LastSyncedAt = runStart;
+
+                            if (needsClientCode)
+                            {
+                                existingClient.ClientCode = externalClientId.ToString();
+                            }
 
                             if (wasDeleted)
                             {
@@ -261,6 +274,7 @@ public class SyncService
                         var newClient = new Client
                         {
                             ExternalClientId = externalClientId,
+                            ClientCode = externalClientId.ToString(),
                             ClientName = clientName ?? $"Client {externalClientId}",
                             IsActive = true,
                             CreatedAt = DateTime.UtcNow,
