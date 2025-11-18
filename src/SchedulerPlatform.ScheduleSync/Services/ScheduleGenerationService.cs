@@ -43,106 +43,174 @@ public class ScheduleGenerationService
                 })
                 .ToListAsync();
 
-            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Found {syncGroups.Count} unique schedule groups to process");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Found {syncGroups.Count:N0} unique schedule groups to process");
+
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Preloading clients into memory...");
+            var uniqueExternalClientIds = syncGroups.Select(g => g.ExternalClientId).Distinct().ToList();
+            var clientMap = new Dictionary<int, (int ClientId, string ClientName)>();
+            
+            const int clientChunkSize = 2000;
+            for (int i = 0; i < uniqueExternalClientIds.Count; i += clientChunkSize)
+            {
+                var chunk = uniqueExternalClientIds.Skip(i).Take(clientChunkSize).ToList();
+                var clients = await _dbContext.Clients
+                    .Where(c => chunk.Contains(c.ExternalClientId))
+                    .Select(c => new { c.ExternalClientId, c.Id, c.ClientName })
+                    .ToListAsync();
+                
+                foreach (var client in clients)
+                {
+                    clientMap[client.ExternalClientId] = (client.Id, client.ClientName);
+                }
+            }
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Loaded {clientMap.Count:N0} clients into memory");
 
             int created = 0;
             int updated = 0;
+            int unchanged = 0;
             int errors = 0;
+            int processed = 0;
+            
+            const int chunkSize = 5000;
+            var totalGroups = syncGroups.Count;
 
-            foreach (var group in syncGroups)
+            for (int chunkStart = 0; chunkStart < totalGroups; chunkStart += chunkSize)
             {
-                try
+                var chunk = syncGroups.Skip(chunkStart).Take(chunkSize).ToList();
+                
+                var clientIdsInChunk = chunk
+                    .Where(g => clientMap.ContainsKey(g.ExternalClientId))
+                    .Select(g => clientMap[g.ExternalClientId].ClientId)
+                    .Distinct()
+                    .ToList();
+                
+                var existingSchedules = await _dbContext.Schedules
+                    .Where(s => clientIdsInChunk.Contains(s.ClientId))
+                    .Select(s => new { s.Id, s.ClientId, s.Name, s.CronExpression, s.Frequency, s.NextRunTime })
+                    .ToListAsync();
+                
+                var scheduleMap = existingSchedules
+                    .GroupBy(s => (s.ClientId, s.Name))
+                    .ToDictionary(g => g.Key, g => g.First());
+
+                foreach (var group in chunk)
                 {
-                    string vendorName = group.VendorName?.Trim() ?? $"Vendor{group.ExternalVendorId}";
-                    string accountTrimmed = group.AccountNumber.Trim();
-                    string scheduleName = $"{vendorName}_{accountTrimmed}";
-
-                    var client = await _dbContext.Clients
-                        .Where(c => c.ExternalClientId == group.ExternalClientId)
-                        .FirstOrDefaultAsync();
-
-                    if (client == null)
+                    try
                     {
-                        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Warning: Client not found for ExternalClientId {group.ExternalClientId}. Skipping schedule creation.");
-                        errors++;
-                        continue;
-                    }
-
-                    var existingSchedule = await _dbContext.Schedules
-                        .Where(s => s.ClientId == client.Id && s.Name.Contains(scheduleName))
-                        .FirstOrDefaultAsync();
-
-                    string cronExpression = CronExpressionGenerator.GenerateFromFrequency(
-                        (ScheduleFrequency)group.ScheduleFrequency,
-                        group.EarliestDate);
-
-                    DateTime? nextRunTime = CalculateNextRunTime(cronExpression, _defaultTimeZone);
-
-                    if (existingSchedule != null)
-                    {
-                        existingSchedule.CronExpression = cronExpression;
-                        existingSchedule.NextRunTime = nextRunTime;
-                        existingSchedule.Frequency = (ScheduleFrequency)group.ScheduleFrequency;
-                        existingSchedule.UpdatedAt = DateTime.UtcNow;
-                        existingSchedule.UpdatedBy = "ScheduleSync";
-
-                        _dbContext.Schedules.Update(existingSchedule);
-                        updated++;
-
-                        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Updated schedule: {scheduleName} (ID: {existingSchedule.Id})");
-                    }
-                    else
-                    {
-                        var newSchedule = new Schedule
+                        if (!clientMap.TryGetValue(group.ExternalClientId, out var clientInfo))
                         {
-                            Name = scheduleName,
-                            Description = $"Auto-synced schedule for {vendorName} - Account {accountTrimmed} ({group.RecordCount} records)",
-                            ClientId = client.Id,
-                            JobType = JobType.StoredProcedure,
-                            Frequency = (ScheduleFrequency)group.ScheduleFrequency,
-                            CronExpression = cronExpression,
-                            NextRunTime = nextRunTime,
-                            IsEnabled = true,
-                            MaxRetries = 3,
-                            RetryDelayMinutes = 5,
-                            TimeZone = _defaultTimeZone,
-                            JobConfiguration = "{\"ConnectionString\":\"\",\"ProcedureName\":\"TBD\",\"TimeoutSeconds\":300}",
-                            CreatedAt = DateTime.UtcNow,
-                            CreatedBy = "ScheduleSync",
-                            IsDeleted = false
-                        };
+                            errors++;
+                            continue;
+                        }
 
-                        await _dbContext.Schedules.AddAsync(newSchedule);
-                        created++;
+                        string vendorName = group.VendorName?.Trim() ?? $"Vendor{group.ExternalVendorId}";
+                        string accountTrimmed = group.AccountNumber.Trim();
+                        string scheduleName = $"{vendorName}_{accountTrimmed}";
 
-                        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Created schedule: {scheduleName}");
+                        string cronExpression = CronExpressionGenerator.GenerateFromFrequency(
+                            (ScheduleFrequency)group.ScheduleFrequency,
+                            group.EarliestDate);
+
+                        DateTime? nextRunTime = CalculateNextRunTime(cronExpression, _defaultTimeZone);
+
+                        if (scheduleMap.TryGetValue((clientInfo.ClientId, scheduleName), out var existingSchedule))
+                        {
+                            bool cronChanged = existingSchedule.CronExpression != cronExpression;
+                            bool frequencyChanged = existingSchedule.Frequency != (ScheduleFrequency)group.ScheduleFrequency;
+                            bool nextRunChanged = existingSchedule.NextRunTime != nextRunTime;
+
+                            if (cronChanged || frequencyChanged || nextRunChanged)
+                            {
+                                var scheduleToUpdate = await _dbContext.Schedules.FindAsync(existingSchedule.Id);
+                                if (scheduleToUpdate != null)
+                                {
+                                    scheduleToUpdate.CronExpression = cronExpression;
+                                    scheduleToUpdate.NextRunTime = nextRunTime;
+                                    scheduleToUpdate.Frequency = (ScheduleFrequency)group.ScheduleFrequency;
+                                    scheduleToUpdate.UpdatedAt = DateTime.UtcNow;
+                                    scheduleToUpdate.UpdatedBy = "ScheduleSync";
+                                    updated++;
+                                }
+                            }
+                            else
+                            {
+                                unchanged++;
+                            }
+                        }
+                        else
+                        {
+                            var newSchedule = new Schedule
+                            {
+                                Name = scheduleName,
+                                Description = $"Auto-synced schedule for {vendorName} - Account {accountTrimmed} ({group.RecordCount} records)",
+                                ClientId = clientInfo.ClientId,
+                                JobType = JobType.StoredProcedure,
+                                Frequency = (ScheduleFrequency)group.ScheduleFrequency,
+                                CronExpression = cronExpression,
+                                NextRunTime = nextRunTime,
+                                IsEnabled = true,
+                                MaxRetries = 3,
+                                RetryDelayMinutes = 5,
+                                TimeZone = _defaultTimeZone,
+                                JobConfiguration = "{\"ConnectionString\":\"\",\"ProcedureName\":\"TBD\",\"TimeoutSeconds\":300}",
+                                CreatedAt = DateTime.UtcNow,
+                                CreatedBy = "ScheduleSync",
+                                IsDeleted = false
+                            };
+
+                            await _dbContext.Schedules.AddAsync(newSchedule);
+                            created++;
+                        }
+
+                        processed++;
                     }
-
-                    if ((created + updated) % _batchSize == 0)
+                    catch (Exception ex)
                     {
-                        await _dbContext.SaveChangesAsync();
-                        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Saved batch (Total: {created + updated})");
+                        errors++;
+                        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Error processing group (Client: {group.ExternalClientId}, Vendor: {group.ExternalVendorId}, Account: {group.AccountNumber}): {ex.Message}");
                     }
                 }
-                catch (Exception ex)
+
+                await _dbContext.SaveChangesAsync();
+                
+                var elapsedTime = DateTime.UtcNow - result.StartTime;
+                var groupsRemaining = totalGroups - processed;
+                
+                if (elapsedTime.TotalSeconds > 0 && processed > 0)
                 {
-                    errors++;
-                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Error processing group (Client: {group.ExternalClientId}, Vendor: {group.ExternalVendorId}, Account: {group.AccountNumber}): {ex.Message}");
+                    var groupsPerSecond = processed / elapsedTime.TotalSeconds;
+                    var estimatedSecondsRemaining = groupsRemaining / groupsPerSecond;
+                    var estimatedTimeRemaining = TimeSpan.FromSeconds(estimatedSecondsRemaining);
+                    
+                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Progress: {processed:N0}/{totalGroups:N0} ({(processed * 100.0 / totalGroups):F1}%) | Created: {created:N0}, Updated: {updated:N0}, Unchanged: {unchanged:N0}, Errors: {errors:N0}");
+                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}]   Rate: {groupsPerSecond:F1} groups/s | Elapsed: {FormatTimeSpan(elapsedTime)} | ETA: {FormatTimeSpan(estimatedTimeRemaining)}");
                 }
             }
 
-            await _dbContext.SaveChangesAsync();
-
             result.Created = created;
             result.Updated = updated;
+            result.Unchanged = unchanged;
             result.Errors = errors;
             result.EndTime = DateTime.UtcNow;
             result.Success = errors == 0;
 
-            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Schedule generation completed");
-            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Schedules created: {created}");
-            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Schedules updated: {updated}");
-            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Errors: {errors}");
+            var totalDuration = result.EndTime - result.StartTime;
+            
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}]");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] ========================================");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] SCHEDULE GENERATION SUMMARY");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] ========================================");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Total groups processed: {processed:N0}");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Schedules created: {created:N0}");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Schedules updated: {updated:N0}");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Schedules unchanged: {unchanged:N0}");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Errors: {errors:N0}");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Duration: {FormatTimeSpan(totalDuration)}");
+            if (totalDuration.TotalSeconds > 0)
+            {
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Average rate: {processed / totalDuration.TotalSeconds:F1} groups/sec");
+            }
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] ========================================");
 
             return result;
         }
@@ -171,6 +239,22 @@ public class ScheduleGenerationService
             return null;
         }
     }
+    
+    private static string FormatTimeSpan(TimeSpan ts)
+    {
+        if (ts.TotalHours >= 1)
+        {
+            return $"{ts.Hours}h {ts.Minutes}m {ts.Seconds}s";
+        }
+        else if (ts.TotalMinutes >= 1)
+        {
+            return $"{ts.Minutes}m {ts.Seconds}s";
+        }
+        else
+        {
+            return $"{ts.Seconds}s";
+        }
+    }
 }
 
 public class ScheduleGenerationResult
@@ -180,6 +264,7 @@ public class ScheduleGenerationResult
     public bool Success { get; set; }
     public int Created { get; set; }
     public int Updated { get; set; }
+    public int Unchanged { get; set; }
     public int Errors { get; set; }
     public string? ErrorMessage { get; set; }
 }
