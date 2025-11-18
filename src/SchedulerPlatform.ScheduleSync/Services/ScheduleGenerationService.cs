@@ -108,7 +108,7 @@ public class ScheduleGenerationService
                         string accountTrimmed = group.AccountNumber.Trim();
                         string scheduleName = $"{vendorName}_{accountTrimmed}";
 
-                        string stableKey = $"{group.ExternalClientId}|{group.ExternalVendorId}|{accountTrimmed}";
+                        string stableKey = $"{clientInfo.ClientId}|{scheduleName}";
                         string cronExpression = CronExpressionGenerator.GenerateFromFrequency(
                             (ScheduleFrequency)group.ScheduleFrequency,
                             stableKey,
