@@ -233,14 +233,13 @@ public class ScheduleGenerationService
     {
         try
         {
-            var trigger = TriggerBuilder.Create()
-                .WithCronSchedule(cronExpression, x => x.InTimeZone(TimeZoneInfo.FindSystemTimeZoneById(timeZone)))
-                .Build();
-            return trigger.GetNextFireTimeUtc()?.DateTime;
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(timeZone);
+            var cron = new CronExpression(cronExpression) { TimeZone = tz };
+            return cron.GetNextValidTimeAfter(DateTimeOffset.UtcNow)?.UtcDateTime;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Warning: Could not calculate NextRunTime for CRON {cronExpression}: {ex.Message}");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Warning: Could not calculate NextRunTime for CRON '{cronExpression}' with TimeZone '{timeZone}': {ex.Message}");
             return null;
         }
     }
