@@ -73,8 +73,7 @@ public class ScheduleRepository : Repository<Schedule>, IScheduleRepository
         string? searchTerm = null)
     {
         var query = _dbSet
-            .Include(s => s.Client)
-            .Include(s => s.JobParameters)
+            .AsNoTracking()
             .Where(s => !s.IsDeleted);
         
         if (clientId.HasValue)
@@ -91,19 +90,26 @@ public class ScheduleRepository : Repository<Schedule>, IScheduleRepository
         
         var items = await query
             .OrderBy(s => s.Name)
+            .ThenBy(s => s.Id)
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
             .Select(s => new
             {
                 Schedule = s,
+                ClientName = s.Client != null ? s.Client.ClientName : null,
                 LastExecution = s.JobExecutions
                     .OrderByDescending(e => e.StartTime)
+                    .Select(e => new { e.Status, e.StartTime })
                     .FirstOrDefault()
             })
             .ToListAsync();
         
         var schedules = items.Select(i =>
         {
+            if (i.Schedule.Client == null && i.ClientName != null)
+            {
+                i.Schedule.Client = new Client { ClientName = i.ClientName };
+            }
             i.Schedule.LastRunStatus = i.LastExecution?.Status;
             return i.Schedule;
         }).ToList();
