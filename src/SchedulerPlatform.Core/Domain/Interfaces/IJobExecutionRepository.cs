@@ -5,7 +5,7 @@ namespace SchedulerPlatform.Core.Domain.Interfaces;
 
 public interface IJobExecutionRepository : IRepository<JobExecution>
 {
-    Task<JobExecution?> GetByIdAsync(long id);
+    Task<JobExecution?> GetByIdAsync(int id);
     Task<IEnumerable<JobExecution>> GetByScheduleIdAsync(int scheduleId);
     Task<IEnumerable<JobExecution>> GetByStatusAsync(JobStatus status);
     Task<IEnumerable<JobExecution>> GetFailedExecutionsAsync(int scheduleId);
