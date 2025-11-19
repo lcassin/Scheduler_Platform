@@ -17,4 +17,8 @@ public interface IScheduleRepository : IRepository<Schedule>
         string? searchTerm = null);
     Task<IEnumerable<Schedule>> GetAllWithNotificationSettingsAsync();
     Task<IEnumerable<Schedule>> GetByClientIdWithNotificationSettingsAsync(int clientId);
+    
+    Task<int> GetTotalSchedulesCountAsync(int? clientId);
+    Task<int> GetEnabledSchedulesCountAsync(int? clientId);
+    Task<int> GetDisabledSchedulesCountAsync(int? clientId);
 }

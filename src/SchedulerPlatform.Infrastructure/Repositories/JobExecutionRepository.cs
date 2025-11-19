@@ -279,33 +279,28 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
             query = query.Where(e => statuses.Contains(e.Status));
         }
 
-        var rows = await query
-            .Select(e => new
+        var trends = await query
+            .GroupBy(e => new
             {
                 Year = e.StartTime.Year,
                 Month = e.StartTime.Month,
                 Day = e.StartTime.Day,
-                Hour = e.StartTime.Hour,
-                Duration = e.DurationSeconds,
-                Status = e.Status
+                Hour = e.StartTime.Hour
             })
+            .Select(g => new
+            {
+                g.Key.Year,
+                g.Key.Month,
+                g.Key.Day,
+                g.Key.Hour,
+                ExecutionCount = g.Count(),
+                AvgDuration = g.Where(e => e.DurationSeconds.HasValue).Average(e => (double?)e.DurationSeconds) ?? 0,
+                ConcurrentCount = g.Count(e => e.Status == JobStatus.Running || e.Status == JobStatus.Retrying)
+            })
+            .OrderBy(x => x.Year).ThenBy(x => x.Month).ThenBy(x => x.Day).ThenBy(x => x.Hour)
             .ToListAsync();
 
-        var trends = rows
-            .GroupBy(e => new { e.Year, e.Month, e.Day, e.Hour })
-            .Select(g => (
-                Year: g.Key.Year,
-                Month: g.Key.Month,
-                Day: g.Key.Day,
-                Hour: g.Key.Hour,
-                ExecutionCount: g.Count(),
-                AvgDuration: g.Where(x => x.Duration.HasValue).Average(x => (double?)x.Duration) ?? 0,
-                ConcurrentCount: g.Count(x => x.Status == JobStatus.Running || x.Status == JobStatus.Retrying)
-            ))
-            .OrderBy(x => x.Year).ThenBy(x => x.Month).ThenBy(x => x.Day).ThenBy(x => x.Hour)
-            .ToList();
-
-        return trends;
+        return trends.Select(t => (t.Year, t.Month, t.Day, t.Hour, t.ExecutionCount, t.AvgDuration, t.ConcurrentCount)).ToList();
     }
 
     public async Task<List<(string ScheduleName, int DurationSeconds, DateTime StartTime, DateTime? EndTime)>> GetTopLongestAsync(
