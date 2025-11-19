@@ -851,4 +851,43 @@ public class SchedulesController : ControllerBase
     {
         return await TriggerSchedule(id);
     }
+
+    [HttpGet("calendar")]
+    public async Task<ActionResult<IEnumerable<object>>> GetSchedulesForCalendar(
+        [FromQuery] DateTime? startDate = null,
+        [FromQuery] DateTime? endDate = null,
+        [FromQuery] int? clientId = null,
+        [FromQuery] int maxPerDay = 10)
+    {
+        try
+        {
+            if (!startDate.HasValue || !endDate.HasValue)
+            {
+                return BadRequest("startDate and endDate are required for calendar view");
+            }
+
+            var schedules = await _unitOfWork.Schedules.GetSchedulesForCalendarAsync(
+                startDate.Value.ToUniversalTime(),
+                endDate.Value.ToUniversalTime(),
+                clientId,
+                maxPerDay);
+
+            var result = schedules.Select(s => new
+            {
+                s.Id,
+                s.Name,
+                s.ClientId,
+                s.NextRunTime,
+                s.TimeZone,
+                s.IsEnabled
+            });
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving schedules for calendar");
+            return StatusCode(500, "An error occurred while retrieving schedules for calendar");
+        }
+    }
 }

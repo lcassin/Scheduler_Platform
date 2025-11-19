@@ -21,4 +21,5 @@ public interface IScheduleRepository : IRepository<Schedule>
     Task<int> GetTotalSchedulesCountAsync(int? clientId);
     Task<int> GetEnabledSchedulesCountAsync(int? clientId);
     Task<int> GetDisabledSchedulesCountAsync(int? clientId);
+    Task<IEnumerable<Schedule>> GetSchedulesForCalendarAsync(DateTime startUtc, DateTime endUtc, int? clientId, int maxPerDay = 10);
 }
