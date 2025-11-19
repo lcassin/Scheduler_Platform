@@ -41,14 +41,14 @@ public class DashboardController : ControllerBase
             var enabledSchedules = schedulesQuery.Count(s => s.IsEnabled);
             var disabledSchedules = schedulesQuery.Count(s => !s.IsEnabled);
 
-            var executionsQuery = await _unitOfWork.JobExecutions.FindAsync(e => e.StartTime >= startDate);
+            var executions = await _unitOfWork.JobExecutions.GetByFiltersAsync(null, null, startDate, null);
             
             if (clientId.HasValue)
             {
-                executionsQuery = executionsQuery.Where(e => e.Schedule.ClientId == clientId.Value);
+                executions = executions.Where(e => e.Schedule?.ClientId == clientId.Value);
             }
 
-            var executionsList = executionsQuery.ToList();
+            var executionsList = executions.ToList();
             
             var runningExecutions = executionsList.Count(e => e.Status == JobStatus.Running || e.Status == JobStatus.Retrying);
             var completedToday = executionsList.Count(e => e.StartTime >= today && e.Status == JobStatus.Completed);
@@ -89,14 +89,14 @@ public class DashboardController : ControllerBase
         {
             var startDate = DateTime.UtcNow.AddHours(-hours);
             
-            var executionsQuery = await _unitOfWork.JobExecutions.FindAsync(e => e.StartTime >= startDate);
+            var executions = await _unitOfWork.JobExecutions.GetByFiltersAsync(null, null, startDate, null);
 
             if (clientId.HasValue)
             {
-                executionsQuery = executionsQuery.Where(e => e.Schedule.ClientId == clientId.Value);
+                executions = executions.Where(e => e.Schedule?.ClientId == clientId.Value);
             }
 
-            var executionsList = executionsQuery.ToList();
+            var executionsList = executions.ToList();
             var totalCount = executionsList.Count;
 
             var breakdown = executionsList
@@ -129,19 +129,19 @@ public class DashboardController : ControllerBase
         {
             var startDate = DateTime.UtcNow.AddHours(-hours);
             
-            var executionsQuery = await _unitOfWork.JobExecutions.FindAsync(e => e.StartTime >= startDate);
+            var executions = await _unitOfWork.JobExecutions.GetByFiltersAsync(null, null, startDate, null);
 
             if (statuses != null && statuses.Length > 0)
             {
-                executionsQuery = executionsQuery.Where(e => statuses.Contains(e.Status));
+                executions = executions.Where(e => statuses.Contains(e.Status));
             }
 
             if (clientId.HasValue)
             {
-                executionsQuery = executionsQuery.Where(e => e.Schedule.ClientId == clientId.Value);
+                executions = executions.Where(e => e.Schedule?.ClientId == clientId.Value);
             }
 
-            var executionsList = executionsQuery.ToList();
+            var executionsList = executions.ToList();
             var trends = executionsList
                 .GroupBy(e => new DateTime(e.StartTime.Year, e.StartTime.Month, e.StartTime.Day, e.StartTime.Hour, 0, 0))
                 .Select(g => new ExecutionTrendItem
@@ -173,25 +173,26 @@ public class DashboardController : ControllerBase
         try
         {
             var startDate = DateTime.UtcNow.AddHours(-hours);
-            var executionsQuery = await _unitOfWork.JobExecutions.FindAsync(e => 
-                e.StartTime >= startDate && e.DurationSeconds.HasValue);
+            
+            var executions = await _unitOfWork.JobExecutions.GetByFiltersAsync(null, null, startDate, null);
 
             if (statuses != null && statuses.Length > 0)
             {
-                executionsQuery = executionsQuery.Where(e => statuses.Contains(e.Status));
+                executions = executions.Where(e => statuses.Contains(e.Status));
             }
 
             if (clientId.HasValue)
             {
-                executionsQuery = executionsQuery.Where(e => e.Schedule.ClientId == clientId.Value);
+                executions = executions.Where(e => e.Schedule?.ClientId == clientId.Value);
             }
 
-            var topLongest = executionsQuery
+            var topLongest = executions
+                .Where(e => e.DurationSeconds.HasValue)
                 .OrderByDescending(e => e.DurationSeconds)
                 .Take(limit)
                 .Select(e => new TopLongestExecutionItem
                 {
-                    ScheduleName = e.Schedule.Name ?? "Unknown",
+                    ScheduleName = e.Schedule?.Name ?? "Unknown",
                     DurationSeconds = e.DurationSeconds!.Value,
                     StartTime = e.StartTime,
                     EndTime = e.EndTime
