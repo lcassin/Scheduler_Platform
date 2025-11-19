@@ -12,7 +12,7 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
     {
     }
 
-    public async Task<JobExecution?> GetByIdAsync(long id)
+    public async Task<JobExecution?> GetByIdAsync(int id)
     {
         var execution = await _dbSet
             .Include(je => je.Schedule)
