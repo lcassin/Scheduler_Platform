@@ -2,7 +2,16 @@ namespace SchedulerPlatform.API.Configuration;
 
 public class SchedulerSettings
 {
+    public ScheduleHydrationSettings Hydration { get; set; } = new();
     public MissedScheduleHandlingSettings MissedScheduleHandling { get; set; } = new();
+}
+
+public class ScheduleHydrationSettings
+{
+    public bool Enabled { get; set; } = true;
+    public int HorizonHours { get; set; } = 24;
+    public int BatchSize { get; set; } = 10000;
+    public int DelaySeconds { get; set; } = 7;
 }
 
 public class MissedScheduleHandlingSettings
