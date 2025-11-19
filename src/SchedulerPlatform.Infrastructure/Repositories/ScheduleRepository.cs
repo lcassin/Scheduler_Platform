@@ -171,4 +171,35 @@ public class ScheduleRepository : Repository<Schedule>, IScheduleRepository
 
         return await query.CountAsync();
     }
+
+    public async Task<IEnumerable<Schedule>> GetSchedulesForCalendarAsync(DateTime startUtc, DateTime endUtc, int? clientId, int maxPerDay = 10)
+    {
+        var query = _dbSet.AsNoTracking()
+            .Where(s => !s.IsDeleted 
+                && s.NextRunTime.HasValue 
+                && s.NextRunTime.Value >= startUtc 
+                && s.NextRunTime.Value <= endUtc);
+
+        if (clientId.HasValue)
+        {
+            query = query.Where(s => s.ClientId == clientId.Value);
+        }
+
+        var schedules = await query
+            .OrderBy(s => s.NextRunTime)
+            .ThenBy(s => s.Id)
+            .Select(s => new
+            {
+                Schedule = s,
+                DayDate = s.NextRunTime.Value.Date
+            })
+            .ToListAsync();
+
+        var groupedByDay = schedules
+            .GroupBy(x => x.DayDate)
+            .SelectMany(g => g.Take(maxPerDay).Select(x => x.Schedule))
+            .ToList();
+
+        return groupedByDay;
+    }
 }
