@@ -29,46 +29,39 @@ public class SyncService
         try
         {
             var uniqueClients = accounts
-                .GroupBy(a => a.ClientId)
+                .GroupBy(a => a.ClientName)
                 .Select(g => g.First())
                 .ToList();
 
             Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Found {uniqueClients.Count} unique clients in API data");
 
-            var externalClientIds = uniqueClients.Select(c => (int)c.ClientId).ToList();
+            var clientNames = uniqueClients.Select(c => c.ClientName).Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
             
             var existing = await _dbContext.Clients
-                .Where(c => externalClientIds.Contains(c.ExternalClientId))
-                .ToDictionaryAsync(c => c.ExternalClientId);
+                .Where(c => clientNames.Contains(c.ClientName))
+                .ToDictionaryAsync(c => c.ClientName);
 
             foreach (var clientData in uniqueClients)
             {
-                var externalClientId = (int)clientData.ClientId;
+                var clientName = clientData.ClientName;
                 
-                if (existing.TryGetValue(externalClientId, out var existingClient))
+                if (string.IsNullOrWhiteSpace(clientName))
                 {
-                    var nameChanged = existingClient.ClientName != clientData.ClientName;
+                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Warning: Skipping client with null/empty name");
+                    continue;
+                }
+                
+                if (existing.TryGetValue(clientName, out var existingClient))
+                {
                     var wasDeleted = existingClient.IsDeleted;
-                    var needsClientCode = string.IsNullOrEmpty(existingClient.ClientCode);
 
-                    if (nameChanged || wasDeleted || needsClientCode)
+                    if (wasDeleted)
                     {
-                        existingClient.ClientName = clientData.ClientName ?? $"Client {externalClientId}";
+                        existingClient.IsDeleted = false;
                         existingClient.UpdatedAt = DateTime.UtcNow;
                         existingClient.UpdatedBy = "ApiSync";
                         existingClient.LastSyncedAt = syncRunStart;
-
-                        if (needsClientCode)
-                        {
-                            existingClient.ClientCode = externalClientId.ToString();
-                        }
-
-                        if (wasDeleted)
-                        {
-                            existingClient.IsDeleted = false;
-                            result.Reactivated++;
-                        }
-
+                        result.Reactivated++;
                         result.Updated++;
                     }
                     else
@@ -80,9 +73,8 @@ public class SyncService
                 {
                     var newClient = new Client
                     {
-                        ExternalClientId = externalClientId,
-                        ClientCode = externalClientId.ToString(),
-                        ClientName = clientData.ClientName ?? $"Client {externalClientId}",
+                        ClientName = clientName,
+                        ClientCode = clientName.Length > 50 ? clientName.Substring(0, 50) : clientName,
                         IsActive = true,
                         CreatedAt = DateTime.UtcNow,
                         CreatedBy = "ApiSync",
@@ -153,7 +145,7 @@ public class SyncService
 
             try
             {
-                var uniqueClientsDict = new Dictionary<int, (string? ClientName, DateTime? LastSyncedAt)>();
+                var uniqueClientsDict = new Dictionary<string, DateTime?>();
                 const int pageSize = 100000;
                 int lastId = 0;
                 int totalScanned = 0;
@@ -169,7 +161,6 @@ public class SyncService
                         .Select(s => new
                         {
                             s.Id,
-                            s.ExternalClientId,
                             s.ClientName,
                             s.LastSyncedAt
                         })
@@ -181,18 +172,19 @@ public class SyncService
 
                     foreach (var row in page)
                     {
-                        if (uniqueClientsDict.TryGetValue(row.ExternalClientId, out var existing))
+                        if (string.IsNullOrWhiteSpace(row.ClientName))
+                            continue;
+
+                        if (uniqueClientsDict.TryGetValue(row.ClientName, out var existing))
                         {
-                            if (!string.IsNullOrWhiteSpace(row.ClientName) &&
-                                (string.IsNullOrWhiteSpace(existing.ClientName) ||
-                                 (row.LastSyncedAt ?? DateTime.MinValue) > (existing.LastSyncedAt ?? DateTime.MinValue)))
+                            if ((row.LastSyncedAt ?? DateTime.MinValue) > (existing ?? DateTime.MinValue))
                             {
-                                uniqueClientsDict[row.ExternalClientId] = (row.ClientName, row.LastSyncedAt);
+                                uniqueClientsDict[row.ClientName] = row.LastSyncedAt;
                             }
                         }
                         else
                         {
-                            uniqueClientsDict[row.ExternalClientId] = (row.ClientName, row.LastSyncedAt);
+                            uniqueClientsDict[row.ClientName] = row.LastSyncedAt;
                         }
                     }
 
@@ -207,27 +199,27 @@ public class SyncService
 
                 Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Scanned {totalScanned:N0} total rows, found {uniqueClientsDict.Count:N0} unique clients");
 
-                var externalClientIds = uniqueClientsDict.Keys.ToList();
-                var existingClients = new Dictionary<int, Client>();
+                var clientNames = uniqueClientsDict.Keys.ToList();
+                var existingClients = new Dictionary<string, Client>();
                 const int chunkSize = 2000;
 
                 Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Fetching existing clients in chunks of {chunkSize:N0}...");
 
-                for (int i = 0; i < externalClientIds.Count; i += chunkSize)
+                for (int i = 0; i < clientNames.Count; i += chunkSize)
                 {
-                    var chunk = externalClientIds.Skip(i).Take(chunkSize).ToList();
+                    var chunk = clientNames.Skip(i).Take(chunkSize).ToList();
                     var chunkClients = await _dbContext.Clients
-                        .Where(c => chunk.Contains(c.ExternalClientId))
+                        .Where(c => chunk.Contains(c.ClientName))
                         .ToListAsync();
 
                     foreach (var client in chunkClients)
                     {
-                        existingClients[client.ExternalClientId] = client;
+                        existingClients[client.ClientName] = client;
                     }
 
                     if ((i + chunkSize) % 10000 == 0)
                     {
-                        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Fetched {Math.Min(i + chunkSize, externalClientIds.Count):N0} / {externalClientIds.Count:N0} client records...");
+                        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Fetched {Math.Min(i + chunkSize, clientNames.Count):N0} / {clientNames.Count:N0} client records...");
                     }
                 }
 
@@ -235,33 +227,19 @@ public class SyncService
 
                 foreach (var kvp in uniqueClientsDict)
                 {
-                    var externalClientId = kvp.Key;
-                    var clientName = kvp.Value.ClientName;
+                    var clientName = kvp.Key;
 
-                    if (existingClients.TryGetValue(externalClientId, out var existingClient))
+                    if (existingClients.TryGetValue(clientName, out var existingClient))
                     {
-                        var nameChanged = existingClient.ClientName != clientName;
                         var wasDeleted = existingClient.IsDeleted;
-                        var needsClientCode = string.IsNullOrEmpty(existingClient.ClientCode);
 
-                        if (nameChanged || wasDeleted || needsClientCode)
+                        if (wasDeleted)
                         {
-                            existingClient.ClientName = clientName ?? $"Client {externalClientId}";
+                            existingClient.IsDeleted = false;
                             existingClient.UpdatedAt = DateTime.UtcNow;
                             existingClient.UpdatedBy = "ApiSync";
                             existingClient.LastSyncedAt = runStart;
-
-                            if (needsClientCode)
-                            {
-                                existingClient.ClientCode = externalClientId.ToString();
-                            }
-
-                            if (wasDeleted)
-                            {
-                                existingClient.IsDeleted = false;
-                                result.Reactivated++;
-                            }
-
+                            result.Reactivated++;
                             result.Updated++;
                         }
                         else
@@ -273,9 +251,8 @@ public class SyncService
                     {
                         var newClient = new Client
                         {
-                            ExternalClientId = externalClientId,
-                            ClientCode = externalClientId.ToString(),
-                            ClientName = clientName ?? $"Client {externalClientId}",
+                            ClientName = clientName,
+                            ClientCode = clientName.Length > 50 ? clientName.Substring(0, 50) : clientName,
                             IsActive = true,
                             CreatedAt = DateTime.UtcNow,
                             CreatedBy = "ApiSync",
