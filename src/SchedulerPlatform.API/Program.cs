@@ -145,6 +145,8 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.Configure<SchedulerSettings>(builder.Configuration.GetSection("SchedulerSettings"));
 
+builder.Services.AddSingleton(new SchedulerPlatform.API.Configuration.AppLifetimeInfo { StartUtc = DateTime.UtcNow });
+
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
 builder.Services.AddScoped<IJobExecutionRepository, JobExecutionRepository>();
