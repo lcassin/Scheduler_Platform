@@ -31,10 +31,10 @@ public class ScheduleGenerationService
         {
             var syncGroups = await _dbContext.ScheduleSyncSources
                 .Where(s => !s.IsDeleted && s.LastSyncedAt >= syncRunStart)
-                .GroupBy(s => new { s.ExternalClientId, s.ExternalVendorId, s.VendorName, s.AccountNumber, s.ScheduleFrequency })
+                .GroupBy(s => new { s.ClientName, s.ExternalVendorId, s.VendorName, s.AccountNumber, s.ScheduleFrequency })
                 .Select(g => new
                 {
-                    g.Key.ExternalClientId,
+                    g.Key.ClientName,
                     g.Key.ExternalVendorId,
                     g.Key.VendorName,
                     g.Key.AccountNumber,
@@ -47,21 +47,25 @@ public class ScheduleGenerationService
             Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Found {syncGroups.Count:N0} unique schedule groups to process");
 
             Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Preloading clients into memory...");
-            var uniqueExternalClientIds = syncGroups.Select(g => g.ExternalClientId).Distinct().ToList();
-            var clientMap = new Dictionary<int, (int ClientId, string ClientName)>();
+            var uniqueClientNames = syncGroups
+                .Select(g => g.ClientName?.Trim())
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Distinct()
+                .ToList();
+            var clientMap = new Dictionary<string, (int ClientId, string ClientName)>();
             
             const int clientChunkSize = 2000;
-            for (int i = 0; i < uniqueExternalClientIds.Count; i += clientChunkSize)
+            for (int i = 0; i < uniqueClientNames.Count; i += clientChunkSize)
             {
-                var chunk = uniqueExternalClientIds.Skip(i).Take(clientChunkSize).ToList();
+                var chunk = uniqueClientNames.Skip(i).Take(clientChunkSize).ToList();
                 var clients = await _dbContext.Clients
-                    .Where(c => chunk.Contains(c.ExternalClientId))
-                    .Select(c => new { c.ExternalClientId, c.Id, c.ClientName })
+                    .Where(c => chunk.Contains(c.ClientName))
+                    .Select(c => new { c.Id, c.ClientName })
                     .ToListAsync();
                 
                 foreach (var client in clients)
                 {
-                    clientMap[client.ExternalClientId] = (client.Id, client.ClientName);
+                    clientMap[client.ClientName] = (client.Id, client.ClientName);
                 }
             }
             Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Loaded {clientMap.Count:N0} clients into memory");
@@ -79,10 +83,14 @@ public class ScheduleGenerationService
             {
                 var chunk = syncGroups.Skip(chunkStart).Take(chunkSize).ToList();
                 
-                var clientIdsInChunk = chunk
-                    .Where(g => clientMap.ContainsKey(g.ExternalClientId))
-                    .Select(g => clientMap[g.ExternalClientId].ClientId)
+                var clientNamesInChunk = chunk
+                    .Select(g => g.ClientName)
+                    .Where(n => !string.IsNullOrWhiteSpace(n) && clientMap.ContainsKey(n))
                     .Distinct()
+                    .ToList();
+                
+                var clientIdsInChunk = clientNamesInChunk
+                    .Select(n => clientMap[n].ClientId)
                     .ToList();
                 
                 var existingSchedules = await _dbContext.Schedules
@@ -98,9 +106,10 @@ public class ScheduleGenerationService
                 {
                     try
                     {
-                        if (!clientMap.TryGetValue(group.ExternalClientId, out var clientInfo))
+                        if (string.IsNullOrWhiteSpace(group.ClientName) || !clientMap.TryGetValue(group.ClientName, out var clientInfo))
                         {
                             errors++;
+                            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Warning: Client not found for ClientName '{group.ClientName}'");
                             continue;
                         }
 
@@ -172,7 +181,7 @@ public class ScheduleGenerationService
                     catch (Exception ex)
                     {
                         errors++;
-                        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Error processing group (Client: {group.ExternalClientId}, Vendor: {group.ExternalVendorId}, Account: {group.AccountNumber}): {ex.Message}");
+                        Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Error processing group (Client: {group.ClientName}, Vendor: {group.ExternalVendorId}, Account: {group.AccountNumber}): {ex.Message}");
                     }
                 }
 
@@ -233,14 +242,13 @@ public class ScheduleGenerationService
     {
         try
         {
-            var trigger = TriggerBuilder.Create()
-                .WithCronSchedule(cronExpression, x => x.InTimeZone(TimeZoneInfo.FindSystemTimeZoneById(timeZone)))
-                .Build();
-            return trigger.GetNextFireTimeUtc()?.DateTime;
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(timeZone);
+            var cron = new CronExpression(cronExpression) { TimeZone = tz };
+            return cron.GetNextValidTimeAfter(DateTimeOffset.UtcNow)?.UtcDateTime;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Warning: Could not calculate NextRunTime for CRON {cronExpression}: {ex.Message}");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Warning: Could not calculate NextRunTime for CRON '{cronExpression}' with TimeZone '{timeZone}': {ex.Message}");
             return null;
         }
     }

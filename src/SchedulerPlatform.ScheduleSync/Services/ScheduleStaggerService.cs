@@ -64,7 +64,8 @@ public class ScheduleStaggerService
                         s.Name,
                         s.Frequency,
                         s.TimeZone,
-                        s.CronExpression
+                        s.CronExpression,
+                        s.NextRunTime
                     })
                     .ToListAsync();
 
@@ -84,14 +85,22 @@ public class ScheduleStaggerService
                             startHour,
                             endHour);
 
-                        if (newCronExpression != schedule.CronExpression)
+                        bool cronChanged = newCronExpression != schedule.CronExpression;
+                        bool needsNextRunTime = schedule.NextRunTime == null;
+
+                        if (cronChanged || needsNextRunTime)
                         {
-                            DateTime? newNextRunTime = CalculateNextRunTime(newCronExpression, schedule.TimeZone);
+                            DateTime? newNextRunTime = CalculateNextRunTime(
+                                cronChanged ? newCronExpression : schedule.CronExpression, 
+                                schedule.TimeZone);
 
                             var scheduleToUpdate = await _dbContext.Schedules.FindAsync(schedule.Id);
                             if (scheduleToUpdate != null)
                             {
-                                scheduleToUpdate.CronExpression = newCronExpression;
+                                if (cronChanged)
+                                {
+                                    scheduleToUpdate.CronExpression = newCronExpression;
+                                }
                                 scheduleToUpdate.NextRunTime = newNextRunTime;
                                 scheduleToUpdate.UpdatedAt = DateTime.UtcNow;
                                 scheduleToUpdate.UpdatedBy = "ScheduleSync";
@@ -173,14 +182,13 @@ public class ScheduleStaggerService
     {
         try
         {
-            var trigger = TriggerBuilder.Create()
-                .WithCronSchedule(cronExpression, x => x.InTimeZone(TimeZoneInfo.FindSystemTimeZoneById(timeZone)))
-                .Build();
-            return trigger.GetNextFireTimeUtc()?.DateTime;
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(timeZone);
+            var cron = new CronExpression(cronExpression) { TimeZone = tz };
+            return cron.GetNextValidTimeAfter(DateTimeOffset.UtcNow)?.UtcDateTime;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Warning: Could not calculate NextRunTime for CRON {cronExpression}: {ex.Message}");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Warning: Could not calculate NextRunTime for CRON '{cronExpression}' with TimeZone '{timeZone}': {ex.Message}");
             return null;
         }
     }
