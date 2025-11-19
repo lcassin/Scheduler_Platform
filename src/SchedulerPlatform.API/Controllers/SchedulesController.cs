@@ -755,4 +755,100 @@ public class SchedulesController : ControllerBase
             });
         }
     }
+
+    [HttpGet("missed/count")]
+    public async Task<ActionResult<object>> GetMissedSchedulesCount([FromQuery] int? windowDays = null)
+    {
+        try
+        {
+            var now = DateTime.UtcNow;
+            var windowStart = windowDays.HasValue 
+                ? now.AddDays(-windowDays.Value) 
+                : DateTime.MinValue;
+
+            var missedSchedules = await _unitOfWork.Schedules.FindAsync(s =>
+                s.IsEnabled &&
+                !s.IsDeleted &&
+                s.NextRunTime.HasValue &&
+                s.NextRunTime.Value < now &&
+                s.NextRunTime.Value >= windowStart);
+
+            var count = missedSchedules.Count();
+
+            return Ok(new 
+            { 
+                count = count,
+                windowDays = windowDays,
+                asOfUtc = now
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving missed schedules count");
+            return StatusCode(500, "An error occurred while retrieving missed schedules count");
+        }
+    }
+
+    [HttpGet("missed")]
+    public async Task<ActionResult<object>> GetMissedSchedules(
+        [FromQuery] int? windowDays = 2,
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 100)
+    {
+        try
+        {
+            var now = DateTime.UtcNow;
+            var windowStart = windowDays.HasValue 
+                ? now.AddDays(-windowDays.Value) 
+                : DateTime.MinValue;
+
+            var missedSchedules = await _unitOfWork.Schedules.FindAsync(s =>
+                s.IsEnabled &&
+                !s.IsDeleted &&
+                s.NextRunTime.HasValue &&
+                s.NextRunTime.Value < now &&
+                s.NextRunTime.Value >= windowStart);
+
+            var missedList = missedSchedules
+                .OrderBy(s => s.NextRunTime)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(s => new
+                {
+                    s.Id,
+                    s.Name,
+                    s.ClientId,
+                    s.NextRunTime,
+                    s.Frequency,
+                    s.CronExpression,
+                    s.LastRunTime,
+                    MinutesLate = s.NextRunTime.HasValue ? (now - s.NextRunTime.Value).TotalMinutes : 0
+                })
+                .ToList();
+
+            var totalCount = missedSchedules.Count();
+
+            return Ok(new 
+            { 
+                items = missedList,
+                totalCount = totalCount,
+                pageNumber = pageNumber,
+                pageSize = pageSize,
+                windowDays = windowDays,
+                asOfUtc = now
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving missed schedules");
+            return StatusCode(500, "An error occurred while retrieving missed schedules");
+        }
+    }
+
+    [HttpPost("missed/{id}/trigger")]
+    [Authorize(Policy = "Schedules.Execute")]
+    public async Task<IActionResult> TriggerMissedSchedule(int id)
+    {
+        return await TriggerSchedule(id);
+    }
 }

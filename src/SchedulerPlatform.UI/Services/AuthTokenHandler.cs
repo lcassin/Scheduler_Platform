@@ -17,14 +17,20 @@ public class AuthTokenHandler : DelegatingHandler
     {
         var httpContext = _httpContextAccessor.HttpContext;
         
-        if (httpContext != null)
+        if (httpContext?.User?.Identity?.IsAuthenticated == true)
         {
-            var accessToken = await httpContext.GetTokenAsync("access_token");
-            
-            if (!string.IsNullOrEmpty(accessToken))
+            try
             {
-                request.Headers.Authorization = 
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+                var accessToken = await httpContext.GetTokenAsync("access_token");
+                
+                if (!string.IsNullOrEmpty(accessToken))
+                {
+                    request.Headers.Authorization = 
+                        new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+                }
+            }
+            catch (Exception)
+            {
             }
         }
 
