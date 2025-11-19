@@ -34,9 +34,9 @@ public class UnitOfWork : IUnitOfWork
         NotificationSettings = new Repository<NotificationSetting>(_context);
     }
 
-    public async Task<int> SaveChangesAsync()
+    public Task<int> SaveChangesAsync()
     {
-        return await _context.SaveChangesAsync();
+        return _context.SaveChangesAsync();
     }
 
     public async Task BeginTransactionAsync()
