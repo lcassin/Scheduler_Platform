@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Quartz;
 using SchedulerPlatform.API.Configuration;
 using SchedulerPlatform.Core.Domain.Interfaces;
+using SchedulerPlatform.Jobs.Services;
 
 namespace SchedulerPlatform.API.Services;
 
@@ -13,39 +14,57 @@ public class MissedSchedulesProcessor : IHostedService
     private readonly ILogger<MissedSchedulesProcessor> _logger;
     private readonly IServiceProvider _serviceProvider;
     private readonly IHostEnvironment _environment;
+    private readonly IHostApplicationLifetime _lifetime;
     private readonly SchedulerSettings _settings;
+    private Task? _processingTask;
+    private CancellationTokenSource? _cts;
 
     public MissedSchedulesProcessor(
         ILogger<MissedSchedulesProcessor> logger,
         IServiceProvider serviceProvider,
         IHostEnvironment environment,
+        IHostApplicationLifetime lifetime,
         IOptions<SchedulerSettings> settings)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
         _environment = environment;
+        _lifetime = lifetime;
         _settings = settings.Value;
     }
 
-    public async Task StartAsync(CancellationToken cancellationToken)
+    public Task StartAsync(CancellationToken cancellationToken)
+    {
+        if (!_settings.MissedScheduleHandling.EnableAutoFire)
+        {
+            _logger.LogInformation("MissedSchedulesProcessor: Auto-fire is disabled in configuration");
+            return Task.CompletedTask;
+        }
+
+        if (_environment.IsDevelopment() && !_settings.MissedScheduleHandling.EnableInDevelopment)
+        {
+            _logger.LogInformation("MissedSchedulesProcessor: Auto-fire is disabled in Development environment");
+            return Task.CompletedTask;
+        }
+
+        _logger.LogInformation("MissedSchedulesProcessor: Service registered, will start after application startup");
+        
+        _lifetime.ApplicationStarted.Register(() =>
+        {
+            _cts = new CancellationTokenSource();
+            _processingTask = Task.Run(() => ProcessMissedSchedulesAsync(_cts.Token), _cts.Token);
+        });
+
+        return Task.CompletedTask;
+    }
+
+    private async Task ProcessMissedSchedulesAsync(CancellationToken cancellationToken)
     {
         try
         {
-            if (!_settings.MissedScheduleHandling.EnableAutoFire)
-            {
-                _logger.LogInformation("MissedSchedulesProcessor: Auto-fire is disabled in configuration");
-                return;
-            }
-
-            if (_environment.IsDevelopment() && !_settings.MissedScheduleHandling.EnableInDevelopment)
-            {
-                _logger.LogInformation("MissedSchedulesProcessor: Auto-fire is disabled in Development environment");
-                return;
-            }
-
             await Task.Delay(TimeSpan.FromSeconds(15), cancellationToken);
 
-            _logger.LogInformation("MissedSchedulesProcessor: Starting missed schedule processing...");
+            _logger.LogInformation("MissedSchedulesProcessor: Starting missed schedule processing in background...");
             _logger.LogInformation("MissedSchedulesProcessor: Window = {WindowDays} days, Throttle = {ThrottlePerSecond}/sec",
                 _settings.MissedScheduleHandling.MissedScheduleWindowDays,
                 _settings.MissedScheduleHandling.ThrottlePerSecond);
@@ -53,6 +72,7 @@ public class MissedSchedulesProcessor : IHostedService
             using var scope = _serviceProvider.CreateScope();
             var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
             var scheduler = scope.ServiceProvider.GetRequiredService<IScheduler>();
+            var schedulerService = scope.ServiceProvider.GetRequiredService<ISchedulerService>();
 
             var windowStart = DateTime.UtcNow.AddDays(-_settings.MissedScheduleHandling.MissedScheduleWindowDays);
             var now = DateTime.UtcNow;
@@ -77,6 +97,7 @@ public class MissedSchedulesProcessor : IHostedService
             }
 
             int triggered = 0;
+            int scheduled = 0;
             int failed = 0;
             var delayBetweenTriggers = TimeSpan.FromMilliseconds(1000.0 / _settings.MissedScheduleHandling.ThrottlePerSecond);
 
@@ -92,28 +113,28 @@ public class MissedSchedulesProcessor : IHostedService
                 {
                     var jobKey = new JobKey($"Job_{schedule.Id}", $"Group_{schedule.ClientId}");
 
-                    if (await scheduler.CheckExists(jobKey, cancellationToken))
+                    if (!await scheduler.CheckExists(jobKey, cancellationToken))
                     {
-                        var jobDataMap = new JobDataMap
-                        {
-                            { "ScheduleId", schedule.Id.ToString() },
-                            { "TriggeredBy", "MissedSchedulesProcessor" }
-                        };
-
-                        await scheduler.TriggerJob(jobKey, jobDataMap, cancellationToken);
-                        triggered++;
-
                         _logger.LogDebug(
-                            "MissedSchedulesProcessor: Triggered missed schedule {ScheduleId} ({ScheduleName}), was due {MinutesLate} minutes ago",
-                            schedule.Id, schedule.Name, (now - schedule.NextRunTime.Value).TotalMinutes);
-                    }
-                    else
-                    {
-                        _logger.LogWarning(
-                            "MissedSchedulesProcessor: Job not found for schedule {ScheduleId} ({ScheduleName})",
+                            "MissedSchedulesProcessor: Job not in Quartz for schedule {ScheduleId} ({ScheduleName}), scheduling it now",
                             schedule.Id, schedule.Name);
-                        failed++;
+                        
+                        await schedulerService.ScheduleJob(schedule);
+                        scheduled++;
                     }
+
+                    var jobDataMap = new JobDataMap
+                    {
+                        { "ScheduleId", schedule.Id.ToString() },
+                        { "TriggeredBy", "MissedSchedulesProcessor" }
+                    };
+
+                    await scheduler.TriggerJob(jobKey, jobDataMap, cancellationToken);
+                    triggered++;
+
+                    _logger.LogDebug(
+                        "MissedSchedulesProcessor: Triggered missed schedule {ScheduleId} ({ScheduleName}), was due {MinutesLate:F1} minutes ago",
+                        schedule.Id, schedule.Name, (now - schedule.NextRunTime.Value).TotalMinutes);
 
                     await Task.Delay(delayBetweenTriggers, cancellationToken);
                 }
@@ -127,8 +148,12 @@ public class MissedSchedulesProcessor : IHostedService
             }
 
             _logger.LogInformation(
-                "MissedSchedulesProcessor: Processing complete. Triggered {TriggeredCount} schedules, {FailedCount} failures",
-                triggered, failed);
+                "MissedSchedulesProcessor: Processing complete. Scheduled {ScheduledCount} jobs, triggered {TriggeredCount} schedules, {FailedCount} failures",
+                scheduled, triggered, failed);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("MissedSchedulesProcessor: Processing cancelled");
         }
         catch (Exception ex)
         {
@@ -136,9 +161,23 @@ public class MissedSchedulesProcessor : IHostedService
         }
     }
 
-    public Task StopAsync(CancellationToken cancellationToken)
+    public async Task StopAsync(CancellationToken cancellationToken)
     {
         _logger.LogInformation("MissedSchedulesProcessor: Stopping");
-        return Task.CompletedTask;
+        
+        _cts?.Cancel();
+        
+        if (_processingTask != null)
+        {
+            try
+            {
+                await _processingTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+        
+        _cts?.Dispose();
     }
 }
