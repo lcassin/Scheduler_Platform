@@ -31,15 +31,9 @@ public class DashboardController : ControllerBase
             var startDate = DateTime.UtcNow.AddHours(-hours);
             var today = DateTime.UtcNow.Date;
             
-            var schedulesQuery = await _unitOfWork.Schedules.FindAsync(s => !s.IsDeleted);
-            if (clientId.HasValue)
-            {
-                schedulesQuery = schedulesQuery.Where(s => s.ClientId == clientId.Value);
-            }
-
-            var totalSchedules = schedulesQuery.Count();
-            var enabledSchedules = schedulesQuery.Count(s => s.IsEnabled);
-            var disabledSchedules = schedulesQuery.Count(s => !s.IsEnabled);
+            var totalSchedules = await _unitOfWork.Schedules.GetTotalSchedulesCountAsync(clientId);
+            var enabledSchedules = await _unitOfWork.Schedules.GetEnabledSchedulesCountAsync(clientId);
+            var disabledSchedules = await _unitOfWork.Schedules.GetDisabledSchedulesCountAsync(clientId);
 
             var runningExecutions = await _unitOfWork.JobExecutions.GetRunningCountAsync(startDate, clientId);
             var completedToday = await _unitOfWork.JobExecutions.GetCompletedTodayCountAsync(today, clientId);

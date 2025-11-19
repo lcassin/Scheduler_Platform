@@ -126,4 +126,43 @@ public class ScheduleRepository : Repository<Schedule>, IScheduleRepository
             .Include(s => s.NotificationSetting)
             .ToListAsync();
     }
+
+    public async Task<int> GetTotalSchedulesCountAsync(int? clientId)
+    {
+        var query = _dbSet.AsNoTracking()
+            .Where(s => !s.IsDeleted);
+
+        if (clientId.HasValue)
+        {
+            query = query.Where(s => s.ClientId == clientId.Value);
+        }
+
+        return await query.CountAsync();
+    }
+
+    public async Task<int> GetEnabledSchedulesCountAsync(int? clientId)
+    {
+        var query = _dbSet.AsNoTracking()
+            .Where(s => !s.IsDeleted && s.IsEnabled);
+
+        if (clientId.HasValue)
+        {
+            query = query.Where(s => s.ClientId == clientId.Value);
+        }
+
+        return await query.CountAsync();
+    }
+
+    public async Task<int> GetDisabledSchedulesCountAsync(int? clientId)
+    {
+        var query = _dbSet.AsNoTracking()
+            .Where(s => !s.IsDeleted && !s.IsEnabled);
+
+        if (clientId.HasValue)
+        {
+            query = query.Where(s => s.ClientId == clientId.Value);
+        }
+
+        return await query.CountAsync();
+    }
 }
