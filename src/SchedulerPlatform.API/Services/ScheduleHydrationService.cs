@@ -51,6 +51,45 @@ public class ScheduleHydrationService : IHostedService
             {
                 try
                 {
+                    if (schedule.NextRunTime == null || schedule.NextRunTime < DateTime.UtcNow)
+                    {
+                        try
+                        {
+                            var cronExpression = new Quartz.CronExpression(schedule.CronExpression);
+                            
+                            if (!string.IsNullOrWhiteSpace(schedule.TimeZone))
+                            {
+                                try
+                                {
+                                    cronExpression.TimeZone = TimeZoneInfo.FindSystemTimeZoneById(schedule.TimeZone);
+                                }
+                                catch (Exception tzEx)
+                                {
+                                    _logger.LogWarning(tzEx, "Invalid time zone {TimeZone} for schedule {ScheduleId}, using UTC", 
+                                        schedule.TimeZone, schedule.Id);
+                                }
+                            }
+                            
+                            var nextOccurrence = cronExpression.GetNextValidTimeAfter(DateTimeOffset.UtcNow);
+                            if (nextOccurrence.HasValue)
+                            {
+                                schedule.NextRunTime = nextOccurrence.Value.UtcDateTime;
+                                schedule.UpdatedAt = DateTime.UtcNow;
+                                await unitOfWork.Schedules.UpdateAsync(schedule);
+                                
+                                _logger.LogDebug(
+                                    "ScheduleHydrationService: Recomputed NextRunTime for schedule {ScheduleId} to {NextRunTime}",
+                                    schedule.Id, schedule.NextRunTime.Value.ToString("o"));
+                            }
+                        }
+                        catch (Exception cronEx)
+                        {
+                            _logger.LogWarning(cronEx, 
+                                "ScheduleHydrationService: Could not recompute NextRunTime for schedule {ScheduleId} with cron {CronExpression}",
+                                schedule.Id, schedule.CronExpression);
+                        }
+                    }
+                    
                     await schedulerService.ScheduleJob(schedule);
                     successCount++;
                     
@@ -66,6 +105,8 @@ public class ScheduleHydrationService : IHostedService
                         schedule.Id, schedule.Name);
                 }
             }
+            
+            await unitOfWork.SaveChangesAsync();
 
             _logger.LogInformation(
                 "ScheduleHydrationService: Hydration complete. Successfully scheduled {SuccessCount} jobs, {FailureCount} failures",

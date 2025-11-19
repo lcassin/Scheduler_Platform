@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Quartz;
+using SchedulerPlatform.API.Configuration;
 using SchedulerPlatform.Core.Domain.Interfaces;
 using SchedulerPlatform.Infrastructure.Data;
 using SchedulerPlatform.Infrastructure.Interceptors;
@@ -142,6 +143,8 @@ builder.Services.AddAuthorization(options =>
         policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("users:manage")));
 });
 
+builder.Services.Configure<SchedulerSettings>(builder.Configuration.GetSection("SchedulerSettings"));
+
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
 builder.Services.AddScoped<IJobExecutionRepository, JobExecutionRepository>();
@@ -151,6 +154,7 @@ builder.Services.AddScoped<IEmailService, SchedulerPlatform.Infrastructure.Servi
 
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.StartupRecoveryService>();
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.ScheduleHydrationService>();
+builder.Services.AddHostedService<SchedulerPlatform.API.Services.MissedSchedulesProcessor>();
 
 builder.Services.AddHttpClient("ApiCallJob");
 
