@@ -351,6 +351,7 @@ public class SyncService
 
                 var pageUpdated = 0;
                 var pageUnchanged = 0;
+                var pageAdded = 0;
                 
                 foreach (var account in page.Data)
                 {
@@ -419,12 +420,13 @@ public class SyncService
 
                         await _dbContext.ScheduleSyncSources.AddAsync(newRecord);
                         result.Added++;
+                        pageAdded++;
                     }
 
                     processedCount++;
                 }
                 
-                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}]   Page {page.Page} results: {pageUpdated} updated, {pageUnchanged} unchanged, {result.Added - (processedCount - page.Data.Count)} added");
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}]   Page {page.Page} results: {pageUpdated} updated, {pageUnchanged} unchanged, {pageAdded} added");
 
                 batchCount++;
 
