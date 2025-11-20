@@ -107,8 +107,9 @@ public class SchedulesController : ControllerBase
                 return NotFound();
             }
 
-            var userClientId = User.FindFirst("client_id")?.Value;
-            var isSystemAdmin = User.FindFirst("is_system_admin")?.Value == "True";
+            var userClientId = User.FindFirst("user_client_id")?.Value;
+            var isSystemAdminValue = User.FindFirst("is_system_admin")?.Value;
+            var isSystemAdmin = string.Equals(isSystemAdminValue, "True", StringComparison.OrdinalIgnoreCase) || isSystemAdminValue == "1";
             
             if (!isSystemAdmin && schedule.ClientId.ToString() != userClientId)
             {

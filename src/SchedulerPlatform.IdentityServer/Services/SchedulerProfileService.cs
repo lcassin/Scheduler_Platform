@@ -39,7 +39,7 @@ public class SchedulerProfileService : IProfileService
                         new Claim("given_name", user.FirstName),
                         new Claim("family_name", user.LastName),
                         new Claim("email", user.Email),
-                        new Claim("client_id", user.ClientId.ToString()),
+                        new Claim("user_client_id", user.ClientId.ToString()),
                         new Claim("role", await _userService.GetUserRoleAsync(user.Id))
                     };
 
