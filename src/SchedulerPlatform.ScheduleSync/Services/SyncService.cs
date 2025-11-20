@@ -361,7 +361,12 @@ public class SyncService
                             existingRecord.ExternalVendorId = account.VendorId;
                             existingRecord.ExternalClientId = (int)account.ClientId;
                             existingRecord.CredentialId = account.CredentialId;
-                            existingRecord.LastInvoiceDate = account.LastInvoiceDate ?? DateTime.MinValue;
+                            
+                            if (account.LastInvoiceDate.HasValue)
+                            {
+                                existingRecord.LastInvoiceDate = account.LastInvoiceDate.Value;
+                            }
+                            
                             existingRecord.AccountName = account.AccountName;
                             existingRecord.VendorName = account.VendorName;
                             existingRecord.ClientName = account.ClientName;
