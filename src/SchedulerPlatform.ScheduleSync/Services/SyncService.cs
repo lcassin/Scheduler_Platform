@@ -29,7 +29,7 @@ public class SyncService
         try
         {
             var uniqueClients = accounts
-                .GroupBy(a => a.ClientName)
+                .GroupBy(a => a.ClientName?.Trim() ?? string.Empty, StringComparer.OrdinalIgnoreCase)
                 .Select(g => g.First())
                 .ToList();
 
@@ -37,9 +37,21 @@ public class SyncService
 
             var clientNames = uniqueClients.Select(c => c.ClientName).Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
             
-            var existing = await _dbContext.Clients
+            var existingList = await _dbContext.Clients
                 .Where(c => clientNames.Contains(c.ClientName))
-                .ToDictionaryAsync(c => c.ClientName);
+                .ToListAsync();
+            
+            var existing = existingList
+                .GroupBy(c => c.ClientName?.Trim() ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.OrderBy(c => c.IsDeleted).ThenBy(c => c.Id).First(),
+                    StringComparer.OrdinalIgnoreCase);
+            
+            if (existingList.Count != existing.Count)
+            {
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Warning: Found {existingList.Count - existing.Count} duplicate client names in database (using canonical records)");
+            }
 
             foreach (var clientData in uniqueClients)
             {
@@ -145,7 +157,7 @@ public class SyncService
 
             try
             {
-                var uniqueClientsDict = new Dictionary<string, DateTime?>();
+                var uniqueClientsDict = new Dictionary<string, DateTime?>(StringComparer.OrdinalIgnoreCase);
                 const int pageSize = 100000;
                 int lastId = 0;
                 int totalScanned = 0;
@@ -172,19 +184,20 @@ public class SyncService
 
                     foreach (var row in page)
                     {
-                        if (string.IsNullOrWhiteSpace(row.ClientName))
+                        var clientName = row.ClientName?.Trim();
+                        if (string.IsNullOrWhiteSpace(clientName))
                             continue;
 
-                        if (uniqueClientsDict.TryGetValue(row.ClientName, out var existing))
+                        if (uniqueClientsDict.TryGetValue(clientName, out var existing))
                         {
                             if ((row.LastSyncedAt ?? DateTime.MinValue) > (existing ?? DateTime.MinValue))
                             {
-                                uniqueClientsDict[row.ClientName] = row.LastSyncedAt;
+                                uniqueClientsDict[clientName] = row.LastSyncedAt;
                             }
                         }
                         else
                         {
-                            uniqueClientsDict[row.ClientName] = row.LastSyncedAt;
+                            uniqueClientsDict[clientName] = row.LastSyncedAt;
                         }
                     }
 
@@ -200,8 +213,9 @@ public class SyncService
                 Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Scanned {totalScanned:N0} total rows, found {uniqueClientsDict.Count:N0} unique clients");
 
                 var clientNames = uniqueClientsDict.Keys.ToList();
-                var existingClients = new Dictionary<string, Client>();
+                var existingClients = new Dictionary<string, Client>(StringComparer.OrdinalIgnoreCase);
                 const int chunkSize = 2000;
+                int duplicatesFound = 0;
 
                 Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Fetching existing clients in chunks of {chunkSize:N0}...");
 
@@ -214,7 +228,30 @@ public class SyncService
 
                     foreach (var client in chunkClients)
                     {
-                        existingClients[client.ClientName] = client;
+                        var clientName = client.ClientName?.Trim();
+                        if (string.IsNullOrWhiteSpace(clientName))
+                            continue;
+                            
+                        if (existingClients.ContainsKey(clientName))
+                        {
+                            duplicatesFound++;
+                            var existing = existingClients[clientName];
+                            if (client.IsDeleted && !existing.IsDeleted)
+                                continue;
+                            if (!client.IsDeleted && existing.IsDeleted)
+                            {
+                                existingClients[clientName] = client;
+                                continue;
+                            }
+                            if (client.Id < existing.Id)
+                            {
+                                existingClients[clientName] = client;
+                            }
+                        }
+                        else
+                        {
+                            existingClients[clientName] = client;
+                        }
                     }
 
                     if ((i + chunkSize) % 10000 == 0)
@@ -224,6 +261,10 @@ public class SyncService
                 }
 
                 Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Found {existingClients.Count:N0} existing clients");
+                if (duplicatesFound > 0)
+                {
+                    Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Warning: Found {duplicatesFound} duplicate client names in database (using canonical records)");
+                }
 
                 foreach (var kvp in uniqueClientsDict)
                 {
