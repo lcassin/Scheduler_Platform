@@ -16,7 +16,6 @@ public class UnitOfWork : IUnitOfWork
     public IRepository<User> Users { get; }
     public IUserPermissionRepository UserPermissions { get; }
     public IRepository<PasswordHistory> PasswordHistories { get; }
-    public IRepository<VendorCredential> VendorCredentials { get; }
     public IRepository<JobParameter> JobParameters { get; }
     public IRepository<NotificationSetting> NotificationSettings { get; }
 
@@ -29,14 +28,13 @@ public class UnitOfWork : IUnitOfWork
         Users = new Repository<User>(_context);
         UserPermissions = new UserPermissionRepository(_context);
         PasswordHistories = new Repository<PasswordHistory>(_context);
-        VendorCredentials = new Repository<VendorCredential>(_context);
         JobParameters = new Repository<JobParameter>(_context);
         NotificationSettings = new Repository<NotificationSetting>(_context);
     }
 
-    public async Task<int> SaveChangesAsync()
+    public Task<int> SaveChangesAsync()
     {
-        return await _context.SaveChangesAsync();
+        return _context.SaveChangesAsync();
     }
 
     public async Task BeginTransactionAsync()

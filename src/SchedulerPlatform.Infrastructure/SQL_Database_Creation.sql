@@ -11,11 +11,12 @@ GO
 BEGIN TRANSACTION;
 CREATE TABLE [Clients] (
     [Id] int NOT NULL IDENTITY,
+    [ExternalClientId] int NOT NULL,
     [ClientName] nvarchar(200) NOT NULL,
-    [ClientCode] nvarchar(50) NOT NULL,
     [IsActive] bit NOT NULL,
     [ContactEmail] nvarchar(255) NULL,
     [ContactPhone] nvarchar(50) NULL,
+    [LastSyncedAt] datetime2 NULL,
     [CreatedAt] datetime2 NOT NULL,
     [UpdatedAt] datetime2 NULL,
     [CreatedBy] nvarchar(max) NOT NULL,
@@ -70,27 +71,9 @@ CREATE TABLE [Users] (
     CONSTRAINT [FK_Users_Clients_ClientId] FOREIGN KEY ([ClientId]) REFERENCES [Clients] ([Id]) ON DELETE NO ACTION
 );
 
-CREATE TABLE [VendorCredentials] (
-    [Id] int NOT NULL IDENTITY,
-    [ClientId] int NOT NULL,
-    [VendorName] nvarchar(200) NOT NULL,
-    [VendorUrl] nvarchar(500) NOT NULL,
-    [Username] nvarchar(200) NOT NULL,
-    [EncryptedPassword] nvarchar(500) NOT NULL,
-    [LastVerified] datetime2 NULL,
-    [IsValid] bit NOT NULL,
-    [AdditionalData] nvarchar(max) NULL,
-    [CreatedAt] datetime2 NOT NULL,
-    [UpdatedAt] datetime2 NULL,
-    [CreatedBy] nvarchar(max) NOT NULL,
-    [UpdatedBy] nvarchar(max) NULL,
-    [IsDeleted] bit NOT NULL,
-    CONSTRAINT [PK_VendorCredentials] PRIMARY KEY ([Id]),
-    CONSTRAINT [FK_VendorCredentials_Clients_ClientId] FOREIGN KEY ([ClientId]) REFERENCES [Clients] ([Id]) ON DELETE CASCADE
-);
 
 CREATE TABLE [JobExecutions] (
-    [Id] int NOT NULL IDENTITY,
+    [Id] bigint NOT NULL IDENTITY,
     [ScheduleId] int NOT NULL,
     [StartTime] datetime2 NOT NULL,
     [EndTime] datetime2 NULL,
@@ -101,9 +84,10 @@ CREATE TABLE [JobExecutions] (
     [RetryCount] int NOT NULL,
     [DurationSeconds] int NULL,
     [TriggeredBy] nvarchar(100) NULL,
+    [CancelledBy] nvarchar(100) NULL,
     [CreatedAt] datetime2 NOT NULL,
     [UpdatedAt] datetime2 NULL,
-    [CreatedBy] nvarchar(max) NOT NULL,
+    [CreatedBy] nvarchar(max) NULL,
     [UpdatedBy] nvarchar(max) NULL,
     [IsDeleted] bit NOT NULL,
     CONSTRAINT [PK_JobExecutions] PRIMARY KEY ([Id]),
@@ -149,7 +133,9 @@ CREATE TABLE [UserPermissions] (
     CONSTRAINT [FK_UserPermissions_Users_UserId] FOREIGN KEY ([UserId]) REFERENCES [Users] ([Id]) ON DELETE CASCADE
 );
 
-CREATE UNIQUE INDEX [IX_Clients_ClientCode] ON [Clients] ([ClientCode]);
+CREATE UNIQUE INDEX [IX_Clients_ExternalClientId] ON [Clients] ([ExternalClientId]);
+
+CREATE INDEX [IX_Clients_LastSyncedAt] ON [Clients] ([LastSyncedAt]);
 
 CREATE INDEX [IX_JobExecutions_ScheduleId] ON [JobExecutions] ([ScheduleId]);
 
@@ -298,28 +284,42 @@ IF @var8 IS NOT NULL EXEC(N'ALTER TABLE [AuditLogs] DROP CONSTRAINT [' + @var8 +
 ALTER TABLE [AuditLogs] ALTER COLUMN [CreatedBy] nvarchar(max) NULL;
 
 CREATE TABLE [ScheduleSyncSources] (
-    [Id] int NOT NULL IDENTITY,
-    [ClientId] int NOT NULL,
-    [Vendor] nvarchar(200) NOT NULL,
-    [AccountNumber] nvarchar(100) NOT NULL,
+    [SyncId] int NOT NULL IDENTITY,
+    [ExternalAccountId] bigint NOT NULL,
+    [AccountNumber] nvarchar(128) NOT NULL,
+    [ExternalVendorId] bigint NOT NULL,
+    [ExternalClientId] int NOT NULL,
+    [ClientId] int NULL,
+    [CredentialId] int NOT NULL,
     [ScheduleFrequency] int NOT NULL,
-    [ScheduleDate] datetime2 NOT NULL,
+    [LastInvoiceDate] datetime2 NOT NULL,
+    [AccountName] nvarchar(64) NULL,
+    [VendorName] nvarchar(64) NULL,
+    [ClientName] nvarchar(64) NULL,
+    [TandemAccountId] nvarchar(64) NULL,
+    [LastSyncedAt] datetime2 NULL,
     [CreatedAt] datetime2 NOT NULL,
     [UpdatedAt] datetime2 NULL,
     [CreatedBy] nvarchar(max) NULL,
     [UpdatedBy] nvarchar(max) NULL,
     [IsDeleted] bit NOT NULL,
-    CONSTRAINT [PK_ScheduleSyncSources] PRIMARY KEY ([Id]),
+    CONSTRAINT [PK_ScheduleSyncSources] PRIMARY KEY ([SyncId]),
     CONSTRAINT [FK_ScheduleSyncSources_Clients_ClientId] FOREIGN KEY ([ClientId]) REFERENCES [Clients] ([Id]) ON DELETE NO ACTION
 );
 
+CREATE UNIQUE INDEX [IX_ScheduleSyncSources_ExternalAccountId] ON [ScheduleSyncSources] ([ExternalAccountId]);
+
+CREATE INDEX [IX_ScheduleSyncSources_ExternalClientId] ON [ScheduleSyncSources] ([ExternalClientId]);
+
+CREATE INDEX [IX_ScheduleSyncSources_ExternalVendorId] ON [ScheduleSyncSources] ([ExternalVendorId]);
+
 CREATE INDEX [IX_ScheduleSyncSources_ClientId] ON [ScheduleSyncSources] ([ClientId]);
 
-CREATE INDEX [IX_ScheduleSyncSources_ClientId_Vendor_AccountNumber] ON [ScheduleSyncSources] ([ClientId], [Vendor], [AccountNumber]);
+CREATE INDEX [IX_ScheduleSyncSources_CredentialId] ON [ScheduleSyncSources] ([CredentialId]);
 
-CREATE INDEX [IX_ScheduleSyncSources_ScheduleDate] ON [ScheduleSyncSources] ([ScheduleDate]);
+CREATE INDEX [IX_ScheduleSyncSources_LastSyncedAt] ON [ScheduleSyncSources] ([LastSyncedAt]);
 
-CREATE INDEX [IX_ScheduleSyncSources_ScheduleFrequency] ON [ScheduleSyncSources] ([ScheduleFrequency]);
+CREATE INDEX [IX_ScheduleSyncSources_ExternalClientId_ExternalVendorId_AccountNumber] ON [ScheduleSyncSources] ([ExternalClientId], [ExternalVendorId], [AccountNumber]);
 
 INSERT INTO [__EFMigrationsHistory] ([MigrationId], [ProductVersion])
 VALUES (N'20251024190624_AddScheduleSyncSourceTable', N'9.0.10');
@@ -369,13 +369,13 @@ GO
 
 BEGIN TRANSACTION;
 
-IF NOT EXISTS (SELECT 1 FROM [Clients] WHERE [ClientCode] = 'INTERNAL')
+IF NOT EXISTS (SELECT 1 FROM [Clients] WHERE [ExternalClientId] = 0)
 BEGIN
-    INSERT INTO [Clients] ([ClientName], [ClientCode], [IsActive], [ContactEmail], [CreatedAt], [CreatedBy], [IsDeleted])
-    VALUES (N'Internal', N'INTERNAL', 1, N'admin@cassinfo.com', GETUTCDATE(), N'System', 0);
+    INSERT INTO [Clients] ([ExternalClientId], [ClientName], [IsActive], [ContactEmail], [CreatedAt], [CreatedBy], [IsDeleted])
+    VALUES (0, N'Internal', 1, N'admin@cassinfo.com', GETUTCDATE(), N'System', 0);
 END
 
-DECLARE @ClientId INT = (SELECT [Id] FROM [Clients] WHERE [ClientCode] = 'INTERNAL');
+DECLARE @ClientId INT = (SELECT [Id] FROM [Clients] WHERE [ExternalClientId] = 0);
 
 IF NOT EXISTS (SELECT 1 FROM [Users] WHERE [Email] = 'superadmin@cassinfo.com')
 BEGIN
@@ -459,7 +459,6 @@ PRINT 'Azure AD Configuration Required:';
 PRINT '  - Tenant ID: 08717c9a-7042-4ddf-b86a-e0a500d32cde';
 PRINT '  - Update appsettings.json with ClientId and ClientSecret';
 PRINT '  - See AZURE_AD_SETUP.md for complete setup instructions';
-VALUES (1, 1, N'test_credential', GETDATE(), GETDATE(), N'System', N'System', 0);
 
 /** Optional - Create Test Job Execution **/
 

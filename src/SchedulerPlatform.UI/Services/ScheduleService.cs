@@ -37,7 +37,8 @@ public class ScheduleService : IScheduleService
         int pageNumber = 1,
         int pageSize = 20,
         int? clientId = null,
-        string? searchTerm = null)
+        string? searchTerm = null,
+        bool? isEnabled = null)
     {
         var client = CreateClient();
         var queryParams = new List<string> { "paginated=true" };
@@ -50,6 +51,9 @@ public class ScheduleService : IScheduleService
         
         if (!string.IsNullOrWhiteSpace(searchTerm))
             queryParams.Add($"searchTerm={Uri.EscapeDataString(searchTerm)}");
+        
+        if (isEnabled.HasValue)
+            queryParams.Add($"isEnabled={isEnabled.Value}");
         
         var query = "?" + string.Join("&", queryParams);
         var result = await client.GetFromJsonAsync<PagedResult<Schedule>>($"schedules{query}");

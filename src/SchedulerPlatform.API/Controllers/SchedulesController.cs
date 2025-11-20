@@ -1,5 +1,6 @@
 using System.Text;
 using ClosedXML.Excel;
+using DocumentFormat.OpenXml.Office2010.Drawing.Charts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
@@ -42,7 +43,8 @@ public class SchedulesController : ControllerBase
         [FromQuery] int pageSize = 20,
         [FromQuery] bool paginated = true,
         [FromQuery] DateTime? startDate = null,
-        [FromQuery] DateTime? endDate = null)
+        [FromQuery] DateTime? endDate = null,
+        [FromQuery] bool? isEnabled = null)
     {
         try
         {
@@ -52,7 +54,8 @@ public class SchedulesController : ControllerBase
                     pageNumber, 
                     pageSize, 
                     clientId, 
-                    searchTerm);
+                    searchTerm,
+                    isEnabled);
 
                 return Ok(new 
                 {
@@ -136,7 +139,7 @@ public class SchedulesController : ControllerBase
             schedule.CreatedAt = DateTime.UtcNow;
             schedule.CreatedBy = User.Identity?.Name ?? "System";
 
-            if (!schedule.NextRunTime.HasValue && !string.IsNullOrWhiteSpace(schedule.CronExpression))
+            if (!schedule.IsDeleted && schedule.IsEnabled && !schedule.NextRunTime.HasValue && !string.IsNullOrWhiteSpace(schedule.CronExpression))
             {
                 try
                 {
@@ -203,7 +206,7 @@ public class SchedulesController : ControllerBase
             schedule.UpdatedAt = DateTime.UtcNow;
             schedule.UpdatedBy = User.Identity?.Name ?? "System";
 
-            if (!schedule.NextRunTime.HasValue && !string.IsNullOrWhiteSpace(schedule.CronExpression))
+            if (!schedule.IsDeleted && schedule.IsEnabled && !schedule.NextRunTime.HasValue && !string.IsNullOrWhiteSpace(schedule.CronExpression))
             {
                 try
                 {
@@ -753,6 +756,141 @@ public class SchedulesController : ControllerBase
                 Success = false, 
                 Message = ex.Message 
             });
+        }
+    }
+
+    [HttpGet("missed/count")]
+    public async Task<ActionResult<object>> GetMissedSchedulesCount([FromQuery] int? windowDays = null)
+    {
+        try
+        {
+            var now = DateTime.UtcNow;
+            var windowStart = windowDays.HasValue 
+                ? now.AddDays(-windowDays.Value) 
+                : DateTime.MinValue;
+
+            var missedSchedules = await _unitOfWork.Schedules.FindAsync(s =>
+                s.IsEnabled &&
+                !s.IsDeleted &&
+                s.NextRunTime.HasValue &&
+                s.NextRunTime.Value < now &&
+                s.NextRunTime.Value >= windowStart);
+
+            var count = missedSchedules.Count();
+
+            return Ok(new 
+            { 
+                count = count,
+                windowDays = windowDays,
+                asOfUtc = now
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving missed schedules count");
+            return StatusCode(500, "An error occurred while retrieving missed schedules count");
+        }
+    }
+
+    [HttpGet("missed")]
+    public async Task<ActionResult<object>> GetMissedSchedules(
+        [FromQuery] int? windowDays = 2,
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 100)
+    {
+        try
+        {
+            var now = DateTime.UtcNow;
+            var windowStart = windowDays.HasValue 
+                ? now.AddDays(-windowDays.Value) 
+                : DateTime.MinValue;
+
+            var missedSchedules = await _unitOfWork.Schedules.FindAsync(s =>
+                s.IsEnabled &&
+                !s.IsDeleted &&
+                s.NextRunTime.HasValue &&
+                s.NextRunTime.Value < now &&
+                s.NextRunTime.Value >= windowStart);
+
+            var missedList = missedSchedules
+                .OrderBy(s => s.NextRunTime)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Select(s => new
+                {
+                    s.Id,
+                    s.Name,
+                    s.ClientId,
+                    s.NextRunTime,
+                    s.Frequency,
+                    s.CronExpression,
+                    s.LastRunTime,
+                    MinutesLate = s.NextRunTime.HasValue ? (now - s.NextRunTime.Value).TotalMinutes : 0
+                })
+                .ToList();
+
+            var totalCount = missedSchedules.Count();
+
+            return Ok(new 
+            { 
+                items = missedList,
+                totalCount = totalCount,
+                pageNumber = pageNumber,
+                pageSize = pageSize,
+                windowDays = windowDays,
+                asOfUtc = now
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving missed schedules");
+            return StatusCode(500, "An error occurred while retrieving missed schedules");
+        }
+    }
+
+    [HttpPost("missed/{id}/trigger")]
+    [Authorize(Policy = "Schedules.Execute")]
+    public async Task<IActionResult> TriggerMissedSchedule(int id)
+    {
+        return await TriggerSchedule(id);
+    }
+
+    [HttpGet("calendar")]
+    public async Task<ActionResult<IEnumerable<object>>> GetSchedulesForCalendar(
+        [FromQuery] DateTime? startDate = null,
+        [FromQuery] DateTime? endDate = null,
+        [FromQuery] int? clientId = null,
+        [FromQuery] int maxPerDay = 10)
+    {
+        try
+        {
+            if (!startDate.HasValue || !endDate.HasValue)
+            {
+                return BadRequest("startDate and endDate are required for calendar view");
+            }
+
+            var schedules = await _unitOfWork.Schedules.GetSchedulesForCalendarAsync(
+                startDate.Value.ToUniversalTime(),
+                endDate.Value.ToUniversalTime(),
+                clientId,
+                maxPerDay);
+
+            var result = schedules.Select(s => new
+            {
+                s.Id,
+                s.Name,
+                s.ClientId,
+                s.NextRunTime,
+                s.TimeZone,
+                s.IsEnabled
+            });
+
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving schedules for calendar");
+            return StatusCode(500, "An error occurred while retrieving schedules for calendar");
         }
     }
 }

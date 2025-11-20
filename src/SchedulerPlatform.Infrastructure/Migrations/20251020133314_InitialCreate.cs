@@ -100,37 +100,6 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "VendorCredentials",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
-                    ClientId = table.Column<int>(type: "int", nullable: false),
-                    VendorName = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    VendorUrl = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
-                    Username = table.Column<string>(type: "nvarchar(200)", maxLength: 200, nullable: false),
-                    EncryptedPassword = table.Column<string>(type: "nvarchar(500)", maxLength: 500, nullable: false),
-                    LastVerified = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    IsValid = table.Column<bool>(type: "bit", nullable: false),
-                    AdditionalData = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    CreatedBy = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    UpdatedBy = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    IsDeleted = table.Column<bool>(type: "bit", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_VendorCredentials", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_VendorCredentials_Clients_ClientId",
-                        column: x => x.ClientId,
-                        principalTable: "Clients",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "JobExecutions",
                 columns: table => new
                 {

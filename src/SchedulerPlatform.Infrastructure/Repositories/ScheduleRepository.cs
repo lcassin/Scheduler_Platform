@@ -70,11 +70,11 @@ public class ScheduleRepository : Repository<Schedule>, IScheduleRepository
         int pageNumber,
         int pageSize,
         int? clientId = null,
-        string? searchTerm = null)
+        string? searchTerm = null,
+        bool? isEnabled = null)
     {
         var query = _dbSet
-            .Include(s => s.Client)
-            .Include(s => s.JobParameters)
+            .AsNoTracking()
             .Where(s => !s.IsDeleted);
         
         if (clientId.HasValue)
@@ -87,23 +87,35 @@ public class ScheduleRepository : Repository<Schedule>, IScheduleRepository
             query = query.Where(s => s.Name.Contains(searchTerm));
         }
         
+        if (isEnabled.HasValue)
+        {
+            query = query.Where(s => s.IsEnabled == isEnabled.Value);
+        }
+        
         var totalCount = await query.CountAsync();
         
         var items = await query
             .OrderBy(s => s.Name)
+            .ThenBy(s => s.Id)
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
             .Select(s => new
             {
                 Schedule = s,
+                ClientName = s.Client != null ? s.Client.ClientName : null,
                 LastExecution = s.JobExecutions
                     .OrderByDescending(e => e.StartTime)
+                    .Select(e => new { e.Status, e.StartTime })
                     .FirstOrDefault()
             })
             .ToListAsync();
         
         var schedules = items.Select(i =>
         {
+            if (i.Schedule.Client == null && i.ClientName != null)
+            {
+                i.Schedule.Client = new Client { ClientName = i.ClientName };
+            }
             i.Schedule.LastRunStatus = i.LastExecution?.Status;
             return i.Schedule;
         }).ToList();
@@ -125,5 +137,75 @@ public class ScheduleRepository : Repository<Schedule>, IScheduleRepository
             .Where(s => s.ClientId == clientId && !s.IsDeleted)
             .Include(s => s.NotificationSetting)
             .ToListAsync();
+    }
+
+    public async Task<int> GetTotalSchedulesCountAsync(int? clientId)
+    {
+        var query = _dbSet.AsNoTracking()
+            .Where(s => !s.IsDeleted);
+
+        if (clientId.HasValue)
+        {
+            query = query.Where(s => s.ClientId == clientId.Value);
+        }
+
+        return await query.CountAsync();
+    }
+
+    public async Task<int> GetEnabledSchedulesCountAsync(int? clientId)
+    {
+        var query = _dbSet.AsNoTracking()
+            .Where(s => !s.IsDeleted && s.IsEnabled);
+
+        if (clientId.HasValue)
+        {
+            query = query.Where(s => s.ClientId == clientId.Value);
+        }
+
+        return await query.CountAsync();
+    }
+
+    public async Task<int> GetDisabledSchedulesCountAsync(int? clientId)
+    {
+        var query = _dbSet.AsNoTracking()
+            .Where(s => !s.IsDeleted && !s.IsEnabled);
+
+        if (clientId.HasValue)
+        {
+            query = query.Where(s => s.ClientId == clientId.Value);
+        }
+
+        return await query.CountAsync();
+    }
+
+    public async Task<IEnumerable<Schedule>> GetSchedulesForCalendarAsync(DateTime startUtc, DateTime endUtc, int? clientId, int maxPerDay = 10)
+    {
+        var query = _dbSet.AsNoTracking()
+            .Where(s => !s.IsDeleted 
+                && s.NextRunTime.HasValue 
+                && s.NextRunTime.Value >= startUtc 
+                && s.NextRunTime.Value <= endUtc);
+
+        if (clientId.HasValue)
+        {
+            query = query.Where(s => s.ClientId == clientId.Value);
+        }
+
+        var schedules = await query
+            .OrderBy(s => s.NextRunTime)
+            .ThenBy(s => s.Id)
+            .Select(s => new
+            {
+                Schedule = s,
+                DayDate = s.NextRunTime.Value.Date
+            })
+            .ToListAsync();
+
+        var groupedByDay = schedules
+            .GroupBy(x => x.DayDate)
+            .SelectMany(g => g.Take(maxPerDay).Select(x => x.Schedule))
+            .ToList();
+
+        return groupedByDay;
     }
 }
