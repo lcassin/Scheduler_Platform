@@ -11,6 +11,10 @@ public class AccountsApiClient
     private readonly string _apiKey;
     private readonly int _batchSize;
     private readonly int _delayBetweenRequestsMs;
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        PropertyNameCaseInsensitive = true
+    };
 
     public AccountsApiClient(HttpClient httpClient, string apiBaseUrl, string apiKey, int batchSize = 2500, int delayBetweenRequestsMs = 100)
     {
@@ -51,7 +55,7 @@ public class AccountsApiClient
 
                 if (response.IsSuccessStatusCode)
                 {
-                    var result = await response.Content.ReadFromJsonAsync<AccountApiResponse>(cancellationToken: cancellationToken);
+                    var result = await response.Content.ReadFromJsonAsync<AccountApiResponse>(JsonOptions, cancellationToken);
                     
                     if (_delayBetweenRequestsMs > 0)
                     {

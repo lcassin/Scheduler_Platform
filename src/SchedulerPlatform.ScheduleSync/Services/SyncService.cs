@@ -344,7 +344,8 @@ public class SyncService
                     .Where(s => accountIds.Contains(s.ExternalAccountId))
                     .ToDictionaryAsync(s => s.ExternalAccountId);
 
-                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Processing page {page.Page}: {page.Data.Count} records (Found {existing.Count} existing)");
+                var accountsWithDates = page.Data.Count(a => a.LastInvoiceDate.HasValue);
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Processing page {page.Page}: {page.Data.Count} records (Found {existing.Count} existing, {accountsWithDates} have LastInvoiceDate)");
 
                 foreach (var account in page.Data)
                 {
@@ -360,7 +361,12 @@ public class SyncService
                             existingRecord.ExternalVendorId = account.VendorId;
                             existingRecord.ExternalClientId = (int)account.ClientId;
                             existingRecord.CredentialId = account.CredentialId;
-                            existingRecord.LastInvoiceDate = account.LastInvoiceDate ?? DateTime.MinValue;
+                            
+                            if (account.LastInvoiceDate.HasValue)
+                            {
+                                existingRecord.LastInvoiceDate = account.LastInvoiceDate.Value;
+                            }
+                            
                             existingRecord.AccountName = account.AccountName;
                             existingRecord.VendorName = account.VendorName;
                             existingRecord.ClientName = account.ClientName;
