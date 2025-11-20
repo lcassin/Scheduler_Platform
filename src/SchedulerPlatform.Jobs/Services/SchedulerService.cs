@@ -151,6 +151,12 @@ public class SchedulerService : ISchedulerService
                 return;
             }
 
+            if (!schedule.IsEnabled || schedule.IsDeleted)
+            {
+                _logger.LogDebug("Schedule {ScheduleId} is disabled or deleted, skipping NextRunTime update", scheduleId);
+                return;
+            }
+
             if (string.IsNullOrWhiteSpace(schedule.CronExpression))
             {
                 _logger.LogWarning("Schedule {ScheduleId} has no cron expression, cannot update NextRunTime", scheduleId);

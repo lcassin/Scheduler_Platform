@@ -220,6 +220,10 @@ public class SchedulesController : ControllerBase
                     _logger.LogWarning(ex, "Could not calculate NextRunTime for schedule {ScheduleId}", schedule.Id);
                 }
             }
+            else if (schedule.IsDeleted || !schedule.IsEnabled)
+            {
+                schedule.NextRunTime = null;
+            }
 
             await _unitOfWork.Schedules.UpdateAsync(schedule);
             await _unitOfWork.SaveChangesAsync();
