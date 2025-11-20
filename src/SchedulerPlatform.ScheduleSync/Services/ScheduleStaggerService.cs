@@ -32,10 +32,10 @@ public class ScheduleStaggerService
         try
         {
             var totalSchedules = await _dbContext.Schedules
-                .Where(s => s.CreatedBy == "ScheduleSync" && !s.IsDeleted)
+                .Where(s => s.CreatedBy == "ScheduleSync" && !s.IsDeleted && s.IsEnabled)
                 .CountAsync();
 
-            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Found {totalSchedules:N0} schedules to process");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Found {totalSchedules:N0} enabled schedules to process");
             Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}]");
 
             if (totalSchedules == 0)
@@ -54,7 +54,7 @@ public class ScheduleStaggerService
             while (true)
             {
                 var batch = await _dbContext.Schedules
-                    .Where(s => s.Id > lastId && s.CreatedBy == "ScheduleSync" && !s.IsDeleted)
+                    .Where(s => s.Id > lastId && s.CreatedBy == "ScheduleSync" && !s.IsDeleted && s.IsEnabled)
                     .OrderBy(s => s.Id)
                     .Take(_batchSize)
                     .Select(s => new
