@@ -9,10 +9,15 @@ DECLARE @UpdatedBy NVARCHAR(100) = 'DisableUnknownInvoiceDateScript';
 DECLARE @UpdatedAt DATETIME2(7) = SYSUTCDATETIME();
 DECLARE @RowsAffected INT = 0;
 DECLARE @SourceCount INT = 0;
+DECLARE @DryRun BIT = 1;  -- Set to 0 to actually perform the update
 
 PRINT '========================================';
 PRINT 'Disable Schedules with Unknown Invoice Date';
 PRINT 'Started at: ' + CONVERT(VARCHAR(30), GETDATE(), 120);
+IF @DryRun = 1
+    PRINT '*** DRY RUN MODE - No changes will be made ***';
+ELSE
+    PRINT '*** LIVE MODE - Changes will be committed ***';
 PRINT '========================================';
 PRINT '';
 
@@ -33,7 +38,7 @@ IF OBJECT_ID('tempdb..#Targets') IS NOT NULL
 SELECT DISTINCT
     CanonicalName = CONCAT(
         CASE 
-            WHEN LTRIM(RTRIM(sss.VendorName)) IS NULL OR LTRIM(RTRIM(sss.VendorName)) = '' 
+            WHEN sss.VendorName IS NULL 
                 THEN CONCAT('Vendor', sss.ExternalVendorId)
             ELSE LTRIM(RTRIM(sss.VendorName))
         END,
@@ -98,11 +103,25 @@ ORDER BY ScheduleId;
 PRINT '';
 
 PRINT '========================================';
-PRINT 'Ready to disable ' + CAST(@RowsAffected AS VARCHAR(10)) + ' schedules';
-PRINT 'Press Ctrl+C to cancel, or continue to proceed...';
-PRINT '========================================';
-PRINT '';
-
+IF @DryRun = 1
+BEGIN
+    PRINT '*** DRY RUN COMPLETE - No changes made ***';
+    PRINT 'To perform the actual update:';
+    PRINT '1. Review the sample schedules above';
+    PRINT '2. Set @DryRun = 0 at the top of the script';
+    PRINT '3. Run the script again';
+    PRINT '========================================';
+    PRINT '';
+    GOTO SkipUpdate;
+END
+ELSE
+BEGIN
+    PRINT 'Ready to disable ' + CAST(@RowsAffected AS VARCHAR(10)) + ' schedules';
+    PRINT 'Press Ctrl+C to cancel, or continue to proceed...';
+    PRINT '========================================';
+    PRINT '';
+    WAITFOR DELAY '00:00:05';  -- 5 second pause to allow cancellation
+END
 
 PRINT 'Step 3: Disabling schedules...';
 PRINT '';
@@ -118,7 +137,7 @@ BEGIN TRY
         s.UpdatedBy = @UpdatedBy
     FROM dbo.Schedules s
     INNER JOIN #SchedulesToDisable td ON s.Id = td.ScheduleId
-    WHERE s.IsEnabled = 1;  -- Only update schedules that are currently enabled
+    WHERE s.IsEnabled = 1;
 
     SET @RowsAffected = @@ROWCOUNT;
 
@@ -138,27 +157,32 @@ BEGIN CATCH
     THROW;
 END CATCH;
 
-PRINT 'Step 4: Verification...';
-PRINT '';
+SkipUpdate:
 
-SELECT 
-    'Total schedules identified' AS Metric,
-    COUNT(*) AS Count
-FROM #SchedulesToDisable
-UNION ALL
-SELECT 
-    'Schedules now disabled',
-    COUNT(*)
-FROM dbo.Schedules s
-INNER JOIN #SchedulesToDisable td ON s.Id = td.ScheduleId
-WHERE s.IsEnabled = 0
-UNION ALL
-SELECT 
-    'Schedules with NULL NextRunTime',
-    COUNT(*)
-FROM dbo.Schedules s
-INNER JOIN #SchedulesToDisable td ON s.Id = td.ScheduleId
-WHERE s.NextRunTime IS NULL;
+IF @DryRun = 0
+BEGIN
+    PRINT 'Step 4: Verification...';
+    PRINT '';
+
+    SELECT 
+        'Total schedules identified' AS Metric,
+        COUNT(*) AS Count
+    FROM #SchedulesToDisable
+    UNION ALL
+    SELECT 
+        'Schedules now disabled',
+        COUNT(*)
+    FROM dbo.Schedules s
+    INNER JOIN #SchedulesToDisable td ON s.Id = td.ScheduleId
+    WHERE s.IsEnabled = 0
+    UNION ALL
+    SELECT 
+        'Schedules with NULL NextRunTime',
+        COUNT(*)
+    FROM dbo.Schedules s
+    INNER JOIN #SchedulesToDisable td ON s.Id = td.ScheduleId
+    WHERE s.NextRunTime IS NULL;
+END
 
 PRINT '';
 PRINT '========================================';
