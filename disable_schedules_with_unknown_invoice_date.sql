@@ -8,6 +8,7 @@ DECLARE @DefaultDate DATETIME2(7) = '0001-01-01T00:00:00';
 DECLARE @UpdatedBy NVARCHAR(100) = 'DisableUnknownInvoiceDateScript';
 DECLARE @UpdatedAt DATETIME2(7) = SYSUTCDATETIME();
 DECLARE @RowsAffected INT = 0;
+DECLARE @SourceCount INT = 0;
 
 PRINT '========================================';
 PRINT 'Disable Schedules with Unknown Invoice Date';
@@ -15,41 +16,62 @@ PRINT 'Started at: ' + CONVERT(VARCHAR(30), GETDATE(), 120);
 PRINT '========================================';
 PRINT '';
 
-PRINT 'Step 1: Identifying schedules to disable...';
+SELECT @SourceCount = COUNT(*)
+FROM dbo.ScheduleSyncSources
+WHERE IsDeleted = 0
+    AND LastInvoiceDate = @DefaultDate;
+
+PRINT 'Found ' + CAST(@SourceCount AS VARCHAR(10)) + ' ScheduleSyncSources records with unknown LastInvoiceDate';
+PRINT '';
+
+PRINT 'Step 1: Building target schedule names from sources with unknown dates...';
+PRINT '';
+
+IF OBJECT_ID('tempdb..#Targets') IS NOT NULL
+    DROP TABLE #Targets;
+
+SELECT DISTINCT
+    CanonicalName = CONCAT(
+        CASE 
+            WHEN LTRIM(RTRIM(sss.VendorName)) IS NULL OR LTRIM(RTRIM(sss.VendorName)) = '' 
+                THEN CONCAT('Vendor', sss.ExternalVendorId)
+            ELSE LTRIM(RTRIM(sss.VendorName))
+        END,
+        '_',
+        LTRIM(RTRIM(sss.AccountNumber))
+    ),
+    ClientName = LTRIM(RTRIM(sss.ClientName))
+INTO #Targets
+FROM dbo.ScheduleSyncSources sss
+WHERE sss.IsDeleted = 0
+    AND sss.ClientName IS NOT NULL
+    AND sss.LastInvoiceDate = @DefaultDate;
+
+CREATE INDEX IX_Targets_Name_Client ON #Targets (CanonicalName, ClientName);
+
+SELECT @RowsAffected = COUNT(*) FROM #Targets;
+PRINT 'Built ' + CAST(@RowsAffected AS VARCHAR(10)) + ' unique target schedule names';
+PRINT '';
+
+PRINT 'Step 2: Identifying schedules to disable via exact name match...';
 PRINT '';
 
 IF OBJECT_ID('tempdb..#SchedulesToDisable') IS NOT NULL
     DROP TABLE #SchedulesToDisable;
 
-CREATE TABLE #SchedulesToDisable (
-    ScheduleId INT PRIMARY KEY,
-    ScheduleName NVARCHAR(500),
-    ClientId INT,
-    ClientName NVARCHAR(500),
-    CurrentIsEnabled BIT,
-    CurrentNextRunTime DATETIME
-);
-
-INSERT INTO #SchedulesToDisable (ScheduleId, ScheduleName, ClientId, ClientName, CurrentIsEnabled, CurrentNextRunTime)
 SELECT DISTINCT
-    s.Id,
-    s.Name,
+    s.Id AS ScheduleId,
+    s.Name AS ScheduleName,
     s.ClientId,
     c.ClientName,
-    s.IsEnabled,
-    s.NextRunTime
+    s.IsEnabled AS CurrentIsEnabled,
+    s.NextRunTime AS CurrentNextRunTime
+INTO #SchedulesToDisable
 FROM dbo.Schedules s
-INNER JOIN dbo.Clients c ON s.ClientId = c.Id
+INNER JOIN dbo.Clients c ON c.Id = s.ClientId
+INNER JOIN #Targets t ON t.CanonicalName = s.Name AND t.ClientName = c.ClientName
 WHERE s.IsDeleted = 0
-    AND s.CreatedBy = 'ScheduleSync'  -- Only affect auto-generated schedules
-    AND EXISTS (
-        SELECT 1
-        FROM dbo.ScheduleSyncSources sss
-        WHERE sss.IsDeleted = 0
-            AND sss.LastInvoiceDate = @DefaultDate
-            AND sss.ClientName = c.ClientName
-            AND s.Name LIKE '%' + ISNULL(sss.VendorName, '') + '%' + sss.AccountNumber + '%'
-    );
+    AND s.CreatedBy = 'ScheduleSync';
 
 SELECT @RowsAffected = COUNT(*) FROM #SchedulesToDisable;
 
@@ -82,7 +104,7 @@ PRINT '========================================';
 PRINT '';
 
 
-PRINT 'Step 2: Disabling schedules...';
+PRINT 'Step 3: Disabling schedules...';
 PRINT '';
 
 BEGIN TRANSACTION;
@@ -116,7 +138,7 @@ BEGIN CATCH
     THROW;
 END CATCH;
 
-PRINT 'Step 3: Verification...';
+PRINT 'Step 4: Verification...';
 PRINT '';
 
 SELECT 
@@ -144,6 +166,7 @@ PRINT 'Script completed at: ' + CONVERT(VARCHAR(30), GETDATE(), 120);
 PRINT '========================================';
 
 DROP TABLE #SchedulesToDisable;
+DROP TABLE #Targets;
 
 SET NOCOUNT OFF;
 GO
