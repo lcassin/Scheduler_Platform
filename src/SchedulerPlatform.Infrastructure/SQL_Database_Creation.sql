@@ -71,24 +71,6 @@ CREATE TABLE [Users] (
     CONSTRAINT [FK_Users_Clients_ClientId] FOREIGN KEY ([ClientId]) REFERENCES [Clients] ([Id]) ON DELETE NO ACTION
 );
 
-CREATE TABLE [VendorCredentials] (
-    [Id] int NOT NULL IDENTITY,
-    [ClientId] int NOT NULL,
-    [VendorName] nvarchar(200) NOT NULL,
-    [VendorUrl] nvarchar(500) NOT NULL,
-    [Username] nvarchar(200) NOT NULL,
-    [EncryptedPassword] nvarchar(500) NOT NULL,
-    [LastVerified] datetime2 NULL,
-    [IsValid] bit NOT NULL,
-    [AdditionalData] nvarchar(max) NULL,
-    [CreatedAt] datetime2 NOT NULL,
-    [UpdatedAt] datetime2 NULL,
-    [CreatedBy] nvarchar(max) NOT NULL,
-    [UpdatedBy] nvarchar(max) NULL,
-    [IsDeleted] bit NOT NULL,
-    CONSTRAINT [PK_VendorCredentials] PRIMARY KEY ([Id]),
-    CONSTRAINT [FK_VendorCredentials_Clients_ClientId] FOREIGN KEY ([ClientId]) REFERENCES [Clients] ([Id]) ON DELETE CASCADE
-);
 
 CREATE TABLE [JobExecutions] (
     [Id] bigint NOT NULL IDENTITY,
@@ -477,7 +459,6 @@ PRINT 'Azure AD Configuration Required:';
 PRINT '  - Tenant ID: 08717c9a-7042-4ddf-b86a-e0a500d32cde';
 PRINT '  - Update appsettings.json with ClientId and ClientSecret';
 PRINT '  - See AZURE_AD_SETUP.md for complete setup instructions';
-VALUES (1, 1, N'test_credential', GETDATE(), GETDATE(), N'System', N'System', 0);
 
 /** Optional - Create Test Job Execution **/
 

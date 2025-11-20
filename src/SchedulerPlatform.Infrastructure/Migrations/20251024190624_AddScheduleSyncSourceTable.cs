@@ -13,14 +13,6 @@ namespace SchedulerPlatform.Infrastructure.Migrations
         {
             migrationBuilder.AlterColumn<string>(
                 name: "CreatedBy",
-                table: "VendorCredentials",
-                type: "nvarchar(max)",
-                nullable: true,
-                oldClrType: typeof(string),
-                oldType: "nvarchar(max)");
-
-            migrationBuilder.AlterColumn<string>(
-                name: "CreatedBy",
                 table: "Users",
                 type: "nvarchar(max)",
                 nullable: true,
@@ -137,16 +129,6 @@ namespace SchedulerPlatform.Infrastructure.Migrations
         {
             migrationBuilder.DropTable(
                 name: "ScheduleSyncSources");
-
-            migrationBuilder.AlterColumn<string>(
-                name: "CreatedBy",
-                table: "VendorCredentials",
-                type: "nvarchar(max)",
-                nullable: false,
-                defaultValue: "",
-                oldClrType: typeof(string),
-                oldType: "nvarchar(max)",
-                oldNullable: true);
 
             migrationBuilder.AlterColumn<string>(
                 name: "CreatedBy",

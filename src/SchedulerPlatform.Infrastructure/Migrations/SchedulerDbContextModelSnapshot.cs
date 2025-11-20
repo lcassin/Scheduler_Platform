@@ -691,68 +691,6 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                     b.ToTable("UserPermissions");
                 });
 
-            modelBuilder.Entity("SchedulerPlatform.Core.Domain.Entities.VendorCredential", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("AdditionalData")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<int>("ClientId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("EncryptedPassword")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("bit");
-
-                    b.Property<bool>("IsValid")
-                        .HasColumnType("bit");
-
-                    b.Property<DateTime?>("LastVerified")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Username")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
-
-                    b.Property<string>("VendorName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
-
-                    b.Property<string>("VendorUrl")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClientId");
-
-                    b.ToTable("VendorCredentials");
-                });
-
             modelBuilder.Entity("SchedulerPlatform.Core.Domain.Entities.JobExecution", b =>
                 {
                     b.HasOne("SchedulerPlatform.Core.Domain.Entities.Schedule", "Schedule")
@@ -840,17 +778,7 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("SchedulerPlatform.Core.Domain.Entities.VendorCredential", b =>
-                {
-                    b.HasOne("SchedulerPlatform.Core.Domain.Entities.Client", "Client")
-                        .WithMany("VendorCredentials")
-                        .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Client");
-                });
-
+           
             modelBuilder.Entity("SchedulerPlatform.Core.Domain.Entities.Client", b =>
                 {
                     b.Navigation("ScheduleSyncSources");

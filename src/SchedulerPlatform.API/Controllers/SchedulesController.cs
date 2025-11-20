@@ -1,5 +1,6 @@
 using System.Text;
 using ClosedXML.Excel;
+using DocumentFormat.OpenXml.Office2010.Drawing.Charts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
@@ -138,7 +139,7 @@ public class SchedulesController : ControllerBase
             schedule.CreatedAt = DateTime.UtcNow;
             schedule.CreatedBy = User.Identity?.Name ?? "System";
 
-            if (!schedule.NextRunTime.HasValue && !string.IsNullOrWhiteSpace(schedule.CronExpression))
+            if (!schedule.IsDeleted && schedule.IsEnabled && !schedule.NextRunTime.HasValue && !string.IsNullOrWhiteSpace(schedule.CronExpression))
             {
                 try
                 {
@@ -205,7 +206,7 @@ public class SchedulesController : ControllerBase
             schedule.UpdatedAt = DateTime.UtcNow;
             schedule.UpdatedBy = User.Identity?.Name ?? "System";
 
-            if (!schedule.NextRunTime.HasValue && !string.IsNullOrWhiteSpace(schedule.CronExpression))
+            if (!schedule.IsDeleted && schedule.IsEnabled && !schedule.NextRunTime.HasValue && !string.IsNullOrWhiteSpace(schedule.CronExpression))
             {
                 try
                 {

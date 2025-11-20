@@ -18,7 +18,5 @@ public class Client : BaseEntity
     [JsonIgnore]
     public ICollection<Schedule> Schedules { get; set; } = new List<Schedule>();
     [JsonIgnore]
-    public ICollection<VendorCredential> VendorCredentials { get; set; } = new List<VendorCredential>();
-    [JsonIgnore]
     public ICollection<ScheduleSyncSource> ScheduleSyncSources { get; set; } = new List<ScheduleSyncSource>();
 }

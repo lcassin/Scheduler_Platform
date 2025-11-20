@@ -17,7 +17,6 @@ public class SchedulerDbContext : DbContext
     public DbSet<Schedule> Schedules { get; set; }
     public DbSet<JobExecution> JobExecutions { get; set; }
     public DbSet<JobParameter> JobParameters { get; set; }
-    public DbSet<VendorCredential> VendorCredentials { get; set; }
     public DbSet<AuditLog> AuditLogs { get; set; }
     public DbSet<NotificationSetting> NotificationSettings { get; set; }
     public DbSet<ScheduleSyncSource> ScheduleSyncSources { get; set; }
@@ -148,25 +147,6 @@ public class SchedulerDbContext : DbContext
             entity.HasOne(e => e.Schedule)
                 .WithMany(s => s.JobParameters)
                 .HasForeignKey(e => e.ScheduleId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<VendorCredential>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.VendorName).IsRequired().HasMaxLength(200);
-            entity.Property(e => e.VendorUrl).IsRequired().HasMaxLength(500);
-            entity.Property(e => e.Username).IsRequired().HasMaxLength(200);
-            entity.Property(e => e.EncryptedPassword).IsRequired().HasMaxLength(500);
-            entity.Property(e => e.AdditionalData).HasColumnType("nvarchar(max)");
-            
-            entity.Property(e => e.ClientId)
-                .HasColumnType("bigint")
-                .HasConversion(intToLongConverter);
-            
-            entity.HasOne(e => e.Client)
-                .WithMany(c => c.VendorCredentials)
-                .HasForeignKey(e => e.ClientId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
