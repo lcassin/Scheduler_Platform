@@ -14,7 +14,8 @@ public interface IScheduleRepository : IRepository<Schedule>
         int pageNumber, 
         int pageSize, 
         int? clientId = null, 
-        string? searchTerm = null);
+        string? searchTerm = null,
+        bool? isEnabled = null);
     Task<IEnumerable<Schedule>> GetAllWithNotificationSettingsAsync();
     Task<IEnumerable<Schedule>> GetByClientIdWithNotificationSettingsAsync(int clientId);
     

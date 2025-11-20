@@ -42,7 +42,8 @@ public class SchedulesController : ControllerBase
         [FromQuery] int pageSize = 20,
         [FromQuery] bool paginated = true,
         [FromQuery] DateTime? startDate = null,
-        [FromQuery] DateTime? endDate = null)
+        [FromQuery] DateTime? endDate = null,
+        [FromQuery] bool? isEnabled = null)
     {
         try
         {
@@ -52,7 +53,8 @@ public class SchedulesController : ControllerBase
                     pageNumber, 
                     pageSize, 
                     clientId, 
-                    searchTerm);
+                    searchTerm,
+                    isEnabled);
 
                 return Ok(new 
                 {

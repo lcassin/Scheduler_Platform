@@ -70,7 +70,8 @@ public class ScheduleRepository : Repository<Schedule>, IScheduleRepository
         int pageNumber,
         int pageSize,
         int? clientId = null,
-        string? searchTerm = null)
+        string? searchTerm = null,
+        bool? isEnabled = null)
     {
         var query = _dbSet
             .AsNoTracking()
@@ -84,6 +85,11 @@ public class ScheduleRepository : Repository<Schedule>, IScheduleRepository
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
             query = query.Where(s => s.Name.Contains(searchTerm));
+        }
+        
+        if (isEnabled.HasValue)
+        {
+            query = query.Where(s => s.IsEnabled == isEnabled.Value);
         }
         
         var totalCount = await query.CountAsync();
