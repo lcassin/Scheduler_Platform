@@ -4,9 +4,9 @@
 SET NOCOUNT ON;
 GO
 
-DECLARE @DefaultDate DATETIME = '0001-01-01 00:00:00';
+DECLARE @DefaultDate DATETIME2(7) = '0001-01-01T00:00:00';
 DECLARE @UpdatedBy NVARCHAR(100) = 'DisableUnknownInvoiceDateScript';
-DECLARE @UpdatedAt DATETIME = GETUTCDATE();
+DECLARE @UpdatedAt DATETIME2(7) = SYSUTCDATETIME();
 DECLARE @RowsAffected INT = 0;
 
 PRINT '========================================';
