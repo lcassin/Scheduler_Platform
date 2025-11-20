@@ -345,8 +345,13 @@ public class SyncService
                     .ToDictionaryAsync(s => s.ExternalAccountId);
 
                 var accountsWithDates = page.Data.Count(a => a.LastInvoiceDate.HasValue);
-                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Processing page {page.Page}: {page.Data.Count} records (Found {existing.Count} existing, {accountsWithDates} have LastInvoiceDate)");
+                var accountsWithValidDates = page.Data.Count(a => a.LastInvoiceDate.HasValue && a.LastInvoiceDate.Value != DateTime.MinValue);
+                var accountsWithUnknownDates = page.Data.Count(a => !a.LastInvoiceDate.HasValue || a.LastInvoiceDate.Value == DateTime.MinValue);
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Processing page {page.Page}: {page.Data.Count} records (Found {existing.Count} existing, {accountsWithValidDates} valid dates, {accountsWithUnknownDates} unknown/null dates)");
 
+                var pageUpdated = 0;
+                var pageUnchanged = 0;
+                
                 foreach (var account in page.Data)
                 {
                     if (existing.TryGetValue(account.AccountId, out var existingRecord))
@@ -382,10 +387,12 @@ public class SyncService
                             }
 
                             result.Updated++;
+                            pageUpdated++;
                         }
                         else
                         {
                             existingRecord.LastSyncedAt = runStart;
+                            pageUnchanged++;
                         }
                     }
                     else
@@ -416,6 +423,8 @@ public class SyncService
 
                     processedCount++;
                 }
+                
+                Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}]   Page {page.Page} results: {pageUpdated} updated, {pageUnchanged} unchanged, {result.Added - (processedCount - page.Data.Count)} added");
 
                 batchCount++;
 
