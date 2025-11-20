@@ -29,8 +29,12 @@ public class ScheduleGenerationService
 
         try
         {
+            var defaultDate = new DateTime(1, 1, 1);
+            
             var syncGroups = await _dbContext.ScheduleSyncSources
-                .Where(s => !s.IsDeleted && s.LastSyncedAt >= syncRunStart)
+                .Where(s => !s.IsDeleted 
+                    && s.LastSyncedAt >= syncRunStart
+                    && s.LastInvoiceDate != defaultDate)
                 .GroupBy(s => new { s.ClientName, s.ExternalVendorId, s.VendorName, s.AccountNumber, s.ScheduleFrequency })
                 .Select(g => new
                 {
@@ -44,7 +48,7 @@ public class ScheduleGenerationService
                 })
                 .ToListAsync();
 
-            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Found {syncGroups.Count:N0} unique schedule groups to process");
+            Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Found {syncGroups.Count:N0} unique schedule groups to process (filtered out records with unknown LastInvoiceDate)");
 
             Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Preloading clients into memory...");
             var uniqueClientNames = syncGroups
