@@ -43,7 +43,7 @@ public static class Config
             {
                 Scopes = { "scheduler-api", "admin", "client" },
                 ApiSecrets = { new Secret("api-secret-key".Sha256()) },
-                UserClaims = { "name", "role", "email", "client_id", "permission", "is_system_admin" }
+                UserClaims = { "name", "role", "email", "user_client_id", "permission", "is_system_admin" }
             }
         };
 
