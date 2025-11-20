@@ -9,7 +9,8 @@ public interface IScheduleService
         int pageNumber = 1, 
         int pageSize = 20, 
         int? clientId = null, 
-        string? searchTerm = null);
+        string? searchTerm = null,
+        bool? isEnabled = null);
     Task<Schedule?> GetScheduleAsync(int id);
     Task<Schedule> CreateScheduleAsync(Schedule schedule);
     Task<Schedule> UpdateScheduleAsync(int id, Schedule schedule);

@@ -29,38 +29,32 @@ public class DashboardController : ControllerBase
         try
         {
             var startDate = DateTime.UtcNow.AddHours(-hours);
-            var schedules = await _unitOfWork.Schedules.GetAllAsync();
-            
-            if (clientId.HasValue)
-            {
-                schedules = schedules.Where(s => s.ClientId == clientId.Value);
-            }
-
-            var schedulesList = schedules.ToList();
-            var executions = await _unitOfWork.JobExecutions.GetByFiltersAsync(null, null, startDate, null);
-            
-            if (clientId.HasValue)
-            {
-                var clientScheduleIds = schedulesList.Select(s => s.Id).ToHashSet();
-                executions = executions.Where(e => clientScheduleIds.Contains(e.ScheduleId));
-            }
-
-            var executionsList = executions.ToList();
             var today = DateTime.UtcNow.Date;
             
-            var peakConcurrent = CalculatePeakConcurrentExecutions(executionsList);
+            var totalSchedules = await _unitOfWork.Schedules.GetTotalSchedulesCountAsync(clientId);
+            var enabledSchedules = await _unitOfWork.Schedules.GetEnabledSchedulesCountAsync(clientId);
+            var disabledSchedules = await _unitOfWork.Schedules.GetDisabledSchedulesCountAsync(clientId);
+
+            var runningExecutions = await _unitOfWork.JobExecutions.GetRunningCountAsync(startDate, clientId);
+            var completedToday = await _unitOfWork.JobExecutions.GetCompletedTodayCountAsync(today, clientId);
+            var failedToday = await _unitOfWork.JobExecutions.GetFailedTodayCountAsync(today, clientId);
+            var avgDuration = await _unitOfWork.JobExecutions.GetAverageDurationAsync(startDate, clientId);
+            var totalExecutions = await _unitOfWork.JobExecutions.GetTotalExecutionsCountAsync(startDate, clientId);
+            
+            var executionsForPeak = await _unitOfWork.JobExecutions.GetExecutionsForPeakCalculationAsync(startDate, clientId);
+            var peakConcurrent = CalculatePeakConcurrentExecutions(executionsForPeak);
 
             var overview = new DashboardOverviewResponse
             {
-                TotalSchedules = schedulesList.Count,
-                EnabledSchedules = schedulesList.Count(s => s.IsEnabled),
-                DisabledSchedules = schedulesList.Count(s => !s.IsEnabled),
-                RunningExecutions = executionsList.Count(e => e.Status == JobStatus.Running || e.Status == JobStatus.Retrying),
-                CompletedToday = executionsList.Count(e => e.StartTime >= today && e.Status == JobStatus.Completed),
-                FailedToday = executionsList.Count(e => e.StartTime >= today && e.Status == JobStatus.Failed),
+                TotalSchedules = totalSchedules,
+                EnabledSchedules = enabledSchedules,
+                DisabledSchedules = disabledSchedules,
+                RunningExecutions = runningExecutions,
+                CompletedToday = completedToday,
+                FailedToday = failedToday,
                 PeakConcurrentExecutions = peakConcurrent,
-                AverageDurationSeconds = executionsList.Where(e => e.DurationSeconds.HasValue).Average(e => (double?)e.DurationSeconds) ?? 0,
-                TotalExecutionsInWindow = executionsList.Count
+                AverageDurationSeconds = avgDuration,
+                TotalExecutionsInWindow = totalExecutions
             };
 
             return Ok(overview);
@@ -80,28 +74,16 @@ public class DashboardController : ControllerBase
         try
         {
             var startDate = DateTime.UtcNow.AddHours(-hours);
-            var executions = await _unitOfWork.JobExecutions.GetByFiltersAsync(null, null, startDate, null);
+            
+            var statusCounts = await _unitOfWork.JobExecutions.GetStatusBreakdownAsync(startDate, clientId);
+            var totalCount = statusCounts.Values.Sum();
 
-            if (clientId.HasValue)
-            {
-                var schedules = await _unitOfWork.Schedules.GetAllAsync();
-                var clientScheduleIds = schedules
-                    .Where(s => s.ClientId == clientId.Value)
-                    .Select(s => s.Id)
-                    .ToHashSet();
-                executions = executions.Where(e => clientScheduleIds.Contains(e.ScheduleId));
-            }
-
-            var executionsList = executions.ToList();
-            var totalCount = executionsList.Count;
-
-            var breakdown = executionsList
-                .GroupBy(e => e.Status)
-                .Select(g => new StatusBreakdownItem
+            var breakdown = statusCounts
+                .Select(kvp => new StatusBreakdownItem
                 {
-                    Status = g.Key,
-                    Count = g.Count(),
-                    Percentage = totalCount > 0 ? (double)g.Count() / totalCount * 100 : 0
+                    Status = kvp.Key,
+                    Count = kvp.Value,
+                    Percentage = totalCount > 0 ? (double)kvp.Value / totalCount * 100 : 0
                 })
                 .OrderByDescending(x => x.Count)
                 .ToList();
@@ -125,36 +107,15 @@ public class DashboardController : ControllerBase
         {
             var startDate = DateTime.UtcNow.AddHours(-hours);
             
-            var executions = await _unitOfWork.JobExecutions.GetByFiltersAsync(
-                null, null, startDate, null);
+            var trendsData = await _unitOfWork.JobExecutions.GetExecutionTrendsAsync(startDate, clientId, statuses);
 
-            if (statuses != null && statuses.Length > 0)
+            var trends = trendsData.Select(t => new ExecutionTrendItem
             {
-                executions = executions.Where(e => statuses.Contains(e.Status));
-            }
-
-            if (clientId.HasValue)
-            {
-                var schedules = await _unitOfWork.Schedules.GetAllAsync();
-                var clientScheduleIds = schedules
-                    .Where(s => s.ClientId == clientId.Value)
-                    .Select(s => s.Id)
-                    .ToHashSet();
-                executions = executions.Where(e => clientScheduleIds.Contains(e.ScheduleId));
-            }
-
-            var executionsList = executions.ToList();
-            var trends = executionsList
-                .GroupBy(e => new DateTime(e.StartTime.Year, e.StartTime.Month, e.StartTime.Day, e.StartTime.Hour, 0, 0))
-                .Select(g => new ExecutionTrendItem
-                {
-                    Hour = g.Key,
-                    AverageDurationSeconds = g.Where(e => e.DurationSeconds.HasValue).Average(e => (double?)e.DurationSeconds) ?? 0,
-                    ExecutionCount = g.Count(),
-                    ConcurrentCount = g.Count(e => e.Status == JobStatus.Running || e.Status == JobStatus.Retrying)
-                })
-                .OrderBy(x => x.Hour)
-                .ToList();
+                Hour = new DateTime(t.Year, t.Month, t.Day, t.Hour, 0, 0, DateTimeKind.Utc),
+                AverageDurationSeconds = t.AvgDuration,
+                ExecutionCount = t.ExecutionCount,
+                ConcurrentCount = t.ConcurrentCount
+            }).ToList();
 
             return Ok(trends);
         }
@@ -175,36 +136,16 @@ public class DashboardController : ControllerBase
         try
         {
             var startDate = DateTime.UtcNow.AddHours(-hours);
-            var executions = await _unitOfWork.JobExecutions.GetByFiltersAsync(
-                null, null, startDate, null);
+            
+            var topLongestData = await _unitOfWork.JobExecutions.GetTopLongestAsync(startDate, clientId, statuses, limit);
 
-            if (statuses != null && statuses.Length > 0)
+            var topLongest = topLongestData.Select(t => new TopLongestExecutionItem
             {
-                executions = executions.Where(e => statuses.Contains(e.Status));
-            }
-
-            if (clientId.HasValue)
-            {
-                var schedules = await _unitOfWork.Schedules.GetAllAsync();
-                var clientScheduleIds = schedules
-                    .Where(s => s.ClientId == clientId.Value)
-                    .Select(s => s.Id)
-                    .ToHashSet();
-                executions = executions.Where(e => clientScheduleIds.Contains(e.ScheduleId));
-            }
-
-            var topLongest = executions
-                .Where(e => e.DurationSeconds.HasValue)
-                .OrderByDescending(e => e.DurationSeconds)
-                .Take(limit)
-                .Select(e => new TopLongestExecutionItem
-                {
-                    ScheduleName = e.Schedule?.Name ?? "Unknown",
-                    DurationSeconds = e.DurationSeconds!.Value,
-                    StartTime = e.StartTime,
-                    EndTime = e.EndTime
-                })
-                .ToList();
+                ScheduleName = t.ScheduleName,
+                DurationSeconds = t.DurationSeconds,
+                StartTime = t.StartTime,
+                EndTime = t.EndTime
+            }).ToList();
 
             return Ok(topLongest);
         }
@@ -217,20 +158,19 @@ public class DashboardController : ControllerBase
 
     [HttpGet("invalid-schedules")]
     public async Task<ActionResult<List<InvalidScheduleInfo>>> GetInvalidSchedules(
-        [FromQuery] int? clientId = null)
+        [FromQuery] int? clientId = null,
+        [FromQuery] int limit = 100)
     {
         try
         {
-            var schedules = await _unitOfWork.Schedules.GetAllAsync();
-            
-            schedules = schedules.Where(s => !s.IsDeleted);
+            var schedulesQuery = await _unitOfWork.Schedules.FindAsync(s => !s.IsDeleted);
             
             if (clientId.HasValue)
             {
-                schedules = schedules.Where(s => s.ClientId == clientId.Value);
+                schedulesQuery = schedulesQuery.Where(s => s.ClientId == clientId.Value);
             }
 
-            var schedulesList = schedules.ToList();
+            var schedulesList = schedulesQuery.Take(limit).ToList();
             var invalidSchedules = new List<InvalidScheduleInfo>();
             var sevenDaysAgo = DateTime.UtcNow.AddDays(-7);
 

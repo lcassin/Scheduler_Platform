@@ -82,7 +82,6 @@ public class AuditLogInterceptor : SaveChangesInterceptor
         return entity is Schedule ||
                entity is JobParameter ||
                entity is NotificationSetting ||
-               entity is VendorCredential ||
                entity is User ||
                entity is UserPermission ||
                entity is Client;

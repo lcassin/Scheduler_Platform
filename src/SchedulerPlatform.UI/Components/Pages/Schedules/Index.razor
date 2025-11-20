@@ -29,7 +29,7 @@
             <MudTextField @bind-Value="_searchTerm" Label="Search by Name" Placeholder="e.g. Vendor_Account" 
                           Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
         </MudItem>
-        <MudItem xs="12" md="3">
+        <MudItem xs="12" md="2">
             <MudAutocomplete T="Client" 
                              Label="Filter by Client" 
                              @bind-Value="_selectedClient"
@@ -43,7 +43,14 @@
                              AdornmentIcon="@Icons.Material.Filled.Search"
                              AdornmentColor="Color.Primary" />
         </MudItem>
-        <MudItem xs="12" md="3">
+        <MudItem xs="12" md="2">
+            <MudSelect T="string" @bind-Value="_selectedStatus" Label="Status" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                <MudSelectItem Value="@("Both")">Both</MudSelectItem>
+                <MudSelectItem Value="@("Enabled")">Enabled</MudSelectItem>
+                <MudSelectItem Value="@("Disabled")">Disabled</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="2">
             <MudDatePicker @bind-Date="_selectedDate" 
                            Label="Filter by Date" 
                            Variant="Variant.Outlined" 
@@ -180,6 +187,13 @@
 	private int? _selectedClientId => _selectedClient?.Id;
 	private DateTime? _selectedDate;
 	private DateTime? _filterDate;
+	private string _selectedStatus = "Both";
+	private bool? _filterIsEnabled => _selectedStatus switch
+	{
+		"Enabled" => true,
+		"Disabled" => false,
+		_ => null
+	};
 	private bool _canCreate = false;
 	private bool _canUpdate = false;
 	private bool _canDelete = false;
@@ -258,7 +272,8 @@
 				pageNumber,
 				pageSize,
 				_selectedClientId,
-				_searchTerm);
+				_searchTerm,
+				_filterIsEnabled);
 
 			var items = result.Items;
 

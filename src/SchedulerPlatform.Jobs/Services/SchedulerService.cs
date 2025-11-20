@@ -43,7 +43,7 @@ public class SchedulerService : ISchedulerService
             trigger = TriggerBuilder.Create()
                 .WithIdentity($"Trigger_{schedule.Id}", $"Group_{schedule.ClientId}")
                 .ForJob(jobDetail)
-                .WithCronSchedule(schedule.CronExpression, x => x.WithMisfireHandlingInstructionFireAndProceed())
+                .WithCronSchedule(schedule.CronExpression, x => x.WithMisfireHandlingInstructionDoNothing())
                 .StartAt(schedule.NextRunTime.Value)
                 .Build();
         }
@@ -52,7 +52,7 @@ public class SchedulerService : ISchedulerService
             trigger = TriggerBuilder.Create()
                 .WithIdentity($"Trigger_{schedule.Id}", $"Group_{schedule.ClientId}")
                 .ForJob(jobDetail)
-                .WithCronSchedule(schedule.CronExpression, x => x.WithMisfireHandlingInstructionFireAndProceed())
+                .WithCronSchedule(schedule.CronExpression, x => x.WithMisfireHandlingInstructionDoNothing())
                 .StartNow()
                 .Build();
         }

@@ -8,7 +8,6 @@ public interface IUnitOfWork : IDisposable
     IRepository<Entities.User> Users { get; }
     IUserPermissionRepository UserPermissions { get; }
     IRepository<Entities.PasswordHistory> PasswordHistories { get; }
-    IRepository<Entities.VendorCredential> VendorCredentials { get; }
     IRepository<Entities.JobParameter> JobParameters { get; }
     IRepository<Entities.NotificationSetting> NotificationSettings { get; }
     

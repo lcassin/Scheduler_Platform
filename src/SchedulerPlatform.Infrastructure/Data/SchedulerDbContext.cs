@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SchedulerPlatform.Core.Domain.Entities;
 
 namespace SchedulerPlatform.Infrastructure.Data;
@@ -16,7 +17,6 @@ public class SchedulerDbContext : DbContext
     public DbSet<Schedule> Schedules { get; set; }
     public DbSet<JobExecution> JobExecutions { get; set; }
     public DbSet<JobParameter> JobParameters { get; set; }
-    public DbSet<VendorCredential> VendorCredentials { get; set; }
     public DbSet<AuditLog> AuditLogs { get; set; }
     public DbSet<NotificationSetting> NotificationSettings { get; set; }
     public DbSet<ScheduleSyncSource> ScheduleSyncSources { get; set; }
@@ -25,12 +25,26 @@ public class SchedulerDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        var intToLongConverter = new ValueConverter<int, long>(
+            v => v,
+            v => checked((int)v));
+        
+        var nullableIntToLongConverter = new ValueConverter<int?, long?>(
+            v => v.HasValue ? (long?)v.Value : null,
+            v => v.HasValue ? (int?)checked((int)v.Value) : null);
+
         modelBuilder.Entity<Client>(entity =>
         {
             entity.HasKey(e => e.Id);
+            
+            entity.Property(e => e.Id)
+                .HasColumnType("bigint")
+                .HasConversion(intToLongConverter);
+            
             entity.Property(e => e.ClientName).IsRequired().HasMaxLength(200);
-            entity.Property(e => e.ClientCode).IsRequired().HasMaxLength(50);
-            entity.HasIndex(e => e.ClientCode).IsUnique();
+            entity.Property(e => e.ExternalClientId).IsRequired();
+            entity.HasIndex(e => e.ExternalClientId).IsUnique();
+            entity.HasIndex(e => e.LastSyncedAt);
             entity.Property(e => e.ContactEmail).HasMaxLength(255);
             entity.Property(e => e.ContactPhone).HasMaxLength(50);
         });
@@ -47,6 +61,10 @@ public class SchedulerDbContext : DbContext
             entity.Property(e => e.ExternalIssuer).HasMaxLength(500);
             entity.Property(e => e.PasswordHash).HasMaxLength(500);
             entity.HasIndex(e => new { e.ExternalIssuer, e.ExternalUserId });
+            
+            entity.Property(e => e.ClientId)
+                .HasColumnType("bigint")
+                .HasConversion(intToLongConverter);
             
             entity.HasOne(e => e.Client)
                 .WithMany(c => c.Users)
@@ -89,6 +107,10 @@ public class SchedulerDbContext : DbContext
             entity.Property(e => e.TimeZone).HasMaxLength(100);
             entity.Property(e => e.JobConfiguration).HasColumnType("nvarchar(max)");
             
+            entity.Property(e => e.ClientId)
+                .HasColumnType("bigint")
+                .HasConversion(intToLongConverter);
+            
             entity.HasOne(e => e.Client)
                 .WithMany(c => c.Schedules)
                 .HasForeignKey(e => e.ClientId)
@@ -128,21 +150,6 @@ public class SchedulerDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        modelBuilder.Entity<VendorCredential>(entity =>
-        {
-            entity.HasKey(e => e.Id);
-            entity.Property(e => e.VendorName).IsRequired().HasMaxLength(200);
-            entity.Property(e => e.VendorUrl).IsRequired().HasMaxLength(500);
-            entity.Property(e => e.Username).IsRequired().HasMaxLength(200);
-            entity.Property(e => e.EncryptedPassword).IsRequired().HasMaxLength(500);
-            entity.Property(e => e.AdditionalData).HasColumnType("nvarchar(max)");
-            
-            entity.HasOne(e => e.Client)
-                .WithMany(c => c.VendorCredentials)
-                .HasForeignKey(e => e.ClientId)
-                .OnDelete(DeleteBehavior.Cascade);
-        });
-
         modelBuilder.Entity<AuditLog>(entity =>
         {
             entity.HasKey(e => e.Id);
@@ -175,18 +182,28 @@ public class SchedulerDbContext : DbContext
         modelBuilder.Entity<ScheduleSyncSource>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.Vendor).IsRequired().HasMaxLength(200);
-            entity.Property(e => e.AccountNumber).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Id).HasColumnName("SyncId");
+            entity.Property(e => e.AccountNumber).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.AccountName).HasMaxLength(64);
+            entity.Property(e => e.VendorName).HasMaxLength(64);
+            entity.Property(e => e.ClientName).HasMaxLength(64);
+            entity.Property(e => e.TandemAccountId).HasMaxLength(64);
+            
+            entity.Property(e => e.ClientId)
+                .HasColumnType("bigint")
+                .HasConversion(nullableIntToLongConverter);
             
             entity.HasOne(e => e.Client)
                 .WithMany(c => c.ScheduleSyncSources)
                 .HasForeignKey(e => e.ClientId)
                 .OnDelete(DeleteBehavior.Restrict);
                 
-            entity.HasIndex(e => new { e.ClientId, e.Vendor, e.AccountNumber });
-            entity.HasIndex(e => e.ScheduleFrequency);
-            entity.HasIndex(e => e.ScheduleDate);
+            entity.HasIndex(e => e.ExternalAccountId).IsUnique();
+            entity.HasIndex(e => e.ExternalClientId);
+            entity.HasIndex(e => e.ExternalVendorId);
             entity.HasIndex(e => e.ClientId);
+            entity.HasIndex(e => e.LastSyncedAt);
+            entity.HasIndex(e => new { e.ExternalClientId, e.ExternalVendorId, e.AccountNumber });
         });
     }
 }
