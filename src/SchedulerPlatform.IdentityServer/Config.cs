@@ -30,7 +30,7 @@ public static class Config
         {
             new ApiScope("scheduler-api", "Scheduler Platform API")
             {
-                UserClaims = { "name", "role", "email", "permission", "is_system_admin" }
+                UserClaims = { "name", "role", "email", "permission", "is_system_admin", "user_client_id" }
             },
             new ApiScope("admin", "Admin Access"),
             new ApiScope("client", "Client Access")
