@@ -67,23 +67,21 @@ public class SchedulesController : ControllerBase
             }
             else
             {
-                var schedules = clientId.HasValue
-                    ? await _unitOfWork.Schedules.GetByClientIdAsync(clientId.Value)
-                    : await _unitOfWork.Schedules.GetAllAsync();
-
-                if (startDate.HasValue || endDate.HasValue)
+                IEnumerable<Schedule> schedules;
+                
+                if (startDate.HasValue && endDate.HasValue)
                 {
-                    schedules = schedules.Where(s => s.NextRunTime.HasValue).ToList();
-                    
-                    if (startDate.HasValue)
-                    {
-                        schedules = schedules.Where(s => s.NextRunTime!.Value >= startDate.Value).ToList();
-                    }
-                    
-                    if (endDate.HasValue)
-                    {
-                        schedules = schedules.Where(s => s.NextRunTime!.Value <= endDate.Value).ToList();
-                    }
+                    schedules = await _unitOfWork.Schedules.GetSchedulesForCalendarAsync(
+                        startDate.Value, 
+                        endDate.Value, 
+                        clientId,
+                        maxPerDay: 1000); // High limit for non-calendar views
+                }
+                else
+                {
+                    schedules = clientId.HasValue
+                        ? await _unitOfWork.Schedules.GetByClientIdAsync(clientId.Value)
+                        : await _unitOfWork.Schedules.GetAllAsync();
                 }
 
                 return Ok(schedules);
