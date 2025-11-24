@@ -35,7 +35,8 @@
                           Immediate="false"
                           Style="flex: 1;" />
             <MudSwitch T="bool"
-                       @bind-Checked="ShowInactiveUsers"
+                       Checked="@_showInactiveUsers"
+                       CheckedChanged="@OnShowInactiveChanged"
                        Label="Show Inactive Users"
                        Color="Color.Primary" />
         </div>
@@ -128,15 +129,11 @@
     private bool _canCreateUsers = false;
     private bool _canUpdateUsers = false;
 
-    private bool ShowInactiveUsers
+    private async Task OnShowInactiveChanged(bool value)
     {
-        get => _showInactiveUsers;
-        set
-        {
-            if (_showInactiveUsers == value) return;
-            _showInactiveUsers = value;
-            _ = SearchUsers();
-        }
+        if (_showInactiveUsers == value) return;
+        _showInactiveUsers = value;
+        await SearchUsers();
     }
 
     protected override async Task OnInitializedAsync()
