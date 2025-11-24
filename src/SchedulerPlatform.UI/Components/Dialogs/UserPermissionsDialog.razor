@@ -61,39 +61,44 @@
                         <MudText Typo="Typo.subtitle2" Class="mb-2">@group.PermissionName [Debug: R=@group.CanRead C=@group.CanCreate U=@group.CanUpdate D=@group.CanDelete E=@group.CanExecute]</MudText>
                         <MudGrid>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox T="bool" 
-                                             Checked="@group.CanCreate"
-                                             CheckedChanged="@((bool b) => group.CanCreate = b)"
+                                <MudCheckBox Checked="@group.CanCreate"
+                                             CheckedChanged="@((bool? b) => group.CanCreate = b ?? false)"
                                              Label="Create"
-                                             Dense="true" />
+                                             Dense="true"
+                                             Color="Color.Primary" />
+                                <div style="font-size: 10px;">HTML: <input type="checkbox" checked="@group.CanCreate" disabled /></div>
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox T="bool" 
-                                             Checked="@group.CanRead"
-                                             CheckedChanged="@((bool b) => group.CanRead = b)"
+                                <MudCheckBox Checked="@group.CanRead"
+                                             CheckedChanged="@((bool? b) => group.CanRead = b ?? false)"
                                              Label="Read"
-                                             Dense="true" />
+                                             Dense="true"
+                                             Color="Color.Primary" />
+                                <div style="font-size: 10px;">HTML: <input type="checkbox" checked="@group.CanRead" disabled /></div>
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox T="bool" 
-                                             Checked="@group.CanUpdate"
-                                             CheckedChanged="@((bool b) => group.CanUpdate = b)"
+                                <MudCheckBox Checked="@group.CanUpdate"
+                                             CheckedChanged="@((bool? b) => group.CanUpdate = b ?? false)"
                                              Label="Update"
-                                             Dense="true" />
+                                             Dense="true"
+                                             Color="Color.Primary" />
+                                <div style="font-size: 10px;">HTML: <input type="checkbox" checked="@group.CanUpdate" disabled /></div>
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox T="bool" 
-                                             Checked="@group.CanDelete"
-                                             CheckedChanged="@((bool b) => group.CanDelete = b)"
+                                <MudCheckBox Checked="@group.CanDelete"
+                                             CheckedChanged="@((bool? b) => group.CanDelete = b ?? false)"
                                              Label="Delete"
-                                             Dense="true" />
+                                             Dense="true"
+                                             Color="Color.Primary" />
+                                <div style="font-size: 10px;">HTML: <input type="checkbox" checked="@group.CanDelete" disabled /></div>
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox T="bool" 
-                                             Checked="@group.CanExecute"
-                                             CheckedChanged="@((bool b) => group.CanExecute = b)"
+                                <MudCheckBox Checked="@group.CanExecute"
+                                             CheckedChanged="@((bool? b) => group.CanExecute = b ?? false)"
                                              Label="Execute"
-                                             Dense="true" />
+                                             Dense="true"
+                                             Color="Color.Primary" />
+                                <div style="font-size: 10px;">HTML: <input type="checkbox" checked="@group.CanExecute" disabled /></div>
                             </MudItem>
                         </MudGrid>
                     </MudPaper>
