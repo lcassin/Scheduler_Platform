@@ -61,7 +61,8 @@
                         <MudText Typo="Typo.subtitle2" Class="mb-2">@group.PermissionName [Debug: R=@group.CanRead C=@group.CanCreate U=@group.CanUpdate D=@group.CanDelete E=@group.CanExecute]</MudText>
                         <MudGrid>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox Checked="@group.CanCreate"
+                                <MudCheckBox T="bool?"
+                                             Checked="@group.CanCreate"
                                              CheckedChanged="@((bool? b) => group.CanCreate = b ?? false)"
                                              Label="Create"
                                              Dense="true"
@@ -69,7 +70,8 @@
                                 <div style="font-size: 10px;">HTML: <input type="checkbox" checked="@group.CanCreate" disabled /></div>
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox Checked="@group.CanRead"
+                                <MudCheckBox T="bool?"
+                                             Checked="@group.CanRead"
                                              CheckedChanged="@((bool? b) => group.CanRead = b ?? false)"
                                              Label="Read"
                                              Dense="true"
@@ -77,7 +79,8 @@
                                 <div style="font-size: 10px;">HTML: <input type="checkbox" checked="@group.CanRead" disabled /></div>
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox Checked="@group.CanUpdate"
+                                <MudCheckBox T="bool?"
+                                             Checked="@group.CanUpdate"
                                              CheckedChanged="@((bool? b) => group.CanUpdate = b ?? false)"
                                              Label="Update"
                                              Dense="true"
@@ -85,7 +88,8 @@
                                 <div style="font-size: 10px;">HTML: <input type="checkbox" checked="@group.CanUpdate" disabled /></div>
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox Checked="@group.CanDelete"
+                                <MudCheckBox T="bool?"
+                                             Checked="@group.CanDelete"
                                              CheckedChanged="@((bool? b) => group.CanDelete = b ?? false)"
                                              Label="Delete"
                                              Dense="true"
@@ -93,7 +97,8 @@
                                 <div style="font-size: 10px;">HTML: <input type="checkbox" checked="@group.CanDelete" disabled /></div>
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox Checked="@group.CanExecute"
+                                <MudCheckBox T="bool?"
+                                             Checked="@group.CanExecute"
                                              CheckedChanged="@((bool? b) => group.CanExecute = b ?? false)"
                                              Label="Execute"
                                              Dense="true"
