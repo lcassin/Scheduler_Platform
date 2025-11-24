@@ -163,7 +163,8 @@
 
         foreach (var name in permissionNames)
         {
-            var existing = _user!.Permissions.FirstOrDefault(p => p.PermissionName == name);
+            var existing = _user!.Permissions.FirstOrDefault(p => 
+                string.Equals(p.PermissionName, name, StringComparison.OrdinalIgnoreCase));
             _permissionGroups[name] = new PermissionGroup
             {
                 PermissionName = name,
@@ -176,7 +177,7 @@
         }
     }
 
-    private void ApplyTemplate()
+    private async Task ApplyTemplate()
     {
         if (string.IsNullOrEmpty(_selectedTemplate))
             return;
@@ -217,8 +218,22 @@
             }
         }
 
+        _permissionGroups = _permissionGroups.ToDictionary(
+            kvp => kvp.Key,
+            kvp => new PermissionGroup
+            {
+                PermissionName = kvp.Value.PermissionName,
+                CanCreate = kvp.Value.CanCreate,
+                CanRead = kvp.Value.CanRead,
+                CanUpdate = kvp.Value.CanUpdate,
+                CanDelete = kvp.Value.CanDelete,
+                CanExecute = kvp.Value.CanExecute
+            },
+            StringComparer.OrdinalIgnoreCase
+        );
+
         Snackbar.Add($"Template '{_selectedTemplate}' applied ({appliedCount} permissions). Click Save to persist changes.", Severity.Info);
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
     }
 
     private string GetCurrentTemplate()
