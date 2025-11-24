@@ -95,6 +95,33 @@ public static class Config
                 AlwaysSendClientClaims = true,
                 ClientClaimsPrefix = string.Empty,
                 AccessTokenLifetime = 3600
+            },
+            new Client
+            {
+                ClientId = "swagger-ui",
+                ClientName = "Swagger UI",
+                AllowedGrantTypes = GrantTypes.Code,
+                RequirePkce = true,
+                RequireClientSecret = false,
+                RedirectUris = { 
+                    "https://localhost:5033/swagger/oauth2-redirect.html",
+                    "http://localhost:5033/swagger/oauth2-redirect.html"
+                },
+                AllowedCorsOrigins = { 
+                    "https://localhost:5033",
+                    "http://localhost:5033"
+                },
+                AllowedScopes =
+                {
+                    IdentityServerConstants.StandardScopes.OpenId,
+                    IdentityServerConstants.StandardScopes.Profile,
+                    IdentityServerConstants.StandardScopes.Email,
+                    "scheduler-api",
+                    "role",
+                    "permissions"
+                },
+                AccessTokenLifetime = 3600,
+                RequireConsent = false
             }
         };
 
