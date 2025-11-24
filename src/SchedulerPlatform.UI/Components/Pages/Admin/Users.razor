@@ -25,13 +25,21 @@
     </div>
 
     <MudPaper Class="pa-4 mb-4">
-        <MudTextField @bind-Value="_searchTerm"
-                      Label="Search users"
-                      Placeholder="Search by name or email"
-                      Adornment="Adornment.End"
-                      AdornmentIcon="@Icons.Material.Filled.Search"
-                      OnKeyUp="@(async (e) => { if (e.Key == "Enter") await SearchUsers(); })"
-                      Immediate="false" />
+        <div class="d-flex gap-4 align-center">
+            <MudTextField @bind-Value="_searchTerm"
+                          Label="Search users"
+                          Placeholder="Search by name or email"
+                          Adornment="Adornment.End"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          OnKeyUp="@(async (e) => { if (e.Key == "Enter") await SearchUsers(); })"
+                          Immediate="false"
+                          Style="flex: 1;" />
+            <MudSwitch @bind-Value="_showInactiveUsers"
+                       Label="Show Inactive Users"
+                       Color="Color.Primary"
+                       T="bool"
+                       ValueChanged="@(async (bool value) => { _showInactiveUsers = value; await SearchUsers(); })" />
+        </div>
     </MudPaper>
 
     <MudTable T="UserListItem"
@@ -116,6 +124,7 @@
 @code {
     private MudTable<UserListItem>? _table;
     private string _searchTerm = string.Empty;
+    private bool _showInactiveUsers = false;
     private bool _loading = false;
     private bool _canCreateUsers = false;
     private bool _canUpdateUsers = false;
@@ -134,7 +143,8 @@
             var result = await UserManagementService.GetUsersAsync(
                 string.IsNullOrWhiteSpace(_searchTerm) ? null : _searchTerm,
                 state.Page + 1,
-                state.PageSize);
+                state.PageSize,
+                _showInactiveUsers);
 
             return new TableData<UserListItem>
             {

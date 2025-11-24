@@ -26,12 +26,18 @@ public class UsersController : ControllerBase
     public async Task<ActionResult<object>> GetUsers(
         [FromQuery] string? searchTerm = null,
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20)
+        [FromQuery] int pageSize = 20,
+        [FromQuery] bool showInactive = false)
     {
         try
         {
 
             var query = _unitOfWork.Users.GetAllAsync().Result.AsQueryable();
+
+            if (!showInactive)
+            {
+                query = query.Where(u => u.IsActive);
+            }
 
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
