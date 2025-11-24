@@ -22,6 +22,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet]
+    [Authorize(Policy = "Users.Manage.Read")]
     public async Task<ActionResult<object>> GetUsers(
         [FromQuery] string? searchTerm = null,
         [FromQuery] int pageNumber = 1,
@@ -29,10 +30,6 @@ public class UsersController : ControllerBase
     {
         try
         {
-            if (!HasUsersManagePermission())
-            {
-                return Forbid();
-            }
 
             var query = _unitOfWork.Users.GetAllAsync().Result.AsQueryable();
 
@@ -87,14 +84,11 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet("{id}")]
+    [Authorize(Policy = "Users.Manage.Read")]
     public async Task<ActionResult<UserDetailResponse>> GetUser(int id)
     {
         try
         {
-            if (!HasUsersManagePermission())
-            {
-                return Forbid();
-            }
 
             var user = await _unitOfWork.Users.GetByIdAsync(id);
             if (user == null)
@@ -140,14 +134,11 @@ public class UsersController : ControllerBase
     }
 
     [HttpPut("{id}/permissions")]
+    [Authorize(Policy = "Users.Manage.Update")]
     public async Task<IActionResult> UpdateUserPermissions(int id, [FromBody] UpdateUserPermissionsRequest request)
     {
         try
         {
-            if (!HasUsersManagePermission())
-            {
-                return Forbid();
-            }
 
             var user = await _unitOfWork.Users.GetByIdAsync(id);
             if (user == null)
@@ -202,14 +193,11 @@ public class UsersController : ControllerBase
     }
 
     [HttpPost("{id}/templates/{templateName}")]
+    [Authorize(Policy = "Users.Manage.Update")]
     public async Task<IActionResult> ApplyPermissionTemplate(int id, string templateName)
     {
         try
         {
-            if (!HasUsersManagePermission())
-            {
-                return Forbid();
-            }
 
             var user = await _unitOfWork.Users.GetByIdAsync(id);
             if (user == null)
@@ -270,14 +258,11 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet("templates")]
+    [Authorize(Policy = "Users.Manage.Read")]
     public ActionResult<List<PermissionTemplateResponse>> GetPermissionTemplates()
     {
         try
         {
-            if (!HasUsersManagePermission())
-            {
-                return Forbid();
-            }
 
             var templates = new List<PermissionTemplateResponse>
             {
@@ -295,17 +280,6 @@ public class UsersController : ControllerBase
         }
     }
 
-    private bool HasUsersManagePermission()
-    {
-        var isSystemAdminClaim = User.FindFirst("is_system_admin")?.Value;
-        if (string.Equals(isSystemAdminClaim, "true", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        var permissionClaims = User.FindAll("permission");
-        return permissionClaims.Any(c => c.Value == "users:manage");
-    }
 
     private PermissionTemplateResponse? GetPermissionTemplate(string templateName)
     {
@@ -342,7 +316,7 @@ public class UsersController : ControllerBase
                     new() { PermissionName = "scheduler", CanCreate = true, CanRead = true, CanUpdate = true, CanDelete = true },
                     new() { PermissionName = "schedules", CanCreate = true, CanRead = true, CanUpdate = true, CanDelete = true, CanExecute = true },
                     new() { PermissionName = "jobs", CanCreate = true, CanRead = true, CanUpdate = true, CanDelete = true, CanExecute = true },
-                    new() { PermissionName = "users:manage", CanRead = true }
+                    new() { PermissionName = "users:manage", CanRead = true, CanUpdate = true }
                 }
             },
             _ => null
