@@ -24,6 +24,10 @@
 
             @if (!_user.IsSystemAdmin)
             {
+                <MudAlert Severity="Severity.Info" Class="mb-4">
+                    <strong>Current Template:</strong> @GetCurrentTemplate()
+                </MudAlert>
+
                 <MudPaper Class="pa-4 mb-4">
                     <MudText Typo="Typo.subtitle1" Class="mb-2">Quick Apply Template</MudText>
                     <MudSelect T="string"
@@ -172,6 +176,34 @@
 
         try
         {
+            var template = _templates.FirstOrDefault(t => t.Name == _selectedTemplate);
+            if (template != null)
+            {
+                foreach (var perm in template.Permissions)
+                {
+                    if (_permissionGroups.ContainsKey(perm.PermissionName))
+                    {
+                        _permissionGroups[perm.PermissionName].CanCreate = perm.CanCreate;
+                        _permissionGroups[perm.PermissionName].CanRead = perm.CanRead;
+                        _permissionGroups[perm.PermissionName].CanUpdate = perm.CanUpdate;
+                        _permissionGroups[perm.PermissionName].CanDelete = perm.CanDelete;
+                        _permissionGroups[perm.PermissionName].CanExecute = perm.CanExecute;
+                    }
+                }
+                
+                foreach (var group in _permissionGroups.Values)
+                {
+                    if (!template.Permissions.Any(p => p.PermissionName == group.PermissionName))
+                    {
+                        group.CanCreate = false;
+                        group.CanRead = false;
+                        group.CanUpdate = false;
+                        group.CanDelete = false;
+                        group.CanExecute = false;
+                    }
+                }
+            }
+
             await UserManagementService.ApplyPermissionTemplateAsync(UserId, _selectedTemplate);
             Snackbar.Add($"Template '{_selectedTemplate}' applied successfully", Severity.Success);
             await LoadUser();
@@ -180,6 +212,44 @@
         {
             Snackbar.Add($"Error applying template: {ex.Message}", Severity.Error);
         }
+    }
+
+    private string GetCurrentTemplate()
+    {
+        if (_user == null || _templates == null || !_templates.Any())
+            return "Loading...";
+
+        foreach (var template in _templates)
+        {
+            if (MatchesTemplate(template))
+                return template.Name;
+        }
+
+        return "Custom";
+    }
+
+    private bool MatchesTemplate(PermissionTemplate template)
+    {
+        var userPermissions = _user!.Permissions.ToList();
+        
+        if (userPermissions.Count != template.Permissions.Count)
+            return false;
+
+        foreach (var templatePerm in template.Permissions)
+        {
+            var userPerm = userPermissions.FirstOrDefault(p => p.PermissionName == templatePerm.PermissionName);
+            if (userPerm == null)
+                return false;
+
+            if (userPerm.CanCreate != templatePerm.CanCreate ||
+                userPerm.CanRead != templatePerm.CanRead ||
+                userPerm.CanUpdate != templatePerm.CanUpdate ||
+                userPerm.CanDelete != templatePerm.CanDelete ||
+                userPerm.CanExecute != templatePerm.CanExecute)
+                return false;
+        }
+
+        return true;
     }
 
     private async Task SavePermissions()
