@@ -105,11 +105,15 @@ public static class Config
                 RequireClientSecret = false,
                 RedirectUris = { 
                     "https://localhost:5033/swagger/oauth2-redirect.html",
-                    "http://localhost:5033/swagger/oauth2-redirect.html"
+                    "http://localhost:5033/swagger/oauth2-redirect.html",
+                    "https://localhost:7008/swagger/oauth2-redirect.html",
+                    "http://localhost:7008/swagger/oauth2-redirect.html"
                 },
                 AllowedCorsOrigins = { 
                     "https://localhost:5033",
-                    "http://localhost:5033"
+                    "http://localhost:5033",
+                    "https://localhost:7008",
+                    "http://localhost:7008"
                 },
                 AllowedScopes =
                 {
