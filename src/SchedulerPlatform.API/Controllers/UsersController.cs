@@ -358,18 +358,42 @@ public class UsersController : ControllerBase
         if (permissions.Count == 0)
             return "No Access";
 
-        var hasUsersManage = permissions.Any(p => p.PermissionName == "users:manage");
-        if (hasUsersManage)
+        var adminTemplate = GetPermissionTemplate("Admin");
+        if (adminTemplate != null && MatchesTemplate(permissions, adminTemplate.Permissions))
             return "Admin";
 
-        var schedulesPerm = permissions.FirstOrDefault(p => p.PermissionName == "schedules");
-        if (schedulesPerm != null && (schedulesPerm.CanCreate || schedulesPerm.CanUpdate || schedulesPerm.CanDelete || schedulesPerm.CanExecute))
+        var editorTemplate = GetPermissionTemplate("Editor");
+        if (editorTemplate != null && MatchesTemplate(permissions, editorTemplate.Permissions))
             return "Editor";
 
-        var allReadOnly = permissions.All(p => !p.CanCreate && !p.CanUpdate && !p.CanDelete && !p.CanExecute && p.CanRead);
-        if (allReadOnly)
+        var viewerTemplate = GetPermissionTemplate("Viewer");
+        if (viewerTemplate != null && MatchesTemplate(permissions, viewerTemplate.Permissions))
             return "Viewer";
 
         return "Custom";
+    }
+
+    private bool MatchesTemplate(List<UserPermission> userPermissions, List<UserPermissionRequest> templatePermissions)
+    {
+        if (userPermissions.Count != templatePermissions.Count)
+            return false;
+
+        foreach (var templatePerm in templatePermissions)
+        {
+            var userPerm = userPermissions.FirstOrDefault(p => 
+                string.Equals(p.PermissionName, templatePerm.PermissionName, StringComparison.OrdinalIgnoreCase));
+            
+            if (userPerm == null)
+                return false;
+
+            if (userPerm.CanCreate != templatePerm.CanCreate ||
+                userPerm.CanRead != templatePerm.CanRead ||
+                userPerm.CanUpdate != templatePerm.CanUpdate ||
+                userPerm.CanDelete != templatePerm.CanDelete ||
+                userPerm.CanExecute != templatePerm.CanExecute)
+                return false;
+        }
+
+        return true;
     }
 }
