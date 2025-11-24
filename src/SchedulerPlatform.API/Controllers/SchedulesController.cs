@@ -67,23 +67,21 @@ public class SchedulesController : ControllerBase
             }
             else
             {
-                var schedules = clientId.HasValue
-                    ? await _unitOfWork.Schedules.GetByClientIdAsync(clientId.Value)
-                    : await _unitOfWork.Schedules.GetAllAsync();
-
-                if (startDate.HasValue || endDate.HasValue)
+                IEnumerable<Schedule> schedules;
+                
+                if (startDate.HasValue && endDate.HasValue)
                 {
-                    schedules = schedules.Where(s => s.NextRunTime.HasValue).ToList();
-                    
-                    if (startDate.HasValue)
-                    {
-                        schedules = schedules.Where(s => s.NextRunTime!.Value >= startDate.Value).ToList();
-                    }
-                    
-                    if (endDate.HasValue)
-                    {
-                        schedules = schedules.Where(s => s.NextRunTime!.Value <= endDate.Value).ToList();
-                    }
+                    schedules = await _unitOfWork.Schedules.GetSchedulesForCalendarAsync(
+                        startDate.Value, 
+                        endDate.Value, 
+                        clientId,
+                        maxPerDay: 1000); // High limit for non-calendar views
+                }
+                else
+                {
+                    schedules = clientId.HasValue
+                        ? await _unitOfWork.Schedules.GetByClientIdAsync(clientId.Value)
+                        : await _unitOfWork.Schedules.GetAllAsync();
                 }
 
                 return Ok(schedules);
@@ -107,8 +105,9 @@ public class SchedulesController : ControllerBase
                 return NotFound();
             }
 
-            var userClientId = User.FindFirst("client_id")?.Value;
-            var isSystemAdmin = User.FindFirst("is_system_admin")?.Value == "True";
+            var userClientId = User.FindFirst("user_client_id")?.Value;
+            var isSystemAdminValue = User.FindFirst("is_system_admin")?.Value;
+            var isSystemAdmin = string.Equals(isSystemAdminValue, "True", StringComparison.OrdinalIgnoreCase) || isSystemAdminValue == "1";
             
             if (!isSystemAdmin && schedule.ClientId.ToString() != userClientId)
             {
@@ -219,6 +218,10 @@ public class SchedulesController : ControllerBase
                 {
                     _logger.LogWarning(ex, "Could not calculate NextRunTime for schedule {ScheduleId}", schedule.Id);
                 }
+            }
+            else if (schedule.IsDeleted || !schedule.IsEnabled)
+            {
+                schedule.NextRunTime = null;
             }
 
             await _unitOfWork.Schedules.UpdateAsync(schedule);

@@ -11,4 +11,5 @@ public class UserListItem
     public bool IsSystemAdmin { get; set; }
     public DateTime? LastLoginAt { get; set; }
     public int PermissionCount { get; set; }
+    public string Role { get; set; } = string.Empty;
 }
