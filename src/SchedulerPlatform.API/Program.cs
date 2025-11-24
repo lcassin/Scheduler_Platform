@@ -83,6 +83,14 @@ builder.Services.AddSwaggerGen(c =>
                     { "role", "User Role" },
                     { "permissions", "User Permissions" }
                 }
+            },
+            ClientCredentials = new OpenApiOAuthFlow
+            {
+                TokenUrl = new Uri($"{authority}/connect/token"),
+                Scopes = new Dictionary<string, string>
+                {
+                    { "scheduler-api", "Scheduler API Access" }
+                }
             }
         }
     });
@@ -98,7 +106,7 @@ builder.Services.AddSwaggerGen(c =>
                     Id = "oauth2"
                 }
             },
-            new[] { "openid", "profile", "email", "scheduler-api", "role", "permissions" }
+            new[] { "scheduler-api" }
         }
     });
 });
