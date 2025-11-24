@@ -58,30 +58,40 @@
                 @foreach (var group in _permissionGroupList)
                 {
                     <MudPaper Class="pa-3 mb-3" @key="@group.PermissionName">
-                        <MudText Typo="Typo.subtitle2" Class="mb-2">@group.PermissionName</MudText>
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">@group.PermissionName [Debug: R=@group.CanRead C=@group.CanCreate U=@group.CanUpdate D=@group.CanDelete E=@group.CanExecute]</MudText>
                         <MudGrid>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox T="bool" @bind-Checked="@group.CanCreate"
+                                <MudCheckBox T="bool" 
+                                             Checked="@group.CanCreate"
+                                             CheckedChanged="@(b => group.CanCreate = b)"
                                              Label="Create"
                                              Dense="true" />
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox T="bool" @bind-Checked="@group.CanRead"
+                                <MudCheckBox T="bool" 
+                                             Checked="@group.CanRead"
+                                             CheckedChanged="@(b => group.CanRead = b)"
                                              Label="Read"
                                              Dense="true" />
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox T="bool" @bind-Checked="@group.CanUpdate"
+                                <MudCheckBox T="bool" 
+                                             Checked="@group.CanUpdate"
+                                             CheckedChanged="@(b => group.CanUpdate = b)"
                                              Label="Update"
                                              Dense="true" />
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox T="bool" @bind-Checked="@group.CanDelete"
+                                <MudCheckBox T="bool" 
+                                             Checked="@group.CanDelete"
+                                             CheckedChanged="@(b => group.CanDelete = b)"
                                              Label="Delete"
                                              Dense="true" />
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox T="bool" @bind-Checked="@group.CanExecute"
+                                <MudCheckBox T="bool" 
+                                             Checked="@group.CanExecute"
+                                             CheckedChanged="@(b => group.CanExecute = b)"
                                              Label="Execute"
                                              Dense="true" />
                             </MudItem>
