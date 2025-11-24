@@ -451,6 +451,85 @@ public class UsersController : ControllerBase
         }
     }
 
+    [HttpPost("{id}/reset-password")]
+    [Authorize(Policy = "Users.Manage.Update")]
+    public async Task<IActionResult> ResetPassword(int id)
+    {
+        try
+        {
+            var user = await _unitOfWork.Users.GetByIdAsync(id);
+            if (user == null)
+            {
+                return NotFound();
+            }
+
+            if (string.IsNullOrEmpty(user.PasswordHash))
+            {
+                return BadRequest(new { message = "Cannot reset password for external authentication users" });
+            }
+
+            var newPassword = PasswordGenerator.GeneratePassword();
+            var passwordHash = _passwordHasher.HashPassword(user, newPassword);
+
+            user.PasswordHash = passwordHash;
+            user.MustChangePassword = true;
+            user.PasswordChangedAt = DateTime.UtcNow;
+            user.UpdatedAt = DateTime.UtcNow;
+            user.UpdatedBy = User.Identity?.Name ?? "System";
+
+            await _unitOfWork.Users.UpdateAsync(user);
+
+            var passwordHistory = new PasswordHistory
+            {
+                UserId = user.Id,
+                PasswordHash = passwordHash,
+                ChangedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = User.Identity?.Name ?? "System",
+                IsDeleted = false
+            };
+            await _unitOfWork.PasswordHistories.AddAsync(passwordHistory);
+            await _unitOfWork.SaveChangesAsync();
+
+            _logger.LogInformation("Reset password for user {UserId} by {UpdatedBy}", 
+                id, User.Identity?.Name ?? "System");
+
+            try
+            {
+                var emailSubject = "Your Password Has Been Reset";
+                var emailBody = $@"
+                    <html>
+                    <body style='font-family: Arial, sans-serif;'>
+                        <h2>Password Reset</h2>
+                        <p>Hello {user.FirstName} {user.LastName},</p>
+                        <p>Your password has been reset by an administrator. Please use the following temporary password to log in:</p>
+                        <div style='background-color: #f5f5f5; padding: 15px; margin: 20px 0; border-left: 4px solid #FF9800;'>
+                            <p><strong>Email:</strong> {user.Email}</p>
+                            <p><strong>Temporary Password:</strong> {newPassword}</p>
+                        </div>
+                        <p><strong>Important:</strong> You will be required to change your password upon next login.</p>
+                        <p>Please keep this password secure and do not share it with anyone.</p>
+                        <p>Best regards,<br/>Scheduler Platform Team</p>
+                    </body>
+                    </html>";
+
+                await _emailService.SendEmailAsync(user.Email, emailSubject, emailBody, isHtml: true);
+                _logger.LogInformation("Sent password reset email to {Email}", user.Email);
+            }
+            catch (Exception emailEx)
+            {
+                _logger.LogError(emailEx, "Failed to send password reset email to {Email}", user.Email);
+            }
+
+            return Ok(new { message = "Password reset successfully. New password has been sent to user's email." });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error resetting password for user {UserId}", id);
+            return StatusCode(500, "An error occurred while resetting the password");
+        }
+    }
+
     [HttpGet("templates")]
     [Authorize(Policy = "Users.Manage.Read")]
     public ActionResult<List<PermissionTemplateResponse>> GetPermissionTemplates()
