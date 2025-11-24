@@ -63,35 +63,35 @@
                             <MudItem xs="12" sm="2">
                                 <MudCheckBox T="bool" 
                                              Checked="@group.CanCreate"
-                                             CheckedChanged="@(b => group.CanCreate = b)"
+                                             CheckedChanged="@((bool b) => group.CanCreate = b)"
                                              Label="Create"
                                              Dense="true" />
                             </MudItem>
                             <MudItem xs="12" sm="2">
                                 <MudCheckBox T="bool" 
                                              Checked="@group.CanRead"
-                                             CheckedChanged="@(b => group.CanRead = b)"
+                                             CheckedChanged="@((bool b) => group.CanRead = b)"
                                              Label="Read"
                                              Dense="true" />
                             </MudItem>
                             <MudItem xs="12" sm="2">
                                 <MudCheckBox T="bool" 
                                              Checked="@group.CanUpdate"
-                                             CheckedChanged="@(b => group.CanUpdate = b)"
+                                             CheckedChanged="@((bool b) => group.CanUpdate = b)"
                                              Label="Update"
                                              Dense="true" />
                             </MudItem>
                             <MudItem xs="12" sm="2">
                                 <MudCheckBox T="bool" 
                                              Checked="@group.CanDelete"
-                                             CheckedChanged="@(b => group.CanDelete = b)"
+                                             CheckedChanged="@((bool b) => group.CanDelete = b)"
                                              Label="Delete"
                                              Dense="true" />
                             </MudItem>
                             <MudItem xs="12" sm="2">
                                 <MudCheckBox T="bool" 
                                              Checked="@group.CanExecute"
-                                             CheckedChanged="@(b => group.CanExecute = b)"
+                                             CheckedChanged="@((bool b) => group.CanExecute = b)"
                                              Label="Execute"
                                              Dense="true" />
                             </MudItem>
