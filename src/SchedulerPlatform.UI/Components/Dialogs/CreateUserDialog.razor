@@ -1,0 +1,131 @@
+@using SchedulerPlatform.UI.Services
+@using SchedulerPlatform.UI.Models
+@inject IUserManagementService UserManagementService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="@_isValid">
+            <MudTextField @bind-Value="_email"
+                          Label="Email"
+                          Required="true"
+                          RequiredError="Email is required"
+                          Validation="@(new Func<string, string?>(ValidateEmail))"
+                          Immediate="true" />
+
+            <MudTextField @bind-Value="_firstName"
+                          Label="First Name"
+                          Required="true"
+                          RequiredError="First name is required"
+                          Class="mt-3" />
+
+            <MudTextField @bind-Value="_lastName"
+                          Label="Last Name"
+                          Required="true"
+                          RequiredError="Last name is required"
+                          Class="mt-3" />
+
+            <MudTextField @bind-Value="_username"
+                          Label="Username (optional)"
+                          HelperText="If not provided, email will be used as username"
+                          Class="mt-3" />
+
+            <MudSelect @bind-Value="_selectedTemplate"
+                       Label="Permission Template"
+                       Required="true"
+                       RequiredError="Please select a permission template"
+                       Class="mt-3">
+                <MudSelectItem Value="@("Viewer")">Viewer - Read-only access</MudSelectItem>
+                <MudSelectItem Value="@("Editor")">Editor - Full schedule access</MudSelectItem>
+                <MudSelectItem Value="@("Admin")">Admin - Full access including user management</MudSelectItem>
+            </MudSelect>
+
+            <MudSwitch @bind-Value="_isActive"
+                       Label="Active"
+                       Color="Color.Primary"
+                       Class="mt-3" />
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   OnClick="CreateUser"
+                   Disabled="@(!_isValid || _saving)">
+            @if (_saving)
+            {
+                <MudProgressCircular Class="mr-2" Size="Size.Small" Indeterminate="true" />
+                <span>Creating...</span>
+            }
+            else
+            {
+                <span>Create User</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter]
+    MudDialogInstance? MudDialog { get; set; }
+
+    private MudForm? _form;
+    private bool _isValid;
+    private bool _saving;
+
+    private string _email = string.Empty;
+    private string _firstName = string.Empty;
+    private string _lastName = string.Empty;
+    private string? _username;
+    private string _selectedTemplate = "Viewer";
+    private bool _isActive = true;
+
+    private string? ValidateEmail(string email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return "Email is required";
+
+        if (!email.Contains("@") || !email.Contains("."))
+            return "Please enter a valid email address";
+
+        return null;
+    }
+
+    private async Task CreateUser()
+    {
+        if (_form == null || !_isValid)
+            return;
+
+        _saving = true;
+        try
+        {
+            var request = new CreateUserRequest
+            {
+                Email = _email.Trim(),
+                FirstName = _firstName.Trim(),
+                LastName = _lastName.Trim(),
+                Username = string.IsNullOrWhiteSpace(_username) ? null : _username.Trim(),
+                IsActive = _isActive,
+                TemplateName = _selectedTemplate
+            };
+
+            await UserManagementService.CreateUserAsync(request);
+            
+            Snackbar.Add($"User {_email} created successfully", Severity.Success);
+            MudDialog?.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error creating user: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        MudDialog?.Cancel();
+    }
+}

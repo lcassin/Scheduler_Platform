@@ -6,11 +6,23 @@
 @inject IUserManagementService UserManagementService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject IPermissionService PermissionService
 
 <PageTitle>User Management</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
-    <MudText Typo="Typo.h4" Class="mb-4">User Management</MudText>
+    <div class="d-flex justify-space-between align-center mb-4">
+        <MudText Typo="Typo.h4">User Management</MudText>
+        @if (_canCreateUsers)
+        {
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.PersonAdd"
+                       OnClick="OpenCreateUserDialog">
+                Add User
+            </MudButton>
+        }
+    </div>
 
     <MudPaper Class="pa-4 mb-4">
         <MudTextField @bind-Value="_searchTerm"
@@ -84,6 +96,12 @@
     private MudTable<UserListItem>? _table;
     private string _searchTerm = string.Empty;
     private bool _loading = false;
+    private bool _canCreateUsers = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _canCreateUsers = await PermissionService.CanCreateAsync("users:manage");
+    }
 
     private async Task<TableData<UserListItem>> ServerReload(TableState state, CancellationToken cancellationToken)
     {
@@ -117,6 +135,24 @@
         if (_table != null)
         {
             await _table.ReloadServerData();
+        }
+    }
+
+    private async Task OpenCreateUserDialog()
+    {
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        var dialog = await DialogService.ShowAsync<CreateUserDialog>("Create New User", options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await _table!.ReloadServerData();
         }
     }
 
