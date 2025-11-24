@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using SchedulerPlatform.API.Models;
 using SchedulerPlatform.Core.Domain.Entities;
 using SchedulerPlatform.Core.Domain.Interfaces;
+using SchedulerPlatform.IdentityServer.Services;
 
 namespace SchedulerPlatform.API.Controllers;
 
@@ -14,11 +16,15 @@ public class UsersController : ControllerBase
 {
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<UsersController> _logger;
+    private readonly IEmailService _emailService;
+    private readonly PasswordHasher<User> _passwordHasher;
 
-    public UsersController(IUnitOfWork unitOfWork, ILogger<UsersController> logger)
+    public UsersController(IUnitOfWork unitOfWork, ILogger<UsersController> logger, IEmailService emailService)
     {
         _unitOfWork = unitOfWork;
         _logger = logger;
+        _emailService = emailService;
+        _passwordHasher = new PasswordHasher<User>();
     }
 
     [HttpGet]
@@ -275,6 +281,9 @@ public class UsersController : ControllerBase
                 return BadRequest(new { message = "A user with this email already exists" });
             }
 
+            var temporaryPassword = PasswordGenerator.GeneratePassword();
+            var passwordHash = _passwordHasher.HashPassword(null!, temporaryPassword);
+
             var user = new User
             {
                 Email = request.Email,
@@ -283,6 +292,9 @@ public class UsersController : ControllerBase
                 LastName = request.LastName,
                 IsActive = request.IsActive,
                 IsSystemAdmin = false,
+                PasswordHash = passwordHash,
+                MustChangePassword = true,
+                PasswordChangedAt = DateTime.UtcNow,
                 CreatedAt = DateTime.UtcNow,
                 CreatedBy = User.Identity?.Name ?? "System",
                 IsDeleted = false
@@ -291,8 +303,47 @@ public class UsersController : ControllerBase
             await _unitOfWork.Users.AddAsync(user);
             await _unitOfWork.SaveChangesAsync();
 
+            var passwordHistory = new PasswordHistory
+            {
+                UserId = user.Id,
+                PasswordHash = passwordHash,
+                ChangedAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow,
+                CreatedBy = User.Identity?.Name ?? "System",
+                IsDeleted = false
+            };
+            await _unitOfWork.PasswordHistories.AddAsync(passwordHistory);
+            await _unitOfWork.SaveChangesAsync();
+
             _logger.LogInformation("Created user {Email} with ID {UserId} by {CreatedBy}", 
                 request.Email, user.Id, User.Identity?.Name ?? "System");
+
+            try
+            {
+                var emailSubject = "Your Scheduler Platform Account";
+                var emailBody = $@"
+                    <html>
+                    <body style='font-family: Arial, sans-serif;'>
+                        <h2>Welcome to Scheduler Platform</h2>
+                        <p>Hello {user.FirstName} {user.LastName},</p>
+                        <p>Your account has been created. Please use the following credentials to log in:</p>
+                        <div style='background-color: #f5f5f5; padding: 15px; margin: 20px 0; border-left: 4px solid #4CAF50;'>
+                            <p><strong>Email:</strong> {user.Email}</p>
+                            <p><strong>Temporary Password:</strong> {temporaryPassword}</p>
+                        </div>
+                        <p><strong>Important:</strong> You will be required to change your password upon first login.</p>
+                        <p>Please keep this password secure and do not share it with anyone.</p>
+                        <p>Best regards,<br/>Scheduler Platform Team</p>
+                    </body>
+                    </html>";
+
+                await _emailService.SendEmailAsync(user.Email, emailSubject, emailBody, isHtml: true);
+                _logger.LogInformation("Sent temporary password email to {Email}", user.Email);
+            }
+            catch (Exception emailEx)
+            {
+                _logger.LogError(emailEx, "Failed to send temporary password email to {Email}", user.Email);
+            }
 
             if (!string.IsNullOrEmpty(request.TemplateName))
             {
