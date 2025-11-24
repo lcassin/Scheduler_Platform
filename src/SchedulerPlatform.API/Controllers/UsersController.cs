@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using SchedulerPlatform.API.Models;
 using SchedulerPlatform.Core.Domain.Entities;
 using SchedulerPlatform.Core.Domain.Interfaces;
-using SchedulerPlatform.IdentityServer.Services;
+using SchedulerPlatform.Core.Security;
 
 namespace SchedulerPlatform.API.Controllers;
 
