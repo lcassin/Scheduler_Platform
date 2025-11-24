@@ -22,6 +22,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet]
+    [Authorize(Policy = "Users.Manage.Read")]
     public async Task<ActionResult<object>> GetUsers(
         [FromQuery] string? searchTerm = null,
         [FromQuery] int pageNumber = 1,
@@ -29,10 +30,6 @@ public class UsersController : ControllerBase
     {
         try
         {
-            if (!HasUsersManagePermission())
-            {
-                return Forbid();
-            }
 
             var query = _unitOfWork.Users.GetAllAsync().Result.AsQueryable();
 
@@ -56,6 +53,7 @@ public class UsersController : ControllerBase
             foreach (var user in users)
             {
                 var permissions = await _unitOfWork.UserPermissions.GetByUserIdAsync(user.Id);
+                var permissionsList = permissions.ToList();
                 userResponses.Add(new UserListItemResponse
                 {
                     Id = user.Id,
@@ -65,7 +63,8 @@ public class UsersController : ControllerBase
                     IsActive = user.IsActive,
                     IsSystemAdmin = user.IsSystemAdmin,
                     LastLoginAt = user.LastLoginAt,
-                    PermissionCount = permissions.Count()
+                    PermissionCount = permissionsList.Count,
+                    Role = DetermineUserRole(user, permissionsList)
                 });
             }
 
@@ -85,14 +84,11 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet("{id}")]
+    [Authorize(Policy = "Users.Manage.Read")]
     public async Task<ActionResult<UserDetailResponse>> GetUser(int id)
     {
         try
         {
-            if (!HasUsersManagePermission())
-            {
-                return Forbid();
-            }
 
             var user = await _unitOfWork.Users.GetByIdAsync(id);
             if (user == null)
@@ -138,14 +134,11 @@ public class UsersController : ControllerBase
     }
 
     [HttpPut("{id}/permissions")]
+    [Authorize(Policy = "Users.Manage.Update")]
     public async Task<IActionResult> UpdateUserPermissions(int id, [FromBody] UpdateUserPermissionsRequest request)
     {
         try
         {
-            if (!HasUsersManagePermission())
-            {
-                return Forbid();
-            }
 
             var user = await _unitOfWork.Users.GetByIdAsync(id);
             if (user == null)
@@ -200,14 +193,11 @@ public class UsersController : ControllerBase
     }
 
     [HttpPost("{id}/templates/{templateName}")]
+    [Authorize(Policy = "Users.Manage.Update")]
     public async Task<IActionResult> ApplyPermissionTemplate(int id, string templateName)
     {
         try
         {
-            if (!HasUsersManagePermission())
-            {
-                return Forbid();
-            }
 
             var user = await _unitOfWork.Users.GetByIdAsync(id);
             if (user == null)
@@ -268,14 +258,11 @@ public class UsersController : ControllerBase
     }
 
     [HttpGet("templates")]
+    [Authorize(Policy = "Users.Manage.Read")]
     public ActionResult<List<PermissionTemplateResponse>> GetPermissionTemplates()
     {
         try
         {
-            if (!HasUsersManagePermission())
-            {
-                return Forbid();
-            }
 
             var templates = new List<PermissionTemplateResponse>
             {
@@ -293,17 +280,6 @@ public class UsersController : ControllerBase
         }
     }
 
-    private bool HasUsersManagePermission()
-    {
-        var isSystemAdminClaim = User.FindFirst("is_system_admin")?.Value;
-        if (string.Equals(isSystemAdminClaim, "true", StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        var permissionClaims = User.FindAll("permission");
-        return permissionClaims.Any(c => c.Value == "users:manage");
-    }
 
     private PermissionTemplateResponse? GetPermissionTemplate(string templateName)
     {
@@ -334,17 +310,63 @@ public class UsersController : ControllerBase
             "admin" => new PermissionTemplateResponse
             {
                 Name = "Admin",
-                Description = "Full access to all resources including user management",
+                Description = "Full access to all resources including permission management",
                 Permissions = new List<UserPermissionRequest>
                 {
                     new() { PermissionName = "scheduler", CanCreate = true, CanRead = true, CanUpdate = true, CanDelete = true },
                     new() { PermissionName = "schedules", CanCreate = true, CanRead = true, CanUpdate = true, CanDelete = true, CanExecute = true },
                     new() { PermissionName = "jobs", CanCreate = true, CanRead = true, CanUpdate = true, CanDelete = true, CanExecute = true },
-                    new() { PermissionName = "users", CanCreate = true, CanRead = true, CanUpdate = true, CanDelete = true },
-                    new() { PermissionName = "users:manage", CanRead = true }
+                    new() { PermissionName = "users:manage", CanRead = true, CanUpdate = true }
                 }
             },
             _ => null
         };
+    }
+
+    private string DetermineUserRole(User user, List<UserPermission> permissions)
+    {
+        if (user.IsSystemAdmin)
+            return "Super Admin";
+
+        if (permissions.Count == 0)
+            return "No Access";
+
+        var adminTemplate = GetPermissionTemplate("Admin");
+        if (adminTemplate != null && MatchesTemplate(permissions, adminTemplate.Permissions))
+            return "Admin";
+
+        var editorTemplate = GetPermissionTemplate("Editor");
+        if (editorTemplate != null && MatchesTemplate(permissions, editorTemplate.Permissions))
+            return "Editor";
+
+        var viewerTemplate = GetPermissionTemplate("Viewer");
+        if (viewerTemplate != null && MatchesTemplate(permissions, viewerTemplate.Permissions))
+            return "Viewer";
+
+        return "Custom";
+    }
+
+    private bool MatchesTemplate(List<UserPermission> userPermissions, List<UserPermissionRequest> templatePermissions)
+    {
+        if (userPermissions.Count != templatePermissions.Count)
+            return false;
+
+        foreach (var templatePerm in templatePermissions)
+        {
+            var userPerm = userPermissions.FirstOrDefault(p => 
+                string.Equals(p.PermissionName, templatePerm.PermissionName, StringComparison.OrdinalIgnoreCase));
+            
+            if (userPerm == null)
+                return false;
+
+            if (userPerm.CanCreate != templatePerm.CanCreate ||
+                userPerm.CanRead != templatePerm.CanRead ||
+                userPerm.CanUpdate != templatePerm.CanUpdate ||
+                userPerm.CanDelete != templatePerm.CanDelete ||
+                userPerm.CanExecute != templatePerm.CanExecute)
+                return false;
+        }
+
+        return true;
     }
 }
