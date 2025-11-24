@@ -101,4 +101,28 @@ public class UserManagementService : IUserManagementService
             throw;
         }
     }
+
+    public async Task<UserDetail> CreateUserAsync(CreateUserRequest request)
+    {
+        try
+        {
+            var client = CreateClient();
+            var response = await client.PostAsJsonAsync("Users", request);
+            response.EnsureSuccessStatusCode();
+            
+            var createdUser = await response.Content.ReadFromJsonAsync<UserDetail>();
+            if (createdUser == null)
+            {
+                throw new Exception("Failed to parse created user response");
+            }
+            
+            _logger.LogInformation("Created user {Email}", request.Email);
+            return createdUser;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating user {Email}", request.Email);
+            throw;
+        }
+    }
 }

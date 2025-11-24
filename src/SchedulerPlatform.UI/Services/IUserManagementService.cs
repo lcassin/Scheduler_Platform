@@ -9,4 +9,5 @@ public interface IUserManagementService
     Task UpdateUserPermissionsAsync(int id, List<UserPermissionDto> permissions);
     Task ApplyPermissionTemplateAsync(int id, string templateName);
     Task<List<PermissionTemplate>> GetPermissionTemplatesAsync();
+    Task<UserDetail> CreateUserAsync(CreateUserRequest request);
 }
