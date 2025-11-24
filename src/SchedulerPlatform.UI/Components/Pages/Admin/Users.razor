@@ -52,14 +52,7 @@
                 }
             </MudTd>
             <MudTd DataLabel="Role">
-                @if (context.IsSystemAdmin)
-                {
-                    <MudChip T="string" Color="Color.Error" Size="Size.Small">Super Admin</MudChip>
-                }
-                else
-                {
-                    <MudChip T="string" Color="@GetRoleColor(context)" Size="Size.Small">@GetRoleLabel(context)</MudChip>
-                }
+                <MudChip T="string" Color="@GetRoleColor(context.Role)" Size="Size.Small">@context.Role</MudChip>
             </MudTd>
             <MudTd DataLabel="Permissions">@context.PermissionCount</MudTd>
             <MudTd DataLabel="Last Login">
@@ -150,31 +143,16 @@
         }
     }
 
-    private string GetRoleLabel(UserListItem user)
+    private Color GetRoleColor(string role)
     {
-        if (user.PermissionCount == 0)
-            return "No Access";
-        
-        if (user.PermissionCount >= 5)
-            return "Admin";
-        
-        if (user.PermissionCount == 3)
-            return "Viewer";
-        
-        return "Editor";
-    }
-
-    private Color GetRoleColor(UserListItem user)
-    {
-        if (user.PermissionCount == 0)
-            return Color.Default;
-        
-        if (user.PermissionCount >= 5)
-            return Color.Warning;
-        
-        if (user.PermissionCount == 3)
-            return Color.Default;
-        
-        return Color.Info;
+        return role switch
+        {
+            "Super Admin" => Color.Error,
+            "Admin" => Color.Warning,
+            "Editor" => Color.Info,
+            "Viewer" => Color.Default,
+            "No Access" => Color.Default,
+            _ => Color.Secondary
+        };
     }
 }

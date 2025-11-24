@@ -114,6 +114,8 @@
     {
         await LoadUser();
         await LoadTemplates();
+        _selectedTemplate = GetCurrentTemplate();
+        StateHasChanged();
     }
 
     private async Task LoadUser()
@@ -169,49 +171,38 @@
         }
     }
 
-    private async Task ApplyTemplate()
+    private void ApplyTemplate()
     {
         if (string.IsNullOrEmpty(_selectedTemplate))
             return;
 
-        try
-        {
-            var template = _templates.FirstOrDefault(t => t.Name == _selectedTemplate);
-            if (template != null)
-            {
-                foreach (var perm in template.Permissions)
-                {
-                    if (_permissionGroups.ContainsKey(perm.PermissionName))
-                    {
-                        _permissionGroups[perm.PermissionName].CanCreate = perm.CanCreate;
-                        _permissionGroups[perm.PermissionName].CanRead = perm.CanRead;
-                        _permissionGroups[perm.PermissionName].CanUpdate = perm.CanUpdate;
-                        _permissionGroups[perm.PermissionName].CanDelete = perm.CanDelete;
-                        _permissionGroups[perm.PermissionName].CanExecute = perm.CanExecute;
-                    }
-                }
-                
-                foreach (var group in _permissionGroups.Values)
-                {
-                    if (!template.Permissions.Any(p => p.PermissionName == group.PermissionName))
-                    {
-                        group.CanCreate = false;
-                        group.CanRead = false;
-                        group.CanUpdate = false;
-                        group.CanDelete = false;
-                        group.CanExecute = false;
-                    }
-                }
-            }
+        var template = _templates.FirstOrDefault(t => t.Name == _selectedTemplate);
+        if (template == null)
+            return;
 
-            await UserManagementService.ApplyPermissionTemplateAsync(UserId, _selectedTemplate);
-            Snackbar.Add($"Template '{_selectedTemplate}' applied successfully", Severity.Success);
-            await LoadUser();
-        }
-        catch (Exception ex)
+        foreach (var group in _permissionGroups.Values)
         {
-            Snackbar.Add($"Error applying template: {ex.Message}", Severity.Error);
+            group.CanCreate = false;
+            group.CanRead = false;
+            group.CanUpdate = false;
+            group.CanDelete = false;
+            group.CanExecute = false;
         }
+
+        foreach (var perm in template.Permissions)
+        {
+            if (_permissionGroups.ContainsKey(perm.PermissionName))
+            {
+                _permissionGroups[perm.PermissionName].CanCreate = perm.CanCreate;
+                _permissionGroups[perm.PermissionName].CanRead = perm.CanRead;
+                _permissionGroups[perm.PermissionName].CanUpdate = perm.CanUpdate;
+                _permissionGroups[perm.PermissionName].CanDelete = perm.CanDelete;
+                _permissionGroups[perm.PermissionName].CanExecute = perm.CanExecute;
+            }
+        }
+
+        Snackbar.Add($"Template '{_selectedTemplate}' applied. Click Save to persist changes.", Severity.Info);
+        StateHasChanged();
     }
 
     private string GetCurrentTemplate()
