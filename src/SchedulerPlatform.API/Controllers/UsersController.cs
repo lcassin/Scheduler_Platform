@@ -336,13 +336,12 @@ public class UsersController : ControllerBase
             "admin" => new PermissionTemplateResponse
             {
                 Name = "Admin",
-                Description = "Full access to all resources including user management",
+                Description = "Full access to all resources including permission management",
                 Permissions = new List<UserPermissionRequest>
                 {
                     new() { PermissionName = "scheduler", CanCreate = true, CanRead = true, CanUpdate = true, CanDelete = true },
                     new() { PermissionName = "schedules", CanCreate = true, CanRead = true, CanUpdate = true, CanDelete = true, CanExecute = true },
                     new() { PermissionName = "jobs", CanCreate = true, CanRead = true, CanUpdate = true, CanDelete = true, CanExecute = true },
-                    new() { PermissionName = "users", CanCreate = true, CanRead = true, CanUpdate = true, CanDelete = true },
                     new() { PermissionName = "users:manage", CanRead = true }
                 }
             },
