@@ -34,8 +34,8 @@
                           OnKeyUp="@(async (e) => { if (e.Key == "Enter") await SearchUsers(); })"
                           Immediate="false"
                           Style="flex: 1;" />
-            <MudSwitch Checked="_showInactiveUsers"
-                       CheckedChanged="@(async (bool value) => { _showInactiveUsers = value; await SearchUsers(); })"
+            <MudSwitch T="bool"
+                       @bind-Checked="ShowInactiveUsers"
                        Label="Show Inactive Users"
                        Color="Color.Primary" />
         </div>
@@ -127,6 +127,17 @@
     private bool _loading = false;
     private bool _canCreateUsers = false;
     private bool _canUpdateUsers = false;
+
+    private bool ShowInactiveUsers
+    {
+        get => _showInactiveUsers;
+        set
+        {
+            if (_showInactiveUsers == value) return;
+            _showInactiveUsers = value;
+            _ = SearchUsers();
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
