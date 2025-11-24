@@ -84,6 +84,27 @@
                            OnClick="@(() => OpenPermissionsDialog(context.Id))">
                     Manage
                 </MudButton>
+                @if (_canUpdateUsers && !context.IsSystemAdmin)
+                {
+                    @if (context.IsActive)
+                    {
+                        <MudButton Variant="Variant.Text"
+                                   Color="Color.Error"
+                                   Size="Size.Small"
+                                   OnClick="@(() => ToggleUserStatus(context.Id, context.Email, false))">
+                            Disable
+                        </MudButton>
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Text"
+                                   Color="Color.Success"
+                                   Size="Size.Small"
+                                   OnClick="@(() => ToggleUserStatus(context.Id, context.Email, true))">
+                            Enable
+                        </MudButton>
+                    }
+                }
             </MudTd>
         </RowTemplate>
         <PagerContent>
@@ -97,10 +118,12 @@
     private string _searchTerm = string.Empty;
     private bool _loading = false;
     private bool _canCreateUsers = false;
+    private bool _canUpdateUsers = false;
 
     protected override async Task OnInitializedAsync()
     {
         _canCreateUsers = await PermissionService.CanCreateAsync("users:manage");
+        _canUpdateUsers = await PermissionService.CanUpdateAsync("users:manage");
     }
 
     private async Task<TableData<UserListItem>> ServerReload(TableState state, CancellationToken cancellationToken)
@@ -176,6 +199,35 @@
         if (!result.Canceled)
         {
             await _table!.ReloadServerData();
+        }
+    }
+
+    private async Task ToggleUserStatus(int userId, string email, bool newStatus)
+    {
+        var action = newStatus ? "enable" : "disable";
+        var parameters = new DialogParameters
+        {
+            ["ContentText"] = $"Are you sure you want to {action} user {email}?",
+            ["ButtonText"] = action == "enable" ? "Enable" : "Disable",
+            ["Color"] = newStatus ? Color.Success : Color.Error
+        };
+
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>($"{char.ToUpper(action[0])}{action.Substring(1)} User", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            try
+            {
+                await UserManagementService.UpdateUserStatusAsync(userId, newStatus);
+                Snackbar.Add($"User {email} {(newStatus ? "enabled" : "disabled")} successfully", Severity.Success);
+                await _table!.ReloadServerData();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error updating user status: {ex.Message}", Severity.Error);
+            }
         }
     }
 

@@ -125,4 +125,22 @@ public class UserManagementService : IUserManagementService
             throw;
         }
     }
+
+    public async Task UpdateUserStatusAsync(int id, bool isActive)
+    {
+        try
+        {
+            var client = CreateClient();
+            var request = new UpdateUserStatusRequest { IsActive = isActive };
+            var response = await client.PutAsJsonAsync($"Users/{id}/status", request);
+            response.EnsureSuccessStatusCode();
+            
+            _logger.LogInformation("Updated user {UserId} status to {IsActive}", id, isActive);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating status for user {UserId}", id);
+            throw;
+        }
+    }
 }
