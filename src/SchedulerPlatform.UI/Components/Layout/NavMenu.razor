@@ -28,7 +28,7 @@
 
     private async Task LoadPermissionsAsync()
     {
-        _canManageUsers = await PermissionService.HasPermissionAsync("users:manage");
+        _canManageUsers = await PermissionService.CanReadAsync("users:manage");
     }
 
     private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
