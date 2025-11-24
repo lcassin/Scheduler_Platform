@@ -16,12 +16,12 @@ public class UserManagementService : IUserManagementService
 
     private HttpClient CreateClient() => _httpClientFactory.CreateClient("SchedulerAPI");
 
-    public async Task<PagedResult<UserListItem>> GetUsersAsync(string? searchTerm, int pageNumber, int pageSize)
+    public async Task<PagedResult<UserListItem>> GetUsersAsync(string? searchTerm, int pageNumber, int pageSize, bool showInactive = false)
     {
         try
         {
             var client = CreateClient();
-            var query = $"Users?pageNumber={pageNumber}&pageSize={pageSize}";
+            var query = $"Users?pageNumber={pageNumber}&pageSize={pageSize}&showInactive={showInactive}";
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 query += $"&searchTerm={Uri.EscapeDataString(searchTerm)}";

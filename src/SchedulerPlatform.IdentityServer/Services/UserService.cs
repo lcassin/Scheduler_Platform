@@ -271,4 +271,65 @@ public class UserService : IUserService
             return Enumerable.Empty<UserPermission>();
         }
     }
+
+    public async Task SetMustChangePasswordAsync(int userId, bool mustChange)
+    {
+        try
+        {
+            var user = await GetUserByIdAsync(userId);
+            if (user != null)
+            {
+                user.MustChangePassword = mustChange;
+                await UpdateUserAsync(user);
+                _logger.LogInformation("Set MustChangePassword={MustChange} for user {UserId}", mustChange, userId);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error setting MustChangePassword for user {UserId}", userId);
+            throw;
+        }
+    }
+
+    public async Task<bool> ChangePasswordAsync(int userId, string currentPassword, string newPassword)
+    {
+        try
+        {
+            var user = await GetUserByIdAsync(userId);
+            if (user == null || string.IsNullOrEmpty(user.PasswordHash))
+            {
+                _logger.LogWarning("Cannot change password for user {UserId} - user not found or no password set", userId);
+                return false;
+            }
+
+            var verifyResult = _passwordHasher.VerifyHashedPassword(user, user.PasswordHash, currentPassword);
+            if (verifyResult != PasswordVerificationResult.Success && verifyResult != PasswordVerificationResult.SuccessRehashNeeded)
+            {
+                _logger.LogWarning("Invalid current password for user {UserId}", userId);
+                return false;
+            }
+
+            if (!await CanReusePasswordAsync(userId, newPassword))
+            {
+                _logger.LogWarning("User {UserId} attempted to reuse a recent password", userId);
+                return false;
+            }
+
+            var newPasswordHash = _passwordHasher.HashPassword(user, newPassword);
+            user.PasswordHash = newPasswordHash;
+            user.MustChangePassword = false;
+            user.PasswordChangedAt = DateTime.UtcNow;
+            await UpdateUserAsync(user);
+
+            await AddPasswordToHistoryAsync(userId, newPasswordHash);
+
+            _logger.LogInformation("Password changed successfully for user {UserId}", userId);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error changing password for user {UserId}", userId);
+            return false;
+        }
+    }
 }
