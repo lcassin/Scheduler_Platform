@@ -57,33 +57,38 @@
 
                 @foreach (var group in _permissionGroups)
                 {
-                    <MudPaper Class="pa-3 mb-3">
+                    <MudPaper Class="pa-3 mb-3" @key="@group.Key">
                         <MudText Typo="Typo.subtitle2" Class="mb-2">@group.Key</MudText>
                         <MudGrid>
                             <MudItem xs="12" sm="2">
                                 <MudCheckBox T="bool" @bind-Checked="@group.Value.CanCreate"
                                              Label="Create"
-                                             Dense="true" />
+                                             Dense="true"
+                                             @key="@($"{group.Key}-create")" />
                             </MudItem>
                             <MudItem xs="12" sm="2">
                                 <MudCheckBox T="bool" @bind-Checked="@group.Value.CanRead"
                                              Label="Read"
-                                             Dense="true" />
+                                             Dense="true"
+                                             @key="@($"{group.Key}-read")" />
                             </MudItem>
                             <MudItem xs="12" sm="2">
                                 <MudCheckBox T="bool" @bind-Checked="@group.Value.CanUpdate"
                                              Label="Update"
-                                             Dense="true" />
+                                             Dense="true"
+                                             @key="@($"{group.Key}-update")" />
                             </MudItem>
                             <MudItem xs="12" sm="2">
                                 <MudCheckBox T="bool" @bind-Checked="@group.Value.CanDelete"
                                              Label="Delete"
-                                             Dense="true" />
+                                             Dense="true"
+                                             @key="@($"{group.Key}-delete")" />
                             </MudItem>
                             <MudItem xs="12" sm="2">
                                 <MudCheckBox T="bool" @bind-Checked="@group.Value.CanExecute"
                                              Label="Execute"
-                                             Dense="true" />
+                                             Dense="true"
+                                             @key="@($"{group.Key}-execute")" />
                             </MudItem>
                         </MudGrid>
                     </MudPaper>
@@ -108,7 +113,7 @@
     private List<PermissionTemplate> _templates = new();
     private string? _selectedTemplate;
     private bool _loading = true;
-    private Dictionary<string, PermissionGroup> _permissionGroups = new();
+    private Dictionary<string, PermissionGroup> _permissionGroups = new(StringComparer.OrdinalIgnoreCase);
 
     protected override async Task OnInitializedAsync()
     {
@@ -178,7 +183,16 @@
 
         var template = _templates.FirstOrDefault(t => t.Name == _selectedTemplate);
         if (template == null)
+        {
+            Snackbar.Add($"Template '{_selectedTemplate}' not found", Severity.Error);
             return;
+        }
+
+        if (template.Permissions == null || !template.Permissions.Any())
+        {
+            Snackbar.Add($"Template '{_selectedTemplate}' has no permissions defined", Severity.Warning);
+            return;
+        }
 
         foreach (var group in _permissionGroups.Values)
         {
@@ -189,19 +203,21 @@
             group.CanExecute = false;
         }
 
+        var appliedCount = 0;
         foreach (var perm in template.Permissions)
         {
-            if (_permissionGroups.ContainsKey(perm.PermissionName))
+            if (_permissionGroups.TryGetValue(perm.PermissionName, out var group))
             {
-                _permissionGroups[perm.PermissionName].CanCreate = perm.CanCreate;
-                _permissionGroups[perm.PermissionName].CanRead = perm.CanRead;
-                _permissionGroups[perm.PermissionName].CanUpdate = perm.CanUpdate;
-                _permissionGroups[perm.PermissionName].CanDelete = perm.CanDelete;
-                _permissionGroups[perm.PermissionName].CanExecute = perm.CanExecute;
+                group.CanCreate = perm.CanCreate;
+                group.CanRead = perm.CanRead;
+                group.CanUpdate = perm.CanUpdate;
+                group.CanDelete = perm.CanDelete;
+                group.CanExecute = perm.CanExecute;
+                appliedCount++;
             }
         }
 
-        Snackbar.Add($"Template '{_selectedTemplate}' applied. Click Save to persist changes.", Severity.Info);
+        Snackbar.Add($"Template '{_selectedTemplate}' applied ({appliedCount} permissions). Click Save to persist changes.", Severity.Info);
         StateHasChanged();
     }
 
