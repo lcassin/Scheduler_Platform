@@ -138,8 +138,14 @@ builder.Services.AddAuthorization(options =>
         policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("schedules:execute")));
     options.AddPolicy("Jobs.Read", policy => 
         policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("jobs:read")));
-    options.AddPolicy("Users.Manage", policy => 
-        policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("users:manage")));
+    options.AddPolicy("Users.Manage.Read", policy => 
+        policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("users:manage:read")));
+    options.AddPolicy("Users.Manage.Update", policy => 
+        policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("users:manage:update")));
+    options.AddPolicy("Users.Manage.Create", policy => 
+        policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("users:manage:create")));
+    options.AddPolicy("Users.Manage.Delete", policy => 
+        policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("users:manage:delete")));
 });
 
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();

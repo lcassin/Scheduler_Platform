@@ -104,7 +104,7 @@ public class AuditLogsController : ControllerBase
     }
 
     [HttpGet]
-    [Authorize(Policy = "Users.Manage")]
+    [Authorize(Policy = "Users.Manage.Read")]
     public async Task<ActionResult<object>> GetAuditLogs(
         [FromQuery] string? entityType = null,
         [FromQuery] int? entityId = null,
