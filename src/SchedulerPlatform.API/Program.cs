@@ -257,6 +257,8 @@ app.UseCors("AllowUI");
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.UseMiddleware<SchedulerPlatform.API.Middleware.AutoUserCreationMiddleware>();
+
 app.MapControllers();
 
 try
