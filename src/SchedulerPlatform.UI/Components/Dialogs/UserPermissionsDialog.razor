@@ -61,39 +61,44 @@
                         <MudText Typo="Typo.subtitle2" Class="mb-2">@group.PermissionName</MudText>
                         <MudGrid>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox T="bool"
-                                             Checked="@group.CanCreate"
-                                             CheckedChanged="@((bool b) => group.CanCreate = b)"
-                                             Label="Create"
-                                             Dense="true" />
+                                <label style="display: flex; align-items: center; cursor: pointer;">
+                                    <input type="checkbox" 
+                                           @bind="group.CanCreate"
+                                           style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;" />
+                                    <span>Create</span>
+                                </label>
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox T="bool"
-                                             Checked="@group.CanRead"
-                                             CheckedChanged="@((bool b) => group.CanRead = b)"
-                                             Label="Read"
-                                             Dense="true" />
+                                <label style="display: flex; align-items: center; cursor: pointer;">
+                                    <input type="checkbox" 
+                                           @bind="group.CanRead"
+                                           style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;" />
+                                    <span>Read</span>
+                                </label>
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox T="bool"
-                                             Checked="@group.CanUpdate"
-                                             CheckedChanged="@((bool b) => group.CanUpdate = b)"
-                                             Label="Update"
-                                             Dense="true" />
+                                <label style="display: flex; align-items: center; cursor: pointer;">
+                                    <input type="checkbox" 
+                                           @bind="group.CanUpdate"
+                                           style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;" />
+                                    <span>Update</span>
+                                </label>
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox T="bool"
-                                             Checked="@group.CanDelete"
-                                             CheckedChanged="@((bool b) => group.CanDelete = b)"
-                                             Label="Delete"
-                                             Dense="true" />
+                                <label style="display: flex; align-items: center; cursor: pointer;">
+                                    <input type="checkbox" 
+                                           @bind="group.CanDelete"
+                                           style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;" />
+                                    <span>Delete</span>
+                                </label>
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox T="bool"
-                                             Checked="@group.CanExecute"
-                                             CheckedChanged="@((bool b) => group.CanExecute = b)"
-                                             Label="Execute"
-                                             Dense="true" />
+                                <label style="display: flex; align-items: center; cursor: pointer;">
+                                    <input type="checkbox" 
+                                           @bind="group.CanExecute"
+                                           style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;" />
+                                    <span>Execute</span>
+                                </label>
                             </MudItem>
                         </MudGrid>
                     </MudPaper>
