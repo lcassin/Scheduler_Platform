@@ -34,11 +34,10 @@
                           OnKeyUp="@(async (e) => { if (e.Key == "Enter") await SearchUsers(); })"
                           Immediate="false"
                           Style="flex: 1;" />
-            <MudSwitch @bind-Value="_showInactiveUsers"
+            <MudSwitch Checked="_showInactiveUsers"
+                       CheckedChanged="@(async (bool value) => { _showInactiveUsers = value; await SearchUsers(); })"
                        Label="Show Inactive Users"
-                       Color="Color.Primary"
-                       T="bool"
-                       ValueChanged="@(async (bool value) => { _showInactiveUsers = value; await SearchUsers(); })" />
+                       Color="Color.Primary" />
         </div>
     </MudPaper>
 
