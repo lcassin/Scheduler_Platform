@@ -358,6 +358,42 @@ public class UsersController : ControllerBase
         }
     }
 
+    [HttpPut("{id}/status")]
+    [Authorize(Policy = "Users.Manage.Update")]
+    public async Task<IActionResult> UpdateUserStatus(int id, [FromBody] UpdateUserStatusRequest request)
+    {
+        try
+        {
+            var user = await _unitOfWork.Users.GetByIdAsync(id);
+            if (user == null)
+            {
+                return NotFound();
+            }
+
+            if (user.IsSystemAdmin)
+            {
+                return BadRequest(new { message = "Cannot modify status for system administrators" });
+            }
+
+            user.IsActive = request.IsActive;
+            user.UpdatedAt = DateTime.UtcNow;
+            user.UpdatedBy = User.Identity?.Name ?? "System";
+
+            await _unitOfWork.Users.UpdateAsync(user);
+            await _unitOfWork.SaveChangesAsync();
+
+            _logger.LogInformation("Updated status for user {UserId} to {IsActive} by {UpdatedBy}", 
+                id, request.IsActive, User.Identity?.Name ?? "System");
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating status for user {UserId}", id);
+            return StatusCode(500, "An error occurred while updating user status");
+        }
+    }
+
     [HttpGet("templates")]
     [Authorize(Policy = "Users.Manage.Read")]
     public ActionResult<List<PermissionTemplateResponse>> GetPermissionTemplates()
