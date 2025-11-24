@@ -56,6 +56,7 @@ public class UsersController : ControllerBase
             foreach (var user in users)
             {
                 var permissions = await _unitOfWork.UserPermissions.GetByUserIdAsync(user.Id);
+                var permissionsList = permissions.ToList();
                 userResponses.Add(new UserListItemResponse
                 {
                     Id = user.Id,
@@ -65,7 +66,8 @@ public class UsersController : ControllerBase
                     IsActive = user.IsActive,
                     IsSystemAdmin = user.IsSystemAdmin,
                     LastLoginAt = user.LastLoginAt,
-                    PermissionCount = permissions.Count()
+                    PermissionCount = permissionsList.Count,
+                    Role = DetermineUserRole(user, permissionsList)
                 });
             }
 
@@ -346,5 +348,28 @@ public class UsersController : ControllerBase
             },
             _ => null
         };
+    }
+
+    private string DetermineUserRole(User user, List<UserPermission> permissions)
+    {
+        if (user.IsSystemAdmin)
+            return "Super Admin";
+
+        if (permissions.Count == 0)
+            return "No Access";
+
+        var hasUsersManage = permissions.Any(p => p.PermissionName == "users:manage");
+        if (hasUsersManage)
+            return "Admin";
+
+        var schedulesPerm = permissions.FirstOrDefault(p => p.PermissionName == "schedules");
+        if (schedulesPerm != null && (schedulesPerm.CanCreate || schedulesPerm.CanUpdate || schedulesPerm.CanDelete || schedulesPerm.CanExecute))
+            return "Editor";
+
+        var allReadOnly = permissions.All(p => !p.CanCreate && !p.CanUpdate && !p.CanDelete && !p.CanExecute && p.CanRead);
+        if (allReadOnly)
+            return "Viewer";
+
+        return "Custom";
     }
 }
