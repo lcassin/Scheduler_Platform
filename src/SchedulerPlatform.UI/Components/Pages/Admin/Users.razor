@@ -56,17 +56,9 @@
                 {
                     <MudChip T="string" Color="Color.Error" Size="Size.Small">Super Admin</MudChip>
                 }
-                else if (context.PermissionCount > 10)
-                {
-                    <MudChip T="string" Color="Color.Warning" Size="Size.Small">Admin</MudChip>
-                }
-                else if (context.PermissionCount > 3)
-                {
-                    <MudChip T="string" Color="Color.Info" Size="Size.Small">Editor</MudChip>
-                }
                 else
                 {
-                    <MudChip T="string" Color="Color.Default" Size="Size.Small">Viewer</MudChip>
+                    <MudChip T="string" Color="@GetRoleColor(context)" Size="Size.Small">@GetRoleLabel(context)</MudChip>
                 }
             </MudTd>
             <MudTd DataLabel="Permissions">@context.PermissionCount</MudTd>
@@ -156,5 +148,33 @@
         {
             await _table!.ReloadServerData();
         }
+    }
+
+    private string GetRoleLabel(UserListItem user)
+    {
+        if (user.PermissionCount == 0)
+            return "No Access";
+        
+        if (user.PermissionCount >= 5)
+            return "Admin";
+        
+        if (user.PermissionCount == 3)
+            return "Viewer";
+        
+        return "Editor";
+    }
+
+    private Color GetRoleColor(UserListItem user)
+    {
+        if (user.PermissionCount == 0)
+            return Color.Default;
+        
+        if (user.PermissionCount >= 5)
+            return Color.Warning;
+        
+        if (user.PermissionCount == 3)
+            return Color.Default;
+        
+        return Color.Info;
     }
 }
