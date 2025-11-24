@@ -55,40 +55,35 @@
 
                 <MudText Typo="Typo.subtitle1" Class="mb-3">Custom Permissions</MudText>
 
-                @foreach (var group in _permissionGroups)
+                @foreach (var group in _permissionGroupList)
                 {
-                    <MudPaper Class="pa-3 mb-3" @key="@group.Key">
-                        <MudText Typo="Typo.subtitle2" Class="mb-2">@group.Key</MudText>
+                    <MudPaper Class="pa-3 mb-3" @key="@group.PermissionName">
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">@group.PermissionName</MudText>
                         <MudGrid>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox T="bool" @bind-Checked="@group.Value.CanCreate"
+                                <MudCheckBox T="bool" @bind-Checked="@group.CanCreate"
                                              Label="Create"
-                                             Dense="true"
-                                             @key="@($"{group.Key}-create")" />
+                                             Dense="true" />
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox T="bool" @bind-Checked="@group.Value.CanRead"
+                                <MudCheckBox T="bool" @bind-Checked="@group.CanRead"
                                              Label="Read"
-                                             Dense="true"
-                                             @key="@($"{group.Key}-read")" />
+                                             Dense="true" />
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox T="bool" @bind-Checked="@group.Value.CanUpdate"
+                                <MudCheckBox T="bool" @bind-Checked="@group.CanUpdate"
                                              Label="Update"
-                                             Dense="true"
-                                             @key="@($"{group.Key}-update")" />
+                                             Dense="true" />
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox T="bool" @bind-Checked="@group.Value.CanDelete"
+                                <MudCheckBox T="bool" @bind-Checked="@group.CanDelete"
                                              Label="Delete"
-                                             Dense="true"
-                                             @key="@($"{group.Key}-delete")" />
+                                             Dense="true" />
                             </MudItem>
                             <MudItem xs="12" sm="2">
-                                <MudCheckBox T="bool" @bind-Checked="@group.Value.CanExecute"
+                                <MudCheckBox T="bool" @bind-Checked="@group.CanExecute"
                                              Label="Execute"
-                                             Dense="true"
-                                             @key="@($"{group.Key}-execute")" />
+                                             Dense="true" />
                             </MudItem>
                         </MudGrid>
                     </MudPaper>
@@ -114,6 +109,8 @@
     private string? _selectedTemplate;
     private bool _loading = true;
     private Dictionary<string, PermissionGroup> _permissionGroups = new(StringComparer.OrdinalIgnoreCase);
+    private List<PermissionGroup> _permissionGroupList = new();
+    private readonly string[] _permissionNames = new[] { "scheduler", "schedules", "jobs", "users", "users:manage" };
 
     protected override async Task OnInitializedAsync()
     {
@@ -159,13 +156,15 @@
 
     private void InitializePermissionGroups()
     {
-        var permissionNames = new[] { "scheduler", "schedules", "jobs", "users", "users:manage" };
+        _permissionGroups.Clear();
+        _permissionGroupList.Clear();
 
-        foreach (var name in permissionNames)
+        foreach (var name in _permissionNames)
         {
             var existing = _user!.Permissions.FirstOrDefault(p => 
                 string.Equals(p.PermissionName, name, StringComparison.OrdinalIgnoreCase));
-            _permissionGroups[name] = new PermissionGroup
+            
+            var group = new PermissionGroup
             {
                 PermissionName = name,
                 CanCreate = existing?.CanCreate ?? false,
@@ -174,7 +173,14 @@
                 CanDelete = existing?.CanDelete ?? false,
                 CanExecute = existing?.CanExecute ?? false
             };
+            
+            _permissionGroups[name] = group;
+            _permissionGroupList.Add(group);
         }
+
+        var debugInfo = string.Join("; ", _permissionGroupList.Select(g => 
+            $"{g.PermissionName}: R={g.CanRead} C={g.CanCreate} U={g.CanUpdate} D={g.CanDelete} E={g.CanExecute}"));
+        Console.WriteLine($"[DEBUG] Initialized permissions: {debugInfo}");
     }
 
     private async Task ApplyTemplate()
@@ -218,19 +224,19 @@
             }
         }
 
-        _permissionGroups = _permissionGroups.ToDictionary(
-            kvp => kvp.Key,
-            kvp => new PermissionGroup
+        _permissionGroupList = _permissionNames.Select(name => 
+        {
+            var g = _permissionGroups[name];
+            return new PermissionGroup
             {
-                PermissionName = kvp.Value.PermissionName,
-                CanCreate = kvp.Value.CanCreate,
-                CanRead = kvp.Value.CanRead,
-                CanUpdate = kvp.Value.CanUpdate,
-                CanDelete = kvp.Value.CanDelete,
-                CanExecute = kvp.Value.CanExecute
-            },
-            StringComparer.OrdinalIgnoreCase
-        );
+                PermissionName = g.PermissionName,
+                CanCreate = g.CanCreate,
+                CanRead = g.CanRead,
+                CanUpdate = g.CanUpdate,
+                CanDelete = g.CanDelete,
+                CanExecute = g.CanExecute
+            };
+        }).ToList();
 
         Snackbar.Add($"Template '{_selectedTemplate}' applied ({appliedCount} permissions). Click Save to persist changes.", Severity.Info);
         await InvokeAsync(StateHasChanged);
@@ -278,16 +284,16 @@
     {
         try
         {
-            var permissions = _permissionGroups
-                .Where(g => g.Value.HasAnyPermission())
+            var permissions = _permissionGroupList
+                .Where(g => g.HasAnyPermission())
                 .Select(g => new UserPermissionDto
                 {
-                    PermissionName = g.Key,
-                    CanCreate = g.Value.CanCreate,
-                    CanRead = g.Value.CanRead,
-                    CanUpdate = g.Value.CanUpdate,
-                    CanDelete = g.Value.CanDelete,
-                    CanExecute = g.Value.CanExecute
+                    PermissionName = g.PermissionName,
+                    CanCreate = g.CanCreate,
+                    CanRead = g.CanRead,
+                    CanUpdate = g.CanUpdate,
+                    CanDelete = g.CanDelete,
+                    CanExecute = g.CanExecute
                 })
                 .ToList();
 
