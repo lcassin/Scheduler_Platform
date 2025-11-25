@@ -41,7 +41,7 @@ public class EmailService : IEmailService
             var smtpUsername = _configuration["Email:SmtpUsername"];
             var smtpPassword = _configuration["Email:SmtpPassword"];
             var fromEmail = _configuration["Email:FromEmail"];
-            var fromName = _configuration["Email:FromName"] ?? "Scheduler Platform";
+            var fromName = _configuration["Email:FromName"] ?? "ADR Scheduler";
             var enableSsl = bool.Parse(_configuration["Email:EnableSsl"] ?? "true");
 
             using var client = new SmtpClient(smtpHost, smtpPort)
