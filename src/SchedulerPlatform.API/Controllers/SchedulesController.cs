@@ -859,7 +859,7 @@ public class SchedulesController : ControllerBase
     }
 
     [HttpPost("missed/bulk-trigger")]
-    [Authorize(Policy = "Schedules.Execute")]
+    [Authorize] // All authenticated users can trigger missed schedules for recovery purposes
     public async Task<ActionResult<object>> BulkTriggerMissedSchedules([FromBody] BulkTriggerRequest request)
     {
         try
