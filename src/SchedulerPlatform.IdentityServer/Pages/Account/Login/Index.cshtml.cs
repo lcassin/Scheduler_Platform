@@ -116,6 +116,23 @@ public class Index : PageModel
             
             if (isValid && user != null)
             {
+                if (user.MustChangePassword)
+                {
+                    _logger.LogInformation("User {Email} must change password", user.Email);
+                    return RedirectToPage("/Account/ChangePassword", new { userId = user.Id, returnUrl = Input.ReturnUrl });
+                }
+
+                if (!user.IsSystemAdmin && !string.IsNullOrEmpty(user.PasswordHash) && user.PasswordChangedAt.HasValue)
+                {
+                    var passwordAge = DateTime.UtcNow - user.PasswordChangedAt.Value;
+                    if (passwordAge.TotalDays >= 90)
+                    {
+                        _logger.LogInformation("Password expired for user {Email}", user.Email);
+                        await _userService.SetMustChangePasswordAsync(user.Id, true);
+                        return RedirectToPage("/Account/ChangePassword", new { userId = user.Id, returnUrl = Input.ReturnUrl });
+                    }
+                }
+
                 await _events.RaiseAsync(new UserLoginSuccessEvent(user.Email, user.Id.ToString(), user.Email, clientId: context?.Client.ClientId));
                 Telemetry.Metrics.UserLogin(context?.Client.ClientId, IdentityServerConstants.LocalIdentityProvider);
 
