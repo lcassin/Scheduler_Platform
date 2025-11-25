@@ -301,6 +301,40 @@ public class ApiCallJob : IJob
     }
 }
 
+    private string ValidateAndSecureConnectionString(string connectionString)
+    {
+        if (_environment.IsProduction())
+        {
+            if (connectionString.Contains("TrustServerCertificate=True", StringComparison.OrdinalIgnoreCase) ||
+                connectionString.Contains("Encrypt=False", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogError(
+                    "SECURITY: Insecure SQL connection settings detected in production. " +
+                    "Connection strings must use Encrypt=True and TrustServerCertificate=False with valid certificates.");
+                throw new InvalidOperationException(
+                    "Insecure SQL connection settings are not allowed in production. " +
+                    "Use Encrypt=True and TrustServerCertificate=False with a valid certificate.");
+            }
+            
+            if (!connectionString.Contains("Encrypt=", StringComparison.OrdinalIgnoreCase))
+            {
+                connectionString += ";Encrypt=True;TrustServerCertificate=False";
+                _logger.LogInformation("Added secure encryption settings to connection string");
+            }
+        }
+        else
+        {
+            if (!connectionString.Contains("TrustServerCertificate", StringComparison.OrdinalIgnoreCase) &&
+                !connectionString.Contains("Encrypt=False", StringComparison.OrdinalIgnoreCase))
+            {
+                connectionString += ";TrustServerCertificate=True";
+            }
+        }
+        
+        return connectionString;
+    }
+}
+
 public class ApiCallJobConfig
 {
     public string Url { get; set; } = string.Empty;

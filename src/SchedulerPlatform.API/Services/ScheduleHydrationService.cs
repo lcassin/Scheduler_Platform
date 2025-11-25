@@ -67,11 +67,13 @@ public class ScheduleHydrationService : IHostedService
             var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
             var schedulerService = scope.ServiceProvider.GetRequiredService<ISchedulerService>();
 
+            // Only load future schedules - missed schedules are handled by MissedSchedulesProcessor
             var schedulesInHorizon = await unitOfWork.Schedules.FindAsync(s =>
                 s.IsEnabled &&
                 !s.IsDeleted &&
-                s.NextRunTime != null &&
-                s.NextRunTime <= horizonEnd);
+                s.NextRunTime.HasValue &&
+                s.NextRunTime.Value >= now &&
+                s.NextRunTime.Value <= horizonEnd);
 
             var schedulesList = schedulesInHorizon.ToList();
             

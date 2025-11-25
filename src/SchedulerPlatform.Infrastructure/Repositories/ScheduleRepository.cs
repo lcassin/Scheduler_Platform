@@ -105,7 +105,7 @@ public class ScheduleRepository : Repository<Schedule>, IScheduleRepository
                 ClientName = s.Client != null ? s.Client.ClientName : null,
                 LastExecution = s.JobExecutions
                     .OrderByDescending(e => e.StartTime)
-                    .Select(e => new { e.Status, e.StartTime })
+                    .Select(e => new { e.Status, e.StartTime, e.EndTime })
                     .FirstOrDefault()
             })
             .ToListAsync();
@@ -117,6 +117,8 @@ public class ScheduleRepository : Repository<Schedule>, IScheduleRepository
                 i.Schedule.Client = new Client { ClientName = i.ClientName };
             }
             i.Schedule.LastRunStatus = i.LastExecution?.Status;
+            // Use EndTime if available (job completed), otherwise use StartTime
+            i.Schedule.LastRunTime = i.LastExecution?.EndTime ?? i.LastExecution?.StartTime;
             return i.Schedule;
         }).ToList();
         

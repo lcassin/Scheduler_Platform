@@ -1,0 +1,271 @@
+@page "/schedules/missed"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using SchedulerPlatform.UI.Models
+@inject IScheduleService ScheduleService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject NavigationManager Navigation
+
+<PageTitle>Missed Schedules</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">Missed Schedules</MudText>
+
+<MudPaper Class="pa-4">
+    <MudGrid Class="mb-4">
+        <MudItem xs="12" md="3">
+            <MudSelect T="int" @bind-Value="_windowDays" Label="Time Window" Variant="Variant.Outlined" Margin="Margin.Dense">
+                <MudSelectItem Value="1">Last 24 Hours (Auto-fire eligible)</MudSelectItem>
+                <MudSelectItem Value="2">Last 2 Days</MudSelectItem>
+                <MudSelectItem Value="7">Last 7 Days</MudSelectItem>
+                <MudSelectItem Value="30">Last 30 Days</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudNumericField T="int" @bind-Value="_delayMs" Label="Delay Between Triggers (ms)" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="10000" />
+        </MudItem>
+        <MudItem xs="12" md="6" Class="d-flex align-center gap-2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadMissedSchedules">
+                Refresh
+            </MudButton>
+            @if (_selectedIds.Any())
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="BulkTriggerSelected" Disabled="@_isBulkTriggering">
+                    @if (_isBulkTriggering)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        <text>Triggering...</text>
+                    }
+                    else
+                    {
+                        <text>Trigger Selected (@_selectedIds.Count)</text>
+                    }
+                </MudButton>
+            }
+        </MudItem>
+    </MudGrid>
+
+    @if (_windowDays > 1)
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-4">
+            Schedules missed more than 24 hours ago are not auto-fired on startup. Use this page to manually trigger them if needed.
+        </MudAlert>
+    }
+
+    @if (_loading)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_missedSchedules == null || !_missedSchedules.Items.Any())
+    {
+        <MudAlert Severity="Severity.Success">
+            No missed schedules found within the selected time window.
+        </MudAlert>
+    }
+    else
+    {
+        <MudText Typo="Typo.body2" Class="mb-2">
+            Found <strong>@_missedSchedules.TotalCount</strong> missed schedule(s) as of @_missedSchedules.AsOfUtc.ToString("g") UTC
+        </MudText>
+
+        <MudTable T="MissedScheduleItem" Items="@_missedSchedules.Items" Hover="true" Dense="true" MultiSelection="true" @bind-SelectedItems="_selectedItems">
+            <HeaderContent>
+                <MudTh>
+                    <MudCheckBox T="bool" Value="@(_selectedIds.Count == _missedSchedules.Items.Count && _missedSchedules.Items.Any())" 
+                                 ValueChanged="@((bool value) => SelectAll(value))" />
+                </MudTh>
+                <MudTh>Name</MudTh>
+                <MudTh>Scheduled Time</MudTh>
+                <MudTh>Time Late</MudTh>
+                <MudTh>Frequency</MudTh>
+                <MudTh>Last Run</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>
+                    <MudCheckBox T="bool" Value="@_selectedIds.Contains(context.Id)" 
+                                 ValueChanged="@((bool value) => ToggleSelection(context.Id, value))" />
+                </MudTd>
+                <MudTd DataLabel="Name">
+                    <MudText Typo="Typo.body1"><strong>@context.Name</strong></MudText>
+                </MudTd>
+                <MudTd DataLabel="Scheduled Time">
+                    @if (context.NextRunTime.HasValue)
+                    {
+                        <text>@context.NextRunTime.Value.ToString("g")</text>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Time Late">
+                    <MudChip T="string" Size="Size.Small" Color="@GetLateColor(context.MinutesLate)">
+                        @FormatTimeLate(context.MinutesLate)
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Frequency">@context.Frequency</MudTd>
+                <MudTd DataLabel="Last Run">
+                    @if (context.LastRunTime.HasValue)
+                    {
+                        <text>@context.LastRunTime.Value.ToString("g")</text>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Never</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" 
+                                   OnClick="@(() => TriggerSingle(context))" 
+                                   Title="Trigger Now" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" 
+                                   OnClick="@(() => ViewSchedule(context.Id))" 
+                                   Title="View Details" />
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@code {
+    private MissedSchedulesResult? _missedSchedules;
+    private bool _loading = true;
+    private int _windowDays = 1;
+    private int _delayMs = 200;
+    private HashSet<int> _selectedIds = new();
+    private HashSet<MissedScheduleItem> _selectedItems = new();
+    private bool _isBulkTriggering = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // All authenticated users can trigger missed schedules for recovery purposes
+        await LoadMissedSchedules();
+    }
+
+    private async Task LoadMissedSchedules()
+    {
+        _loading = true;
+        _selectedIds.Clear();
+        _selectedItems.Clear();
+        
+        try
+        {
+            _missedSchedules = await ScheduleService.GetMissedSchedulesAsync(_windowDays, 1, 500);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading missed schedules: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void SelectAll(bool selected)
+    {
+        if (selected && _missedSchedules != null)
+        {
+            _selectedIds = _missedSchedules.Items.Select(i => i.Id).ToHashSet();
+            _selectedItems = _missedSchedules.Items.ToHashSet();
+        }
+        else
+        {
+            _selectedIds.Clear();
+            _selectedItems.Clear();
+        }
+    }
+
+    private void ToggleSelection(int id, bool selected)
+    {
+        if (selected)
+        {
+            _selectedIds.Add(id);
+            var item = _missedSchedules?.Items.FirstOrDefault(i => i.Id == id);
+            if (item != null) _selectedItems.Add(item);
+        }
+        else
+        {
+            _selectedIds.Remove(id);
+            _selectedItems.RemoveWhere(i => i.Id == id);
+        }
+    }
+
+    private async Task BulkTriggerSelected()
+    {
+        if (!_selectedIds.Any()) return;
+
+        var confirmed = await DialogService.ShowMessageBox(
+            "Bulk Trigger Schedules",
+            $"Are you sure you want to trigger {_selectedIds.Count} schedule(s)? They will be executed with a {_delayMs}ms delay between each.",
+            yesText: "Trigger All", cancelText: "Cancel");
+
+        if (confirmed != true) return;
+
+        _isBulkTriggering = true;
+        StateHasChanged();
+
+        try
+        {
+            var result = await ScheduleService.BulkTriggerMissedSchedulesAsync(_selectedIds.ToList(), _delayMs);
+            
+            if (result.FailureCount == 0)
+            {
+                Snackbar.Add($"Successfully triggered {result.SuccessCount} schedule(s)", Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add($"Triggered {result.SuccessCount} schedule(s), {result.FailureCount} failed", Severity.Warning);
+            }
+
+            await LoadMissedSchedules();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error triggering schedules: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isBulkTriggering = false;
+        }
+    }
+
+    private async Task TriggerSingle(MissedScheduleItem item)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Trigger Schedule",
+            $"Are you sure you want to trigger '{item.Name}' now?",
+            yesText: "Trigger", cancelText: "Cancel");
+
+        if (confirmed != true) return;
+
+        try
+        {
+            await ScheduleService.TriggerScheduleAsync(item.Id);
+            Snackbar.Add($"Schedule '{item.Name}' triggered", Severity.Success);
+            await LoadMissedSchedules();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error triggering schedule: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void ViewSchedule(int id)
+    {
+        Navigation.NavigateTo($"/schedules/edit/{id}");
+    }
+
+    private string FormatTimeLate(double minutesLate)
+    {
+        if (minutesLate < 60)
+            return $"{minutesLate:F0} min";
+        if (minutesLate < 1440)
+            return $"{minutesLate / 60:F1} hrs";
+        return $"{minutesLate / 1440:F1} days";
+    }
+
+    private Color GetLateColor(double minutesLate)
+    {
+        if (minutesLate < 60) return Color.Warning;
+        if (minutesLate < 1440) return Color.Error;
+        return Color.Dark;
+    }
+}
