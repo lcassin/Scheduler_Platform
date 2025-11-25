@@ -1,6 +1,6 @@
 @rendermode InteractiveServer
 <CascadingAuthenticationState>
-    <MudThemeProvider />
+    <MudThemeProvider Theme="_cisTheme" />
     <MudPopoverProvider />
     <MudDialogProvider />
     <MudSnackbarProvider />
@@ -16,3 +16,140 @@
         </Found>
     </Router>
 </CascadingAuthenticationState>
+
+@code {
+    private MudTheme _cisTheme = new MudTheme
+    {
+        PaletteLight = new PaletteLight
+        {
+            Primary = "#3058A9",
+            PrimaryContrastText = "#FFFFFF",
+            Secondary = "#5DAF1B",
+            SecondaryContrastText = "#FFFFFF",
+            Tertiary = "#4E9AF2",
+            TertiaryContrastText = "#FFFFFF",
+            Info = "#3C78BE",
+            InfoContrastText = "#FFFFFF",
+            Success = "#5DAF1B",
+            SuccessContrastText = "#FFFFFF",
+            Warning = "#F5AF10",
+            WarningContrastText = "#000000",
+            Error = "#F24A32",
+            ErrorContrastText = "#FFFFFF",
+            Dark = "#414658",
+            DarkContrastText = "#FFFFFF",
+            TextPrimary = "#414658",
+            TextSecondary = "#65747C",
+            TextDisabled = "#8496A0",
+            ActionDefault = "#65747C",
+            ActionDisabled = "#8496A0",
+            ActionDisabledBackground = "#EAEAEA",
+            Background = "#F5F5F5",
+            BackgroundGray = "#EAEAEA",
+            Surface = "#FFFFFF",
+            DrawerBackground = "#414658",
+            DrawerText = "#FFFFFF",
+            DrawerIcon = "#FFFFFF",
+            AppbarBackground = "#3058A9",
+            AppbarText = "#FFFFFF",
+            LinesDefault = "#EAEAEA",
+            LinesInputs = "#8496A0",
+            TableLines = "#EAEAEA",
+            TableStriped = "#F5F5F5",
+            TableHover = "#EAEAEA",
+            Divider = "#EAEAEA",
+            DividerLight = "#F5F5F5"
+        },
+        PaletteDark = new PaletteDark
+        {
+            Primary = "#4E9AF2",
+            PrimaryContrastText = "#FFFFFF",
+            Secondary = "#5DAF1B",
+            SecondaryContrastText = "#FFFFFF",
+            Tertiary = "#3058A9",
+            TertiaryContrastText = "#FFFFFF",
+            Info = "#3C78BE",
+            InfoContrastText = "#FFFFFF",
+            Success = "#5DAF1B",
+            SuccessContrastText = "#FFFFFF",
+            Warning = "#F5AF10",
+            WarningContrastText = "#000000",
+            Error = "#F24A32",
+            ErrorContrastText = "#FFFFFF",
+            Dark = "#0A1E47",
+            DarkContrastText = "#FFFFFF",
+            TextPrimary = "#FFFFFF",
+            TextSecondary = "#8496A0",
+            Background = "#1A1A2E",
+            BackgroundGray = "#252542",
+            Surface = "#252542",
+            DrawerBackground = "#0A1E47",
+            DrawerText = "#FFFFFF",
+            DrawerIcon = "#FFFFFF",
+            AppbarBackground = "#0A1E47",
+            AppbarText = "#FFFFFF"
+        },
+        Typography = new Typography
+        {
+            Default = new Default
+            {
+                FontFamily = new[] { "Nunito Sans", "Trebuchet MS", "Helvetica", "Arial", "sans-serif" }
+            },
+            H1 = new H1
+            {
+                FontFamily = new[] { "Nunito Sans", "Trebuchet MS", "Helvetica", "Arial", "sans-serif" },
+                FontWeight = 700
+            },
+            H2 = new H2
+            {
+                FontFamily = new[] { "Nunito Sans", "Trebuchet MS", "Helvetica", "Arial", "sans-serif" },
+                FontWeight = 700
+            },
+            H3 = new H3
+            {
+                FontFamily = new[] { "Nunito Sans", "Trebuchet MS", "Helvetica", "Arial", "sans-serif" },
+                FontWeight = 600
+            },
+            H4 = new H4
+            {
+                FontFamily = new[] { "Nunito Sans", "Trebuchet MS", "Helvetica", "Arial", "sans-serif" },
+                FontWeight = 600
+            },
+            H5 = new H5
+            {
+                FontFamily = new[] { "Nunito Sans", "Trebuchet MS", "Helvetica", "Arial", "sans-serif" },
+                FontWeight = 600
+            },
+            H6 = new H6
+            {
+                FontFamily = new[] { "Nunito Sans", "Trebuchet MS", "Helvetica", "Arial", "sans-serif" },
+                FontWeight = 600
+            },
+            Body1 = new Body1
+            {
+                FontFamily = new[] { "Nunito Sans", "Trebuchet MS", "Helvetica", "Arial", "sans-serif" }
+            },
+            Body2 = new Body2
+            {
+                FontFamily = new[] { "Nunito Sans", "Trebuchet MS", "Helvetica", "Arial", "sans-serif" }
+            },
+            Button = new Button
+            {
+                FontFamily = new[] { "Nunito Sans", "Trebuchet MS", "Helvetica", "Arial", "sans-serif" },
+                FontWeight = 600
+            },
+            Caption = new Caption
+            {
+                FontFamily = new[] { "Nunito Sans", "Trebuchet MS", "Helvetica", "Arial", "sans-serif" }
+            },
+            Subtitle1 = new Subtitle1
+            {
+                FontFamily = new[] { "Nunito Sans", "Trebuchet MS", "Helvetica", "Arial", "sans-serif" }
+            },
+            Subtitle2 = new Subtitle2
+            {
+                FontFamily = new[] { "Nunito Sans", "Trebuchet MS", "Helvetica", "Arial", "sans-serif" }
+            }
+        }
+    };
+}
