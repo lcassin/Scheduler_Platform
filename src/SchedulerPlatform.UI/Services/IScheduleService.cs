@@ -22,4 +22,5 @@ public interface IScheduleService
     Task<(bool Success, string Message)> TestConnectionAsync(string connectionString);
     Task<MissedSchedulesResult> GetMissedSchedulesAsync(int? windowDays = 1, int pageNumber = 1, int pageSize = 100);
     Task<BulkTriggerResult> BulkTriggerMissedSchedulesAsync(List<int> scheduleIds, int? delayBetweenTriggersMs = 200);
+    Task<int> GetMissedSchedulesCountAsync(int? windowDays = 1);
 }

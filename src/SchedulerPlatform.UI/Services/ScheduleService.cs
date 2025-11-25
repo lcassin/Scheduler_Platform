@@ -218,4 +218,18 @@ public class ScheduleService : IScheduleService
         var result = await response.Content.ReadFromJsonAsync<BulkTriggerResult>();
         return result ?? new BulkTriggerResult();
     }
+
+    public async Task<int> GetMissedSchedulesCountAsync(int? windowDays = 1)
+    {
+        var client = CreateClient();
+        var query = windowDays.HasValue ? $"?windowDays={windowDays.Value}" : "";
+        var result = await client.GetFromJsonAsync<MissedSchedulesCountResult>($"schedules/missed/count{query}");
+        return result?.Count ?? 0;
+    }
+
+    private class MissedSchedulesCountResult
+    {
+        public int Count { get; set; }
+        public int WindowDays { get; set; }
+    }
 }
