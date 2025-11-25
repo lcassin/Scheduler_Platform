@@ -184,4 +184,52 @@ public class ScheduleService : IScheduleService
         public string Message { get; set; } = string.Empty;
         public int? ErrorNumber { get; set; }
     }
+
+    public async Task<MissedSchedulesResult> GetMissedSchedulesAsync(int? windowDays = 1, int pageNumber = 1, int pageSize = 100)
+    {
+        var client = CreateClient();
+        var queryParams = new List<string>();
+        
+        if (windowDays.HasValue)
+            queryParams.Add($"windowDays={windowDays.Value}");
+        
+        queryParams.Add($"pageNumber={pageNumber}");
+        queryParams.Add($"pageSize={pageSize}");
+        
+        var query = "?" + string.Join("&", queryParams);
+        var result = await client.GetFromJsonAsync<MissedSchedulesResult>($"schedules/missed{query}");
+        
+        return result ?? new MissedSchedulesResult
+        {
+            Items = new List<MissedScheduleItem>(),
+            TotalCount = 0,
+            PageNumber = pageNumber,
+            PageSize = pageSize
+        };
+    }
+
+    public async Task<BulkTriggerResult> BulkTriggerMissedSchedulesAsync(List<int> scheduleIds, int? delayBetweenTriggersMs = 200)
+    {
+        var client = CreateClient();
+        var request = new { ScheduleIds = scheduleIds, DelayBetweenTriggersMs = delayBetweenTriggersMs };
+        var response = await client.PostAsJsonAsync("schedules/missed/bulk-trigger", request);
+        response.EnsureSuccessStatusCode();
+        
+        var result = await response.Content.ReadFromJsonAsync<BulkTriggerResult>();
+        return result ?? new BulkTriggerResult();
+    }
+
+    public async Task<int> GetMissedSchedulesCountAsync(int? windowDays = 1)
+    {
+        var client = CreateClient();
+        var query = windowDays.HasValue ? $"?windowDays={windowDays.Value}" : "";
+        var result = await client.GetFromJsonAsync<MissedSchedulesCountResult>($"schedules/missed/count{query}");
+        return result?.Count ?? 0;
+    }
+
+    private class MissedSchedulesCountResult
+    {
+        public int Count { get; set; }
+        public int WindowDays { get; set; }
+    }
 }

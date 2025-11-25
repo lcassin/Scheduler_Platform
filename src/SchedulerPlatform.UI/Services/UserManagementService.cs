@@ -16,12 +16,12 @@ public class UserManagementService : IUserManagementService
 
     private HttpClient CreateClient() => _httpClientFactory.CreateClient("SchedulerAPI");
 
-    public async Task<PagedResult<UserListItem>> GetUsersAsync(string? searchTerm, int pageNumber, int pageSize)
+    public async Task<PagedResult<UserListItem>> GetUsersAsync(string? searchTerm, int pageNumber, int pageSize, bool showInactive = false)
     {
         try
         {
             var client = CreateClient();
-            var query = $"Users?pageNumber={pageNumber}&pageSize={pageSize}";
+            var query = $"Users?pageNumber={pageNumber}&pageSize={pageSize}&showInactive={showInactive}";
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 query += $"&searchTerm={Uri.EscapeDataString(searchTerm)}";
@@ -98,6 +98,48 @@ public class UserManagementService : IUserManagementService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error fetching permission templates");
+            throw;
+        }
+    }
+
+    public async Task<UserDetail> CreateUserAsync(CreateUserRequest request)
+    {
+        try
+        {
+            var client = CreateClient();
+            var response = await client.PostAsJsonAsync("Users", request);
+            response.EnsureSuccessStatusCode();
+            
+            var createdUser = await response.Content.ReadFromJsonAsync<UserDetail>();
+            if (createdUser == null)
+            {
+                throw new Exception("Failed to parse created user response");
+            }
+            
+            _logger.LogInformation("Created user {Email}", request.Email);
+            return createdUser;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating user {Email}", request.Email);
+            throw;
+        }
+    }
+
+    public async Task UpdateUserStatusAsync(int id, bool isActive)
+    {
+        try
+        {
+            var client = CreateClient();
+            var request = new UpdateUserStatusRequest { IsActive = isActive };
+            var response = await client.PutAsJsonAsync($"Users/{id}/status", request);
+            response.EnsureSuccessStatusCode();
+            
+            _logger.LogInformation("Updated user {UserId} status to {IsActive}", id, isActive);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating status for user {UserId}", id);
             throw;
         }
     }

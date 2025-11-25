@@ -24,8 +24,8 @@
         </MudButton>
     }
 
-    <MudGrid Class="mb-4">
-        <MudItem xs="12" md="3">
+    <MudGrid Class="mb-4" Spacing="2">
+        <MudItem xs="12" md="2">
             <MudTextField @bind-Value="_searchTerm" Label="Search by Name" Placeholder="e.g. Vendor_Account" 
                           Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true" />
         </MudItem>
@@ -51,6 +51,17 @@
             </MudSelect>
         </MudItem>
         <MudItem xs="12" md="2">
+            <MudSelect T="string" @bind-Value="_selectedLastRunStatus" Label="Last Run Status" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                <MudSelectItem Value="@("All")">All</MudSelectItem>
+                <MudSelectItem Value="@("Failed")">Failed</MudSelectItem>
+                <MudSelectItem Value="@("Completed")">Completed</MudSelectItem>
+                <MudSelectItem Value="@("Running")">Running</MudSelectItem>
+                <MudSelectItem Value="@("Cancelled")">Cancelled</MudSelectItem>
+                <MudSelectItem Value="@("Retrying")">Retrying</MudSelectItem>
+                <MudSelectItem Value="@("Never")">Never Run</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="2">
             <MudDatePicker @bind-Date="_selectedDate" 
                            Label="Filter by Date" 
                            Variant="Variant.Outlined" 
@@ -58,7 +69,7 @@
                            Clearable="true"
                            Placeholder="Select a date" />
         </MudItem>
-        <MudItem xs="12" md="3" Class="d-flex align-center gap-2">
+        <MudItem xs="12" md="2" Class="d-flex align-center justify-end gap-2">
             <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters">
                 Apply Filters
             </MudButton>
@@ -76,6 +87,26 @@
         </MudItem>
     </MudGrid>
     
+    @if (_selectedIds.Any())
+    {
+        <MudGrid Class="mb-4">
+            <MudItem xs="12" Class="d-flex align-center gap-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="BulkTriggerSelected" Disabled="@_isBulkTriggering">
+                    @if (_isBulkTriggering)
+                    {
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        <text>Triggering...</text>
+                    }
+                    else
+                    {
+                        <text>Re-run Selected (@_selectedIds.Count)</text>
+                    }
+                </MudButton>
+                <MudNumericField T="int" @bind-Value="_delayMs" Label="Delay (ms)" Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="10000" Style="width: 120px;" />
+            </MudItem>
+        </MudGrid>
+    }
+    
     @if (_filterDate.HasValue)
     {
         <MudAlert Severity="Severity.Info" Class="mb-2" CloseIconClicked="ClearDateFilter" ShowCloseIcon="true">
@@ -92,6 +123,9 @@
         <MudTable T="Schedule" ServerData="@ServerReload" 
                   @ref="_table" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
             <HeaderContent>
+                <MudTh Style="width: 50px;">
+                    <MudCheckBox T="bool" Value="@_selectAll" ValueChanged="@((bool value) => SelectAllVisible(value))" />
+                </MudTh>
                 <MudTh>Name</MudTh>
                 <MudTh>Type</MudTh>
                 <MudTh>Frequency</MudTh>
@@ -101,6 +135,10 @@
                 <MudTh>Actions</MudTh>
             </HeaderContent>
             <RowTemplate>
+                <MudTd>
+                    <MudCheckBox T="bool" Value="@_selectedIds.Contains(context.Id)" 
+                                 ValueChanged="@((bool value) => ToggleSelection(context.Id, value))" />
+                </MudTd>
                 <MudTd DataLabel="Name">
                     <MudText Typo="Typo.body1"><strong>@context.Name</strong></MudText>
                     <MudText Typo="Typo.body2" Color="Color.Secondary">@context.Description</MudText>
@@ -113,7 +151,8 @@
                     @if (context.NextRunTime.HasValue)
                     {
                         var tz = GetTimeZoneAbbreviation(context.TimeZone);
-                        <text>@context.NextRunTime.Value.ToString("g") @(!string.IsNullOrEmpty(tz) ? $"({tz})" : "")</text>
+                        var localTime = ConvertUtcToScheduleTime(context.NextRunTime.Value, context.TimeZone);
+                        <text>@localTime.ToString("g") @(!string.IsNullOrEmpty(tz) ? $"({tz})" : "")</text>
                     }
                     else
                     {
@@ -130,6 +169,14 @@
                     else
                     {
                         <MudText Typo="Typo.body2" Color="Color.Secondary">N/A</MudText>
+                    }
+                    @if (context.LastRunTime.HasValue)
+                    {
+                        var tz = GetTimeZoneAbbreviation(context.TimeZone);
+                        var localTime = ConvertUtcToScheduleTime(context.LastRunTime.Value, context.TimeZone);
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            @localTime.ToString("g") @(!string.IsNullOrEmpty(tz) ? $"({tz})" : "")
+                        </MudText>
                     }
                 </MudTd>
                 <MudTd DataLabel="Status">
@@ -188,6 +235,7 @@
 	private DateTime? _selectedDate;
 	private DateTime? _filterDate;
 	private string _selectedStatus = "Both";
+	private string _selectedLastRunStatus = "All";
 	private bool? _filterIsEnabled => _selectedStatus switch
 	{
 		"Enabled" => true,
@@ -198,6 +246,13 @@
 	private bool _canUpdate = false;
 	private bool _canDelete = false;
 	private bool _canExecute = false;
+	
+	// Bulk selection state
+	private HashSet<int> _selectedIds = new();
+	private bool _selectAll = false;
+	private bool _isBulkTriggering = false;
+	private int _delayMs = 200;
+	private List<Schedule> _currentPageItems = new();
 
 	[Parameter]
 	[SupplyParameterFromQuery(Name = "date")]
@@ -283,10 +338,29 @@
 										s.NextRunTime.Value.Date == _filterDate.Value.Date).ToList();
 			}
 
+			// Filter by Last Run Status
+			if (_selectedLastRunStatus != "All")
+			{
+				items = _selectedLastRunStatus switch
+				{
+					"Never" => items.Where(s => !s.LastRunStatus.HasValue).ToList(),
+					"Failed" => items.Where(s => s.LastRunStatus == JobStatus.Failed).ToList(),
+					"Completed" => items.Where(s => s.LastRunStatus == JobStatus.Completed).ToList(),
+					"Running" => items.Where(s => s.LastRunStatus == JobStatus.Running).ToList(),
+					"Cancelled" => items.Where(s => s.LastRunStatus == JobStatus.Cancelled).ToList(),
+					"Retrying" => items.Where(s => s.LastRunStatus == JobStatus.Retrying).ToList(),
+					_ => items
+				};
+			}
+
+			// Store current page items for select all functionality
+			_currentPageItems = items.ToList();
+			_selectAll = _currentPageItems.Any() && _currentPageItems.All(s => _selectedIds.Contains(s.Id));
+
 			return new TableData<Schedule>
 			{
 				Items = items,
-				TotalItems = _filterDate.HasValue ? items.Count : result.TotalCount
+				TotalItems = (_filterDate.HasValue || _selectedLastRunStatus != "All") ? items.Count : result.TotalCount
 			};
 		}
 		catch (Exception ex)
@@ -318,7 +392,82 @@
 	private async Task ApplyFilters()
 	{
 		_filterDate = _selectedDate;
+		_selectedIds.Clear();
+		_selectAll = false;
 		await _table.ReloadServerData();
+	}
+
+	private void SelectAllVisible(bool selected)
+	{
+		_selectAll = selected;
+		if (selected)
+		{
+			foreach (var item in _currentPageItems)
+			{
+				_selectedIds.Add(item.Id);
+			}
+		}
+		else
+		{
+			foreach (var item in _currentPageItems)
+			{
+				_selectedIds.Remove(item.Id);
+			}
+		}
+	}
+
+	private void ToggleSelection(int id, bool selected)
+	{
+		if (selected)
+		{
+			_selectedIds.Add(id);
+		}
+		else
+		{
+			_selectedIds.Remove(id);
+		}
+		_selectAll = _currentPageItems.Any() && _currentPageItems.All(s => _selectedIds.Contains(s.Id));
+	}
+
+	private async Task BulkTriggerSelected()
+	{
+		if (!_selectedIds.Any()) return;
+
+		var confirmed = await DialogService.ShowMessageBox(
+			"Re-run Selected Schedules",
+			$"Are you sure you want to re-run {_selectedIds.Count} schedule(s)? They will be executed with a {_delayMs}ms delay between each.",
+			yesText: "Re-run All", cancelText: "Cancel");
+
+		if (confirmed != true) return;
+
+		_isBulkTriggering = true;
+		StateHasChanged();
+
+		try
+		{
+			var result = await ScheduleService.BulkTriggerMissedSchedulesAsync(_selectedIds.ToList(), _delayMs);
+			
+			if (result.FailureCount == 0)
+			{
+				Snackbar.Add($"Successfully triggered {result.SuccessCount} schedule(s)", Severity.Success);
+			}
+			else
+			{
+				Snackbar.Add($"Triggered {result.SuccessCount} schedule(s), {result.FailureCount} failed", Severity.Warning);
+			}
+
+			_selectedIds.Clear();
+			_selectAll = false;
+			await _table.ReloadServerData();
+		}
+		catch (Exception ex)
+		{
+			Snackbar.Add($"Error triggering schedules: {ex.Message}", Severity.Error);
+		}
+		finally
+		{
+			_isBulkTriggering = false;
+		}
 	}
 
 	private async Task ExportSchedules(string format)
@@ -491,6 +640,27 @@
 		catch
 		{
 			return timeZoneId;
+		}
+	}
+
+	private DateTime ConvertUtcToScheduleTime(DateTime utc, string? timeZoneId)
+	{
+		if (string.IsNullOrWhiteSpace(timeZoneId))
+			return utc;
+
+		try
+		{
+			var tz = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+			
+			// Handle Unspecified kind by treating it as UTC
+			if (utc.Kind == DateTimeKind.Unspecified)
+				utc = DateTime.SpecifyKind(utc, DateTimeKind.Utc);
+
+			return TimeZoneInfo.ConvertTimeFromUtc(utc, tz);
+		}
+		catch
+		{
+			return utc;
 		}
 	}
 }

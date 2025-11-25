@@ -58,18 +58,41 @@ builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo
     {
-        Title = "Scheduler Platform API",
+        Title = "ADR Scheduler API",
         Version = "v1",
         Description = "API for managing scheduled jobs and processes"
     });
 
-    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    var authority = builder.Configuration["Authentication:Authority"] ?? "https://localhost:5001";
+    
+    c.AddSecurityDefinition("oauth2", new OpenApiSecurityScheme
     {
-        Description = "JWT Authorization header using the Bearer scheme. Example: \"Authorization: Bearer {token}\"",
-        Name = "Authorization",
-        In = ParameterLocation.Header,
-        Type = SecuritySchemeType.ApiKey,
-        Scheme = "Bearer"
+        Type = SecuritySchemeType.OAuth2,
+        Flows = new OpenApiOAuthFlows
+        {
+            AuthorizationCode = new OpenApiOAuthFlow
+            {
+                AuthorizationUrl = new Uri($"{authority}/connect/authorize"),
+                TokenUrl = new Uri($"{authority}/connect/token"),
+                Scopes = new Dictionary<string, string>
+                {
+                    { "openid", "OpenID" },
+                    { "profile", "Profile" },
+                    { "email", "Email" },
+                    { "scheduler-api", "Scheduler API Access" },
+                    { "role", "User Role" },
+                    { "permissions", "User Permissions" }
+                }
+            },
+            ClientCredentials = new OpenApiOAuthFlow
+            {
+                TokenUrl = new Uri($"{authority}/connect/token"),
+                Scopes = new Dictionary<string, string>
+                {
+                    { "scheduler-api", "Scheduler API Access" }
+                }
+            }
+        }
     });
 
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
@@ -80,10 +103,10 @@ builder.Services.AddSwaggerGen(c =>
                 Reference = new OpenApiReference
                 {
                     Type = ReferenceType.SecurityScheme,
-                    Id = "Bearer"
+                    Id = "oauth2"
                 }
             },
-            Array.Empty<string>()
+            new[] { "scheduler-api" }
         }
     });
 });
@@ -194,7 +217,10 @@ if (app.Environment.IsDevelopment() ||
     app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Scheduler Platform API v1");
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "ADR Scheduler API v1");
+        c.OAuthClientId("swagger-ui");
+        c.OAuthUsePkce();
+        c.OAuthScopes("openid", "profile", "email", "scheduler-api", "role", "permissions");
     });
 }
 
@@ -263,11 +289,13 @@ app.UseCors("AllowUI");
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.UseMiddleware<SchedulerPlatform.API.Middleware.AutoUserCreationMiddleware>();
+
 app.MapControllers();
 
 try
 {
-    Log.Information("Starting Scheduler Platform API");
+    Log.Information("Starting ADR Scheduler API");
     app.Run();
 }
 catch (Exception ex)

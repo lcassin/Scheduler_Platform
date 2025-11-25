@@ -15,4 +15,6 @@ public interface IUserService
     Task<User> UpdateUserAsync(User user);
     Task AssignDefaultPermissionsAsync(int userId);
     Task<IEnumerable<UserPermission>> GetUserPermissionsAsync(int userId);
+    Task SetMustChangePasswordAsync(int userId, bool mustChange);
+    Task<bool> ChangePasswordAsync(int userId, string currentPassword, string newPassword);
 }
