@@ -345,7 +345,34 @@ public class UsersController : ControllerBase
                 _logger.LogError(emailEx, "Failed to send temporary password email to {Email}", user.Email);
             }
 
-            if (!string.IsNullOrEmpty(request.TemplateName))
+            if (request.CustomPermissions != null && request.CustomPermissions.Any())
+            {
+                foreach (var permissionRequest in request.CustomPermissions)
+                {
+                    var permission = new UserPermission
+                    {
+                        UserId = user.Id,
+                        PermissionName = permissionRequest.PermissionName,
+                        ResourceType = permissionRequest.ResourceType,
+                        ResourceId = permissionRequest.ResourceId,
+                        CanCreate = permissionRequest.CanCreate,
+                        CanRead = permissionRequest.CanRead,
+                        CanUpdate = permissionRequest.CanUpdate,
+                        CanDelete = permissionRequest.CanDelete,
+                        CanExecute = permissionRequest.CanExecute,
+                        CreatedAt = DateTime.UtcNow,
+                        CreatedBy = User.Identity?.Name ?? "System",
+                        IsDeleted = false
+                    };
+
+                    await _unitOfWork.UserPermissions.AddAsync(permission);
+                }
+
+                await _unitOfWork.SaveChangesAsync();
+
+                _logger.LogInformation("Applied custom permissions to new user {UserId}", user.Id);
+            }
+            else if (!string.IsNullOrEmpty(request.TemplateName))
             {
                 var template = GetPermissionTemplate(request.TemplateName);
                 if (template != null)
