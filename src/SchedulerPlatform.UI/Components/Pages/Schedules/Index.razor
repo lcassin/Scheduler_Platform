@@ -113,7 +113,8 @@
                     @if (context.NextRunTime.HasValue)
                     {
                         var tz = GetTimeZoneAbbreviation(context.TimeZone);
-                        <text>@context.NextRunTime.Value.ToString("g") @(!string.IsNullOrEmpty(tz) ? $"({tz})" : "")</text>
+                        var localTime = ConvertUtcToScheduleTime(context.NextRunTime.Value, context.TimeZone);
+                        <text>@localTime.ToString("g") @(!string.IsNullOrEmpty(tz) ? $"({tz})" : "")</text>
                     }
                     else
                     {
@@ -134,8 +135,9 @@
                     @if (context.LastRunTime.HasValue)
                     {
                         var tz = GetTimeZoneAbbreviation(context.TimeZone);
+                        var localTime = ConvertUtcToScheduleTime(context.LastRunTime.Value, context.TimeZone);
                         <MudText Typo="Typo.caption" Color="Color.Secondary">
-                            @context.LastRunTime.Value.ToString("g") @(!string.IsNullOrEmpty(tz) ? $"({tz})" : "")
+                            @localTime.ToString("g") @(!string.IsNullOrEmpty(tz) ? $"({tz})" : "")
                         </MudText>
                     }
                 </MudTd>
@@ -498,6 +500,27 @@
 		catch
 		{
 			return timeZoneId;
+		}
+	}
+
+	private DateTime ConvertUtcToScheduleTime(DateTime utc, string? timeZoneId)
+	{
+		if (string.IsNullOrWhiteSpace(timeZoneId))
+			return utc;
+
+		try
+		{
+			var tz = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+			
+			// Handle Unspecified kind by treating it as UTC
+			if (utc.Kind == DateTimeKind.Unspecified)
+				utc = DateTime.SpecifyKind(utc, DateTimeKind.Utc);
+
+			return TimeZoneInfo.ConvertTimeFromUtc(utc, tz);
+		}
+		catch
+		{
+			return utc;
 		}
 	}
 }
