@@ -217,7 +217,7 @@ if (app.Environment.IsDevelopment() ||
     app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Scheduler Platform API v1");
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "ADR Scheduler API v1");
         c.OAuthClientId("swagger-ui");
         c.OAuthUsePkce();
         c.OAuthScopes("openid", "profile", "email", "scheduler-api", "role", "permissions");
