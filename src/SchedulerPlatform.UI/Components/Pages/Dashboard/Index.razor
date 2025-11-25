@@ -78,9 +78,9 @@
     </MudItem>
 </MudGrid>
 
-<MudGrid Class="mt-4">
-    <MudItem xs="12" md="3">
-        <MudCard>
+<MudGrid Class="mt-4" Spacing="2">
+    <MudItem xs="6" md="2" lg="2">
+        <MudCard Style="cursor: pointer;" @onclick="@(() => NavigateToSchedules())">
             <MudCardContent>
                 <MudText Typo="Typo.h6" Color="Color.Primary">Total Schedules</MudText>
                 @if (_overviewLoading && _overview == null)
@@ -93,13 +93,14 @@
                     <MudText Typo="Typo.body2" Color="Color.Secondary">
                         @FormatNumber(_overview.EnabledSchedules) enabled, @FormatNumber(_overview.DisabledSchedules) disabled
                     </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Primary">(click to view)</MudText>
                 }
             </MudCardContent>
         </MudCard>
     </MudItem>
 
-    <MudItem xs="12" md="3">
-        <MudCard>
+    <MudItem xs="6" md="2" lg="2">
+        <MudCard Style="cursor: pointer;" @onclick="@(() => NavigateToExecutions("Running"))">
             <MudCardContent>
                 <MudText Typo="Typo.h6" Color="Color.Info">Running Now</MudText>
                 @if (_overviewLoading && _overview == null)
@@ -112,13 +113,14 @@
                     <MudText Typo="Typo.body2" Color="Color.Secondary">
                         Peak: @FormatNumber(_overview.PeakConcurrentExecutions) concurrent
                     </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Info">(click to view)</MudText>
                 }
             </MudCardContent>
         </MudCard>
     </MudItem>
 
-    <MudItem xs="12" md="3">
-        <MudCard>
+    <MudItem xs="6" md="2" lg="2">
+        <MudCard Style="cursor: pointer;" @onclick="@(() => NavigateToExecutions("Completed"))">
             <MudCardContent>
                 <MudText Typo="Typo.h6" Color="Color.Success">Completed Today</MudText>
                 @if (_overviewLoading && _overview == null)
@@ -131,13 +133,14 @@
                     <MudText Typo="Typo.body2" Color="Color.Secondary">
                         Avg: @_overview.AverageDurationSeconds.ToString("F1")s
                     </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Success">(click to view)</MudText>
                 }
             </MudCardContent>
         </MudCard>
     </MudItem>
 
-    <MudItem xs="12" md="3">
-        <MudCard>
+    <MudItem xs="6" md="2" lg="2">
+        <MudCard Style="cursor: pointer;" @onclick="@(() => NavigateToExecutions("Failed"))">
             <MudCardContent>
                 <MudText Typo="Typo.h6" Color="Color.Error">Failed Today</MudText>
                 @if (_overviewLoading && _overview == null)
@@ -150,12 +153,13 @@
                     <MudText Typo="Typo.body2" Color="Color.Secondary">
                         Total in window: @FormatNumber(_overview.TotalExecutionsInWindow)
                     </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Error">(click to view)</MudText>
                 }
             </MudCardContent>
         </MudCard>
     </MudItem>
 
-    <MudItem xs="12" md="3">
+    <MudItem xs="6" md="2" lg="2">
         <MudCard Style="cursor: pointer;" @onclick="NavigateToMissedSchedules">
             <MudCardContent>
                 <MudText Typo="Typo.h6" Color="Color.Warning">Missed Schedules</MudText>
@@ -167,13 +171,16 @@
                 {
                     <MudText Typo="Typo.h3" Color="@(_missedSchedulesCount > 0 ? Color.Warning : Color.Default)">@FormatNumber(_missedSchedulesCount)</MudText>
                     <MudText Typo="Typo.body2" Color="Color.Secondary">
-                        In last 24 hours (click to view)
+                        In last 24 hours
                     </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Warning">(click to view)</MudText>
                 }
             </MudCardContent>
         </MudCard>
     </MudItem>
+</MudGrid>
 
+<MudGrid Class="mt-4">
     <MudItem xs="12" md="6">
         <MudPaper Class="pa-4">
             <MudText Typo="Typo.h6" Class="mb-4">Status Breakdown</MudText>
@@ -550,6 +557,21 @@
     private void NavigateToMissedSchedules()
     {
         NavigationManager.NavigateTo("/schedules/missed");
+    }
+    
+    private void NavigateToSchedules()
+    {
+        NavigationManager.NavigateTo("/schedules");
+    }
+    
+    private void NavigateToExecutions(string? status = null)
+    {
+        var url = "/executions";
+        if (!string.IsNullOrEmpty(status))
+        {
+            url += $"?status={status}";
+        }
+        NavigationManager.NavigateTo(url);
     }
 
     public void Dispose()
