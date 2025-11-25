@@ -18,7 +18,7 @@ public class ScheduleHydrationSettings
 public class MissedScheduleHandlingSettings
 {
     public bool EnableAutoFire { get; set; } = true;
-    public int MissedScheduleWindowDays { get; set; } = 2;
+    public int MissedScheduleWindowDays { get; set; } = 1; // 24 hours - schedules missed within this window are auto-fired
     public bool EnableInDevelopment { get; set; } = false;
     public int ThrottlePerSecond { get; set; } = 50;
 }

@@ -858,6 +858,87 @@ public class SchedulesController : ControllerBase
         return await TriggerSchedule(id);
     }
 
+    [HttpPost("missed/bulk-trigger")]
+    [Authorize(Policy = "Schedules.Execute")]
+    public async Task<ActionResult<object>> BulkTriggerMissedSchedules([FromBody] BulkTriggerRequest request)
+    {
+        try
+        {
+            if (request.ScheduleIds == null || !request.ScheduleIds.Any())
+            {
+                return BadRequest("At least one schedule ID is required");
+            }
+
+            var results = new List<object>();
+            int successCount = 0;
+            int failureCount = 0;
+            var delayMs = request.DelayBetweenTriggersMs ?? 200; // Default 200ms between triggers
+
+            _logger.LogInformation(
+                "BulkTriggerMissedSchedules: Starting bulk trigger for {Count} schedules with {DelayMs}ms delay",
+                request.ScheduleIds.Count, delayMs);
+
+            foreach (var scheduleId in request.ScheduleIds)
+            {
+                try
+                {
+                    var schedule = await _unitOfWork.Schedules.GetByIdAsync(scheduleId);
+                    if (schedule == null)
+                    {
+                        results.Add(new { scheduleId, success = false, error = "Schedule not found" });
+                        failureCount++;
+                        continue;
+                    }
+
+                    var jobKey = new JobKey($"Job_{schedule.Id}", $"Group_{schedule.ClientId}");
+                    if (!await _scheduler.CheckExists(jobKey))
+                    {
+                        _logger.LogDebug(
+                            "BulkTriggerMissedSchedules: Job not in Quartz for schedule {ScheduleId}, scheduling it now",
+                            schedule.Id);
+                        await _schedulerService.ScheduleJob(schedule);
+                    }
+
+                    await _schedulerService.TriggerJobNow(schedule.Id, schedule.ClientId, "BulkTrigger");
+                    results.Add(new { scheduleId, success = true, scheduleName = schedule.Name });
+                    successCount++;
+
+                    _logger.LogDebug(
+                        "BulkTriggerMissedSchedules: Triggered schedule {ScheduleId} ({ScheduleName})",
+                        schedule.Id, schedule.Name);
+
+                    if (delayMs > 0 && scheduleId != request.ScheduleIds.Last())
+                    {
+                        await Task.Delay(delayMs);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "BulkTriggerMissedSchedules: Failed to trigger schedule {ScheduleId}", scheduleId);
+                    results.Add(new { scheduleId, success = false, error = ex.Message });
+                    failureCount++;
+                }
+            }
+
+            _logger.LogInformation(
+                "BulkTriggerMissedSchedules: Completed. {SuccessCount} succeeded, {FailureCount} failed",
+                successCount, failureCount);
+
+            return Ok(new
+            {
+                successCount,
+                failureCount,
+                totalRequested = request.ScheduleIds.Count,
+                results
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error in bulk trigger of missed schedules");
+            return StatusCode(500, "An error occurred while bulk triggering missed schedules");
+        }
+    }
+
     [HttpGet("calendar")]
     public async Task<ActionResult<IEnumerable<object>>> GetSchedulesForCalendar(
         [FromQuery] DateTime? startDate = null,

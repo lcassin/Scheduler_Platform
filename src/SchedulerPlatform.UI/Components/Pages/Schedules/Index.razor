@@ -131,6 +131,13 @@
                     {
                         <MudText Typo="Typo.body2" Color="Color.Secondary">N/A</MudText>
                     }
+                    @if (context.LastRunTime.HasValue)
+                    {
+                        var tz = GetTimeZoneAbbreviation(context.TimeZone);
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            @context.LastRunTime.Value.ToString("g") @(!string.IsNullOrEmpty(tz) ? $"({tz})" : "")
+                        </MudText>
+                    }
                 </MudTd>
                 <MudTd DataLabel="Status">
                     <MudSwitch T="bool" Value="context.IsEnabled" ValueChanged="@((bool value) => HandleToggleSchedule(context, value))" Color="Color.Primary" Disabled="@(!_canUpdate)" />
