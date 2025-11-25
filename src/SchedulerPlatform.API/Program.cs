@@ -58,7 +58,7 @@ builder.Services.AddSwaggerGen(c =>
 {
     c.SwaggerDoc("v1", new OpenApiInfo
     {
-        Title = "Scheduler Platform API",
+        Title = "ADR Scheduler API",
         Version = "v1",
         Description = "API for managing scheduled jobs and processes"
     });
@@ -295,7 +295,7 @@ app.MapControllers();
 
 try
 {
-    Log.Information("Starting Scheduler Platform API");
+    Log.Information("Starting ADR Scheduler API");
     app.Run();
 }
 catch (Exception ex)
