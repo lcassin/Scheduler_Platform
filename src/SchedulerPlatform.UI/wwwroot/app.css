@@ -49,3 +49,24 @@ h1:focus {
 .darker-border-checkbox.form-check-input {
     border-color: #929292;
 }
+
+/* Override MudBlazor nav link active state for better contrast on dark drawer */
+.mud-nav-link.active,
+.mud-nav-link.active .mud-nav-link-text,
+.mud-navmenu .mud-nav-link.active {
+    color: #5DAF1B !important; /* Cass Green for active state */
+}
+
+.mud-nav-link.active .mud-icon-root {
+    color: #5DAF1B !important; /* Cass Green for active icon */
+}
+
+/* Ensure hover state is also visible */
+.mud-nav-link:hover,
+.mud-nav-link:hover .mud-nav-link-text {
+    color: #FFFFFF !important;
+}
+
+.mud-nav-link:hover .mud-icon-root {
+    color: #FFFFFF !important;
+}
