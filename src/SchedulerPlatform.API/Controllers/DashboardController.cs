@@ -21,15 +21,39 @@ public class DashboardController : ControllerBase
         _logger = logger;
     }
 
-    [HttpGet("overview")]
-    public async Task<ActionResult<DashboardOverviewResponse>> GetOverview(
-        [FromQuery] int? clientId = null,
-        [FromQuery] int hours = 24)
-    {
-        try
+        [HttpGet("overview")]
+        public async Task<ActionResult<DashboardOverviewResponse>> GetOverview(
+            [FromQuery] int? clientId = null,
+            [FromQuery] int hours = 24,
+            [FromQuery] string? timezone = null)
         {
-            var startDate = DateTime.UtcNow.AddHours(-hours);
-            var today = DateTime.UtcNow.Date;
+            try
+            {
+                var startDate = DateTime.UtcNow.AddHours(-hours);
+            
+                // Calculate "today" based on the user's timezone
+                // If no timezone provided, default to UTC
+                DateTime today;
+                if (!string.IsNullOrEmpty(timezone))
+                {
+                    try
+                    {
+                        var tz = TimeZoneInfo.FindSystemTimeZoneById(timezone);
+                        var localNow = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz);
+                        var localToday = localNow.Date;
+                        // Convert local midnight back to UTC
+                        today = TimeZoneInfo.ConvertTimeToUtc(localToday, tz);
+                    }
+                    catch (TimeZoneNotFoundException)
+                    {
+                        _logger.LogWarning("Invalid timezone '{Timezone}', falling back to UTC", timezone);
+                        today = DateTime.UtcNow.Date;
+                    }
+                }
+                else
+                {
+                    today = DateTime.UtcNow.Date;
+                }
             
             var totalSchedules = await _unitOfWork.Schedules.GetTotalSchedulesCountAsync(clientId);
             var enabledSchedules = await _unitOfWork.Schedules.GetEnabledSchedulesCountAsync(clientId);

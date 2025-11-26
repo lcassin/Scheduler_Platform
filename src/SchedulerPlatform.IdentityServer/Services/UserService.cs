@@ -31,21 +31,36 @@ public class UserService : IUserService
         }
     }
 
-    public async Task<User?> GetUserByUsernameAsync(string username)
-    {
-        try
+        public async Task<User?> GetUserByUsernameAsync(string username)
         {
-            var users = await _unitOfWork.Users.FindAsync(u => u.Username == username && !u.IsDeleted);
-            return users.FirstOrDefault();
+            try
+            {
+                var users = await _unitOfWork.Users.FindAsync(u => u.Username == username && !u.IsDeleted);
+                return users.FirstOrDefault();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving user by username {Username}", username);
+                return null;
+            }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving user by username {Username}", username);
-            return null;
-        }
-    }
 
-    public async Task<User?> GetUserByExternalIdAsync(string externalId)
+        public async Task<User?> GetUserByEmailAsync(string email)
+        {
+            try
+            {
+                var users = await _unitOfWork.Users.FindAsync(u => 
+                    u.Email.ToLower() == email.ToLower() && !u.IsDeleted);
+                return users.FirstOrDefault();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving user by email {Email}", email);
+                return null;
+            }
+        }
+
+        public async Task<User?> GetUserByExternalIdAsync(string externalId)
     {
         try
         {

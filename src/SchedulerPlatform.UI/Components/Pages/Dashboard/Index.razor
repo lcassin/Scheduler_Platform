@@ -8,6 +8,7 @@
 @inject IScheduleService ScheduleService
 @inject ISnackbar Snackbar
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
 @implements IDisposable
 
 <PageTitle>Dashboard</PageTitle>
@@ -180,7 +181,7 @@
     </MudItem>
 </MudGrid>
 
-<MudGrid Class="mt-4">
+<MudGrid Class="mt-4 mb-4 dashboard-charts-grid">
     <MudItem xs="12" md="6">
         <MudPaper Class="pa-4">
             <MudText Typo="Typo.h6" Class="mb-4">Status Breakdown</MudText>
@@ -304,18 +305,20 @@
     private int _selectedTimeWindow = 24;
     private int? _selectedClientId;
     private JobStatus _selectedStatusesValue;
-    private IEnumerable<JobStatus>? _selectedStatusesBackingField = null;
+        private IEnumerable<JobStatus>? _selectedStatusesBackingField = null;
     
-    private bool _overviewLoading;
-    private bool _statusLoading;
-    private bool _trendsLoading;
-    private bool _longestLoading;
-    private bool _missedLoading;
-    private bool _initialLoadComplete;
+        private bool _overviewLoading;
+        private bool _statusLoading;
+        private bool _trendsLoading;
+        private bool _longestLoading;
+        private bool _missedLoading;
+        private bool _initialLoadComplete;
+        private bool _timezoneLoaded;
     
-    private int _missedSchedulesCount;
+        private int _missedSchedulesCount;
+        private string? _browserTimeZone;
     
-    private IEnumerable<JobStatus>? SelectedStatuses
+        private IEnumerable<JobStatus>? SelectedStatuses
     {
         get => _selectedStatusesBackingField;
         set
@@ -349,20 +352,36 @@
         YAxisTicks = 10
     };
 
-    protected override async Task OnInitializedAsync()
-    {
-        try
+        protected override async Task OnInitializedAsync()
         {
-            _clients = await ClientService.GetClientsAsync();
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error loading clients: {ex.Message}", Severity.Error);
+            try
+            {
+                _clients = await ClientService.GetClientsAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error loading clients: {ex.Message}", Severity.Error);
+            }
+
+            StartAutoRefresh();
         }
 
-        RefreshData();
-        StartAutoRefresh();
-    }
+        protected override async Task OnAfterRenderAsync(bool firstRender)
+        {
+            if (firstRender && !_timezoneLoaded)
+            {
+                try
+                {
+                    _browserTimeZone = await JSRuntime.InvokeAsync<string>("getBrowserTimeZone");
+                }
+                catch (Exception ex)
+                {
+                    _browserTimeZone = "Central Standard Time";
+                }
+                _timezoneLoaded = true;
+                RefreshData();
+            }
+        }
 
     private void StartAutoRefresh()
     {
@@ -401,25 +420,25 @@
         _ = LoadMissedSchedulesAsync();
     }
     
-    private async Task LoadOverviewAsync()
-    {
-        if (_overviewLoading) return;
-        _overviewLoading = true;
-        try
+        private async Task LoadOverviewAsync()
         {
-            _overview = await DashboardService.GetOverviewAsync(_selectedClientId, _selectedTimeWindow);
+            if (_overviewLoading) return;
+            _overviewLoading = true;
+            try
+            {
+                _overview = await DashboardService.GetOverviewAsync(_selectedClientId, _selectedTimeWindow, _browserTimeZone);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error loading overview: {ex.Message}", Severity.Error);
+            }
+            finally
+            {
+                _overviewLoading = false;
+                _initialLoadComplete = true;
+                await InvokeAsync(StateHasChanged);
+            }
         }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error loading overview: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _overviewLoading = false;
-            _initialLoadComplete = true;
-            await InvokeAsync(StateHasChanged);
-        }
-    }
     
     private async Task LoadStatusBreakdownAsync()
     {

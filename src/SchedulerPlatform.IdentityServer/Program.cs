@@ -1,3 +1,4 @@
+using Azure.Identity;
 using Duende.IdentityServer;
 using Duende.IdentityServer.Models;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
@@ -15,6 +16,16 @@ using DomainClient = SchedulerPlatform.Core.Domain.Entities.Client;
 using DuendeClient = Duende.IdentityServer.Models.Client;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add Azure Key Vault configuration for production
+// Set KeyVault:VaultUri in appsettings.json or environment variable to enable
+var keyVaultUri = builder.Configuration["KeyVault:VaultUri"];
+if (!string.IsNullOrEmpty(keyVaultUri) && !builder.Environment.IsDevelopment())
+{
+    builder.Configuration.AddAzureKeyVault(
+        new Uri(keyVaultUri),
+        new DefaultAzureCredential());
+}
 
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
