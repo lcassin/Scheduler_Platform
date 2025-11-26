@@ -72,8 +72,7 @@ h1:focus {
 }
 
 /* MudNavGroup expand arrow - make green when expanded */
-.mud-nav-group.mud-nav-group-open .mud-nav-link .mud-nav-link-icon-expand,
-.mud-nav-group.mud-nav-group-open > .mud-nav-link .mud-icon-root {
+.mud-nav-group.mud-nav-group-open .mud-nav-link-expand-icon .mud-icon-root {
     color: #5DAF1B !important; /* Cass Green for expanded state */
 }
 
