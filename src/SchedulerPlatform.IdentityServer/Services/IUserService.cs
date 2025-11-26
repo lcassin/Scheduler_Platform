@@ -5,8 +5,9 @@ namespace SchedulerPlatform.IdentityServer.Services;
 public interface IUserService
 {
     Task<User?> GetUserByIdAsync(int id);
-    Task<User?> GetUserByUsernameAsync(string username);
-    Task<User?> GetUserByExternalIdAsync(string externalId);
+        Task<User?> GetUserByUsernameAsync(string username);
+        Task<User?> GetUserByEmailAsync(string email);
+        Task<User?> GetUserByExternalIdAsync(string externalId);
     Task<string> GetUserRoleAsync(int userId);
     Task<(bool IsValid, User? User)> ValidateCredentialsAsync(string emailOrUsername, string password);
     Task<bool> CanReusePasswordAsync(int userId, string newPassword);

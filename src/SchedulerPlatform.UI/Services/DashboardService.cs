@@ -15,20 +15,25 @@ public class DashboardService : IDashboardService
 
     private HttpClient CreateClient() => _httpClientFactory.CreateClient("SchedulerAPI");
 
-    public async Task<DashboardOverview?> GetOverviewAsync(int? clientId = null, int hours = 24)
-    {
-        var client = CreateClient();
-        var queryParams = new List<string> { $"hours={hours}" };
-        
-        if (clientId.HasValue)
+        public async Task<DashboardOverview?> GetOverviewAsync(int? clientId = null, int hours = 24, string? timezone = null)
         {
-            queryParams.Add($"clientId={clientId.Value}");
-        }
+            var client = CreateClient();
+            var queryParams = new List<string> { $"hours={hours}" };
         
-        var query = "?" + string.Join("&", queryParams);
-        var result = await client.GetFromJsonAsync<DashboardOverview>($"dashboard/overview{query}");
-        return result;
-    }
+            if (clientId.HasValue)
+            {
+                queryParams.Add($"clientId={clientId.Value}");
+            }
+        
+            if (!string.IsNullOrEmpty(timezone))
+            {
+                queryParams.Add($"timezone={Uri.EscapeDataString(timezone)}");
+            }
+        
+            var query = "?" + string.Join("&", queryParams);
+            var result = await client.GetFromJsonAsync<DashboardOverview>($"dashboard/overview{query}");
+            return result;
+        }
 
     public async Task<List<StatusBreakdownItem>> GetStatusBreakdownAsync(int hours = 24, int? clientId = null)
     {
