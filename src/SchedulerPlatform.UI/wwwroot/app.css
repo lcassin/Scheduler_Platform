@@ -72,9 +72,9 @@ h1:focus {
 }
 
 /* MudNavGroup expand arrow - make green when expanded */
-/* Match exact MudBlazor selector with !important to override */
+/* Override the CSS variable that MudBlazor uses for the fill color */
 .mud-navmenu.mud-navmenu-default .mud-nav-link-expand-icon.mud-transform {
-    fill: #5DAF1B !important;
+    --mud-palette-primary: #5DAF1B;
 }
 
 /* MudNavGroup title text when expanded */
