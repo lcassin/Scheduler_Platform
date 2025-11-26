@@ -72,16 +72,9 @@ h1:focus {
 }
 
 /* MudNavGroup expand arrow - make green when expanded */
-/* Test: Global rule without open-state constraint to verify selector works */
-svg.mud-nav-link-expand-icon {
-    color: #5DAF1B !important;
+/* Override MudBlazor's specific selector: .mud-navmenu.mud-navmenu-default .mud-nav-link-expand-icon.mud-transform */
+.mud-navmenu.mud-navmenu-default .mud-nav-group.mud-nav-group-open .mud-nav-link-expand-icon.mud-transform {
     fill: #5DAF1B !important;
-    stroke: #5DAF1B !important;
-}
-
-svg.mud-nav-link-expand-icon path {
-    fill: #5DAF1B !important;
-    stroke: #5DAF1B !important;
 }
 
 /* MudNavGroup title text when expanded */
