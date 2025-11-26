@@ -49,3 +49,50 @@ h1:focus {
 .darker-border-checkbox.form-check-input {
     border-color: #929292;
 }
+
+/* Override MudBlazor nav link active state for better contrast on dark drawer */
+.mud-nav-link.active,
+.mud-nav-link.active .mud-nav-link-text,
+.mud-navmenu .mud-nav-link.active {
+    color: #5DAF1B !important; /* Cass Green for active state */
+}
+
+.mud-nav-link.active .mud-icon-root {
+    color: #5DAF1B !important; /* Cass Green for active icon */
+}
+
+/* Ensure hover state is also visible */
+.mud-nav-link:hover,
+.mud-nav-link:hover .mud-nav-link-text {
+    color: #FFFFFF !important;
+}
+
+.mud-nav-link:hover .mud-icon-root {
+    color: #FFFFFF !important;
+}
+
+/* MudNavGroup expand arrow - make green when expanded */
+/* Override the CSS variable that MudBlazor uses for the fill color */
+.mud-navmenu.mud-navmenu-default .mud-nav-link-expand-icon.mud-transform {
+    --mud-palette-primary: #5DAF1B;
+}
+
+/* MudNavGroup title text when expanded */
+.mud-nav-group.mud-nav-group-open > .mud-nav-link .mud-nav-link-text {
+    color: #5DAF1B !important; /* Cass Green for expanded state */
+}
+
+/* Dashboard large tiles - equal height in each row */
+.dashboard-charts-grid {
+    align-items: stretch !important;
+}
+
+.dashboard-charts-grid > .mud-grid-item {
+    display: flex !important;
+}
+
+.dashboard-charts-grid > .mud-grid-item > .mud-paper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}

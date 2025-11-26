@@ -8,4 +8,5 @@ public class CreateUserRequest
     public string? Username { get; set; }
     public bool IsActive { get; set; } = true;
     public string? TemplateName { get; set; }
+    public List<UserPermissionRequest>? CustomPermissions { get; set; }
 }

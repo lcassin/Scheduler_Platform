@@ -100,52 +100,70 @@ public class Callback : PageModel
                       externalUser.FindFirst("http://schemas.microsoft.com/identity/claims/objectidentifier")?.Value ?? 
                       providerUserId;
             
-            var externalId = $"{issuer}|{oid}";
-            var dbUser = await _userService.GetUserByExternalIdAsync(externalId);
+                        var externalId = $"{issuer}|{oid}";
+                        var dbUser = await _userService.GetUserByExternalIdAsync(externalId);
 
-            if (dbUser == null)
-            {
-                var email = externalUser.FindFirst("email")?.Value ?? 
-                           externalUser.FindFirst(ClaimTypes.Email)?.Value ?? 
-                           externalUser.FindFirst("preferred_username")?.Value ?? 
-                           $"{oid}@external.user";
-                
-                var givenName = externalUser.FindFirst("given_name")?.Value ?? 
-                               externalUser.FindFirst(ClaimTypes.GivenName)?.Value ?? "External";
-                
-                var familyName = externalUser.FindFirst("family_name")?.Value ?? 
-                                externalUser.FindFirst(ClaimTypes.Surname)?.Value ?? "User";
-                
-                var name = externalUser.FindFirst("name")?.Value ?? 
-                          externalUser.FindFirst(ClaimTypes.Name)?.Value ?? 
-                          $"{givenName} {familyName}";
+                        // Extract email from claims for lookup/creation
+                        var email = externalUser.FindFirst("email")?.Value ?? 
+                                   externalUser.FindFirst(ClaimTypes.Email)?.Value ?? 
+                                   externalUser.FindFirst("preferred_username")?.Value ?? 
+                                   $"{oid}@external.user";
 
-                dbUser = new User
-                {
-                    Username = email,
-                    Email = email,
-                    FirstName = givenName,
-                    LastName = familyName,
-                    ExternalUserId = externalId,
-                    ExternalIssuer = issuer,
-                    IsActive = true,
-                    ClientId = 1,
-                    CreatedAt = DateTime.UtcNow,
-                    CreatedBy = "System",
-                    IsDeleted = false,
-                    LastLoginAt = DateTime.UtcNow
-                };
-
-                await _userService.CreateUserAsync(dbUser);
-                await _userService.AssignDefaultPermissionsAsync(dbUser.Id);
+                        if (dbUser == null)
+                        {
+                            // User not found by external ID - check if user exists by email
+                            dbUser = await _userService.GetUserByEmailAsync(email);
                 
-                _logger.LogInformation("JIT provisioned new user {Email} from {Provider}", email, provider);
-            }
-            else
-            {
-                dbUser.LastLoginAt = DateTime.UtcNow;
-                await _userService.UpdateUserAsync(dbUser);
-            }
+                            if (dbUser != null)
+                            {
+                                // Found existing user by email - link to Entra identity
+                                dbUser.ExternalUserId = externalId;
+                                dbUser.ExternalIssuer = issuer;
+                                dbUser.LastLoginAt = DateTime.UtcNow;
+                                await _userService.UpdateUserAsync(dbUser);
+                    
+                                _logger.LogInformation("Linked existing user {Email} to external provider {Provider}", email, provider);
+                            }
+                            else
+                            {
+                                // No existing user found - create new user
+                                var givenName = externalUser.FindFirst("given_name")?.Value ?? 
+                                               externalUser.FindFirst(ClaimTypes.GivenName)?.Value ?? "External";
+                    
+                                var familyName = externalUser.FindFirst("family_name")?.Value ?? 
+                                                externalUser.FindFirst(ClaimTypes.Surname)?.Value ?? "User";
+                    
+                                var name = externalUser.FindFirst("name")?.Value ?? 
+                                          externalUser.FindFirst(ClaimTypes.Name)?.Value ?? 
+                                          $"{givenName} {familyName}";
+
+                                dbUser = new User
+                                {
+                                    Username = email,
+                                    Email = email,
+                                    FirstName = givenName,
+                                    LastName = familyName,
+                                    ExternalUserId = externalId,
+                                    ExternalIssuer = issuer,
+                                    IsActive = true,
+                                    ClientId = 1,
+                                    CreatedAt = DateTime.UtcNow,
+                                    CreatedBy = "System",
+                                    IsDeleted = false,
+                                    LastLoginAt = DateTime.UtcNow
+                                };
+
+                                await _userService.CreateUserAsync(dbUser);
+                                await _userService.AssignDefaultPermissionsAsync(dbUser.Id);
+                    
+                                _logger.LogInformation("JIT provisioned new user {Email} from {Provider}", email, provider);
+                            }
+                        }
+                        else
+                        {
+                            dbUser.LastLoginAt = DateTime.UtcNow;
+                            await _userService.UpdateUserAsync(dbUser);
+                        }
 
             subjectId = dbUser.Id.ToString();
             username = dbUser.Email;

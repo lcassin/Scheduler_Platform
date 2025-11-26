@@ -30,20 +30,88 @@
                           HelperText="If not provided, email will be used as username"
                           Class="mt-3" />
 
-            <MudSelect @bind-Value="_selectedTemplate"
-                       Label="Permission Template"
-                       Required="true"
-                       RequiredError="Please select a permission template"
-                       Class="mt-3">
-                <MudSelectItem Value="@("Viewer")">Viewer - Read-only access</MudSelectItem>
-                <MudSelectItem Value="@("Editor")">Editor - Full schedule access</MudSelectItem>
-                <MudSelectItem Value="@("Admin")">Admin - Full access including user management</MudSelectItem>
-            </MudSelect>
-
             <MudSwitch @bind-Value="_isActive"
                        Label="Active"
                        Color="Color.Primary"
                        Class="mt-3" />
+
+            <MudDivider Class="my-4" />
+
+            <MudPaper Class="pa-4 mb-4">
+                <MudText Typo="Typo.subtitle1" Class="mb-2">Quick Apply Template</MudText>
+                <MudSelect T="string"
+                           Label="Permission Template"
+                           @bind-Value="_selectedTemplate"
+                           Placeholder="Select a template">
+                    @foreach (var template in _templates)
+                    {
+                        <MudSelectItem Value="@template.Name">
+                            <MudText>@template.Name</MudText>
+                            <MudText Typo="Typo.caption">@template.Description</MudText>
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Secondary"
+                           Class="mt-2"
+                           Disabled="@(string.IsNullOrEmpty(_selectedTemplate))"
+                           OnClick="ApplyTemplate">
+                    Apply Template
+                </MudButton>
+            </MudPaper>
+
+            <MudDivider Class="my-4" />
+
+            <MudText Typo="Typo.subtitle1" Class="mb-3">Custom Permissions</MudText>
+
+            @foreach (var group in _permissionGroupList)
+            {
+                <MudPaper Class="pa-3 mb-3" @key="@group.PermissionName">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">@group.PermissionName</MudText>
+                    <MudGrid>
+                        <MudItem xs="12" sm="2">
+                            <label style="display: flex; align-items: center; cursor: pointer;">
+                                <input type="checkbox" 
+                                       @bind="group.CanCreate"
+                                       style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;" />
+                                <span>Create</span>
+                            </label>
+                        </MudItem>
+                        <MudItem xs="12" sm="2">
+                            <label style="display: flex; align-items: center; cursor: pointer;">
+                                <input type="checkbox" 
+                                       @bind="group.CanRead"
+                                       style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;" />
+                                <span>Read</span>
+                            </label>
+                        </MudItem>
+                        <MudItem xs="12" sm="2">
+                            <label style="display: flex; align-items: center; cursor: pointer;">
+                                <input type="checkbox" 
+                                       @bind="group.CanUpdate"
+                                       style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;" />
+                                <span>Update</span>
+                            </label>
+                        </MudItem>
+                        <MudItem xs="12" sm="2">
+                            <label style="display: flex; align-items: center; cursor: pointer;">
+                                <input type="checkbox" 
+                                       @bind="group.CanDelete"
+                                       style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;" />
+                                <span>Delete</span>
+                            </label>
+                        </MudItem>
+                        <MudItem xs="12" sm="2">
+                            <label style="display: flex; align-items: center; cursor: pointer;">
+                                <input type="checkbox" 
+                                       @bind="group.CanExecute"
+                                       style="margin-right: 8px; width: 18px; height: 18px; cursor: pointer;" />
+                                <span>Execute</span>
+                            </label>
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+            }
         </MudForm>
     </DialogContent>
     <DialogActions>
@@ -77,8 +145,117 @@
     private string _firstName = string.Empty;
     private string _lastName = string.Empty;
     private string? _username;
-    private string _selectedTemplate = "Viewer";
+    private string? _selectedTemplate = "Viewer";
     private bool _isActive = true;
+
+    private List<PermissionTemplate> _templates = new();
+    private Dictionary<string, PermissionGroup> _permissionGroups = new(StringComparer.OrdinalIgnoreCase);
+    private List<PermissionGroup> _permissionGroupList = new();
+    private readonly string[] _permissionNames = new[] { "scheduler", "schedules", "jobs", "users:manage" };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTemplates();
+        InitializePermissionGroups();
+        if (!string.IsNullOrEmpty(_selectedTemplate))
+        {
+            ApplyTemplateToGroups(_selectedTemplate);
+        }
+    }
+
+    private async Task LoadTemplates()
+    {
+        try
+        {
+            _templates = await UserManagementService.GetPermissionTemplatesAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading templates: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void InitializePermissionGroups()
+    {
+        _permissionGroups.Clear();
+        _permissionGroupList.Clear();
+
+        foreach (var name in _permissionNames)
+        {
+            var group = new PermissionGroup
+            {
+                PermissionName = name,
+                CanCreate = false,
+                CanRead = false,
+                CanUpdate = false,
+                CanDelete = false,
+                CanExecute = false
+            };
+            
+            _permissionGroups[name] = group;
+            _permissionGroupList.Add(group);
+        }
+    }
+
+    private async Task ApplyTemplate()
+    {
+        if (string.IsNullOrEmpty(_selectedTemplate))
+            return;
+
+        ApplyTemplateToGroups(_selectedTemplate);
+        Snackbar.Add($"Template '{_selectedTemplate}' applied. You can customize individual permissions below.", Severity.Info);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void ApplyTemplateToGroups(string templateName)
+    {
+        var template = _templates.FirstOrDefault(t => t.Name == templateName);
+        if (template == null)
+            return;
+
+        foreach (var group in _permissionGroups.Values)
+        {
+            group.CanCreate = false;
+            group.CanRead = false;
+            group.CanUpdate = false;
+            group.CanDelete = false;
+            group.CanExecute = false;
+        }
+
+        if (template.Permissions != null)
+        {
+            foreach (var perm in template.Permissions)
+            {
+                if (_permissionGroups.TryGetValue(perm.PermissionName, out var group))
+                {
+                    group.CanCreate = perm.CanCreate;
+                    group.CanRead = perm.CanRead;
+                    group.CanUpdate = perm.CanUpdate;
+                    group.CanDelete = perm.CanDelete;
+                    group.CanExecute = perm.CanExecute;
+                }
+            }
+        }
+
+        _permissionGroupList = _permissionNames.Select(name => 
+        {
+            var g = _permissionGroups[name];
+            return new PermissionGroup
+            {
+                PermissionName = g.PermissionName,
+                CanCreate = g.CanCreate,
+                CanRead = g.CanRead,
+                CanUpdate = g.CanUpdate,
+                CanDelete = g.CanDelete,
+                CanExecute = g.CanExecute
+            };
+        }).ToList();
+
+        foreach (var name in _permissionNames)
+        {
+            _permissionGroups[name] = _permissionGroupList.First(g => g.PermissionName == name);
+        }
+    }
 
     private string? ValidateEmail(string email)
     {
@@ -99,6 +276,19 @@
         _saving = true;
         try
         {
+            var customPermissions = _permissionGroupList
+                .Where(g => g.HasAnyPermission())
+                .Select(g => new UserPermissionDto
+                {
+                    PermissionName = g.PermissionName,
+                    CanCreate = g.CanCreate,
+                    CanRead = g.CanRead,
+                    CanUpdate = g.CanUpdate,
+                    CanDelete = g.CanDelete,
+                    CanExecute = g.CanExecute
+                })
+                .ToList();
+
             var request = new CreateUserRequest
             {
                 Email = _email.Trim(),
@@ -106,7 +296,8 @@
                 LastName = _lastName.Trim(),
                 Username = string.IsNullOrWhiteSpace(_username) ? null : _username.Trim(),
                 IsActive = _isActive,
-                TemplateName = _selectedTemplate
+                CustomPermissions = customPermissions.Any() ? customPermissions : null,
+                TemplateName = customPermissions.Any() ? null : _selectedTemplate
             };
 
             await UserManagementService.CreateUserAsync(request);
@@ -127,5 +318,18 @@
     private void Cancel()
     {
         MudDialog?.Cancel();
+    }
+
+    private class PermissionGroup
+    {
+        public string PermissionName { get; set; } = string.Empty;
+        public bool CanCreate { get; set; }
+        public bool CanRead { get; set; }
+        public bool CanUpdate { get; set; }
+        public bool CanDelete { get; set; }
+        public bool CanExecute { get; set; }
+
+        public bool HasAnyPermission() =>
+            CanCreate || CanRead || CanUpdate || CanDelete || CanExecute;
     }
 }

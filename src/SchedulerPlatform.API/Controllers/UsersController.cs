@@ -61,24 +61,33 @@ public class UsersController : ControllerBase
                 .Take(pageSize)
                 .ToList();
 
-            var userResponses = new List<UserListItemResponse>();
-            foreach (var user in users)
-            {
-                var permissions = await _unitOfWork.UserPermissions.GetByUserIdAsync(user.Id);
-                var permissionsList = permissions.ToList();
-                userResponses.Add(new UserListItemResponse
-                {
-                    Id = user.Id,
-                    Email = user.Email,
-                    FirstName = user.FirstName,
-                    LastName = user.LastName,
-                    IsActive = user.IsActive,
-                    IsSystemAdmin = user.IsSystemAdmin,
-                    LastLoginAt = user.LastLoginAt,
-                    PermissionCount = permissionsList.Count,
-                    Role = DetermineUserRole(user, permissionsList)
-                });
-            }
+                        var userResponses = new List<UserListItemResponse>();
+                        foreach (var user in users)
+                        {
+                            var permissions = await _unitOfWork.UserPermissions.GetByUserIdAsync(user.Id);
+                            var permissionsList = permissions.ToList();
+                
+                            // Count individual enabled permissions (each checkbox) instead of permission rows
+                            var individualPermissionCount = permissionsList.Sum(p =>
+                                (p.CanCreate ? 1 : 0) +
+                                (p.CanRead ? 1 : 0) +
+                                (p.CanUpdate ? 1 : 0) +
+                                (p.CanDelete ? 1 : 0) +
+                                (p.CanExecute ? 1 : 0));
+                
+                            userResponses.Add(new UserListItemResponse
+                            {
+                                Id = user.Id,
+                                Email = user.Email,
+                                FirstName = user.FirstName,
+                                LastName = user.LastName,
+                                IsActive = user.IsActive,
+                                IsSystemAdmin = user.IsSystemAdmin,
+                                LastLoginAt = user.LastLoginAt,
+                                PermissionCount = individualPermissionCount,
+                                Role = DetermineUserRole(user, permissionsList)
+                            });
+                        }
 
             return Ok(new
             {
@@ -345,7 +354,34 @@ public class UsersController : ControllerBase
                 _logger.LogError(emailEx, "Failed to send temporary password email to {Email}", user.Email);
             }
 
-            if (!string.IsNullOrEmpty(request.TemplateName))
+            if (request.CustomPermissions != null && request.CustomPermissions.Any())
+            {
+                foreach (var permissionRequest in request.CustomPermissions)
+                {
+                    var permission = new UserPermission
+                    {
+                        UserId = user.Id,
+                        PermissionName = permissionRequest.PermissionName,
+                        ResourceType = permissionRequest.ResourceType,
+                        ResourceId = permissionRequest.ResourceId,
+                        CanCreate = permissionRequest.CanCreate,
+                        CanRead = permissionRequest.CanRead,
+                        CanUpdate = permissionRequest.CanUpdate,
+                        CanDelete = permissionRequest.CanDelete,
+                        CanExecute = permissionRequest.CanExecute,
+                        CreatedAt = DateTime.UtcNow,
+                        CreatedBy = User.Identity?.Name ?? "System",
+                        IsDeleted = false
+                    };
+
+                    await _unitOfWork.UserPermissions.AddAsync(permission);
+                }
+
+                await _unitOfWork.SaveChangesAsync();
+
+                _logger.LogInformation("Applied custom permissions to new user {UserId}", user.Id);
+            }
+            else if (!string.IsNullOrEmpty(request.TemplateName))
             {
                 var template = GetPermissionTemplate(request.TemplateName);
                 if (template != null)

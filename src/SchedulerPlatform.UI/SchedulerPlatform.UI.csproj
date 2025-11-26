@@ -9,7 +9,7 @@
   <ItemGroup>
     <PackageReference Include="Heron.MudCalendar" Version="3.3.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.0" />
-    <PackageReference Include="MudBlazor" Version="8.14.0" />
+    <PackageReference Include="MudBlazor" Version="8.15.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\SchedulerPlatform.Core\SchedulerPlatform.Core.csproj" />
