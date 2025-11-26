@@ -81,3 +81,18 @@ h1:focus {
 .mud-nav-group.mud-nav-group-open > .mud-nav-link .mud-nav-link-text {
     color: #5DAF1B !important; /* Cass Green for expanded state */
 }
+
+/* Dashboard large tiles - equal height in each row */
+.dashboard-charts-grid {
+    align-items: stretch !important;
+}
+
+.dashboard-charts-grid > .mud-grid-item {
+    display: flex !important;
+}
+
+.dashboard-charts-grid > .mud-grid-item > .mud-paper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}

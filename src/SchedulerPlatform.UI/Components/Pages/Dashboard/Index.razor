@@ -181,9 +181,9 @@
     </MudItem>
 </MudGrid>
 
-<MudGrid Class="mt-4 mb-4">
+<MudGrid Class="mt-4 mb-4 dashboard-charts-grid">
     <MudItem xs="12" md="6">
-        <MudPaper Class="pa-4" Style="min-height: 500px;">
+        <MudPaper Class="pa-4">
             <MudText Typo="Typo.h6" Class="mb-4">Status Breakdown</MudText>
             @if (_statusLoading && !_statusData.Any())
             {
@@ -217,9 +217,9 @@
         </MudPaper>
     </MudItem>
 
-        <MudItem xs="12" md="6">
-            <MudPaper Class="pa-4" Style="min-height: 500px;">
-                <MudText Typo="Typo.h6" Class="mb-4">Execution Duration Trends</MudText>
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-4">Execution Duration Trends</MudText>
             @if (_trendsLoading && !_durationSeries.Any())
             {
                 <div class="d-flex justify-center py-8">
@@ -243,9 +243,9 @@
         </MudPaper>
     </MudItem>
 
-        <MudItem xs="12" md="6">
-            <MudPaper Class="pa-4" Style="min-height: 500px;">
-                <MudText Typo="Typo.h6" Class="mb-4">Concurrent Executions Over Time</MudText>
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-4">Concurrent Executions Over Time</MudText>
             @if (_trendsLoading && !_concurrentSeries.Any())
             {
                 <div class="d-flex justify-center py-8">
@@ -269,9 +269,9 @@
         </MudPaper>
     </MudItem>
 
-        <MudItem xs="12" md="6">
-            <MudPaper Class="pa-4" Style="min-height: 500px;">
-                <MudText Typo="Typo.h6" Class="mb-4">Top 10 Longest Running Schedules</MudText>
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-4">Top 10 Longest Running Schedules</MudText>
             @if (_longestLoading && !_longestSeries.Any())
             {
                 <div class="d-flex justify-center py-8">
