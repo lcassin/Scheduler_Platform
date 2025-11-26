@@ -61,24 +61,33 @@ public class UsersController : ControllerBase
                 .Take(pageSize)
                 .ToList();
 
-            var userResponses = new List<UserListItemResponse>();
-            foreach (var user in users)
-            {
-                var permissions = await _unitOfWork.UserPermissions.GetByUserIdAsync(user.Id);
-                var permissionsList = permissions.ToList();
-                userResponses.Add(new UserListItemResponse
-                {
-                    Id = user.Id,
-                    Email = user.Email,
-                    FirstName = user.FirstName,
-                    LastName = user.LastName,
-                    IsActive = user.IsActive,
-                    IsSystemAdmin = user.IsSystemAdmin,
-                    LastLoginAt = user.LastLoginAt,
-                    PermissionCount = permissionsList.Count,
-                    Role = DetermineUserRole(user, permissionsList)
-                });
-            }
+                        var userResponses = new List<UserListItemResponse>();
+                        foreach (var user in users)
+                        {
+                            var permissions = await _unitOfWork.UserPermissions.GetByUserIdAsync(user.Id);
+                            var permissionsList = permissions.ToList();
+                
+                            // Count individual enabled permissions (each checkbox) instead of permission rows
+                            var individualPermissionCount = permissionsList.Sum(p =>
+                                (p.CanCreate ? 1 : 0) +
+                                (p.CanRead ? 1 : 0) +
+                                (p.CanUpdate ? 1 : 0) +
+                                (p.CanDelete ? 1 : 0) +
+                                (p.CanExecute ? 1 : 0));
+                
+                            userResponses.Add(new UserListItemResponse
+                            {
+                                Id = user.Id,
+                                Email = user.Email,
+                                FirstName = user.FirstName,
+                                LastName = user.LastName,
+                                IsActive = user.IsActive,
+                                IsSystemAdmin = user.IsSystemAdmin,
+                                LastLoginAt = user.LastLoginAt,
+                                PermissionCount = individualPermissionCount,
+                                Role = DetermineUserRole(user, permissionsList)
+                            });
+                        }
 
             return Ok(new
             {
