@@ -72,15 +72,16 @@ h1:focus {
 }
 
 /* MudNavGroup expand arrow - make green when expanded */
-/* The SVG has class mud-nav-link-expand-icon directly on it */
-.mud-nav-group.mud-nav-group-open svg.mud-nav-link-expand-icon {
+/* Test: Global rule without open-state constraint to verify selector works */
+svg.mud-nav-link-expand-icon {
     color: #5DAF1B !important;
     fill: #5DAF1B !important;
+    stroke: #5DAF1B !important;
 }
 
-/* Target the path elements inside the SVG directly */
-.mud-nav-group.mud-nav-group-open svg.mud-nav-link-expand-icon path {
+svg.mud-nav-link-expand-icon path {
     fill: #5DAF1B !important;
+    stroke: #5DAF1B !important;
 }
 
 /* MudNavGroup title text when expanded */
