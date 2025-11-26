@@ -72,8 +72,20 @@ h1:focus {
 }
 
 /* MudNavGroup expand arrow - make green when expanded */
-.mud-nav-group.mud-nav-group-open .mud-nav-link-expand-icon .mud-icon-root {
+/* Target all possible ways the arrow could be styled */
+.mud-nav-group.mud-nav-group-open .mud-nav-link-expand-icon,
+.mud-nav-group.mud-nav-group-open .mud-nav-link-expand-icon *,
+.mud-nav-group.mud-nav-group-open .mud-nav-link-expand-icon .mud-icon-root,
+.mud-nav-group.mud-nav-group-open .mud-nav-link-expand-icon svg {
     color: #5DAF1B !important; /* Cass Green for expanded state */
+    fill: #5DAF1B !important;
+}
+
+/* Also try targeting the icon within the nav link itself */
+.mud-nav-group.mud-nav-group-open > .mud-nav-link .mud-icon-root:last-child,
+.mud-nav-group.mud-nav-group-open > .mud-nav-link > .mud-icon-root:last-of-type {
+    color: #5DAF1B !important;
+    fill: #5DAF1B !important;
 }
 
 /* MudNavGroup title text when expanded */
