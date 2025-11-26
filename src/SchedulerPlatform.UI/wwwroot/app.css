@@ -72,8 +72,8 @@ h1:focus {
 }
 
 /* MudNavGroup expand arrow - make green when expanded */
-/* Override MudBlazor's specific selector: .mud-navmenu.mud-navmenu-default .mud-nav-link-expand-icon.mud-transform */
-.mud-navmenu.mud-navmenu-default .mud-nav-group.mud-nav-group-open .mud-nav-link-expand-icon.mud-transform {
+/* Match exact MudBlazor selector with !important to override */
+.mud-navmenu.mud-navmenu-default .mud-nav-link-expand-icon.mud-transform {
     fill: #5DAF1B !important;
 }
 
