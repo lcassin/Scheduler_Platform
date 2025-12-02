@@ -819,17 +819,17 @@ public class SchedulesController : ControllerBase
                 .OrderBy(s => s.NextRunTime)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
-                .Select(s => new
-                {
-                    s.Id,
-                    s.Name,
-                    s.ClientId,
-                    s.NextRunTime,
-                    s.Frequency,
-                    s.CronExpression,
-                    s.LastRunTime,
-                    MinutesLate = s.NextRunTime.HasValue ? (now - s.NextRunTime.Value).TotalMinutes : 0
-                })
+                                .Select(s => new
+                                {
+                                    s.Id,
+                                    s.Name,
+                                    s.ClientId,
+                                    s.NextRunTime,
+                                    Frequency = s.Frequency.ToString(),
+                                    s.CronExpression,
+                                    s.LastRunTime,
+                                    MinutesLate = s.NextRunTime.HasValue ? (now - s.NextRunTime.Value).TotalMinutes : 0
+                                })
                 .ToList();
 
             var totalCount = missedSchedules.Count();
