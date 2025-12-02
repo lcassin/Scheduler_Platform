@@ -70,7 +70,13 @@ class Program
             int scheduleGenerationBatchSize = configuration.GetValue<int>("SyncSettings:ScheduleGenerationBatchSize", 1000);
 
             var optionsBuilder = new DbContextOptionsBuilder<SchedulerDbContext>();
-            optionsBuilder.UseSqlServer(connectionString);
+            optionsBuilder.UseSqlServer(connectionString, sqlOptions =>
+            {
+                sqlOptions.EnableRetryOnFailure(
+                    maxRetryCount: 3,
+                    maxRetryDelay: TimeSpan.FromSeconds(5),
+                    errorNumbersToAdd: null);
+            });
             await using var dbContext = new SchedulerDbContext(optionsBuilder.Options);
 
             var httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
@@ -340,7 +346,13 @@ class Program
             int endHour = configuration.GetValue<int>("SyncSettings:StaggerEndHour", 24);
 
             var optionsBuilder = new DbContextOptionsBuilder<SchedulerDbContext>();
-            optionsBuilder.UseSqlServer(connectionString);
+            optionsBuilder.UseSqlServer(connectionString, sqlOptions =>
+            {
+                sqlOptions.EnableRetryOnFailure(
+                    maxRetryCount: 3,
+                    maxRetryDelay: TimeSpan.FromSeconds(5),
+                    errorNumbersToAdd: null);
+            });
             await using var dbContext = new SchedulerDbContext(optionsBuilder.Options);
 
             var staggerService = new ScheduleStaggerService(dbContext, batchSize);
