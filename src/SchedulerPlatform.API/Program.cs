@@ -221,33 +221,6 @@ if (app.Environment.IsDevelopment() ||
     app.Environment.IsEnvironment("UAT") || 
     app.Environment.IsEnvironment("Staging"))
 {
-    // Restrict Swagger access to Admin/SuperAdmin users only
-    app.UseWhen(
-        ctx => ctx.Request.Path.StartsWithSegments("/swagger"),
-        branch =>
-        {
-            branch.UseAuthentication();
-            branch.UseAuthorization();
-            branch.Use(async (ctx, next) =>
-            {
-                if (!ctx.User.Identity?.IsAuthenticated ?? true)
-                {
-                    ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    await ctx.Response.WriteAsync("Authentication required to access Swagger. Please log in through the UI first.");
-                    return;
-                }
-                
-                if (!ctx.User.HasClaim("is_system_admin", "True") &&
-                    !ctx.User.HasClaim("role", "Admin"))
-                {
-                    ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
-                    await ctx.Response.WriteAsync("Access denied. Swagger is only available to Admin users.");
-                    return;
-                }
-                await next();
-            });
-        });
-
     app.UseSwagger();
     app.UseSwaggerUI(c =>
     {
