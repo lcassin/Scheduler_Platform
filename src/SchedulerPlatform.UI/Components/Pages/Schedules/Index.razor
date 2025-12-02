@@ -147,18 +147,25 @@
                     <MudChip T="string" Size="Size.Small">@context.JobType.ToString()</MudChip>
                 </MudTd>
                 <MudTd DataLabel="Frequency">@context.Frequency.ToString()</MudTd>
-                <MudTd DataLabel="Next Run">
-                    @if (context.NextRunTime.HasValue)
-                    {
-                        var tz = GetTimeZoneAbbreviation(context.TimeZone);
-                        var localTime = ConvertUtcToScheduleTime(context.NextRunTime.Value, context.TimeZone);
-                        <text>@localTime.ToString("g") @(!string.IsNullOrEmpty(tz) ? $"({tz})" : "")</text>
-                    }
-                    else
-                    {
-                        <text>N/A</text>
-                    }
-                </MudTd>
+                                <MudTd DataLabel="Next Run">
+                                    @if (context.NextRunTime.HasValue)
+                                    {
+                                        var tz = GetTimeZoneAbbreviation(context.TimeZone);
+                                        var localTime = ConvertUtcToScheduleTime(context.NextRunTime.Value, context.TimeZone);
+                                        var hoursLate = (DateTime.UtcNow - context.NextRunTime.Value).TotalHours;
+                                        @if (context.IsEnabled && hoursLate > 24)
+                                        {
+                                            <MudTooltip Text="@($"Missed by {Math.Floor(hoursLate / 24)} day(s) - requires manual trigger")">
+                                                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Size="Size.Small" Class="mr-1" />
+                                            </MudTooltip>
+                                        }
+                                        <text>@localTime.ToString("g") @(!string.IsNullOrEmpty(tz) ? $"({tz})" : "")</text>
+                                    }
+                                    else
+                                    {
+                                        <text>N/A</text>
+                                    }
+                                </MudTd>
                 <MudTd DataLabel="Last Run Status">
                     @if (context.LastRunStatus.HasValue)
                     {
