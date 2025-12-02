@@ -120,7 +120,14 @@ builder.Services.AddDbContext<SchedulerDbContext>((serviceProvider, options) =>
     var auditLogInterceptor = serviceProvider.GetRequiredService<AuditLogInterceptor>();
     options.UseSqlServer(
         builder.Configuration.GetConnectionString("DefaultConnection"),
-        sqlOptions => sqlOptions.MigrationsAssembly("SchedulerPlatform.Infrastructure"))
+        sqlOptions =>
+        {
+            sqlOptions.MigrationsAssembly("SchedulerPlatform.Infrastructure");
+            sqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 3,
+                maxRetryDelay: TimeSpan.FromSeconds(5),
+                errorNumbersToAdd: null);
+        })
     .AddInterceptors(auditLogInterceptor);
 });
 
