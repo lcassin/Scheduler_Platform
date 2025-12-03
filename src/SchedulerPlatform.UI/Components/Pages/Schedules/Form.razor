@@ -381,10 +381,10 @@
                 {
                     _schedule = schedule;
                     
-                    if (_schedule.NextRunTime.HasValue)
+                    if (_schedule.NextRunDateTime.HasValue)
                     {
-                        _nextRunDate = _schedule.NextRunTime.Value.Date;
-                        _nextRunTime = _schedule.NextRunTime.Value.TimeOfDay;
+                        _nextRunDate = _schedule.NextRunDateTime.Value.Date;
+                        _nextRunTime = _schedule.NextRunDateTime.Value.TimeOfDay;
                     }
                     
                     if (!string.IsNullOrWhiteSpace(_schedule.JobDataJson))

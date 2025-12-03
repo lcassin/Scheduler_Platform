@@ -14,9 +14,9 @@ public class User : BaseEntity
     public string? ExternalIssuer { get; set; }
     public string? PasswordHash { get; set; }
     public bool IsSystemAdmin { get; set; }
-    public DateTime? LastLoginAt { get; set; }
+    public DateTime? LastLoginDateTime { get; set; }
     public bool MustChangePassword { get; set; }
-    public DateTime? PasswordChangedAt { get; set; }
+    public DateTime? PasswordChangedDateTime { get; set; }
     
     [JsonIgnore]
     public Client Client { get; set; } = null!;

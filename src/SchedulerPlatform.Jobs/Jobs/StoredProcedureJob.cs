@@ -48,7 +48,7 @@ public class StoredProcedureJob : IJob
         var jobExecution = new JobExecution
         {
             ScheduleId = scheduleId,
-            StartTime = DateTime.UtcNow,
+            StartDateTime = DateTime.UtcNow,
             Status = JobStatus.Running,
             TriggeredBy = triggeredBy ?? "Scheduler"
         };
@@ -135,7 +135,7 @@ public class StoredProcedureJob : IJob
             stopwatch.Stop();
 
             jobExecution.Status = JobStatus.Completed;
-            jobExecution.EndTime = DateTime.UtcNow;
+            jobExecution.EndDateTime = DateTime.UtcNow;
             jobExecution.Output = result?.ToString() ?? "Stored procedure executed successfully.";
             jobExecution.DurationSeconds = (int)stopwatch.Elapsed.TotalSeconds;
 
@@ -161,7 +161,7 @@ public class StoredProcedureJob : IJob
             _logger.LogWarning(ex, "Stored procedure timed out for schedule {ScheduleId}", scheduleId);
             
             jobExecution.Status = JobStatus.Cancelled;
-            jobExecution.EndTime = DateTime.UtcNow;
+            jobExecution.EndDateTime = DateTime.UtcNow;
             jobExecution.ErrorMessage = $"Stored procedure execution timed out after {timeoutSeconds} seconds";
             
             await _unitOfWork.JobExecutions.UpdateAsync(jobExecution);
@@ -181,7 +181,7 @@ public class StoredProcedureJob : IJob
             _logger.LogError(ex, "Error executing stored procedure job for schedule {ScheduleId}", scheduleId);
 
             jobExecution.Status = JobStatus.Failed;
-            jobExecution.EndTime = DateTime.UtcNow;
+            jobExecution.EndDateTime = DateTime.UtcNow;
             jobExecution.ErrorMessage = ex.Message;
             jobExecution.StackTrace = ex.StackTrace;
             

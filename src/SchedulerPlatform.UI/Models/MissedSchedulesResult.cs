@@ -15,10 +15,10 @@ public class MissedScheduleItem
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public int ClientId { get; set; }
-    public DateTime? NextRunTime { get; set; }
+    public DateTime? NextRunDateTime { get; set; }
     public string Frequency { get; set; } = string.Empty;
     public string CronExpression { get; set; } = string.Empty;
-    public DateTime? LastRunTime { get; set; }
+    public DateTime? LastRunDateTime { get; set; }
     public double MinutesLate { get; set; }
 }
 

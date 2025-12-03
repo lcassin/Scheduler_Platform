@@ -47,7 +47,7 @@ public class AutoUserCreationMiddleware
                             LastName = lastName,
                             IsActive = true,
                             IsSystemAdmin = false,
-                            CreatedAt = DateTime.UtcNow,
+                            CreatedDateTime = DateTime.UtcNow,
                             CreatedBy = "System",
                             IsDeleted = false
                         };
@@ -81,7 +81,7 @@ public class AutoUserCreationMiddleware
                 UserId = userId,
                 PermissionName = "scheduler",
                 CanRead = true,
-                CreatedAt = DateTime.UtcNow,
+                CreatedDateTime = DateTime.UtcNow,
                 CreatedBy = "System",
                 IsDeleted = false
             },
@@ -90,7 +90,7 @@ public class AutoUserCreationMiddleware
                 UserId = userId,
                 PermissionName = "schedules",
                 CanRead = true,
-                CreatedAt = DateTime.UtcNow,
+                CreatedDateTime = DateTime.UtcNow,
                 CreatedBy = "System",
                 IsDeleted = false
             },
@@ -99,7 +99,7 @@ public class AutoUserCreationMiddleware
                 UserId = userId,
                 PermissionName = "jobs",
                 CanRead = true,
-                CreatedAt = DateTime.UtcNow,
+                CreatedDateTime = DateTime.UtcNow,
                 CreatedBy = "System",
                 IsDeleted = false
             }

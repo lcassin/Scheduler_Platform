@@ -93,8 +93,8 @@ class Program
             else
             {
                 var lastSyncedAt = await dbContext.ScheduleSyncSources
-                    .Where(s => s.LastSyncedAt != null)
-                    .MaxAsync(s => (DateTime?)s.LastSyncedAt);
+                    .Where(s => s.LastSyncedDateTime != null)
+                    .MaxAsync(s => (DateTime?)s.LastSyncedDateTime);
 
                 if (lastSyncedAt.HasValue)
                 {

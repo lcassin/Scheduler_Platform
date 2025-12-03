@@ -43,9 +43,9 @@
             <MudItem xs="12" md="6">
                 <MudText Typo="Typo.subtitle2" Class="mb-1">Next Run Time</MudText>
                 <MudText Typo="Typo.body2">
-                    @if (Schedule.NextRunTime.HasValue)
+                    @if (Schedule.NextRunDateTime.HasValue)
                     {
-                        <text>@Schedule.NextRunTime.Value.ToString("g")</text>
+                        <text>@Schedule.NextRunDateTime.Value.ToString("g")</text>
                     }
                     else
                     {
@@ -57,7 +57,7 @@
             <MudItem xs="12" md="6">
                 <MudText Typo="Typo.subtitle2" Class="mb-1">Last Run Time</MudText>
                 <MudText Typo="Typo.body2">
-                    @(Schedule.LastRunTime.HasValue ? Schedule.LastRunTime.Value.ToString("g") : "N/A")
+                    @(Schedule.LastRunDateTime.HasValue ? Schedule.LastRunDateTime.Value.ToString("g") : "N/A")
                 </MudText>
             </MudItem>
             
@@ -109,7 +109,7 @@
             
             <MudItem xs="12" md="6">
                 <MudText Typo="Typo.subtitle2" Class="mb-1">Created At</MudText>
-                <MudText Typo="Typo.body2">@Schedule.CreatedAt.ToString("g")</MudText>
+                <MudText Typo="Typo.body2">@Schedule.CreatedDateTime.ToString("g")</MudText>
             </MudItem>
             
             <MudItem xs="12" md="6">
@@ -117,16 +117,16 @@
                 <MudText Typo="Typo.body2">@(Schedule.CreatedBy ?? "System")</MudText>
             </MudItem>
             
-            @if (Schedule.UpdatedAt.HasValue)
+            @if (Schedule.ModifiedDateTime.HasValue)
             {
                 <MudItem xs="12" md="6">
                     <MudText Typo="Typo.subtitle2" Class="mb-1">Updated At</MudText>
-                    <MudText Typo="Typo.body2">@Schedule.UpdatedAt.Value.ToString("g")</MudText>
+                    <MudText Typo="Typo.body2">@Schedule.ModifiedDateTime.Value.ToString("g")</MudText>
                 </MudItem>
                 
                 <MudItem xs="12" md="6">
                     <MudText Typo="Typo.subtitle2" Class="mb-1">Updated By</MudText>
-                    <MudText Typo="Typo.body2">@(Schedule.UpdatedBy ?? "System")</MudText>
+                    <MudText Typo="Typo.body2">@(Schedule.ModifiedBy ?? "System")</MudText>
                 </MudItem>
             }
         </MudGrid>

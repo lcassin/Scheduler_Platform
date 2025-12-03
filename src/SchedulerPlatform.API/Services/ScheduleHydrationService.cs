@@ -71,9 +71,9 @@ public class ScheduleHydrationService : IHostedService
             var schedulesInHorizon = await unitOfWork.Schedules.FindAsync(s =>
                 s.IsEnabled &&
                 !s.IsDeleted &&
-                s.NextRunTime.HasValue &&
-                s.NextRunTime.Value >= now &&
-                s.NextRunTime.Value <= horizonEnd);
+                s.NextRunDateTime.HasValue &&
+                s.NextRunDateTime.Value >= now &&
+                s.NextRunDateTime.Value <= horizonEnd);
 
             var schedulesList = schedulesInHorizon.ToList();
             
@@ -115,7 +115,7 @@ public class ScheduleHydrationService : IHostedService
                 {
                     try
                     {
-                        if (schedule.NextRunTime == null || schedule.NextRunTime < now)
+                        if (schedule.NextRunDateTime == null || schedule.NextRunDateTime < now)
                         {
                             try
                             {
@@ -138,20 +138,20 @@ public class ScheduleHydrationService : IHostedService
                                 var nextOccurrence = cronExpression.GetNextValidTimeAfter(DateTimeOffset.UtcNow);
                                 if (nextOccurrence.HasValue)
                                 {
-                                    schedule.NextRunTime = nextOccurrence.Value.UtcDateTime;
-                                    schedule.UpdatedAt = DateTime.UtcNow;
+                                    schedule.NextRunDateTime = nextOccurrence.Value.UtcDateTime;
+                                    schedule.ModifiedDateTime = DateTime.UtcNow;
                                     await unitOfWork.Schedules.UpdateAsync(schedule);
                                     batchRecomputedCount++;
                                     
                                     _logger.LogDebug(
-                                        "ScheduleHydrationService: Recomputed NextRunTime for schedule {ScheduleId} to {NextRunTime}",
-                                        schedule.Id, schedule.NextRunTime.Value.ToString("o"));
+                                        "ScheduleHydrationService: Recomputed NextRunDateTime for schedule {ScheduleId} to {NextRunDateTime}",
+                                        schedule.Id, schedule.NextRunDateTime.Value.ToString("o"));
                                 }
                             }
                             catch (Exception cronEx)
                             {
                                 _logger.LogWarning(cronEx, 
-                                    "ScheduleHydrationService: Could not recompute NextRunTime for schedule {ScheduleId} with cron {CronExpression}",
+                                    "ScheduleHydrationService: Could not recompute NextRunDateTime for schedule {ScheduleId} with cron {CronExpression}",
                                     schedule.Id, schedule.CronExpression);
                             }
                         }

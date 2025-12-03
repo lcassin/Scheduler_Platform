@@ -10,9 +10,9 @@ public class JobExecution
     
     public string? ScheduleName { get; set; }
     
-    public DateTime StartTime { get; set; }
+    public DateTime StartDateTime { get; set; }
     
-    public DateTime? EndTime { get; set; }
+    public DateTime? EndDateTime { get; set; }
     
     public JobStatus Status { get; set; }
     

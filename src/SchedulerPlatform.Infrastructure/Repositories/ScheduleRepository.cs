@@ -43,18 +43,18 @@ public class ScheduleRepository : Repository<Schedule>, IScheduleRepository
             .Include(s => s.JobParameters)
             .Where(s => s.IsEnabled 
                 && !s.IsDeleted 
-                && (s.NextRunTime == null || s.NextRunTime <= currentTime))
+                && (s.NextRunDateTime == null || s.NextRunDateTime <= currentTime))
             .ToListAsync();
     }
 
-    public async Task UpdateNextRunTimeAsync(int scheduleId, DateTime nextRunTime)
+    public async Task UpdateNextRunDateTimeAsync(int scheduleId, DateTime nextRunDateTime)
     {
         var schedule = await _dbSet.FindAsync(scheduleId);
         if (schedule != null)
         {
-            schedule.NextRunTime = nextRunTime;
-            schedule.LastRunTime = DateTime.UtcNow;
-            schedule.UpdatedAt = DateTime.UtcNow;
+            schedule.NextRunDateTime = nextRunDateTime;
+            schedule.LastRunDateTime = DateTime.UtcNow;
+            schedule.ModifiedDateTime = DateTime.UtcNow;
         }
     }
 
@@ -104,8 +104,8 @@ public class ScheduleRepository : Repository<Schedule>, IScheduleRepository
                 Schedule = s,
                 ClientName = s.Client != null ? s.Client.ClientName : null,
                 LastExecution = s.JobExecutions
-                    .OrderByDescending(e => e.StartTime)
-                    .Select(e => new { e.Status, e.StartTime, e.EndTime })
+                    .OrderByDescending(e => e.StartDateTime)
+                    .Select(e => new { e.Status, e.StartDateTime, e.EndDateTime })
                     .FirstOrDefault()
             })
             .ToListAsync();
@@ -117,8 +117,8 @@ public class ScheduleRepository : Repository<Schedule>, IScheduleRepository
                 i.Schedule.Client = new Client { ClientName = i.ClientName };
             }
             i.Schedule.LastRunStatus = i.LastExecution?.Status;
-            // Use EndTime if available (job completed), otherwise use StartTime
-            i.Schedule.LastRunTime = i.LastExecution?.EndTime ?? i.LastExecution?.StartTime;
+            // Use EndDateTime if available (job completed), otherwise use StartDateTime
+            i.Schedule.LastRunDateTime = i.LastExecution?.EndDateTime ?? i.LastExecution?.StartDateTime;
             return i.Schedule;
         }).ToList();
         
@@ -184,9 +184,9 @@ public class ScheduleRepository : Repository<Schedule>, IScheduleRepository
     {
         var query = _dbSet.AsNoTracking()
             .Where(s => !s.IsDeleted 
-                && s.NextRunTime.HasValue 
-                && s.NextRunTime.Value >= startUtc 
-                && s.NextRunTime.Value <= endUtc);
+                && s.NextRunDateTime.HasValue 
+                && s.NextRunDateTime.Value >= startUtc 
+                && s.NextRunDateTime.Value <= endUtc);
 
         if (clientId.HasValue)
         {
@@ -194,12 +194,12 @@ public class ScheduleRepository : Repository<Schedule>, IScheduleRepository
         }
 
         var schedules = await query
-            .OrderBy(s => s.NextRunTime)
+            .OrderBy(s => s.NextRunDateTime)
             .ThenBy(s => s.Id)
             .Select(s => new
             {
                 Schedule = s,
-                DayDate = s.NextRunTime.Value.Date
+                DayDate = s.NextRunDateTime.Value.Date
             })
             .ToListAsync();
 

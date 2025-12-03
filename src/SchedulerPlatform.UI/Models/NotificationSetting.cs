@@ -26,13 +26,13 @@ public class NotificationSetting
     [JsonPropertyName("failureEmailSubject")]
     public string? FailureEmailSubject { get; set; }
     
-    public DateTime CreatedAt { get; set; }
+    public DateTime CreatedDateTime { get; set; }
     
     public string? CreatedBy { get; set; }
     
-    public DateTime? UpdatedAt { get; set; }
+    public DateTime? ModifiedDateTime { get; set; }
     
-    public string? UpdatedBy { get; set; }
+    public string? ModifiedBy { get; set; }
     
     public bool IncludeExecutionDetails { get; set; } = true;
     public bool IncludeOutput { get; set; } = false;

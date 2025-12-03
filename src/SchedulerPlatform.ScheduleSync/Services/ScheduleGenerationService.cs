@@ -33,7 +33,7 @@ public class ScheduleGenerationService
             
             var syncGroups = await _dbContext.ScheduleSyncSources
                 .Where(s => !s.IsDeleted 
-                    && s.LastSyncedAt >= syncRunStart
+                    && s.LastSyncedDateTime >= syncRunStart
                     && s.LastInvoiceDate != defaultDate)
                 .GroupBy(s => new { s.ClientName, s.ExternalVendorId, s.VendorName, s.AccountNumber, s.ScheduleFrequency })
                 .Select(g => new
@@ -99,7 +99,7 @@ public class ScheduleGenerationService
                 
                 var existingSchedules = await _dbContext.Schedules
                     .Where(s => clientIdsInChunk.Contains(s.ClientId))
-                    .Select(s => new { s.Id, s.ClientId, s.Name, s.CronExpression, s.Frequency, s.NextRunTime })
+                    .Select(s => new { s.Id, s.ClientId, s.Name, s.CronExpression, s.Frequency, s.NextRunDateTime })
                     .ToListAsync();
                 
                 var scheduleMap = existingSchedules
@@ -129,13 +129,13 @@ public class ScheduleGenerationService
                             endHour: 24,
                             referenceDate: group.EarliestDate);
 
-                        DateTime? nextRunTime = CalculateNextRunTime(cronExpression, _defaultTimeZone);
+                        DateTime? nextRunDateTime = CalculateNextRunTime(cronExpression, _defaultTimeZone);
 
                         if (scheduleMap.TryGetValue((clientInfo.ClientId, scheduleName), out var existingSchedule))
                         {
                             bool cronChanged = existingSchedule.CronExpression != cronExpression;
                             bool frequencyChanged = existingSchedule.Frequency != (ScheduleFrequency)group.ScheduleFrequency;
-                            bool nextRunChanged = existingSchedule.NextRunTime != nextRunTime;
+                            bool nextRunChanged = existingSchedule.NextRunDateTime != nextRunDateTime;
 
                             if (cronChanged || frequencyChanged || nextRunChanged)
                             {
@@ -143,10 +143,10 @@ public class ScheduleGenerationService
                                 if (scheduleToUpdate != null)
                                 {
                                     scheduleToUpdate.CronExpression = cronExpression;
-                                    scheduleToUpdate.NextRunTime = nextRunTime;
+                                    scheduleToUpdate.NextRunDateTime = nextRunDateTime;
                                     scheduleToUpdate.Frequency = (ScheduleFrequency)group.ScheduleFrequency;
-                                    scheduleToUpdate.UpdatedAt = DateTime.UtcNow;
-                                    scheduleToUpdate.UpdatedBy = "ScheduleSync";
+                                    scheduleToUpdate.ModifiedDateTime = DateTime.UtcNow;
+                                    scheduleToUpdate.ModifiedBy = "ScheduleSync";
                                     updated++;
                                 }
                             }
@@ -165,13 +165,13 @@ public class ScheduleGenerationService
                                 JobType = JobType.StoredProcedure,
                                 Frequency = (ScheduleFrequency)group.ScheduleFrequency,
                                 CronExpression = cronExpression,
-                                NextRunTime = nextRunTime,
+                                NextRunDateTime = nextRunDateTime,
                                 IsEnabled = true,
                                 MaxRetries = 3,
                                 RetryDelayMinutes = 5,
                                 TimeZone = _defaultTimeZone,
                                 JobConfiguration = "{\"ConnectionString\":\"\",\"ProcedureName\":\"TBD\",\"TimeoutSeconds\":300}",
-                                CreatedAt = DateTime.UtcNow,
+                                CreatedDateTime = DateTime.UtcNow,
                                 CreatedBy = "ScheduleSync",
                                 IsDeleted = false
                             };

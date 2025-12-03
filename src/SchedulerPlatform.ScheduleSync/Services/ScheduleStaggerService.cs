@@ -65,7 +65,7 @@ public class ScheduleStaggerService
                         s.Frequency,
                         s.TimeZone,
                         s.CronExpression,
-                        s.NextRunTime
+                        s.NextRunDateTime
                     })
                     .ToListAsync();
 
@@ -86,7 +86,7 @@ public class ScheduleStaggerService
                             endHour);
 
                         bool cronChanged = newCronExpression != schedule.CronExpression;
-                        bool needsNextRunTime = schedule.NextRunTime == null;
+                        bool needsNextRunTime = schedule.NextRunDateTime == null;
 
                         if (cronChanged || needsNextRunTime)
                         {
@@ -101,9 +101,9 @@ public class ScheduleStaggerService
                                 {
                                     scheduleToUpdate.CronExpression = newCronExpression;
                                 }
-                                scheduleToUpdate.NextRunTime = newNextRunTime;
-                                scheduleToUpdate.UpdatedAt = DateTime.UtcNow;
-                                scheduleToUpdate.UpdatedBy = "ScheduleSync";
+                                scheduleToUpdate.NextRunDateTime = newNextRunTime;
+                                scheduleToUpdate.ModifiedDateTime = DateTime.UtcNow;
+                                scheduleToUpdate.ModifiedBy = "ScheduleSync";
                                 updated++;
                             }
                         }
