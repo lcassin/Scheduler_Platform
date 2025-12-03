@@ -679,8 +679,6 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                     b.Navigation("Schedules");
 
                     b.Navigation("Users");
-
-                    b.Navigation("VendorCredentials");
                 });
 
             modelBuilder.Entity("SchedulerPlatform.Core.Domain.Entities.Schedule", b =>
