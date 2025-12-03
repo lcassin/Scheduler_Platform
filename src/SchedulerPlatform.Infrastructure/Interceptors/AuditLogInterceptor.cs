@@ -63,7 +63,7 @@ public class AuditLogInterceptor : SaveChangesInterceptor
                 ClientId = clientId,
                 IpAddress = ipAddress,
                 UserAgent = userAgent,
-                Timestamp = DateTime.UtcNow,
+                TimestampDateTime = DateTime.UtcNow,
                 OldValues = entry.State == EntityState.Modified || entry.State == EntityState.Deleted
                     ? SerializeOldValues(entry)
                     : null,
