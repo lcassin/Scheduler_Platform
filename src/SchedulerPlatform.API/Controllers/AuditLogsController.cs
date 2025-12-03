@@ -55,18 +55,18 @@ public class AuditLogsController : ControllerBase
 
             if (startDate.HasValue)
             {
-                query = query.Where(a => a.Timestamp >= startDate.Value);
+                query = query.Where(a => a.TimestampDateTime >= startDate.Value);
             }
 
             if (endDate.HasValue)
             {
-                query = query.Where(a => a.Timestamp <= endDate.Value);
+                query = query.Where(a => a.TimestampDateTime <= endDate.Value);
             }
 
             var totalCount = await query.CountAsync();
 
             var auditLogs = await query
-                .OrderByDescending(a => a.Timestamp)
+                .OrderByDescending(a => a.TimestampDateTime)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
                 .Select(a => new
@@ -80,7 +80,7 @@ public class AuditLogsController : ControllerBase
                     a.ClientId,
                     a.IpAddress,
                     a.UserAgent,
-                    a.Timestamp,
+                    TimestampDateTime = a.TimestampDateTime,
                     a.OldValues,
                     a.NewValues,
                     a.AdditionalData
@@ -147,18 +147,18 @@ public class AuditLogsController : ControllerBase
 
             if (startDate.HasValue)
             {
-                query = query.Where(a => a.Timestamp >= startDate.Value);
+                query = query.Where(a => a.TimestampDateTime >= startDate.Value);
             }
 
             if (endDate.HasValue)
             {
-                query = query.Where(a => a.Timestamp <= endDate.Value);
+                query = query.Where(a => a.TimestampDateTime <= endDate.Value);
             }
 
             var totalCount = await query.CountAsync();
 
             var auditLogs = await query
-                .OrderByDescending(a => a.Timestamp)
+                .OrderByDescending(a => a.TimestampDateTime)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
                 .Select(a => new
@@ -172,7 +172,7 @@ public class AuditLogsController : ControllerBase
                     a.ClientId,
                     a.IpAddress,
                     a.UserAgent,
-                    a.Timestamp,
+                    TimestampDateTime = a.TimestampDateTime,
                     a.OldValues,
                     a.NewValues,
                     a.AdditionalData

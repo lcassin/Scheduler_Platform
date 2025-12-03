@@ -399,7 +399,7 @@ public class SyncService
                     if (existing.TryGetValue(account.AccountId, out var existingRecord))
                     {
                         var lastInvoiceDateChanged = account.LastInvoiceDate.HasValue && 
-                                                    existingRecord.LastInvoiceDate != account.LastInvoiceDate.Value;
+                                                    existingRecord.LastInvoiceDateTime != account.LastInvoiceDate.Value;
                         var wasDeleted = existingRecord.IsDeleted;
 
                         if (lastInvoiceDateChanged || wasDeleted)
@@ -411,7 +411,7 @@ public class SyncService
                             
                             if (account.LastInvoiceDate.HasValue)
                             {
-                                existingRecord.LastInvoiceDate = account.LastInvoiceDate.Value;
+                                existingRecord.LastInvoiceDateTime = account.LastInvoiceDate.Value;
                             }
                             
                             existingRecord.AccountName = account.AccountName;
@@ -448,7 +448,7 @@ public class SyncService
                             ClientId = null,
                             CredentialId = account.CredentialId,
                             ScheduleFrequency = (int)ScheduleFrequency.Monthly,
-                            LastInvoiceDate = account.LastInvoiceDate ?? DateTime.MinValue,
+                            LastInvoiceDateTime = account.LastInvoiceDate ?? DateTime.MinValue,
                             AccountName = account.AccountName,
                             VendorName = account.VendorName,
                             ClientName = account.ClientName,

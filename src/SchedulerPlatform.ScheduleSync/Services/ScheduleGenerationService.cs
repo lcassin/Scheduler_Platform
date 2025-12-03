@@ -34,7 +34,7 @@ public class ScheduleGenerationService
             var syncGroups = await _dbContext.ScheduleSyncSources
                 .Where(s => !s.IsDeleted 
                     && s.LastSyncedDateTime >= syncRunStart
-                    && s.LastInvoiceDate != defaultDate)
+                    && s.LastInvoiceDateTime != defaultDate)
                 .GroupBy(s => new { s.ClientName, s.ExternalVendorId, s.VendorName, s.AccountNumber, s.ScheduleFrequency })
                 .Select(g => new
                 {
@@ -43,7 +43,7 @@ public class ScheduleGenerationService
                     g.Key.VendorName,
                     g.Key.AccountNumber,
                     g.Key.ScheduleFrequency,
-                    EarliestDate = g.Min(s => s.LastInvoiceDate),
+                    EarliestDate = g.Min(s => s.LastInvoiceDateTime),
                     RecordCount = g.Count()
                 })
                 .ToListAsync();
