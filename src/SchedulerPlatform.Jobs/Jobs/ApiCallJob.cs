@@ -52,7 +52,7 @@ public class ApiCallJob : IJob
         var jobExecution = new JobExecution
         {
             ScheduleId = scheduleId,
-            StartTime = DateTime.UtcNow,
+            StartDateTime = DateTime.UtcNow,
             Status = JobStatus.Running,
             TriggeredBy = triggeredBy ?? "Scheduler"
         };
@@ -149,7 +149,7 @@ public class ApiCallJob : IJob
             response.EnsureSuccessStatusCode();
             
             jobExecution.Status = JobStatus.Completed;
-            jobExecution.EndTime = DateTime.UtcNow;
+            jobExecution.EndDateTime = DateTime.UtcNow;
             jobExecution.Output = $"Status: {(int)response.StatusCode} {response.StatusCode}\n\n{responseContent}";
             jobExecution.DurationSeconds = (int)stopwatch.Elapsed.TotalSeconds;
 
@@ -175,7 +175,7 @@ public class ApiCallJob : IJob
             _logger.LogWarning(ex, "API call timed out for schedule {ScheduleId}", scheduleId);
             
             jobExecution.Status = JobStatus.Cancelled;
-            jobExecution.EndTime = DateTime.UtcNow;
+            jobExecution.EndDateTime = DateTime.UtcNow;
             jobExecution.ErrorMessage = $"API call timed out after {timeoutSeconds} seconds";
             
             await _unitOfWork.JobExecutions.UpdateAsync(jobExecution);
@@ -195,7 +195,7 @@ public class ApiCallJob : IJob
             _logger.LogError(ex, "Error executing API call job for schedule {ScheduleId}", scheduleId);
 
             jobExecution.Status = JobStatus.Failed;
-            jobExecution.EndTime = DateTime.UtcNow;
+            jobExecution.EndDateTime = DateTime.UtcNow;
             jobExecution.ErrorMessage = ex.Message;
             jobExecution.StackTrace = ex.StackTrace;
             

@@ -10,7 +10,7 @@ public class UserDetail
     public string Username { get; set; } = string.Empty;
     public bool IsActive { get; set; }
     public bool IsSystemAdmin { get; set; }
-    public DateTime? LastLoginAt { get; set; }
+    public DateTime? LastLoginDateTime { get; set; }
     public int ClientId { get; set; }
     public List<UserPermissionDto> Permissions { get; set; } = new();
 }

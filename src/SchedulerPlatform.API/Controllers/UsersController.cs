@@ -83,7 +83,7 @@ public class UsersController : ControllerBase
                                 LastName = user.LastName,
                                 IsActive = user.IsActive,
                                 IsSystemAdmin = user.IsSystemAdmin,
-                                LastLoginAt = user.LastLoginAt,
+                                LastLoginDateTime = user.LastLoginDateTime,
                                 PermissionCount = individualPermissionCount,
                                 Role = DetermineUserRole(user, permissionsList)
                             });
@@ -140,7 +140,7 @@ public class UsersController : ControllerBase
                 Username = user.Username,
                 IsActive = user.IsActive,
                 IsSystemAdmin = user.IsSystemAdmin,
-                LastLoginAt = user.LastLoginAt,
+                LastLoginDateTime = user.LastLoginDateTime,
                 ClientId = user.ClientId,
                 Permissions = permissionResponses
             };
@@ -192,7 +192,7 @@ public class UsersController : ControllerBase
                     CanUpdate = permissionRequest.CanUpdate,
                     CanDelete = permissionRequest.CanDelete,
                     CanExecute = permissionRequest.CanExecute,
-                    CreatedAt = DateTime.UtcNow,
+                    CreatedDateTime = DateTime.UtcNow,
                     CreatedBy = User.Identity?.Name ?? "System"
                 };
 
@@ -201,7 +201,7 @@ public class UsersController : ControllerBase
 
             await _unitOfWork.SaveChangesAsync();
 
-            _logger.LogInformation("Updated permissions for user {UserId} by {UpdatedBy}", 
+            _logger.LogInformation("Updated permissions for user {UserId} by {ModifiedBy}", 
                 id, User.Identity?.Name ?? "System");
 
             return NoContent();
@@ -257,7 +257,7 @@ public class UsersController : ControllerBase
                     CanUpdate = permissionRequest.CanUpdate,
                     CanDelete = permissionRequest.CanDelete,
                     CanExecute = permissionRequest.CanExecute,
-                    CreatedAt = DateTime.UtcNow,
+                    CreatedDateTime = DateTime.UtcNow,
                     CreatedBy = User.Identity?.Name ?? "System"
                 };
 
@@ -266,7 +266,7 @@ public class UsersController : ControllerBase
 
             await _unitOfWork.SaveChangesAsync();
 
-            _logger.LogInformation("Applied template {TemplateName} to user {UserId} by {UpdatedBy}",
+            _logger.LogInformation("Applied template {TemplateName} to user {UserId} by {ModifiedBy}",
                 templateName, id, User.Identity?.Name ?? "System");
 
             return NoContent();
@@ -303,8 +303,8 @@ public class UsersController : ControllerBase
                 IsSystemAdmin = false,
                 PasswordHash = passwordHash,
                 MustChangePassword = true,
-                PasswordChangedAt = DateTime.UtcNow,
-                CreatedAt = DateTime.UtcNow,
+                PasswordChangedDateTime = DateTime.UtcNow,
+                CreatedDateTime = DateTime.UtcNow,
                 CreatedBy = User.Identity?.Name ?? "System",
                 IsDeleted = false
             };
@@ -316,8 +316,8 @@ public class UsersController : ControllerBase
             {
                 UserId = user.Id,
                 PasswordHash = passwordHash,
-                ChangedAt = DateTime.UtcNow,
-                CreatedAt = DateTime.UtcNow,
+                ChangedDateTime = DateTime.UtcNow,
+                CreatedDateTime = DateTime.UtcNow,
                 CreatedBy = User.Identity?.Name ?? "System",
                 IsDeleted = false
             };
@@ -369,7 +369,7 @@ public class UsersController : ControllerBase
                         CanUpdate = permissionRequest.CanUpdate,
                         CanDelete = permissionRequest.CanDelete,
                         CanExecute = permissionRequest.CanExecute,
-                        CreatedAt = DateTime.UtcNow,
+                        CreatedDateTime = DateTime.UtcNow,
                         CreatedBy = User.Identity?.Name ?? "System",
                         IsDeleted = false
                     };
@@ -399,7 +399,7 @@ public class UsersController : ControllerBase
                             CanUpdate = permissionRequest.CanUpdate,
                             CanDelete = permissionRequest.CanDelete,
                             CanExecute = permissionRequest.CanExecute,
-                            CreatedAt = DateTime.UtcNow,
+                            CreatedDateTime = DateTime.UtcNow,
                             CreatedBy = User.Identity?.Name ?? "System",
                             IsDeleted = false
                         };
@@ -437,7 +437,7 @@ public class UsersController : ControllerBase
                 Username = user.Username,
                 IsActive = user.IsActive,
                 IsSystemAdmin = user.IsSystemAdmin,
-                LastLoginAt = user.LastLoginAt,
+                LastLoginDateTime = user.LastLoginDateTime,
                 ClientId = user.ClientId,
                 Permissions = permissionResponses
             };
@@ -469,13 +469,13 @@ public class UsersController : ControllerBase
             }
 
             user.IsActive = request.IsActive;
-            user.UpdatedAt = DateTime.UtcNow;
-            user.UpdatedBy = User.Identity?.Name ?? "System";
+            user.ModifiedDateTime = DateTime.UtcNow;
+            user.ModifiedBy = User.Identity?.Name ?? "System";
 
             await _unitOfWork.Users.UpdateAsync(user);
             await _unitOfWork.SaveChangesAsync();
 
-            _logger.LogInformation("Updated status for user {UserId} to {IsActive} by {UpdatedBy}", 
+            _logger.LogInformation("Updated status for user {UserId} to {IsActive} by {ModifiedBy}", 
                 id, request.IsActive, User.Identity?.Name ?? "System");
 
             return NoContent();
@@ -509,9 +509,9 @@ public class UsersController : ControllerBase
 
             user.PasswordHash = passwordHash;
             user.MustChangePassword = true;
-            user.PasswordChangedAt = DateTime.UtcNow;
-            user.UpdatedAt = DateTime.UtcNow;
-            user.UpdatedBy = User.Identity?.Name ?? "System";
+            user.PasswordChangedDateTime = DateTime.UtcNow;
+            user.ModifiedDateTime = DateTime.UtcNow;
+            user.ModifiedBy = User.Identity?.Name ?? "System";
 
             await _unitOfWork.Users.UpdateAsync(user);
 
@@ -519,15 +519,15 @@ public class UsersController : ControllerBase
             {
                 UserId = user.Id,
                 PasswordHash = passwordHash,
-                ChangedAt = DateTime.UtcNow,
-                CreatedAt = DateTime.UtcNow,
+                ChangedDateTime = DateTime.UtcNow,
+                CreatedDateTime = DateTime.UtcNow,
                 CreatedBy = User.Identity?.Name ?? "System",
                 IsDeleted = false
             };
             await _unitOfWork.PasswordHistories.AddAsync(passwordHistory);
             await _unitOfWork.SaveChangesAsync();
 
-            _logger.LogInformation("Reset password for user {UserId} by {UpdatedBy}", 
+            _logger.LogInformation("Reset password for user {UserId} by {ModifiedBy}", 
                 id, User.Identity?.Name ?? "System");
 
             try

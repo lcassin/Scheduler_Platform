@@ -70,15 +70,15 @@ public class SyncService
                     if (wasDeleted)
                     {
                         existingClient.IsDeleted = false;
-                        existingClient.UpdatedAt = DateTime.UtcNow;
-                        existingClient.UpdatedBy = "ApiSync";
-                        existingClient.LastSyncedAt = syncRunStart;
+                            existingClient.ModifiedDateTime = DateTime.UtcNow;
+                            existingClient.ModifiedBy = "ApiSync";
+                            existingClient.LastSyncedDateTime = syncRunStart;
                         result.Reactivated++;
                         result.Updated++;
                     }
                     else
                     {
-                        existingClient.LastSyncedAt = syncRunStart;
+                        existingClient.LastSyncedDateTime = syncRunStart;
                     }
                 }
                 else
@@ -88,9 +88,9 @@ public class SyncService
                         ClientName = clientName,
                         ClientCode = clientName.Length > 50 ? clientName.Substring(0, 50) : clientName,
                         IsActive = true,
-                        CreatedAt = DateTime.UtcNow,
+                        CreatedDateTime = DateTime.UtcNow,
                         CreatedBy = "ApiSync",
-                        LastSyncedAt = syncRunStart,
+                        LastSyncedDateTime = syncRunStart,
                         IsDeleted = false
                     };
 
@@ -105,11 +105,11 @@ public class SyncService
             if (performSoftDelete)
             {
                 var deletedCount = await _dbContext.Clients
-                    .Where(c => !c.IsDeleted && (c.LastSyncedAt == null || c.LastSyncedAt < syncRunStart))
+                    .Where(c => !c.IsDeleted && (c.LastSyncedDateTime == null || c.LastSyncedDateTime < syncRunStart))
                     .ExecuteUpdateAsync(c => c
                         .SetProperty(x => x.IsDeleted, true)
-                        .SetProperty(x => x.UpdatedAt, DateTime.UtcNow)
-                        .SetProperty(x => x.UpdatedBy, "ApiSync"));
+                        .SetProperty(x => x.ModifiedDateTime, DateTime.UtcNow)
+                        .SetProperty(x => x.ModifiedBy, "ApiSync"));
 
                 result.Deleted = deletedCount;
                 Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Marked {deletedCount} clients as deleted");
@@ -174,7 +174,7 @@ public class SyncService
                         {
                             s.Id,
                             s.ClientName,
-                            s.LastSyncedAt
+                            s.LastSyncedDateTime
                         })
                         .Take(pageSize)
                         .ToListAsync();
@@ -190,14 +190,14 @@ public class SyncService
 
                         if (uniqueClientsDict.TryGetValue(clientName, out var existing))
                         {
-                            if ((row.LastSyncedAt ?? DateTime.MinValue) > (existing ?? DateTime.MinValue))
+                            if ((row.LastSyncedDateTime ?? DateTime.MinValue) > (existing ?? DateTime.MinValue))
                             {
-                                uniqueClientsDict[clientName] = row.LastSyncedAt;
+                                uniqueClientsDict[clientName] = row.LastSyncedDateTime;
                             }
                         }
                         else
                         {
-                            uniqueClientsDict[clientName] = row.LastSyncedAt;
+                            uniqueClientsDict[clientName] = row.LastSyncedDateTime;
                         }
                     }
 
@@ -277,15 +277,15 @@ public class SyncService
                         if (wasDeleted)
                         {
                             existingClient.IsDeleted = false;
-                            existingClient.UpdatedAt = DateTime.UtcNow;
-                            existingClient.UpdatedBy = "ApiSync";
-                            existingClient.LastSyncedAt = runStart;
+                                existingClient.ModifiedDateTime = DateTime.UtcNow;
+                                existingClient.ModifiedBy = "ApiSync";
+                                existingClient.LastSyncedDateTime = runStart;
                             result.Reactivated++;
                             result.Updated++;
                         }
                         else
                         {
-                            existingClient.LastSyncedAt = runStart;
+                            existingClient.LastSyncedDateTime = runStart;
                         }
                     }
                     else
@@ -295,9 +295,9 @@ public class SyncService
                             ClientName = clientName,
                             ClientCode = clientName.Length > 50 ? clientName.Substring(0, 50) : clientName,
                             IsActive = true,
-                            CreatedAt = DateTime.UtcNow,
+                            CreatedDateTime = DateTime.UtcNow,
                             CreatedBy = "ApiSync",
-                            LastSyncedAt = runStart,
+                            LastSyncedDateTime = runStart,
                             IsDeleted = false
                         };
 
@@ -312,11 +312,11 @@ public class SyncService
                 if (performSoftDelete)
                 {
                     var deletedCount = await _dbContext.Clients
-                        .Where(c => !c.IsDeleted && (c.LastSyncedAt == null || c.LastSyncedAt < runStart))
+                        .Where(c => !c.IsDeleted && (c.LastSyncedDateTime == null || c.LastSyncedDateTime < runStart))
                         .ExecuteUpdateAsync(c => c
                             .SetProperty(x => x.IsDeleted, true)
-                            .SetProperty(x => x.UpdatedAt, DateTime.UtcNow)
-                            .SetProperty(x => x.UpdatedBy, "ApiSync"));
+                            .SetProperty(x => x.ModifiedDateTime, DateTime.UtcNow)
+                            .SetProperty(x => x.ModifiedBy, "ApiSync"));
 
                     result.Deleted = deletedCount;
                     Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Marked {deletedCount} clients as deleted");
@@ -418,9 +418,9 @@ public class SyncService
                             existingRecord.VendorName = account.VendorName;
                             existingRecord.ClientName = account.ClientName;
                             existingRecord.TandemAccountId = account.TandemAcctId;
-                            existingRecord.UpdatedAt = DateTime.UtcNow;
-                            existingRecord.UpdatedBy = "ApiSync";
-                            existingRecord.LastSyncedAt = runStart;
+                            existingRecord.ModifiedDateTime = DateTime.UtcNow;
+                            existingRecord.ModifiedBy = "ApiSync";
+                            existingRecord.LastSyncedDateTime = runStart;
 
                             if (wasDeleted)
                             {
@@ -433,7 +433,7 @@ public class SyncService
                         }
                         else
                         {
-                            existingRecord.LastSyncedAt = runStart;
+                            existingRecord.LastSyncedDateTime = runStart;
                             pageUnchanged++;
                         }
                     }
@@ -453,9 +453,9 @@ public class SyncService
                             VendorName = account.VendorName,
                             ClientName = account.ClientName,
                             TandemAccountId = account.TandemAcctId,
-                            CreatedAt = DateTime.UtcNow,
+                            CreatedDateTime = DateTime.UtcNow,
                             CreatedBy = "ApiSync",
-                            LastSyncedAt = runStart,
+                            LastSyncedDateTime = runStart,
                             IsDeleted = false
                         };
 
@@ -510,11 +510,11 @@ public class SyncService
                 Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Processed count matches expected total. Marking untouched records as deleted...");
                 
                 var deletedCount = await _dbContext.ScheduleSyncSources
-                    .Where(s => !s.IsDeleted && (s.LastSyncedAt == null || s.LastSyncedAt < runStart))
+                    .Where(s => !s.IsDeleted && (s.LastSyncedDateTime == null || s.LastSyncedDateTime < runStart))
                     .ExecuteUpdateAsync(s => s
                         .SetProperty(x => x.IsDeleted, true)
-                        .SetProperty(x => x.UpdatedAt, DateTime.UtcNow)
-                        .SetProperty(x => x.UpdatedBy, "ApiSync"));
+                        .SetProperty(x => x.ModifiedDateTime, DateTime.UtcNow)
+                        .SetProperty(x => x.ModifiedBy, "ApiSync"));
 
                 result.Deleted = deletedCount;
                 Console.WriteLine($"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] Marked {deletedCount} records as deleted");

@@ -35,23 +35,27 @@ public class SchedulerDbContext : DbContext
 
         modelBuilder.Entity<Client>(entity =>
         {
+            entity.ToTable("Client");
             entity.HasKey(e => e.Id);
             
             entity.Property(e => e.Id)
+                .HasColumnName("ClientId")
                 .HasColumnType("bigint")
                 .HasConversion(intToLongConverter);
             
             entity.Property(e => e.ClientName).IsRequired().HasMaxLength(200);
             entity.Property(e => e.ExternalClientId).IsRequired();
             entity.HasIndex(e => e.ExternalClientId).IsUnique();
-            entity.HasIndex(e => e.LastSyncedAt);
+            entity.HasIndex(e => e.LastSyncedDateTime);
             entity.Property(e => e.ContactEmail).HasMaxLength(255);
             entity.Property(e => e.ContactPhone).HasMaxLength(50);
         });
 
         modelBuilder.Entity<User>(entity =>
         {
+            entity.ToTable("User");
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("UserId");
             entity.Property(e => e.Username).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Email).IsRequired().HasMaxLength(255);
             entity.HasIndex(e => e.Email).IsUnique();
@@ -74,7 +78,9 @@ public class SchedulerDbContext : DbContext
 
         modelBuilder.Entity<UserPermission>(entity =>
         {
+            entity.ToTable("UserPermission");
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("UserPermissionId");
             entity.Property(e => e.PermissionName).IsRequired().HasMaxLength(100);
             entity.Property(e => e.ResourceType).HasMaxLength(50);
             
@@ -86,21 +92,25 @@ public class SchedulerDbContext : DbContext
 
         modelBuilder.Entity<PasswordHistory>(entity =>
         {
+            entity.ToTable("PasswordHistory");
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("PasswordHistoryId");
             entity.Property(e => e.PasswordHash).IsRequired().HasMaxLength(500);
-            entity.Property(e => e.ChangedAt).IsRequired();
+            entity.Property(e => e.ChangedDateTime).IsRequired();
             
             entity.HasOne(e => e.User)
                 .WithMany(u => u.PasswordHistories)
                 .HasForeignKey(e => e.UserId)
                 .OnDelete(DeleteBehavior.Cascade);
                 
-            entity.HasIndex(e => new { e.UserId, e.ChangedAt });
+            entity.HasIndex(e => new { e.UserId, e.ChangedDateTime });
         });
 
         modelBuilder.Entity<Schedule>(entity =>
         {
+            entity.ToTable("Schedule");
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("ScheduleId");
             entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Description).HasMaxLength(1000);
             entity.Property(e => e.CronExpression).IsRequired().HasMaxLength(100);
@@ -119,7 +129,9 @@ public class SchedulerDbContext : DbContext
 
         modelBuilder.Entity<JobExecution>(entity =>
         {
+            entity.ToTable("JobExecution");
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("JobExecutionId");
             entity.Property(e => e.Output).HasColumnType("nvarchar(max)");
             entity.Property(e => e.ErrorMessage).HasColumnType("nvarchar(max)");
             entity.Property(e => e.StackTrace).HasColumnType("nvarchar(max)");
@@ -131,13 +143,15 @@ public class SchedulerDbContext : DbContext
                 .HasForeignKey(e => e.ScheduleId)
                 .OnDelete(DeleteBehavior.Cascade);
                 
-            entity.HasIndex(e => e.StartTime);
+            entity.HasIndex(e => e.StartDateTime);
             entity.HasIndex(e => e.Status);
         });
 
         modelBuilder.Entity<JobParameter>(entity =>
         {
+            entity.ToTable("JobParameter");
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("JobParameterId");
             entity.Property(e => e.ParameterName).IsRequired().HasMaxLength(100);
             entity.Property(e => e.ParameterType).IsRequired().HasMaxLength(50);
             entity.Property(e => e.ParameterValue).HasColumnType("nvarchar(max)");
@@ -152,7 +166,9 @@ public class SchedulerDbContext : DbContext
 
         modelBuilder.Entity<AuditLog>(entity =>
         {
+            entity.ToTable("AuditLog");
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("AuditLogId");
             entity.Property(e => e.EventType).IsRequired().HasMaxLength(100);
             entity.Property(e => e.EntityType).IsRequired().HasMaxLength(100);
             entity.Property(e => e.Action).IsRequired().HasMaxLength(50);
@@ -162,13 +178,15 @@ public class SchedulerDbContext : DbContext
             entity.Property(e => e.OldValues).HasColumnType("nvarchar(max)");
             entity.Property(e => e.NewValues).HasColumnType("nvarchar(max)");
             entity.Property(e => e.AdditionalData).HasColumnType("nvarchar(max)");
-            entity.HasIndex(e => e.Timestamp);
+            entity.HasIndex(e => e.TimestampDateTime);
             entity.HasIndex(e => new { e.EntityType, e.EntityId });
         });
 
         modelBuilder.Entity<NotificationSetting>(entity =>
         {
+            entity.ToTable("NotificationSetting");
             entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("NotificationSettingId");
             entity.Property(e => e.SuccessEmailRecipients).HasMaxLength(1000);
             entity.Property(e => e.FailureEmailRecipients).HasMaxLength(1000);
             entity.Property(e => e.SuccessEmailSubject).HasMaxLength(500);
@@ -181,8 +199,9 @@ public class SchedulerDbContext : DbContext
 
         modelBuilder.Entity<ScheduleSyncSource>(entity =>
         {
+            entity.ToTable("ScheduleSyncSource");
             entity.HasKey(e => e.Id);
-            entity.Property(e => e.Id).HasColumnName("SyncId");
+            entity.Property(e => e.Id).HasColumnName("ScheduleSyncSourceId");
             entity.Property(e => e.AccountNumber).IsRequired().HasMaxLength(128);
             entity.Property(e => e.AccountName).HasMaxLength(64);
             entity.Property(e => e.VendorName).HasMaxLength(64);
@@ -202,7 +221,7 @@ public class SchedulerDbContext : DbContext
             entity.HasIndex(e => e.ExternalClientId);
             entity.HasIndex(e => e.ExternalVendorId);
             entity.HasIndex(e => e.ClientId);
-            entity.HasIndex(e => e.LastSyncedAt);
+            entity.HasIndex(e => e.LastSyncedDateTime);
             entity.HasIndex(e => new { e.ExternalClientId, e.ExternalVendorId, e.AccountNumber });
         });
     }

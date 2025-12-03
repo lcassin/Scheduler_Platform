@@ -134,23 +134,23 @@ else
                 endDate: endOfMonth,
                 clientId: _selectedClientId);
             
-            var filteredSchedules = schedules.Where(s => s.NextRunTime.HasValue).ToList();
+            var filteredSchedules = schedules.Where(s => s.NextRunDateTime.HasValue).ToList();
             
             var groupedByDate = filteredSchedules
-                .GroupBy(s => ConvertToLocalTime(s.NextRunTime!.Value, s.TimeZone).Date)
+                .GroupBy(s => ConvertToLocalTime(s.NextRunDateTime!.Value, s.TimeZone).Date)
                 .ToList();
             
             _scheduleItems = new List<ScheduleCalendarItem>();
             
             foreach (var dateGroup in groupedByDate)
             {
-                var schedulesForDay = dateGroup.OrderBy(s => s.NextRunTime).ToList();
+                var schedulesForDay = dateGroup.OrderBy(s => s.NextRunDateTime).ToList();
                 
                 var itemsToDisplay = schedulesForDay.Take(20).ToList();
                 
                 foreach (var schedule in itemsToDisplay)
                 {
-                    var localTime = ConvertToLocalTime(schedule.NextRunTime!.Value, schedule.TimeZone);
+                    var localTime = ConvertToLocalTime(schedule.NextRunDateTime!.Value, schedule.TimeZone);
                     
                     _scheduleItems.Add(new ScheduleCalendarItem
                     {

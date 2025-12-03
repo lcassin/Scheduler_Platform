@@ -9,7 +9,7 @@ public class UserListItemResponse
     public string FullName => $"{FirstName} {LastName}".Trim();
     public bool IsActive { get; set; }
     public bool IsSystemAdmin { get; set; }
-    public DateTime? LastLoginAt { get; set; }
+    public DateTime? LastLoginDateTime { get; set; }
     public int PermissionCount { get; set; }
     public string Role { get; set; } = string.Empty;
 }

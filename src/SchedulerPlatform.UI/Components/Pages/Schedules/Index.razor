@@ -148,11 +148,11 @@
                 </MudTd>
                 <MudTd DataLabel="Frequency">@context.Frequency.ToString()</MudTd>
                                 <MudTd DataLabel="Next Run">
-                                    @if (context.NextRunTime.HasValue)
+                                    @if (context.NextRunDateTime.HasValue)
                                     {
                                         var tz = GetTimeZoneAbbreviation(context.TimeZone);
-                                        var localTime = ConvertUtcToScheduleTime(context.NextRunTime.Value, context.TimeZone);
-                                        var hoursLate = (DateTime.UtcNow - context.NextRunTime.Value).TotalHours;
+                                        var localTime = ConvertUtcToScheduleTime(context.NextRunDateTime.Value, context.TimeZone);
+                                        var hoursLate = (DateTime.UtcNow - context.NextRunDateTime.Value).TotalHours;
                                         @if (context.IsEnabled && hoursLate > 24)
                                         {
                                             <MudTooltip Text="@($"Missed by {Math.Floor(hoursLate / 24)} day(s) - requires manual trigger")">
@@ -177,10 +177,10 @@
                     {
                         <MudText Typo="Typo.body2" Color="Color.Secondary">N/A</MudText>
                     }
-                    @if (context.LastRunTime.HasValue)
+                    @if (context.LastRunDateTime.HasValue)
                     {
                         var tz = GetTimeZoneAbbreviation(context.TimeZone);
-                        var localTime = ConvertUtcToScheduleTime(context.LastRunTime.Value, context.TimeZone);
+                        var localTime = ConvertUtcToScheduleTime(context.LastRunDateTime.Value, context.TimeZone);
                         <MudText Typo="Typo.caption" Color="Color.Secondary">
                             @localTime.ToString("g") @(!string.IsNullOrEmpty(tz) ? $"({tz})" : "")
                         </MudText>
@@ -380,8 +380,8 @@
 
 			if (_filterDate.HasValue)
 			{
-				items = items.Where(s => s.NextRunTime.HasValue &&
-										s.NextRunTime.Value.Date == _filterDate.Value.Date).ToList();
+				items = items.Where(s => s.NextRunDateTime.HasValue &&
+										s.NextRunDateTime.Value.Date == _filterDate.Value.Date).ToList();
 			}
 
 			// Filter by Last Run Status

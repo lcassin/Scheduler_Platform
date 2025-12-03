@@ -46,7 +46,7 @@ public class ProcessJob : IJob
         var jobExecution = new JobExecution
         {
             ScheduleId = scheduleId,
-            StartTime = DateTime.UtcNow,
+            StartDateTime = DateTime.UtcNow,
             Status = JobStatus.Running,
             TriggeredBy = triggeredBy ?? "Scheduler"
         };
@@ -126,7 +126,7 @@ public class ProcessJob : IJob
                     process.Kill();
                     
                     jobExecution.Status = JobStatus.Cancelled;
-                    jobExecution.EndTime = DateTime.UtcNow;
+                    jobExecution.EndDateTime = DateTime.UtcNow;
                     jobExecution.ErrorMessage = $"Process execution timed out after {timeoutSeconds} seconds";
                     
                     await _unitOfWork.JobExecutions.UpdateAsync(jobExecution);
@@ -155,7 +155,7 @@ public class ProcessJob : IJob
             stopwatch.Stop();
 
             jobExecution.Status = JobStatus.Completed;
-            jobExecution.EndTime = DateTime.UtcNow;
+            jobExecution.EndDateTime = DateTime.UtcNow;
             jobExecution.Output = outputBuilder.ToString();
             jobExecution.DurationSeconds = (int)stopwatch.Elapsed.TotalSeconds;
 
@@ -181,7 +181,7 @@ public class ProcessJob : IJob
             _logger.LogError(ex, "Error executing process job for schedule {ScheduleId}", scheduleId);
 
             jobExecution.Status = JobStatus.Failed;
-            jobExecution.EndTime = DateTime.UtcNow;
+            jobExecution.EndDateTime = DateTime.UtcNow;
             jobExecution.ErrorMessage = ex.Message;
             jobExecution.StackTrace = ex.StackTrace;
             

@@ -7,8 +7,8 @@ namespace SchedulerPlatform.Core.Domain.Entities;
 public class JobExecution : BaseEntity
 {
     public int ScheduleId { get; set; }
-    public DateTime StartTime { get; set; }
-    public DateTime? EndTime { get; set; }
+    public DateTime StartDateTime { get; set; }
+    public DateTime? EndDateTime { get; set; }
     public JobStatus Status { get; set; }
     public string? Output { get; set; }
     public string? ErrorMessage { get; set; }

@@ -90,9 +90,9 @@
                     <MudText Typo="Typo.body1"><strong>@context.Name</strong></MudText>
                 </MudTd>
                 <MudTd DataLabel="Scheduled Time">
-                    @if (context.NextRunTime.HasValue)
+                    @if (context.NextRunDateTime.HasValue)
                     {
-                        <text>@context.NextRunTime.Value.ToString("g")</text>
+                        <text>@context.NextRunDateTime.Value.ToString("g")</text>
                     }
                 </MudTd>
                 <MudTd DataLabel="Time Late">
@@ -102,9 +102,9 @@
                 </MudTd>
                 <MudTd DataLabel="Frequency">@context.Frequency</MudTd>
                 <MudTd DataLabel="Last Run">
-                    @if (context.LastRunTime.HasValue)
+                    @if (context.LastRunDateTime.HasValue)
                     {
-                        <text>@context.LastRunTime.Value.ToString("g")</text>
+                        <text>@context.LastRunDateTime.Value.ToString("g")</text>
                     }
                     else
                     {

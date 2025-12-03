@@ -11,7 +11,7 @@ public class Client : BaseEntity
     public bool IsActive { get; set; }
     public string? ContactEmail { get; set; }
     public string? ContactPhone { get; set; }
-    public DateTime? LastSyncedAt { get; set; }
+    public DateTime? LastSyncedDateTime { get; set; }
     
     [JsonIgnore]
     public ICollection<User> Users { get; set; } = new List<User>();

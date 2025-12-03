@@ -12,8 +12,8 @@ public class Schedule : BaseEntity
     public JobType JobType { get; set; }
     public ScheduleFrequency Frequency { get; set; }
     public string CronExpression { get; set; } = string.Empty;
-    public DateTime? NextRunTime { get; set; }
-    public DateTime? LastRunTime { get; set; }
+    public DateTime? NextRunDateTime { get; set; }
+    public DateTime? LastRunDateTime { get; set; }
     
     [NotMapped]
     public JobStatus? LastRunStatus { get; set; }
