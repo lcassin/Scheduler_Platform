@@ -443,15 +443,15 @@
             
             if (_nextRunDate.HasValue && _nextRunTime.HasValue)
             {
-                _schedule.NextRunTime = _nextRunDate.Value.Add(_nextRunTime.Value);
+                _schedule.NextRunDateTime = _nextRunDate.Value.Add(_nextRunTime.Value);
             }
             else if (_nextRunDate.HasValue)
             {
-                _schedule.NextRunTime = _nextRunDate.Value;
+                _schedule.NextRunDateTime = _nextRunDate.Value;
             }
             else
             {
-                _schedule.NextRunTime = null;
+                _schedule.NextRunDateTime = null;
             }
             
             if (_notifyOnSuccess || _notifyOnFailure)

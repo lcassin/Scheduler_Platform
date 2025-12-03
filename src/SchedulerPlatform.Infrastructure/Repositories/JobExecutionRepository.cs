@@ -303,7 +303,7 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
         return trends.Select(t => (t.Year, t.Month, t.Day, t.Hour, t.ExecutionCount, t.AvgDuration, t.ConcurrentCount)).ToList();
     }
 
-    public async Task<List<(string ScheduleName, int DurationSeconds, DateTime StartTime, DateTime? EndTime)>> GetTopLongestAsync(
+    public async Task<List<(string ScheduleName, int DurationSeconds, DateTime StartDateTime, DateTime? EndDateTime)>> GetTopLongestAsync(
         DateTime startDate, int? clientId, JobStatus[] statuses, int limit)
     {
         var query = _dbSet.AsNoTracking()
