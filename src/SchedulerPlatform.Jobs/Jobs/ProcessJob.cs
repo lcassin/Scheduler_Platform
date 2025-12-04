@@ -43,12 +43,17 @@ public class ProcessJob : IJob
             return;
         }
 
+        var execNow = DateTime.UtcNow;
         var jobExecution = new JobExecution
         {
             ScheduleId = scheduleId,
-            StartDateTime = DateTime.UtcNow,
+            StartDateTime = execNow,
             Status = JobStatus.Running,
-            TriggeredBy = triggeredBy ?? "Scheduler"
+            TriggeredBy = triggeredBy ?? "Scheduler",
+            CreatedDateTime = execNow,
+            CreatedBy = "System",
+            ModifiedDateTime = execNow,
+            ModifiedBy = "System"
         };
 
         await _unitOfWork.JobExecutions.AddAsync(jobExecution);
