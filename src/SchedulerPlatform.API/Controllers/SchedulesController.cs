@@ -135,21 +135,21 @@ public class SchedulesController : ControllerBase
             var notificationSetting = schedule.NotificationSetting;
             schedule.NotificationSetting = null;
 
-            schedule.CreatedAt = DateTime.UtcNow;
+            schedule.CreatedDateTime = DateTime.UtcNow;
             schedule.CreatedBy = User.Identity?.Name ?? "System";
 
-            if (!schedule.IsDeleted && schedule.IsEnabled && !schedule.NextRunTime.HasValue && !string.IsNullOrWhiteSpace(schedule.CronExpression))
+            if (!schedule.IsDeleted && schedule.IsEnabled && !schedule.NextRunDateTime.HasValue && !string.IsNullOrWhiteSpace(schedule.CronExpression))
             {
                 try
                 {
                     var trigger = TriggerBuilder.Create()
                         .WithCronSchedule(schedule.CronExpression)
                         .Build();
-                    schedule.NextRunTime = trigger.GetNextFireTimeUtc()?.DateTime;
+                    schedule.NextRunDateTime = trigger.GetNextFireTimeUtc()?.DateTime;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Could not calculate NextRunTime for schedule {ScheduleId}", schedule.Id);
+                    _logger.LogWarning(ex, "Could not calculate NextRunDateTime for schedule {ScheduleId}", schedule.Id);
                 }
             }
 
@@ -159,7 +159,7 @@ public class SchedulesController : ControllerBase
             if (notificationSetting != null)
             {
                 notificationSetting.ScheduleId = schedule.Id;
-                notificationSetting.CreatedAt = DateTime.UtcNow;
+                notificationSetting.CreatedDateTime = DateTime.UtcNow;
                 notificationSetting.CreatedBy = User.Identity?.Name ?? "System";
                 
                 await _unitOfWork.NotificationSettings.AddAsync(notificationSetting);
@@ -202,26 +202,26 @@ public class SchedulesController : ControllerBase
             var notificationSetting = schedule.NotificationSetting;
             schedule.NotificationSetting = null;
 
-            schedule.UpdatedAt = DateTime.UtcNow;
-            schedule.UpdatedBy = User.Identity?.Name ?? "System";
+            schedule.ModifiedDateTime = DateTime.UtcNow;
+            schedule.ModifiedBy = User.Identity?.Name ?? "System";
 
-            if (!schedule.IsDeleted && schedule.IsEnabled && !schedule.NextRunTime.HasValue && !string.IsNullOrWhiteSpace(schedule.CronExpression))
+            if (!schedule.IsDeleted && schedule.IsEnabled && !schedule.NextRunDateTime.HasValue && !string.IsNullOrWhiteSpace(schedule.CronExpression))
             {
                 try
                 {
                     var trigger = TriggerBuilder.Create()
                         .WithCronSchedule(schedule.CronExpression)
                         .Build();
-                    schedule.NextRunTime = trigger.GetNextFireTimeUtc()?.DateTime;
+                    schedule.NextRunDateTime = trigger.GetNextFireTimeUtc()?.DateTime;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Could not calculate NextRunTime for schedule {ScheduleId}", schedule.Id);
+                    _logger.LogWarning(ex, "Could not calculate NextRunDateTime for schedule {ScheduleId}", schedule.Id);
                 }
             }
             else if (schedule.IsDeleted || !schedule.IsEnabled)
             {
-                schedule.NextRunTime = null;
+                schedule.NextRunDateTime = null;
             }
 
             await _unitOfWork.Schedules.UpdateAsync(schedule);
@@ -234,9 +234,9 @@ public class SchedulesController : ControllerBase
                 {
                     notificationSetting.Id = existingNotification.Id;
                     notificationSetting.ScheduleId = schedule.Id;
-                    notificationSetting.UpdatedAt = DateTime.UtcNow;
-                    notificationSetting.UpdatedBy = User.Identity?.Name ?? "System";
-                    notificationSetting.CreatedAt = existingNotification.CreatedAt;
+                    notificationSetting.ModifiedDateTime = DateTime.UtcNow;
+                    notificationSetting.ModifiedBy = User.Identity?.Name ?? "System";
+                    notificationSetting.CreatedDateTime = existingNotification.CreatedDateTime;
                     notificationSetting.CreatedBy = existingNotification.CreatedBy;
                     
                     await _unitOfWork.NotificationSettings.UpdateAsync(notificationSetting);
@@ -244,7 +244,7 @@ public class SchedulesController : ControllerBase
                 else
                 {
                     notificationSetting.ScheduleId = schedule.Id;
-                    notificationSetting.CreatedAt = DateTime.UtcNow;
+                    notificationSetting.CreatedDateTime = DateTime.UtcNow;
                     notificationSetting.CreatedBy = User.Identity?.Name ?? "System";
                     
                     await _unitOfWork.NotificationSettings.AddAsync(notificationSetting);
@@ -296,8 +296,8 @@ public class SchedulesController : ControllerBase
             await _schedulerService.UnscheduleJob(schedule.Id, schedule.ClientId);
 
             schedule.IsDeleted = true;
-            schedule.UpdatedAt = DateTime.UtcNow;
-            schedule.UpdatedBy = User.Identity?.Name ?? "System";
+            schedule.ModifiedDateTime = DateTime.UtcNow;
+            schedule.ModifiedBy = User.Identity?.Name ?? "System";
 
             await _unitOfWork.Schedules.UpdateAsync(schedule);
             await _unitOfWork.SaveChangesAsync();
@@ -459,7 +459,7 @@ public class SchedulesController : ControllerBase
                         JobConfiguration = request.JobConfiguration,
                         MaxRetries = request.MaxRetries,
                         RetryDelayMinutes = request.RetryDelayMinutes,
-                        CreatedAt = DateTime.UtcNow,
+                        CreatedDateTime = DateTime.UtcNow,
                         CreatedBy = User.Identity?.Name ?? "System"
                     };
                     
@@ -596,23 +596,23 @@ public class SchedulesController : ControllerBase
 
             if (startDate.HasValue || endDate.HasValue)
             {
-                schedules = schedules.Where(s => s.NextRunTime.HasValue).ToList();
+                schedules = schedules.Where(s => s.NextRunDateTime.HasValue).ToList();
                 
                 if (startDate.HasValue)
                 {
-                    schedules = schedules.Where(s => s.NextRunTime!.Value >= startDate.Value).ToList();
+                    schedules = schedules.Where(s => s.NextRunDateTime!.Value >= startDate.Value).ToList();
                 }
                 
                 if (endDate.HasValue)
                 {
-                    schedules = schedules.Where(s => s.NextRunTime!.Value <= endDate.Value).ToList();
+                    schedules = schedules.Where(s => s.NextRunDateTime!.Value <= endDate.Value).ToList();
                 }
             }
 
             if (string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
             {
                 var csv = new StringBuilder();
-                csv.AppendLine("Id,Name,Description,ClientId,JobType,Frequency,CronExpression,NextRunTime,LastRunTime,IsEnabled,MaxRetries,RetryDelayMinutes,TimeZone,EnableSuccessNotifications,EnableFailureNotifications,FailureEmailRecipients,FailureEmailSubject,IncludeExecutionDetails,IncludeOutput");
+                csv.AppendLine("Id,Name,Description,ClientId,JobType,Frequency,CronExpression,NextRunDateTime,LastRunDateTime,IsEnabled,MaxRetries,RetryDelayMinutes,TimeZone,EnableSuccessNotifications,EnableFailureNotifications,FailureEmailRecipients,FailureEmailSubject,IncludeExecutionDetails,IncludeOutput");
                 
                 foreach (var s in schedules)
                 {
@@ -625,8 +625,8 @@ public class SchedulesController : ControllerBase
                         s.JobType,
                         s.Frequency,
                         CsvEscape(s.CronExpression),
-                        s.NextRunTime?.ToString("o") ?? "",
-                        s.LastRunTime?.ToString("o") ?? "",
+                        s.NextRunDateTime?.ToString("o") ?? "",
+                        s.LastRunDateTime?.ToString("o") ?? "",
                         s.IsEnabled,
                         s.MaxRetries,
                         s.RetryDelayMinutes,
@@ -650,7 +650,7 @@ public class SchedulesController : ControllerBase
                 
                 var headers = new[] {
                     "Id", "Name", "Description", "ClientId", "JobType", "Frequency", "CronExpression",
-                    "NextRunTime", "LastRunTime", "IsEnabled", "MaxRetries", "RetryDelayMinutes", "TimeZone",
+                    "NextRunDateTime", "LastRunDateTime", "IsEnabled", "MaxRetries", "RetryDelayMinutes", "TimeZone",
                     "EnableSuccessNotifications", "EnableFailureNotifications", "FailureEmailRecipients",
                     "FailureEmailSubject", "IncludeExecutionDetails", "IncludeOutput"
                 };
@@ -671,8 +671,8 @@ public class SchedulesController : ControllerBase
                     worksheet.Cell(row, 5).Value = s.JobType.ToString();
                     worksheet.Cell(row, 6).Value = s.Frequency.ToString();
                     worksheet.Cell(row, 7).Value = s.CronExpression;
-                    if (s.NextRunTime.HasValue) worksheet.Cell(row, 8).Value = s.NextRunTime.Value;
-                    if (s.LastRunTime.HasValue) worksheet.Cell(row, 9).Value = s.LastRunTime.Value;
+                    if (s.NextRunDateTime.HasValue) worksheet.Cell(row, 8).Value = s.NextRunDateTime.Value;
+                    if (s.LastRunDateTime.HasValue) worksheet.Cell(row, 9).Value = s.LastRunDateTime.Value;
                     worksheet.Cell(row, 10).Value = s.IsEnabled;
                     worksheet.Cell(row, 11).Value = s.MaxRetries;
                     worksheet.Cell(row, 12).Value = s.RetryDelayMinutes;
@@ -775,9 +775,9 @@ public class SchedulesController : ControllerBase
             var missedSchedules = await _unitOfWork.Schedules.FindAsync(s =>
                 s.IsEnabled &&
                 !s.IsDeleted &&
-                s.NextRunTime.HasValue &&
-                s.NextRunTime.Value < now &&
-                s.NextRunTime.Value >= windowStart);
+                s.NextRunDateTime.HasValue &&
+                s.NextRunDateTime.Value < now &&
+                s.NextRunDateTime.Value >= windowStart);
 
             var count = missedSchedules.Count();
 
@@ -811,25 +811,25 @@ public class SchedulesController : ControllerBase
             var missedSchedules = await _unitOfWork.Schedules.FindAsync(s =>
                 s.IsEnabled &&
                 !s.IsDeleted &&
-                s.NextRunTime.HasValue &&
-                s.NextRunTime.Value < now &&
-                s.NextRunTime.Value >= windowStart);
+                s.NextRunDateTime.HasValue &&
+                s.NextRunDateTime.Value < now &&
+                s.NextRunDateTime.Value >= windowStart);
 
             var missedList = missedSchedules
-                .OrderBy(s => s.NextRunTime)
+                .OrderBy(s => s.NextRunDateTime)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
-                .Select(s => new
-                {
-                    s.Id,
-                    s.Name,
-                    s.ClientId,
-                    s.NextRunTime,
-                    s.Frequency,
-                    s.CronExpression,
-                    s.LastRunTime,
-                    MinutesLate = s.NextRunTime.HasValue ? (now - s.NextRunTime.Value).TotalMinutes : 0
-                })
+                                .Select(s => new
+                                {
+                                    s.Id,
+                                    s.Name,
+                                    s.ClientId,
+                                    s.NextRunDateTime,
+                                    Frequency = s.Frequency.ToString(),
+                                    s.CronExpression,
+                                    s.LastRunDateTime,
+                                    MinutesLate = s.NextRunDateTime.HasValue ? (now - s.NextRunDateTime.Value).TotalMinutes : 0
+                                })
                 .ToList();
 
             var totalCount = missedSchedules.Count();
@@ -964,7 +964,7 @@ public class SchedulesController : ControllerBase
                 s.Id,
                 s.Name,
                 s.ClientId,
-                s.NextRunTime,
+                s.NextRunDateTime,
                 s.TimeZone,
                 s.IsEnabled
             });

@@ -167,8 +167,8 @@ public class DashboardController : ControllerBase
             {
                 ScheduleName = t.ScheduleName,
                 DurationSeconds = t.DurationSeconds,
-                StartTime = t.StartTime,
-                EndTime = t.EndTime
+                StartDateTime = t.StartDateTime,
+                EndDateTime = t.EndDateTime
             }).ToList();
 
             return Ok(topLongest);
@@ -243,7 +243,7 @@ public class DashboardController : ControllerBase
                 var schedulingFailure = recentExecutions
                     .Where(e => e.ErrorMessage != null && 
                            e.ErrorMessage.Contains("Failed to schedule", StringComparison.OrdinalIgnoreCase))
-                    .OrderByDescending(e => e.StartTime)
+                    .OrderByDescending(e => e.StartDateTime)
                     .FirstOrDefault();
 
                 if (schedulingFailure != null)
@@ -259,7 +259,7 @@ public class DashboardController : ControllerBase
                         Name = schedule.Name,
                         IsEnabled = schedule.IsEnabled,
                         ValidationErrors = validationErrors,
-                        LastFailureTime = schedulingFailure?.StartTime,
+                        LastFailureDateTime = schedulingFailure?.StartDateTime,
                         LastErrorMessage = schedulingFailure?.ErrorMessage
                     });
                 }
@@ -341,11 +341,11 @@ public class DashboardController : ControllerBase
 
         foreach (var execution in executions)
         {
-            events.Add((execution.StartTime, 1));
+            events.Add((execution.StartDateTime, 1));
             
-            if (execution.EndTime.HasValue)
+            if (execution.EndDateTime.HasValue)
             {
-                events.Add((execution.EndTime.Value, -1));
+                events.Add((execution.EndDateTime.Value, -1));
             }
         }
 

@@ -136,20 +136,20 @@ public class JobExecutionsController : ControllerBase
             if (string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
             {
                 var csv = new StringBuilder();
-                csv.AppendLine("Id,ScheduleId,ScheduleName,StartTime,EndTime,DurationSeconds,Status,RetryCount,ErrorMessage");
+                csv.AppendLine("Id,ScheduleId,ScheduleName,StartDateTime,EndDateTime,DurationSeconds,Status,RetryCount,ErrorMessage");
                 
                 foreach (var e in executions)
                 {
-                    var duration = e.EndTime.HasValue 
-                        ? (e.EndTime.Value - e.StartTime).TotalSeconds 
+                    var duration = e.EndDateTime.HasValue 
+                        ? (e.EndDateTime.Value - e.StartDateTime).TotalSeconds 
                         : (double?)null;
                     
                     csv.AppendLine(string.Join(",",
                         e.Id,
                         e.ScheduleId,
                         CsvEscape(e.Schedule.Name),
-                        e.StartTime.ToString("o"),
-                        e.EndTime?.ToString("o") ?? "",
+                        e.StartDateTime.ToString("o"),
+                        e.EndDateTime?.ToString("o") ?? "",
                         duration?.ToString(CultureInfo.InvariantCulture) ?? "",
                         e.Status,
                         e.RetryCount,
@@ -166,7 +166,7 @@ public class JobExecutionsController : ControllerBase
                 var worksheet = workbook.Worksheets.Add("JobExecutions");
                 
                 var headers = new[] {
-                    "Id", "ScheduleId", "ScheduleName", "StartTime", "EndTime", 
+                    "Id", "ScheduleId", "ScheduleName", "StartDateTime", "EndDateTime", 
                     "Duration", "Status", "RetryCount", "ErrorMessage"
                 };
                 
@@ -181,11 +181,11 @@ public class JobExecutionsController : ControllerBase
                     worksheet.Cell(row, 1).Value = e.Id;
                     worksheet.Cell(row, 2).Value = e.ScheduleId;
                     worksheet.Cell(row, 3).Value = e.Schedule.Name;
-                    worksheet.Cell(row, 4).Value = e.StartTime;
-                    if (e.EndTime.HasValue) worksheet.Cell(row, 5).Value = e.EndTime.Value;
-                    if (e.EndTime.HasValue)
+                    worksheet.Cell(row, 4).Value = e.StartDateTime;
+                    if (e.EndDateTime.HasValue) worksheet.Cell(row, 5).Value = e.EndDateTime.Value;
+                    if (e.EndDateTime.HasValue)
                     {
-                        var duration = e.EndTime.Value - e.StartTime;
+                        var duration = e.EndDateTime.Value - e.StartDateTime;
                         worksheet.Cell(row, 6).Value = duration.ToString();
                     }
                     worksheet.Cell(row, 7).Value = e.Status.ToString();
@@ -253,7 +253,7 @@ public class JobExecutionsController : ControllerBase
             }
             
             execution.Status = JobStatus.Cancelled;
-            execution.EndTime = DateTime.UtcNow;
+            execution.EndDateTime = DateTime.UtcNow;
             execution.ErrorMessage = "Job was manually cancelled by user";
             execution.CancelledBy = User.Identity?.Name ?? "Unknown";
             

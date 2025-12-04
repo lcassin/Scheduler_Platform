@@ -614,24 +614,11 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("SchedulerPlatform.Core.Domain.Entities.VendorCredential", b =>
-                {
-                    b.HasOne("SchedulerPlatform.Core.Domain.Entities.Client", "Client")
-                        .WithMany("VendorCredentials")
-                        .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Client");
-                });
-
             modelBuilder.Entity("SchedulerPlatform.Core.Domain.Entities.Client", b =>
                 {
                     b.Navigation("Schedules");
 
                     b.Navigation("Users");
-
-                    b.Navigation("VendorCredentials");
                 });
 
             modelBuilder.Entity("SchedulerPlatform.Core.Domain.Entities.Schedule", b =>

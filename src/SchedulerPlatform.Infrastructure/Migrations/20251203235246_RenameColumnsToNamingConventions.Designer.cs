@@ -12,15 +12,15 @@ using SchedulerPlatform.Infrastructure.Data;
 namespace SchedulerPlatform.Infrastructure.Migrations
 {
     [DbContext(typeof(SchedulerDbContext))]
-    [Migration("20251027162823_AddTimeoutMinutesToSchedule")]
-    partial class AddTimeoutMinutesToSchedule
+    [Migration("20251203235246_RenameColumnsToNamingConventions")]
+    partial class RenameColumnsToNamingConventions
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.10")
+                .HasAnnotation("ProductVersion", "10.0.0")
                 .HasAnnotation("Relational:MaxIdentifierLength", 128);
 
             SqlServerModelBuilderExtensions.UseIdentityColumns(modelBuilder);
@@ -29,7 +29,8 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
+                        .HasColumnType("int")
+                        .HasColumnName("AuditLogId");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
@@ -44,11 +45,11 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                     b.Property<int?>("ClientId")
                         .HasColumnType("int");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedDateTime")
+                        .HasColumnType("datetime2");
 
                     b.Property<int?>("EntityId")
                         .HasColumnType("int");
@@ -70,20 +71,20 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<string>("ModifiedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("ModifiedDateTime")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("NewValues")
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("OldValues")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime>("Timestamp")
+                    b.Property<DateTime>("TimestampDateTime")
                         .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("UserAgent")
                         .HasMaxLength(500)
@@ -96,25 +97,25 @@ namespace SchedulerPlatform.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Timestamp");
+                    b.HasIndex("TimestampDateTime");
 
                     b.HasIndex("EntityType", "EntityId");
 
-                    b.ToTable("AuditLogs");
+                    b.ToTable("AuditLog", (string)null);
                 });
 
             modelBuilder.Entity("SchedulerPlatform.Core.Domain.Entities.Client", b =>
                 {
-                    b.Property<int>("Id")
+                    b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
+                        .HasColumnType("bigint")
+                        .HasColumnName("ClientId");
 
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
 
                     b.Property<string>("ClientCode")
                         .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("ClientName")
                         .IsRequired()
@@ -129,11 +130,14 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedDateTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ExternalClientId")
+                        .HasColumnType("int");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("bit");
@@ -141,38 +145,48 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
-                    b.Property<DateTime?>("UpdatedAt")
+                    b.Property<DateTime?>("LastSyncedDateTime")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("UpdatedBy")
+                    b.Property<string>("ModifiedBy")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("ModifiedDateTime")
+                        .HasColumnType("datetime2");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ClientCode")
+                    b.HasIndex("ExternalClientId")
                         .IsUnique();
 
-                    b.ToTable("Clients");
+                    b.HasIndex("LastSyncedDateTime");
+
+                    b.ToTable("Client", (string)null);
                 });
 
             modelBuilder.Entity("SchedulerPlatform.Core.Domain.Entities.JobExecution", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
+                        .HasColumnType("int")
+                        .HasColumnName("JobExecutionId");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
+                    b.Property<string>("CancelledBy")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<DateTime>("CreatedDateTime")
+                        .HasColumnType("datetime2");
+
                     b.Property<int?>("DurationSeconds")
                         .HasColumnType("int");
 
-                    b.Property<DateTime?>("EndTime")
+                    b.Property<DateTime?>("EndDateTime")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("ErrorMessage")
@@ -180,6 +194,12 @@ namespace SchedulerPlatform.Infrastructure.Migrations
 
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("ModifiedDateTime")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("Output")
                         .HasColumnType("nvarchar(max)");
@@ -193,7 +213,7 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                     b.Property<string>("StackTrace")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime>("StartTime")
+                    b.Property<DateTime>("StartDateTime")
                         .HasColumnType("datetime2");
 
                     b.Property<int>("Status")
@@ -203,36 +223,31 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("nvarchar(max)");
-
                     b.HasKey("Id");
 
                     b.HasIndex("ScheduleId");
 
-                    b.HasIndex("StartTime");
+                    b.HasIndex("StartDateTime");
 
                     b.HasIndex("Status");
 
-                    b.ToTable("JobExecutions");
+                    b.ToTable("JobExecution", (string)null);
                 });
 
             modelBuilder.Entity("SchedulerPlatform.Core.Domain.Entities.JobParameter", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
+                        .HasColumnType("int")
+                        .HasColumnName("JobParameterId");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedDateTime")
+                        .HasColumnType("datetime2");
 
                     b.Property<int>("DisplayOrder")
                         .HasColumnType("int");
@@ -242,6 +257,12 @@ namespace SchedulerPlatform.Infrastructure.Migrations
 
                     b.Property<bool>("IsDynamic")
                         .HasColumnType("bit");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("ModifiedDateTime")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("ParameterName")
                         .IsRequired()
@@ -266,32 +287,27 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                     b.Property<string>("SourceQuery")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("nvarchar(max)");
-
                     b.HasKey("Id");
 
                     b.HasIndex("ScheduleId");
 
-                    b.ToTable("JobParameters");
+                    b.ToTable("JobParameter", (string)null);
                 });
 
             modelBuilder.Entity("SchedulerPlatform.Core.Domain.Entities.NotificationSetting", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
+                        .HasColumnType("int")
+                        .HasColumnName("NotificationSettingId");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedDateTime")
+                        .HasColumnType("datetime2");
 
                     b.Property<bool>("EnableFailureNotifications")
                         .HasColumnType("bit");
@@ -316,6 +332,12 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<string>("ModifiedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("ModifiedDateTime")
+                        .HasColumnType("datetime2");
+
                     b.Property<int>("ScheduleId")
                         .HasColumnType("int");
 
@@ -327,36 +349,73 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("nvarchar(max)");
-
                     b.HasKey("Id");
 
                     b.HasIndex("ScheduleId")
                         .IsUnique();
 
-                    b.ToTable("NotificationSettings");
+                    b.ToTable("NotificationSetting", (string)null);
+                });
+
+            modelBuilder.Entity("SchedulerPlatform.Core.Domain.Entities.PasswordHistory", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("PasswordHistoryId");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("ChangedDateTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("CreatedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedDateTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("ModifiedDateTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PasswordHash")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "ChangedDateTime");
+
+                    b.ToTable("PasswordHistory", (string)null);
                 });
 
             modelBuilder.Entity("SchedulerPlatform.Core.Domain.Entities.Schedule", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
+                        .HasColumnType("int")
+                        .HasColumnName("ScheduleId");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("ClientId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
+                    b.Property<long>("ClientId")
+                        .HasColumnType("bigint");
 
                     b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedDateTime")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("CronExpression")
                         .IsRequired()
@@ -383,18 +442,24 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                     b.Property<int>("JobType")
                         .HasColumnType("int");
 
-                    b.Property<DateTime?>("LastRunTime")
+                    b.Property<DateTime?>("LastRunDateTime")
                         .HasColumnType("datetime2");
 
                     b.Property<int>("MaxRetries")
                         .HasColumnType("int");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("ModifiedDateTime")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
-                    b.Property<DateTime?>("NextRunTime")
+                    b.Property<DateTime?>("NextRunDateTime")
                         .HasColumnType("datetime2");
 
                     b.Property<int>("RetryDelayMinutes")
@@ -407,95 +472,126 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                     b.Property<int?>("TimeoutMinutes")
                         .HasColumnType("int");
 
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("nvarchar(max)");
-
                     b.HasKey("Id");
 
                     b.HasIndex("ClientId");
 
-                    b.ToTable("Schedules");
+                    b.ToTable("Schedule", (string)null);
                 });
 
             modelBuilder.Entity("SchedulerPlatform.Core.Domain.Entities.ScheduleSyncSource", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
+                        .HasColumnType("int")
+                        .HasColumnName("ScheduleSyncSourceId");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("AccountName")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
                     b.Property<string>("AccountNumber")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
 
-                    b.Property<int>("ClientId")
-                        .HasColumnType("int");
+                    b.Property<long?>("ClientId")
+                        .HasColumnType("bigint");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
+                    b.Property<string>("ClientName")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
                     b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<DateTime>("CreatedDateTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("CredentialId")
+                        .HasColumnType("int");
+
+                    b.Property<long>("ExternalAccountId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("ExternalClientId")
+                        .HasColumnType("int");
+
+                    b.Property<long>("ExternalVendorId")
+                        .HasColumnType("bigint");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
-                    b.Property<DateTime>("ScheduleDate")
+                    b.Property<DateTime>("LastInvoiceDateTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("LastSyncedDateTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("ModifiedDateTime")
                         .HasColumnType("datetime2");
 
                     b.Property<int>("ScheduleFrequency")
                         .HasColumnType("int");
 
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
+                    b.Property<string>("TandemAccountId")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Vendor")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                    b.Property<string>("VendorName")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
 
                     b.HasKey("Id");
 
                     b.HasIndex("ClientId");
 
-                    b.HasIndex("ScheduleDate");
+                    b.HasIndex("ExternalAccountId")
+                        .IsUnique();
 
-                    b.HasIndex("ScheduleFrequency");
+                    b.HasIndex("ExternalClientId");
 
-                    b.HasIndex("ClientId", "Vendor", "AccountNumber");
+                    b.HasIndex("ExternalVendorId");
 
-                    b.ToTable("ScheduleSyncSources");
+                    b.HasIndex("LastSyncedDateTime");
+
+                    b.HasIndex("ExternalClientId", "ExternalVendorId", "AccountNumber");
+
+                    b.ToTable("ScheduleSyncSource", (string)null);
                 });
 
             modelBuilder.Entity("SchedulerPlatform.Core.Domain.Entities.User", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
+                        .HasColumnType("int")
+                        .HasColumnName("UserId");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<int>("ClientId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
+                    b.Property<long>("ClientId")
+                        .HasColumnType("bigint");
 
                     b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedDateTime")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(255)
                         .HasColumnType("nvarchar(255)");
+
+                    b.Property<string>("ExternalIssuer")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<string>("ExternalUserId")
                         .HasMaxLength(255)
@@ -512,16 +608,32 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsSystemAdmin")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("LastLoginDateTime")
+                        .HasColumnType("datetime2");
+
                     b.Property<string>("LastName")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
-                    b.Property<DateTime?>("UpdatedAt")
+                    b.Property<string>("ModifiedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("ModifiedDateTime")
                         .HasColumnType("datetime2");
 
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<bool>("MustChangePassword")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTime?>("PasswordChangedDateTime")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PasswordHash")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<string>("Username")
                         .IsRequired()
@@ -535,14 +647,17 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                     b.HasIndex("Email")
                         .IsUnique();
 
-                    b.ToTable("Users");
+                    b.HasIndex("ExternalIssuer", "ExternalUserId");
+
+                    b.ToTable("User", (string)null);
                 });
 
             modelBuilder.Entity("SchedulerPlatform.Core.Domain.Entities.UserPermission", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
+                        .HasColumnType("int")
+                        .HasColumnName("UserPermissionId");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
@@ -561,14 +676,20 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                     b.Property<bool>("CanUpdate")
                         .HasColumnType("bit");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
                     b.Property<string>("CreatedBy")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<DateTime>("CreatedDateTime")
+                        .HasColumnType("datetime2");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("bit");
+
+                    b.Property<string>("ModifiedBy")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("ModifiedDateTime")
+                        .HasColumnType("datetime2");
 
                     b.Property<string>("PermissionName")
                         .IsRequired()
@@ -582,12 +703,6 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("UpdatedBy")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<int>("UserId")
                         .HasColumnType("int");
 
@@ -595,10 +710,8 @@ namespace SchedulerPlatform.Infrastructure.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("UserPermissions");
+                    b.ToTable("UserPermission", (string)null);
                 });
-
-           
 
             modelBuilder.Entity("SchedulerPlatform.Core.Domain.Entities.JobExecution", b =>
                 {
@@ -633,6 +746,17 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                     b.Navigation("Schedule");
                 });
 
+            modelBuilder.Entity("SchedulerPlatform.Core.Domain.Entities.PasswordHistory", b =>
+                {
+                    b.HasOne("SchedulerPlatform.Core.Domain.Entities.User", "User")
+                        .WithMany("PasswordHistories")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("SchedulerPlatform.Core.Domain.Entities.Schedule", b =>
                 {
                     b.HasOne("SchedulerPlatform.Core.Domain.Entities.Client", "Client")
@@ -649,8 +773,7 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                     b.HasOne("SchedulerPlatform.Core.Domain.Entities.Client", "Client")
                         .WithMany("ScheduleSyncSources")
                         .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Client");
                 });
@@ -697,6 +820,8 @@ namespace SchedulerPlatform.Infrastructure.Migrations
 
             modelBuilder.Entity("SchedulerPlatform.Core.Domain.Entities.User", b =>
                 {
+                    b.Navigation("PasswordHistories");
+
                     b.Navigation("Permissions");
                 });
 #pragma warning restore 612, 618

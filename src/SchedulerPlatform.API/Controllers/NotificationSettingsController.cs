@@ -47,7 +47,7 @@ public class NotificationSettingsController : ControllerBase
         if (schedule == null)
             return BadRequest("Schedule not found");
 
-        notificationSetting.CreatedAt = DateTime.UtcNow;
+        notificationSetting.CreatedDateTime = DateTime.UtcNow;
         notificationSetting.CreatedBy = User.Identity?.Name ?? "System";
 
         await _repository.AddAsync(notificationSetting);
@@ -77,14 +77,14 @@ public class NotificationSettingsController : ControllerBase
         existing.FailureEmailSubject = notificationSetting.FailureEmailSubject;
         existing.IncludeExecutionDetails = notificationSetting.IncludeExecutionDetails;
         existing.IncludeOutput = notificationSetting.IncludeOutput;
-        existing.UpdatedAt = DateTime.UtcNow;
-        existing.UpdatedBy = User.Identity?.Name ?? "System";
+        existing.ModifiedDateTime = DateTime.UtcNow;
+        existing.ModifiedBy = User.Identity?.Name ?? "System";
 
         await _repository.UpdateAsync(existing);
         await _unitOfWork.SaveChangesAsync();
 
         _logger.LogInformation("Notification settings updated for schedule {ScheduleId} by {User}", 
-            existing.ScheduleId, existing.UpdatedBy);
+            existing.ScheduleId, existing.ModifiedBy);
 
         return NoContent();
     }

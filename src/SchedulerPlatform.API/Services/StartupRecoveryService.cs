@@ -60,13 +60,13 @@ namespace SchedulerPlatform.API.Services
 
                 var affectedRows = await dbContext.JobExecutions
                     .Where(e => e.Status == JobStatus.Running 
-                             && e.EndTime == null 
-                             && e.StartTime < cutoffTime)
+                             && e.EndDateTime == null 
+                             && e.StartDateTime < cutoffTime)
                     .ExecuteUpdateAsync(setters => setters
                         .SetProperty(e => e.Status, JobStatus.Failed)
-                        .SetProperty(e => e.EndTime, now)
+                        .SetProperty(e => e.EndDateTime, now)
                         .SetProperty(e => e.ErrorMessage, "Application restarted while job was running; marked as Failed by startup recovery.")
-                        .SetProperty(e => e.DurationSeconds, e => (int)EF.Functions.DateDiffSecond(e.StartTime, now)),
+                        .SetProperty(e => e.DurationSeconds, e => (int)EF.Functions.DateDiffSecond(e.StartDateTime, now)),
                         cancellationToken);
 
                 if (affectedRows > 0)

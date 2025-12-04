@@ -177,8 +177,8 @@ public class EmailService : IEmailService
             sb.AppendLine($"<div class='detail'><span class='label'>Schedule:</span> {schedule.Name}</div>");
             sb.AppendLine($"<div class='detail'><span class='label'>Description:</span> {schedule.Description}</div>");
             sb.AppendLine($"<div class='detail'><span class='label'>Job Type:</span> {schedule.JobType}</div>");
-            sb.AppendLine($"<div class='detail'><span class='label'>Start Time:</span> {jobExecution.StartTime:yyyy-MM-dd HH:mm:ss UTC}</div>");
-            sb.AppendLine($"<div class='detail'><span class='label'>End Time:</span> {jobExecution.EndTime:yyyy-MM-dd HH:mm:ss UTC}</div>");
+            sb.AppendLine($"<div class='detail'><span class='label'>Start Time:</span> {jobExecution.StartDateTime:yyyy-MM-dd HH:mm:ss UTC}</div>");
+            sb.AppendLine($"<div class='detail'><span class='label'>End Time:</span> {jobExecution.EndDateTime:yyyy-MM-dd HH:mm:ss UTC}</div>");
             
             if (jobExecution.DurationSeconds.HasValue)
             {
