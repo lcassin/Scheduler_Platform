@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SchedulerPlatform.Infrastructure.Data;
 
@@ -11,9 +12,11 @@ using SchedulerPlatform.Infrastructure.Data;
 namespace SchedulerPlatform.Infrastructure.Migrations
 {
     [DbContext(typeof(SchedulerDbContext))]
-    partial class SchedulerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251203235246_RenameColumnsToNamingConventions")]
+    partial class RenameColumnsToNamingConventions
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
