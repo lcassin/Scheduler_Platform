@@ -30,7 +30,7 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
     {
         var executions = await _dbSet
             .Include(je => je.Schedule)
-            .OrderByDescending(je => je.StartTime)
+            .OrderByDescending(je => je.StartDateTime)
             .ToListAsync();
         
         foreach (var execution in executions)
@@ -46,7 +46,7 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
         var executions = await _dbSet
             .Include(je => je.Schedule)
             .Where(je => je.ScheduleId == scheduleId)
-            .OrderByDescending(je => je.StartTime)
+            .OrderByDescending(je => je.StartDateTime)
             .ToListAsync();
         
         foreach (var execution in executions)
@@ -62,7 +62,7 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
         var executions = await _dbSet
             .Include(je => je.Schedule)
             .Where(je => je.Status == status)
-            .OrderByDescending(je => je.StartTime)
+            .OrderByDescending(je => je.StartDateTime)
             .ToListAsync();
         
         foreach (var execution in executions)
@@ -78,7 +78,7 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
         var executions = await _dbSet
             .Include(je => je.Schedule)
             .Where(je => je.ScheduleId == scheduleId && je.Status == JobStatus.Failed)
-            .OrderByDescending(je => je.StartTime)
+            .OrderByDescending(je => je.StartDateTime)
             .ToListAsync();
         
         foreach (var execution in executions)
@@ -94,7 +94,7 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
         var execution = await _dbSet
             .Include(je => je.Schedule)
             .Where(je => je.ScheduleId == scheduleId)
-            .OrderByDescending(je => je.StartTime)
+            .OrderByDescending(je => je.StartDateTime)
             .FirstOrDefaultAsync();
         
         if (execution != null)
@@ -125,17 +125,17 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
         
         if (startDate.HasValue)
         {
-            query = query.Where(je => je.StartTime >= startDate.Value);
+            query = query.Where(je => je.StartDateTime >= startDate.Value);
         }
         
         if (endDate.HasValue)
         {
-            query = query.Where(je => je.EndTime.HasValue 
-                ? je.EndTime.Value <= endDate.Value 
-                : je.StartTime <= endDate.Value);
+            query = query.Where(je => je.EndDateTime.HasValue 
+                ? je.EndDateTime.Value <= endDate.Value 
+                : je.StartDateTime <= endDate.Value);
         }
 
-        query = query.OrderByDescending(je => je.StartTime);
+        query = query.OrderByDescending(je => je.StartDateTime);
         
         var executions = await query.ToListAsync();
         
@@ -150,7 +150,7 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
     public async Task<int> GetRunningCountAsync(DateTime startDate, int? clientId)
     {
         var query = _dbSet.AsNoTracking()
-            .Where(e => e.StartTime >= startDate)
+            .Where(e => e.StartDateTime >= startDate)
             .Where(e => e.Status == JobStatus.Running || e.Status == JobStatus.Retrying)
             .Where(e => !e.Schedule.IsDeleted);
 
@@ -165,7 +165,7 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
     public async Task<int> GetCompletedTodayCountAsync(DateTime today, int? clientId)
     {
         var query = _dbSet.AsNoTracking()
-            .Where(e => e.StartTime >= today)
+            .Where(e => e.StartDateTime >= today)
             .Where(e => e.Status == JobStatus.Completed)
             .Where(e => !e.Schedule.IsDeleted);
 
@@ -180,7 +180,7 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
     public async Task<int> GetFailedTodayCountAsync(DateTime today, int? clientId)
     {
         var query = _dbSet.AsNoTracking()
-            .Where(e => e.StartTime >= today)
+            .Where(e => e.StartDateTime >= today)
             .Where(e => e.Status == JobStatus.Failed)
             .Where(e => !e.Schedule.IsDeleted);
 
@@ -195,7 +195,7 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
     public async Task<double> GetAverageDurationAsync(DateTime startDate, int? clientId)
     {
         var query = _dbSet.AsNoTracking()
-            .Where(e => e.StartTime >= startDate)
+            .Where(e => e.StartDateTime >= startDate)
             .Where(e => e.DurationSeconds.HasValue)
             .Where(e => !e.Schedule.IsDeleted);
 
@@ -211,7 +211,7 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
     public async Task<int> GetTotalExecutionsCountAsync(DateTime startDate, int? clientId)
     {
         var query = _dbSet.AsNoTracking()
-            .Where(e => e.StartTime >= startDate)
+            .Where(e => e.StartDateTime >= startDate)
             .Where(e => !e.Schedule.IsDeleted);
 
         if (clientId.HasValue)
@@ -225,13 +225,13 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
     public async Task<List<JobExecution>> GetExecutionsForPeakCalculationAsync(DateTime startDate, int? clientId)
     {
         var query = _dbSet.AsNoTracking()
-            .Where(e => e.StartTime >= startDate)
+            .Where(e => e.StartDateTime >= startDate)
             .Where(e => !e.Schedule.IsDeleted)
             .Select(e => new JobExecution
             {
                 Id = e.Id,
-                StartTime = e.StartTime,
-                EndTime = e.EndTime,
+                StartDateTime = e.StartDateTime,
+                EndDateTime = e.EndDateTime,
                 Status = e.Status
             });
 
@@ -246,7 +246,7 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
     public async Task<Dictionary<JobStatus, int>> GetStatusBreakdownAsync(DateTime startDate, int? clientId)
     {
         var query = _dbSet.AsNoTracking()
-            .Where(e => e.StartTime >= startDate)
+            .Where(e => e.StartDateTime >= startDate)
             .Where(e => !e.Schedule.IsDeleted);
 
         if (clientId.HasValue)
@@ -266,7 +266,7 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
         DateTime startDate, int? clientId, JobStatus[] statuses)
     {
         var query = _dbSet.AsNoTracking()
-            .Where(e => e.StartTime >= startDate)
+            .Where(e => e.StartDateTime >= startDate)
             .Where(e => !e.Schedule.IsDeleted);
 
         if (clientId.HasValue)
@@ -282,10 +282,10 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
         var trends = await query
             .GroupBy(e => new
             {
-                Year = e.StartTime.Year,
-                Month = e.StartTime.Month,
-                Day = e.StartTime.Day,
-                Hour = e.StartTime.Hour
+                Year = e.StartDateTime.Year,
+                Month = e.StartDateTime.Month,
+                Day = e.StartDateTime.Day,
+                Hour = e.StartDateTime.Hour
             })
             .Select(g => new
             {
@@ -303,11 +303,11 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
         return trends.Select(t => (t.Year, t.Month, t.Day, t.Hour, t.ExecutionCount, t.AvgDuration, t.ConcurrentCount)).ToList();
     }
 
-    public async Task<List<(string ScheduleName, int DurationSeconds, DateTime StartTime, DateTime? EndTime)>> GetTopLongestAsync(
+    public async Task<List<(string ScheduleName, int DurationSeconds, DateTime StartDateTime, DateTime? EndDateTime)>> GetTopLongestAsync(
         DateTime startDate, int? clientId, JobStatus[] statuses, int limit)
     {
         var query = _dbSet.AsNoTracking()
-            .Where(e => e.StartTime >= startDate)
+            .Where(e => e.StartDateTime >= startDate)
             .Where(e => e.DurationSeconds.HasValue)
             .Where(e => !e.Schedule.IsDeleted);
 
@@ -328,12 +328,12 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
             {
                 ScheduleName = e.Schedule.Name ?? "Unknown",
                 DurationSeconds = e.DurationSeconds!.Value,
-                StartTime = e.StartTime,
-                EndTime = e.EndTime
+                StartDateTime = e.StartDateTime,
+                EndDateTime = e.EndDateTime
             })
             .ToListAsync();
 
-        return topLongest.Select(x => (x.ScheduleName, x.DurationSeconds, x.StartTime, x.EndTime)).ToList();
+        return topLongest.Select(x => (x.ScheduleName, x.DurationSeconds, x.StartDateTime, x.EndDateTime)).ToList();
     }
 
 }

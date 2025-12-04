@@ -67,12 +67,12 @@
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Schedule">@context.ScheduleName</MudTd>
-                <MudTd DataLabel="Started">@($"{context.StartTime.ToLocalTime():g} ({GetLocalTimeZoneAbbreviation()})")</MudTd>
-                <MudTd DataLabel="Completed">@(context.EndTime.HasValue ? $"{context.EndTime.Value.ToLocalTime():g} ({GetLocalTimeZoneAbbreviation()})" : "Running...")</MudTd>
+                <MudTd DataLabel="Started">@($"{context.StartDateTime.ToLocalTime():g} ({GetLocalTimeZoneAbbreviation()})")</MudTd>
+                <MudTd DataLabel="Completed">@(context.EndDateTime.HasValue ? $"{context.EndDateTime.Value.ToLocalTime():g} ({GetLocalTimeZoneAbbreviation()})" : "Running...")</MudTd>
                 <MudTd DataLabel="Duration">
-                    @if (context.EndTime.HasValue)
+                    @if (context.EndDateTime.HasValue)
                     {
-                        var duration = context.EndTime.Value - context.StartTime;
+                        var duration = context.EndDateTime.Value - context.StartDateTime;
                         <span>@duration.ToString(@"hh\:mm\:ss")</span>
                     }
                     else

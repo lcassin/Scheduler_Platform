@@ -76,9 +76,9 @@
             </MudTd>
             <MudTd DataLabel="Permissions">@context.PermissionCount</MudTd>
             <MudTd DataLabel="Last Login">
-                @if (context.LastLoginAt.HasValue)
+                @if (context.LastLoginDateTime.HasValue)
                 {
-                    @context.LastLoginAt.Value.ToLocalTime().ToString("g")
+                    @context.LastLoginDateTime.Value.ToLocalTime().ToString("g")
                 }
                 else
                 {

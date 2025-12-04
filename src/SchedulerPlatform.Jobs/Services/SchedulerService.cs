@@ -38,13 +38,13 @@ public class SchedulerService : ISchedulerService
             .Build();
 
         ITrigger trigger;
-        if (schedule.NextRunTime.HasValue)
+        if (schedule.NextRunDateTime.HasValue)
         {
             trigger = TriggerBuilder.Create()
                 .WithIdentity($"Trigger_{schedule.Id}", $"Group_{schedule.ClientId}")
                 .ForJob(jobDetail)
                 .WithCronSchedule(schedule.CronExpression, x => x.WithMisfireHandlingInstructionDoNothing())
-                .StartAt(schedule.NextRunTime.Value)
+                .StartAt(schedule.NextRunDateTime.Value)
                 .Build();
         }
         else
@@ -181,14 +181,14 @@ public class SchedulerService : ISchedulerService
                 }
                 
                 var nextOccurrence = cronExpression.GetNextValidTimeAfter(DateTimeOffset.UtcNow);
-                schedule.NextRunTime = nextOccurrence?.UtcDateTime;
-                schedule.UpdatedAt = DateTime.UtcNow;
+                schedule.NextRunDateTime = nextOccurrence?.UtcDateTime;
+                schedule.ModifiedDateTime = DateTime.UtcNow;
                 
                 await _unitOfWork.Schedules.UpdateAsync(schedule);
                 await _unitOfWork.SaveChangesAsync();
 
-                _logger.LogInformation("Updated NextRunTime for schedule {ScheduleId} to {NextRunTime} (calculated from cron expression)", 
-                    scheduleId, schedule.NextRunTime?.ToString("o") ?? "null");
+                _logger.LogInformation("Updated NextRunDateTime for schedule {ScheduleId} to {NextRunDateTime} (calculated from cron expression)", 
+                    scheduleId, schedule.NextRunDateTime?.ToString("o") ?? "null");
             }
             catch (Exception cronEx)
             {

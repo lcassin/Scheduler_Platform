@@ -60,7 +60,7 @@ public class ClientsController : ControllerBase
     {
         try
         {
-            client.CreatedAt = DateTime.UtcNow;
+            client.CreatedDateTime = DateTime.UtcNow;
             client.CreatedBy = User.Identity?.Name ?? "System";
 
             await _unitOfWork.Clients.AddAsync(client);
@@ -92,8 +92,8 @@ public class ClientsController : ControllerBase
                 return NotFound();
             }
 
-            client.UpdatedAt = DateTime.UtcNow;
-            client.UpdatedBy = User.Identity?.Name ?? "System";
+            client.ModifiedDateTime = DateTime.UtcNow;
+            client.ModifiedBy = User.Identity?.Name ?? "System";
 
             await _unitOfWork.Clients.UpdateAsync(client);
             await _unitOfWork.SaveChangesAsync();

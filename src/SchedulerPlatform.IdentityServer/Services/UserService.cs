@@ -120,7 +120,7 @@ public class UserService : IUserService
             
             if (result == PasswordVerificationResult.Success || result == PasswordVerificationResult.SuccessRehashNeeded)
             {
-                user.LastLoginAt = DateTime.UtcNow;
+                user.LastLoginDateTime = DateTime.UtcNow;
                 await UpdateUserAsync(user);
                 
                 _logger.LogInformation("Successful login for user: {Email}", user.Email);
@@ -148,7 +148,7 @@ public class UserService : IUserService
                 ph => ph.UserId == userId && !ph.IsDeleted);
             
             var recentPasswords = passwordHistories
-                .OrderByDescending(ph => ph.ChangedAt)
+                .OrderByDescending(ph => ph.ChangedDateTime)
                 .Take(MaxPasswordHistory)
                 .ToList();
 
@@ -179,8 +179,8 @@ public class UserService : IUserService
             {
                 UserId = userId,
                 PasswordHash = passwordHash,
-                ChangedAt = DateTime.UtcNow,
-                CreatedAt = DateTime.UtcNow,
+                ChangedDateTime = DateTime.UtcNow,
+                CreatedDateTime = DateTime.UtcNow,
                 CreatedBy = "System",
                 IsDeleted = false
             };
@@ -192,7 +192,7 @@ public class UserService : IUserService
                 ph => ph.UserId == userId && !ph.IsDeleted);
             
             var historiesToDelete = allHistories
-                .OrderByDescending(ph => ph.ChangedAt)
+                .OrderByDescending(ph => ph.ChangedDateTime)
                 .Skip(MaxPasswordHistory)
                 .ToList();
 
@@ -233,7 +233,7 @@ public class UserService : IUserService
     {
         try
         {
-            user.UpdatedAt = DateTime.UtcNow;
+            user.ModifiedDateTime = DateTime.UtcNow;
             await _unitOfWork.Users.UpdateAsync(user);
             await _unitOfWork.SaveChangesAsync();
             return user;
@@ -258,7 +258,7 @@ public class UserService : IUserService
                 CanUpdate = false,
                 CanDelete = false,
                 CanExecute = false,
-                CreatedAt = DateTime.UtcNow,
+                CreatedDateTime = DateTime.UtcNow,
                 CreatedBy = "System",
                 IsDeleted = false
             };
@@ -333,7 +333,7 @@ public class UserService : IUserService
             var newPasswordHash = _passwordHasher.HashPassword(user, newPassword);
             user.PasswordHash = newPasswordHash;
             user.MustChangePassword = false;
-            user.PasswordChangedAt = DateTime.UtcNow;
+            user.PasswordChangedDateTime = DateTime.UtcNow;
             await UpdateUserAsync(user);
 
             await AddPasswordToHistoryAsync(userId, newPasswordHash);

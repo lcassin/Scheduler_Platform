@@ -147,18 +147,25 @@
                     <MudChip T="string" Size="Size.Small">@context.JobType.ToString()</MudChip>
                 </MudTd>
                 <MudTd DataLabel="Frequency">@context.Frequency.ToString()</MudTd>
-                <MudTd DataLabel="Next Run">
-                    @if (context.NextRunTime.HasValue)
-                    {
-                        var tz = GetTimeZoneAbbreviation(context.TimeZone);
-                        var localTime = ConvertUtcToScheduleTime(context.NextRunTime.Value, context.TimeZone);
-                        <text>@localTime.ToString("g") @(!string.IsNullOrEmpty(tz) ? $"({tz})" : "")</text>
-                    }
-                    else
-                    {
-                        <text>N/A</text>
-                    }
-                </MudTd>
+                                <MudTd DataLabel="Next Run">
+                                    @if (context.NextRunDateTime.HasValue)
+                                    {
+                                        var tz = GetTimeZoneAbbreviation(context.TimeZone);
+                                        var localTime = ConvertUtcToScheduleTime(context.NextRunDateTime.Value, context.TimeZone);
+                                        var hoursLate = (DateTime.UtcNow - context.NextRunDateTime.Value).TotalHours;
+                                        @if (context.IsEnabled && hoursLate > 24)
+                                        {
+                                            <MudTooltip Text="@($"Missed by {Math.Floor(hoursLate / 24)} day(s) - requires manual trigger")">
+                                                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Size="Size.Small" Class="mr-1" />
+                                            </MudTooltip>
+                                        }
+                                        <text>@localTime.ToString("g") @(!string.IsNullOrEmpty(tz) ? $"({tz})" : "")</text>
+                                    }
+                                    else
+                                    {
+                                        <text>N/A</text>
+                                    }
+                                </MudTd>
                 <MudTd DataLabel="Last Run Status">
                     @if (context.LastRunStatus.HasValue)
                     {
@@ -170,10 +177,10 @@
                     {
                         <MudText Typo="Typo.body2" Color="Color.Secondary">N/A</MudText>
                     }
-                    @if (context.LastRunTime.HasValue)
+                    @if (context.LastRunDateTime.HasValue)
                     {
                         var tz = GetTimeZoneAbbreviation(context.TimeZone);
-                        var localTime = ConvertUtcToScheduleTime(context.LastRunTime.Value, context.TimeZone);
+                        var localTime = ConvertUtcToScheduleTime(context.LastRunDateTime.Value, context.TimeZone);
                         <MudText Typo="Typo.caption" Color="Color.Secondary">
                             @localTime.ToString("g") @(!string.IsNullOrEmpty(tz) ? $"({tz})" : "")
                         </MudText>
@@ -222,6 +229,9 @@
                 <MudTablePager PageSizeOptions="new int[] { 20, 50, 100 }" />
             </PagerContent>
         </MudTable>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+            Auto-refresh every @(_refreshInterval) seconds
+        </MudText>
     }
 </MudPaper>
 
@@ -251,8 +261,13 @@
 	private HashSet<int> _selectedIds = new();
 	private bool _selectAll = false;
 	private bool _isBulkTriggering = false;
-	private int _delayMs = 200;
+	private int _delayMs = 1000;
 	private List<Schedule> _currentPageItems = new();
+	
+	// Auto-refresh
+	private int _refreshInterval = 60;
+	private PeriodicTimer? _timer;
+	private CancellationTokenSource? _timerCts;
 
 	[Parameter]
 	[SupplyParameterFromQuery(Name = "date")]
@@ -280,21 +295,49 @@
 		Console.WriteLine($"Permissions: Create={_canCreate}, Update={_canUpdate}, Delete={_canDelete}, Execute={_canExecute}");
 
 
-		AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+			AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
 
-		try
-		{
-			_clients = await ClientService.GetClientsAsync();
+			try
+			{
+				_clients = await ClientService.GetClientsAsync();
+			}
+			catch (Exception ex)
+			{
+				Snackbar.Add($"Error loading clients: {ex.Message}", Severity.Error);
+			}
+			finally
+			{
+				_loading = false;
+			}
+		
+			StartAutoRefresh();
 		}
-		catch (Exception ex)
+	
+		private void StartAutoRefresh()
 		{
-			Snackbar.Add($"Error loading clients: {ex.Message}", Severity.Error);
+			_timerCts = new CancellationTokenSource();
+			_timer = new PeriodicTimer(TimeSpan.FromSeconds(_refreshInterval));
+			_ = Task.Run(async () =>
+			{
+				try
+				{
+					while (await _timer.WaitForNextTickAsync(_timerCts.Token))
+					{
+						await InvokeAsync(async () =>
+						{
+							if (_table != null && !_loading)
+							{
+								await _table.ReloadServerData();
+							}
+						});
+					}
+				}
+				catch (OperationCanceledException)
+				{
+					// Timer was cancelled, this is expected on dispose
+				}
+			});
 		}
-		finally
-		{
-			_loading = false;
-		}
-	}
 
 	private async Task LoadPermissionsAsync()
 	{
@@ -311,9 +354,12 @@
 	}
 
 	public void Dispose()
-	{
-		AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
-	}
+		{
+			AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+			_timerCts?.Cancel();
+			_timerCts?.Dispose();
+			_timer?.Dispose();
+		}
 
 	private async Task<TableData<Schedule>> ServerReload(TableState state, CancellationToken cancellationToken)
 	{
@@ -334,8 +380,8 @@
 
 			if (_filterDate.HasValue)
 			{
-				items = items.Where(s => s.NextRunTime.HasValue &&
-										s.NextRunTime.Value.Date == _filterDate.Value.Date).ToList();
+				items = items.Where(s => s.NextRunDateTime.HasValue &&
+										s.NextRunDateTime.Value.Date == _filterDate.Value.Date).ToList();
 			}
 
 			// Filter by Last Run Status

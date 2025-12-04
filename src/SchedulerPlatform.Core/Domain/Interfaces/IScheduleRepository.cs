@@ -8,7 +8,7 @@ public interface IScheduleRepository : IRepository<Schedule>
     Task<IEnumerable<Schedule>> GetByClientIdAsync(int clientId);
     Task<IEnumerable<Schedule>> GetEnabledSchedulesAsync();
     Task<IEnumerable<Schedule>> GetSchedulesDueForExecutionAsync(DateTime currentTime);
-    Task UpdateNextRunTimeAsync(int scheduleId, DateTime nextRunTime);
+    Task UpdateNextRunDateTimeAsync(int scheduleId, DateTime nextRunDateTime);
     Task<Schedule?> GetByIdWithNotificationSettingsAsync(int id);
     Task<(IEnumerable<Schedule> items, int totalCount)> GetPagedAsync(
         int pageNumber, 

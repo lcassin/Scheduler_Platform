@@ -6,7 +6,7 @@ namespace SchedulerPlatform.Core.Domain.Entities;
 
 public class ScheduleSyncSource : BaseEntity
 {
-    [Column("SyncId")]
+    [Column("ScheduleSyncSourceId")]
     public override int Id { get; set; }
     
     public long ExternalAccountId { get; set; }
@@ -16,12 +16,12 @@ public class ScheduleSyncSource : BaseEntity
     public int? ClientId { get; set; }
     public int CredentialId { get; set; }
     public int ScheduleFrequency { get; set; }
-    public DateTime LastInvoiceDate { get; set; }
+    public DateTime LastInvoiceDateTime { get; set; }
     public string? AccountName { get; set; }
     public string? VendorName { get; set; }
     public string? ClientName { get; set; }
     public string? TandemAccountId { get; set; }
-    public DateTime? LastSyncedAt { get; set; }
+    public DateTime? LastSyncedDateTime { get; set; }
     
     [JsonIgnore]
     public Client? Client { get; set; }

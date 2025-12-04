@@ -36,21 +36,21 @@ public class Schedule
     
     public string? TimeZone { get; set; }
     
-    public DateTime? NextRunTime { get; set; }
+    public DateTime? NextRunDateTime { get; set; }
     
-    public DateTime? LastRunTime { get; set; }
+    public DateTime? LastRunDateTime { get; set; }
     
     public JobStatus? LastRunStatus { get; set; }
     
     public int? TimeoutMinutes { get; set; }
     
-    public DateTime CreatedAt { get; set; }
+    public DateTime CreatedDateTime { get; set; }
     
     public string? CreatedBy { get; set; }
     
-    public DateTime? UpdatedAt { get; set; }
+    public DateTime? ModifiedDateTime { get; set; }
     
-    public string? UpdatedBy { get; set; }
+    public string? ModifiedBy { get; set; }
     
     public bool IsDeleted { get; set; } = false;
     

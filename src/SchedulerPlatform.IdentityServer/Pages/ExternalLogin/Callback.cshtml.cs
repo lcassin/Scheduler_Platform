@@ -119,7 +119,7 @@ public class Callback : PageModel
                                 // Found existing user by email - link to Entra identity
                                 dbUser.ExternalUserId = externalId;
                                 dbUser.ExternalIssuer = issuer;
-                                dbUser.LastLoginAt = DateTime.UtcNow;
+                                dbUser.LastLoginDateTime = DateTime.UtcNow;
                                 await _userService.UpdateUserAsync(dbUser);
                     
                                 _logger.LogInformation("Linked existing user {Email} to external provider {Provider}", email, provider);
@@ -147,10 +147,10 @@ public class Callback : PageModel
                                     ExternalIssuer = issuer,
                                     IsActive = true,
                                     ClientId = 1,
-                                    CreatedAt = DateTime.UtcNow,
+                                    CreatedDateTime = DateTime.UtcNow,
                                     CreatedBy = "System",
                                     IsDeleted = false,
-                                    LastLoginAt = DateTime.UtcNow
+                                    LastLoginDateTime = DateTime.UtcNow
                                 };
 
                                 await _userService.CreateUserAsync(dbUser);
@@ -161,7 +161,7 @@ public class Callback : PageModel
                         }
                         else
                         {
-                            dbUser.LastLoginAt = DateTime.UtcNow;
+                            dbUser.LastLoginDateTime = DateTime.UtcNow;
                             await _userService.UpdateUserAsync(dbUser);
                         }
 

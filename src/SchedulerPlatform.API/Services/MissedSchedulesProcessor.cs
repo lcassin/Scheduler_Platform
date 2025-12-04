@@ -80,9 +80,9 @@ public class MissedSchedulesProcessor : IHostedService
             var missedSchedules = await unitOfWork.Schedules.FindAsync(s =>
                 s.IsEnabled &&
                 !s.IsDeleted &&
-                s.NextRunTime.HasValue &&
-                s.NextRunTime.Value < now &&
-                s.NextRunTime.Value >= windowStart);
+                s.NextRunDateTime.HasValue &&
+                s.NextRunDateTime.Value < now &&
+                s.NextRunDateTime.Value >= windowStart);
 
             var missedList = missedSchedules.ToList();
 
@@ -134,7 +134,7 @@ public class MissedSchedulesProcessor : IHostedService
 
                     _logger.LogDebug(
                         "MissedSchedulesProcessor: Triggered missed schedule {ScheduleId} ({ScheduleName}), was due {MinutesLate:F1} minutes ago",
-                        schedule.Id, schedule.Name, (now - schedule.NextRunTime.Value).TotalMinutes);
+                        schedule.Id, schedule.Name, (now - schedule.NextRunDateTime.Value).TotalMinutes);
 
                     await Task.Delay(delayBetweenTriggers, cancellationToken);
                 }

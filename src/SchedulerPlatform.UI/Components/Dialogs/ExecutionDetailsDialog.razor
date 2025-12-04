@@ -40,9 +40,9 @@
             <MudItem xs="12" md="6">
                 <MudText Typo="Typo.subtitle2" Class="mb-1">Duration</MudText>
                 <MudText Typo="Typo.body2">
-                    @if (Execution.EndTime.HasValue)
+                    @if (Execution.EndDateTime.HasValue)
                     {
-                        var duration = Execution.EndTime.Value - Execution.StartTime;
+                        var duration = Execution.EndDateTime.Value - Execution.StartDateTime;
                         <text>@duration.ToString(@"hh\:mm\:ss")</text>
                     }
                     else
@@ -54,13 +54,13 @@
             
             <MudItem xs="12" md="6">
                 <MudText Typo="Typo.subtitle2" Class="mb-1">Start Time</MudText>
-                <MudText Typo="Typo.body2">@($"{Execution.StartTime.ToLocalTime():g} ({GetLocalTimeZoneAbbreviation()})")</MudText>
+                <MudText Typo="Typo.body2">@($"{Execution.StartDateTime.ToLocalTime():g} ({GetLocalTimeZoneAbbreviation()})")</MudText>
             </MudItem>
             
             <MudItem xs="12" md="6">
                 <MudText Typo="Typo.subtitle2" Class="mb-1">End Time</MudText>
                 <MudText Typo="Typo.body2">
-                    @(Execution.EndTime.HasValue ? $"{Execution.EndTime.Value.ToLocalTime():g} ({GetLocalTimeZoneAbbreviation()})" : "N/A")
+                    @(Execution.EndDateTime.HasValue ? $"{Execution.EndDateTime.Value.ToLocalTime():g} ({GetLocalTimeZoneAbbreviation()})" : "N/A")
                 </MudText>
             </MudItem>
             

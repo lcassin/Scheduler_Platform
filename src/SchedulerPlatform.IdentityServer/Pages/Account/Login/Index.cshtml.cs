@@ -122,9 +122,9 @@ public class Index : PageModel
                     return RedirectToPage("/Account/ChangePassword", new { userId = user.Id, returnUrl = Input.ReturnUrl });
                 }
 
-                if (!user.IsSystemAdmin && !string.IsNullOrEmpty(user.PasswordHash) && user.PasswordChangedAt.HasValue)
+                if (!user.IsSystemAdmin && !string.IsNullOrEmpty(user.PasswordHash) && user.PasswordChangedDateTime.HasValue)
                 {
-                    var passwordAge = DateTime.UtcNow - user.PasswordChangedAt.Value;
+                    var passwordAge = DateTime.UtcNow - user.PasswordChangedDateTime.Value;
                     if (passwordAge.TotalDays >= 90)
                     {
                         _logger.LogInformation("Password expired for user {Email}", user.Email);

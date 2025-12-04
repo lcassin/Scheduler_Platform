@@ -63,7 +63,7 @@ public class AuditLogInterceptor : SaveChangesInterceptor
                 ClientId = clientId,
                 IpAddress = ipAddress,
                 UserAgent = userAgent,
-                Timestamp = DateTime.UtcNow,
+                TimestampDateTime = DateTime.UtcNow,
                 OldValues = entry.State == EntityState.Modified || entry.State == EntityState.Deleted
                     ? SerializeOldValues(entry)
                     : null,
@@ -144,10 +144,10 @@ public class AuditLogInterceptor : SaveChangesInterceptor
     {
         var skipProperties = new[]
         {
-            "UpdatedAt",
-            "LastRunTime",
-            "NextRunTime",
-            "CreatedAt", // Only skip for Modified, not Added
+            "ModifiedDateTime",
+            "LastRunDateTime",
+            "NextRunDateTime",
+            "CreatedDateTime", // Only skip for Modified, not Added
             "Id" // ID is captured separately in EntityId
         };
 
