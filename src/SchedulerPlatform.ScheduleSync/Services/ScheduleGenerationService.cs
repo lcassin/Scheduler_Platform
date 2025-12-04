@@ -157,6 +157,7 @@ public class ScheduleGenerationService
                         }
                         else
                         {
+                            var now = DateTime.UtcNow;
                             var newSchedule = new Schedule
                             {
                                 Name = scheduleName,
@@ -171,8 +172,10 @@ public class ScheduleGenerationService
                                 RetryDelayMinutes = 5,
                                 TimeZone = _defaultTimeZone,
                                 JobConfiguration = "{\"ConnectionString\":\"\",\"ProcedureName\":\"TBD\",\"TimeoutSeconds\":300}",
-                                CreatedDateTime = DateTime.UtcNow,
+                                CreatedDateTime = now,
                                 CreatedBy = "ScheduleSync",
+                                ModifiedDateTime = now,
+                                ModifiedBy = "ScheduleSync",
                                 IsDeleted = false
                             };
 

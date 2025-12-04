@@ -135,8 +135,12 @@ public class SchedulesController : ControllerBase
             var notificationSetting = schedule.NotificationSetting;
             schedule.NotificationSetting = null;
 
-            schedule.CreatedDateTime = DateTime.UtcNow;
-            schedule.CreatedBy = User.Identity?.Name ?? "System";
+            var now = DateTime.UtcNow;
+            var createdBy = User.Identity?.Name ?? "System";
+            schedule.CreatedDateTime = now;
+            schedule.CreatedBy = createdBy;
+            schedule.ModifiedDateTime = now;
+            schedule.ModifiedBy = createdBy;
 
             if (!schedule.IsDeleted && schedule.IsEnabled && !schedule.NextRunDateTime.HasValue && !string.IsNullOrWhiteSpace(schedule.CronExpression))
             {
@@ -159,8 +163,10 @@ public class SchedulesController : ControllerBase
             if (notificationSetting != null)
             {
                 notificationSetting.ScheduleId = schedule.Id;
-                notificationSetting.CreatedDateTime = DateTime.UtcNow;
-                notificationSetting.CreatedBy = User.Identity?.Name ?? "System";
+                notificationSetting.CreatedDateTime = now;
+                notificationSetting.CreatedBy = createdBy;
+                notificationSetting.ModifiedDateTime = now;
+                notificationSetting.ModifiedBy = createdBy;
                 
                 await _unitOfWork.NotificationSettings.AddAsync(notificationSetting);
                 await _unitOfWork.SaveChangesAsync();
@@ -243,9 +249,13 @@ public class SchedulesController : ControllerBase
                 }
                 else
                 {
+                    var notifNow = DateTime.UtcNow;
+                    var notifCreatedBy = User.Identity?.Name ?? "System";
                     notificationSetting.ScheduleId = schedule.Id;
-                    notificationSetting.CreatedDateTime = DateTime.UtcNow;
-                    notificationSetting.CreatedBy = User.Identity?.Name ?? "System";
+                    notificationSetting.CreatedDateTime = notifNow;
+                    notificationSetting.CreatedBy = notifCreatedBy;
+                    notificationSetting.ModifiedDateTime = notifNow;
+                    notificationSetting.ModifiedBy = notifCreatedBy;
                     
                     await _unitOfWork.NotificationSettings.AddAsync(notificationSetting);
                 }
@@ -446,6 +456,8 @@ public class SchedulesController : ControllerBase
                 {
                     var cronExpression = GenerateCronExpression(scheduleDate.DateTime, includeYear: true);
                     
+                    var bulkNow = DateTime.UtcNow;
+                    var bulkCreatedBy = User.Identity?.Name ?? "System";
                     var schedule = new Schedule
                     {
                         Name = scheduleDate.Name,
@@ -459,8 +471,10 @@ public class SchedulesController : ControllerBase
                         JobConfiguration = request.JobConfiguration,
                         MaxRetries = request.MaxRetries,
                         RetryDelayMinutes = request.RetryDelayMinutes,
-                        CreatedDateTime = DateTime.UtcNow,
-                        CreatedBy = User.Identity?.Name ?? "System"
+                        CreatedDateTime = bulkNow,
+                        CreatedBy = bulkCreatedBy,
+                        ModifiedDateTime = bulkNow,
+                        ModifiedBy = bulkCreatedBy
                     };
                     
                     await _unitOfWork.Schedules.AddAsync(schedule);

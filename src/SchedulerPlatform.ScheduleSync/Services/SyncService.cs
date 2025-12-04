@@ -83,13 +83,16 @@ public class SyncService
                 }
                 else
                 {
+                    var now = DateTime.UtcNow;
                     var newClient = new Client
                     {
                         ClientName = clientName,
                         ClientCode = clientName.Length > 50 ? clientName.Substring(0, 50) : clientName,
                         IsActive = true,
-                        CreatedDateTime = DateTime.UtcNow,
+                        CreatedDateTime = now,
                         CreatedBy = "ApiSync",
+                        ModifiedDateTime = now,
+                        ModifiedBy = "ApiSync",
                         LastSyncedDateTime = syncRunStart,
                         IsDeleted = false
                     };
@@ -290,19 +293,22 @@ public class SyncService
                     }
                     else
                     {
-                        var newClient = new Client
-                        {
-                            ClientName = clientName,
-                            ClientCode = clientName.Length > 50 ? clientName.Substring(0, 50) : clientName,
-                            IsActive = true,
-                            CreatedDateTime = DateTime.UtcNow,
-                            CreatedBy = "ApiSync",
-                            LastSyncedDateTime = runStart,
-                            IsDeleted = false
-                        };
+                            var clientNow = DateTime.UtcNow;
+                            var newClient = new Client
+                            {
+                                ClientName = clientName,
+                                ClientCode = clientName.Length > 50 ? clientName.Substring(0, 50) : clientName,
+                                IsActive = true,
+                                CreatedDateTime = clientNow,
+                                CreatedBy = "ApiSync",
+                                ModifiedDateTime = clientNow,
+                                ModifiedBy = "ApiSync",
+                                LastSyncedDateTime = runStart,
+                                IsDeleted = false
+                            };
 
-                        await _dbContext.Clients.AddAsync(newClient);
-                        result.Added++;
+                            await _dbContext.Clients.AddAsync(newClient);
+                            result.Added++;
                     }
                 }
 
@@ -439,6 +445,7 @@ public class SyncService
                     }
                     else
                     {
+                        var syncNow = DateTime.UtcNow;
                         var newRecord = new ScheduleSyncSource
                         {
                             ExternalAccountId = account.AccountId,
@@ -453,8 +460,10 @@ public class SyncService
                             VendorName = account.VendorName,
                             ClientName = account.ClientName,
                             TandemAccountId = account.TandemAcctId,
-                            CreatedDateTime = DateTime.UtcNow,
+                            CreatedDateTime = syncNow,
                             CreatedBy = "ApiSync",
+                            ModifiedDateTime = syncNow,
+                            ModifiedBy = "ApiSync",
                             LastSyncedDateTime = runStart,
                             IsDeleted = false
                         };
