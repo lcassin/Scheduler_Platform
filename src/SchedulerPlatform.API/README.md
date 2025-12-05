@@ -7,7 +7,7 @@
 - **Permission-Based Authorization**: JWT tokens now include custom claims for granular permission checking (Create, Read, Update, Delete, Execute per resource)
 - **Admin User Management**: New UsersController with endpoints for managing users and permissions (system admin only)
 - **Service Account Authentication**: OAuth2 Client Credentials flow support for external systems to access the API
-- **NextRunTime Calculation Fix**: Manual schedule triggers no longer incorrectly advance NextRunTime
+- **NextRunDateTime Calculation Fix**: Manual schedule triggers no longer incorrectly advance NextRunDateTime
 - **Deleted Schedule Filtering**: Soft-deleted schedules are properly filtered and no longer execute
 
 ## Business Overview
@@ -536,9 +536,9 @@ sequenceDiagram
     Filter->>Controller: Model validated
     
     alt POST /api/schedules (Create Schedule)
-        Controller->>Controller: Set CreatedAt, CreatedBy from User.Identity
-        Controller->>UoW: Schedules.AddAsync(schedule)
-        UoW->>DB: INSERT INTO Schedules
+                Controller->>Controller: Set CreatedDateTime, CreatedBy from User.Identity
+                Controller->>UoW: Schedules.AddAsync(schedule)
+                UoW->>DB: INSERT INTO Schedule
         DB-->>UoW: Schedule ID = 123
         Controller->>UoW: SaveChangesAsync()
         

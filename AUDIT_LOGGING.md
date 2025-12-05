@@ -29,7 +29,7 @@ Each audit log entry captures:
 | `ClientId` | Client ID if available |
 | `IpAddress` | IP address of the request (if applicable) |
 | `UserAgent` | Browser/client user agent (if applicable) |
-| `Timestamp` | UTC timestamp of the change |
+| `TimestampDateTime` | UTC timestamp of the change |
 | `OldValues` | JSON of property values before the change |
 | `NewValues` | JSON of property values after the change |
 | `AdditionalData` | Optional additional context |
@@ -64,10 +64,10 @@ Masked values appear as `***MASKED***` in the audit log.
 
 ### Excluded Fields
 To reduce noise, these auto-updated fields are excluded from audit logs:
-- `UpdatedAt`
-- `LastRunTime`
-- `NextRunTime`
-- `CreatedAt` (for Modified actions)
+- `ModifiedDateTime`
+- `LastRunDateTime`
+- `NextRunDateTime`
+- `CreatedDateTime` (for Modified actions)
 - `Id` (captured separately in EntityId)
 
 ## API Endpoints
@@ -166,7 +166,7 @@ builder.Services.AddDbContext<SchedulerDbContext>((serviceProvider, options) =>
 The `AuditLogs` table includes:
 - Primary key on `Id`
 - Index on `(EntityType, EntityId)` for entity lookups
-- Index on `Timestamp` for date range queries
+- Index on `TimestampDateTime` for date range queries
 
 ## Use Cases
 

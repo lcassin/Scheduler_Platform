@@ -324,7 +324,7 @@ private async Task LoadCalendarData()
     calendarItems = schedules
         .Select(s => new ScheduleCalendarItem
         {
-            Date = s.NextRunTime ?? DateTime.Today,
+            Date = s.NextRunDateTime ?? DateTime.Today,
             ScheduleName = s.Name,
             JobType = s.JobType
         })

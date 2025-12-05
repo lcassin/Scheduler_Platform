@@ -3,7 +3,7 @@
 ## Recent Updates (November 2025)
 
 - **Upgraded to .NET 10**: Complete upgrade from .NET 9 to .NET 10 with Quartz.NET 3.15.1
-- **NextRunTime Calculation Fix**: Manual triggers no longer incorrectly advance NextRunTime; now calculated from cron expression using CronExpression.GetNextValidTimeAfter()
+- **NextRunDateTime Calculation Fix**: Manual triggers no longer incorrectly advance NextRunDateTime; now calculated from cron expression using CronExpression.GetNextValidTimeAfter()
 - **Schedule Hydration on Startup**: ScheduleHydrationService loads all enabled schedules into Quartz when API starts, ensuring 24/7 automatic execution
 - **Deleted Schedule Filtering**: Soft-deleted schedules are no longer loaded into Quartz or executed
 - **Misfire Handling**: Configured WithMisfireHandlingInstructionFireAndProceed for missed schedules
@@ -293,8 +293,8 @@ sequenceDiagram
         Job->>UoW: JobExecutions.UpdateAsync(execution)
         UoW->>DB: UPDATE JobExecution (Status=Completed)
         
-        Job->>UoW: Schedules.UpdateNextRunTimeAsync()
-        UoW->>DB: UPDATE Schedule SET NextRunTime
+                Job->>UoW: Schedules.UpdateNextRunDateTimeAsync()
+                UoW->>DB: UPDATE Schedule SET NextRunDateTime
         
         Job->>Email: SendJobExecutionNotificationAsync(id, isSuccess=true)
         Email-->>Job: Email sent (if configured)
