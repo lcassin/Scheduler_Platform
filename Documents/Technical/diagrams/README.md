@@ -40,6 +40,20 @@ mmdc -i core-er-diagram.mmd -o core-er-diagram.svg -b white
 
 Note: After converting to shapes, you may need to adjust connectors and layout for optimal appearance.
 
+## Alternative: Edit in draw.io First
+
+If you want to edit the diagram before importing to Visio:
+
+1. Open [draw.io](https://app.diagrams.net/) (web or desktop)
+2. Go to **Arrange** (or **Insert**) → **Advanced** → **Mermaid**
+3. Paste the contents of any `.mmd` file
+4. Click Insert to render the diagram
+5. Edit the diagram as needed in draw.io
+6. Export as SVG: **File** → **Export As** → **SVG**
+7. Import the SVG into Visio using the steps above
+
+Note: draw.io can import Visio files but does not have a native "Export to Visio" option. Use SVG as the intermediate format.
+
 ## Mermaid Syntax Reference
 
 - [Mermaid Documentation](https://mermaid.js.org/intro/)
