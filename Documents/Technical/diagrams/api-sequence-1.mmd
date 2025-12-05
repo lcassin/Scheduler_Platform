@@ -1,0 +1,69 @@
+sequenceDiagram
+    participant Client as Client (UI/Script)
+    participant CORS as CORS Middleware
+    participant Auth as Authentication Middleware
+    participant Authz as Authorization Middleware
+    participant Filter as ModelStateLoggingFilter
+    participant Controller as Controller Action
+    participant UoW as UnitOfWork
+    participant Scheduler as SchedulerService
+    participant DB as SQL Server
+    participant Quartz as Quartz.NET
+    
+    Client->>CORS: HTTP Request (with Origin header)
+    CORS->>CORS: Check AllowUI policy
+    alt Origin not allowed
+        CORS-->>Client: 403 Forbidden (CORS error)
+    end
+    
+    CORS->>Auth: Request passed CORS check
+    Auth->>Auth: Validate JWT token
+    alt Token missing or invalid
+        Auth-->>Client: 401 Unauthorized
+    end
+    
+    Auth->>Authz: Token validated, extract claims
+    Authz->>Authz: Check role requirements
+    alt Insufficient permissions
+        Authz-->>Client: 403 Forbidden
+    end
+    
+    Authz->>Filter: User authorized
+    Filter->>Filter: Check ModelState
+    alt ModelState invalid
+        Filter->>Filter: Log validation errors
+        Filter-->>Client: 400 Bad Request (with errors)
+    end
+    
+    Filter->>Controller: Model validated
+    
+    alt POST /api/schedules (Create Schedule)
+                Controller->>Controller: Set CreatedDateTime, CreatedBy from User.Identity
+                Controller->>UoW: Schedules.AddAsync(schedule)
+                UoW->>DB: INSERT INTO Schedule
+        DB-->>UoW: Schedule ID = 123
+        Controller->>UoW: SaveChangesAsync()
+        
+        alt schedule.IsEnabled = true
+            Controller->>Scheduler: ScheduleJob(schedule)
+            Scheduler->>Quartz: Create JobDetail & Trigger
+            Quartz-->>Scheduler: Job scheduled
+        end
+        
+        Controller-->>Client: 201 Created (Location: /api/schedules/123)
+    end
+    
+    alt GET /api/schedules/{id}
+        Controller->>UoW: Schedules.GetByIdAsync(id)
+        UoW->>DB: SELECT * FROM Schedules WHERE Id = @id
+        DB-->>UoW: Schedule entity
+        UoW-->>Controller: Schedule
+        Controller-->>Client: 200 OK (JSON: Schedule)
+    end
+    
+    alt POST /api/schedules/{id}/trigger
+        Controller->>Scheduler: TriggerJobNow(id, clientId, username)
+        Scheduler->>Quartz: TriggerJob(jobKey, jobDataMap)
+        Quartz-->>Scheduler: Job triggered
+        Controller-->>Client: 200 OK
+    end

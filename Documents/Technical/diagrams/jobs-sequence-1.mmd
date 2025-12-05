@@ -1,0 +1,82 @@
+sequenceDiagram
+    participant Quartz as Quartz Scheduler
+    participant Factory as QuartzJobFactory
+    participant Job as Job (Process/API/SP)
+    participant UoW as UnitOfWork
+    participant DB as SQL Server
+    participant Email as EmailService
+    participant Retry as Retry Logic
+    
+    Note over Quartz: CRON trigger fires
+    
+    Quartz->>Factory: NewJob(bundle)
+    Factory->>Factory: Create scoped ServiceProvider
+    Factory->>Job: Resolve job from DI container
+    Factory-->>Quartz: Return job instance
+    
+    Quartz->>Job: Execute(context)
+    
+    Job->>UoW: Schedules.GetByIdAsync(scheduleId)
+    UoW->>DB: SELECT Schedule WITH JobParameters
+    DB-->>UoW: Schedule + parameters
+    UoW-->>Job: Schedule entity
+    
+    Job->>UoW: JobExecutions.AddAsync(execution)
+    Job->>Job: Set Status = Running
+    UoW->>DB: INSERT JobExecution (Status=Running)
+    
+    alt Process Job
+        Job->>Job: Start process with arguments
+        Job->>Job: Capture stdout/stderr
+        Job->>Job: Wait for completion (with timeout)
+    else API Call Job
+        Job->>Job: Build HTTP request
+        Job->>Job: Substitute parameters in body
+        Job->>Job: Send HTTP request
+        Job->>Job: Read response
+    else Stored Procedure Job
+        Job->>Job: Open SQL connection
+        Job->>Job: Create SqlCommand with parameters
+        Job->>Job: Execute stored procedure
+        Job->>Job: Read results
+    end
+    
+    alt Job Succeeds
+        Job->>Job: Set Status = Completed
+        Job->>Job: Set Output = result data
+        Job->>UoW: JobExecutions.UpdateAsync(execution)
+        UoW->>DB: UPDATE JobExecution (Status=Completed)
+        
+                Job->>UoW: Schedules.UpdateNextRunDateTimeAsync()
+                UoW->>DB: UPDATE Schedule SET NextRunDateTime
+        
+        Job->>Email: SendJobExecutionNotificationAsync(id, isSuccess=true)
+        Email-->>Job: Email sent (if configured)
+        
+    else Job Fails
+        Job->>Job: Set Status = Failed
+        Job->>Job: Set ErrorMessage = exception.Message
+        Job->>Job: Set StackTrace = exception.StackTrace
+        Job->>UoW: JobExecutions.UpdateAsync(execution)
+        UoW->>DB: UPDATE JobExecution (Status=Failed)
+        
+        Job->>Email: SendJobExecutionNotificationAsync(id, isSuccess=false)
+        
+        alt Retries Available
+            Job->>Job: Check RetryCount < MaxRetries
+            Job->>Retry: Calculate backoff delay
+            Retry->>Retry: Delay = RetryDelayMinutes * 2^RetryCount
+            Job->>UoW: Schedule retry execution
+            UoW->>DB: INSERT JobExecution (Status=Retrying)
+            
+            Note over Retry: Wait exponential backoff time
+            
+            Retry->>Job: Retry execution (increment RetryCount)
+        else No Retries Left
+            Job->>Job: Final failure - no more retries
+        end
+    end
+    
+    Quartz->>Factory: ReturnJob(job)
+    Factory->>Factory: Dispose scoped ServiceProvider
+    Factory-->>Quartz: Job resources cleaned up

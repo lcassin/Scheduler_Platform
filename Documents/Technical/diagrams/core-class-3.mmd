@@ -1,0 +1,32 @@
+classDiagram
+    class JobType {
+        <<enumeration>>
+        Process = 1
+        StoredProcedure = 2
+        ApiCall = 3
+    }
+    
+    class JobStatus {
+        <<enumeration>>
+        Scheduled = 1
+        Running = 2
+        Completed = 3
+        Failed = 4
+        Retrying = 5
+        Cancelled = 6
+    }
+    
+    class ScheduleFrequency {
+        <<enumeration>>
+        Manual = 0
+        Daily = 1
+        Weekly = 2
+        Monthly = 3
+        Quarterly = 4
+        Annually = 5
+        Custom = 6
+    }
+    
+    Schedule --> JobType : uses
+    Schedule --> ScheduleFrequency : uses
+    JobExecution --> JobStatus : uses
