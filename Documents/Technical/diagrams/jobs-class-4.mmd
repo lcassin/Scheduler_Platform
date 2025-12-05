@@ -1,0 +1,33 @@
+classDiagram
+    class ISchedulerService {
+        <<interface>>
+        +ScheduleJob(Schedule schedule) Task
+        +UnscheduleJob(int scheduleId, int clientId) Task
+        +PauseJob(int scheduleId, int clientId) Task
+        +ResumeJob(int scheduleId, int clientId) Task
+        +TriggerJobNow(int scheduleId, int clientId, string triggeredBy) Task
+    }
+    
+    class SchedulerService {
+        -IScheduler _scheduler
+        -ILogger~SchedulerService~ _logger
+        -IUnitOfWork _unitOfWork
+        +ScheduleJob(Schedule schedule) Task
+        +UnscheduleJob(int scheduleId, int clientId) Task
+        +PauseJob(int scheduleId, int clientId) Task
+        +ResumeJob(int scheduleId, int clientId) Task
+        +TriggerJobNow(int scheduleId, int clientId, string triggeredBy) Task
+    }
+    
+    class QuartzJobFactory {
+        -IServiceProvider _serviceProvider
+        +NewJob(TriggerFiredBundle bundle, IScheduler scheduler) IJob
+        +ReturnJob(IJob job) void
+    }
+    
+    ISchedulerService <|.. SchedulerService : implements
+    SchedulerService --> IScheduler : uses
+    QuartzJobFactory --> IServiceProvider : uses
+    QuartzJobFactory ..> ProcessJob : creates
+    QuartzJobFactory ..> ApiCallJob : creates
+    QuartzJobFactory ..> StoredProcedureJob : creates

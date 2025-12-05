@@ -1,0 +1,73 @@
+classDiagram
+    class IScheduleService {
+        <<interface>>
+        +GetSchedulesAsync(int pageNumber, int pageSize, string searchTerm) Task~PagedResult~Schedule~~
+        +GetScheduleAsync(int id) Task~Schedule~
+        +CreateScheduleAsync(Schedule schedule) Task~Schedule~
+        +UpdateScheduleAsync(int id, Schedule schedule) Task
+        +DeleteScheduleAsync(int id) Task
+        +TriggerScheduleAsync(int id) Task
+        +PauseScheduleAsync(int id) Task
+        +ResumeScheduleAsync(int id) Task
+    }
+    
+    class ScheduleService {
+        -HttpClient _httpClient
+        -ILogger~ScheduleService~ _logger
+        +GetSchedulesAsync(int pageNumber, int pageSize, string searchTerm) Task~PagedResult~Schedule~~
+        +GetScheduleAsync(int id) Task~Schedule~
+        +CreateScheduleAsync(Schedule schedule) Task~Schedule~
+        +UpdateScheduleAsync(int id, Schedule schedule) Task
+        +DeleteScheduleAsync(int id) Task
+        +TriggerScheduleAsync(int id) Task
+        +PauseScheduleAsync(int id) Task
+        +ResumeScheduleAsync(int id) Task
+    }
+    
+    class IClientService {
+        <<interface>>
+        +GetClientsAsync() Task~List~Client~~
+        +GetClientAsync(int id) Task~Client~
+        +CreateClientAsync(Client client) Task~Client~
+        +UpdateClientAsync(int id, Client client) Task
+    }
+    
+    class ClientService {
+        -HttpClient _httpClient
+        -ILogger~ClientService~ _logger
+        +GetClientsAsync() Task~List~Client~~
+        +GetClientAsync(int id) Task~Client~
+        +CreateClientAsync(Client client) Task~Client~
+        +UpdateClientAsync(int id, Client client) Task
+    }
+    
+    class IJobExecutionService {
+        <<interface>>
+        +GetJobExecutionsAsync(int? scheduleId, JobStatus? status) Task~List~JobExecution~~
+        +GetJobExecutionAsync(int id) Task~JobExecution~
+        +GetLatestExecutionAsync(int scheduleId) Task~JobExecution~
+        +GetFailedExecutionsAsync(int scheduleId) Task~List~JobExecution~~
+    }
+    
+    class JobExecutionService {
+        -HttpClient _httpClient
+        -ILogger~JobExecutionService~ _logger
+        +GetJobExecutionsAsync(int? scheduleId, JobStatus? status) Task~List~JobExecution~~
+        +GetJobExecutionAsync(int id) Task~JobExecution~
+        +GetLatestExecutionAsync(int scheduleId) Task~JobExecution~
+        +GetFailedExecutionsAsync(int scheduleId) Task~List~JobExecution~~
+    }
+    
+    class AuthTokenHandler {
+        -IHttpContextAccessor _httpContextAccessor
+        #SendAsync(HttpRequestMessage request, CancellationToken ct) Task~HttpResponseMessage~
+        -GetAccessTokenAsync() Task~string~
+    }
+    
+    IScheduleService <|.. ScheduleService
+    IClientService <|.. ClientService
+    IJobExecutionService <|.. JobExecutionService
+    
+    ScheduleService ..> AuthTokenHandler : uses via HttpClient
+    ClientService ..> AuthTokenHandler : uses via HttpClient
+    JobExecutionService ..> AuthTokenHandler : uses via HttpClient

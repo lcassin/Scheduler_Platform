@@ -1,0 +1,50 @@
+classDiagram
+    class PageModel {
+        <<ASP.NET Core>>
+        +HttpContext HttpContext
+        +ModelStateDictionary ModelState
+        +IActionResult Page()
+        +RedirectResult Redirect(string url)
+    }
+    
+    class LoginPageModel {
+        -TestUserStore _users
+        -IIdentityServerInteractionService _interaction
+        -IEventService _events
+        -IAuthenticationSchemeProvider _schemeProvider
+        +ViewModel View
+        +InputModel Input
+        +Task~IActionResult~ OnGet(string returnUrl)
+        +Task~IActionResult~ OnPost()
+        -Task BuildModelAsync(string returnUrl)
+    }
+    
+    class ConsentPageModel {
+        -IIdentityServerInteractionService _interaction
+        -IEventService _events
+        +ViewModel View
+        +InputModel Input
+        +Task~IActionResult~ OnGet(string returnUrl)
+        +Task~IActionResult~ OnPost()
+    }
+    
+    class GrantsPageModel {
+        -IIdentityServerInteractionService _interaction
+        -IEventService _events
+        +ViewModel View
+        +Task OnGet()
+        +Task~IActionResult~ OnPost(string clientId)
+    }
+    
+    class LogoutPageModel {
+        -IIdentityServerInteractionService _interaction
+        -IEventService _events
+        +LogoutViewModel View
+        +Task~IActionResult~ OnGet(string logoutId)
+        +Task~IActionResult~ OnPost()
+    }
+    
+    PageModel <|-- LoginPageModel
+    PageModel <|-- ConsentPageModel
+    PageModel <|-- GrantsPageModel
+    PageModel <|-- LogoutPageModel

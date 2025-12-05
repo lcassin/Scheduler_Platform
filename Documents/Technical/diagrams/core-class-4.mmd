@@ -1,0 +1,57 @@
+classDiagram
+    class IRepository~T~ {
+        <<interface>>
+        +GetByIdAsync(int id) Task~T?~
+        +GetAllAsync() Task~IEnumerable~T~~
+        +FindAsync(Expression predicate) Task~IEnumerable~T~~
+        +AddAsync(T entity) Task~T~
+        +UpdateAsync(T entity) Task
+        +DeleteAsync(T entity) Task
+        +CountAsync(Expression predicate) Task~int~
+    }
+    
+    class IScheduleRepository {
+        <<interface>>
+        +GetByClientIdAsync(int clientId) Task~IEnumerable~Schedule~~
+        +GetEnabledSchedulesAsync() Task~IEnumerable~Schedule~~
+        +GetSchedulesDueForExecutionAsync(DateTime currentTime) Task~IEnumerable~Schedule~~
+        +UpdateNextRunDateTimeAsync(int scheduleId, DateTime nextRunTime) Task
+        +GetByIdWithNotificationSettingsAsync(int id) Task~Schedule?~
+        +GetPagedAsync(int pageNumber, int pageSize, int? clientId, string? searchTerm) Task
+    }
+    
+    class IJobExecutionRepository {
+        <<interface>>
+        +GetByScheduleIdAsync(int scheduleId) Task~IEnumerable~JobExecution~~
+        +GetByStatusAsync(JobStatus status) Task~IEnumerable~JobExecution~~
+        +GetFailedExecutionsAsync(int scheduleId) Task~IEnumerable~JobExecution~~
+        +GetLastExecutionAsync(int scheduleId) Task~JobExecution?~
+    }
+    
+    class IEmailService {
+        <<interface>>
+        +SendJobExecutionNotificationAsync(int jobExecutionId, bool isSuccess) Task
+    }
+    
+    class IUnitOfWork {
+        <<interface>>
+        +IScheduleRepository Schedules
+        +IJobExecutionRepository JobExecutions
+        +IRepository~Client~ Clients
+        +IRepository~User~ Users
+        +IRepository~UserPermission~ UserPermissions
+        +IRepository~VendorCredential~ VendorCredentials
+        +IRepository~JobParameter~ JobParameters
+        +IRepository~NotificationSetting~ NotificationSettings
+        +SaveChangesAsync() Task~int~
+        +BeginTransactionAsync() Task
+        +CommitTransactionAsync() Task
+        +RollbackTransactionAsync() Task
+        +Dispose() void
+    }
+    
+    IRepository~T~ <|.. IScheduleRepository : extends
+    IRepository~T~ <|.. IJobExecutionRepository : extends
+    IUnitOfWork --> IScheduleRepository : provides
+    IUnitOfWork --> IJobExecutionRepository : provides
+    IUnitOfWork --> IRepository~T~ : provides
