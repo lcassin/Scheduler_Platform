@@ -478,7 +478,7 @@ erDiagram
         int ClientId
         string IpAddress
         string UserAgent
-        DateTime Timestamp
+        DateTime TimestampDateTime
         string AdditionalData
     }
 ```
@@ -496,10 +496,10 @@ classDiagram
     class BaseEntity {
         <<abstract>>
         +int Id
-        +DateTime CreatedAt
-        +DateTime? UpdatedAt
-        +string? CreatedBy
-        +string? UpdatedBy
+        +DateTime CreatedDateTime
+        +DateTime ModifiedDateTime
+        +string CreatedBy
+        +string ModifiedBy
         +bool IsDeleted
     }
     
@@ -510,8 +510,8 @@ classDiagram
         +JobType JobType
         +ScheduleFrequency Frequency
         +string CronExpression
-        +DateTime? NextRunTime
-        +DateTime? LastRunTime
+        +DateTime? NextRunDateTime
+        +DateTime? LastRunDateTime
         +bool IsEnabled
         +int MaxRetries
         +int RetryDelayMinutes
@@ -536,8 +536,8 @@ classDiagram
     
     class JobExecution {
         +int ScheduleId
-        +DateTime StartTime
-        +DateTime? EndTime
+        +DateTime StartDateTime
+        +DateTime? EndDateTime
         +JobStatus Status
         +string? Output
         +string? ErrorMessage
@@ -616,7 +616,7 @@ classDiagram
         +int? ClientId
         +string? IpAddress
         +string? UserAgent
-        +DateTime Timestamp
+        +DateTime TimestampDateTime
         +string? AdditionalData
     }
     

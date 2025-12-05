@@ -1,0 +1,143 @@
+erDiagram
+    BaseEntity {
+        int Id PK
+        DateTime CreatedDateTime
+        DateTime ModifiedDateTime
+        string CreatedBy
+        string ModifiedBy
+        bool IsDeleted
+    }
+    
+    Client ||--o{ User : "has many"
+    Client ||--o{ Schedule : "owns"
+    Client ||--o{ VendorCredential : "has many"
+    
+    Client {
+        int Id PK
+        string ClientName
+        string ClientCode UK
+        bool IsActive
+        string ContactEmail
+        string ContactPhone
+    }
+    
+    User ||--o{ UserPermission : "has many"
+    User }o--|| Client : "belongs to"
+    
+    User {
+        int Id PK
+        string Username
+        string Email UK
+        string FirstName
+        string LastName
+        int ClientId FK
+        bool IsActive
+        string ExternalUserId
+    }
+    
+    UserPermission }o--|| User : "belongs to"
+    
+    UserPermission {
+        int Id PK
+        int UserId FK
+        string PermissionName
+        string ResourceType
+        int ResourceId
+    }
+    
+    Schedule }o--|| Client : "owned by"
+    Schedule ||--o{ JobExecution : "has many"
+    Schedule ||--o{ JobParameter : "has many"
+    Schedule ||--o| NotificationSetting : "has one"
+    
+    Schedule {
+        int Id PK
+        string Name
+        string Description
+        int ClientId FK
+        int JobType
+        int Frequency
+        string CronExpression
+        DateTime NextRunDateTime
+        DateTime LastRunDateTime
+        bool IsEnabled
+        int MaxRetries
+        int RetryDelayMinutes
+        string TimeZone
+        string JobConfiguration
+    }
+    
+    JobExecution }o--|| Schedule : "belongs to"
+    
+    JobExecution {
+        int Id PK
+        int ScheduleId FK
+        DateTime StartDateTime
+        DateTime EndDateTime
+        int Status
+        string Output
+        string ErrorMessage
+        string StackTrace
+        int RetryCount
+        int DurationSeconds
+        string TriggeredBy
+    }
+    
+    JobParameter }o--|| Schedule : "belongs to"
+    
+    JobParameter {
+        int Id PK
+        int ScheduleId FK
+        string ParameterName
+        string ParameterType
+        string ParameterValue
+        string SourceQuery
+        string SourceConnectionString
+        bool IsDynamic
+        int DisplayOrder
+    }
+    
+    NotificationSetting ||--|| Schedule : "belongs to"
+    
+    NotificationSetting {
+        int Id PK
+        int ScheduleId FK
+        bool EnableSuccessNotifications
+        bool EnableFailureNotifications
+        string SuccessEmailRecipients
+        string FailureEmailRecipients
+        string SuccessEmailSubject
+        string FailureEmailSubject
+        bool IncludeExecutionDetails
+        bool IncludeOutput
+    }
+    
+    VendorCredential }o--|| Client : "belongs to"
+    
+    VendorCredential {
+        int Id PK
+        int ClientId FK
+        string VendorName
+        string VendorUrl
+        string Username
+        string EncryptedPassword
+        DateTime LastVerified
+        bool IsValid
+        string AdditionalData
+    }
+    
+    AuditLog {
+        int Id PK
+        string EventType
+        string EntityType
+        int EntityId
+        string Action
+        string OldValues
+        string NewValues
+        string UserName
+        int ClientId
+        string IpAddress
+        string UserAgent
+        DateTime TimestampDateTime
+        string AdditionalData
+    }
