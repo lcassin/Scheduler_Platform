@@ -65,8 +65,7 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                         j.Status == "ScrapeRequested" &&
                         j.AdrStatusId.HasValue &&
                         !j.ScrapingCompletedDateTime.HasValue &&
-                        j.ModifiedDateTime.HasValue &&
-                        j.ModifiedDateTime.Value <= checkDate)
+                        j.ModifiedDateTime <= checkDate)
             .Include(j => j.AdrAccount)
             .ToListAsync();
     }
