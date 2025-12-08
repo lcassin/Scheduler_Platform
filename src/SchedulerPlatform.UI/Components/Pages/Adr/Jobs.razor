@@ -1,0 +1,255 @@
+@page "/adr/jobs"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject IAdrService AdrService
+@inject NavigationManager Navigation
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<PageTitle>ADR Jobs</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">ADR Jobs</MudText>
+
+<MudPaper Class="pa-4">
+    <MudGrid Class="mb-4" Spacing="2">
+        <MudItem xs="12" md="3">
+            <MudTextField @bind-Value="_searchAccountId" 
+                          Label="Filter by Account ID" 
+                          Placeholder="Enter account ID"
+                          Variant="Variant.Outlined" 
+                          Margin="Margin.Dense" 
+                          Clearable="true"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" />
+        </MudItem>
+        <MudItem xs="12" md="2">
+            <MudSelect T="string" @bind-Value="_selectedStatus" Label="Status" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                <MudSelectItem Value="@("")">All</MudSelectItem>
+                <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
+                <MudSelectItem Value="@("CredentialVerified")">Credential Verified</MudSelectItem>
+                <MudSelectItem Value="@("CredentialFailed")">Credential Failed</MudSelectItem>
+                <MudSelectItem Value="@("ScrapeRequested")">Scrape Requested</MudSelectItem>
+                <MudSelectItem Value="@("ScrapeFailed")">Scrape Failed</MudSelectItem>
+                <MudSelectItem Value="@("Completed")">Completed</MudSelectItem>
+                <MudSelectItem Value="@("NeedsReview")">Needs Review</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="4" Class="d-flex align-center justify-end gap-2">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters" StartIcon="@Icons.Material.Filled.FilterAlt">
+                Apply
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ClearFilters" StartIcon="@Icons.Material.Filled.Clear">
+                Clear
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+
+    @if (_loading)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    }
+    else
+    {
+        <MudTable T="AdrJob" ServerData="@ServerReload" 
+                  @ref="_table" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
+            <HeaderContent>
+                <MudTh>Job ID</MudTh>
+                <MudTh>Account #</MudTh>
+                <MudTh>Billing Period</MudTh>
+                <MudTh>Period Type</MudTh>
+                <MudTh>Next Run</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>ADR Status</MudTh>
+                <MudTh>Retry Count</MudTh>
+                <MudTh>Actions</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Job ID">@context.Id</MudTd>
+                <MudTd DataLabel="Account #">
+                    <MudText Typo="Typo.body2"><strong>@context.VMAccountNumber</strong></MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @context.VMAccountId</MudText>
+                </MudTd>
+                <MudTd DataLabel="Billing Period">
+                    <MudText Typo="Typo.body2">@context.BillingPeriodStartDateTime.ToString("MM/dd/yy") - @context.BillingPeriodEndDateTime.ToString("MM/dd/yy")</MudText>
+                </MudTd>
+                <MudTd DataLabel="Period Type">
+                    @if (!string.IsNullOrEmpty(context.PeriodType))
+                    {
+                        <MudChip T="string" Size="Size.Small">@context.PeriodType</MudChip>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">N/A</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Next Run">
+                    @if (context.NextRunDateTime.HasValue)
+                    {
+                        <text>@context.NextRunDateTime.Value.ToString("MM/dd/yyyy")</text>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">N/A</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
+                        @context.Status
+                    </MudChip>
+                </MudTd>
+                <MudTd DataLabel="ADR Status">
+                    @if (context.AdrStatusId.HasValue)
+                    {
+                        <MudTooltip Text="@(context.AdrStatusDescription ?? "")">
+                            <MudChip T="string" Size="Size.Small" Color="@GetAdrStatusColor(context.AdrStatusId.Value)">
+                                @context.AdrStatusId
+                            </MudChip>
+                        </MudTooltip>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">N/A</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Retry Count">@context.RetryCount</MudTd>
+                <MudTd DataLabel="Actions">
+                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
+                        <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewJobDetails(context)">View Details</MudMenuItem>
+                        <MudMenuItem Icon="@Icons.Material.Filled.History" OnClick="() => ViewExecutions(context.Id)">View Executions</MudMenuItem>
+                        <MudMenuItem Icon="@Icons.Material.Filled.AccountBalance" OnClick="() => ViewAccount(context.AdrAccountId)">View Account</MudMenuItem>
+                    </MudMenu>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Align="Align.Center" Class="my-8">
+                    <MudIcon Icon="@Icons.Material.Filled.Work" Size="Size.Large" Class="mb-2" />
+                    <MudText Typo="Typo.h6">No jobs found</MudText>
+                    <MudText Typo="Typo.body2" Class="mb-4">
+                        @if (_filterAccountId.HasValue || !string.IsNullOrEmpty(_filterStatus))
+                        {
+                            <span>Try adjusting your filters.</span>
+                        }
+                        else
+                        {
+                            <span>No ADR jobs have been created yet. Jobs are created automatically when accounts are due for processing.</span>
+                        }
+                    </MudText>
+                </MudText>
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new int[] { 20, 50, 100 }" />
+            </PagerContent>
+        </MudTable>
+    }
+</MudPaper>
+
+@code {
+    private MudTable<AdrJob> _table = null!;
+    private bool _loading = true;
+    private string? _searchAccountId;
+    private string _selectedStatus = "";
+    private int? _filterAccountId;
+    private string? _filterStatus;
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "accountId")]
+    public int? AccountIdParam { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (AccountIdParam.HasValue)
+        {
+            _searchAccountId = AccountIdParam.Value.ToString();
+            _filterAccountId = AccountIdParam.Value;
+        }
+        _loading = false;
+    }
+
+    private async Task<TableData<AdrJob>> ServerReload(TableState state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
+        {
+            var pageNumber = state.Page + 1;
+            var pageSize = state.PageSize;
+
+            var result = await AdrService.GetJobsPagedAsync(
+                pageNumber,
+                pageSize,
+                _filterAccountId,
+                _filterStatus);
+
+            return new TableData<AdrJob>
+            {
+                Items = result.Items,
+                TotalItems = result.TotalCount
+            };
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading jobs: {ex.Message}", Severity.Error);
+            return new TableData<AdrJob> { Items = new List<AdrJob>(), TotalItems = 0 };
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task ApplyFilters()
+    {
+        _filterAccountId = int.TryParse(_searchAccountId, out var id) ? id : null;
+        _filterStatus = string.IsNullOrEmpty(_selectedStatus) ? null : _selectedStatus;
+        await _table.ReloadServerData();
+    }
+
+    private async Task ClearFilters()
+    {
+        _searchAccountId = null;
+        _selectedStatus = "";
+        _filterAccountId = null;
+        _filterStatus = null;
+        Navigation.NavigateTo("/adr/jobs");
+        await _table.ReloadServerData();
+    }
+
+    private Color GetStatusColor(string status) => status switch
+    {
+        "Pending" => Color.Default,
+        "CredentialVerified" => Color.Info,
+        "CredentialFailed" => Color.Error,
+        "ScrapeRequested" => Color.Warning,
+        "ScrapeFailed" => Color.Error,
+        "Completed" => Color.Success,
+        "NeedsReview" => Color.Warning,
+        _ => Color.Default
+    };
+
+    private Color GetAdrStatusColor(int statusId) => statusId switch
+    {
+        11 => Color.Success, // Complete
+        9 => Color.Warning,  // Needs Human Review
+        3 or 4 or 5 or 7 or 8 => Color.Error, // Error statuses
+        _ => Color.Info
+    };
+
+    private async Task ViewJobDetails(AdrJob job)
+    {
+        var parameters = new DialogParameters<JobDetailsDialog>
+        {
+            { x => x.Job, job }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true };
+        await DialogService.ShowAsync<JobDetailsDialog>("Job Details", parameters, options);
+    }
+
+    private void ViewExecutions(int jobId)
+    {
+        Navigation.NavigateTo($"/adr/executions?jobId={jobId}");
+    }
+
+    private void ViewAccount(int accountId)
+    {
+        Navigation.NavigateTo($"/adr/accounts?accountId={accountId}");
+    }
+}
