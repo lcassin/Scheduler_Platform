@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SchedulerPlatform.API.Services;
 using SchedulerPlatform.Core.Domain.Entities;
 using SchedulerPlatform.Core.Domain.Enums;
 using SchedulerPlatform.Core.Domain.Interfaces;
@@ -12,11 +13,19 @@ namespace SchedulerPlatform.API.Controllers;
 public class AdrController : ControllerBase
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IAdrAccountSyncService _syncService;
+    private readonly IAdrOrchestratorService _orchestratorService;
     private readonly ILogger<AdrController> _logger;
 
-    public AdrController(IUnitOfWork unitOfWork, ILogger<AdrController> logger)
+    public AdrController(
+        IUnitOfWork unitOfWork,
+        IAdrAccountSyncService syncService,
+        IAdrOrchestratorService orchestratorService,
+        ILogger<AdrController> logger)
     {
         _unitOfWork = unitOfWork;
+        _syncService = syncService;
+        _orchestratorService = orchestratorService;
         _logger = logger;
     }
 
@@ -606,6 +615,119 @@ public class AdrController : ControllerBase
             });
 
         return Ok(types);
+    }
+
+    #endregion
+
+    #region Orchestration Endpoints
+
+    [HttpPost("sync/accounts")]
+    public async Task<ActionResult<AdrAccountSyncResult>> SyncAccounts(CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("Manual account sync triggered by {User}", User.Identity?.Name ?? "Unknown");
+            var result = await _syncService.SyncAccountsAsync(cancellationToken);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during manual account sync");
+            return StatusCode(500, new { error = "An error occurred during account sync", message = ex.Message });
+        }
+    }
+
+    [HttpPost("orchestrate/create-jobs")]
+    public async Task<ActionResult<JobCreationResult>> CreateJobs(CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("Manual job creation triggered by {User}", User.Identity?.Name ?? "Unknown");
+            var result = await _orchestratorService.CreateJobsForDueAccountsAsync(cancellationToken);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during manual job creation");
+            return StatusCode(500, new { error = "An error occurred during job creation", message = ex.Message });
+        }
+    }
+
+    [HttpPost("orchestrate/verify-credentials")]
+    public async Task<ActionResult<CredentialVerificationResult>> VerifyCredentials(CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("Manual credential verification triggered by {User}", User.Identity?.Name ?? "Unknown");
+            var result = await _orchestratorService.VerifyCredentialsAsync(cancellationToken);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during manual credential verification");
+            return StatusCode(500, new { error = "An error occurred during credential verification", message = ex.Message });
+        }
+    }
+
+    [HttpPost("orchestrate/process-scraping")]
+    public async Task<ActionResult<ScrapeResult>> ProcessScraping(CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("Manual scraping triggered by {User}", User.Identity?.Name ?? "Unknown");
+            var result = await _orchestratorService.ProcessScrapingAsync(cancellationToken);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during manual scraping");
+            return StatusCode(500, new { error = "An error occurred during scraping", message = ex.Message });
+        }
+    }
+
+    [HttpPost("orchestrate/check-statuses")]
+    public async Task<ActionResult<StatusCheckResult>> CheckStatuses(CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("Manual status check triggered by {User}", User.Identity?.Name ?? "Unknown");
+            var result = await _orchestratorService.CheckPendingStatusesAsync(cancellationToken);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during manual status check");
+            return StatusCode(500, new { error = "An error occurred during status check", message = ex.Message });
+        }
+    }
+
+    [HttpPost("orchestrate/run-full-cycle")]
+    public async Task<ActionResult<object>> RunFullCycle(CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("Full ADR cycle triggered by {User}", User.Identity?.Name ?? "Unknown");
+
+            var syncResult = await _syncService.SyncAccountsAsync(cancellationToken);
+            var jobCreationResult = await _orchestratorService.CreateJobsForDueAccountsAsync(cancellationToken);
+            var credentialResult = await _orchestratorService.VerifyCredentialsAsync(cancellationToken);
+            var scrapeResult = await _orchestratorService.ProcessScrapingAsync(cancellationToken);
+            var statusResult = await _orchestratorService.CheckPendingStatusesAsync(cancellationToken);
+
+            return Ok(new
+            {
+                syncResult,
+                jobCreationResult,
+                credentialResult,
+                scrapeResult,
+                statusResult
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during full ADR cycle");
+            return StatusCode(500, new { error = "An error occurred during full ADR cycle", message = ex.Message });
+        }
     }
 
     #endregion
