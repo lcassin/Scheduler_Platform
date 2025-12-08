@@ -6,6 +6,7 @@
 @inject IDashboardService DashboardService
 @inject IClientService ClientService
 @inject IScheduleService ScheduleService
+@inject IAdrService AdrService
 @inject ISnackbar Snackbar
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JSRuntime
@@ -181,6 +182,109 @@
     </MudItem>
 </MudGrid>
 
+<MudText Typo="Typo.h5" Class="mt-6 mb-2">ADR (Automated Data Retrieval)</MudText>
+<MudGrid Class="mb-4" Spacing="2">
+    <MudItem xs="6" md="2" lg="2">
+        <MudCard Style="cursor: pointer;" @onclick="@(() => NavigationManager.NavigateTo("/adr/accounts"))">
+            <MudCardContent>
+                <MudText Typo="Typo.h6" Color="Color.Primary">Total Accounts</MudText>
+                @if (_adrLoading && _adrStats == null)
+                {
+                    <MudProgressCircular Color="Color.Primary" Size="Size.Small" Indeterminate="true" />
+                }
+                else if (_adrStats != null)
+                {
+                    <MudText Typo="Typo.h3">@FormatNumber(_adrStats.TotalAccounts)</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        ADR-enabled accounts
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Primary">(click to view)</MudText>
+                }
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="6" md="2" lg="2">
+        <MudCard Style="cursor: pointer;" @onclick="@(() => NavigationManager.NavigateTo("/adr/accounts?nextRunStatus=Run%20Now"))">
+            <MudCardContent>
+                <MudText Typo="Typo.h6" Color="Color.Error">Run Now</MudText>
+                @if (_adrLoading && _adrStats == null)
+                {
+                    <MudProgressCircular Color="Color.Error" Size="Size.Small" Indeterminate="true" />
+                }
+                else if (_adrStats != null)
+                {
+                    <MudText Typo="Typo.h3" Color="@(_adrStats.RunNowCount > 0 ? Color.Error : Color.Default)">@FormatNumber(_adrStats.RunNowCount)</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Ready to process
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Error">(click to view)</MudText>
+                }
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="6" md="2" lg="2">
+        <MudCard Style="cursor: pointer;" @onclick="@(() => NavigationManager.NavigateTo("/adr/accounts?nextRunStatus=Due%20Soon"))">
+            <MudCardContent>
+                <MudText Typo="Typo.h6" Color="Color.Warning">Due Soon</MudText>
+                @if (_adrLoading && _adrStats == null)
+                {
+                    <MudProgressCircular Color="Color.Warning" Size="Size.Small" Indeterminate="true" />
+                }
+                else if (_adrStats != null)
+                {
+                    <MudText Typo="Typo.h3" Color="@(_adrStats.DueSoonCount > 0 ? Color.Warning : Color.Default)">@FormatNumber(_adrStats.DueSoonCount)</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Within 7 days
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Warning">(click to view)</MudText>
+                }
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="6" md="2" lg="2">
+        <MudCard Style="cursor: pointer;" @onclick="@(() => NavigationManager.NavigateTo("/adr/missing-accounts"))">
+            <MudCardContent>
+                <MudText Typo="Typo.h6" Color="Color.Error">Missing Invoices</MudText>
+                @if (_adrLoading && _adrStats == null)
+                {
+                    <MudProgressCircular Color="Color.Error" Size="Size.Small" Indeterminate="true" />
+                }
+                else if (_adrStats != null)
+                {
+                    <MudText Typo="Typo.h3" Color="@(_adrStats.MissingCount > 0 ? Color.Error : Color.Default)">@FormatNumber(_adrStats.MissingCount)</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Accounts with missing invoices
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Error">(click to view)</MudText>
+                }
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="6" md="2" lg="2">
+        <MudCard Style="cursor: pointer;" @onclick="@(() => NavigationManager.NavigateTo("/adr/jobs"))">
+            <MudCardContent>
+                <MudText Typo="Typo.h6" Color="Color.Info">Active Jobs</MudText>
+                @if (_adrLoading && _adrStats == null)
+                {
+                    <MudProgressCircular Color="Color.Info" Size="Size.Small" Indeterminate="true" />
+                }
+                else if (_adrStats != null)
+                {
+                    <MudText Typo="Typo.h3">@FormatNumber(_adrStats.ActiveJobsCount)</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Jobs in progress
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Info">(click to view)</MudText>
+                }
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
 <MudGrid Class="mt-4 mb-4 dashboard-charts-grid">
     <MudItem xs="12" md="6">
         <MudPaper Class="pa-4">
@@ -307,16 +411,18 @@
     private JobStatus _selectedStatusesValue;
         private IEnumerable<JobStatus>? _selectedStatusesBackingField = null;
     
-        private bool _overviewLoading;
-        private bool _statusLoading;
-        private bool _trendsLoading;
-        private bool _longestLoading;
-        private bool _missedLoading;
-        private bool _initialLoadComplete;
-        private bool _timezoneLoaded;
+                private bool _overviewLoading;
+                private bool _statusLoading;
+                private bool _trendsLoading;
+                private bool _longestLoading;
+                private bool _missedLoading;
+                private bool _adrLoading;
+                private bool _initialLoadComplete;
+                private bool _timezoneLoaded;
     
-        private int _missedSchedulesCount;
-        private string? _browserTimeZone;
+                private int _missedSchedulesCount;
+                private string? _browserTimeZone;
+                private AdrAccountStats? _adrStats;
     
         private IEnumerable<JobStatus>? SelectedStatuses
     {
@@ -411,14 +517,15 @@
         RefreshData();
     }
 
-    private void RefreshData()
-    {
-        _ = LoadOverviewAsync();
-        _ = LoadStatusBreakdownAsync();
-        _ = LoadTrendsAsync();
-        _ = LoadLongestAsync();
-        _ = LoadMissedSchedulesAsync();
-    }
+        private void RefreshData()
+        {
+            _ = LoadOverviewAsync();
+            _ = LoadStatusBreakdownAsync();
+            _ = LoadTrendsAsync();
+            _ = LoadLongestAsync();
+            _ = LoadMissedSchedulesAsync();
+            _ = LoadAdrStatsAsync();
+        }
     
         private async Task LoadOverviewAsync()
         {
@@ -536,26 +643,46 @@
         }
     }
 
-    private async Task LoadMissedSchedulesAsync()
-    {
-        if (_missedLoading) return;
-        _missedLoading = true;
-        try
+        private async Task LoadMissedSchedulesAsync()
         {
-            _missedSchedulesCount = await ScheduleService.GetMissedSchedulesCountAsync(1);
+            if (_missedLoading) return;
+            _missedLoading = true;
+            try
+            {
+                _missedSchedulesCount = await ScheduleService.GetMissedSchedulesCountAsync(1);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error loading missed schedules: {ex.Message}", Severity.Error);
+            }
+            finally
+            {
+                _missedLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
         }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error loading missed schedules: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _missedLoading = false;
-            await InvokeAsync(StateHasChanged);
-        }
-    }
 
-    private string FormatDateLabel(DateTime dateTime)
+        private async Task LoadAdrStatsAsync()
+        {
+            if (_adrLoading) return;
+            _adrLoading = true;
+            try
+            {
+                _adrStats = await AdrService.GetAccountStatsAsync();
+            }
+            catch (Exception ex)
+            {
+                // ADR stats are optional - don't show error to user if ADR is not configured
+                Console.WriteLine($"Error loading ADR stats: {ex.Message}");
+            }
+            finally
+            {
+                _adrLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+
+        private string FormatDateLabel(DateTime dateTime)
     {
         if (_selectedTimeWindow <= 24)
         {
