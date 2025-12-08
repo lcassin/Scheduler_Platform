@@ -4,7 +4,7 @@ namespace SchedulerPlatform.Core.Domain.Entities;
 
 /// <summary>
 /// Represents a vendor account synced from the external VendorCredNewUAT database.
-/// Tracks billing patterns and scraping schedules for ADR (Automated Data Retrieval).
+/// Tracks billing patterns and scraping schedules for ADR (Automated Document Retrieval).
 /// </summary>
 public class AdrAccount : BaseEntity
 {
