@@ -222,7 +222,7 @@ public class ApiCallJob : IJob
                         .ForJob(context.JobDetail.Key)
                         .WithIdentity($"Retry_{scheduleId}_{jobExecution.RetryCount + 1}")
                         .StartAt(retryTime)
-                        .UsingJobData("RetryCount", jobExecution.RetryCount + 1)
+                        .UsingJobData("RetryCount", (jobExecution.RetryCount + 1).ToString())
                         .UsingJobData("TriggeredBy", "RetryMechanism")
                         .Build();
 

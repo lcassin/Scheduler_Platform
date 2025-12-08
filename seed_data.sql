@@ -85,11 +85,11 @@ VALUES (1, 'Daily Log Cleanup', 'Automatically deletes log files older than 7 da
 
 -- ADR Account Sync - runs daily at 1:00 AM CT (API Call job - JobType 3)
 INSERT INTO [Schedule] (ScheduleId, Name, Description, ClientId, JobType, Frequency, CronExpression, ModifiedDateTime, LastRunDateTime, IsEnabled, MaxRetries, RetryDelayMinutes, TimeZone, JobConfiguration, CreatedDateTime, NextRunDateTime, CreatedBy, ModifiedBy, IsDeleted, TimeoutMinutes)
-VALUES (2, 'ADR Account Sync', 'Syncs ADR accounts from VendorCredNewUAT database daily', 1, 3, 1, '0 0 1 * * ?', GETUTCDATE(), NULL, 1, 3, 5, 'Central Standard Time', '{"Url":"https://localhost:5001/api/adr/sync/accounts","Method":"POST","TimeoutSeconds":600}', GETUTCDATE(), NULL, 'System Created', 'System Created', 0, 10);
+VALUES (2, 'ADR Account Sync', 'Syncs ADR accounts from VendorCredNewUAT database daily', 1, 3, 1, '0 0 1 * * ?', GETUTCDATE(), NULL, 1, 3, 5, 'Central Standard Time', '{"Url":"https://localhost:7008/api/adr/sync/accounts","Method":"POST","TimeoutSeconds":600}', GETUTCDATE(), NULL, 'System Created', 'System Created', 0, 10);
 
 -- ADR Full Cycle - runs daily at 2:00 AM CT after sync completes (API Call job - JobType 3)
 INSERT INTO [Schedule] (ScheduleId, Name, Description, ClientId, JobType, Frequency, CronExpression, ModifiedDateTime, LastRunDateTime, IsEnabled, MaxRetries, RetryDelayMinutes, TimeZone, JobConfiguration, CreatedDateTime, NextRunDateTime, CreatedBy, ModifiedBy, IsDeleted, TimeoutMinutes)
-VALUES (3, 'ADR Full Cycle', 'Runs full ADR orchestration cycle: create jobs, verify credentials, process scraping, check statuses', 1, 3, 1, '0 0 2 * * ?', GETUTCDATE(), NULL, 1, 3, 5, 'Central Standard Time', '{"Url":"https://localhost:5001/api/adr/orchestrate/run-full-cycle","Method":"POST","TimeoutSeconds":1800}', GETUTCDATE(), NULL, 'System Created', 'System Created', 0, 30);
+VALUES (3, 'ADR Full Cycle', 'Runs full ADR orchestration cycle: create jobs, verify credentials, process scraping, check statuses', 1, 3, 1, '0 0 2 * * ?', GETUTCDATE(), NULL, 1, 3, 5, 'Central Standard Time', '{"Url":"https://localhost:7008/api/adr/orchestrate/run-full-cycle","Method":"POST","TimeoutSeconds":1800}', GETUTCDATE(), NULL, 'System Created', 'System Created', 0, 30);
 
 SET IDENTITY_INSERT [Schedule] OFF;
 
