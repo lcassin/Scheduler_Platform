@@ -18,15 +18,20 @@ public class AdrJob : BaseEntity
     /// </summary>
     public long VMAccountId { get; set; }
     
-    /// <summary>
-    /// Vendor account number (denormalized for queries)
-    /// </summary>
-    public string VMAccountNumber { get; set; } = string.Empty;
+        /// <summary>
+        /// Vendor account number (denormalized for queries)
+        /// </summary>
+        public string VMAccountNumber { get; set; } = string.Empty;
     
-    /// <summary>
-    /// Credential ID used for this job
-    /// </summary>
-    public int CredentialId { get; set; }
+        /// <summary>
+        /// Vendor code (denormalized for queries and schedule linking)
+        /// </summary>
+        public string? VendorCode { get; set; }
+    
+        /// <summary>
+        /// Credential ID used for this job
+        /// </summary>
+        public int CredentialId { get; set; }
     
     /// <summary>
     /// Billing period type (e.g., Monthly, Quarterly)
