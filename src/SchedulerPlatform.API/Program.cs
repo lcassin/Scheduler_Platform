@@ -190,11 +190,15 @@ builder.Services.AddScoped<IScheduleRepository, ScheduleRepository>();
 builder.Services.AddScoped<ISchedulerService, SchedulerService>();
 builder.Services.AddScoped<IEmailService, SchedulerPlatform.Infrastructure.Services.EmailService>();
 
+builder.Services.AddScoped<SchedulerPlatform.API.Services.IAdrAccountSyncService, SchedulerPlatform.API.Services.AdrAccountSyncService>();
+builder.Services.AddScoped<SchedulerPlatform.API.Services.IAdrOrchestratorService, SchedulerPlatform.API.Services.AdrOrchestratorService>();
+
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.StartupRecoveryService>();
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.ScheduleHydrationService>();
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.MissedSchedulesProcessor>();
 
 builder.Services.AddHttpClient("ApiCallJob");
+builder.Services.AddHttpClient("AdrApi");
 
 builder.Services.AddQuartzJobServices(builder.Configuration.GetConnectionString("DefaultConnection")!);
 

@@ -20,6 +20,11 @@ public class SchedulerDbContext : DbContext
     public DbSet<AuditLog> AuditLogs { get; set; }
     public DbSet<NotificationSetting> NotificationSettings { get; set; }
     public DbSet<ScheduleSyncSource> ScheduleSyncSources { get; set; }
+    
+    // ADR Process entities
+    public DbSet<AdrAccount> AdrAccounts { get; set; }
+    public DbSet<AdrJob> AdrJobs { get; set; }
+    public DbSet<AdrJobExecution> AdrJobExecutions { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -223,6 +228,88 @@ public class SchedulerDbContext : DbContext
             entity.HasIndex(e => e.ClientId);
             entity.HasIndex(e => e.LastSyncedDateTime);
             entity.HasIndex(e => new { e.ExternalClientId, e.ExternalVendorId, e.AccountNumber });
+        });
+
+        // ADR Account entity configuration
+        modelBuilder.Entity<AdrAccount>(entity =>
+        {
+            entity.ToTable("AdrAccount");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("AdrAccountId");
+            
+            entity.Property(e => e.VMAccountNumber).IsRequired().HasMaxLength(30);
+            entity.Property(e => e.InterfaceAccountId).HasMaxLength(30);
+            entity.Property(e => e.ClientName).HasMaxLength(128);
+            entity.Property(e => e.VendorCode).HasMaxLength(30);
+            entity.Property(e => e.PeriodType).HasMaxLength(13);
+            entity.Property(e => e.NextRunStatus).HasMaxLength(10);
+            entity.Property(e => e.HistoricalBillingStatus).HasMaxLength(10);
+            
+            entity.Property(e => e.ClientId)
+                .HasColumnType("bigint")
+                .HasConversion(nullableIntToLongConverter);
+            
+            entity.HasOne(e => e.Client)
+                .WithMany()
+                .HasForeignKey(e => e.ClientId)
+                .OnDelete(DeleteBehavior.Restrict);
+            
+            entity.HasIndex(e => e.VMAccountId);
+            entity.HasIndex(e => e.VMAccountNumber);
+            entity.HasIndex(e => e.CredentialId);
+            entity.HasIndex(e => e.ClientId);
+            entity.HasIndex(e => e.NextRunStatus);
+            entity.HasIndex(e => e.HistoricalBillingStatus);
+            entity.HasIndex(e => new { e.VMAccountId, e.VMAccountNumber });
+        });
+
+        // ADR Job entity configuration
+        modelBuilder.Entity<AdrJob>(entity =>
+        {
+            entity.ToTable("AdrJob");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("AdrJobId");
+            
+            entity.Property(e => e.VMAccountNumber).IsRequired().HasMaxLength(30);
+            entity.Property(e => e.PeriodType).HasMaxLength(13);
+            entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.AdrStatusDescription).HasMaxLength(100);
+            entity.Property(e => e.ErrorMessage).HasColumnType("nvarchar(max)");
+            
+            entity.HasOne(e => e.AdrAccount)
+                .WithMany(a => a.AdrJobs)
+                .HasForeignKey(e => e.AdrAccountId)
+                .OnDelete(DeleteBehavior.Cascade);
+            
+            entity.HasIndex(e => e.AdrAccountId);
+            entity.HasIndex(e => e.VMAccountId);
+            entity.HasIndex(e => e.CredentialId);
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.BillingPeriodStartDateTime);
+            entity.HasIndex(e => new { e.AdrAccountId, e.BillingPeriodStartDateTime, e.BillingPeriodEndDateTime });
+        });
+
+        // ADR Job Execution entity configuration
+        modelBuilder.Entity<AdrJobExecution>(entity =>
+        {
+            entity.ToTable("AdrJobExecution");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("AdrJobExecutionId");
+            
+            entity.Property(e => e.AdrStatusDescription).HasMaxLength(100);
+            entity.Property(e => e.ErrorMessage).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.ApiResponse).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.RequestPayload).HasColumnType("nvarchar(max)");
+            
+            entity.HasOne(e => e.AdrJob)
+                .WithMany(j => j.AdrJobExecutions)
+                .HasForeignKey(e => e.AdrJobId)
+                .OnDelete(DeleteBehavior.Cascade);
+            
+            entity.HasIndex(e => e.AdrJobId);
+            entity.HasIndex(e => e.StartDateTime);
+            entity.HasIndex(e => e.AdrRequestTypeId);
+            entity.HasIndex(e => e.IsSuccess);
         });
     }
 }

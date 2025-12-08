@@ -1,0 +1,431 @@
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
+using SchedulerPlatform.Core.Domain.Entities;
+using SchedulerPlatform.Core.Domain.Interfaces;
+using SchedulerPlatform.Infrastructure.Data;
+using System.Data;
+
+namespace SchedulerPlatform.API.Services;
+
+public interface IAdrAccountSyncService
+{
+    Task<AdrAccountSyncResult> SyncAccountsAsync(CancellationToken cancellationToken = default);
+}
+
+public class AdrAccountSyncResult
+{
+    public int TotalAccountsProcessed { get; set; }
+    public int AccountsInserted { get; set; }
+    public int AccountsUpdated { get; set; }
+    public int AccountsMarkedDeleted { get; set; }
+    public int Errors { get; set; }
+    public List<string> ErrorMessages { get; set; } = new();
+    public DateTime SyncStartDateTime { get; set; }
+    public DateTime SyncEndDateTime { get; set; }
+    public TimeSpan Duration => SyncEndDateTime - SyncStartDateTime;
+}
+
+public class AdrAccountSyncService : IAdrAccountSyncService
+{
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly SchedulerDbContext _dbContext;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<AdrAccountSyncService> _logger;
+
+    public AdrAccountSyncService(
+        IUnitOfWork unitOfWork,
+        SchedulerDbContext dbContext,
+        IConfiguration configuration,
+        ILogger<AdrAccountSyncService> logger)
+    {
+        _unitOfWork = unitOfWork;
+        _dbContext = dbContext;
+        _configuration = configuration;
+        _logger = logger;
+    }
+
+    public async Task<AdrAccountSyncResult> SyncAccountsAsync(CancellationToken cancellationToken = default)
+    {
+        var result = new AdrAccountSyncResult
+        {
+            SyncStartDateTime = DateTime.UtcNow
+        };
+
+        try
+        {
+            _logger.LogInformation("Starting ADR account sync");
+
+            var externalConnectionString = _configuration.GetConnectionString("VendorCredential");
+            if (string.IsNullOrEmpty(externalConnectionString))
+            {
+                throw new InvalidOperationException("VendorCredential connection string not configured");
+            }
+
+            var externalAccounts = await FetchExternalAccountsAsync(externalConnectionString, cancellationToken);
+            _logger.LogInformation("Fetched {Count} accounts from external database", externalAccounts.Count);
+
+            var existingAccounts = await _dbContext.AdrAccounts
+                .Where(a => !a.IsDeleted)
+                .ToDictionaryAsync(a => a.VMAccountId, cancellationToken);
+
+            var processedVMAccountIds = new HashSet<long>();
+
+            foreach (var externalAccount in externalAccounts)
+            {
+                try
+                {
+                    processedVMAccountIds.Add(externalAccount.VMAccountId);
+
+                    if (existingAccounts.TryGetValue(externalAccount.VMAccountId, out var existingAccount))
+                    {
+                        UpdateExistingAccount(existingAccount, externalAccount);
+                        result.AccountsUpdated++;
+                    }
+                    else
+                    {
+                        var newAccount = CreateNewAccount(externalAccount);
+                        await _dbContext.AdrAccounts.AddAsync(newAccount, cancellationToken);
+                        result.AccountsInserted++;
+                    }
+
+                    result.TotalAccountsProcessed++;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error processing account VMAccountId={VMAccountId}", externalAccount.VMAccountId);
+                    result.Errors++;
+                    result.ErrorMessages.Add($"VMAccountId {externalAccount.VMAccountId}: {ex.Message}");
+                }
+            }
+
+            foreach (var existingAccount in existingAccounts.Values)
+            {
+                if (!processedVMAccountIds.Contains(existingAccount.VMAccountId))
+                {
+                    existingAccount.IsDeleted = true;
+                    existingAccount.ModifiedDateTime = DateTime.UtcNow;
+                    existingAccount.ModifiedBy = "System Created";
+                    result.AccountsMarkedDeleted++;
+                }
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            result.SyncEndDateTime = DateTime.UtcNow;
+            _logger.LogInformation(
+                "ADR account sync completed. Processed: {Processed}, Inserted: {Inserted}, Updated: {Updated}, Deleted: {Deleted}, Errors: {Errors}, Duration: {Duration}",
+                result.TotalAccountsProcessed, result.AccountsInserted, result.AccountsUpdated, 
+                result.AccountsMarkedDeleted, result.Errors, result.Duration);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "ADR account sync failed");
+            result.SyncEndDateTime = DateTime.UtcNow;
+            result.Errors++;
+            result.ErrorMessages.Add($"Sync failed: {ex.Message}");
+            throw;
+        }
+    }
+
+    private async Task<List<ExternalAccountData>> FetchExternalAccountsAsync(
+        string connectionString, 
+        CancellationToken cancellationToken)
+    {
+        var accounts = new List<ExternalAccountData>();
+
+        var query = GetAccountSyncQuery();
+
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        await using var command = new SqlCommand(query, connection);
+        command.CommandTimeout = 300;
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            accounts.Add(new ExternalAccountData
+            {
+                VMAccountId = reader.GetInt64(reader.GetOrdinal("VMAccountId")),
+                CredentialId = reader.GetInt32(reader.GetOrdinal("CredentialId")),
+                ClientId = reader.IsDBNull(reader.GetOrdinal("ClientId")) ? null : reader.GetInt32(reader.GetOrdinal("ClientId")),
+                ClientName = reader.IsDBNull(reader.GetOrdinal("ClientName")) ? null : reader.GetString(reader.GetOrdinal("ClientName")),
+                VendorCode = reader.IsDBNull(reader.GetOrdinal("VendorCode")) ? null : reader.GetString(reader.GetOrdinal("VendorCode")),
+                VMAccountNumber = reader.GetString(reader.GetOrdinal("VMAccountNumber")),
+                InterfaceAccountId = reader.IsDBNull(reader.GetOrdinal("InterfaceAccountId")) ? null : reader.GetString(reader.GetOrdinal("InterfaceAccountId")),
+                PeriodType = reader.IsDBNull(reader.GetOrdinal("PeriodType")) ? null : reader.GetString(reader.GetOrdinal("PeriodType")),
+                PeriodDays = reader.IsDBNull(reader.GetOrdinal("PeriodDays")) ? null : reader.GetInt32(reader.GetOrdinal("PeriodDays")),
+                MedianDays = reader.IsDBNull(reader.GetOrdinal("MedianDays")) ? null : reader.GetDouble(reader.GetOrdinal("MedianDays")),
+                InvoiceCount = reader.GetInt32(reader.GetOrdinal("InvoiceCount")),
+                LastInvoiceDateTime = reader.IsDBNull(reader.GetOrdinal("LastInvoiceDate")) ? null : reader.GetDateTime(reader.GetOrdinal("LastInvoiceDate")),
+                ExpectedRangeStartDateTime = reader.IsDBNull(reader.GetOrdinal("ExpectedRangeStart")) ? null : reader.GetDateTime(reader.GetOrdinal("ExpectedRangeStart")),
+                ExpectedNextDateTime = reader.IsDBNull(reader.GetOrdinal("ExpectedNextDate")) ? null : reader.GetDateTime(reader.GetOrdinal("ExpectedNextDate")),
+                ExpectedRangeEndDateTime = reader.IsDBNull(reader.GetOrdinal("ExpectedRangeEnd")) ? null : reader.GetDateTime(reader.GetOrdinal("ExpectedRangeEnd")),
+                NextRangeStartDateTime = reader.IsDBNull(reader.GetOrdinal("NextRangeStart")) ? null : reader.GetDateTime(reader.GetOrdinal("NextRangeStart")),
+                NextRunDateTime = reader.IsDBNull(reader.GetOrdinal("NextRunDate")) ? null : reader.GetDateTime(reader.GetOrdinal("NextRunDate")),
+                NextRangeEndDateTime = reader.IsDBNull(reader.GetOrdinal("NextRangeEnd")) ? null : reader.GetDateTime(reader.GetOrdinal("NextRangeEnd")),
+                DaysUntilNextRun = reader.IsDBNull(reader.GetOrdinal("DaysUntilNextRun")) ? null : reader.GetInt32(reader.GetOrdinal("DaysUntilNextRun")),
+                NextRunStatus = reader.IsDBNull(reader.GetOrdinal("NextRunStatus")) ? null : reader.GetString(reader.GetOrdinal("NextRunStatus")),
+                HistoricalBillingStatus = reader.IsDBNull(reader.GetOrdinal("HistoricalBillingStatus")) ? null : reader.GetString(reader.GetOrdinal("HistoricalBillingStatus"))
+            });
+        }
+
+        return accounts;
+    }
+
+    private static string GetAccountSyncQuery()
+    {
+        return @"
+DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
+
+SELECT [RecId]
+      ,AD.[InterfaceAccountId]
+      ,[BillId]
+      ,[InvoiceDate]
+      ,AD.[AccountNumber]
+      ,AD.[VendorCode]
+      ,[VCAccountId] AS AccountId
+      ,C.[CredentialId]
+      ,C.ExpirationDate
+      ,CL.ClientId
+      ,CL.ClientName
+INTO #tmpCredentialAccountBilling
+FROM [dbo].[ADRInvoiceAccountData] AD
+    LEFT OUTER JOIN Account A ON AD.VCAccountId = A.AccountId
+    LEFT OUTER JOIN Client CL ON A.ClientId = CL.ClientId
+    INNER JOIN CredentialAccount CA ON AD.VCAccountId = CA.AccountId
+    INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId;
+
+;WITH AccountStats AS (
+    SELECT AccountId,
+           MAX(InvoiceDate) AS LastInvoiceDate,
+           COUNT(*) AS InvoiceCount
+    FROM #tmpCredentialAccountBilling
+    GROUP BY AccountId
+),
+InvoiceIntervals AS (
+    SELECT AccountId,
+           DATEDIFF(DAY, LAG(InvoiceDate) OVER (PARTITION BY AccountId ORDER BY InvoiceDate), InvoiceDate) AS DaysBetween
+    FROM #tmpCredentialAccountBilling
+),
+IntervalStats AS (
+    SELECT DISTINCT
+        AccountId,
+        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY DaysBetween) 
+            OVER (PARTITION BY AccountId) AS MedianDays
+    FROM InvoiceIntervals
+    WHERE DaysBetween IS NOT NULL AND DaysBetween > 0
+),
+AccountPeriods AS (
+    SELECT 
+        a.AccountId,
+        a.LastInvoiceDate,
+        a.InvoiceCount,
+        COALESCE(i.MedianDays, 30) AS MedianDays,
+        CASE 
+            WHEN i.MedianDays >= 7 AND i.MedianDays <= 21 THEN 'Bi-Weekly'
+            WHEN i.MedianDays >= 22 AND i.MedianDays <= 45 THEN 'Monthly'
+            WHEN i.MedianDays >= 46 AND i.MedianDays <= 75 THEN 'Bi-Monthly'
+            WHEN i.MedianDays >= 76 AND i.MedianDays <= 135 THEN 'Quarterly'
+            WHEN i.MedianDays >= 136 AND i.MedianDays <= 270 THEN 'Semi-Annually'
+            WHEN i.MedianDays >= 271 THEN 'Annually'
+            ELSE 'Monthly'
+        END AS PeriodType,
+        CASE 
+            WHEN i.MedianDays >= 7 AND i.MedianDays <= 21 THEN 14
+            WHEN i.MedianDays >= 22 AND i.MedianDays <= 45 THEN 30
+            WHEN i.MedianDays >= 46 AND i.MedianDays <= 75 THEN 60
+            WHEN i.MedianDays >= 76 AND i.MedianDays <= 135 THEN 90
+            WHEN i.MedianDays >= 136 AND i.MedianDays <= 270 THEN 180
+            WHEN i.MedianDays >= 271 THEN 365
+            ELSE 30
+        END AS PeriodDays,
+        CASE 
+            WHEN i.MedianDays >= 7 AND i.MedianDays <= 21 THEN 3
+            WHEN i.MedianDays >= 22 AND i.MedianDays <= 45 THEN 5
+            WHEN i.MedianDays >= 46 AND i.MedianDays <= 75 THEN 7
+            WHEN i.MedianDays >= 76 AND i.MedianDays <= 135 THEN 10
+            WHEN i.MedianDays >= 136 AND i.MedianDays <= 270 THEN 14
+            WHEN i.MedianDays >= 271 THEN 21
+            ELSE 5
+        END AS WindowDays,
+        DATEADD(DAY, CAST(COALESCE(i.MedianDays, 30) AS INT), a.LastInvoiceDate) AS ExpectedNextDate
+    FROM AccountStats a
+    LEFT JOIN IntervalStats i ON i.AccountId = a.AccountId
+),
+NextRunCalc AS (
+    SELECT ap.*,
+        CASE 
+            WHEN ap.ExpectedNextDate >= CAST(GETDATE() AS DATE) THEN ap.ExpectedNextDate
+            ELSE DATEADD(DAY, ((DATEDIFF(DAY, ap.ExpectedNextDate, CAST(GETDATE() AS DATE)) / ap.PeriodDays) + 1) * ap.PeriodDays, ap.ExpectedNextDate)
+        END AS NextRunDate
+    FROM AccountPeriods ap
+),
+Combined AS (
+    SELECT DISTINCT 
+        cab.AccountId AS VMAccountId, 
+        cab.CredentialId, 
+        cab.ClientId,
+        cab.ClientName,
+        cab.VendorCode,
+        cab.AccountNumber AS VMAccountNumber, 
+        cab.InterfaceAccountId,
+        nr.PeriodType,
+        nr.PeriodDays,
+        nr.MedianDays,
+        nr.InvoiceCount,
+        nr.LastInvoiceDate,
+        DATEADD(DAY, -nr.WindowDays, nr.ExpectedNextDate) AS ExpectedRangeStart,
+        nr.ExpectedNextDate,
+        DATEADD(DAY, nr.WindowDays, nr.ExpectedNextDate) AS ExpectedRangeEnd,
+        DATEADD(DAY, -nr.WindowDays, nr.NextRunDate) AS NextRangeStart,
+        nr.NextRunDate,
+        DATEADD(DAY, nr.WindowDays, nr.NextRunDate) AS NextRangeEnd,
+        DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) AS DaysUntilNextRun,
+        CASE 
+            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) <= 0 THEN 'Run Now'
+            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) <= nr.WindowDays THEN 'Due Soon'
+            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) <= 30 THEN 'Upcoming'
+            ELSE 'Future'
+        END AS NextRunStatus,
+        CASE 
+            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) < -(nr.PeriodDays * 2) THEN 'Missing'
+            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) < -nr.WindowDays THEN 'Overdue'
+            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) < 0 THEN 'Due Now'
+            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) <= nr.WindowDays THEN 'Due Soon'
+            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) <= 30 THEN 'Upcoming'
+            ELSE 'Future'
+        END AS HistoricalBillingStatus
+    FROM #tmpCredentialAccountBilling cab
+    INNER JOIN NextRunCalc nr ON nr.AccountId = cab.AccountId
+),
+MaxCred AS (
+    SELECT VMAccountId, VMAccountNumber, ExpectedNextDate, MAX(CredentialId) AS MaxCredentialId
+    FROM Combined
+    GROUP BY VMAccountId, VMAccountNumber, ExpectedNextDate
+),
+Filtered AS (
+    SELECT c.*
+    FROM Combined c
+    JOIN MaxCred m ON m.VMAccountId = c.VMAccountId
+                  AND m.VMAccountNumber = c.VMAccountNumber
+                  AND m.ExpectedNextDate = c.ExpectedNextDate
+                  AND m.MaxCredentialId = c.CredentialId
+)
+SELECT DISTINCT
+    VMAccountId,
+    CredentialId,
+    ClientId,
+    ClientName,
+    VendorCode,
+    VMAccountNumber,
+    InterfaceAccountId,
+    PeriodType,
+    PeriodDays,
+    MedianDays,
+    InvoiceCount,
+    LastInvoiceDate,
+    ExpectedRangeStart,
+    ExpectedNextDate,
+    ExpectedRangeEnd,
+    NextRangeStart,
+    NextRunDate,
+    NextRangeEnd,
+    DaysUntilNextRun,
+    NextRunStatus,
+    HistoricalBillingStatus
+FROM Filtered
+ORDER BY VMAccountId;
+
+DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
+";
+    }
+
+    private void UpdateExistingAccount(AdrAccount existing, ExternalAccountData external)
+    {
+        existing.VMAccountNumber = external.VMAccountNumber;
+        existing.InterfaceAccountId = external.InterfaceAccountId;
+        existing.ClientId = external.ClientId;
+        existing.ClientName = external.ClientName;
+        existing.CredentialId = external.CredentialId;
+        existing.VendorCode = external.VendorCode;
+        existing.PeriodType = external.PeriodType;
+        existing.PeriodDays = external.PeriodDays;
+        existing.MedianDays = external.MedianDays;
+        existing.InvoiceCount = external.InvoiceCount;
+        existing.LastInvoiceDateTime = external.LastInvoiceDateTime;
+        existing.ExpectedNextDateTime = external.ExpectedNextDateTime;
+        existing.ExpectedRangeStartDateTime = external.ExpectedRangeStartDateTime;
+        existing.ExpectedRangeEndDateTime = external.ExpectedRangeEndDateTime;
+        existing.NextRunDateTime = external.NextRunDateTime;
+        existing.NextRangeStartDateTime = external.NextRangeStartDateTime;
+        existing.NextRangeEndDateTime = external.NextRangeEndDateTime;
+        existing.DaysUntilNextRun = external.DaysUntilNextRun;
+        existing.NextRunStatus = external.NextRunStatus;
+        existing.HistoricalBillingStatus = external.HistoricalBillingStatus;
+        existing.LastSyncedDateTime = DateTime.UtcNow;
+        existing.ModifiedDateTime = DateTime.UtcNow;
+        existing.ModifiedBy = "System Created";
+    }
+
+    private AdrAccount CreateNewAccount(ExternalAccountData external)
+    {
+        return new AdrAccount
+        {
+            VMAccountId = external.VMAccountId,
+            VMAccountNumber = external.VMAccountNumber,
+            InterfaceAccountId = external.InterfaceAccountId,
+            ClientId = external.ClientId,
+            ClientName = external.ClientName,
+            CredentialId = external.CredentialId,
+            VendorCode = external.VendorCode,
+            PeriodType = external.PeriodType,
+            PeriodDays = external.PeriodDays,
+            MedianDays = external.MedianDays,
+            InvoiceCount = external.InvoiceCount,
+            LastInvoiceDateTime = external.LastInvoiceDateTime,
+            ExpectedNextDateTime = external.ExpectedNextDateTime,
+            ExpectedRangeStartDateTime = external.ExpectedRangeStartDateTime,
+            ExpectedRangeEndDateTime = external.ExpectedRangeEndDateTime,
+            NextRunDateTime = external.NextRunDateTime,
+            NextRangeStartDateTime = external.NextRangeStartDateTime,
+            NextRangeEndDateTime = external.NextRangeEndDateTime,
+            DaysUntilNextRun = external.DaysUntilNextRun,
+            NextRunStatus = external.NextRunStatus,
+            HistoricalBillingStatus = external.HistoricalBillingStatus,
+            LastSyncedDateTime = DateTime.UtcNow,
+            CreatedDateTime = DateTime.UtcNow,
+            CreatedBy = "System Created",
+            ModifiedDateTime = DateTime.UtcNow,
+            ModifiedBy = "System Created",
+            IsDeleted = false
+        };
+    }
+
+    private class ExternalAccountData
+    {
+        public long VMAccountId { get; set; }
+        public string VMAccountNumber { get; set; } = string.Empty;
+        public string? InterfaceAccountId { get; set; }
+        public int? ClientId { get; set; }
+        public string? ClientName { get; set; }
+        public int CredentialId { get; set; }
+        public string? VendorCode { get; set; }
+        public string? PeriodType { get; set; }
+        public int? PeriodDays { get; set; }
+        public double? MedianDays { get; set; }
+        public int InvoiceCount { get; set; }
+        public DateTime? LastInvoiceDateTime { get; set; }
+        public DateTime? ExpectedNextDateTime { get; set; }
+        public DateTime? ExpectedRangeStartDateTime { get; set; }
+        public DateTime? ExpectedRangeEndDateTime { get; set; }
+        public DateTime? NextRunDateTime { get; set; }
+        public DateTime? NextRangeStartDateTime { get; set; }
+        public DateTime? NextRangeEndDateTime { get; set; }
+        public int? DaysUntilNextRun { get; set; }
+        public string? NextRunStatus { get; set; }
+        public string? HistoricalBillingStatus { get; set; }
+    }
+}
