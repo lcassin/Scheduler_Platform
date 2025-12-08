@@ -78,36 +78,44 @@ public class AdrService : IAdrService
 
     #region Job Operations
 
-    public async Task<PagedResult<AdrJob>> GetJobsPagedAsync(
-        int pageNumber = 1,
-        int pageSize = 20,
-        int? adrAccountId = null,
-        string? status = null)
-    {
-        var client = CreateClient();
-        var queryParams = new List<string>
+        public async Task<PagedResult<AdrJob>> GetJobsPagedAsync(
+            int pageNumber = 1,
+            int pageSize = 20,
+            int? adrAccountId = null,
+            string? status = null,
+            string? vendorCode = null,
+            string? vmAccountNumber = null)
         {
-            $"pageNumber={pageNumber}",
-            $"pageSize={pageSize}"
-        };
+            var client = CreateClient();
+            var queryParams = new List<string>
+            {
+                $"pageNumber={pageNumber}",
+                $"pageSize={pageSize}"
+            };
 
-        if (adrAccountId.HasValue)
-            queryParams.Add($"adrAccountId={adrAccountId.Value}");
+            if (adrAccountId.HasValue)
+                queryParams.Add($"adrAccountId={adrAccountId.Value}");
 
-        if (!string.IsNullOrWhiteSpace(status))
-            queryParams.Add($"status={Uri.EscapeDataString(status)}");
+            if (!string.IsNullOrWhiteSpace(status))
+                queryParams.Add($"status={Uri.EscapeDataString(status)}");
 
-        var query = "?" + string.Join("&", queryParams);
-        var result = await client.GetFromJsonAsync<PagedResult<AdrJob>>($"adr/jobs{query}");
+            if (!string.IsNullOrWhiteSpace(vendorCode))
+                queryParams.Add($"vendorCode={Uri.EscapeDataString(vendorCode)}");
 
-        return result ?? new PagedResult<AdrJob>
-        {
-            Items = new List<AdrJob>(),
-            TotalCount = 0,
-            PageNumber = pageNumber,
-            PageSize = pageSize
-        };
-    }
+            if (!string.IsNullOrWhiteSpace(vmAccountNumber))
+                queryParams.Add($"vmAccountNumber={Uri.EscapeDataString(vmAccountNumber)}");
+
+            var query = "?" + string.Join("&", queryParams);
+            var result = await client.GetFromJsonAsync<PagedResult<AdrJob>>($"adr/jobs{query}");
+
+            return result ?? new PagedResult<AdrJob>
+            {
+                Items = new List<AdrJob>(),
+                TotalCount = 0,
+                PageNumber = pageNumber,
+                PageSize = pageSize
+            };
+        }
 
     public async Task<AdrJob?> GetJobAsync(int id)
     {

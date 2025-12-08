@@ -168,39 +168,43 @@ public class AdrController : ControllerBase
 
     #region AdrJob Endpoints
 
-    [HttpGet("jobs")]
-    public async Task<ActionResult<object>> GetJobs(
-        [FromQuery] int? adrAccountId = null,
-        [FromQuery] string? status = null,
-        [FromQuery] DateTime? billingPeriodStart = null,
-        [FromQuery] DateTime? billingPeriodEnd = null,
-        [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20)
-    {
-        try
+        [HttpGet("jobs")]
+        public async Task<ActionResult<object>> GetJobs(
+            [FromQuery] int? adrAccountId = null,
+            [FromQuery] string? status = null,
+            [FromQuery] DateTime? billingPeriodStart = null,
+            [FromQuery] DateTime? billingPeriodEnd = null,
+            [FromQuery] string? vendorCode = null,
+            [FromQuery] string? vmAccountNumber = null,
+            [FromQuery] int pageNumber = 1,
+            [FromQuery] int pageSize = 20)
         {
-            var (items, totalCount) = await _unitOfWork.AdrJobs.GetPagedAsync(
-                pageNumber,
-                pageSize,
-                adrAccountId,
-                status,
-                billingPeriodStart,
-                billingPeriodEnd);
-
-            return Ok(new
+            try
             {
-                items,
-                totalCount,
-                pageNumber,
-                pageSize
-            });
+                var (items, totalCount) = await _unitOfWork.AdrJobs.GetPagedAsync(
+                    pageNumber,
+                    pageSize,
+                    adrAccountId,
+                    status,
+                    billingPeriodStart,
+                    billingPeriodEnd,
+                    vendorCode,
+                    vmAccountNumber);
+
+                return Ok(new
+                {
+                    items,
+                    totalCount,
+                    pageNumber,
+                    pageSize
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving ADR jobs");
+                return StatusCode(500, "An error occurred while retrieving ADR jobs");
+            }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error retrieving ADR jobs");
-            return StatusCode(500, "An error occurred while retrieving ADR jobs");
-        }
-    }
 
     [HttpGet("jobs/{id}")]
     public async Task<ActionResult<AdrJob>> GetJob(int id)

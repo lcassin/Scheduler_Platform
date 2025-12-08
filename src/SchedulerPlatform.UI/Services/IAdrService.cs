@@ -16,12 +16,14 @@ public interface IAdrService
     Task<AdrAccount?> GetAccountByVMAccountIdAsync(long vmAccountId);
     Task<AdrAccountStats> GetAccountStatsAsync();
     
-    // Job operations
-    Task<PagedResult<AdrJob>> GetJobsPagedAsync(
-        int pageNumber = 1,
-        int pageSize = 20,
-        int? adrAccountId = null,
-        string? status = null);
+        // Job operations
+        Task<PagedResult<AdrJob>> GetJobsPagedAsync(
+            int pageNumber = 1,
+            int pageSize = 20,
+            int? adrAccountId = null,
+            string? status = null,
+            string? vendorCode = null,
+            string? vmAccountNumber = null);
     Task<AdrJob?> GetJobAsync(int id);
     Task<List<AdrJob>> GetJobsByAccountAsync(int adrAccountId);
     Task<AdrJobStats> GetJobStatsAsync();

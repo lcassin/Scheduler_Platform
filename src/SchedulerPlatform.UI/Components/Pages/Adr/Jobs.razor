@@ -11,38 +11,48 @@
 <MudText Typo="Typo.h4" Class="mb-4">ADR Jobs</MudText>
 
 <MudPaper Class="pa-4">
-    <MudGrid Class="mb-4" Spacing="2">
-        <MudItem xs="12" md="3">
-            <MudTextField @bind-Value="_searchAccountId" 
-                          Label="Filter by Account ID" 
-                          Placeholder="Enter account ID"
-                          Variant="Variant.Outlined" 
-                          Margin="Margin.Dense" 
-                          Clearable="true"
-                          Adornment="Adornment.Start"
-                          AdornmentIcon="@Icons.Material.Filled.Search" />
-        </MudItem>
-        <MudItem xs="12" md="2">
-            <MudSelect T="string" @bind-Value="_selectedStatus" Label="Status" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
-                <MudSelectItem Value="@("")">All</MudSelectItem>
-                <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
-                <MudSelectItem Value="@("CredentialVerified")">Credential Verified</MudSelectItem>
-                <MudSelectItem Value="@("CredentialFailed")">Credential Failed</MudSelectItem>
-                <MudSelectItem Value="@("ScrapeRequested")">Scrape Requested</MudSelectItem>
-                <MudSelectItem Value="@("ScrapeFailed")">Scrape Failed</MudSelectItem>
-                <MudSelectItem Value="@("Completed")">Completed</MudSelectItem>
-                <MudSelectItem Value="@("NeedsReview")">Needs Review</MudSelectItem>
-            </MudSelect>
-        </MudItem>
-        <MudItem xs="12" md="4" Class="d-flex align-center justify-end gap-2">
-            <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters" StartIcon="@Icons.Material.Filled.FilterAlt">
-                Apply
-            </MudButton>
-            <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ClearFilters" StartIcon="@Icons.Material.Filled.Clear">
-                Clear
-            </MudButton>
-        </MudItem>
-    </MudGrid>
+        <MudGrid Class="mb-4" Spacing="2">
+            <MudItem xs="12" md="2">
+                <MudTextField @bind-Value="_searchVendorCode" 
+                              Label="Vendor Code" 
+                              Placeholder="Enter vendor code"
+                              Variant="Variant.Outlined" 
+                              Margin="Margin.Dense" 
+                              Clearable="true"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Business" />
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudTextField @bind-Value="_searchAccountNumber" 
+                              Label="Account Number" 
+                              Placeholder="Enter account #"
+                              Variant="Variant.Outlined" 
+                              Margin="Margin.Dense" 
+                              Clearable="true"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Search" />
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudSelect T="string" @bind-Value="_selectedStatus" Label="Status" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                    <MudSelectItem Value="@("")">All</MudSelectItem>
+                    <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
+                    <MudSelectItem Value="@("CredentialVerified")">Credential Verified</MudSelectItem>
+                    <MudSelectItem Value="@("CredentialFailed")">Credential Failed</MudSelectItem>
+                    <MudSelectItem Value="@("ScrapeRequested")">Scrape Requested</MudSelectItem>
+                    <MudSelectItem Value="@("ScrapeFailed")">Scrape Failed</MudSelectItem>
+                    <MudSelectItem Value="@("Completed")">Completed</MudSelectItem>
+                    <MudSelectItem Value="@("NeedsReview")">Needs Review</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3" Class="d-flex align-center justify-end gap-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters" StartIcon="@Icons.Material.Filled.FilterAlt">
+                    Apply
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ClearFilters" StartIcon="@Icons.Material.Filled.Clear">
+                    Clear
+                </MudButton>
+            </MudItem>
+        </MudGrid>
 
     @if (_loading)
     {
@@ -52,23 +62,33 @@
     {
         <MudTable T="AdrJob" ServerData="@ServerReload" 
                   @ref="_table" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
-            <HeaderContent>
-                <MudTh>Job ID</MudTh>
-                <MudTh>Account #</MudTh>
-                <MudTh>Billing Period</MudTh>
-                <MudTh>Period Type</MudTh>
-                <MudTh>Next Run</MudTh>
-                <MudTh>Status</MudTh>
-                <MudTh>ADR Status</MudTh>
-                <MudTh>Retry Count</MudTh>
-                <MudTh>Actions</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="Job ID">@context.Id</MudTd>
-                <MudTd DataLabel="Account #">
-                    <MudText Typo="Typo.body2"><strong>@context.VMAccountNumber</strong></MudText>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @context.VMAccountId</MudText>
-                </MudTd>
+                        <HeaderContent>
+                            <MudTh>Job ID</MudTh>
+                            <MudTh>Vendor</MudTh>
+                            <MudTh>Account #</MudTh>
+                            <MudTh>Billing Period</MudTh>
+                            <MudTh>Period Type</MudTh>
+                            <MudTh>Next Run</MudTh>
+                            <MudTh>Status</MudTh>
+                            <MudTh>ADR Status</MudTh>
+                            <MudTh>Retry Count</MudTh>
+                            <MudTh>Actions</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Job ID">@context.Id</MudTd>
+                            <MudTd DataLabel="Vendor">
+                                @if (!string.IsNullOrEmpty(context.VendorCode))
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary">@context.VendorCode</MudChip>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">N/A</MudText>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Account #">
+                                <MudText Typo="Typo.body2"><strong>@context.VMAccountNumber</strong></MudText>
+                            </MudTd>
                 <MudTd DataLabel="Billing Period">
                     <MudText Typo="Typo.body2">@context.BillingPeriodStartDateTime.ToString("MM/dd/yy") - @context.BillingPeriodEndDateTime.ToString("MM/dd/yy")</MudText>
                 </MudTd>
@@ -112,30 +132,31 @@
                     }
                 </MudTd>
                 <MudTd DataLabel="Retry Count">@context.RetryCount</MudTd>
-                <MudTd DataLabel="Actions">
-                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
-                        <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewJobDetails(context)">View Details</MudMenuItem>
-                        <MudMenuItem Icon="@Icons.Material.Filled.History" OnClick="() => ViewExecutions(context.Id)">View Executions</MudMenuItem>
-                        <MudMenuItem Icon="@Icons.Material.Filled.AccountBalance" OnClick="() => ViewAccount(context.AdrAccountId)">View Account</MudMenuItem>
-                    </MudMenu>
-                </MudTd>
+                                <MudTd DataLabel="Actions">
+                                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
+                                        <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewJobDetails(context)">View Details</MudMenuItem>
+                                        <MudMenuItem Icon="@Icons.Material.Filled.History" OnClick="() => ViewExecutions(context.Id)">View Executions</MudMenuItem>
+                                        <MudMenuItem Icon="@Icons.Material.Filled.AccountBalance" OnClick="() => ViewAccount(context.AdrAccountId)">View Account</MudMenuItem>
+                                        <MudMenuItem Icon="@Icons.Material.Filled.Schedule" OnClick="() => ViewSchedule(context)">View Schedule</MudMenuItem>
+                                    </MudMenu>
+                                </MudTd>
             </RowTemplate>
-            <NoRecordsContent>
-                <MudText Align="Align.Center" Class="my-8">
-                    <MudIcon Icon="@Icons.Material.Filled.Work" Size="Size.Large" Class="mb-2" />
-                    <MudText Typo="Typo.h6">No jobs found</MudText>
-                    <MudText Typo="Typo.body2" Class="mb-4">
-                        @if (_filterAccountId.HasValue || !string.IsNullOrEmpty(_filterStatus))
-                        {
-                            <span>Try adjusting your filters.</span>
-                        }
-                        else
-                        {
-                            <span>No ADR jobs have been created yet. Jobs are created automatically when accounts are due for processing.</span>
-                        }
-                    </MudText>
-                </MudText>
-            </NoRecordsContent>
+                        <NoRecordsContent>
+                            <MudText Align="Align.Center" Class="my-8">
+                                <MudIcon Icon="@Icons.Material.Filled.Work" Size="Size.Large" Class="mb-2" />
+                                <MudText Typo="Typo.h6">No jobs found</MudText>
+                                <MudText Typo="Typo.body2" Class="mb-4">
+                                    @if (!string.IsNullOrEmpty(_filterVendorCode) || !string.IsNullOrEmpty(_filterAccountNumber) || !string.IsNullOrEmpty(_filterStatus))
+                                    {
+                                        <span>Try adjusting your filters.</span>
+                                    }
+                                    else
+                                    {
+                                        <span>No ADR jobs have been created yet. Jobs are created automatically when accounts are due for processing.</span>
+                                    }
+                                </MudText>
+                            </MudText>
+                        </NoRecordsContent>
             <PagerContent>
                 <MudTablePager PageSizeOptions="new int[] { 20, 50, 100 }" />
             </PagerContent>
@@ -146,21 +167,32 @@
 @code {
     private MudTable<AdrJob> _table = null!;
     private bool _loading = true;
-    private string? _searchAccountId;
+    private string? _searchVendorCode;
+    private string? _searchAccountNumber;
     private string _selectedStatus = "";
-    private int? _filterAccountId;
+    private string? _filterVendorCode;
+    private string? _filterAccountNumber;
     private string? _filterStatus;
 
     [Parameter]
-    [SupplyParameterFromQuery(Name = "accountId")]
-    public int? AccountIdParam { get; set; }
+    [SupplyParameterFromQuery(Name = "vendorCode")]
+    public string? VendorCodeParam { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "accountNumber")]
+    public string? AccountNumberParam { get; set; }
 
     protected override void OnInitialized()
     {
-        if (AccountIdParam.HasValue)
+        if (!string.IsNullOrEmpty(VendorCodeParam))
         {
-            _searchAccountId = AccountIdParam.Value.ToString();
-            _filterAccountId = AccountIdParam.Value;
+            _searchVendorCode = VendorCodeParam;
+            _filterVendorCode = VendorCodeParam;
+        }
+        if (!string.IsNullOrEmpty(AccountNumberParam))
+        {
+            _searchAccountNumber = AccountNumberParam;
+            _filterAccountNumber = AccountNumberParam;
         }
         _loading = false;
     }
@@ -176,8 +208,10 @@
             var result = await AdrService.GetJobsPagedAsync(
                 pageNumber,
                 pageSize,
-                _filterAccountId,
-                _filterStatus);
+                null, // adrAccountId - no longer used for filtering
+                _filterStatus,
+                _filterVendorCode,
+                _filterAccountNumber);
 
             return new TableData<AdrJob>
             {
@@ -198,16 +232,19 @@
 
     private async Task ApplyFilters()
     {
-        _filterAccountId = int.TryParse(_searchAccountId, out var id) ? id : null;
+        _filterVendorCode = string.IsNullOrWhiteSpace(_searchVendorCode) ? null : _searchVendorCode;
+        _filterAccountNumber = string.IsNullOrWhiteSpace(_searchAccountNumber) ? null : _searchAccountNumber;
         _filterStatus = string.IsNullOrEmpty(_selectedStatus) ? null : _selectedStatus;
         await _table.ReloadServerData();
     }
 
     private async Task ClearFilters()
     {
-        _searchAccountId = null;
+        _searchVendorCode = null;
+        _searchAccountNumber = null;
         _selectedStatus = "";
-        _filterAccountId = null;
+        _filterVendorCode = null;
+        _filterAccountNumber = null;
         _filterStatus = null;
         Navigation.NavigateTo("/adr/jobs");
         await _table.ReloadServerData();
@@ -251,5 +288,12 @@
     private void ViewAccount(int accountId)
     {
         Navigation.NavigateTo($"/adr/accounts?accountId={accountId}");
+    }
+
+    private void ViewSchedule(AdrJob job)
+    {
+        // Navigate to Schedules page with search filter using VendorCode_VMAccountNumber_ naming convention
+        var schedulePrefix = $"{job.VendorCode}_{job.VMAccountNumber}_";
+        Navigation.NavigateTo($"/schedules?search={Uri.EscapeDataString(schedulePrefix)}");
     }
 }

@@ -82,46 +82,58 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             .ToListAsync();
     }
 
-    public async Task<(IEnumerable<AdrJob> items, int totalCount)> GetPagedAsync(
-        int pageNumber,
-        int pageSize,
-        int? adrAccountId = null,
-        string? status = null,
-        DateTime? billingPeriodStart = null,
-        DateTime? billingPeriodEnd = null)
-    {
-        var query = _dbSet.Where(j => !j.IsDeleted);
-
-        if (adrAccountId.HasValue)
+        public async Task<(IEnumerable<AdrJob> items, int totalCount)> GetPagedAsync(
+            int pageNumber,
+            int pageSize,
+            int? adrAccountId = null,
+            string? status = null,
+            DateTime? billingPeriodStart = null,
+            DateTime? billingPeriodEnd = null,
+            string? vendorCode = null,
+            string? vmAccountNumber = null)
         {
-            query = query.Where(j => j.AdrAccountId == adrAccountId.Value);
+            var query = _dbSet.Where(j => !j.IsDeleted);
+
+            if (adrAccountId.HasValue)
+            {
+                query = query.Where(j => j.AdrAccountId == adrAccountId.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                query = query.Where(j => j.Status == status);
+            }
+
+            if (billingPeriodStart.HasValue)
+            {
+                query = query.Where(j => j.BillingPeriodStartDateTime >= billingPeriodStart.Value);
+            }
+
+            if (billingPeriodEnd.HasValue)
+            {
+                query = query.Where(j => j.BillingPeriodEndDateTime <= billingPeriodEnd.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(vendorCode))
+            {
+                query = query.Where(j => j.VendorCode != null && j.VendorCode.Contains(vendorCode));
+            }
+
+            if (!string.IsNullOrWhiteSpace(vmAccountNumber))
+            {
+                query = query.Where(j => j.VMAccountNumber.Contains(vmAccountNumber));
+            }
+
+            var totalCount = await query.CountAsync();
+            var items = await query
+                .OrderByDescending(j => j.BillingPeriodStartDateTime)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .Include(j => j.AdrAccount)
+                .ToListAsync();
+
+            return (items, totalCount);
         }
-
-        if (!string.IsNullOrWhiteSpace(status))
-        {
-            query = query.Where(j => j.Status == status);
-        }
-
-        if (billingPeriodStart.HasValue)
-        {
-            query = query.Where(j => j.BillingPeriodStartDateTime >= billingPeriodStart.Value);
-        }
-
-        if (billingPeriodEnd.HasValue)
-        {
-            query = query.Where(j => j.BillingPeriodEndDateTime <= billingPeriodEnd.Value);
-        }
-
-        var totalCount = await query.CountAsync();
-        var items = await query
-            .OrderByDescending(j => j.BillingPeriodStartDateTime)
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
-            .Include(j => j.AdrAccount)
-            .ToListAsync();
-
-        return (items, totalCount);
-    }
 
     public async Task<int> GetTotalCountAsync(int? adrAccountId = null)
     {
