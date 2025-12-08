@@ -11,6 +11,11 @@ public interface IUnitOfWork : IDisposable
     IRepository<Entities.JobParameter> JobParameters { get; }
     IRepository<Entities.NotificationSetting> NotificationSettings { get; }
     
+    // ADR repositories
+    IAdrAccountRepository AdrAccounts { get; }
+    IAdrJobRepository AdrJobs { get; }
+    IAdrJobExecutionRepository AdrJobExecutions { get; }
+    
     Task<int> SaveChangesAsync();
     Task BeginTransactionAsync();
     Task CommitTransactionAsync();
