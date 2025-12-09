@@ -1,0 +1,21 @@
+classDiagram
+    class SchedulerDbContext {
+        +DbSet~Client~ Clients
+        +DbSet~User~ Users
+        +DbSet~UserPermission~ UserPermissions
+        +DbSet~Schedule~ Schedules
+        +DbSet~JobExecution~ JobExecutions
+        +DbSet~JobParameter~ JobParameters
+        +DbSet~VendorCredential~ VendorCredentials
+        +DbSet~AuditLog~ AuditLogs
+        +DbSet~NotificationSetting~ NotificationSettings
+        #OnModelCreating(ModelBuilder modelBuilder) void
+        +SaveChangesAsync() Task~int~
+    }
+    
+    class SchedulerDbContextFactory {
+        +CreateDbContext(string[] args) SchedulerDbContext
+    }
+    
+    SchedulerDbContextFactory ..> SchedulerDbContext : creates
+    Repository~T~ --> SchedulerDbContext : uses

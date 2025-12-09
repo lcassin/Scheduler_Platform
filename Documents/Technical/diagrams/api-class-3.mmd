@@ -1,0 +1,72 @@
+classDiagram
+    class ControllerBase {
+        <<ASP.NET Core>>
+        +User ClaimsPrincipal
+        +Ok(object value) ActionResult
+        +BadRequest(object error) ActionResult
+        +NotFound() ActionResult
+        +CreatedDateTimeAction(string actionName, object routeValues, object value) ActionResult
+    }
+    
+    class SchedulesController {
+        -IUnitOfWork _unitOfWork
+        -ISchedulerService _schedulerService
+        -ILogger~SchedulesController~ _logger
+        +GetSchedules(int? clientId, string? searchTerm, int pageNumber, int pageSize) Task~ActionResult~
+        +GetSchedule(int id) Task~ActionResult~
+        +CreateSchedule(Schedule schedule) Task~ActionResult~
+        +UpdateSchedule(int id, Schedule schedule) Task~IActionResult~
+        +DeleteSchedule(int id) Task~IActionResult~
+        +TriggerSchedule(int id, TriggerRequest request) Task~IActionResult~
+        +PauseSchedule(int id) Task~IActionResult~
+        +ResumeSchedule(int id) Task~IActionResult~
+        +CreateBulkSchedules(BulkScheduleRequest request) Task~ActionResult~
+        +GenerateCronExpressions(GenerateCronRequest request) ActionResult
+        -GenerateCronExpression(DateTime dateTime, bool includeYear) string
+    }
+    
+    class ClientsController {
+        -IUnitOfWork _unitOfWork
+        -ILogger~ClientsController~ _logger
+        +GetClients() Task~ActionResult~
+        +GetClient(int id) Task~ActionResult~
+        +CreateClient(Client client) Task~ActionResult~
+        +UpdateClient(int id, Client client) Task~IActionResult~
+    }
+    
+    class JobExecutionsController {
+        -IUnitOfWork _unitOfWork
+        -ILogger~JobExecutionsController~ _logger
+        +GetJobExecutions(int? scheduleId, JobStatus? status) Task~ActionResult~
+        +GetJobExecution(int id) Task~ActionResult~
+        +GetLatestExecution(int scheduleId) Task~ActionResult~
+        +GetFailedExecutions(int scheduleId) Task~ActionResult~
+    }
+    
+    class NotificationSettingsController {
+        -IRepository~NotificationSetting~ _repository
+        -IScheduleRepository _scheduleRepository
+        -IUnitOfWork _unitOfWork
+        -ILogger~NotificationSettingsController~ _logger
+        +GetByScheduleId(int scheduleId) Task~ActionResult~
+        +Create(NotificationSetting notificationSetting) Task~ActionResult~
+        +Update(int id, NotificationSetting notificationSetting) Task~IActionResult~
+        +Delete(int id) Task~IActionResult~
+    }
+    
+    class VendorCredentialsController {
+        -IRepository~VendorCredential~ _repository
+        -IUnitOfWork _unitOfWork
+        -ILogger~VendorCredentialsController~ _logger
+        +GetByClientId(int clientId) Task~ActionResult~
+        +GetCredential(int id) Task~ActionResult~
+        +CreateCredential(VendorCredential credential) Task~ActionResult~
+        +UpdateCredential(int id, VendorCredential credential) Task~IActionResult~
+        +DeleteCredential(int id) Task~IActionResult~
+    }
+    
+    ControllerBase <|-- SchedulesController
+    ControllerBase <|-- ClientsController
+    ControllerBase <|-- JobExecutionsController
+    ControllerBase <|-- NotificationSettingsController
+    ControllerBase <|-- VendorCredentialsController

@@ -1,0 +1,17 @@
+stateDiagram-v2
+    [*] --> Scheduled: API creates schedule
+    Scheduled --> Running: CRON trigger fires
+    Running --> Completed: Success
+    Running --> Failed: Error occurs
+    Failed --> Retrying: Retries available
+    Retrying --> Running: Retry after backoff
+    Retrying --> Failed: No retries left
+    Completed --> [*]
+    Failed --> [*]
+    
+    Scheduled --> Paused: User pauses job
+    Paused --> Scheduled: User resumes job
+    Scheduled --> Cancelled: User cancels
+    Cancelled --> [*]
+    
+    Running --> Cancelled: User cancels

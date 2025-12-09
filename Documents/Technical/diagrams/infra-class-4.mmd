@@ -1,0 +1,15 @@
+classDiagram
+    class EmailService {
+        -IConfiguration _configuration
+        -ILogger~EmailService~ _logger
+        -IJobExecutionRepository _jobExecutionRepository
+        -IScheduleRepository _scheduleRepository
+        +SendEmailAsync(string to, string subject, string body, bool isHtml) Task
+        +SendEmailAsync(IEnumerable~string~ recipients, string subject, string body, bool isHtml) Task
+        +SendJobExecutionNotificationAsync(int jobExecutionId, bool isSuccess) Task
+        -ParseEmailRecipients(string? recipients) List~string~
+        -BuildNotificationEmailBody(Schedule schedule, JobExecution jobExecution, bool isSuccess, NotificationSetting settings) string
+    }
+    
+    EmailService --> IJobExecutionRepository : uses
+    EmailService --> IScheduleRepository : uses

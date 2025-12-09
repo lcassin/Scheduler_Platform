@@ -1,0 +1,53 @@
+classDiagram
+    class BulkScheduleRequest {
+        +int ClientId
+        +JobType JobType
+        +List~ScheduleDateTimeRequest~ ScheduleDates
+        +string? TimeZone
+        +int MaxRetries
+        +int RetryDelayMinutes
+        +string? JobConfiguration
+        +bool IsEnabled
+    }
+    
+    class ScheduleDateTimeRequest {
+        +DateTime DateTime
+        +string Name
+        +string Description
+        +Dictionary~string,string~? JobParameters
+    }
+    
+    class BulkScheduleResponse {
+        +int SuccessCount
+        +int FailureCount
+        +List~ScheduleResult~ Results
+    }
+    
+    class ScheduleResult {
+        +bool Success
+        +int? ScheduleId
+        +string? CronExpression
+        +DateTime DateTime
+        +string? ErrorMessage
+    }
+    
+    class GenerateCronRequest {
+        +List~DateTime~ DateTimes
+        +string? TimeZone
+        +bool IncludeYear
+    }
+    
+    class GenerateCronResponse {
+        +List~CronExpressionResult~ CronExpressions
+    }
+    
+    class CronExpressionResult {
+        +DateTime DateTime
+        +string CronExpression
+        +string Description
+        +DateTime? NextFireTime
+    }
+    
+    BulkScheduleRequest --> ScheduleDateTimeRequest : contains
+    BulkScheduleResponse --> ScheduleResult : contains
+    GenerateCronResponse --> CronExpressionResult : contains

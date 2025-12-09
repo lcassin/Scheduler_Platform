@@ -153,7 +153,7 @@ sequenceDiagram
     API->>Identity: Validate JWT token
     Identity-->>API: Token valid, claims returned
     API->>Infra: SaveChangesAsync()
-    Infra->>DB: INSERT INTO Schedules
+    Infra->>DB: INSERT INTO Schedule
     DB-->>Infra: Schedule created (ID returned)
     API->>Jobs: ScheduleJob(schedule)
     Jobs-->>Jobs: Register CRON trigger in Quartz
@@ -163,22 +163,22 @@ sequenceDiagram
     Note over Jobs: Time passes... CRON trigger fires
     
     Jobs->>Infra: GetByIdAsync(scheduleId)
-    Infra->>DB: SELECT * FROM Schedules WHERE Id = @id
+    Infra->>DB: SELECT * FROM Schedule WHERE ScheduleId = @id
     DB-->>Infra: Schedule entity
     Infra-->>Jobs: Schedule with configuration
     
     Jobs->>Jobs: Execute job based on JobType<br/>(ProcessJob/ApiCallJob/StoredProcedureJob)
     
     Jobs->>Infra: AddAsync(jobExecution)
-    Infra->>DB: INSERT INTO JobExecutions (Status=Running)
+    Infra->>DB: INSERT INTO JobExecution (Status=Running)
     
     alt Job Succeeds
         Jobs->>Infra: UpdateAsync(jobExecution, Status=Completed)
-        Infra->>DB: UPDATE JobExecutions SET Status='Completed'
+        Infra->>DB: UPDATE JobExecution SET Status='Completed'
         Jobs->>Infra: SendJobExecutionNotificationAsync(success=true)
     else Job Fails
         Jobs->>Infra: UpdateAsync(jobExecution, Status=Failed)
-        Infra->>DB: UPDATE JobExecutions SET Status='Failed'
+        Infra->>DB: UPDATE JobExecution SET Status='Failed'
         alt Retries Available
             Jobs->>Jobs: Schedule retry with exponential backoff
         end
@@ -186,12 +186,12 @@ sequenceDiagram
     end
     
     Jobs->>Infra: UpdateNextRunTimeAsync(scheduleId)
-    Infra->>DB: UPDATE Schedules SET NextRunTime=@time
+    Infra->>DB: UPDATE Schedule SET NextRunDateTime=@time
     
     User->>UI: View job executions
     UI->>API: GET /api/jobexecutions?scheduleId={id}
     API->>Infra: FindAsync(je => je.ScheduleId == id)
-    Infra->>DB: SELECT * FROM JobExecutions WHERE ScheduleId = @id
+    Infra->>DB: SELECT * FROM JobExecution WHERE ScheduleId = @id
     DB-->>Infra: List of executions
     Infra-->>API: Execution history
     API-->>UI: JSON response

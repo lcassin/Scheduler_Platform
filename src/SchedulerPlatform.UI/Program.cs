@@ -71,6 +71,7 @@ builder.Services.AddScoped<IClientService, ClientService>();
 builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
+builder.Services.AddScoped<IAdrService, AdrService>();
 
 builder.Services.AddAuthorization();
 builder.Services.AddCascadingAuthenticationState();

@@ -60,8 +60,12 @@ public class ClientsController : ControllerBase
     {
         try
         {
-            client.CreatedDateTime = DateTime.UtcNow;
-            client.CreatedBy = User.Identity?.Name ?? "System";
+            var now = DateTime.UtcNow;
+            var createdBy = User.Identity?.Name ?? "System";
+            client.CreatedDateTime = now;
+            client.CreatedBy = createdBy;
+            client.ModifiedDateTime = now;
+            client.ModifiedBy = createdBy;
 
             await _unitOfWork.Clients.AddAsync(client);
             await _unitOfWork.SaveChangesAsync();

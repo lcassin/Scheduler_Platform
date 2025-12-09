@@ -1,0 +1,32 @@
+classDiagram
+    class IIdentityServerInteractionService {
+        <<interface>>
+        +Task~AuthorizationRequest~ GetAuthorizationContextAsync(string returnUrl)
+        +Task DenyAuthorizationAsync(AuthorizationRequest context, AuthorizationError error)
+        +Task~LogoutRequest~ GetLogoutContextAsync(string logoutId)
+        +Task~string~ CreateLogoutContextAsync()
+    }
+    
+    class IEventService {
+        <<interface>>
+        +Task RaiseAsync(Event evt)
+    }
+    
+    class TestUserStore {
+        -List~TestUser~ _users
+        +bool ValidateCredentials(string username, string password)
+        +TestUser FindByUsername(string username)
+        +TestUser FindBySubjectId(string subjectId)
+        +TestUser FindByExternalProvider(string provider, string userId)
+    }
+    
+    class IAuthenticationSchemeProvider {
+        <<interface>>
+        +Task~IEnumerable~AuthenticationScheme~~ GetAllSchemesAsync()
+        +Task~AuthenticationScheme~ GetSchemeAsync(string name)
+    }
+    
+    LoginPageModel --> IIdentityServerInteractionService : uses
+    LoginPageModel --> IEventService : uses
+    LoginPageModel --> TestUserStore : uses
+    LoginPageModel --> IAuthenticationSchemeProvider : uses

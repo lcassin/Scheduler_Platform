@@ -2,9 +2,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi.Models;
 using Quartz;
 using SchedulerPlatform.API.Configuration;
 using SchedulerPlatform.Core.Domain.Interfaces;
@@ -15,6 +13,9 @@ using SchedulerPlatform.Infrastructure.Services;
 using SchedulerPlatform.Jobs.Quartz;
 using SchedulerPlatform.Jobs.Services;
 using Serilog;
+using Azure.Identity;
+using Microsoft.Extensions.Azure;
+using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -56,59 +57,55 @@ builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Title = "ADR Scheduler API",
-        Version = "v1",
-        Description = "API for managing scheduled jobs and processes"
-    });
+	c.SwaggerDoc("v1", new OpenApiInfo
+	{
+		Title = "ADR Scheduler API",
+		Version = "v1",
+		Description = "API for managing scheduled jobs and processes"
+	});
 
-    var authority = builder.Configuration["Authentication:Authority"] ?? "https://localhost:5001";
-    
-    c.AddSecurityDefinition("oauth2", new OpenApiSecurityScheme
-    {
-        Type = SecuritySchemeType.OAuth2,
-        Flows = new OpenApiOAuthFlows
-        {
-            AuthorizationCode = new OpenApiOAuthFlow
-            {
-                AuthorizationUrl = new Uri($"{authority}/connect/authorize"),
-                TokenUrl = new Uri($"{authority}/connect/token"),
-                Scopes = new Dictionary<string, string>
-                {
-                    { "openid", "OpenID" },
-                    { "profile", "Profile" },
-                    { "email", "Email" },
-                    { "scheduler-api", "Scheduler API Access" },
-                    { "role", "User Role" },
-                    { "permissions", "User Permissions" }
-                }
-            },
-            ClientCredentials = new OpenApiOAuthFlow
-            {
-                TokenUrl = new Uri($"{authority}/connect/token"),
-                Scopes = new Dictionary<string, string>
-                {
-                    { "scheduler-api", "Scheduler API Access" }
-                }
-            }
-        }
-    });
+	var authority = builder.Configuration["Authentication:Authority"] ?? "https://localhost:5001";
 
-    c.AddSecurityRequirement(new OpenApiSecurityRequirement
-    {
-        {
-            new OpenApiSecurityScheme
-            {
-                Reference = new OpenApiReference
-                {
-                    Type = ReferenceType.SecurityScheme,
-                    Id = "oauth2"
-                }
-            },
-            new[] { "scheduler-api" }
-        }
-    });
+	c.AddSecurityDefinition("oauth2", new OpenApiSecurityScheme
+	{
+		Type = SecuritySchemeType.OAuth2,
+		In = ParameterLocation.Header,
+		Name = "oauth2",
+		Flows = new OpenApiOAuthFlows
+		{
+			AuthorizationCode = new OpenApiOAuthFlow
+			{
+				AuthorizationUrl = new Uri($"{authority}/connect/authorize"),
+				TokenUrl = new Uri($"{authority}/connect/token"),
+				Scopes = new Dictionary<string, string>
+				{
+					{ "openid", "OpenID" },
+					{ "profile", "Profile" },
+					{ "email", "Email" },
+					{ "scheduler-api", "Scheduler API Access" },
+					{ "role", "User Role" },
+					{ "permissions", "User Permissions" }
+				}
+			},
+			ClientCredentials = new OpenApiOAuthFlow
+			{
+				TokenUrl = new Uri($"{authority}/connect/token"),
+				Scopes = new Dictionary<string, string>
+				{
+					{ "scheduler-api", "Scheduler API Access" }
+				}
+			}
+		}
+	});
+
+	c.AddSecurityRequirement(document =>
+	{
+		var requirements = new OpenApiSecurityRequirement();
+		var schemeRef = new OpenApiSecuritySchemeReference("oauth2", document);
+		requirements.Add(schemeRef, new List<string> { "scheduler-api" });
+
+		return requirements;
+	});
 });
 
 builder.Services.AddHttpContextAccessor();
@@ -179,6 +176,11 @@ builder.Services.AddAuthorization(options =>
         policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("users:manage:delete")));
 });
 
+builder.Services.AddAzureClients(builder =>
+{
+    builder.UseCredential(new DefaultAzureCredential());
+});
+
 builder.Services.Configure<SchedulerSettings>(builder.Configuration.GetSection("SchedulerSettings"));
 
 builder.Services.AddSingleton(new SchedulerPlatform.API.Configuration.AppLifetimeInfo { StartUtc = DateTime.UtcNow });
@@ -190,11 +192,15 @@ builder.Services.AddScoped<IScheduleRepository, ScheduleRepository>();
 builder.Services.AddScoped<ISchedulerService, SchedulerService>();
 builder.Services.AddScoped<IEmailService, SchedulerPlatform.Infrastructure.Services.EmailService>();
 
+builder.Services.AddScoped<SchedulerPlatform.API.Services.IAdrAccountSyncService, SchedulerPlatform.API.Services.AdrAccountSyncService>();
+builder.Services.AddScoped<SchedulerPlatform.API.Services.IAdrOrchestratorService, SchedulerPlatform.API.Services.AdrOrchestratorService>();
+
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.StartupRecoveryService>();
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.ScheduleHydrationService>();
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.MissedSchedulesProcessor>();
 
 builder.Services.AddHttpClient("ApiCallJob");
+builder.Services.AddHttpClient("AdrApi");
 
 builder.Services.AddQuartzJobServices(builder.Configuration.GetConnectionString("DefaultConnection")!);
 

@@ -53,6 +53,7 @@ public class AuditLogInterceptor : SaveChangesInterceptor
 
         foreach (var entry in entries)
         {
+            var auditNow = DateTime.UtcNow;
             var auditLog = new AuditLog
             {
                 EventType = isManual ? "Manual" : "Automated",
@@ -63,14 +64,18 @@ public class AuditLogInterceptor : SaveChangesInterceptor
                 ClientId = clientId,
                 IpAddress = ipAddress,
                 UserAgent = userAgent,
-                TimestampDateTime = DateTime.UtcNow,
+                TimestampDateTime = auditNow,
                 OldValues = entry.State == EntityState.Modified || entry.State == EntityState.Deleted
                     ? SerializeOldValues(entry)
                     : null,
                 NewValues = entry.State == EntityState.Added || entry.State == EntityState.Modified
                     ? SerializeNewValues(entry)
                     : null,
-                AdditionalData = null
+                AdditionalData = null,
+                CreatedDateTime = auditNow,
+                CreatedBy = "System",
+                ModifiedDateTime = auditNow,
+                ModifiedBy = "System"
             };
 
             context.Set<AuditLog>().Add(auditLog);

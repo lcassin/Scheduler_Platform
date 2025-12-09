@@ -1,0 +1,39 @@
+sequenceDiagram
+    participant Client as Client (UI)
+    participant API as SchedulerPlatform.API
+    participant Identity as IdentityServer
+    
+    Note over Client: User clicks "Login"
+    
+    Client->>Identity: Navigate to /Account/Login
+    Identity->>Identity: Show login page
+    Client->>Identity: Enter credentials
+    Identity->>Identity: Validate user (TestUsers)
+    
+    alt Valid credentials
+        Identity->>Identity: Generate access token (JWT)
+        Identity->>Identity: Generate refresh token
+        Identity-->>Client: Redirect with tokens
+    else Invalid credentials
+        Identity-->>Client: Show error message
+    end
+    
+    Note over Client: User has access token
+    
+    Client->>API: GET /api/schedules (Authorization: Bearer {token})
+    API->>API: Extract JWT from Authorization header
+    API->>API: Validate token signature
+    API->>Identity: GET /.well-known/openid-configuration
+    Identity-->>API: Public keys for validation
+    API->>API: Verify issuer, audience, expiration
+    
+    alt Token valid
+        API->>API: Extract user claims (name, role, clientId)
+        API->>API: Execute controller action
+        API-->>Client: 200 OK with data
+    else Token expired
+        API-->>Client: 401 Unauthorized (Token expired)
+        Note over Client: Use refresh token to get new access token
+    else Token invalid
+        API-->>Client: 401 Unauthorized
+    end

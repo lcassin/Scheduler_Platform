@@ -49,12 +49,17 @@ public class ApiCallJob : IJob
             return;
         }
 
+        var execNow = DateTime.UtcNow;
         var jobExecution = new JobExecution
         {
             ScheduleId = scheduleId,
-            StartDateTime = DateTime.UtcNow,
+            StartDateTime = execNow,
             Status = JobStatus.Running,
-            TriggeredBy = triggeredBy ?? "Scheduler"
+            TriggeredBy = triggeredBy ?? "Scheduler",
+            CreatedDateTime = execNow,
+            CreatedBy = "System",
+            ModifiedDateTime = execNow,
+            ModifiedBy = "System"
         };
 
         await _unitOfWork.JobExecutions.AddAsync(jobExecution);
@@ -217,7 +222,7 @@ public class ApiCallJob : IJob
                         .ForJob(context.JobDetail.Key)
                         .WithIdentity($"Retry_{scheduleId}_{jobExecution.RetryCount + 1}")
                         .StartAt(retryTime)
-                        .UsingJobData("RetryCount", jobExecution.RetryCount + 1)
+                        .UsingJobData("RetryCount", (jobExecution.RetryCount + 1).ToString())
                         .UsingJobData("TriggeredBy", "RetryMechanism")
                         .Build();
 

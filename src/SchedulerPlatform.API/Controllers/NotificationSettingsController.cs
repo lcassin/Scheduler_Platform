@@ -47,8 +47,12 @@ public class NotificationSettingsController : ControllerBase
         if (schedule == null)
             return BadRequest("Schedule not found");
 
-        notificationSetting.CreatedDateTime = DateTime.UtcNow;
-        notificationSetting.CreatedBy = User.Identity?.Name ?? "System";
+        var now = DateTime.UtcNow;
+        var createdBy = User.Identity?.Name ?? "System";
+        notificationSetting.CreatedDateTime = now;
+        notificationSetting.CreatedBy = createdBy;
+        notificationSetting.ModifiedDateTime = now;
+        notificationSetting.ModifiedBy = createdBy;
 
         await _repository.AddAsync(notificationSetting);
         await _unitOfWork.SaveChangesAsync();

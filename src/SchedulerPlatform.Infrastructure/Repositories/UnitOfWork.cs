@@ -18,6 +18,11 @@ public class UnitOfWork : IUnitOfWork
     public IRepository<PasswordHistory> PasswordHistories { get; }
     public IRepository<JobParameter> JobParameters { get; }
     public IRepository<NotificationSetting> NotificationSettings { get; }
+    
+    // ADR repositories
+    public IAdrAccountRepository AdrAccounts { get; }
+    public IAdrJobRepository AdrJobs { get; }
+    public IAdrJobExecutionRepository AdrJobExecutions { get; }
 
     public UnitOfWork(SchedulerDbContext context)
     {
@@ -30,6 +35,11 @@ public class UnitOfWork : IUnitOfWork
         PasswordHistories = new Repository<PasswordHistory>(_context);
         JobParameters = new Repository<JobParameter>(_context);
         NotificationSettings = new Repository<NotificationSetting>(_context);
+        
+        // ADR repositories
+        AdrAccounts = new AdrAccountRepository(_context);
+        AdrJobs = new AdrJobRepository(_context);
+        AdrJobExecutions = new AdrJobExecutionRepository(_context);
     }
 
     public Task<int> SaveChangesAsync()

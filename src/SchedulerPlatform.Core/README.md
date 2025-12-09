@@ -30,11 +30,13 @@ All entities inherit from `BaseEntity` which provides common tracking fields:
 
 #### BaseEntity (Abstract Base Class)
 - `Id` (int): Unique identifier
-- `CreatedAt` (DateTime): When the record was created
-- `UpdatedAt` (DateTime?): When the record was last modified
-- `CreatedBy` (string?): Username who created the record
-- `UpdatedBy` (string?): Username who last updated the record
+- `CreatedDateTime` (DateTime): When the record was created
+- `ModifiedDateTime` (DateTime): When the record was last modified
+- `CreatedBy` (string): Username who created the record
+- `ModifiedBy` (string): Username who last updated the record
 - `IsDeleted` (bool): Soft delete flag
+
+**Note:** `ModifiedDateTime` and `ModifiedBy` are non-nullable and default to the same values as `CreatedDateTime` and `CreatedBy` when a record is first created.
 
 #### Schedule
 **Purpose**: Represents a scheduled job with its configuration and timing.
@@ -46,8 +48,8 @@ All entities inherit from `BaseEntity` which provides common tracking fields:
 - `JobType` (JobType enum): Type of job (Process=1, StoredProcedure=2, ApiCall=3)
 - `Frequency` (ScheduleFrequency enum): How often it runs (Manual, Daily, Weekly, Monthly, etc.)
 - `CronExpression` (string): Quartz CRON expression defining when to run
-- `NextRunTime` (DateTime?): When the job will execute next
-- `LastRunTime` (DateTime?): When the job last executed
+- `NextRunDateTime` (DateTime?): When the job will execute next
+- `LastRunDateTime` (DateTime?): When the job last executed
 - `IsEnabled` (bool): Whether the schedule is active
 - `MaxRetries` (int): How many times to retry on failure
 - `RetryDelayMinutes` (int): Minutes to wait between retries
@@ -81,8 +83,8 @@ All entities inherit from `BaseEntity` which provides common tracking fields:
 
 **Properties:**
 - `ScheduleId` (int): Which schedule this execution belongs to
-- `StartTime` (DateTime): When execution started
-- `EndTime` (DateTime?): When execution completed
+- `StartDateTime` (DateTime): When execution started
+- `EndDateTime` (DateTime?): When execution completed
 - `Status` (JobStatus enum): Current status (Scheduled, Running, Completed, Failed, etc.)
 - `Output` (string?): Success output or result data
 - `ErrorMessage` (string?): Error message if failed
@@ -181,10 +183,10 @@ All entities inherit from `BaseEntity` which provides common tracking fields:
 - `AccountNumber` (string): Account or identifier in the external system
 - `ScheduleFrequency` (int): How often the schedule should run (maps to ScheduleFrequency enum)
 - `ScheduleDate` (DateTime): Specific date/time for the scheduled execution
-- `CreatedAt` (DateTime): When this sync source was created
-- `UpdatedAt` (DateTime?): When this sync source was last updated
-- `CreatedBy` (string?): Username who created this record
-- `UpdatedBy` (string?): Username who last updated this record
+- `CreatedDateTime` (DateTime): When this sync source was created
+- `ModifiedDateTime` (DateTime): When this sync source was last updated
+- `CreatedBy` (string): Username who created this record
+- `ModifiedBy` (string): Username who last updated this record
 - `IsDeleted` (bool): Soft delete flag
 
 **Navigation Properties:**
@@ -209,7 +211,7 @@ All entities inherit from `BaseEntity` which provides common tracking fields:
 - `ClientId` (int?): Client context for the change
 - `IpAddress` (string?): IP address of the user
 - `UserAgent` (string?): Browser/client user agent
-- `Timestamp` (DateTime): When the event occurred
+- `TimestampDateTime` (DateTime): When the event occurred
 - `AdditionalData` (string?): Extra context data in JSON
 
 ### Enumerations
@@ -339,10 +341,10 @@ This entity-relationship diagram shows how all the core business entities (Clien
 erDiagram
     BaseEntity {
         int Id PK
-        DateTime CreatedAt
-        DateTime UpdatedAt
+        DateTime CreatedDateTime
+        DateTime ModifiedDateTime
         string CreatedBy
-        string UpdatedBy
+        string ModifiedBy
         bool IsDeleted
     }
     
@@ -396,8 +398,8 @@ erDiagram
         int JobType
         int Frequency
         string CronExpression
-        DateTime NextRunTime
-        DateTime LastRunTime
+        DateTime NextRunDateTime
+        DateTime LastRunDateTime
         bool IsEnabled
         int MaxRetries
         int RetryDelayMinutes
@@ -410,8 +412,8 @@ erDiagram
     JobExecution {
         int Id PK
         int ScheduleId FK
-        DateTime StartTime
-        DateTime EndTime
+        DateTime StartDateTime
+        DateTime EndDateTime
         int Status
         string Output
         string ErrorMessage
@@ -476,7 +478,7 @@ erDiagram
         int ClientId
         string IpAddress
         string UserAgent
-        DateTime Timestamp
+        DateTime TimestampDateTime
         string AdditionalData
     }
 ```
@@ -494,10 +496,10 @@ classDiagram
     class BaseEntity {
         <<abstract>>
         +int Id
-        +DateTime CreatedAt
-        +DateTime? UpdatedAt
-        +string? CreatedBy
-        +string? UpdatedBy
+        +DateTime CreatedDateTime
+        +DateTime ModifiedDateTime
+        +string CreatedBy
+        +string ModifiedBy
         +bool IsDeleted
     }
     
@@ -508,8 +510,8 @@ classDiagram
         +JobType JobType
         +ScheduleFrequency Frequency
         +string CronExpression
-        +DateTime? NextRunTime
-        +DateTime? LastRunTime
+        +DateTime? NextRunDateTime
+        +DateTime? LastRunDateTime
         +bool IsEnabled
         +int MaxRetries
         +int RetryDelayMinutes
@@ -534,8 +536,8 @@ classDiagram
     
     class JobExecution {
         +int ScheduleId
-        +DateTime StartTime
-        +DateTime? EndTime
+        +DateTime StartDateTime
+        +DateTime? EndDateTime
         +JobStatus Status
         +string? Output
         +string? ErrorMessage
@@ -614,7 +616,7 @@ classDiagram
         +int? ClientId
         +string? IpAddress
         +string? UserAgent
-        +DateTime Timestamp
+        +DateTime TimestampDateTime
         +string? AdditionalData
     }
     

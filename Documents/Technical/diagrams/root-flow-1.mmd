@@ -1,0 +1,49 @@
+flowchart TB
+    subgraph "Client Layer"
+        UI[SchedulerPlatform.UI<br/>Blazor Server + MudBlazor<br/>Port 7299]
+    end
+    
+    subgraph "API Layer"
+        API[SchedulerPlatform.API<br/>REST API + Swagger<br/>Port 5001]
+        Identity[SchedulerPlatform.IdentityServer<br/>Duende IdentityServer<br/>Port 5000]
+    end
+    
+    subgraph "Business Logic Layer"
+        Jobs[SchedulerPlatform.Jobs<br/>Quartz.NET Job Engine]
+    end
+    
+    subgraph "Data Access Layer"
+        Infra[SchedulerPlatform.Infrastructure<br/>EF Core 9.0 + Dapper]
+        Core[SchedulerPlatform.Core<br/>Domain Entities & Interfaces]
+    end
+    
+    subgraph "Database Layer"
+        DB[(SQL Server<br/>SchedulerPlatform_Dev / SchedulerPlatform)]
+    end
+    
+    subgraph "Utility Projects"
+        LogCleanup[SchedulerPlatform.LogCleanup<br/>Log Archival Utility]
+        ScheduleSync[SchedulerPlatform.ScheduleSync<br/>External Schedule Sync]
+    end
+    
+    UI -->|OIDC Auth| Identity
+    UI -->|HTTPS/JSON API Calls| API
+    API -->|JWT Token Validation| Identity
+    API -->|Schedule/Control Jobs| Jobs
+    API -->|CRUD Operations| Infra
+    Jobs -->|Execute Jobs| Infra
+    Identity -->|User Management| Infra
+    Infra -->|Implements| Core
+    Infra -->|EF Core Migrations + Dapper| DB
+    LogCleanup -.->|Archives Old Logs| DB
+    ScheduleSync -.->|Syncs External Data| DB
+    
+    style UI fill:#e1f5ff
+    style API fill:#fff4e1
+    style Identity fill:#fff4e1
+    style Jobs fill:#f0e1ff
+    style Infra fill:#e1ffe1
+    style Core fill:#e1ffe1
+    style DB fill:#ffe1e1
+    style LogCleanup fill:#f5f5f5
+    style ScheduleSync fill:#f5f5f5
