@@ -1,0 +1,149 @@
+@using SchedulerPlatform.UI.Models
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Work" Class="mr-2" />
+            Job Details
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (Job != null)
+        {
+            <MudGrid>
+                <MudItem xs="12">
+                    <MudText Typo="Typo.subtitle1" Class="mb-2"><strong>Job Information</strong></MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Job ID</MudText>
+                    <MudText Typo="Typo.body1">@Job.Id</MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Account ID</MudText>
+                    <MudText Typo="Typo.body1">@Job.AdrAccountId</MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">VM Account ID</MudText>
+                    <MudText Typo="Typo.body1">@Job.VMAccountId</MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Account Number</MudText>
+                    <MudText Typo="Typo.body1">@Job.VMAccountNumber</MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Credential ID</MudText>
+                    <MudText Typo="Typo.body1">@Job.CredentialId</MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Period Type</MudText>
+                    <MudText Typo="Typo.body1">@(Job.PeriodType ?? "N/A")</MudText>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.subtitle1" Class="mb-2"><strong>Billing Period</strong></MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Start Date</MudText>
+                    <MudText Typo="Typo.body1">@Job.BillingPeriodStartDateTime.ToString("MM/dd/yyyy")</MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">End Date</MudText>
+                    <MudText Typo="Typo.body1">@Job.BillingPeriodEndDateTime.ToString("MM/dd/yyyy")</MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Next Run Date</MudText>
+                    <MudText Typo="Typo.body1">@(Job.NextRunDateTime?.ToString("MM/dd/yyyy") ?? "N/A")</MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Is Missing</MudText>
+                    <MudText Typo="Typo.body1">@(Job.IsMissing ? "Yes" : "No")</MudText>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.subtitle1" Class="mb-2"><strong>Status</strong></MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Job Status</MudText>
+                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(Job.Status)">
+                        @Job.Status
+                    </MudChip>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Retry Count</MudText>
+                    <MudText Typo="Typo.body1">@Job.RetryCount</MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">ADR Status ID</MudText>
+                    <MudText Typo="Typo.body1">@(Job.AdrStatusId?.ToString() ?? "N/A")</MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">ADR Status Description</MudText>
+                    <MudText Typo="Typo.body1">@(Job.AdrStatusDescription ?? "N/A")</MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">ADR Index ID</MudText>
+                    <MudText Typo="Typo.body1">@(Job.AdrIndexId?.ToString() ?? "N/A")</MudText>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.subtitle1" Class="mb-2"><strong>Timestamps</strong></MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Credential Verified</MudText>
+                    <MudText Typo="Typo.body1">@(Job.CredentialVerifiedDateTime?.ToString("MM/dd/yyyy HH:mm") ?? "N/A")</MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Scraping Completed</MudText>
+                    <MudText Typo="Typo.body1">@(Job.ScrapingCompletedDateTime?.ToString("MM/dd/yyyy HH:mm") ?? "N/A")</MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Created</MudText>
+                    <MudText Typo="Typo.body1">@Job.CreatedDateTime.ToString("MM/dd/yyyy HH:mm")</MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Modified</MudText>
+                    <MudText Typo="Typo.body1">@(Job.ModifiedDateTime?.ToString("MM/dd/yyyy HH:mm") ?? "N/A")</MudText>
+                </MudItem>
+
+                @if (!string.IsNullOrEmpty(Job.ErrorMessage))
+                {
+                    <MudItem xs="12">
+                        <MudDivider Class="my-2" />
+                        <MudText Typo="Typo.subtitle1" Class="mb-2"><strong>Error</strong></MudText>
+                    </MudItem>
+                    <MudItem xs="12">
+                        <MudAlert Severity="Severity.Error">@Job.ErrorMessage</MudAlert>
+                    </MudItem>
+                }
+            </MudGrid>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] 
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public AdrJob? Job { get; set; }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private Color GetStatusColor(string status) => status switch
+    {
+        "Pending" => Color.Default,
+        "CredentialVerified" => Color.Info,
+        "CredentialFailed" => Color.Error,
+        "ScrapeRequested" => Color.Warning,
+        "ScrapeFailed" => Color.Error,
+        "Completed" => Color.Success,
+        "NeedsReview" => Color.Warning,
+        _ => Color.Default
+    };
+}
