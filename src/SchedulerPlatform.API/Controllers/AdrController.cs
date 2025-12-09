@@ -37,6 +37,7 @@ public class AdrController : ControllerBase
         [FromQuery] int? credentialId = null,
         [FromQuery] string? nextRunStatus = null,
         [FromQuery] string? searchTerm = null,
+        [FromQuery] string? historicalBillingStatus = null,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20)
     {
@@ -48,7 +49,8 @@ public class AdrController : ControllerBase
                 clientId,
                 credentialId,
                 nextRunStatus,
-                searchTerm);
+                searchTerm,
+                historicalBillingStatus);
 
             return Ok(new
             {
@@ -144,17 +146,24 @@ public class AdrController : ControllerBase
     {
         try
         {
-            var totalCount = await _unitOfWork.AdrAccounts.GetTotalCountAsync(clientId);
-            var pendingCount = await _unitOfWork.AdrAccounts.GetCountByStatusAsync("Pending", clientId);
-            var readyCount = await _unitOfWork.AdrAccounts.GetCountByStatusAsync("Ready", clientId);
-            var completedCount = await _unitOfWork.AdrAccounts.GetCountByStatusAsync("Completed", clientId);
+            var totalAccounts = await _unitOfWork.AdrAccounts.GetTotalCountAsync(clientId);
+            var runNowCount = await _unitOfWork.AdrAccounts.GetCountByNextRunStatusAsync("Run Now", clientId);
+            var dueSoonCount = await _unitOfWork.AdrAccounts.GetCountByNextRunStatusAsync("Due Soon", clientId);
+            var upcomingCount = await _unitOfWork.AdrAccounts.GetCountByNextRunStatusAsync("Upcoming", clientId);
+            var futureCount = await _unitOfWork.AdrAccounts.GetCountByNextRunStatusAsync("Future", clientId);
+            var missingCount = await _unitOfWork.AdrAccounts.GetCountByHistoricalStatusAsync("Missing", clientId);
+            var activeJobsCount = await _unitOfWork.AdrJobs.GetActiveJobsCountAsync();
 
             return Ok(new
             {
-                totalCount,
-                pendingCount,
-                readyCount,
-                completedCount
+                totalAccounts,
+                runNowCount,
+                dueSoonCount,
+                upcomingCount,
+                futureCount,
+                missingCount,
+                overdueCount = 0, // Overdue is calculated based on ExpectedNextDateTime in the UI
+                activeJobsCount
             });
         }
         catch (Exception ex)

@@ -154,6 +154,15 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             .CountAsync();
     }
 
+    public async Task<int> GetActiveJobsCountAsync()
+    {
+        // Active jobs are those that are not completed, failed, or cancelled
+        var activeStatuses = new[] { "Pending", "CredentialVerified", "ScrapeRequested" };
+        return await _dbSet
+            .Where(j => !j.IsDeleted && activeStatuses.Contains(j.Status))
+            .CountAsync();
+    }
+
     public async Task<bool> ExistsForBillingPeriodAsync(int adrAccountId, DateTime billingPeriodStart, DateTime billingPeriodEnd)
     {
         return await _dbSet
