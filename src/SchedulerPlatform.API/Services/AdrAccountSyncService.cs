@@ -75,9 +75,31 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             // Step 3: Sync AdrAccounts using the ExternalClientId -> internal ClientId mapping
             // Process in batches to avoid large transactions and memory pressure
             const int batchSize = 5000;
-            var existingAccounts = await _dbContext.AdrAccounts
+            
+            // Use ToListAsync + GroupBy to handle potential duplicates gracefully
+            var existingAccountList = await _dbContext.AdrAccounts
                 .Where(a => !a.IsDeleted)
-                .ToDictionaryAsync(a => a.VMAccountId, cancellationToken);
+                .ToListAsync(cancellationToken);
+
+            var existingAccounts = existingAccountList
+                .GroupBy(a => a.VMAccountId)
+                .ToDictionary(
+                    g => g.Key,
+                    g =>
+                    {
+                        if (g.Count() > 1)
+                        {
+                            _logger.LogWarning(
+                                "Found {Count} AdrAccount rows with VMAccountId {VMAccountId}. " +
+                                "Using the most recently modified one. Please clean up duplicate records.",
+                                g.Count(),
+                                g.Key);
+                        }
+                        // Use most recently modified
+                        return g
+                            .OrderByDescending(a => a.ModifiedDateTime)
+                            .First();
+                    });
 
             var processedVMAccountIds = new HashSet<long>();
             int processedSinceLastSave = 0;
@@ -198,10 +220,32 @@ public class AdrAccountSyncService : IAdrAccountSyncService
         _logger.LogInformation("Found {Count} unique clients in external data", uniqueClients.Count);
 
         // Load existing clients by ExternalClientId
+        // Use ToListAsync + GroupBy to handle potential duplicates gracefully
         var externalClientIds = uniqueClients.Select(c => c.ExternalClientId).ToList();
-        var existingClients = await _dbContext.Clients
+        var clientList = await _dbContext.Clients
             .Where(c => externalClientIds.Contains(c.ExternalClientId))
-            .ToDictionaryAsync(c => c.ExternalClientId, cancellationToken);
+            .ToListAsync(cancellationToken);
+
+        var existingClients = clientList
+            .GroupBy(c => c.ExternalClientId)
+            .ToDictionary(
+                g => g.Key,
+                g =>
+                {
+                    if (g.Count() > 1)
+                    {
+                        _logger.LogWarning(
+                            "Found {Count} Client rows with ExternalClientId {ExternalClientId}. " +
+                            "Using the most recently modified one. Please clean up duplicate records.",
+                            g.Count(),
+                            g.Key);
+                    }
+                    // Prefer non-deleted, then most recently modified
+                    return g
+                        .OrderBy(c => c.IsDeleted)
+                        .ThenByDescending(c => c.ModifiedDateTime)
+                        .First();
+                });
 
         _logger.LogInformation("Found {Count} existing clients by ExternalClientId", existingClients.Count);
 
