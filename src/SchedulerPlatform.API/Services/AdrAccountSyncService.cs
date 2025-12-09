@@ -76,13 +76,14 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             // Process in batches to avoid large transactions and memory pressure
             const int batchSize = 5000;
             
-            // Use ToListAsync + GroupBy to handle potential duplicates gracefully
+            // Use VMAccountId + VMAccountNumber as composite key since VMAccountId can have multiple account numbers
+            // (historical account number changes in source system)
             var existingAccountList = await _dbContext.AdrAccounts
                 .Where(a => !a.IsDeleted)
                 .ToListAsync(cancellationToken);
 
             var existingAccounts = existingAccountList
-                .GroupBy(a => a.VMAccountId)
+                .GroupBy(a => (a.VMAccountId, a.VMAccountNumber))
                 .ToDictionary(
                     g => g.Key,
                     g =>
@@ -90,10 +91,11 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                         if (g.Count() > 1)
                         {
                             _logger.LogWarning(
-                                "Found {Count} AdrAccount rows with VMAccountId {VMAccountId}. " +
-                                "Using the most recently modified one. Please clean up duplicate records.",
+                                "Found {Count} AdrAccount rows with VMAccountId {VMAccountId} and VMAccountNumber {VMAccountNumber}. " +
+                                "Using the most recently modified one.",
                                 g.Count(),
-                                g.Key);
+                                g.Key.VMAccountId,
+                                g.Key.VMAccountNumber);
                         }
                         // Use most recently modified
                         return g
@@ -101,7 +103,8 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                             .First();
                     });
 
-            var processedVMAccountIds = new HashSet<long>();
+            // Track processed accounts by composite key (VMAccountId + VMAccountNumber)
+            var processedAccountKeys = new HashSet<(long VMAccountId, string VMAccountNumber)>();
             int processedSinceLastSave = 0;
             int batchNumber = 1;
 
@@ -111,7 +114,8 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             {
                 try
                 {
-                    processedVMAccountIds.Add(externalAccount.VMAccountId);
+                    var accountKey = (externalAccount.VMAccountId, externalAccount.VMAccountNumber);
+                    processedAccountKeys.Add(accountKey);
 
                     // Look up the internal ClientId using the ExternalClientId mapping
                     int? internalClientId = null;
@@ -121,7 +125,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                         internalClientId = mappedClientId;
                     }
 
-                    if (existingAccounts.TryGetValue(externalAccount.VMAccountId, out var existingAccount))
+                    if (existingAccounts.TryGetValue(accountKey, out var existingAccount))
                     {
                         UpdateExistingAccount(existingAccount, externalAccount, internalClientId);
                         result.AccountsUpdated++;
@@ -130,7 +134,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                     {
                         var newAccount = CreateNewAccount(externalAccount, internalClientId);
                         await _dbContext.AdrAccounts.AddAsync(newAccount, cancellationToken);
-                        existingAccounts[newAccount.VMAccountId] = newAccount; // Track for future lookups
+                        existingAccounts[accountKey] = newAccount; // Track for future lookups
                         result.AccountsInserted++;
                     }
 
@@ -157,9 +161,12 @@ public class AdrAccountSyncService : IAdrAccountSyncService
 
             // Mark accounts not in external data as deleted
             int deletedSinceLastSave = 0;
-            foreach (var existingAccount in existingAccounts.Values)
+            foreach (var kvp in existingAccounts)
             {
-                if (!processedVMAccountIds.Contains(existingAccount.VMAccountId))
+                var accountKey = kvp.Key;
+                var existingAccount = kvp.Value;
+                
+                if (!processedAccountKeys.Contains(accountKey))
                 {
                     existingAccount.IsDeleted = true;
                     existingAccount.ModifiedDateTime = DateTime.UtcNow;
