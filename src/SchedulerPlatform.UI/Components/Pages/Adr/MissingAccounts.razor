@@ -18,6 +18,16 @@
 <MudPaper Class="pa-4">
     <MudGrid Class="mb-4" Spacing="2">
         <MudItem xs="12" md="3">
+            <MudTextField @bind-Value="_searchTerm" 
+                          Label="Search by Account # or Interface Account ID" 
+                          Placeholder="Enter account number or interface ID"
+                          Variant="Variant.Outlined" 
+                          Margin="Margin.Dense" 
+                          Clearable="true"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" />
+        </MudItem>
+        <MudItem xs="12" md="3">
             <MudAutocomplete T="Client" 
                              Label="Filter by Client" 
                              @bind-Value="_selectedClient"
@@ -28,19 +38,10 @@
                              Clearable="true"
                              ResetValueOnEmptyText="true"
                              CoerceText="false"
-                             AdornmentIcon="@Icons.Material.Filled.Search"
+                             AdornmentIcon="@Icons.Material.Filled.Business"
                              AdornmentColor="Color.Primary" />
         </MudItem>
-        <MudItem xs="12" md="2">
-            <MudSelect T="string" @bind-Value="_selectedNextRunStatus" Label="Next Run Status" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
-                <MudSelectItem Value="@("")">All</MudSelectItem>
-                <MudSelectItem Value="@("Run Now")">Run Now</MudSelectItem>
-                <MudSelectItem Value="@("Due Soon")">Due Soon</MudSelectItem>
-                <MudSelectItem Value="@("Upcoming")">Upcoming</MudSelectItem>
-                <MudSelectItem Value="@("Future")">Future</MudSelectItem>
-            </MudSelect>
-        </MudItem>
-        <MudItem xs="12" md="4" Class="d-flex align-center justify-end gap-2">
+        <MudItem xs="12" md="6" Class="d-flex align-center justify-end gap-2">
             <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters" StartIcon="@Icons.Material.Filled.FilterAlt">
                 Apply
             </MudButton>
@@ -65,12 +66,11 @@
                 <MudTh>Account #</MudTh>
                 <MudTh>Interface Account ID</MudTh>
                 <MudTh>Client</MudTh>
-                <MudTh>Vendor</MudTh>
+                <MudTh>Vendor Code</MudTh>
                 <MudTh>Period Type</MudTh>
                 <MudTh>Last Invoice</MudTh>
                 <MudTh>Expected Next</MudTh>
                 <MudTh>Days Overdue</MudTh>
-                <MudTh>Next Run Status</MudTh>
                 <MudTh>Actions</MudTh>
             </HeaderContent>
             <RowTemplate>
@@ -80,7 +80,7 @@
                 </MudTd>
                 <MudTd DataLabel="Interface Account ID">@(context.InterfaceAccountId ?? "N/A")</MudTd>
                 <MudTd DataLabel="Client">@(context.ClientName ?? "N/A")</MudTd>
-                <MudTd DataLabel="Vendor">@(context.VendorCode ?? "N/A")</MudTd>
+                <MudTd DataLabel="Vendor Code">@(context.VendorCode ?? "N/A")</MudTd>
                 <MudTd DataLabel="Period Type">
                     @if (!string.IsNullOrEmpty(context.PeriodType))
                     {
@@ -126,18 +126,6 @@
                         }
                     }
                 </MudTd>
-                <MudTd DataLabel="Next Run Status">
-                    @if (!string.IsNullOrEmpty(context.NextRunStatus))
-                    {
-                        <MudChip T="string" Size="Size.Small" Color="@GetNextRunStatusColor(context.NextRunStatus)">
-                            @context.NextRunStatus
-                        </MudChip>
-                    }
-                    else
-                    {
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">N/A</MudText>
-                    }
-                </MudTd>
                 <MudTd DataLabel="Actions">
                     <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
                         <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewAccountDetails(context)">View Details</MudMenuItem>
@@ -165,10 +153,9 @@
     private MudTable<AdrAccount> _table = null!;
     private List<Client> _clients = new();
     private bool _loading = true;
+    private string? _searchTerm;
     private Client? _selectedClient;
     private int? _filterClientId;
-    private string _selectedNextRunStatus = "";
-    private string? _filterNextRunStatus;
 
     protected override async Task OnInitializedAsync()
     {
@@ -198,8 +185,8 @@
                 pageNumber,
                 pageSize,
                 _filterClientId,
+                _searchTerm,
                 null,
-                _filterNextRunStatus,
                 "Missing");
 
             return new TableData<AdrAccount>
@@ -230,16 +217,14 @@
     private async Task ApplyFilters()
     {
         _filterClientId = _selectedClient?.Id;
-        _filterNextRunStatus = string.IsNullOrEmpty(_selectedNextRunStatus) ? null : _selectedNextRunStatus;
         await _table.ReloadServerData();
     }
 
     private async Task ClearFilters()
     {
+        _searchTerm = null;
         _selectedClient = null;
-        _selectedNextRunStatus = "";
         _filterClientId = null;
-        _filterNextRunStatus = null;
         await _table.ReloadServerData();
     }
 
@@ -262,15 +247,6 @@
         > 60 => Color.Error,
         > 30 => Color.Warning,
         _ => Color.Info
-    };
-
-    private Color GetNextRunStatusColor(string status) => status switch
-    {
-        "Run Now" => Color.Error,
-        "Due Soon" => Color.Warning,
-        "Upcoming" => Color.Info,
-        "Future" => Color.Default,
-        _ => Color.Default
     };
 
     private async Task ViewAccountDetails(AdrAccount account)

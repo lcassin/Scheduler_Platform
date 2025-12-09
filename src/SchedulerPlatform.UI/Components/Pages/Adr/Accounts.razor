@@ -77,7 +77,7 @@
                 <MudTh>Account #</MudTh>
                 <MudTh>Interface Account ID</MudTh>
                 <MudTh>Client</MudTh>
-                <MudTh>Vendor</MudTh>
+                <MudTh>Vendor Code</MudTh>
                 <MudTh>Period Type</MudTh>
                 <MudTh>Next Run</MudTh>
                 <MudTh>Run Status</MudTh>
@@ -91,7 +91,7 @@
                 </MudTd>
                 <MudTd DataLabel="Interface Account ID">@(context.InterfaceAccountId ?? "N/A")</MudTd>
                 <MudTd DataLabel="Client">@(context.ClientName ?? "N/A")</MudTd>
-                <MudTd DataLabel="Vendor">@(context.VendorCode ?? "N/A")</MudTd>
+                <MudTd DataLabel="Vendor Code">@(context.VendorCode ?? "N/A")</MudTd>
                 <MudTd DataLabel="Period Type">
                     @if (!string.IsNullOrEmpty(context.PeriodType))
                     {
