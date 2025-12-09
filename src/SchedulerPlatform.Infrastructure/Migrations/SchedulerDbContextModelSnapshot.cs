@@ -756,6 +756,9 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                     b.Property<bool>("IsEnabled")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("IsSystemSchedule")
+                        .HasColumnType("bit");
+
                     b.Property<string>("JobConfiguration")
                         .HasColumnType("nvarchar(max)");
 

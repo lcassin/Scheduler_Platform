@@ -187,12 +187,12 @@
                     }
                 </MudTd>
                 <MudTd DataLabel="Status">
-                    <MudSwitch T="bool" Value="context.IsEnabled" ValueChanged="@((bool value) => HandleToggleSchedule(context, value))" Color="Color.Primary" Disabled="@(!_canUpdate)" />
+                    <MudSwitch T="bool" Value="context.IsEnabled" ValueChanged="@((bool value) => HandleToggleSchedule(context, value))" Color="Color.Primary" Disabled="@(!_canUpdate || context.IsSystemSchedule)" />
                 </MudTd>
                 <MudTd DataLabel="Actions">
                     <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
                         <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewScheduleDetails(context)">View Details</MudMenuItem>
-                        @if (_canUpdate)
+                        @if (_canUpdate && !context.IsSystemSchedule)
                         {
                             <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => EditSchedule(context.Id)">Edit</MudMenuItem>
                         }
@@ -201,9 +201,13 @@
                         {
                             <MudMenuItem Icon="@Icons.Material.Filled.PlayArrow" OnClick="() => TriggerSchedule(context)">Trigger Now</MudMenuItem>
                         }
-                        @if (_canDelete)
+                        @if (_canDelete && !context.IsSystemSchedule)
                         {
                             <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="() => DeleteSchedule(context)">Delete</MudMenuItem>
+                        }
+                        @if (context.IsSystemSchedule)
+                        {
+                            <MudMenuItem Icon="@Icons.Material.Filled.Lock" Disabled="true">System Schedule (Protected)</MudMenuItem>
                         }
                     </MudMenu>
                 </MudTd>
