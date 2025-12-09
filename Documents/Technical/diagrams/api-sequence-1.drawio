@@ -1,0 +1,318 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/29.0.3 Chrome/140.0.7339.249 Electron/38.7.0 Safari/537.36" version="29.0.3">
+  <diagram name="Page-1" id="gx3INOu6nSPyKT-klIyl">
+    <mxGraphModel dx="1426" dy="841" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-56" value="Client (UI/Script)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" vertex="1" parent="1">
+          <mxGeometry x="20" y="20" width="150" height="2452" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-57" value="CORS Middleware" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" vertex="1" parent="1">
+          <mxGeometry x="334" y="20" width="150" height="2452" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-58" value="Authentication Middleware" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" vertex="1" parent="1">
+          <mxGeometry x="572" y="20" width="212" height="2452" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-59" value="Authorization Middleware" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" vertex="1" parent="1">
+          <mxGeometry x="860" y="20" width="204" height="2452" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-60" value="ModelStateLoggingFilter" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" vertex="1" parent="1">
+          <mxGeometry x="1114" y="20" width="194" height="2452" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-61" value="Controller Action" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" vertex="1" parent="1">
+          <mxGeometry x="1358" y="20" width="150" height="2452" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-62" value="UnitOfWork" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" vertex="1" parent="1">
+          <mxGeometry x="1645" y="20" width="150" height="2452" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-63" value="SchedulerService" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" vertex="1" parent="1">
+          <mxGeometry x="1845" y="20" width="150" height="2452" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-64" value="SQL Server" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" vertex="1" parent="1">
+          <mxGeometry x="2045" y="20" width="150" height="2452" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-65" value="Quartz.NET" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" vertex="1" parent="1">
+          <mxGeometry x="2245" y="20" width="150" height="2452" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-66" value="alt" style="shape=umlFrame;dashed=1;pointerEvents=0;dropTarget=0;strokeColor=#B3B3B3;height=20;width=30" vertex="1" parent="1">
+          <mxGeometry x="84" y="229" width="336" height="98" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-67" value="[Origin not allowed]" style="text;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;" vertex="1" parent="4jvBMMd8r0nJFwHS6YxB-66">
+          <mxGeometry x="30" width="306" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-68" value="alt" style="shape=umlFrame;dashed=1;pointerEvents=0;dropTarget=0;strokeColor=#B3B3B3;height=20;width=30" vertex="1" parent="1">
+          <mxGeometry x="84" y="471" width="605" height="98" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-69" value="[Token missing or invalid]" style="text;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;" vertex="1" parent="4jvBMMd8r0nJFwHS6YxB-68">
+          <mxGeometry x="30" width="575" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-70" value="alt" style="shape=umlFrame;dashed=1;pointerEvents=0;dropTarget=0;strokeColor=#B3B3B3;height=20;width=30" vertex="1" parent="1">
+          <mxGeometry x="84" y="713" width="889" height="98" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-71" value="[Insufficient permissions]" style="text;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;" vertex="1" parent="4jvBMMd8r0nJFwHS6YxB-70">
+          <mxGeometry x="30" width="859" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-72" value="alt" style="shape=umlFrame;dashed=1;pointerEvents=0;dropTarget=0;strokeColor=#B3B3B3;height=20;width=30" vertex="1" parent="1">
+          <mxGeometry x="84" y="955" width="1213" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-73" value="[ModelState invalid]" style="text;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;" vertex="1" parent="4jvBMMd8r0nJFwHS6YxB-72">
+          <mxGeometry x="30" width="1183" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-74" value="alt" style="shape=umlFrame;dashed=1;pointerEvents=0;dropTarget=0;strokeColor=#B3B3B3;height=20;width=30" vertex="1" parent="1">
+          <mxGeometry x="1422" y="1533" width="909" height="202" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-75" value="[schedule.IsEnabled = true]" style="text;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;" vertex="1" parent="4jvBMMd8r0nJFwHS6YxB-74">
+          <mxGeometry x="30" width="879" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-76" value="alt" style="shape=umlFrame;dashed=1;pointerEvents=0;dropTarget=0;strokeColor=#B3B3B3;height=20;width=30" vertex="1" parent="1">
+          <mxGeometry x="84" y="1197" width="2257" height="600" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-77" value="[POST /api/schedules (Create Schedule)]" style="text;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;" vertex="1" parent="4jvBMMd8r0nJFwHS6YxB-76">
+          <mxGeometry x="30" width="2227" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-78" value="alt" style="shape=umlFrame;dashed=1;pointerEvents=0;dropTarget=0;strokeColor=#B3B3B3;height=20;width=30" vertex="1" parent="1">
+          <mxGeometry x="84" y="1807" width="2047" height="306" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-79" value="[GET /api/schedules/{id}]" style="text;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;" vertex="1" parent="4jvBMMd8r0nJFwHS6YxB-78">
+          <mxGeometry x="30" width="2017" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-80" value="alt" style="shape=umlFrame;dashed=1;pointerEvents=0;dropTarget=0;strokeColor=#B3B3B3;height=20;width=30" vertex="1" parent="1">
+          <mxGeometry x="84" y="2123" width="2247" height="254" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-81" value="[POST /api/schedules/{id}/trigger]" style="text;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;" vertex="1" parent="4jvBMMd8r0nJFwHS6YxB-80">
+          <mxGeometry x="30" width="2217" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-82" value="HTTP Request (with Origin header)" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-56" target="4jvBMMd8r0nJFwHS6YxB-57">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="261" y="127" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-83" value="Check AllowUI policy" style="curved=1;endArrow=block;rounded=0;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-57" target="4jvBMMd8r0nJFwHS6YxB-57">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="460" y="179" />
+              <mxPoint x="460" y="209" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-84" value="403 Forbidden (CORS error)" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-57" target="4jvBMMd8r0nJFwHS6YxB-56">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="264" y="307" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-85" value="Request passed CORS check" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-57" target="4jvBMMd8r0nJFwHS6YxB-58">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="552" y="369" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-86" value="Validate JWT token" style="curved=1;endArrow=block;rounded=0;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-58" target="4jvBMMd8r0nJFwHS6YxB-58">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="729" y="421" />
+              <mxPoint x="729" y="451" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-87" value="401 Unauthorized" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-58" target="4jvBMMd8r0nJFwHS6YxB-56">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="398" y="549" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-88" value="Token validated, extract claims" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-58" target="4jvBMMd8r0nJFwHS6YxB-59">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="829" y="611" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-89" value="Check role requirements" style="curved=1;endArrow=block;rounded=0;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-59" target="4jvBMMd8r0nJFwHS6YxB-59">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1013" y="663" />
+              <mxPoint x="1013" y="693" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-90" value="403 Forbidden" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-59" target="4jvBMMd8r0nJFwHS6YxB-56">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="540" y="791" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-91" value="User authorized" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-59" target="4jvBMMd8r0nJFwHS6YxB-60">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1095" y="853" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-92" value="Check ModelState" style="curved=1;endArrow=block;rounded=0;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-60" target="4jvBMMd8r0nJFwHS6YxB-60">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1262" y="905" />
+              <mxPoint x="1262" y="935" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-93" value="Log validation errors" style="curved=1;endArrow=block;rounded=0;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-60" target="4jvBMMd8r0nJFwHS6YxB-60">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1262" y="1033" />
+              <mxPoint x="1262" y="1063" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-94" value="400 Bad Request (with errors)" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-60" target="4jvBMMd8r0nJFwHS6YxB-56">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="665" y="1115" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-95" value="Model validated" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-60" target="4jvBMMd8r0nJFwHS6YxB-61">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1331" y="1177" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-96" value="Set CreatedDateTime, CreatedBy from User.Identity" style="curved=1;endArrow=block;rounded=0;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-61" target="4jvBMMd8r0nJFwHS6YxB-61">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1484" y="1275" />
+              <mxPoint x="1484" y="1305" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-97" value="Schedules.AddAsync(schedule)" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-61" target="4jvBMMd8r0nJFwHS6YxB-62">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1585" y="1357" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-98" value="INSERT INTO Schedule" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-62" target="4jvBMMd8r0nJFwHS6YxB-64">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1929" y="1409" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-99" value="Schedule ID = 123" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-64" target="4jvBMMd8r0nJFwHS6YxB-62">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1932" y="1461" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-100" value="SaveChangesAsync()" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-61" target="4jvBMMd8r0nJFwHS6YxB-62">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1585" y="1513" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-101" value="ScheduleJob(schedule)" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-61" target="4jvBMMd8r0nJFwHS6YxB-63">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1685" y="1611" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-102" value="Create JobDetail &amp; Trigger" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-63" target="4jvBMMd8r0nJFwHS6YxB-65">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2129" y="1663" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-103" value="Job scheduled" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-65" target="4jvBMMd8r0nJFwHS6YxB-63">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2132" y="1715" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-104" value="201 Created (Location: /api/schedules/123)" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-61" target="4jvBMMd8r0nJFwHS6YxB-56">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="776" y="1777" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-105" value="Schedules.GetByIdAsync(id)" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-61" target="4jvBMMd8r0nJFwHS6YxB-62">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1585" y="1885" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-106" value="SELECT * FROM Schedules WHERE Id = @id" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-62" target="4jvBMMd8r0nJFwHS6YxB-64">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1929" y="1937" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-107" value="Schedule entity" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-64" target="4jvBMMd8r0nJFwHS6YxB-62">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1932" y="1989" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-108" value="Schedule" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-62" target="4jvBMMd8r0nJFwHS6YxB-61">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1588" y="2041" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-109" value="200 OK (JSON: Schedule)" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-61" target="4jvBMMd8r0nJFwHS6YxB-56">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="776" y="2093" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-110" value="TriggerJobNow(id, clientId, username)" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-61" target="4jvBMMd8r0nJFwHS6YxB-63">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1685" y="2201" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-111" value="TriggerJob(jobKey, jobDataMap)" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-63" target="4jvBMMd8r0nJFwHS6YxB-65">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2129" y="2253" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-112" value="Job triggered" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-65" target="4jvBMMd8r0nJFwHS6YxB-63">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2132" y="2305" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="4jvBMMd8r0nJFwHS6YxB-113" value="200 OK" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" edge="1" parent="1" source="4jvBMMd8r0nJFwHS6YxB-61" target="4jvBMMd8r0nJFwHS6YxB-56">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="776" y="2357" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

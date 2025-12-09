@@ -39,6 +39,7 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("nvarchar(128)");
 
                     b.Property<string>("CreatedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedDateTime")
@@ -83,9 +84,10 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("float");
 
                     b.Property<string>("ModifiedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime?>("ModifiedDateTime")
+                    b.Property<DateTime>("ModifiedDateTime")
                         .HasColumnType("datetime2");
 
                     b.Property<DateTime?>("NextRangeEndDateTime")
@@ -168,6 +170,7 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<string>("CreatedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedDateTime")
@@ -189,9 +192,10 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("bit");
 
                     b.Property<string>("ModifiedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime?>("ModifiedDateTime")
+                    b.Property<DateTime>("ModifiedDateTime")
                         .HasColumnType("datetime2");
 
                     b.Property<DateTime?>("NextRangeEndDateTime")
@@ -225,6 +229,9 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
+
+                    b.Property<string>("VendorCode")
+                        .HasColumnType("nvarchar(max)");
 
                     b.HasKey("Id");
 
@@ -272,6 +279,7 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("CreatedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedDateTime")
@@ -299,9 +307,10 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("bit");
 
                     b.Property<string>("ModifiedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime?>("ModifiedDateTime")
+                    b.Property<DateTime>("ModifiedDateTime")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("RequestPayload")
@@ -344,6 +353,7 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     b.Property<string>("CreatedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedDateTime")
@@ -370,9 +380,10 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("bit");
 
                     b.Property<string>("ModifiedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime?>("ModifiedDateTime")
+                    b.Property<DateTime>("ModifiedDateTime")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("NewValues")
@@ -429,6 +440,7 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("nvarchar(50)");
 
                     b.Property<string>("CreatedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedDateTime")
@@ -447,9 +459,10 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<string>("ModifiedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime?>("ModifiedDateTime")
+                    b.Property<DateTime>("ModifiedDateTime")
                         .HasColumnType("datetime2");
 
                     b.HasKey("Id");
@@ -476,6 +489,7 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("CreatedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedDateTime")
@@ -494,9 +508,10 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("bit");
 
                     b.Property<string>("ModifiedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime?>("ModifiedDateTime")
+                    b.Property<DateTime>("ModifiedDateTime")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Output")
@@ -542,6 +557,7 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("CreatedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedDateTime")
@@ -557,9 +573,10 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("bit");
 
                     b.Property<string>("ModifiedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime?>("ModifiedDateTime")
+                    b.Property<DateTime>("ModifiedDateTime")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("ParameterName")
@@ -602,6 +619,7 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
                     b.Property<string>("CreatedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedDateTime")
@@ -631,9 +649,10 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("bit");
 
                     b.Property<string>("ModifiedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime?>("ModifiedDateTime")
+                    b.Property<DateTime>("ModifiedDateTime")
                         .HasColumnType("datetime2");
 
                     b.Property<int>("ScheduleId")
@@ -668,6 +687,7 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<string>("CreatedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedDateTime")
@@ -677,9 +697,10 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("bit");
 
                     b.Property<string>("ModifiedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime?>("ModifiedDateTime")
+                    b.Property<DateTime>("ModifiedDateTime")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("PasswordHash")
@@ -710,6 +731,7 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("bigint");
 
                     b.Property<string>("CreatedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedDateTime")
@@ -747,9 +769,10 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("int");
 
                     b.Property<string>("ModifiedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime?>("ModifiedDateTime")
+                    b.Property<DateTime>("ModifiedDateTime")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("Name")
@@ -803,6 +826,7 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("nvarchar(64)");
 
                     b.Property<string>("CreatedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedDateTime")
@@ -830,9 +854,10 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("datetime2");
 
                     b.Property<string>("ModifiedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime?>("ModifiedDateTime")
+                    b.Property<DateTime>("ModifiedDateTime")
                         .HasColumnType("datetime2");
 
                     b.Property<int>("ScheduleFrequency")
@@ -877,6 +902,7 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("bigint");
 
                     b.Property<string>("CreatedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedDateTime")
@@ -918,9 +944,10 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("ModifiedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime?>("ModifiedDateTime")
+                    b.Property<DateTime>("ModifiedDateTime")
                         .HasColumnType("datetime2");
 
                     b.Property<bool>("MustChangePassword")
@@ -975,6 +1002,7 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("bit");
 
                     b.Property<string>("CreatedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime>("CreatedDateTime")
@@ -984,9 +1012,10 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasColumnType("bit");
 
                     b.Property<string>("ModifiedBy")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<DateTime?>("ModifiedDateTime")
+                    b.Property<DateTime>("ModifiedDateTime")
                         .HasColumnType("datetime2");
 
                     b.Property<string>("PermissionName")
