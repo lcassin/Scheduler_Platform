@@ -210,6 +210,14 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 {
                     result.JobsProcessed++;
 
+                    // Set "in-progress" status and save BEFORE calling external API
+                    // This prevents double-billing if the process crashes after the API call
+                    job.Status = "CredentialCheckInProgress";
+                    job.ModifiedDateTime = DateTime.UtcNow;
+                    job.ModifiedBy = "System Created";
+                    await _unitOfWork.AdrJobs.UpdateAsync(job);
+                    await _unitOfWork.SaveChangesAsync();
+
                     var execution = await CreateExecutionAsync(job.Id, (int)AdrRequestType.AttemptLogin);
                     
                     var apiResult = await CallAdrApiAsync(
@@ -307,6 +315,14 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 try
                 {
                     result.JobsProcessed++;
+
+                    // Set "in-progress" status and save BEFORE calling external API
+                    // This prevents double-billing if the process crashes after the API call
+                    job.Status = "ScrapeInProgress";
+                    job.ModifiedDateTime = DateTime.UtcNow;
+                    job.ModifiedBy = "System Created";
+                    await _unitOfWork.AdrJobs.UpdateAsync(job);
+                    await _unitOfWork.SaveChangesAsync();
 
                     var execution = await CreateExecutionAsync(job.Id, (int)AdrRequestType.DownloadInvoice);
 
@@ -413,6 +429,14 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 try
                 {
                     result.JobsChecked++;
+
+                    // Set "in-progress" status and save BEFORE calling external API
+                    // This prevents double-billing if the process crashes after the API call
+                    job.Status = "StatusCheckInProgress";
+                    job.ModifiedDateTime = DateTime.UtcNow;
+                    job.ModifiedBy = "System Created";
+                    await _unitOfWork.AdrJobs.UpdateAsync(job);
+                    await _unitOfWork.SaveChangesAsync();
 
                     var statusResult = await CheckJobStatusAsync(job.Id, cancellationToken);
 

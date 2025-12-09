@@ -37,9 +37,11 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
 
     public async Task<IEnumerable<AdrJob>> GetJobsNeedingCredentialVerificationAsync(DateTime currentDate)
     {
+        // Include "CredentialCheckInProgress" to recover jobs that were interrupted mid-step
+        // These jobs already had the API called but the process crashed before updating status
         return await _dbSet
             .Where(j => !j.IsDeleted && 
-                        j.Status == "Pending" &&
+                        (j.Status == "Pending" || j.Status == "CredentialCheckInProgress") &&
                         !j.CredentialVerifiedDateTime.HasValue)
             .Include(j => j.AdrAccount)
             .ToListAsync();
@@ -47,9 +49,11 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
 
     public async Task<IEnumerable<AdrJob>> GetJobsReadyForScrapingAsync(DateTime currentDate)
     {
+        // Include "ScrapeInProgress" to recover jobs that were interrupted mid-step
+        // These jobs already had the API called but the process crashed before updating status
         return await _dbSet
             .Where(j => !j.IsDeleted && 
-                        j.Status == "CredentialVerified" &&
+                        (j.Status == "CredentialVerified" || j.Status == "ScrapeInProgress") &&
                         j.CredentialVerifiedDateTime.HasValue &&
                         j.NextRunDateTime.HasValue &&
                         j.NextRunDateTime.Value.Date <= currentDate.Date)
@@ -59,10 +63,12 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
 
     public async Task<IEnumerable<AdrJob>> GetJobsNeedingStatusCheckAsync(DateTime currentDate, int followUpDelayDays = 5)
     {
+        // Include "StatusCheckInProgress" to recover jobs that were interrupted mid-step
+        // These jobs already had the API called but the process crashed before updating status
         var checkDate = currentDate.AddDays(-followUpDelayDays);
         return await _dbSet
             .Where(j => !j.IsDeleted && 
-                        j.Status == "ScrapeRequested" &&
+                        (j.Status == "ScrapeRequested" || j.Status == "StatusCheckInProgress") &&
                         j.AdrStatusId.HasValue &&
                         !j.ScrapingCompletedDateTime.HasValue &&
                         j.ModifiedDateTime <= checkDate)
