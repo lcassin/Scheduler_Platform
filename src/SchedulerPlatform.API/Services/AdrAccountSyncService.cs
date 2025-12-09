@@ -418,14 +418,7 @@ Combined AS (
         nr.NextRunDate,
         DATEADD(DAY, nr.WindowDays, nr.NextRunDate) AS NextRangeEnd,
         DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) AS DaysUntilNextRun,
-        CASE 
-            -- If HistoricalBillingStatus is Missing, NextRunStatus should also be Missing
-            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) < -(nr.PeriodDays * 2) THEN 'Missing'
-            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) <= 0 THEN 'Run Now'
-            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) <= nr.WindowDays THEN 'Due Soon'
-            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) <= 30 THEN 'Upcoming'
-            ELSE 'Future'
-        END AS NextRunStatus,
+        -- Calculate HistoricalBillingStatus first (based on ExpectedNextDate)
         CASE 
             WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) < -(nr.PeriodDays * 2) THEN 'Missing'
             WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) < -nr.WindowDays THEN 'Overdue'
@@ -433,7 +426,16 @@ Combined AS (
             WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) <= nr.WindowDays THEN 'Due Soon'
             WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) <= 30 THEN 'Upcoming'
             ELSE 'Future'
-        END AS HistoricalBillingStatus
+        END AS HistoricalBillingStatus,
+        -- NextRunStatus: If HistoricalBillingStatus is Missing, NextRunStatus should also be Missing
+        -- Otherwise calculate based on NextRunDate
+        CASE 
+            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) < -(nr.PeriodDays * 2) THEN 'Missing'
+            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) <= 0 THEN 'Run Now'
+            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) <= nr.WindowDays THEN 'Due Soon'
+            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) <= 30 THEN 'Upcoming'
+            ELSE 'Future'
+        END AS NextRunStatus
     FROM #tmpCredentialAccountBilling cab
     INNER JOIN NextRunCalc nr ON nr.AccountId = cab.AccountId
 ),
