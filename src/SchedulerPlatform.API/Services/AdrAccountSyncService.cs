@@ -18,6 +18,8 @@ public class AdrAccountSyncResult
     public int AccountsInserted { get; set; }
     public int AccountsUpdated { get; set; }
     public int AccountsMarkedDeleted { get; set; }
+    public int ClientsCreated { get; set; }
+    public int ClientsUpdated { get; set; }
     public int Errors { get; set; }
     public List<string> ErrorMessages { get; set; } = new();
     public DateTime SyncStartDateTime { get; set; }
@@ -61,9 +63,16 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                 throw new InvalidOperationException("VendorCredential connection string not configured");
             }
 
+            // Step 1: Fetch external accounts from VendorCred
             var externalAccounts = await FetchExternalAccountsAsync(externalConnectionString, cancellationToken);
             _logger.LogInformation("Fetched {Count} accounts from external database", externalAccounts.Count);
 
+            // Step 2: Sync Clients - create/update Client records based on ExternalClientId
+            var externalClientIdToInternalClientId = await SyncClientsAsync(externalAccounts, result, cancellationToken);
+            _logger.LogInformation("Client sync complete. Created: {Created}, Updated: {Updated}", 
+                result.ClientsCreated, result.ClientsUpdated);
+
+            // Step 3: Sync AdrAccounts using the ExternalClientId -> internal ClientId mapping
             var existingAccounts = await _dbContext.AdrAccounts
                 .Where(a => !a.IsDeleted)
                 .ToDictionaryAsync(a => a.VMAccountId, cancellationToken);
@@ -76,14 +85,22 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                 {
                     processedVMAccountIds.Add(externalAccount.VMAccountId);
 
+                    // Look up the internal ClientId using the ExternalClientId mapping
+                    int? internalClientId = null;
+                    if (externalAccount.ClientId.HasValue && 
+                        externalClientIdToInternalClientId.TryGetValue(externalAccount.ClientId.Value, out var mappedClientId))
+                    {
+                        internalClientId = mappedClientId;
+                    }
+
                     if (existingAccounts.TryGetValue(externalAccount.VMAccountId, out var existingAccount))
                     {
-                        UpdateExistingAccount(existingAccount, externalAccount);
+                        UpdateExistingAccount(existingAccount, externalAccount, internalClientId);
                         result.AccountsUpdated++;
                     }
                     else
                     {
-                        var newAccount = CreateNewAccount(externalAccount);
+                        var newAccount = CreateNewAccount(externalAccount, internalClientId);
                         await _dbContext.AdrAccounts.AddAsync(newAccount, cancellationToken);
                         result.AccountsInserted++;
                     }
@@ -98,6 +115,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                 }
             }
 
+            // Mark accounts not in external data as deleted
             foreach (var existingAccount in existingAccounts.Values)
             {
                 if (!processedVMAccountIds.Contains(existingAccount.VMAccountId))
@@ -113,9 +131,9 @@ public class AdrAccountSyncService : IAdrAccountSyncService
 
             result.SyncEndDateTime = DateTime.UtcNow;
             _logger.LogInformation(
-                "ADR account sync completed. Processed: {Processed}, Inserted: {Inserted}, Updated: {Updated}, Deleted: {Deleted}, Errors: {Errors}, Duration: {Duration}",
-                result.TotalAccountsProcessed, result.AccountsInserted, result.AccountsUpdated, 
-                result.AccountsMarkedDeleted, result.Errors, result.Duration);
+                "ADR account sync completed. Clients: {ClientsCreated} created/{ClientsUpdated} updated. Accounts: {Processed} processed, {Inserted} inserted, {Updated} updated, {Deleted} deleted, {Errors} errors. Duration: {Duration}",
+                result.ClientsCreated, result.ClientsUpdated, result.TotalAccountsProcessed, result.AccountsInserted, 
+                result.AccountsUpdated, result.AccountsMarkedDeleted, result.Errors, result.Duration);
 
             return result;
         }
@@ -127,6 +145,91 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             result.ErrorMessages.Add($"Sync failed: {ex.Message}");
             throw;
         }
+    }
+
+    /// <summary>
+    /// Syncs Client records from external account data.
+    /// Creates new Clients for unknown ExternalClientIds, updates existing ones.
+    /// Returns a mapping from ExternalClientId to internal ClientId.
+    /// </summary>
+    private async Task<Dictionary<int, int>> SyncClientsAsync(
+        List<ExternalAccountData> externalAccounts, 
+        AdrAccountSyncResult result,
+        CancellationToken cancellationToken)
+    {
+        // Extract unique ExternalClientId -> ClientName pairs from external data
+        var uniqueClients = externalAccounts
+            .Where(a => a.ClientId.HasValue)
+            .GroupBy(a => a.ClientId!.Value)
+            .Select(g => new { ExternalClientId = g.Key, ClientName = g.First().ClientName ?? $"Client {g.Key}" })
+            .ToList();
+
+        _logger.LogInformation("Found {Count} unique clients in external data", uniqueClients.Count);
+
+        // Load existing clients by ExternalClientId
+        var externalClientIds = uniqueClients.Select(c => c.ExternalClientId).ToList();
+        var existingClients = await _dbContext.Clients
+            .Where(c => externalClientIds.Contains(c.ExternalClientId))
+            .ToDictionaryAsync(c => c.ExternalClientId, cancellationToken);
+
+        _logger.LogInformation("Found {Count} existing clients by ExternalClientId", existingClients.Count);
+
+        var now = DateTime.UtcNow;
+
+        foreach (var clientData in uniqueClients)
+        {
+            if (existingClients.TryGetValue(clientData.ExternalClientId, out var existingClient))
+            {
+                // Update existing client if name changed
+                if (existingClient.ClientName != clientData.ClientName)
+                {
+                    existingClient.ClientName = clientData.ClientName;
+                    existingClient.ModifiedDateTime = now;
+                    existingClient.ModifiedBy = "System Created";
+                    existingClient.LastSyncedDateTime = now;
+                    result.ClientsUpdated++;
+                }
+                else
+                {
+                    existingClient.LastSyncedDateTime = now;
+                }
+            }
+            else
+            {
+                // Create new client
+                var newClient = new Client
+                {
+                    ExternalClientId = clientData.ExternalClientId,
+                    ClientName = clientData.ClientName,
+                    ClientCode = clientData.ClientName.Length > 50 
+                        ? clientData.ClientName.Substring(0, 50) 
+                        : clientData.ClientName,
+                    IsActive = true,
+                    CreatedDateTime = now,
+                    CreatedBy = "System Created",
+                    ModifiedDateTime = now,
+                    ModifiedBy = "System Created",
+                    LastSyncedDateTime = now,
+                    IsDeleted = false
+                };
+
+                await _dbContext.Clients.AddAsync(newClient, cancellationToken);
+                existingClients[clientData.ExternalClientId] = newClient;
+                result.ClientsCreated++;
+            }
+        }
+
+        // Save client changes so we have ClientIds for the new records
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // Build the ExternalClientId -> internal ClientId mapping
+        // Note: Client.Id is the internal ClientId (from BaseEntity)
+        var mapping = existingClients.ToDictionary(
+            kvp => kvp.Key,  // ExternalClientId
+            kvp => kvp.Value.Id  // Internal ClientId (from BaseEntity.Id)
+        );
+
+        return mapping;
     }
 
     private async Task<List<ExternalAccountData>> FetchExternalAccountsAsync(
@@ -343,11 +446,11 @@ DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
 ";
     }
 
-    private void UpdateExistingAccount(AdrAccount existing, ExternalAccountData external)
+    private void UpdateExistingAccount(AdrAccount existing, ExternalAccountData external, int? internalClientId)
     {
         existing.VMAccountNumber = external.VMAccountNumber;
         existing.InterfaceAccountId = external.InterfaceAccountId;
-        existing.ClientId = external.ClientId;
+        existing.ClientId = internalClientId;
         existing.ClientName = external.ClientName;
         existing.CredentialId = external.CredentialId;
         existing.VendorCode = external.VendorCode;
@@ -370,14 +473,14 @@ DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
         existing.ModifiedBy = "System Created";
     }
 
-    private AdrAccount CreateNewAccount(ExternalAccountData external)
+    private AdrAccount CreateNewAccount(ExternalAccountData external, int? internalClientId)
     {
         return new AdrAccount
         {
             VMAccountId = external.VMAccountId,
             VMAccountNumber = external.VMAccountNumber,
             InterfaceAccountId = external.InterfaceAccountId,
-            ClientId = external.ClientId,
+            ClientId = internalClientId,
             ClientName = external.ClientName,
             CredentialId = external.CredentialId,
             VendorCode = external.VendorCode,
