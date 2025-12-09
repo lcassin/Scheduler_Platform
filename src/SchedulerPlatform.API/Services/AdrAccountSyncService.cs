@@ -73,11 +73,17 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                 result.ClientsCreated, result.ClientsUpdated);
 
             // Step 3: Sync AdrAccounts using the ExternalClientId -> internal ClientId mapping
+            // Process in batches to avoid large transactions and memory pressure
+            const int batchSize = 5000;
             var existingAccounts = await _dbContext.AdrAccounts
                 .Where(a => !a.IsDeleted)
                 .ToDictionaryAsync(a => a.VMAccountId, cancellationToken);
 
             var processedVMAccountIds = new HashSet<long>();
+            int processedSinceLastSave = 0;
+            int batchNumber = 1;
+
+            _logger.LogInformation("Processing {Count} accounts in batches of {BatchSize}", externalAccounts.Count, batchSize);
 
             foreach (var externalAccount in externalAccounts)
             {
@@ -102,10 +108,22 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                     {
                         var newAccount = CreateNewAccount(externalAccount, internalClientId);
                         await _dbContext.AdrAccounts.AddAsync(newAccount, cancellationToken);
+                        existingAccounts[newAccount.VMAccountId] = newAccount; // Track for future lookups
                         result.AccountsInserted++;
                     }
 
                     result.TotalAccountsProcessed++;
+                    processedSinceLastSave++;
+
+                    // Save in batches to reduce transaction size and memory pressure
+                    if (processedSinceLastSave >= batchSize)
+                    {
+                        await _dbContext.SaveChangesAsync(cancellationToken);
+                        _logger.LogInformation("Batch {BatchNumber} saved: {Count} accounts processed so far", 
+                            batchNumber, result.TotalAccountsProcessed);
+                        processedSinceLastSave = 0;
+                        batchNumber++;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -116,6 +134,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             }
 
             // Mark accounts not in external data as deleted
+            int deletedSinceLastSave = 0;
             foreach (var existingAccount in existingAccounts.Values)
             {
                 if (!processedVMAccountIds.Contains(existingAccount.VMAccountId))
@@ -124,10 +143,22 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                     existingAccount.ModifiedDateTime = DateTime.UtcNow;
                     existingAccount.ModifiedBy = "System Created";
                     result.AccountsMarkedDeleted++;
+                    deletedSinceLastSave++;
+
+                    // Also batch the deletion updates
+                    if (deletedSinceLastSave >= batchSize)
+                    {
+                        await _dbContext.SaveChangesAsync(cancellationToken);
+                        _logger.LogInformation("Deletion batch saved: {Count} accounts marked deleted so far", 
+                            result.AccountsMarkedDeleted);
+                        deletedSinceLastSave = 0;
+                    }
                 }
             }
 
+            // Final save for any remaining changes
             await _dbContext.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation("Final batch saved. Total batches: {BatchCount}", batchNumber);
 
             result.SyncEndDateTime = DateTime.UtcNow;
             _logger.LogInformation(

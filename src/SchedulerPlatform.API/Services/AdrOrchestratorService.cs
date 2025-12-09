@@ -66,6 +66,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     private const int DefaultScrapeRetryDays = 5;
     private const int DefaultFollowUpDelayDays = 5;
     private const int DefaultMaxRetries = 5;
+    private const int BatchSize = 1000; // Process and save in batches to avoid large transactions
 
     public AdrOrchestratorService(
         IUnitOfWork unitOfWork,
@@ -96,7 +97,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 a.NextRangeStartDateTime.HasValue &&
                 a.NextRangeEndDateTime.HasValue);
 
-            foreach (var account in dueAccounts)
+            int processedSinceLastSave = 0;
+            int batchNumber = 1;
+            var dueAccountsList = dueAccounts.ToList();
+            _logger.LogInformation("Processing {Count} due accounts in batches of {BatchSize}", dueAccountsList.Count, BatchSize);
+
+            foreach (var account in dueAccountsList)
             {
                 try
                 {
@@ -140,6 +146,17 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
                     await _unitOfWork.AdrJobs.AddAsync(job);
                     result.JobsCreated++;
+                    processedSinceLastSave++;
+
+                    // Save in batches to reduce transaction size
+                    if (processedSinceLastSave >= BatchSize)
+                    {
+                        await _unitOfWork.SaveChangesAsync();
+                        _logger.LogInformation("Job creation batch {BatchNumber} saved: {Count} jobs created so far", 
+                            batchNumber, result.JobsCreated);
+                        processedSinceLastSave = 0;
+                        batchNumber++;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -149,7 +166,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 }
             }
 
-            await _unitOfWork.SaveChangesAsync();
+            // Final save for remaining jobs
+            if (processedSinceLastSave > 0)
+            {
+                await _unitOfWork.SaveChangesAsync();
+            }
 
             _logger.LogInformation(
                 "Job creation completed. Created: {Created}, Skipped: {Skipped}, Errors: {Errors}",
@@ -178,7 +199,10 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         {
             _logger.LogInformation("Starting credential verification");
 
-            var jobsNeedingVerification = await _unitOfWork.AdrJobs.GetJobsNeedingCredentialVerificationAsync(DateTime.UtcNow);
+            var jobsNeedingVerification = (await _unitOfWork.AdrJobs.GetJobsNeedingCredentialVerificationAsync(DateTime.UtcNow)).ToList();
+            int processedSinceLastSave = 0;
+            int batchNumber = 1;
+            _logger.LogInformation("Processing {Count} jobs for credential verification in batches of {BatchSize}", jobsNeedingVerification.Count, BatchSize);
 
             foreach (var job in jobsNeedingVerification)
             {
@@ -220,6 +244,17 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.ModifiedDateTime = DateTime.UtcNow;
                     job.ModifiedBy = "System Created";
                     await _unitOfWork.AdrJobs.UpdateAsync(job);
+                    processedSinceLastSave++;
+
+                    // Save in batches to reduce transaction size
+                    if (processedSinceLastSave >= BatchSize)
+                    {
+                        await _unitOfWork.SaveChangesAsync();
+                        _logger.LogInformation("Credential verification batch {BatchNumber} saved: {Count} jobs processed so far", 
+                            batchNumber, result.JobsProcessed);
+                        processedSinceLastSave = 0;
+                        batchNumber++;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -229,7 +264,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 }
             }
 
-            await _unitOfWork.SaveChangesAsync();
+            // Final save for remaining jobs
+            if (processedSinceLastSave > 0)
+            {
+                await _unitOfWork.SaveChangesAsync();
+            }
 
             _logger.LogInformation(
                 "Credential verification completed. Processed: {Processed}, Verified: {Verified}, Failed: {Failed}, Errors: {Errors}",
@@ -258,7 +297,10 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         {
             _logger.LogInformation("Starting invoice scraping");
 
-            var jobsReadyForScraping = await _unitOfWork.AdrJobs.GetJobsReadyForScrapingAsync(DateTime.UtcNow);
+            var jobsReadyForScraping = (await _unitOfWork.AdrJobs.GetJobsReadyForScrapingAsync(DateTime.UtcNow)).ToList();
+            int processedSinceLastSave = 0;
+            int batchNumber = 1;
+            _logger.LogInformation("Processing {Count} jobs for scraping in batches of {BatchSize}", jobsReadyForScraping.Count, BatchSize);
 
             foreach (var job in jobsReadyForScraping)
             {
@@ -306,6 +348,17 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.ModifiedDateTime = DateTime.UtcNow;
                     job.ModifiedBy = "System Created";
                     await _unitOfWork.AdrJobs.UpdateAsync(job);
+                    processedSinceLastSave++;
+
+                    // Save in batches to reduce transaction size
+                    if (processedSinceLastSave >= BatchSize)
+                    {
+                        await _unitOfWork.SaveChangesAsync();
+                        _logger.LogInformation("Scraping batch {BatchNumber} saved: {Count} jobs processed so far", 
+                            batchNumber, result.JobsProcessed);
+                        processedSinceLastSave = 0;
+                        batchNumber++;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -315,7 +368,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 }
             }
 
-            await _unitOfWork.SaveChangesAsync();
+            // Final save for remaining jobs
+            if (processedSinceLastSave > 0)
+            {
+                await _unitOfWork.SaveChangesAsync();
+            }
 
             _logger.LogInformation(
                 "Invoice scraping completed. Processed: {Processed}, Requested: {Requested}, Completed: {Completed}, Failed: {Failed}, Errors: {Errors}",
@@ -344,9 +401,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         {
             _logger.LogInformation("Starting status check for pending jobs");
 
-            var jobsNeedingStatusCheck = await _unitOfWork.AdrJobs.GetJobsNeedingStatusCheckAsync(
+            var jobsNeedingStatusCheck = (await _unitOfWork.AdrJobs.GetJobsNeedingStatusCheckAsync(
                 DateTime.UtcNow, 
-                DefaultFollowUpDelayDays);
+                DefaultFollowUpDelayDays)).ToList();
+            int processedSinceLastSave = 0;
+            int batchNumber = 1;
+            _logger.LogInformation("Processing {Count} jobs for status check in batches of {BatchSize}", jobsNeedingStatusCheck.Count, BatchSize);
 
             foreach (var job in jobsNeedingStatusCheck)
             {
@@ -384,6 +444,17 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         job.ModifiedDateTime = DateTime.UtcNow;
                         job.ModifiedBy = "System Created";
                         await _unitOfWork.AdrJobs.UpdateAsync(job);
+                        processedSinceLastSave++;
+
+                        // Save in batches to reduce transaction size
+                        if (processedSinceLastSave >= BatchSize)
+                        {
+                            await _unitOfWork.SaveChangesAsync();
+                            _logger.LogInformation("Status check batch {BatchNumber} saved: {Count} jobs checked so far", 
+                                batchNumber, result.JobsChecked);
+                            processedSinceLastSave = 0;
+                            batchNumber++;
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -394,7 +465,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 }
             }
 
-            await _unitOfWork.SaveChangesAsync();
+            // Final save for remaining jobs
+            if (processedSinceLastSave > 0)
+            {
+                await _unitOfWork.SaveChangesAsync();
+            }
 
             _logger.LogInformation(
                 "Status check completed. Checked: {Checked}, Completed: {Completed}, NeedsReview: {NeedsReview}, Processing: {Processing}, Errors: {Errors}",
