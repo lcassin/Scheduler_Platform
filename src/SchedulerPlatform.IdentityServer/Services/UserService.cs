@@ -175,13 +175,16 @@ public class UserService : IUserService
     {
         try
         {
+            var histNow = DateTime.UtcNow;
             var passwordHistory = new PasswordHistory
             {
                 UserId = userId,
                 PasswordHash = passwordHash,
-                ChangedDateTime = DateTime.UtcNow,
-                CreatedDateTime = DateTime.UtcNow,
+                ChangedDateTime = histNow,
+                CreatedDateTime = histNow,
                 CreatedBy = "System",
+                ModifiedDateTime = histNow,
+                ModifiedBy = "System",
                 IsDeleted = false
             };
 
@@ -249,6 +252,7 @@ public class UserService : IUserService
     {
         try
         {
+            var permNow = DateTime.UtcNow;
             var defaultPermission = new UserPermission
             {
                 UserId = userId,
@@ -258,8 +262,10 @@ public class UserService : IUserService
                 CanUpdate = false,
                 CanDelete = false,
                 CanExecute = false,
-                CreatedDateTime = DateTime.UtcNow,
+                CreatedDateTime = permNow,
                 CreatedBy = "System",
+                ModifiedDateTime = permNow,
+                ModifiedBy = "System",
                 IsDeleted = false
             };
 

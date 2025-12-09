@@ -1,0 +1,29 @@
+classDiagram
+    class ProcessJobConfig {
+        +string ExecutablePath
+        +string? Arguments
+        +string? WorkingDirectory
+        +int TimeoutMinutes
+    }
+    
+    class ApiCallJobConfig {
+        +string Url
+        +string Method
+        +Dictionary~string,string~? Headers
+        +string? AuthorizationType
+        +string? AuthorizationValue
+        +string? RequestBody
+        +string? ContentType
+        +int TimeoutSeconds
+    }
+    
+    class StoredProcedureJobConfig {
+        +string ConnectionString
+        +string ProcedureName
+        +int TimeoutSeconds
+        +bool ReturnValue
+    }
+    
+    ProcessJob --> ProcessJobConfig : deserializes
+    ApiCallJob --> ApiCallJobConfig : deserializes
+    StoredProcedureJob --> StoredProcedureJobConfig : deserializes

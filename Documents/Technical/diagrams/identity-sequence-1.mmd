@@ -1,0 +1,65 @@
+sequenceDiagram
+    participant Useras User (Browser)
+    participant UI as Blazor UI
+    participant Identity as IdentityServer
+    participant API as SchedulerPlatform.API
+    
+    Note over User: User clicks "Login" in UI
+    
+    User->>UI: Navigate to /
+    UI->>UI: Check authentication
+    UI->>Identity: Redirect to /connect/authorize?<br/>client_id=scheduler-blazor&<br/>response_type=code&<br/>scope=openid profile email scheduler-api&<br/>redirect_uri=https://localhost:7299/signin-oidc
+    
+    Identity->>Identity: User not authenticated
+    Identity->>User: Redirect to /Account/Login?returnUrl={auth_request}
+    
+    User->>Identity: Display login page
+    User->>User: Enter username and password
+    User->>Identity: POST /Account/Login (username, password)
+    
+    Identity->>Identity: Validate credentials (TestUserStore)
+    alt Valid credentials
+        Identity->>Identity: Create authentication cookie
+        Identity->>Identity: Generate authorization code
+        Identity->>UI: Redirect to /signin-oidc?code={auth_code}
+        
+        UI->>Identity: POST /connect/token<br/>grant_type=authorization_code&<br/>code={auth_code}&<br/>client_id=scheduler-blazor&<br/>client_secret={secret}&<br/>code_verifier={pkce_verifier}
+        
+        Identity->>Identity: Validate authorization code
+        Identity->>Identity: Generate access token (JWT)
+        Identity->>Identity: Generate refresh token
+        Identity->>Identity: Generate ID token
+        Identity-->>UI: Return tokens (access, refresh, id)
+        
+        UI->>UI: Store tokens in session/cookie
+        UI->>UI: Extract user claims from ID token
+        UI-->>User: Display authenticated UI
+        
+        Note over User: User makes API request
+        
+        User->>UI: Create new schedule
+        UI->>API: POST /api/schedules<br/>Authorization: Bearer {access_token}
+        
+        API->>API: Extract JWT from Authorization header
+        API->>Identity: GET /.well-known/openid-configuration
+        Identity-->>API: Public keys for JWT validation
+        
+        API->>API: Validate JWT signature
+        API->>API: Verify issuer, audience, expiration
+        API->>API: Extract user claims (sub, role, clientId)
+        
+        alt Token valid
+            API->>API: Execute controller action
+            API-->>UI: 200 OK with data
+            UI-->>User: Display result
+        else Token expired
+            API-->>UI: 401 Unauthorized
+            UI->>Identity: Use refresh token to get new access token
+            Identity-->>UI: New access token
+            UI->>API: Retry request with new token
+        end
+        
+    else Invalid credentials
+        Identity->>Identity: Log failure event
+        Identity-->>User: Display "Invalid credentials" error
+    end

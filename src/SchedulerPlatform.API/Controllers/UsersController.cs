@@ -181,6 +181,8 @@ public class UsersController : ControllerBase
 
             foreach (var permissionRequest in request.Permissions)
             {
+                var now = DateTime.UtcNow;
+                var createdBy = User.Identity?.Name ?? "System";
                 var permission = new UserPermission
                 {
                     UserId = id,
@@ -192,8 +194,10 @@ public class UsersController : ControllerBase
                     CanUpdate = permissionRequest.CanUpdate,
                     CanDelete = permissionRequest.CanDelete,
                     CanExecute = permissionRequest.CanExecute,
-                    CreatedDateTime = DateTime.UtcNow,
-                    CreatedBy = User.Identity?.Name ?? "System"
+                    CreatedDateTime = now,
+                    CreatedBy = createdBy,
+                    ModifiedDateTime = now,
+                    ModifiedBy = createdBy
                 };
 
                 await _unitOfWork.UserPermissions.AddAsync(permission);
@@ -246,6 +250,8 @@ public class UsersController : ControllerBase
 
             foreach (var permissionRequest in template.Permissions)
             {
+                var now = DateTime.UtcNow;
+                var createdBy = User.Identity?.Name ?? "System";
                 var permission = new UserPermission
                 {
                     UserId = id,
@@ -257,8 +263,10 @@ public class UsersController : ControllerBase
                     CanUpdate = permissionRequest.CanUpdate,
                     CanDelete = permissionRequest.CanDelete,
                     CanExecute = permissionRequest.CanExecute,
-                    CreatedDateTime = DateTime.UtcNow,
-                    CreatedBy = User.Identity?.Name ?? "System"
+                    CreatedDateTime = now,
+                    CreatedBy = createdBy,
+                    ModifiedDateTime = now,
+                    ModifiedBy = createdBy
                 };
 
                 await _unitOfWork.UserPermissions.AddAsync(permission);
@@ -293,6 +301,8 @@ public class UsersController : ControllerBase
             var temporaryPassword = PasswordGenerator.GeneratePassword();
             var passwordHash = _passwordHasher.HashPassword(null!, temporaryPassword);
 
+            var userNow = DateTime.UtcNow;
+            var userCreatedBy = User.Identity?.Name ?? "System";
             var user = new User
             {
                 Email = request.Email,
@@ -303,9 +313,11 @@ public class UsersController : ControllerBase
                 IsSystemAdmin = false,
                 PasswordHash = passwordHash,
                 MustChangePassword = true,
-                PasswordChangedDateTime = DateTime.UtcNow,
-                CreatedDateTime = DateTime.UtcNow,
-                CreatedBy = User.Identity?.Name ?? "System",
+                PasswordChangedDateTime = userNow,
+                CreatedDateTime = userNow,
+                CreatedBy = userCreatedBy,
+                ModifiedDateTime = userNow,
+                ModifiedBy = userCreatedBy,
                 IsDeleted = false
             };
 
@@ -316,9 +328,11 @@ public class UsersController : ControllerBase
             {
                 UserId = user.Id,
                 PasswordHash = passwordHash,
-                ChangedDateTime = DateTime.UtcNow,
-                CreatedDateTime = DateTime.UtcNow,
-                CreatedBy = User.Identity?.Name ?? "System",
+                ChangedDateTime = userNow,
+                CreatedDateTime = userNow,
+                CreatedBy = userCreatedBy,
+                ModifiedDateTime = userNow,
+                ModifiedBy = userCreatedBy,
                 IsDeleted = false
             };
             await _unitOfWork.PasswordHistories.AddAsync(passwordHistory);
@@ -358,6 +372,8 @@ public class UsersController : ControllerBase
             {
                 foreach (var permissionRequest in request.CustomPermissions)
                 {
+                    var permNow = DateTime.UtcNow;
+                    var permCreatedBy = User.Identity?.Name ?? "System";
                     var permission = new UserPermission
                     {
                         UserId = user.Id,
@@ -369,8 +385,10 @@ public class UsersController : ControllerBase
                         CanUpdate = permissionRequest.CanUpdate,
                         CanDelete = permissionRequest.CanDelete,
                         CanExecute = permissionRequest.CanExecute,
-                        CreatedDateTime = DateTime.UtcNow,
-                        CreatedBy = User.Identity?.Name ?? "System",
+                        CreatedDateTime = permNow,
+                        CreatedBy = permCreatedBy,
+                        ModifiedDateTime = permNow,
+                        ModifiedBy = permCreatedBy,
                         IsDeleted = false
                     };
 
@@ -388,21 +406,25 @@ public class UsersController : ControllerBase
                 {
                     foreach (var permissionRequest in template.Permissions)
                     {
-                        var permission = new UserPermission
-                        {
-                            UserId = user.Id,
-                            PermissionName = permissionRequest.PermissionName,
-                            ResourceType = permissionRequest.ResourceType,
-                            ResourceId = permissionRequest.ResourceId,
-                            CanCreate = permissionRequest.CanCreate,
-                            CanRead = permissionRequest.CanRead,
-                            CanUpdate = permissionRequest.CanUpdate,
-                            CanDelete = permissionRequest.CanDelete,
-                            CanExecute = permissionRequest.CanExecute,
-                            CreatedDateTime = DateTime.UtcNow,
-                            CreatedBy = User.Identity?.Name ?? "System",
-                            IsDeleted = false
-                        };
+                        var tplNow = DateTime.UtcNow;
+                            var tplCreatedBy = User.Identity?.Name ?? "System";
+                            var permission = new UserPermission
+                            {
+                                UserId = user.Id,
+                                PermissionName = permissionRequest.PermissionName,
+                                ResourceType = permissionRequest.ResourceType,
+                                ResourceId = permissionRequest.ResourceId,
+                                CanCreate = permissionRequest.CanCreate,
+                                CanRead = permissionRequest.CanRead,
+                                CanUpdate = permissionRequest.CanUpdate,
+                                CanDelete = permissionRequest.CanDelete,
+                                CanExecute = permissionRequest.CanExecute,
+                                CreatedDateTime = tplNow,
+                                CreatedBy = tplCreatedBy,
+                                ModifiedDateTime = tplNow,
+                                ModifiedBy = tplCreatedBy,
+                                IsDeleted = false
+                            };
 
                         await _unitOfWork.UserPermissions.AddAsync(permission);
                     }

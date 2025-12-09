@@ -1,0 +1,42 @@
+sequenceDiagram
+    participant API as API Controller
+    participant UoW as UnitOfWork
+    participant Repo as Repository
+    participant Context as DbContext
+    participant DB as SQL Server
+    participant Email as EmailService
+    
+    API->>UoW: Create(scheduleData)
+    UoW->>Repo: Schedules.AddAsync(schedule)
+    Repo->>Context: DbSet.AddAsync(schedule)
+    Context-->>Repo: Entity tracked
+    
+    API->>UoW: SaveChangesAsync()
+    UoW->>Context: SaveChangesAsync()
+    Context->>DB: INSERT INTO Schedules
+    DB-->>Context: 1 row affected
+    Context-->>UoW: 1 change saved
+    UoW-->>API: Success
+    
+    Note over API,Email: Later: Job completes
+    
+    API->>UoW: JobExecutions.AddAsync(execution)
+    UoW->>Repo: AddAsync(execution)
+    Repo->>Context: DbSet.AddAsync(execution)
+    
+    API->>UoW: SaveChangesAsync()
+    UoW->>Context: SaveChangesAsync()
+    Context->>DB: INSERT INTO JobExecutions
+    
+    API->>Email: SendJobExecutionNotificationAsync(id, isSuccess)
+    Email->>UoW: Schedules.GetByIdWithNotificationSettingsAsync()
+    UoW->>Repo: GetByIdWithNotificationSettingsAsync()
+    Repo->>Context: Include(NotificationSetting)
+    Context->>DB: SELECT with JOIN
+    DB-->>Context: Schedule + NotificationSetting
+    Context-->>Repo: Entities
+    Repo-->>Email: Schedule with settings
+    
+    Email->>Email: Build HTML email
+    Email->>Email: Send via SMTP
+    Email-->>API: Notification sent

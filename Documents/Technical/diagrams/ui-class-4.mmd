@@ -1,0 +1,72 @@
+classDiagram
+    class Schedule {
+        +int Id
+        +string Name
+        +string Description
+        +int ClientId
+        +JobType JobType
+        +ScheduleFrequency Frequency
+        +string CronExpression
+        +DateTime? NextRunDateTime
+        +DateTime? LastRunDateTime
+        +bool IsEnabled
+        +int MaxRetries
+        +int RetryDelayMinutes
+        +string TimeZone
+        +string JobConfiguration
+        +DateTime CreatedDateTime
+        +string CreatedBy
+        +DateTime ModifiedDateTime
+        +string ModifiedBy
+        +bool IsDeleted
+    }
+    
+    class Client {
+        +int Id
+        +string Name
+        +string Description
+        +string ClientCode
+        +bool IsActive
+        +DateTime CreatedDateTime
+        +string CreatedBy
+    }
+    
+    class JobExecution {
+        +int Id
+        +int ScheduleId
+        +DateTime StartDateTime
+        +DateTime? EndDateTime
+        +JobStatus Status
+        +string Output
+        +string ErrorMessage
+        +string StackTrace
+        +int RetryCount
+        +string TriggeredBy
+    }
+    
+    class NotificationSetting {
+        +int Id
+        +int ScheduleId
+        +bool EnableSuccessNotifications
+        +bool EnableFailureNotifications
+        +string SuccessEmailRecipients
+        +string FailureEmailRecipients
+        +string SuccessEmailSubject
+        +string FailureEmailSubject
+        +bool IncludeExecutionDetails
+        +bool IncludeOutput
+    }
+    
+    class PagedResult~T~ {
+        +List~T~ Items
+        +int TotalCount
+        +int PageNumber
+        +int PageSize
+        +int TotalPages
+        +bool HasPreviousPage
+        +bool HasNextPage
+    }
+    
+    Schedule --> Client : ClientId
+    JobExecution --> Schedule : ScheduleId
+    NotificationSetting --> Schedule : ScheduleId

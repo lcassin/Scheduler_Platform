@@ -1,0 +1,145 @@
+classDiagram
+    class BaseEntity {
+        <<abstract>>
+        +int Id
+        +DateTime CreatedDateTime
+        +DateTime ModifiedDateTime
+        +string CreatedBy
+        +string ModifiedBy
+        +bool IsDeleted
+    }
+    
+    class Schedule {
+        +string Name
+        +string? Description
+        +int ClientId
+        +JobType JobType
+        +ScheduleFrequency Frequency
+        +string CronExpression
+        +DateTime? NextRunDateTime
+        +DateTime? LastRunDateTime
+        +bool IsEnabled
+        +int MaxRetries
+        +int RetryDelayMinutes
+        +string TimeZone
+        +string JobConfiguration
+        +Client Client
+        +ICollection~JobExecution~ JobExecutions
+        +ICollection~JobParameter~ JobParameters
+        +NotificationSetting? NotificationSetting
+    }
+    
+    class Client {
+        +string ClientName
+        +string ClientCode
+        +bool IsActive
+        +string? ContactEmail
+        +string? ContactPhone
+        +ICollection~User~ Users
+        +ICollection~Schedule~ Schedules
+        +ICollection~VendorCredential~ VendorCredentials
+    }
+    
+    class JobExecution {
+        +int ScheduleId
+        +DateTime StartDateTime
+        +DateTime? EndDateTime
+        +JobStatus Status
+        +string? Output
+        +string? ErrorMessage
+        +string? StackTrace
+        +int RetryCount
+        +int DurationSeconds
+        +string TriggeredBy
+        +Schedule Schedule
+    }
+    
+    class JobParameter {
+        +int ScheduleId
+        +string ParameterName
+        +string ParameterType
+        +string? ParameterValue
+        +string? SourceQuery
+        +string? SourceConnectionString
+        +bool IsDynamic
+        +int DisplayOrder
+        +Schedule Schedule
+    }
+    
+    class NotificationSetting {
+        +int ScheduleId
+        +bool EnableSuccessNotifications
+        +bool EnableFailureNotifications
+        +string? SuccessEmailRecipients
+        +string? FailureEmailRecipients
+        +string? SuccessEmailSubject
+        +string? FailureEmailSubject
+        +bool IncludeExecutionDetails
+        +bool IncludeOutput
+        +Schedule? Schedule
+    }
+    
+    class User {
+        +string Username
+        +string Email
+        +string FirstName
+        +string LastName
+        +int ClientId
+        +bool IsActive
+        +string? ExternalUserId
+        +Client Client
+        +ICollection~UserPermission~ Permissions
+    }
+    
+    class UserPermission {
+        +int UserId
+        +string PermissionName
+        +string? ResourceType
+        +int? ResourceId
+        +User User
+    }
+    
+    class VendorCredential {
+        +int ClientId
+        +string VendorName
+        +string VendorUrl
+        +string Username
+        +string EncryptedPassword
+        +DateTime? LastVerified
+        +bool IsValid
+        +string? AdditionalData
+        +Client Client
+    }
+    
+    class AuditLog {
+        +string EventType
+        +string EntityType
+        +int? EntityId
+        +string Action
+        +string? OldValues
+        +string? NewValues
+        +string UserName
+        +int? ClientId
+        +string? IpAddress
+        +string? UserAgent
+        +DateTime TimestampDateTime
+        +string? AdditionalData
+    }
+    
+    BaseEntity <|-- Schedule
+    BaseEntity <|-- Client
+    BaseEntity <|-- JobExecution
+    BaseEntity <|-- JobParameter
+    BaseEntity <|-- NotificationSetting
+    BaseEntity <|-- User
+    BaseEntity <|-- UserPermission
+    BaseEntity <|-- VendorCredential
+    BaseEntity <|-- AuditLog
+    
+    Client "1" --> "*" Schedule : owns
+    Client "1" --> "*" User : has
+    Client "1" --> "*" VendorCredential : has
+    Schedule "1" --> "*" JobExecution : has
+    Schedule "1" --> "*" JobParameter : has
+    Schedule "1" --> "0..1" NotificationSetting : has
+    User "1" --> "*" UserPermission : has

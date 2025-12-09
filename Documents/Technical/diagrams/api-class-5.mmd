@@ -1,0 +1,14 @@
+classDiagram
+    class IActionFilter {
+        <<interface>>
+        +OnActionExecuting(ActionExecutingContext context) void
+        +OnActionExecuted(ActionExecutedContext context) void
+    }
+    
+    class ModelStateLoggingFilter {
+        -ILogger~ModelStateLoggingFilter~ _logger
+        +OnActionExecuting(ActionExecutingContext context) void
+        +OnActionExecuted(ActionExecutedContext context) void
+    }
+    
+    IActionFilter <|.. ModelStateLoggingFilter

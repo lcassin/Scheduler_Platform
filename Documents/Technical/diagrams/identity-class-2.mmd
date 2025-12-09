@@ -1,0 +1,56 @@
+classDiagram
+    class Config {
+        <<static>>
+        +IEnumerable~IdentityResource~ IdentityResources
+        +IEnumerable~ApiScope~ ApiScopes
+        +IEnumerable~Client~ Clients
+        +IEnumerable~ApiResource~ ApiResources
+    }
+    
+    class IdentityResource {
+        +string Name
+        +string DisplayName
+        +string Description
+        +bool Required
+        +bool Emphasize
+        +ICollection~string~ UserClaims
+    }
+    
+    class ApiScope {
+        +string Name
+        +string DisplayName
+        +string Description
+        +bool Required
+        +bool Emphasize
+        +ICollection~string~ UserClaims
+    }
+    
+    class Client {
+        +string ClientId
+        +string ClientName
+        +ICollection~Secret~ ClientSecrets
+        +ICollection~string~ AllowedGrantTypes
+        +bool RequirePkce
+        +bool RequireClientSecret
+        +ICollection~string~ RedirectUris
+        +ICollection~string~ PostLogoutRedirectUris
+        +ICollection~string~ AllowedScopes
+        +bool AllowOfflineAccess
+        +int AccessTokenLifetime
+        +int IdentityTokenLifetime
+        +int RefreshTokenLifetime
+    }
+    
+    class ApiResource {
+        +string Name
+        +string DisplayName
+        +string Description
+        +ICollection~string~ Scopes
+        +ICollection~string~ UserClaims
+        +ICollection~Secret~ ApiSecrets
+    }
+    
+    Config --> IdentityResource : defines
+    Config --> ApiScope : defines
+    Config --> Client : defines
+    Config --> ApiResource : defines

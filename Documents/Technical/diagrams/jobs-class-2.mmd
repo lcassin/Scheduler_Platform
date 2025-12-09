@@ -1,0 +1,47 @@
+classDiagram
+    class IJob {
+        <<interface>>
+        +Execute(IJobExecutionContext context) Task
+    }
+    
+    class ProcessJob {
+        -ILogger~ProcessJob~ _logger
+        -IUnitOfWork _unitOfWork
+        -ProcessJobConfig _config
+        +Execute(IJobExecutionContext context) Task
+        -LoadScheduleAndParameters(int scheduleId) Task~Schedule~
+        -ExecuteProcess(Schedule schedule) Task~ProcessResult~
+        -StartProcess(string exePath, string arguments, string workingDir) Process
+        -SubstituteParameters(string arguments, Dictionary parameters) string
+        -HandleRetry(Schedule schedule, JobExecution execution, Exception ex) Task
+    }
+    
+    class ApiCallJob {
+        -ILogger~ApiCallJob~ _logger
+        -IUnitOfWork _unitOfWork
+        -IHttpClientFactory _httpClientFactory
+        -ApiCallJobConfig _config
+        +Execute(IJobExecutionContext context) Task
+        -LoadScheduleAndParameters(int scheduleId) Task~Schedule~
+        -ExecuteApiCall(Schedule schedule) Task~ApiCallResult~
+        -BuildHttpRequest(ApiCallJobConfig config, Dictionary parameters) HttpRequestMessage
+        -SubstituteParameters(string body, Dictionary parameters) string
+        -HandleRetry(Schedule schedule, JobExecution execution, Exception ex) Task
+    }
+    
+    class StoredProcedureJob {
+        -ILogger~StoredProcedureJob~ _logger
+        -IUnitOfWork _unitOfWork
+        -StoredProcedureJobConfig _config
+        +Execute(IJobExecutionContext context) Task
+        -LoadScheduleAndParameters(int scheduleId) Task~Schedule~
+        -ExecuteStoredProcedure(Schedule schedule) Task~StoredProcedureResult~
+        -CreateSqlCommand(string connectionString, string procedureName) SqlCommand
+        -AddParametersToCommand(SqlCommand cmd, List~JobParameter~ parameters) void
+        -ConvertParameterType(string type) SqlDbType
+        -HandleRetry(Schedule schedule, JobExecution execution, Exception ex) Task
+    }
+    
+    IJob <|.. ProcessJob : implements
+    IJob <|.. ApiCallJob : implements
+    IJob <|.. StoredProcedureJob : implements

@@ -39,6 +39,7 @@ public class AutoUserCreationMiddleware
 
                     if (user == null)
                     {
+                        var userNow = DateTime.UtcNow;
                         user = new User
                         {
                             Email = email,
@@ -47,8 +48,10 @@ public class AutoUserCreationMiddleware
                             LastName = lastName,
                             IsActive = true,
                             IsSystemAdmin = false,
-                            CreatedDateTime = DateTime.UtcNow,
+                            CreatedDateTime = userNow,
                             CreatedBy = "System",
+                            ModifiedDateTime = userNow,
+                            ModifiedBy = "System",
                             IsDeleted = false
                         };
 
@@ -74,6 +77,7 @@ public class AutoUserCreationMiddleware
 
     private async Task AssignViewerPermissions(int userId, IUnitOfWork unitOfWork)
     {
+        var permNow = DateTime.UtcNow;
         var viewerPermissions = new[]
         {
             new UserPermission
@@ -81,8 +85,10 @@ public class AutoUserCreationMiddleware
                 UserId = userId,
                 PermissionName = "scheduler",
                 CanRead = true,
-                CreatedDateTime = DateTime.UtcNow,
+                CreatedDateTime = permNow,
                 CreatedBy = "System",
+                ModifiedDateTime = permNow,
+                ModifiedBy = "System",
                 IsDeleted = false
             },
             new UserPermission
@@ -90,8 +96,10 @@ public class AutoUserCreationMiddleware
                 UserId = userId,
                 PermissionName = "schedules",
                 CanRead = true,
-                CreatedDateTime = DateTime.UtcNow,
+                CreatedDateTime = permNow,
                 CreatedBy = "System",
+                ModifiedDateTime = permNow,
+                ModifiedBy = "System",
                 IsDeleted = false
             },
             new UserPermission
@@ -99,8 +107,10 @@ public class AutoUserCreationMiddleware
                 UserId = userId,
                 PermissionName = "jobs",
                 CanRead = true,
-                CreatedDateTime = DateTime.UtcNow,
+                CreatedDateTime = permNow,
                 CreatedBy = "System",
+                ModifiedDateTime = permNow,
+                ModifiedBy = "System",
                 IsDeleted = false
             }
         };

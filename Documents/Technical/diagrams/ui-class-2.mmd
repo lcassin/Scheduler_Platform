@@ -1,0 +1,76 @@
+classDiagram
+    class ComponentBase {
+        <<Blazor Framework>>
+        +StateHasChanged() void
+        +InvokeAsync(Action) Task
+    }
+    
+    class SchedulesIndex {
+        -IScheduleService _scheduleService
+        -IDialogService _dialogService
+        -NavigationManager _navigation
+        -List~Schedule~ schedules
+        -int pageNumber
+        -int pageSize
+        -string searchTerm
+        +OnInitializedAsync() Task
+        +LoadSchedules() Task
+        +TriggerSchedule(int id) Task
+        +PauseSchedule(int id) Task
+        +ResumeSchedule(int id) Task
+        +DeleteSchedule(int id) Task
+        +NavigateToEdit(int id) void
+    }
+    
+    class SchedulesForm {
+        -IScheduleService _scheduleService
+        -IClientService _clientService
+        -NavigationManager _navigation
+        -Schedule schedule
+        -List~Client~ clients
+        -bool isEditMode
+        +OnInitializedAsync() Task
+        +LoadClients() Task
+        +SaveSchedule() Task
+        +Cancel() void
+        -ValidateForm() bool
+    }
+    
+    class ExecutionsIndex {
+        -IJobExecutionService _executionService
+        -List~JobExecution~ executions
+        -int? scheduleIdFilter
+        -JobStatus? statusFilter
+        -bool autoRefresh
+        +OnInitializedAsync() Task
+        +LoadExecutions() Task
+        +RefreshExecutions() Task
+        +FilterByStatus(JobStatus status) void
+        +ExportToCsv() Task
+    }
+    
+    class CronBuilder {
+        -string cronExpression
+        -List~DateTime~ nextExecutions
+        +CronExpressionChanged EventCallback~string~
+        +OnFrequencyChanged(ScheduleFrequency freq) void
+        +ValidateCronExpression(string cron) bool
+        +PreviewNextExecutions() void
+    }
+    
+    class JsonEditorDialog {
+        -string jsonContent
+        -bool isValid
+        -string errorMessage
+        +DialogResult DialogResult
+        +ValidateJson() void
+        +FormatJson() void
+        +Save() void
+        +Cancel() void
+    }
+    
+    ComponentBase <|-- SchedulesIndex
+    ComponentBase <|-- SchedulesForm
+    ComponentBase <|-- ExecutionsIndex
+    ComponentBase <|-- CronBuilder
+    ComponentBase <|-- JsonEditorDialog

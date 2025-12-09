@@ -137,6 +137,7 @@ public class Callback : PageModel
                                           externalUser.FindFirst(ClaimTypes.Name)?.Value ?? 
                                           $"{givenName} {familyName}";
 
+                                var userNow = DateTime.UtcNow;
                                 dbUser = new User
                                 {
                                     Username = email,
@@ -147,10 +148,12 @@ public class Callback : PageModel
                                     ExternalIssuer = issuer,
                                     IsActive = true,
                                     ClientId = 1,
-                                    CreatedDateTime = DateTime.UtcNow,
+                                    CreatedDateTime = userNow,
                                     CreatedBy = "System",
+                                    ModifiedDateTime = userNow,
+                                    ModifiedBy = "System",
                                     IsDeleted = false,
-                                    LastLoginDateTime = DateTime.UtcNow
+                                    LastLoginDateTime = userNow
                                 };
 
                                 await _userService.CreateUserAsync(dbUser);

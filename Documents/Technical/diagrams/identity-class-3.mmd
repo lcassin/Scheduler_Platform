@@ -1,0 +1,23 @@
+classDiagram
+    class TestUsers {
+        <<static>>
+        +List~TestUser~ Users
+    }
+    
+    class TestUser {
+        +string SubjectId
+        +string Username
+        +string Password
+        +string ProviderName
+        +string ProviderSubjectId
+        +bool IsActive
+        +ICollection~Claim~ Claims
+    }
+    
+    class Claim {
+        +string Type
+        +string Value
+    }
+    
+    TestUsers --> TestUser : contains
+    TestUser --> Claim : has

@@ -1,0 +1,71 @@
+sequenceDiagram
+    participant User as User (Browser)
+    participant Blazor as Blazor UI
+    participant Identity as IdentityServer
+    participant API as SchedulerPlatform.API
+    
+    Note over User: User navigates to app
+    
+    User->>Blazor: GET /
+    Blazor->>Blazor: Check authentication
+    alt Not authenticated
+        Blazor->>User: Redirect to /Account/Login
+        User->>Identity: Redirect to /Account/Login
+        Identity->>User: Display login page
+        User->>Identity: Enter username/password
+        Identity->>Identity: Validate credentials
+        Identity->>Blazor: Redirect to /signin-oidc?code={auth_code}
+        Blazor->>Identity: Exchange code for tokens
+        Identity-->>Blazor: Return access/ID tokens
+        Blazor->>Blazor: Store tokens in cookie
+        Blazor-->>User: Redirect to /
+    end
+    
+    Note over User: User authenticated, viewing home
+    
+    User->>Blazor: Click "Schedules"
+    Blazor->>Blazor: Navigate to /schedules
+    Blazor->>API: GET /api/schedules (with Bearer token)
+    API->>API: Validate JWT token
+    API-->>Blazor: Return schedule list
+    Blazor-->>User: Display schedules table
+    
+    Note over User: User creates new schedule
+    
+    User->>Blazor: Click "Create Schedule"
+    Blazor-->>User: Display schedule form
+    User->>Blazor: Fill in form (name, job type, CRON)
+    User->>Blazor: Click "Save"
+    
+    Blazor->>Blazor: Validate form inputs
+    Blazor->>API: POST /api/schedules (Schedule JSON, Bearer token)
+    API->>API: Validate token
+    API->>API: Create schedule in database
+    API->>API: Schedule job in Quartz.NET
+    API-->>Blazor: 201 Created (Schedule with ID)
+    
+    Blazor-->>User: Show success message
+    Blazor->>Blazor: Navigate to /schedules
+    Blazor->>API: GET /api/schedules
+    API-->>Blazor: Return updated schedule list
+    Blazor-->>User: Display schedules including new one
+    
+    Note over User: User triggers manual execution
+    
+    User->>Blazor: Click "Run Now" button
+    Blazor->>API: POST /api/schedules/{id}/trigger (Bearer token)
+    API->>API: Validate token
+    API->>API: Trigger immediate job execution
+    API-->>Blazor: 200 OK
+    Blazor-->>User: Show "Job triggered" message
+    
+    Note over User: User monitors execution
+    
+    User->>Blazor: Click "Job Executions"
+    Blazor->>Blazor: Navigate to /executions
+    Blazor->>API: GET /api/jobexecutions?scheduleId={id}
+    API-->>Blazor: Return execution list
+    Blazor-->>User: Display execution history with status
+    
+    User->>Blazor: Click execution row to expand
+    Blazor-->>User: Show output, errors, duration

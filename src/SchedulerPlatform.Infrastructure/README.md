@@ -3,7 +3,7 @@
 ## Recent Updates (November 2025)
 
 - **Upgraded to .NET 10**: Complete upgrade from .NET 9 to .NET 10 with Entity Framework Core 10.0.0
-- **User Authentication Tables**: Added Users.PasswordHash, Users.IsSystemAdmin, Users.ExternalIssuer, Users.LastLoginAt columns
+- **User Authentication Tables**: Added Users.PasswordHash, Users.IsSystemAdmin, Users.ExternalIssuer, Users.LastLoginDateTime columns
 - **Password History Tracking**: New PasswordHistories table to prevent password reuse (last 10 passwords)
 - **UserPermissions Table**: Granular permission tracking with CanCreate, CanRead, CanUpdate, CanDelete, CanExecute per resource
 - **Deleted Schedule Filtering**: ScheduleRepository.GetAllAsync() now filters out soft-deleted schedules
@@ -415,9 +415,9 @@ classDiagram
 1. **Indexes for Performance**:
    - `User.Email` (unique)
    - `Client.ClientCode` (unique)
-   - `JobExecution.StartTime` (range queries)
-   - `JobExecution.Status` (filtering)
-   - `AuditLog.Timestamp` (time-series)
+      - `JobExecution.StartDateTime` (range queries)
+      - `JobExecution.Status` (filtering)
+      - `AuditLog.TimestampDateTime` (time-series)
    - `AuditLog.(EntityType, EntityId)` (entity history)
 
 2. **Cascade Delete Rules**:
@@ -457,7 +457,7 @@ classDiagram
 2. **Paging for Large Results**:
    ```csharp
    var pagedResults = await _context.JobExecutions
-       .OrderByDescending(je => je.StartTime)
+       .OrderByDescending(je => je.StartDateTime)
        .Skip((pageNumber - 1) * pageSize)
        .Take(pageSize)
        .ToListAsync();

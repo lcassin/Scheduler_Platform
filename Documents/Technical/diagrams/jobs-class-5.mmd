@@ -1,0 +1,37 @@
+classDiagram
+    class IScheduler {
+        <<interface>>
+        +ScheduleJob(IJobDetail jobDetail, ITrigger trigger) Task
+        +DeleteJob(JobKey jobKey) Task
+        +PauseTrigger(TriggerKey triggerKey) Task
+        +ResumeTrigger(TriggerKey triggerKey) Task
+        +TriggerJob(JobKey jobKey, JobDataMap dataMap) Task
+        +CheckExists(JobKey jobKey) Task~bool~
+    }
+    
+    class IJobDetail {
+        <<interface>>
+        +JobKey Key
+        +Type JobType
+        +JobDataMap JobDataMap
+    }
+    
+    class ITrigger {
+        <<interface>>
+        +TriggerKey Key
+        +string CronExpression
+        +DateTime? GetNextFireTimeUtc()
+    }
+    
+    class IJobExecutionContext {
+        <<interface>>
+        +IJobDetail JobDetail
+        +ITrigger Trigger
+        +JobDataMap MergedJobDataMap
+    }
+    
+    IScheduler --> IJobDetail : creates
+    IScheduler --> ITrigger : creates
+    IJob --> IJobExecutionContext : receives
+    IJobExecutionContext --> IJobDetail : provides
+    IJobExecutionContext --> ITrigger : provides

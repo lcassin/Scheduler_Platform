@@ -1,0 +1,63 @@
+sequenceDiagram
+    participant User
+    participant UI as UI<br/>(Blazor)
+    participant Identity as IdentityServer<br/>(OAuth2)
+    participant API as API<br/>(REST)
+    participant Jobs as Jobs<br/>(Quartz)
+    participant Infra as Infrastructure<br/>(EF Core)
+    participant DB as SQL Server
+    
+    User->>UI: Navigate to app
+    UI->>Identity: Redirect to /Account/Login
+    Identity->>User: Show login page
+    User->>Identity: Enter credentials (admin/Admin123!)
+    Identity-->>Identity: Validate credentials
+    Identity->>UI: Return access token + refresh token
+    
+    UI->>API: POST /api/schedules (with JWT token)
+    API->>Identity: Validate JWT token
+    Identity-->>API: Token valid, claims returned
+    API->>Infra: SaveChangesAsync()
+    Infra->>DB: INSERT INTO Schedule
+    DB-->>Infra: Schedule created (ID returned)
+    API->>Jobs: ScheduleJob(schedule)
+    Jobs-->>Jobs: Register CRON trigger in Quartz
+    API-->>UI: 201 Created (schedule details)
+    UI-->>User: Show success message
+    
+    Note over Jobs: Time passes... CRON trigger fires
+    
+    Jobs->>Infra: GetByIdAsync(scheduleId)
+    Infra->>DB: SELECT * FROM Schedule WHERE ScheduleId = @id
+    DB-->>Infra: Schedule entity
+    Infra-->>Jobs: Schedule with configuration
+    
+    Jobs->>Jobs: Execute job based on JobType<br/>(ProcessJob/ApiCallJob/StoredProcedureJob)
+    
+    Jobs->>Infra: AddAsync(jobExecution)
+    Infra->>DB: INSERT INTO JobExecution (Status=Running)
+    
+    alt Job Succeeds
+        Jobs->>Infra: UpdateAsync(jobExecution, Status=Completed)
+        Infra->>DB: UPDATE JobExecution SET Status='Completed'
+        Jobs->>Infra: SendJobExecutionNotificationAsync(success=true)
+    else Job Fails
+        Jobs->>Infra: UpdateAsync(jobExecution, Status=Failed)
+        Infra->>DB: UPDATE JobExecution SET Status='Failed'
+        alt Retries Available
+            Jobs->>Jobs: Schedule retry with exponential backoff
+        end
+        Jobs->>Infra: SendJobExecutionNotificationAsync(success=false)
+    end
+    
+    Jobs->>Infra: UpdateNextRunDateTimeAsync(scheduleId)
+    Infra->>DB: UPDATE Schedule SET NextRunDateTime=@time
+    
+    User->>UI: View job executions
+    UI->>API: GET /api/jobexecutions?scheduleId={id}
+    API->>Infra: FindAsync(je => je.ScheduleId == id)
+    Infra->>DB: SELECT * FROM JobExecution WHERE ScheduleId = @id
+    DB-->>Infra: List of executions
+    Infra-->>API: Execution history
+    API-->>UI: JSON response
+    UI-->>User: Display execution list with status
