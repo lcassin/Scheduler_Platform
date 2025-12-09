@@ -143,7 +143,11 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             NameClaimType = "name"
         };
-    });
+    })
+    .AddScheme<SchedulerPlatform.API.Authorization.SchedulerApiKeyAuthenticationOptions, 
+               SchedulerPlatform.API.Authorization.SchedulerApiKeyAuthenticationHandler>(
+        SchedulerPlatform.API.Authorization.SchedulerApiKeyAuthenticationOptions.DefaultScheme, 
+        options => { });
 
 builder.Services.AddSingleton<IAuthorizationHandler, SchedulerPlatform.API.Authorization.PermissionAuthorizationHandler>();
 

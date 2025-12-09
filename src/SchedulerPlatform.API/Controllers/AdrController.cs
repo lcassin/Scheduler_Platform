@@ -623,10 +623,11 @@ public class AdrController : ControllerBase
 
     #endregion
 
-    #region Orchestration Endpoints
+        #region Orchestration Endpoints
 
-    [HttpPost("sync/accounts")]
-    public async Task<ActionResult<AdrAccountSyncResult>> SyncAccounts(CancellationToken cancellationToken)
+        [HttpPost("sync/accounts")]
+        [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+        public async Task<ActionResult<AdrAccountSyncResult>> SyncAccounts(CancellationToken cancellationToken)
     {
         try
         {
@@ -641,8 +642,9 @@ public class AdrController : ControllerBase
         }
     }
 
-    [HttpPost("orchestrate/create-jobs")]
-    public async Task<ActionResult<JobCreationResult>> CreateJobs(CancellationToken cancellationToken)
+        [HttpPost("orchestrate/create-jobs")]
+        [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+        public async Task<ActionResult<JobCreationResult>> CreateJobs(CancellationToken cancellationToken)
     {
         try
         {
@@ -657,8 +659,9 @@ public class AdrController : ControllerBase
         }
     }
 
-    [HttpPost("orchestrate/verify-credentials")]
-    public async Task<ActionResult<CredentialVerificationResult>> VerifyCredentials(CancellationToken cancellationToken)
+        [HttpPost("orchestrate/verify-credentials")]
+        [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+        public async Task<ActionResult<CredentialVerificationResult>> VerifyCredentials(CancellationToken cancellationToken)
     {
         try
         {
@@ -673,8 +676,9 @@ public class AdrController : ControllerBase
         }
     }
 
-    [HttpPost("orchestrate/process-scraping")]
-    public async Task<ActionResult<ScrapeResult>> ProcessScraping(CancellationToken cancellationToken)
+        [HttpPost("orchestrate/process-scraping")]
+        [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+        public async Task<ActionResult<ScrapeResult>> ProcessScraping(CancellationToken cancellationToken)
     {
         try
         {
@@ -689,8 +693,9 @@ public class AdrController : ControllerBase
         }
     }
 
-    [HttpPost("orchestrate/check-statuses")]
-    public async Task<ActionResult<StatusCheckResult>> CheckStatuses(CancellationToken cancellationToken)
+        [HttpPost("orchestrate/check-statuses")]
+        [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+        public async Task<ActionResult<StatusCheckResult>> CheckStatuses(CancellationToken cancellationToken)
     {
         try
         {
@@ -705,8 +710,9 @@ public class AdrController : ControllerBase
         }
     }
 
-    [HttpPost("orchestrate/run-full-cycle")]
-    public async Task<ActionResult<object>> RunFullCycle(CancellationToken cancellationToken)
+        [HttpPost("orchestrate/run-full-cycle")]
+        [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+        public async Task<ActionResult<object>> RunFullCycle(CancellationToken cancellationToken)
     {
         try
         {
