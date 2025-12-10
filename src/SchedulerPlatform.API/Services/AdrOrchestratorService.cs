@@ -230,10 +230,17 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 return result;
             }
 
-            // Step 1: Mark all jobs as "InProgress" sequentially (for idempotency)
+            // Step 1: Mark all jobs as "InProgress" in batches (for idempotency)
             // This prevents double-billing if the process crashes after the API call
+            // Batching reduces database round-trips from 2*N to N/batchSize
+            const int setupBatchSize = 500;
             var jobsToProcess = new List<(int JobId, int CredentialId, DateTime? StartDate, DateTime? EndDate, int ExecutionId)>();
             int markedCount = 0;
+            int processedSinceLastSave = 0;
+            var startTime = DateTime.UtcNow;
+            
+            _logger.LogInformation("Starting to mark {Count} jobs as in-progress (batch size: {BatchSize})", 
+                jobsNeedingVerification.Count, setupBatchSize);
             
             foreach (var job in jobsNeedingVerification)
             {
@@ -243,16 +250,20 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.ModifiedDateTime = DateTime.UtcNow;
                     job.ModifiedBy = "System Created";
                     await _unitOfWork.AdrJobs.UpdateAsync(job);
-                    await _unitOfWork.SaveChangesAsync();
 
-                    var execution = await CreateExecutionAsync(job.Id, (int)AdrRequestType.AttemptLogin);
+                    var execution = await CreateExecutionAsync(job.Id, (int)AdrRequestType.AttemptLogin, saveChanges: false);
                     jobsToProcess.Add((job.Id, job.CredentialId, job.NextRangeStartDateTime, job.NextRangeEndDateTime, execution.Id));
                     
-                    // Report progress during setup phase (negative progress indicates setup)
                     markedCount++;
-                    if (markedCount % 100 == 0 || markedCount == jobsNeedingVerification.Count)
+                    processedSinceLastSave++;
+                    
+                    // Save in batches to reduce database round-trips
+                    if (processedSinceLastSave >= setupBatchSize)
                     {
-                        _logger.LogInformation("Marking jobs as in-progress: {Marked}/{Total}", markedCount, jobsNeedingVerification.Count);
+                        await _unitOfWork.SaveChangesAsync();
+                        processedSinceLastSave = 0;
+                        _logger.LogInformation("Marked {Marked}/{Total} jobs as in-progress (batch saved)", 
+                            markedCount, jobsNeedingVerification.Count);
                     }
                 }
                 catch (Exception ex)
@@ -263,8 +274,16 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     markedCount++;
                 }
             }
-
-            _logger.LogInformation("Marked {Count} jobs as in-progress, starting parallel API calls", jobsToProcess.Count);
+            
+            // Save any remaining jobs
+            if (processedSinceLastSave > 0)
+            {
+                await _unitOfWork.SaveChangesAsync();
+            }
+            
+            var setupDuration = DateTime.UtcNow - startTime;
+            _logger.LogInformation("Marked {Count} jobs as in-progress in {Duration:F1} seconds, starting parallel API calls", 
+                jobsToProcess.Count, setupDuration.TotalSeconds);
 
             // Step 2: Call ADR API in parallel with semaphore to limit concurrency
             var apiResults = new ConcurrentDictionary<int, (AdrApiResult Result, int ExecutionId)>();
@@ -450,8 +469,15 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 return result;
             }
 
-            // Step 1: Mark all jobs as "InProgress" sequentially (for idempotency)
+            // Step 1: Mark all jobs as "InProgress" in batches (for idempotency)
+            const int setupBatchSize = 500;
             var jobsToProcess = new List<(int JobId, int CredentialId, DateTime? StartDate, DateTime? EndDate, int ExecutionId)>();
+            int markedCount = 0;
+            int processedSinceLastSave = 0;
+            var startTime = DateTime.UtcNow;
+            
+            _logger.LogInformation("Starting to mark {Count} jobs as in-progress for scraping (batch size: {BatchSize})", 
+                jobsReadyForScraping.Count, setupBatchSize);
             
             foreach (var job in jobsReadyForScraping)
             {
@@ -461,20 +487,40 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.ModifiedDateTime = DateTime.UtcNow;
                     job.ModifiedBy = "System Created";
                     await _unitOfWork.AdrJobs.UpdateAsync(job);
-                    await _unitOfWork.SaveChangesAsync();
 
-                    var execution = await CreateExecutionAsync(job.Id, (int)AdrRequestType.DownloadInvoice);
+                    var execution = await CreateExecutionAsync(job.Id, (int)AdrRequestType.DownloadInvoice, saveChanges: false);
                     jobsToProcess.Add((job.Id, job.CredentialId, job.NextRangeStartDateTime, job.NextRangeEndDateTime, execution.Id));
+                    
+                    markedCount++;
+                    processedSinceLastSave++;
+                    
+                    // Save in batches to reduce database round-trips
+                    if (processedSinceLastSave >= setupBatchSize)
+                    {
+                        await _unitOfWork.SaveChangesAsync();
+                        processedSinceLastSave = 0;
+                        _logger.LogInformation("Marked {Marked}/{Total} jobs as in-progress for scraping (batch saved)", 
+                            markedCount, jobsReadyForScraping.Count);
+                    }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error marking job {JobId} as in-progress for scraping", job.Id);
                     result.Errors++;
                     result.ErrorMessages.Add($"Job {job.Id}: {ex.Message}");
+                    markedCount++;
                 }
             }
-
-            _logger.LogInformation("Marked {Count} jobs as in-progress, starting parallel API calls", jobsToProcess.Count);
+            
+            // Save any remaining jobs
+            if (processedSinceLastSave > 0)
+            {
+                await _unitOfWork.SaveChangesAsync();
+            }
+            
+            var setupDuration = DateTime.UtcNow - startTime;
+            _logger.LogInformation("Marked {Count} jobs as in-progress for scraping in {Duration:F1} seconds, starting parallel API calls", 
+                jobsToProcess.Count, setupDuration.TotalSeconds);
 
             // Step 2: Call ADR API in parallel with semaphore to limit concurrency
             var apiResults = new ConcurrentDictionary<int, (AdrApiResult Result, int ExecutionId)>();
@@ -668,8 +714,15 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 return result;
             }
 
-            // Step 1: Mark all jobs as "InProgress" sequentially (for idempotency)
+            // Step 1: Mark all jobs as "InProgress" in batches (for idempotency)
+            const int setupBatchSize = 500;
             var jobsToProcess = new List<int>();
+            int markedCount = 0;
+            int processedSinceLastSave = 0;
+            var startTime = DateTime.UtcNow;
+            
+            _logger.LogInformation("Starting to mark {Count} jobs as in-progress for status check (batch size: {BatchSize})", 
+                jobsNeedingStatusCheck.Count, setupBatchSize);
             
             foreach (var job in jobsNeedingStatusCheck)
             {
@@ -679,18 +732,38 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.ModifiedDateTime = DateTime.UtcNow;
                     job.ModifiedBy = "System Created";
                     await _unitOfWork.AdrJobs.UpdateAsync(job);
-                    await _unitOfWork.SaveChangesAsync();
                     jobsToProcess.Add(job.Id);
+                    
+                    markedCount++;
+                    processedSinceLastSave++;
+                    
+                    // Save in batches to reduce database round-trips
+                    if (processedSinceLastSave >= setupBatchSize)
+                    {
+                        await _unitOfWork.SaveChangesAsync();
+                        processedSinceLastSave = 0;
+                        _logger.LogInformation("Marked {Marked}/{Total} jobs as in-progress for status check (batch saved)", 
+                            markedCount, jobsNeedingStatusCheck.Count);
+                    }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error marking job {JobId} as in-progress for status check", job.Id);
                     result.Errors++;
                     result.ErrorMessages.Add($"Job {job.Id}: {ex.Message}");
+                    markedCount++;
                 }
             }
-
-            _logger.LogInformation("Marked {Count} jobs as in-progress, starting parallel status checks", jobsToProcess.Count);
+            
+            // Save any remaining jobs
+            if (processedSinceLastSave > 0)
+            {
+                await _unitOfWork.SaveChangesAsync();
+            }
+            
+            var setupDuration = DateTime.UtcNow - startTime;
+            _logger.LogInformation("Marked {Count} jobs as in-progress for status check in {Duration:F1} seconds, starting parallel status checks", 
+                jobsToProcess.Count, setupDuration.TotalSeconds);
 
             // Step 2: Check status in parallel with semaphore to limit concurrency
             var statusResults = new ConcurrentDictionary<int, AdrApiResult?>();
@@ -835,7 +908,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
     #region Private Helper Methods
 
-    private async Task<AdrJobExecution> CreateExecutionAsync(int adrJobId, int adrRequestTypeId)
+    private async Task<AdrJobExecution> CreateExecutionAsync(int adrJobId, int adrRequestTypeId, bool saveChanges = true)
     {
         var execution = new AdrJobExecution
         {
@@ -849,7 +922,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         };
 
         await _unitOfWork.AdrJobExecutions.AddAsync(execution);
-        await _unitOfWork.SaveChangesAsync();
+        
+        if (saveChanges)
+        {
+            await _unitOfWork.SaveChangesAsync();
+        }
 
         return execution;
     }
