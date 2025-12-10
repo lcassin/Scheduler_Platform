@@ -1,14 +1,29 @@
 using Microsoft.AspNetCore.Authentication;
+using System.Net;
 
 namespace SchedulerPlatform.UI.Services;
+
+/// <summary>
+/// Exception thrown when the user's session has expired and they need to re-authenticate.
+/// UI components should catch this exception and redirect to login.
+/// </summary>
+public class SessionExpiredException : Exception
+{
+    public SessionExpiredException() : base("Your session has expired. Please log in again.") { }
+    public SessionExpiredException(string message) : base(message) { }
+}
 
 public class AuthTokenHandler : DelegatingHandler
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly ILogger<AuthTokenHandler> _logger;
 
-    public AuthTokenHandler(IHttpContextAccessor httpContextAccessor)
+    public AuthTokenHandler(
+        IHttpContextAccessor httpContextAccessor,
+        ILogger<AuthTokenHandler> logger)
     {
         _httpContextAccessor = httpContextAccessor;
+        _logger = logger;
     }
 
     protected override async Task<HttpResponseMessage> SendAsync(
@@ -28,12 +43,30 @@ public class AuthTokenHandler : DelegatingHandler
                     request.Headers.Authorization = 
                         new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
                 }
+                else
+                {
+                    _logger.LogWarning("No access token available for authenticated user");
+                }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                _logger.LogWarning(ex, "Failed to get access token for request");
             }
         }
 
-        return await base.SendAsync(request, cancellationToken);
+        var response = await base.SendAsync(request, cancellationToken);
+
+        // Check for 401 Unauthorized - session has expired
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            _logger.LogWarning(
+                "Received 401 Unauthorized from API. User session may have expired. Request: {Method} {Uri}",
+                request.Method, request.RequestUri);
+            
+            // Throw a custom exception that UI components can catch and handle
+            throw new SessionExpiredException();
+        }
+
+        return response;
     }
 }

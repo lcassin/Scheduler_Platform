@@ -16,17 +16,20 @@ public class AdrController : ControllerBase
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAdrAccountSyncService _syncService;
     private readonly IAdrOrchestratorService _orchestratorService;
+    private readonly IAdrOrchestrationQueue _orchestrationQueue;
     private readonly ILogger<AdrController> _logger;
 
     public AdrController(
         IUnitOfWork unitOfWork,
         IAdrAccountSyncService syncService,
         IAdrOrchestratorService orchestratorService,
+        IAdrOrchestrationQueue orchestrationQueue,
         ILogger<AdrController> logger)
     {
         _unitOfWork = unitOfWork;
         _syncService = syncService;
         _orchestratorService = orchestratorService;
+        _orchestrationQueue = orchestrationQueue;
         _logger = logger;
     }
 
@@ -1043,6 +1046,95 @@ public class AdrController : ControllerBase
 
     #endregion
 
+    #region Background Orchestration Endpoints
+
+    /// <summary>
+    /// Triggers ADR orchestration to run in the background. Returns immediately with a request ID
+    /// that can be used to check status. This endpoint does NOT depend on user session - the
+    /// background job will continue running even if the user logs out.
+    /// </summary>
+    [HttpPost("orchestrate/run-background")]
+    [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    public async Task<ActionResult<object>> RunBackgroundOrchestration([FromBody] BackgroundOrchestrationRequest? request = null)
+    {
+        try
+        {
+            var orchestrationRequest = new AdrOrchestrationRequest
+            {
+                RequestedBy = User.Identity?.Name ?? "Unknown",
+                RunSync = request?.RunSync ?? true,
+                RunCreateJobs = request?.RunCreateJobs ?? true,
+                RunCredentialVerification = request?.RunCredentialVerification ?? true,
+                RunScraping = request?.RunScraping ?? true,
+                RunStatusCheck = request?.RunStatusCheck ?? true
+            };
+
+            await _orchestrationQueue.QueueAsync(orchestrationRequest);
+
+            _logger.LogInformation(
+                "Background ADR orchestration queued with request ID {RequestId} by {User}",
+                orchestrationRequest.RequestId, orchestrationRequest.RequestedBy);
+
+            return Ok(new
+            {
+                message = "ADR orchestration queued successfully. The job will run in the background.",
+                requestId = orchestrationRequest.RequestId,
+                requestedAt = orchestrationRequest.RequestedAt,
+                requestedBy = orchestrationRequest.RequestedBy
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error queuing background ADR orchestration");
+            return StatusCode(500, new { error = "An error occurred while queuing ADR orchestration", message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Gets the status of a specific background orchestration request.
+    /// </summary>
+    [HttpGet("orchestrate/status/{requestId}")]
+    [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    public ActionResult<AdrOrchestrationStatus> GetOrchestrationStatus(string requestId)
+    {
+        var status = _orchestrationQueue.GetStatus(requestId);
+        if (status == null)
+        {
+            return NotFound(new { error = "Request not found", requestId });
+        }
+
+        return Ok(status);
+    }
+
+    /// <summary>
+    /// Gets the status of the currently running orchestration, if any.
+    /// </summary>
+    [HttpGet("orchestrate/current")]
+    [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    public ActionResult<object> GetCurrentOrchestration()
+    {
+        var current = _orchestrationQueue.GetCurrentRun();
+        if (current == null)
+        {
+            return Ok(new { isRunning = false, message = "No orchestration is currently running" });
+        }
+
+        return Ok(new { isRunning = true, status = current });
+    }
+
+    /// <summary>
+    /// Gets the recent orchestration run history.
+    /// </summary>
+    [HttpGet("orchestrate/history")]
+    [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    public ActionResult<IEnumerable<AdrOrchestrationStatus>> GetOrchestrationHistory([FromQuery] int count = 10)
+    {
+        var statuses = _orchestrationQueue.GetRecentStatuses(count);
+        return Ok(statuses);
+    }
+
+    #endregion
+
     private static string CsvEscape(string? value)
     {
         if (value == null) return "";
@@ -1095,6 +1187,15 @@ public class CompleteExecutionRequest
 public class RefireJobsRequest
 {
     public List<int> JobIds { get; set; } = new();
+}
+
+public class BackgroundOrchestrationRequest
+{
+    public bool RunSync { get; set; } = true;
+    public bool RunCreateJobs { get; set; } = true;
+    public bool RunCredentialVerification { get; set; } = true;
+    public bool RunScraping { get; set; } = true;
+    public bool RunStatusCheck { get; set; } = true;
 }
 
 #endregion

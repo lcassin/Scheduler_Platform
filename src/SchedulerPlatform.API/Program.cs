@@ -199,6 +199,10 @@ builder.Services.AddScoped<IEmailService, SchedulerPlatform.Infrastructure.Servi
 builder.Services.AddScoped<SchedulerPlatform.API.Services.IAdrAccountSyncService, SchedulerPlatform.API.Services.AdrAccountSyncService>();
 builder.Services.AddScoped<SchedulerPlatform.API.Services.IAdrOrchestratorService, SchedulerPlatform.API.Services.AdrOrchestratorService>();
 
+// ADR Background Orchestration - runs independently of user sessions
+builder.Services.AddSingleton<SchedulerPlatform.API.Services.IAdrOrchestrationQueue, SchedulerPlatform.API.Services.AdrOrchestrationQueue>();
+builder.Services.AddHostedService<SchedulerPlatform.API.Services.AdrBackgroundOrchestrationService>();
+
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.StartupRecoveryService>();
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.ScheduleHydrationService>();
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.MissedSchedulesProcessor>();
