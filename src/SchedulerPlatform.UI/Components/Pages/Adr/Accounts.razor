@@ -96,14 +96,14 @@
         <MudTable T="AdrAccount" ServerData="@ServerReload" 
                   @ref="_table" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
             <HeaderContent>
-                <MudTh>Account #</MudTh>
-                <MudTh>Interface Account ID</MudTh>
-                <MudTh>Client</MudTh>
-                <MudTh>Vendor Code</MudTh>
-                <MudTh>Period Type</MudTh>
-                <MudTh>Next Run</MudTh>
-                <MudTh>Run Status</MudTh>
-                <MudTh>Historical Status</MudTh>
+                <MudTh><MudTableSortLabel SortLabel="VMAccountNumber" T="AdrAccount">Account #</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="InterfaceAccountId" T="AdrAccount">Interface Account ID</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="ClientName" T="AdrAccount">Client</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="VendorCode" T="AdrAccount">Vendor Code</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="PeriodType" T="AdrAccount">Period Type</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="NextRunDateTime" T="AdrAccount" InitialDirection="SortDirection.Ascending">Next Run</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="NextRunStatus" T="AdrAccount">Run Status</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="HistoricalBillingStatus" T="AdrAccount">Historical Status</MudTableSortLabel></MudTh>
                 <MudTh>Actions</MudTh>
             </HeaderContent>
             <RowTemplate>
@@ -235,9 +235,12 @@
                 _filterNextRunStatus,
                 _filterHistoricalStatus);
 
+            // Apply sorting
+            var sortedItems = ApplySorting(result.Items, state.SortLabel, state.SortDirection);
+
             return new TableData<AdrAccount>
             {
-                Items = result.Items,
+                Items = sortedItems,
                 TotalItems = result.TotalCount
             };
         }
@@ -250,6 +253,46 @@
         {
             _loading = false;
         }
+    }
+
+    private List<AdrAccount> ApplySorting(List<AdrAccount> items, string? sortLabel, SortDirection sortDirection)
+    {
+        if (string.IsNullOrEmpty(sortLabel))
+        {
+            // Default sort: Next Run ascending (soonest first)
+            return items.OrderBy(a => a.NextRunDateTime ?? DateTime.MaxValue).ToList();
+        }
+
+        var isDescending = sortDirection == SortDirection.Descending;
+
+        return sortLabel switch
+        {
+            "VMAccountNumber" => isDescending 
+                ? items.OrderByDescending(a => a.VMAccountNumber ?? "").ToList() 
+                : items.OrderBy(a => a.VMAccountNumber ?? "").ToList(),
+            "InterfaceAccountId" => isDescending 
+                ? items.OrderByDescending(a => a.InterfaceAccountId ?? "").ToList() 
+                : items.OrderBy(a => a.InterfaceAccountId ?? "").ToList(),
+            "ClientName" => isDescending 
+                ? items.OrderByDescending(a => a.ClientName ?? "").ToList() 
+                : items.OrderBy(a => a.ClientName ?? "").ToList(),
+            "VendorCode" => isDescending 
+                ? items.OrderByDescending(a => a.VendorCode ?? "").ToList() 
+                : items.OrderBy(a => a.VendorCode ?? "").ToList(),
+            "PeriodType" => isDescending 
+                ? items.OrderByDescending(a => a.PeriodType ?? "").ToList() 
+                : items.OrderBy(a => a.PeriodType ?? "").ToList(),
+            "NextRunDateTime" => isDescending 
+                ? items.OrderByDescending(a => a.NextRunDateTime ?? DateTime.MinValue).ToList() 
+                : items.OrderBy(a => a.NextRunDateTime ?? DateTime.MaxValue).ToList(),
+            "NextRunStatus" => isDescending 
+                ? items.OrderByDescending(a => a.NextRunStatus ?? "").ToList() 
+                : items.OrderBy(a => a.NextRunStatus ?? "").ToList(),
+            "HistoricalBillingStatus" => isDescending 
+                ? items.OrderByDescending(a => a.HistoricalBillingStatus ?? "").ToList() 
+                : items.OrderBy(a => a.HistoricalBillingStatus ?? "").ToList(),
+            _ => items.OrderBy(a => a.NextRunDateTime ?? DateTime.MaxValue).ToList()
+        };
     }
 
     private async Task<IEnumerable<Client>> SearchClients(string value, CancellationToken cancellationToken)

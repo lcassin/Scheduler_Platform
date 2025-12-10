@@ -83,15 +83,15 @@
                   @ref="_table" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true"
                   Loading="@_loading" LoadingProgressColor="Color.Primary">
                         <HeaderContent>
-                            <MudTh>Job ID</MudTh>
-                            <MudTh>Vendor</MudTh>
-                            <MudTh>Account #</MudTh>
-                            <MudTh>Billing Period</MudTh>
-                            <MudTh>Period Type</MudTh>
-                            <MudTh>Next Run</MudTh>
-                            <MudTh>Status</MudTh>
-                            <MudTh>ADR Status</MudTh>
-                            <MudTh>Retry Count</MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="Id" T="AdrJob" InitialDirection="SortDirection.Descending">Job ID</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="VendorCode" T="AdrJob">Vendor</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="VMAccountNumber" T="AdrJob">Account #</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="BillingPeriodStartDateTime" T="AdrJob">Billing Period</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="PeriodType" T="AdrJob">Period Type</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="NextRunDateTime" T="AdrJob">Next Run</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="Status" T="AdrJob">Status</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="AdrStatusId" T="AdrJob">ADR Status</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="RetryCount" T="AdrJob">Retry Count</MudTableSortLabel></MudTh>
                             <MudTh>Actions</MudTh>
                         </HeaderContent>
                         <RowTemplate>
@@ -237,9 +237,12 @@
                 _filterAccountNumber,
                 _showLatestPerAccount);
 
+            // Apply sorting
+            var sortedItems = ApplySorting(result.Items, state.SortLabel, state.SortDirection);
+
             return new TableData<AdrJob>
             {
-                Items = result.Items,
+                Items = sortedItems,
                 TotalItems = result.TotalCount
             };
         }
@@ -252,6 +255,49 @@
         {
             _loading = false;
         }
+    }
+
+    private List<AdrJob> ApplySorting(List<AdrJob> items, string? sortLabel, SortDirection sortDirection)
+    {
+        if (string.IsNullOrEmpty(sortLabel))
+        {
+            // Default sort: Job ID descending (most recent first)
+            return items.OrderByDescending(j => j.Id).ToList();
+        }
+
+        var isDescending = sortDirection == SortDirection.Descending;
+
+        return sortLabel switch
+        {
+            "Id" => isDescending 
+                ? items.OrderByDescending(j => j.Id).ToList() 
+                : items.OrderBy(j => j.Id).ToList(),
+            "VendorCode" => isDescending 
+                ? items.OrderByDescending(j => j.VendorCode ?? "").ToList() 
+                : items.OrderBy(j => j.VendorCode ?? "").ToList(),
+            "VMAccountNumber" => isDescending 
+                ? items.OrderByDescending(j => j.VMAccountNumber ?? "").ToList() 
+                : items.OrderBy(j => j.VMAccountNumber ?? "").ToList(),
+            "BillingPeriodStartDateTime" => isDescending 
+                ? items.OrderByDescending(j => j.BillingPeriodStartDateTime).ToList() 
+                : items.OrderBy(j => j.BillingPeriodStartDateTime).ToList(),
+            "PeriodType" => isDescending 
+                ? items.OrderByDescending(j => j.PeriodType ?? "").ToList() 
+                : items.OrderBy(j => j.PeriodType ?? "").ToList(),
+            "NextRunDateTime" => isDescending 
+                ? items.OrderByDescending(j => j.NextRunDateTime ?? DateTime.MinValue).ToList() 
+                : items.OrderBy(j => j.NextRunDateTime ?? DateTime.MaxValue).ToList(),
+            "Status" => isDescending 
+                ? items.OrderByDescending(j => j.Status ?? "").ToList() 
+                : items.OrderBy(j => j.Status ?? "").ToList(),
+            "AdrStatusId" => isDescending 
+                ? items.OrderByDescending(j => j.AdrStatusId ?? 0).ToList() 
+                : items.OrderBy(j => j.AdrStatusId ?? int.MaxValue).ToList(),
+            "RetryCount" => isDescending 
+                ? items.OrderByDescending(j => j.RetryCount).ToList() 
+                : items.OrderBy(j => j.RetryCount).ToList(),
+            _ => items.OrderByDescending(j => j.Id).ToList()
+        };
     }
 
     private async Task ApplyFilters()
