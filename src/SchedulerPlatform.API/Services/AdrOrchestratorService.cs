@@ -90,6 +90,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         return _configuration.GetValue<int>("AdrOrchestration:MaxParallelRequests", DefaultMaxParallelRequests);
     }
 
+    private int GetCredentialCheckLeadDays()
+    {
+        return _configuration.GetValue<int>("AdrOrchestration:CredentialCheckLeadDays", DefaultCredentialCheckLeadDays);
+    }
+
     #region Step 2: Job Creation
 
     public async Task<JobCreationResult> CreateJobsForDueAccountsAsync(CancellationToken cancellationToken = default)
@@ -206,13 +211,16 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     {
         var result = new CredentialVerificationResult();
         var maxParallel = GetMaxParallelRequests();
+        var credentialCheckLeadDays = GetCredentialCheckLeadDays();
 
         try
         {
-            _logger.LogInformation("Starting credential verification with {MaxParallel} parallel workers", maxParallel);
+            _logger.LogInformation("Starting credential verification with {MaxParallel} parallel workers, {LeadDays} day lead time", 
+                maxParallel, credentialCheckLeadDays);
 
-            var jobsNeedingVerification = (await _unitOfWork.AdrJobs.GetJobsNeedingCredentialVerificationAsync(DateTime.UtcNow)).ToList();
-            _logger.LogInformation("Found {Count} jobs needing credential verification", jobsNeedingVerification.Count);
+            var jobsNeedingVerification = (await _unitOfWork.AdrJobs.GetJobsNeedingCredentialVerificationAsync(DateTime.UtcNow, credentialCheckLeadDays)).ToList();
+            _logger.LogInformation("Found {Count} jobs needing credential verification (NextRunDate within {LeadDays} days)", 
+                jobsNeedingVerification.Count, credentialCheckLeadDays);
 
             if (!jobsNeedingVerification.Any())
             {
@@ -249,6 +257,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             // Step 2: Call ADR API in parallel with semaphore to limit concurrency
             var apiResults = new ConcurrentDictionary<int, (AdrApiResult Result, int ExecutionId)>();
             using var semaphore = new SemaphoreSlim(maxParallel, maxParallel);
+            int completedApiCalls = 0;
+            var totalApiCalls = jobsToProcess.Count;
             
             var tasks = jobsToProcess.Select(async jobInfo =>
             {
@@ -264,6 +274,15 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         cancellationToken);
 
                     apiResults[jobInfo.JobId] = (apiResult, jobInfo.ExecutionId);
+                    
+                    // Log progress every 500 completions or at the end
+                    var count = Interlocked.Increment(ref completedApiCalls);
+                    if (count % 500 == 0 || count == totalApiCalls)
+                    {
+                        _logger.LogInformation(
+                            "Credential verification API calls: {Completed}/{Total} completed ({Percent:F1}%)",
+                            count, totalApiCalls, (double)count / totalApiCalls * 100);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -274,6 +293,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         IsError = true, 
                         ErrorMessage = ex.Message 
                     }, jobInfo.ExecutionId);
+                    
+                    Interlocked.Increment(ref completedApiCalls);
                 }
                 finally
                 {
@@ -435,6 +456,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             // Step 2: Call ADR API in parallel with semaphore to limit concurrency
             var apiResults = new ConcurrentDictionary<int, (AdrApiResult Result, int ExecutionId)>();
             using var semaphore = new SemaphoreSlim(maxParallel, maxParallel);
+            int completedApiCalls = 0;
+            var totalApiCalls = jobsToProcess.Count;
             
             var tasks = jobsToProcess.Select(async jobInfo =>
             {
@@ -450,6 +473,15 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         cancellationToken);
 
                     apiResults[jobInfo.JobId] = (apiResult, jobInfo.ExecutionId);
+                    
+                    // Log progress every 500 completions or at the end
+                    var count = Interlocked.Increment(ref completedApiCalls);
+                    if (count % 500 == 0 || count == totalApiCalls)
+                    {
+                        _logger.LogInformation(
+                            "Invoice scraping API calls: {Completed}/{Total} completed ({Percent:F1}%)",
+                            count, totalApiCalls, (double)count / totalApiCalls * 100);
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -460,6 +492,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         IsError = true, 
                         ErrorMessage = ex.Message 
                     }, jobInfo.ExecutionId);
+                    
+                    Interlocked.Increment(ref completedApiCalls);
                 }
                 finally
                 {
@@ -627,6 +661,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             // Step 2: Check status in parallel with semaphore to limit concurrency
             var statusResults = new ConcurrentDictionary<int, AdrApiResult?>();
             using var semaphore = new SemaphoreSlim(maxParallel, maxParallel);
+            int completedStatusChecks = 0;
+            var totalStatusChecks = jobsToProcess.Count;
             
             var tasks = jobsToProcess.Select(async jobId =>
             {
@@ -635,11 +671,21 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 {
                     var statusResult = await CheckJobStatusAsync(jobId, cancellationToken);
                     statusResults[jobId] = statusResult;
+                    
+                    // Log progress every 500 completions or at the end
+                    var count = Interlocked.Increment(ref completedStatusChecks);
+                    if (count % 500 == 0 || count == totalStatusChecks)
+                    {
+                        _logger.LogInformation(
+                            "Status check API calls: {Completed}/{Total} completed ({Percent:F1}%)",
+                            count, totalStatusChecks, (double)count / totalStatusChecks * 100);
+                    }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error checking status for job {JobId}", jobId);
                     statusResults[jobId] = null;
+                    Interlocked.Increment(ref completedStatusChecks);
                 }
                 finally
                 {

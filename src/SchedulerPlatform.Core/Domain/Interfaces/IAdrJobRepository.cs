@@ -7,7 +7,7 @@ public interface IAdrJobRepository : IRepository<AdrJob>
     Task<AdrJob?> GetByAccountAndBillingPeriodAsync(int adrAccountId, DateTime billingPeriodStart, DateTime billingPeriodEnd);
     Task<IEnumerable<AdrJob>> GetByAccountIdAsync(int adrAccountId);
     Task<IEnumerable<AdrJob>> GetByStatusAsync(string status);
-    Task<IEnumerable<AdrJob>> GetJobsNeedingCredentialVerificationAsync(DateTime currentDate);
+    Task<IEnumerable<AdrJob>> GetJobsNeedingCredentialVerificationAsync(DateTime currentDate, int credentialCheckLeadDays = 7);
     Task<IEnumerable<AdrJob>> GetJobsReadyForScrapingAsync(DateTime currentDate);
     Task<IEnumerable<AdrJob>> GetJobsNeedingStatusCheckAsync(DateTime currentDate, int followUpDelayDays = 5);
     Task<IEnumerable<AdrJob>> GetJobsForRetryAsync(DateTime currentDate, int maxRetries = 5);
