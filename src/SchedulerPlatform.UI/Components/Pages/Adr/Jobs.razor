@@ -138,13 +138,11 @@
                                 <MudTd DataLabel="Actions">
                                     <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
                                         <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewJobDetails(context)">View Details</MudMenuItem>
-                                        <MudMenuItem Icon="@Icons.Material.Filled.History" OnClick="() => ViewExecutions(context.Id)">View Executions</MudMenuItem>
                                         @if (_showLatestPerAccount)
                                         {
                                             <MudMenuItem Icon="@Icons.Material.Filled.List" OnClick="() => ViewJobHistory(context)">View Job History</MudMenuItem>
                                         }
-                                        <MudMenuItem Icon="@Icons.Material.Filled.AccountBalance" OnClick="() => ViewAccount(context.AdrAccountId)">View Account</MudMenuItem>
-                                        <MudMenuItem Icon="@Icons.Material.Filled.Schedule" OnClick="() => ViewSchedule(context)">View Schedule</MudMenuItem>
+                                        <MudMenuItem Icon="@Icons.Material.Filled.AccountBalance" OnClick="() => ViewAccount(context)">View Account</MudMenuItem>
                                     </MudMenu>
                                 </MudTd>
             </RowTemplate>
@@ -289,21 +287,10 @@
         await DialogService.ShowAsync<JobDetailsDialog>("Job Details", parameters, options);
     }
 
-    private void ViewExecutions(int jobId)
+    private void ViewAccount(AdrJob job)
     {
-        Navigation.NavigateTo($"/adr/executions?jobId={jobId}");
-    }
-
-    private void ViewAccount(int accountId)
-    {
-        Navigation.NavigateTo($"/adr/accounts?accountId={accountId}");
-    }
-
-    private void ViewSchedule(AdrJob job)
-    {
-        // Navigate to Schedules page with search filter using VendorCode_VMAccountNumber_ naming convention
-        var schedulePrefix = $"{job.VendorCode}_{job.VMAccountNumber}_";
-        Navigation.NavigateTo($"/schedules?search={Uri.EscapeDataString(schedulePrefix)}");
+        // Navigate to Accounts page with account number filter (searchTerm searches by account number)
+        Navigation.NavigateTo($"/adr/accounts?accountNumber={Uri.EscapeDataString(job.VMAccountNumber ?? "")}");
     }
 
     private void ViewJobHistory(AdrJob job)
