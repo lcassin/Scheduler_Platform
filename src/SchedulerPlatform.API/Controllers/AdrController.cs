@@ -185,6 +185,7 @@ public class AdrController : ControllerBase
             [FromQuery] DateTime? billingPeriodEnd = null,
             [FromQuery] string? vendorCode = null,
             [FromQuery] string? vmAccountNumber = null,
+            [FromQuery] bool latestPerAccount = false,
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 20)
         {
@@ -198,7 +199,8 @@ public class AdrController : ControllerBase
                     billingPeriodStart,
                     billingPeriodEnd,
                     vendorCode,
-                    vmAccountNumber);
+                    vmAccountNumber,
+                    latestPerAccount);
 
                 return Ok(new
                 {

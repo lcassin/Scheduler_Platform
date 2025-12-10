@@ -128,6 +128,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         AdrAccountId = account.Id,
                         VMAccountId = account.VMAccountId,
                         VMAccountNumber = account.VMAccountNumber,
+                        VendorCode = account.VendorCode,
                         CredentialId = account.CredentialId,
                         PeriodType = account.PeriodType,
                         BillingPeriodStartDateTime = account.NextRangeStartDateTime.Value,
@@ -591,31 +592,94 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
             if (response.IsSuccessStatusCode)
             {
-                var apiResponse = JsonSerializer.Deserialize<AdrApiResponse>(responseContent, new JsonSerializerOptions
+                if (string.IsNullOrWhiteSpace(responseContent))
                 {
-                    PropertyNameCaseInsensitive = true
-                });
-
-                if (apiResponse != null)
-                {
-                    result.StatusId = apiResponse.StatusId;
-                    result.StatusDescription = apiResponse.StatusDescription;
-                    result.IndexId = apiResponse.IndexId;
+                    _logger.LogWarning("ADR API returned empty response for job {JobId}", jobId);
                     result.IsSuccess = true;
-                    result.IsError = apiResponse.IsError;
-                    result.IsFinal = apiResponse.IsFinal;
+                    result.IsError = false;
+                    result.StatusDescription = "ADR API returned no content.";
+                }
+                else
+                {
+                    try
+                    {
+                        var trimmed = responseContent.TrimStart();
+                        if (trimmed.StartsWith("{"))
+                        {
+                            var apiResponse = JsonSerializer.Deserialize<AdrApiResponse>(responseContent, new JsonSerializerOptions
+                            {
+                                PropertyNameCaseInsensitive = true
+                            });
+
+                            if (apiResponse != null)
+                            {
+                                result.StatusId = apiResponse.StatusId;
+                                result.StatusDescription = apiResponse.StatusDescription;
+                                result.IndexId = apiResponse.IndexId;
+                                result.IsSuccess = true;
+                                result.IsError = apiResponse.IsError;
+                                result.IsFinal = apiResponse.IsFinal;
+                            }
+                            else
+                            {
+                                result.IsSuccess = false;
+                                result.IsError = true;
+                                result.ErrorMessage = "ADR API returned an empty JSON object.";
+                            }
+                        }
+                        else if (trimmed.StartsWith("["))
+                        {
+                            var list = JsonSerializer.Deserialize<List<AdrApiResponse>>(responseContent, new JsonSerializerOptions
+                            {
+                                PropertyNameCaseInsensitive = true
+                            });
+                            var apiResponse = list?.FirstOrDefault();
+                            if (apiResponse != null)
+                            {
+                                result.StatusId = apiResponse.StatusId;
+                                result.StatusDescription = apiResponse.StatusDescription;
+                                result.IndexId = apiResponse.IndexId;
+                                result.IsSuccess = true;
+                                result.IsError = apiResponse.IsError;
+                                result.IsFinal = apiResponse.IsFinal;
+                                _logger.LogInformation("ADR API returned array response for job {JobId}, using first element", jobId);
+                            }
+                            else
+                            {
+                                result.IsSuccess = false;
+                                result.IsError = true;
+                                result.ErrorMessage = "ADR API returned an empty JSON array.";
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogWarning("ADR API returned unexpected content for job {JobId}: {Response}", 
+                                jobId, TruncateResponse(responseContent));
+                            result.IsSuccess = false;
+                            result.IsError = true;
+                            result.ErrorMessage = $"ADR API returned unexpected content: {TruncateResponse(responseContent)}";
+                        }
+                    }
+                    catch (JsonException jsonEx)
+                    {
+                        _logger.LogError(jsonEx, "Error deserializing ADR API response for job {JobId}: {Response}", 
+                            jobId, TruncateResponse(responseContent));
+                        result.IsSuccess = false;
+                        result.IsError = true;
+                        result.ErrorMessage = $"Error deserializing ADR API response: {jsonEx.Message}. Raw: {TruncateResponse(responseContent)}";
+                    }
                 }
             }
             else
             {
                 result.IsSuccess = false;
                 result.IsError = true;
-                result.ErrorMessage = $"API returned {response.StatusCode}: {responseContent}";
+                result.ErrorMessage = $"API returned {response.StatusCode}: {TruncateResponse(responseContent)}";
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error calling ADR API");
+            _logger.LogError(ex, "Error calling ADR API for job {JobId}", jobId);
             result.IsSuccess = false;
             result.IsError = true;
             result.ErrorMessage = ex.Message;
@@ -669,6 +733,13 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             _logger.LogError(ex, "Error checking job status for job {JobId}", jobId);
             return null;
         }
+    }
+
+    private static string TruncateResponse(string? response, int maxLength = 500)
+    {
+        if (string.IsNullOrEmpty(response))
+            return string.Empty;
+        return response.Length <= maxLength ? response : response.Substring(0, maxLength) + "...";
     }
 
     #endregion

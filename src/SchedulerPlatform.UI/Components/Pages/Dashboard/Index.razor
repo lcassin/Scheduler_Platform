@@ -285,6 +285,97 @@
     </MudItem>
 </MudGrid>
 
+<MudGrid Class="mt-2 mb-4" Spacing="2">
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-4">ADR Account Status</MudText>
+            @if (_adrLoading && _adrStats == null)
+            {
+                <div class="d-flex justify-center py-8">
+                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+                </div>
+            }
+            else if (_adrStats != null && _adrAccountChartData.Any())
+            {
+                <MudChart ChartType="ChartType.Donut" 
+                         InputData="@_adrAccountChartData" 
+                         InputLabels="@_adrAccountChartLabels"
+                         Width="100%" 
+                         Height="300px">
+                </MudChart>
+                <MudGrid Class="mt-2">
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2"><strong>Run Now:</strong> @FormatNumber(_adrStats.RunNowCount)</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2"><strong>Due Soon:</strong> @FormatNumber(_adrStats.DueSoonCount)</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2"><strong>Upcoming:</strong> @FormatNumber(_adrStats.UpcomingCount)</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2"><strong>Future:</strong> @FormatNumber(_adrStats.FutureCount)</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2"><strong>Missing:</strong> @FormatNumber(_adrStats.MissingCount)</MudText>
+                    </MudItem>
+                </MudGrid>
+            }
+            else
+            {
+                <MudText Typo="Typo.body1" Color="Color.Secondary">No ADR account data available</MudText>
+            }
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-4">ADR Job Status</MudText>
+            @if (_adrJobStatsLoading && _adrJobStats == null)
+            {
+                <div class="d-flex justify-center py-8">
+                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+                </div>
+            }
+            else if (_adrJobStats != null && _adrJobChartData.Any())
+            {
+                <MudChart ChartType="ChartType.Bar" 
+                         ChartSeries="@_adrJobChartSeries" 
+                         XAxisLabels="@_adrJobChartLabels"
+                         ChartOptions="@_barChartOptions"
+                         Width="100%" 
+                         Height="300px">
+                </MudChart>
+                <MudGrid Class="mt-2">
+                    <MudItem xs="4">
+                        <MudText Typo="Typo.body2"><strong>Pending:</strong> @FormatNumber(_adrJobStats.PendingCount)</MudText>
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudText Typo="Typo.body2"><strong>Verified:</strong> @FormatNumber(_adrJobStats.CredentialVerifiedCount)</MudText>
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudText Typo="Typo.body2"><strong>Requested:</strong> @FormatNumber(_adrJobStats.ScrapeRequestedCount)</MudText>
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudText Typo="Typo.body2"><strong>Completed:</strong> @FormatNumber(_adrJobStats.CompletedCount)</MudText>
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudText Typo="Typo.body2"><strong>Failed:</strong> @FormatNumber(_adrJobStats.FailedCount)</MudText>
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudText Typo="Typo.body2"><strong>Review:</strong> @FormatNumber(_adrJobStats.NeedsReviewCount)</MudText>
+                    </MudItem>
+                </MudGrid>
+            }
+            else
+            {
+                <MudText Typo="Typo.body1" Color="Color.Secondary">No ADR job data available</MudText>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudText Typo="Typo.h5" Class="mt-4 mb-2">Scheduler Metrics</MudText>
 <MudGrid Class="mt-4 mb-4 dashboard-charts-grid">
     <MudItem xs="12" md="6">
         <MudPaper Class="pa-4">
@@ -423,6 +514,14 @@
                 private int _missedSchedulesCount;
                 private string? _browserTimeZone;
                 private AdrAccountStats? _adrStats;
+                private AdrJobStats? _adrJobStats;
+                private bool _adrJobStatsLoading;
+                
+                private double[] _adrAccountChartData = Array.Empty<double>();
+                private string[] _adrAccountChartLabels = Array.Empty<string>();
+                private double[] _adrJobChartData = Array.Empty<double>();
+                private string[] _adrJobChartLabels = Array.Empty<string>();
+                private List<ChartSeries> _adrJobChartSeries = new();
     
         private IEnumerable<JobStatus>? SelectedStatuses
     {
@@ -525,6 +624,7 @@
             _ = LoadLongestAsync();
             _ = LoadMissedSchedulesAsync();
             _ = LoadAdrStatsAsync();
+            _ = LoadAdrJobStatsAsync();
         }
     
         private async Task LoadOverviewAsync()
@@ -669,6 +769,26 @@
             try
             {
                 _adrStats = await AdrService.GetAccountStatsAsync();
+                
+                if (_adrStats != null)
+                {
+                    _adrAccountChartData = new double[]
+                    {
+                        _adrStats.RunNowCount,
+                        _adrStats.DueSoonCount,
+                        _adrStats.UpcomingCount,
+                        _adrStats.FutureCount,
+                        _adrStats.MissingCount
+                    };
+                    _adrAccountChartLabels = new string[]
+                    {
+                        "Run Now",
+                        "Due Soon",
+                        "Upcoming",
+                        "Future",
+                        "Missing"
+                    };
+                }
             }
             catch (Exception ex)
             {
@@ -678,6 +798,56 @@
             finally
             {
                 _adrLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+
+        private async Task LoadAdrJobStatsAsync()
+        {
+            if (_adrJobStatsLoading) return;
+            _adrJobStatsLoading = true;
+            try
+            {
+                _adrJobStats = await AdrService.GetJobStatsAsync();
+                
+                if (_adrJobStats != null)
+                {
+                    _adrJobChartData = new double[]
+                    {
+                        _adrJobStats.PendingCount,
+                        _adrJobStats.CredentialVerifiedCount,
+                        _adrJobStats.ScrapeRequestedCount,
+                        _adrJobStats.CompletedCount,
+                        _adrJobStats.FailedCount,
+                        _adrJobStats.NeedsReviewCount
+                    };
+                    _adrJobChartLabels = new string[]
+                    {
+                        "Pending",
+                        "Verified",
+                        "Requested",
+                        "Completed",
+                        "Failed",
+                        "Review"
+                    };
+                    _adrJobChartSeries = new List<ChartSeries>
+                    {
+                        new ChartSeries
+                        {
+                            Name = "Jobs",
+                            Data = _adrJobChartData
+                        }
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                // ADR job stats are optional - don't show error to user if ADR is not configured
+                Console.WriteLine($"Error loading ADR job stats: {ex.Message}");
+            }
+            finally
+            {
+                _adrJobStatsLoading = false;
                 await InvokeAsync(StateHasChanged);
             }
         }

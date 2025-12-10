@@ -44,7 +44,10 @@
                     <MudSelectItem Value="@("NeedsReview")">Needs Review</MudSelectItem>
                 </MudSelect>
             </MudItem>
-            <MudItem xs="12" md="3" Class="d-flex align-center justify-end gap-2">
+            <MudItem xs="12" md="2" Class="d-flex align-center">
+                <MudSwitch @bind-Value="_showLatestPerAccount" Color="Color.Primary" Label="Latest per Account" />
+            </MudItem>
+            <MudItem xs="12" md="2" Class="d-flex align-center justify-end gap-2">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters" StartIcon="@Icons.Material.Filled.FilterAlt">
                     Apply
                 </MudButton>
@@ -136,6 +139,10 @@
                                     <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
                                         <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewJobDetails(context)">View Details</MudMenuItem>
                                         <MudMenuItem Icon="@Icons.Material.Filled.History" OnClick="() => ViewExecutions(context.Id)">View Executions</MudMenuItem>
+                                        @if (_showLatestPerAccount)
+                                        {
+                                            <MudMenuItem Icon="@Icons.Material.Filled.List" OnClick="() => ViewJobHistory(context)">View Job History</MudMenuItem>
+                                        }
                                         <MudMenuItem Icon="@Icons.Material.Filled.AccountBalance" OnClick="() => ViewAccount(context.AdrAccountId)">View Account</MudMenuItem>
                                         <MudMenuItem Icon="@Icons.Material.Filled.Schedule" OnClick="() => ViewSchedule(context)">View Schedule</MudMenuItem>
                                     </MudMenu>
@@ -173,6 +180,7 @@
     private string? _filterVendorCode;
     private string? _filterAccountNumber;
     private string? _filterStatus;
+    private bool _showLatestPerAccount = true;
 
     [Parameter]
     [SupplyParameterFromQuery(Name = "vendorCode")]
@@ -211,7 +219,8 @@
                 null, // adrAccountId - no longer used for filtering
                 _filterStatus,
                 _filterVendorCode,
-                _filterAccountNumber);
+                _filterAccountNumber,
+                _showLatestPerAccount);
 
             return new TableData<AdrJob>
             {
@@ -295,5 +304,16 @@
         // Navigate to Schedules page with search filter using VendorCode_VMAccountNumber_ naming convention
         var schedulePrefix = $"{job.VendorCode}_{job.VMAccountNumber}_";
         Navigation.NavigateTo($"/schedules?search={Uri.EscapeDataString(schedulePrefix)}");
+    }
+
+    private void ViewJobHistory(AdrJob job)
+    {
+        // Turn off "Latest per Account" mode and filter by the specific account's vendor code and account number
+        _showLatestPerAccount = false;
+        _searchVendorCode = job.VendorCode;
+        _searchAccountNumber = job.VMAccountNumber;
+        _filterVendorCode = job.VendorCode;
+        _filterAccountNumber = job.VMAccountNumber;
+        _table.ReloadServerData();
     }
 }

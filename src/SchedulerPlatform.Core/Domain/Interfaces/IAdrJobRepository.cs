@@ -19,7 +19,8 @@ public interface IAdrJobRepository : IRepository<AdrJob>
             DateTime? billingPeriodStart = null,
             DateTime? billingPeriodEnd = null,
             string? vendorCode = null,
-            string? vmAccountNumber = null);
+            string? vmAccountNumber = null,
+            bool latestPerAccount = false);
     Task<int> GetTotalCountAsync(int? adrAccountId = null);
     Task<int> GetCountByStatusAsync(string status);
     Task<int> GetActiveJobsCountAsync();

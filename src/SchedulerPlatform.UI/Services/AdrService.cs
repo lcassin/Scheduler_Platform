@@ -84,7 +84,8 @@ public class AdrService : IAdrService
             int? adrAccountId = null,
             string? status = null,
             string? vendorCode = null,
-            string? vmAccountNumber = null)
+            string? vmAccountNumber = null,
+            bool latestPerAccount = false)
         {
             var client = CreateClient();
             var queryParams = new List<string>
@@ -104,6 +105,9 @@ public class AdrService : IAdrService
 
             if (!string.IsNullOrWhiteSpace(vmAccountNumber))
                 queryParams.Add($"vmAccountNumber={Uri.EscapeDataString(vmAccountNumber)}");
+
+            if (latestPerAccount)
+                queryParams.Add("latestPerAccount=true");
 
             var query = "?" + string.Join("&", queryParams);
             var result = await client.GetFromJsonAsync<PagedResult<AdrJob>>($"adr/jobs{query}");

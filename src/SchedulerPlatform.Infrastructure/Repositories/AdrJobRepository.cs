@@ -96,7 +96,8 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             DateTime? billingPeriodStart = null,
             DateTime? billingPeriodEnd = null,
             string? vendorCode = null,
-            string? vmAccountNumber = null)
+            string? vmAccountNumber = null,
+            bool latestPerAccount = false)
         {
             var query = _dbSet.Where(j => !j.IsDeleted);
 
@@ -128,6 +129,14 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             if (!string.IsNullOrWhiteSpace(vmAccountNumber))
             {
                 query = query.Where(j => j.VMAccountNumber.Contains(vmAccountNumber));
+            }
+
+            // If latestPerAccount is true, get only the most recent job per account
+            if (latestPerAccount)
+            {
+                query = query
+                    .GroupBy(j => j.AdrAccountId)
+                    .Select(g => g.OrderByDescending(j => j.BillingPeriodStartDateTime).First());
             }
 
             var totalCount = await query.CountAsync();
