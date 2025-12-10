@@ -62,12 +62,30 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
     {
         // Include "ScrapeInProgress" to recover jobs that were interrupted mid-step
         // These jobs already had the API called but the process crashed before updating status
+        //
+        // Two categories of jobs are ready for scraping:
+        // 1. Normal flow: CredentialVerified or ScrapeInProgress jobs where NextRunDate has arrived
+        // 2. Missed credential window: Pending jobs where NextRunDate has arrived AND:
+        //    - They have a CredentialId (so we can attempt scraping)
+        //    - Their account is not "Missing" (Missing accounts need manual investigation)
+        //    The downstream API will handle any credential issues and create helpdesk tickets
+        var today = currentDate.Date;
+        
         return await _dbSet
             .Where(j => !j.IsDeleted && 
-                        (j.Status == "CredentialVerified" || j.Status == "ScrapeInProgress") &&
-                        j.CredentialVerifiedDateTime.HasValue &&
                         j.NextRunDateTime.HasValue &&
-                        j.NextRunDateTime.Value.Date <= currentDate.Date)
+                        j.NextRunDateTime.Value.Date <= today &&
+                        (
+                            // Normal flow: credential verified jobs
+                            ((j.Status == "CredentialVerified" || j.Status == "ScrapeInProgress") &&
+                             j.CredentialVerifiedDateTime.HasValue)
+                            ||
+                            // Missed credential window: Pending jobs that can still be scraped
+                            (j.Status == "Pending" &&
+                             j.CredentialId > 0 &&
+                             j.AdrAccount != null &&
+                             j.AdrAccount.HistoricalBillingStatus != "Missing")
+                        ))
             .Include(j => j.AdrAccount)
             .ToListAsync();
     }
