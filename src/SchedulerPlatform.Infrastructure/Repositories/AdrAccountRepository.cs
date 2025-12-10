@@ -57,7 +57,8 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
         int? clientId = null,
         int? credentialId = null,
         string? nextRunStatus = null,
-        string? searchTerm = null)
+        string? searchTerm = null,
+        string? historicalBillingStatus = null)
     {
         var query = _dbSet.Where(a => !a.IsDeleted);
 
@@ -74,6 +75,11 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
         if (!string.IsNullOrWhiteSpace(nextRunStatus))
         {
             query = query.Where(a => a.NextRunStatus == nextRunStatus);
+        }
+
+        if (!string.IsNullOrWhiteSpace(historicalBillingStatus))
+        {
+            query = query.Where(a => a.HistoricalBillingStatus == historicalBillingStatus);
         }
 
         if (!string.IsNullOrWhiteSpace(searchTerm))
@@ -106,9 +112,21 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
         return await query.CountAsync();
     }
 
-    public async Task<int> GetCountByStatusAsync(string status, int? clientId = null)
+    public async Task<int> GetCountByNextRunStatusAsync(string status, int? clientId = null)
     {
         var query = _dbSet.Where(a => !a.IsDeleted && a.NextRunStatus == status);
+        
+        if (clientId.HasValue)
+        {
+            query = query.Where(a => a.ClientId == clientId.Value);
+        }
+
+        return await query.CountAsync();
+    }
+
+    public async Task<int> GetCountByHistoricalStatusAsync(string status, int? clientId = null)
+    {
+        var query = _dbSet.Where(a => !a.IsDeleted && a.HistoricalBillingStatus == status);
         
         if (clientId.HasValue)
         {

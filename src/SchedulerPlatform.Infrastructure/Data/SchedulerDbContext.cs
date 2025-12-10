@@ -237,10 +237,10 @@ public class SchedulerDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("AdrAccountId");
             
-            entity.Property(e => e.VMAccountNumber).IsRequired().HasMaxLength(30);
-            entity.Property(e => e.InterfaceAccountId).HasMaxLength(30);
+            entity.Property(e => e.VMAccountNumber).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.InterfaceAccountId).HasMaxLength(128);
             entity.Property(e => e.ClientName).HasMaxLength(128);
-            entity.Property(e => e.VendorCode).HasMaxLength(30);
+            entity.Property(e => e.VendorCode).HasMaxLength(128);
             entity.Property(e => e.PeriodType).HasMaxLength(13);
             entity.Property(e => e.NextRunStatus).HasMaxLength(10);
             entity.Property(e => e.HistoricalBillingStatus).HasMaxLength(10);
@@ -261,6 +261,15 @@ public class SchedulerDbContext : DbContext
             entity.HasIndex(e => e.NextRunStatus);
             entity.HasIndex(e => e.HistoricalBillingStatus);
             entity.HasIndex(e => new { e.VMAccountId, e.VMAccountNumber });
+            
+            // Performance indexes for paged queries
+            entity.HasIndex(e => e.NextRunDateTime);
+            entity.HasIndex(e => e.InterfaceAccountId);
+            entity.HasIndex(e => e.VendorCode);
+            // Composite indexes for common filter + sort patterns
+            entity.HasIndex(e => new { e.IsDeleted, e.NextRunStatus, e.NextRunDateTime });
+            entity.HasIndex(e => new { e.IsDeleted, e.HistoricalBillingStatus });
+            entity.HasIndex(e => new { e.IsDeleted, e.ClientId, e.NextRunStatus });
         });
 
         // ADR Job entity configuration
@@ -270,7 +279,8 @@ public class SchedulerDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("AdrJobId");
             
-            entity.Property(e => e.VMAccountNumber).IsRequired().HasMaxLength(30);
+            entity.Property(e => e.VMAccountNumber).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.VendorCode).HasMaxLength(128);
             entity.Property(e => e.PeriodType).HasMaxLength(13);
             entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
             entity.Property(e => e.AdrStatusDescription).HasMaxLength(100);
@@ -287,6 +297,15 @@ public class SchedulerDbContext : DbContext
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => e.BillingPeriodStartDateTime);
             entity.HasIndex(e => new { e.AdrAccountId, e.BillingPeriodStartDateTime, e.BillingPeriodEndDateTime });
+            
+            // Performance indexes for paged queries and search
+            entity.HasIndex(e => e.VMAccountNumber);
+            entity.HasIndex(e => e.VendorCode);
+            entity.HasIndex(e => e.ModifiedDateTime);
+            // Composite indexes for common filter + sort patterns
+            entity.HasIndex(e => new { e.IsDeleted, e.Status });
+            entity.HasIndex(e => new { e.IsDeleted, e.Status, e.BillingPeriodStartDateTime });
+            entity.HasIndex(e => new { e.IsDeleted, e.AdrAccountId, e.BillingPeriodStartDateTime });
         });
 
         // ADR Job Execution entity configuration

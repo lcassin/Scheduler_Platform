@@ -1,3 +1,4 @@
+using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchedulerPlatform.API.Services;
@@ -15,17 +16,20 @@ public class AdrController : ControllerBase
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAdrAccountSyncService _syncService;
     private readonly IAdrOrchestratorService _orchestratorService;
+    private readonly IAdrOrchestrationQueue _orchestrationQueue;
     private readonly ILogger<AdrController> _logger;
 
     public AdrController(
         IUnitOfWork unitOfWork,
         IAdrAccountSyncService syncService,
         IAdrOrchestratorService orchestratorService,
+        IAdrOrchestrationQueue orchestrationQueue,
         ILogger<AdrController> logger)
     {
         _unitOfWork = unitOfWork;
         _syncService = syncService;
         _orchestratorService = orchestratorService;
+        _orchestrationQueue = orchestrationQueue;
         _logger = logger;
     }
 
@@ -37,6 +41,7 @@ public class AdrController : ControllerBase
         [FromQuery] int? credentialId = null,
         [FromQuery] string? nextRunStatus = null,
         [FromQuery] string? searchTerm = null,
+        [FromQuery] string? historicalBillingStatus = null,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20)
     {
@@ -48,7 +53,8 @@ public class AdrController : ControllerBase
                 clientId,
                 credentialId,
                 nextRunStatus,
-                searchTerm);
+                searchTerm,
+                historicalBillingStatus);
 
             return Ok(new
             {
@@ -144,23 +150,108 @@ public class AdrController : ControllerBase
     {
         try
         {
-            var totalCount = await _unitOfWork.AdrAccounts.GetTotalCountAsync(clientId);
-            var pendingCount = await _unitOfWork.AdrAccounts.GetCountByStatusAsync("Pending", clientId);
-            var readyCount = await _unitOfWork.AdrAccounts.GetCountByStatusAsync("Ready", clientId);
-            var completedCount = await _unitOfWork.AdrAccounts.GetCountByStatusAsync("Completed", clientId);
+            var totalAccounts = await _unitOfWork.AdrAccounts.GetTotalCountAsync(clientId);
+            var runNowCount = await _unitOfWork.AdrAccounts.GetCountByNextRunStatusAsync("Run Now", clientId);
+            var dueSoonCount = await _unitOfWork.AdrAccounts.GetCountByNextRunStatusAsync("Due Soon", clientId);
+            var upcomingCount = await _unitOfWork.AdrAccounts.GetCountByNextRunStatusAsync("Upcoming", clientId);
+            var futureCount = await _unitOfWork.AdrAccounts.GetCountByNextRunStatusAsync("Future", clientId);
+            var missingCount = await _unitOfWork.AdrAccounts.GetCountByHistoricalStatusAsync("Missing", clientId);
+            var activeJobsCount = await _unitOfWork.AdrJobs.GetActiveJobsCountAsync();
 
             return Ok(new
             {
-                totalCount,
-                pendingCount,
-                readyCount,
-                completedCount
+                totalAccounts,
+                runNowCount,
+                dueSoonCount,
+                upcomingCount,
+                futureCount,
+                missingCount,
+                overdueCount = 0, // Overdue is calculated based on ExpectedNextDateTime in the UI
+                activeJobsCount
             });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving ADR account stats");
             return StatusCode(500, "An error occurred while retrieving ADR account stats");
+        }
+    }
+
+    [HttpGet("accounts/export")]
+    public async Task<IActionResult> ExportAccounts(
+        [FromQuery] int? clientId = null,
+        [FromQuery] string? searchTerm = null,
+        [FromQuery] string? nextRunStatus = null,
+        [FromQuery] string? historicalBillingStatus = null,
+        [FromQuery] string format = "excel")
+    {
+        try
+        {
+            // Get all accounts matching the filters (no pagination for export)
+            var (accounts, _) = await _unitOfWork.AdrAccounts.GetPagedAsync(
+                1, int.MaxValue, clientId, null, nextRunStatus, searchTerm, historicalBillingStatus);
+
+            if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
+            {
+                var csv = new System.Text.StringBuilder();
+                csv.AppendLine("Account #,Interface Account ID,Client,Vendor Code,Period Type,Next Run,Run Status,Historical Status,Last Invoice,Expected Next");
+
+                foreach (var a in accounts)
+                {
+                    csv.AppendLine($"{CsvEscape(a.VMAccountNumber)},{CsvEscape(a.InterfaceAccountId)},{CsvEscape(a.ClientName)},{CsvEscape(a.VendorCode)},{CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.NextRunStatus)},{CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""}");
+                }
+
+                return File(System.Text.Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", $"adr_accounts_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
+            }
+
+            // Excel format
+            using var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("ADR Accounts");
+
+            // Headers
+            worksheet.Cell(1, 1).Value = "Account #";
+            worksheet.Cell(1, 2).Value = "VM Account ID";
+            worksheet.Cell(1, 3).Value = "Interface Account ID";
+            worksheet.Cell(1, 4).Value = "Client";
+            worksheet.Cell(1, 5).Value = "Vendor Code";
+            worksheet.Cell(1, 6).Value = "Period Type";
+            worksheet.Cell(1, 7).Value = "Next Run";
+            worksheet.Cell(1, 8).Value = "Run Status";
+            worksheet.Cell(1, 9).Value = "Historical Status";
+            worksheet.Cell(1, 10).Value = "Last Invoice";
+            worksheet.Cell(1, 11).Value = "Expected Next";
+
+            var headerRow = worksheet.Row(1);
+            headerRow.Style.Font.Bold = true;
+
+            int row = 2;
+            foreach (var a in accounts)
+            {
+                worksheet.Cell(row, 1).Value = a.VMAccountNumber;
+                worksheet.Cell(row, 2).Value = a.VMAccountId;
+                worksheet.Cell(row, 3).Value = a.InterfaceAccountId;
+                worksheet.Cell(row, 4).Value = a.ClientName;
+                worksheet.Cell(row, 5).Value = a.VendorCode;
+                worksheet.Cell(row, 6).Value = a.PeriodType;
+                if (a.NextRunDateTime.HasValue) worksheet.Cell(row, 7).Value = a.NextRunDateTime.Value;
+                worksheet.Cell(row, 8).Value = a.NextRunStatus;
+                worksheet.Cell(row, 9).Value = a.HistoricalBillingStatus;
+                if (a.LastInvoiceDateTime.HasValue) worksheet.Cell(row, 10).Value = a.LastInvoiceDateTime.Value;
+                if (a.ExpectedNextDateTime.HasValue) worksheet.Cell(row, 11).Value = a.ExpectedNextDateTime.Value;
+                row++;
+            }
+
+            worksheet.Columns().AdjustToContents();
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"adr_accounts_{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting ADR accounts");
+            return StatusCode(500, "An error occurred while exporting ADR accounts");
         }
     }
 
@@ -176,6 +267,7 @@ public class AdrController : ControllerBase
             [FromQuery] DateTime? billingPeriodEnd = null,
             [FromQuery] string? vendorCode = null,
             [FromQuery] string? vmAccountNumber = null,
+            [FromQuery] bool latestPerAccount = false,
             [FromQuery] int pageNumber = 1,
             [FromQuery] int pageSize = 20)
         {
@@ -189,11 +281,42 @@ public class AdrController : ControllerBase
                     billingPeriodStart,
                     billingPeriodEnd,
                     vendorCode,
-                    vmAccountNumber);
+                    vmAccountNumber,
+                    latestPerAccount);
+
+                // Map to DTOs with VendorCode fallback from AdrAccount when job's VendorCode is null
+                var mappedItems = items.Select(j => new
+                {
+                    j.Id,
+                    j.AdrAccountId,
+                    j.VMAccountId,
+                    j.VMAccountNumber,
+                    VendorCode = !string.IsNullOrEmpty(j.VendorCode) ? j.VendorCode : j.AdrAccount?.VendorCode,
+                    j.CredentialId,
+                    j.PeriodType,
+                    j.BillingPeriodStartDateTime,
+                    j.BillingPeriodEndDateTime,
+                    j.NextRunDateTime,
+                    j.NextRangeStartDateTime,
+                    j.NextRangeEndDateTime,
+                    j.Status,
+                    j.AdrStatusId,
+                    j.AdrStatusDescription,
+                    j.AdrIndexId,
+                    j.IsMissing,
+                    j.RetryCount,
+                    j.CredentialVerifiedDateTime,
+                    j.ScrapingCompletedDateTime,
+                    j.ErrorMessage,
+                    j.CreatedDateTime,
+                    j.CreatedBy,
+                    j.ModifiedDateTime,
+                    j.ModifiedBy
+                }).ToList();
 
                 return Ok(new
                 {
-                    items,
+                    items = mappedItems,
                     totalCount,
                     pageNumber,
                     pageSize
@@ -353,6 +476,86 @@ public class AdrController : ControllerBase
         }
     }
 
+    [HttpGet("jobs/export")]
+    public async Task<IActionResult> ExportJobs(
+        [FromQuery] string? status = null,
+        [FromQuery] string? vendorCode = null,
+        [FromQuery] string? vmAccountNumber = null,
+        [FromQuery] bool latestPerAccount = false,
+        [FromQuery] string format = "excel")
+    {
+        try
+        {
+            // Get all jobs matching the filters (no pagination for export)
+            var (jobs, _) = await _unitOfWork.AdrJobs.GetPagedAsync(
+                1, int.MaxValue, null, status, null, null, vendorCode, vmAccountNumber, latestPerAccount);
+
+            if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
+            {
+                var csv = new System.Text.StringBuilder();
+                csv.AppendLine("Job ID,Vendor Code,Account #,Billing Period Start,Billing Period End,Period Type,Next Run,Status,ADR Status,ADR Status Description,Retry Count,Created");
+
+                foreach (var j in jobs)
+                {
+                    csv.AppendLine($"{j.Id},{CsvEscape(j.VendorCode)},{CsvEscape(j.VMAccountNumber)},{j.BillingPeriodStartDateTime:MM/dd/yyyy},{j.BillingPeriodEndDateTime:MM/dd/yyyy},{CsvEscape(j.PeriodType)},{j.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(j.Status)},{j.AdrStatusId?.ToString() ?? ""},{CsvEscape(j.AdrStatusDescription)},{j.RetryCount},{j.CreatedDateTime:MM/dd/yyyy HH:mm}");
+                }
+
+                return File(System.Text.Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", $"adr_jobs_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
+            }
+
+            // Excel format
+            using var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("ADR Jobs");
+
+            // Headers
+            worksheet.Cell(1, 1).Value = "Job ID";
+            worksheet.Cell(1, 2).Value = "Vendor Code";
+            worksheet.Cell(1, 3).Value = "Account #";
+            worksheet.Cell(1, 4).Value = "Billing Period Start";
+            worksheet.Cell(1, 5).Value = "Billing Period End";
+            worksheet.Cell(1, 6).Value = "Period Type";
+            worksheet.Cell(1, 7).Value = "Next Run";
+            worksheet.Cell(1, 8).Value = "Status";
+            worksheet.Cell(1, 9).Value = "ADR Status";
+            worksheet.Cell(1, 10).Value = "ADR Status Description";
+            worksheet.Cell(1, 11).Value = "Retry Count";
+            worksheet.Cell(1, 12).Value = "Created";
+
+            var headerRow = worksheet.Row(1);
+            headerRow.Style.Font.Bold = true;
+
+            int row = 2;
+            foreach (var j in jobs)
+            {
+                worksheet.Cell(row, 1).Value = j.Id;
+                worksheet.Cell(row, 2).Value = j.VendorCode;
+                worksheet.Cell(row, 3).Value = j.VMAccountNumber;
+                worksheet.Cell(row, 4).Value = j.BillingPeriodStartDateTime;
+                worksheet.Cell(row, 5).Value = j.BillingPeriodEndDateTime;
+                worksheet.Cell(row, 6).Value = j.PeriodType;
+                if (j.NextRunDateTime.HasValue) worksheet.Cell(row, 7).Value = j.NextRunDateTime.Value;
+                worksheet.Cell(row, 8).Value = j.Status;
+                if (j.AdrStatusId.HasValue) worksheet.Cell(row, 9).Value = j.AdrStatusId.Value;
+                worksheet.Cell(row, 10).Value = j.AdrStatusDescription;
+                worksheet.Cell(row, 11).Value = j.RetryCount;
+                worksheet.Cell(row, 12).Value = j.CreatedDateTime;
+                row++;
+            }
+
+            worksheet.Columns().AdjustToContents();
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"adr_jobs_{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting ADR jobs");
+            return StatusCode(500, "An error occurred while exporting ADR jobs");
+        }
+    }
+
     [HttpPost("jobs")]
     public async Task<ActionResult<AdrJob>> CreateJob([FromBody] CreateAdrJobRequest request)
     {
@@ -444,6 +647,107 @@ public class AdrController : ControllerBase
         {
             _logger.LogError(ex, "Error updating ADR job status {JobId}", id);
             return StatusCode(500, "An error occurred while updating the ADR job status");
+        }
+    }
+
+    [HttpPost("jobs/{id}/refire")]
+    public async Task<ActionResult<object>> RefireJob(int id)
+    {
+        try
+        {
+            var job = await _unitOfWork.AdrJobs.GetByIdAsync(id);
+            if (job == null)
+            {
+                return NotFound();
+            }
+
+            // Reset job to Pending status so it gets picked up by the orchestrator
+            job.Status = "Pending";
+            job.AdrStatusId = null;
+            job.AdrStatusDescription = null;
+            job.AdrIndexId = null;
+            job.ErrorMessage = null;
+            job.CredentialVerifiedDateTime = null;
+            job.ScrapingCompletedDateTime = null;
+            job.RetryCount = 0;
+            job.ModifiedDateTime = DateTime.UtcNow;
+            job.ModifiedBy = User.Identity?.Name ?? "System Created";
+
+            await _unitOfWork.AdrJobs.UpdateAsync(job);
+            await _unitOfWork.SaveChangesAsync();
+
+            _logger.LogInformation("Job {JobId} refired by {User}", id, User.Identity?.Name ?? "Unknown");
+
+            return Ok(new { message = "Job refired successfully", jobId = id });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error refiring ADR job {JobId}", id);
+            return StatusCode(500, "An error occurred while refiring the ADR job");
+        }
+    }
+
+    [HttpPost("jobs/refire-bulk")]
+    public async Task<ActionResult<object>> RefireJobsBulk([FromBody] RefireJobsRequest request)
+    {
+        try
+        {
+            if (request.JobIds == null || !request.JobIds.Any())
+            {
+                return BadRequest("No job IDs provided");
+            }
+
+            var refiredCount = 0;
+            var errors = new List<string>();
+
+            foreach (var jobId in request.JobIds)
+            {
+                try
+                {
+                    var job = await _unitOfWork.AdrJobs.GetByIdAsync(jobId);
+                    if (job == null)
+                    {
+                        errors.Add($"Job {jobId} not found");
+                        continue;
+                    }
+
+                    // Reset job to Pending status so it gets picked up by the orchestrator
+                    job.Status = "Pending";
+                    job.AdrStatusId = null;
+                    job.AdrStatusDescription = null;
+                    job.AdrIndexId = null;
+                    job.ErrorMessage = null;
+                    job.CredentialVerifiedDateTime = null;
+                    job.ScrapingCompletedDateTime = null;
+                    job.RetryCount = 0;
+                    job.ModifiedDateTime = DateTime.UtcNow;
+                    job.ModifiedBy = User.Identity?.Name ?? "System Created";
+
+                    await _unitOfWork.AdrJobs.UpdateAsync(job);
+                    refiredCount++;
+                }
+                catch (Exception ex)
+                {
+                    errors.Add($"Job {jobId}: {ex.Message}");
+                }
+            }
+
+            await _unitOfWork.SaveChangesAsync();
+
+            _logger.LogInformation("Bulk refire: {Count} jobs refired by {User}", refiredCount, User.Identity?.Name ?? "Unknown");
+
+            return Ok(new
+            {
+                message = $"{refiredCount} job(s) refired successfully",
+                refiredCount,
+                totalRequested = request.JobIds.Count,
+                errors = errors.Any() ? errors : null
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during bulk job refire");
+            return StatusCode(500, "An error occurred while refiring jobs");
         }
     }
 
@@ -623,10 +927,11 @@ public class AdrController : ControllerBase
 
     #endregion
 
-    #region Orchestration Endpoints
+        #region Orchestration Endpoints
 
-    [HttpPost("sync/accounts")]
-    public async Task<ActionResult<AdrAccountSyncResult>> SyncAccounts(CancellationToken cancellationToken)
+        [HttpPost("sync/accounts")]
+        [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+        public async Task<ActionResult<AdrAccountSyncResult>> SyncAccounts(CancellationToken cancellationToken)
     {
         try
         {
@@ -641,8 +946,9 @@ public class AdrController : ControllerBase
         }
     }
 
-    [HttpPost("orchestrate/create-jobs")]
-    public async Task<ActionResult<JobCreationResult>> CreateJobs(CancellationToken cancellationToken)
+        [HttpPost("orchestrate/create-jobs")]
+        [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+        public async Task<ActionResult<JobCreationResult>> CreateJobs(CancellationToken cancellationToken)
     {
         try
         {
@@ -657,8 +963,9 @@ public class AdrController : ControllerBase
         }
     }
 
-    [HttpPost("orchestrate/verify-credentials")]
-    public async Task<ActionResult<CredentialVerificationResult>> VerifyCredentials(CancellationToken cancellationToken)
+        [HttpPost("orchestrate/verify-credentials")]
+        [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+        public async Task<ActionResult<CredentialVerificationResult>> VerifyCredentials(CancellationToken cancellationToken)
     {
         try
         {
@@ -673,8 +980,9 @@ public class AdrController : ControllerBase
         }
     }
 
-    [HttpPost("orchestrate/process-scraping")]
-    public async Task<ActionResult<ScrapeResult>> ProcessScraping(CancellationToken cancellationToken)
+        [HttpPost("orchestrate/process-scraping")]
+        [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+        public async Task<ActionResult<ScrapeResult>> ProcessScraping(CancellationToken cancellationToken)
     {
         try
         {
@@ -689,8 +997,9 @@ public class AdrController : ControllerBase
         }
     }
 
-    [HttpPost("orchestrate/check-statuses")]
-    public async Task<ActionResult<StatusCheckResult>> CheckStatuses(CancellationToken cancellationToken)
+        [HttpPost("orchestrate/check-statuses")]
+        [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+        public async Task<ActionResult<StatusCheckResult>> CheckStatuses(CancellationToken cancellationToken)
     {
         try
         {
@@ -705,8 +1014,9 @@ public class AdrController : ControllerBase
         }
     }
 
-    [HttpPost("orchestrate/run-full-cycle")]
-    public async Task<ActionResult<object>> RunFullCycle(CancellationToken cancellationToken)
+        [HttpPost("orchestrate/run-full-cycle")]
+        [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+        public async Task<ActionResult<object>> RunFullCycle(CancellationToken cancellationToken)
     {
         try
         {
@@ -735,6 +1045,105 @@ public class AdrController : ControllerBase
     }
 
     #endregion
+
+    #region Background Orchestration Endpoints
+
+    /// <summary>
+    /// Triggers ADR orchestration to run in the background. Returns immediately with a request ID
+    /// that can be used to check status. This endpoint does NOT depend on user session - the
+    /// background job will continue running even if the user logs out.
+    /// </summary>
+    [HttpPost("orchestrate/run-background")]
+    [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    public async Task<ActionResult<object>> RunBackgroundOrchestration([FromBody] BackgroundOrchestrationRequest? request = null)
+    {
+        try
+        {
+            var orchestrationRequest = new AdrOrchestrationRequest
+            {
+                RequestedBy = User.Identity?.Name ?? "Unknown",
+                RunSync = request?.RunSync ?? true,
+                RunCreateJobs = request?.RunCreateJobs ?? true,
+                RunCredentialVerification = request?.RunCredentialVerification ?? true,
+                RunScraping = request?.RunScraping ?? true,
+                RunStatusCheck = request?.RunStatusCheck ?? true
+            };
+
+            await _orchestrationQueue.QueueAsync(orchestrationRequest);
+
+            _logger.LogInformation(
+                "Background ADR orchestration queued with request ID {RequestId} by {User}",
+                orchestrationRequest.RequestId, orchestrationRequest.RequestedBy);
+
+            return Ok(new
+            {
+                message = "ADR orchestration queued successfully. The job will run in the background.",
+                requestId = orchestrationRequest.RequestId,
+                requestedAt = orchestrationRequest.RequestedAt,
+                requestedBy = orchestrationRequest.RequestedBy
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error queuing background ADR orchestration");
+            return StatusCode(500, new { error = "An error occurred while queuing ADR orchestration", message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Gets the status of a specific background orchestration request.
+    /// </summary>
+    [HttpGet("orchestrate/status/{requestId}")]
+    [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    public ActionResult<AdrOrchestrationStatus> GetOrchestrationStatus(string requestId)
+    {
+        var status = _orchestrationQueue.GetStatus(requestId);
+        if (status == null)
+        {
+            return NotFound(new { error = "Request not found", requestId });
+        }
+
+        return Ok(status);
+    }
+
+    /// <summary>
+    /// Gets the status of the currently running orchestration, if any.
+    /// </summary>
+    [HttpGet("orchestrate/current")]
+    [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    public ActionResult<object> GetCurrentOrchestration()
+    {
+        var current = _orchestrationQueue.GetCurrentRun();
+        if (current == null)
+        {
+            return Ok(new { isRunning = false, message = "No orchestration is currently running" });
+        }
+
+        return Ok(new { isRunning = true, status = current });
+    }
+
+    /// <summary>
+    /// Gets the recent orchestration run history.
+    /// </summary>
+    [HttpGet("orchestrate/history")]
+    [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    public ActionResult<IEnumerable<AdrOrchestrationStatus>> GetOrchestrationHistory([FromQuery] int count = 10)
+    {
+        var statuses = _orchestrationQueue.GetRecentStatuses(count);
+        return Ok(statuses);
+    }
+
+    #endregion
+
+    private static string CsvEscape(string? value)
+    {
+        if (value == null) return "";
+        if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
+        {
+            return $"\"{value.Replace("\"", "\"\"")}\"";
+        }
+        return value;
+    }
 }
 
 #region Request DTOs
@@ -773,6 +1182,20 @@ public class CompleteExecutionRequest
     public bool IsFinal { get; set; }
     public string? ErrorMessage { get; set; }
     public string? ApiResponse { get; set; }
+}
+
+public class RefireJobsRequest
+{
+    public List<int> JobIds { get; set; } = new();
+}
+
+public class BackgroundOrchestrationRequest
+{
+    public bool RunSync { get; set; } = true;
+    public bool RunCreateJobs { get; set; } = true;
+    public bool RunCredentialVerification { get; set; } = true;
+    public bool RunScraping { get; set; } = true;
+    public bool RunStatusCheck { get; set; } = true;
 }
 
 #endregion

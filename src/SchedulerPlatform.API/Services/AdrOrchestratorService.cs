@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using System.Text.Json;
 using SchedulerPlatform.Core.Domain.Entities;
@@ -58,6 +59,7 @@ public class StatusCheckResult
 public class AdrOrchestratorService : IAdrOrchestratorService
 {
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IServiceScopeFactory _scopeFactory;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AdrOrchestratorService> _logger;
@@ -66,17 +68,26 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     private const int DefaultScrapeRetryDays = 5;
     private const int DefaultFollowUpDelayDays = 5;
     private const int DefaultMaxRetries = 5;
+    private const int BatchSize = 1000; // Process and save in batches to avoid large transactions
+    private const int DefaultMaxParallelRequests = 8; // Default parallel API requests
 
     public AdrOrchestratorService(
         IUnitOfWork unitOfWork,
+        IServiceScopeFactory scopeFactory,
         IHttpClientFactory httpClientFactory,
         IConfiguration configuration,
         ILogger<AdrOrchestratorService> logger)
     {
         _unitOfWork = unitOfWork;
+        _scopeFactory = scopeFactory;
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
         _logger = logger;
+    }
+
+    private int GetMaxParallelRequests()
+    {
+        return _configuration.GetValue<int>("AdrOrchestration:MaxParallelRequests", DefaultMaxParallelRequests);
     }
 
     #region Step 2: Job Creation
@@ -96,7 +107,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 a.NextRangeStartDateTime.HasValue &&
                 a.NextRangeEndDateTime.HasValue);
 
-            foreach (var account in dueAccounts)
+            int processedSinceLastSave = 0;
+            int batchNumber = 1;
+            var dueAccountsList = dueAccounts.ToList();
+            _logger.LogInformation("Processing {Count} due accounts in batches of {BatchSize}", dueAccountsList.Count, BatchSize);
+
+            foreach (var account in dueAccountsList)
             {
                 try
                 {
@@ -122,6 +138,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         AdrAccountId = account.Id,
                         VMAccountId = account.VMAccountId,
                         VMAccountNumber = account.VMAccountNumber,
+                        VendorCode = account.VendorCode,
                         CredentialId = account.CredentialId,
                         PeriodType = account.PeriodType,
                         BillingPeriodStartDateTime = account.NextRangeStartDateTime.Value,
@@ -140,6 +157,17 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
                     await _unitOfWork.AdrJobs.AddAsync(job);
                     result.JobsCreated++;
+                    processedSinceLastSave++;
+
+                    // Save in batches to reduce transaction size
+                    if (processedSinceLastSave >= BatchSize)
+                    {
+                        await _unitOfWork.SaveChangesAsync();
+                        _logger.LogInformation("Job creation batch {BatchNumber} saved: {Count} jobs created so far", 
+                            batchNumber, result.JobsCreated);
+                        processedSinceLastSave = 0;
+                        batchNumber++;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -149,7 +177,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 }
             }
 
-            await _unitOfWork.SaveChangesAsync();
+            // Final save for remaining jobs
+            if (processedSinceLastSave > 0)
+            {
+                await _unitOfWork.SaveChangesAsync();
+            }
 
             _logger.LogInformation(
                 "Job creation completed. Created: {Created}, Skipped: {Skipped}, Errors: {Errors}",
@@ -173,30 +205,120 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     public async Task<CredentialVerificationResult> VerifyCredentialsAsync(CancellationToken cancellationToken = default)
     {
         var result = new CredentialVerificationResult();
+        var maxParallel = GetMaxParallelRequests();
 
         try
         {
-            _logger.LogInformation("Starting credential verification");
+            _logger.LogInformation("Starting credential verification with {MaxParallel} parallel workers", maxParallel);
 
-            var jobsNeedingVerification = await _unitOfWork.AdrJobs.GetJobsNeedingCredentialVerificationAsync(DateTime.UtcNow);
+            var jobsNeedingVerification = (await _unitOfWork.AdrJobs.GetJobsNeedingCredentialVerificationAsync(DateTime.UtcNow)).ToList();
+            _logger.LogInformation("Found {Count} jobs needing credential verification", jobsNeedingVerification.Count);
 
+            if (!jobsNeedingVerification.Any())
+            {
+                return result;
+            }
+
+            // Step 1: Mark all jobs as "InProgress" sequentially (for idempotency)
+            // This prevents double-billing if the process crashes after the API call
+            var jobsToProcess = new List<(int JobId, int CredentialId, DateTime? StartDate, DateTime? EndDate, int ExecutionId)>();
+            
             foreach (var job in jobsNeedingVerification)
+            {
+                try
+                {
+                    job.Status = "CredentialCheckInProgress";
+                    job.ModifiedDateTime = DateTime.UtcNow;
+                    job.ModifiedBy = "System Created";
+                    await _unitOfWork.AdrJobs.UpdateAsync(job);
+                    await _unitOfWork.SaveChangesAsync();
+
+                    var execution = await CreateExecutionAsync(job.Id, (int)AdrRequestType.AttemptLogin);
+                    jobsToProcess.Add((job.Id, job.CredentialId, job.NextRangeStartDateTime, job.NextRangeEndDateTime, execution.Id));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error marking job {JobId} as in-progress", job.Id);
+                    result.Errors++;
+                    result.ErrorMessages.Add($"Job {job.Id}: {ex.Message}");
+                }
+            }
+
+            _logger.LogInformation("Marked {Count} jobs as in-progress, starting parallel API calls", jobsToProcess.Count);
+
+            // Step 2: Call ADR API in parallel with semaphore to limit concurrency
+            var apiResults = new ConcurrentDictionary<int, (AdrApiResult Result, int ExecutionId)>();
+            using var semaphore = new SemaphoreSlim(maxParallel, maxParallel);
+            
+            var tasks = jobsToProcess.Select(async jobInfo =>
+            {
+                await semaphore.WaitAsync(cancellationToken);
+                try
+                {
+                    var apiResult = await CallAdrApiAsync(
+                        AdrRequestType.AttemptLogin,
+                        jobInfo.CredentialId,
+                        jobInfo.StartDate,
+                        jobInfo.EndDate,
+                        jobInfo.JobId,
+                        cancellationToken);
+
+                    apiResults[jobInfo.JobId] = (apiResult, jobInfo.ExecutionId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error calling ADR API for job {JobId}", jobInfo.JobId);
+                    apiResults[jobInfo.JobId] = (new AdrApiResult 
+                    { 
+                        IsSuccess = false, 
+                        IsError = true, 
+                        ErrorMessage = ex.Message 
+                    }, jobInfo.ExecutionId);
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks);
+
+            _logger.LogInformation("Completed {Count} parallel API calls, updating job statuses", apiResults.Count);
+
+            // Step 3: Update job statuses sequentially (EF DbContext is not thread-safe)
+            int processedSinceLastSave = 0;
+            int batchNumber = 1;
+
+            foreach (var jobInfo in jobsToProcess)
             {
                 try
                 {
                     result.JobsProcessed++;
 
-                    var execution = await CreateExecutionAsync(job.Id, (int)AdrRequestType.AttemptLogin);
-                    
-                    var apiResult = await CallAdrApiAsync(
-                        AdrRequestType.AttemptLogin,
-                        job.CredentialId,
-                        job.NextRangeStartDateTime,
-                        job.NextRangeEndDateTime,
-                        job.Id,
-                        cancellationToken);
+                    if (!apiResults.TryGetValue(jobInfo.JobId, out var apiResultInfo))
+                    {
+                        result.Errors++;
+                        result.ErrorMessages.Add($"Job {jobInfo.JobId}: No API result found");
+                        continue;
+                    }
 
-                    await CompleteExecutionAsync(execution, apiResult);
+                    var (apiResult, executionId) = apiResultInfo;
+
+                    // Update execution record
+                    var execution = await _unitOfWork.AdrJobExecutions.GetByIdAsync(executionId);
+                    if (execution != null)
+                    {
+                        await CompleteExecutionAsync(execution, apiResult);
+                    }
+
+                    // Update job record
+                    var job = await _unitOfWork.AdrJobs.GetByIdAsync(jobInfo.JobId);
+                    if (job == null)
+                    {
+                        result.Errors++;
+                        result.ErrorMessages.Add($"Job {jobInfo.JobId}: Job not found after API call");
+                        continue;
+                    }
 
                     if (apiResult.IsSuccess)
                     {
@@ -213,6 +335,10 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         job.ErrorMessage = apiResult.ErrorMessage;
                         job.AdrStatusId = apiResult.StatusId;
                         job.AdrStatusDescription = apiResult.StatusDescription;
+                        if (apiResult.IndexId.HasValue)
+                        {
+                            job.AdrIndexId = apiResult.IndexId;
+                        }
                         job.RetryCount++;
                         result.CredentialsFailed++;
                     }
@@ -220,16 +346,29 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.ModifiedDateTime = DateTime.UtcNow;
                     job.ModifiedBy = "System Created";
                     await _unitOfWork.AdrJobs.UpdateAsync(job);
+                    processedSinceLastSave++;
+
+                    if (processedSinceLastSave >= BatchSize)
+                    {
+                        await _unitOfWork.SaveChangesAsync();
+                        _logger.LogInformation("Credential verification batch {BatchNumber} saved: {Count} jobs processed so far", 
+                            batchNumber, result.JobsProcessed);
+                        processedSinceLastSave = 0;
+                        batchNumber++;
+                    }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error verifying credentials for job {JobId}", job.Id);
+                    _logger.LogError(ex, "Error updating job {JobId} after API call", jobInfo.JobId);
                     result.Errors++;
-                    result.ErrorMessages.Add($"Job {job.Id}: {ex.Message}");
+                    result.ErrorMessages.Add($"Job {jobInfo.JobId}: {ex.Message}");
                 }
             }
 
-            await _unitOfWork.SaveChangesAsync();
+            if (processedSinceLastSave > 0)
+            {
+                await _unitOfWork.SaveChangesAsync();
+            }
 
             _logger.LogInformation(
                 "Credential verification completed. Processed: {Processed}, Verified: {Verified}, Failed: {Failed}, Errors: {Errors}",
@@ -253,30 +392,119 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     public async Task<ScrapeResult> ProcessScrapingAsync(CancellationToken cancellationToken = default)
     {
         var result = new ScrapeResult();
+        var maxParallel = GetMaxParallelRequests();
 
         try
         {
-            _logger.LogInformation("Starting invoice scraping");
+            _logger.LogInformation("Starting invoice scraping with {MaxParallel} parallel workers", maxParallel);
 
-            var jobsReadyForScraping = await _unitOfWork.AdrJobs.GetJobsReadyForScrapingAsync(DateTime.UtcNow);
+            var jobsReadyForScraping = (await _unitOfWork.AdrJobs.GetJobsReadyForScrapingAsync(DateTime.UtcNow)).ToList();
+            _logger.LogInformation("Found {Count} jobs ready for scraping", jobsReadyForScraping.Count);
 
+            if (!jobsReadyForScraping.Any())
+            {
+                return result;
+            }
+
+            // Step 1: Mark all jobs as "InProgress" sequentially (for idempotency)
+            var jobsToProcess = new List<(int JobId, int CredentialId, DateTime? StartDate, DateTime? EndDate, int ExecutionId)>();
+            
             foreach (var job in jobsReadyForScraping)
+            {
+                try
+                {
+                    job.Status = "ScrapeInProgress";
+                    job.ModifiedDateTime = DateTime.UtcNow;
+                    job.ModifiedBy = "System Created";
+                    await _unitOfWork.AdrJobs.UpdateAsync(job);
+                    await _unitOfWork.SaveChangesAsync();
+
+                    var execution = await CreateExecutionAsync(job.Id, (int)AdrRequestType.DownloadInvoice);
+                    jobsToProcess.Add((job.Id, job.CredentialId, job.NextRangeStartDateTime, job.NextRangeEndDateTime, execution.Id));
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error marking job {JobId} as in-progress for scraping", job.Id);
+                    result.Errors++;
+                    result.ErrorMessages.Add($"Job {job.Id}: {ex.Message}");
+                }
+            }
+
+            _logger.LogInformation("Marked {Count} jobs as in-progress, starting parallel API calls", jobsToProcess.Count);
+
+            // Step 2: Call ADR API in parallel with semaphore to limit concurrency
+            var apiResults = new ConcurrentDictionary<int, (AdrApiResult Result, int ExecutionId)>();
+            using var semaphore = new SemaphoreSlim(maxParallel, maxParallel);
+            
+            var tasks = jobsToProcess.Select(async jobInfo =>
+            {
+                await semaphore.WaitAsync(cancellationToken);
+                try
+                {
+                    var apiResult = await CallAdrApiAsync(
+                        AdrRequestType.DownloadInvoice,
+                        jobInfo.CredentialId,
+                        jobInfo.StartDate,
+                        jobInfo.EndDate,
+                        jobInfo.JobId,
+                        cancellationToken);
+
+                    apiResults[jobInfo.JobId] = (apiResult, jobInfo.ExecutionId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error calling ADR API for scraping job {JobId}", jobInfo.JobId);
+                    apiResults[jobInfo.JobId] = (new AdrApiResult 
+                    { 
+                        IsSuccess = false, 
+                        IsError = true, 
+                        ErrorMessage = ex.Message 
+                    }, jobInfo.ExecutionId);
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks);
+
+            _logger.LogInformation("Completed {Count} parallel API calls, updating job statuses", apiResults.Count);
+
+            // Step 3: Update job statuses sequentially
+            int processedSinceLastSave = 0;
+            int batchNumber = 1;
+
+            foreach (var jobInfo in jobsToProcess)
             {
                 try
                 {
                     result.JobsProcessed++;
 
-                    var execution = await CreateExecutionAsync(job.Id, (int)AdrRequestType.DownloadInvoice);
+                    if (!apiResults.TryGetValue(jobInfo.JobId, out var apiResultInfo))
+                    {
+                        result.Errors++;
+                        result.ErrorMessages.Add($"Job {jobInfo.JobId}: No API result found");
+                        continue;
+                    }
 
-                    var apiResult = await CallAdrApiAsync(
-                        AdrRequestType.DownloadInvoice,
-                        job.CredentialId,
-                        job.NextRangeStartDateTime,
-                        job.NextRangeEndDateTime,
-                        job.Id,
-                        cancellationToken);
+                    var (apiResult, executionId) = apiResultInfo;
 
-                    await CompleteExecutionAsync(execution, apiResult);
+                    // Update execution record
+                    var execution = await _unitOfWork.AdrJobExecutions.GetByIdAsync(executionId);
+                    if (execution != null)
+                    {
+                        await CompleteExecutionAsync(execution, apiResult);
+                    }
+
+                    // Update job record
+                    var job = await _unitOfWork.AdrJobs.GetByIdAsync(jobInfo.JobId);
+                    if (job == null)
+                    {
+                        result.Errors++;
+                        result.ErrorMessages.Add($"Job {jobInfo.JobId}: Job not found after API call");
+                        continue;
+                    }
 
                     if (apiResult.IsSuccess)
                     {
@@ -299,6 +527,10 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         job.ErrorMessage = apiResult.ErrorMessage;
                         job.AdrStatusId = apiResult.StatusId;
                         job.AdrStatusDescription = apiResult.StatusDescription;
+                        if (apiResult.IndexId.HasValue)
+                        {
+                            job.AdrIndexId = apiResult.IndexId;
+                        }
                         job.RetryCount++;
                         result.ScrapesFailed++;
                     }
@@ -306,16 +538,29 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.ModifiedDateTime = DateTime.UtcNow;
                     job.ModifiedBy = "System Created";
                     await _unitOfWork.AdrJobs.UpdateAsync(job);
+                    processedSinceLastSave++;
+
+                    if (processedSinceLastSave >= BatchSize)
+                    {
+                        await _unitOfWork.SaveChangesAsync();
+                        _logger.LogInformation("Scraping batch {BatchNumber} saved: {Count} jobs processed so far", 
+                            batchNumber, result.JobsProcessed);
+                        processedSinceLastSave = 0;
+                        batchNumber++;
+                    }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error processing scrape for job {JobId}", job.Id);
+                    _logger.LogError(ex, "Error updating job {JobId} after scraping API call", jobInfo.JobId);
                     result.Errors++;
-                    result.ErrorMessages.Add($"Job {job.Id}: {ex.Message}");
+                    result.ErrorMessages.Add($"Job {jobInfo.JobId}: {ex.Message}");
                 }
             }
 
-            await _unitOfWork.SaveChangesAsync();
+            if (processedSinceLastSave > 0)
+            {
+                await _unitOfWork.SaveChangesAsync();
+            }
 
             _logger.LogInformation(
                 "Invoice scraping completed. Processed: {Processed}, Requested: {Requested}, Completed: {Completed}, Failed: {Failed}, Errors: {Errors}",
@@ -339,62 +584,149 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     public async Task<StatusCheckResult> CheckPendingStatusesAsync(CancellationToken cancellationToken = default)
     {
         var result = new StatusCheckResult();
+        var maxParallel = GetMaxParallelRequests();
 
         try
         {
-            _logger.LogInformation("Starting status check for pending jobs");
+            _logger.LogInformation("Starting status check with {MaxParallel} parallel workers", maxParallel);
 
-            var jobsNeedingStatusCheck = await _unitOfWork.AdrJobs.GetJobsNeedingStatusCheckAsync(
+            var jobsNeedingStatusCheck = (await _unitOfWork.AdrJobs.GetJobsNeedingStatusCheckAsync(
                 DateTime.UtcNow, 
-                DefaultFollowUpDelayDays);
+                DefaultFollowUpDelayDays)).ToList();
+            _logger.LogInformation("Found {Count} jobs needing status check", jobsNeedingStatusCheck.Count);
 
+            if (!jobsNeedingStatusCheck.Any())
+            {
+                return result;
+            }
+
+            // Step 1: Mark all jobs as "InProgress" sequentially (for idempotency)
+            var jobsToProcess = new List<int>();
+            
             foreach (var job in jobsNeedingStatusCheck)
             {
                 try
                 {
-                    result.JobsChecked++;
-
-                    var statusResult = await CheckJobStatusAsync(job.Id, cancellationToken);
-
-                    if (statusResult != null)
-                    {
-                        job.AdrStatusId = statusResult.StatusId;
-                        job.AdrStatusDescription = statusResult.StatusDescription;
-
-                        if (statusResult.IsFinal)
-                        {
-                            if (statusResult.StatusId == (int)AdrStatus.Complete)
-                            {
-                                job.Status = "Completed";
-                                job.ScrapingCompletedDateTime = DateTime.UtcNow;
-                                result.JobsCompleted++;
-                            }
-                            else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
-                            {
-                                job.Status = "NeedsReview";
-                                job.ScrapingCompletedDateTime = DateTime.UtcNow;
-                                result.JobsNeedingReview++;
-                            }
-                        }
-                        else
-                        {
-                            result.JobsStillProcessing++;
-                        }
-
-                        job.ModifiedDateTime = DateTime.UtcNow;
-                        job.ModifiedBy = "System Created";
-                        await _unitOfWork.AdrJobs.UpdateAsync(job);
-                    }
+                    job.Status = "StatusCheckInProgress";
+                    job.ModifiedDateTime = DateTime.UtcNow;
+                    job.ModifiedBy = "System Created";
+                    await _unitOfWork.AdrJobs.UpdateAsync(job);
+                    await _unitOfWork.SaveChangesAsync();
+                    jobsToProcess.Add(job.Id);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error checking status for job {JobId}", job.Id);
+                    _logger.LogError(ex, "Error marking job {JobId} as in-progress for status check", job.Id);
                     result.Errors++;
                     result.ErrorMessages.Add($"Job {job.Id}: {ex.Message}");
                 }
             }
 
-            await _unitOfWork.SaveChangesAsync();
+            _logger.LogInformation("Marked {Count} jobs as in-progress, starting parallel status checks", jobsToProcess.Count);
+
+            // Step 2: Check status in parallel with semaphore to limit concurrency
+            var statusResults = new ConcurrentDictionary<int, AdrApiResult?>();
+            using var semaphore = new SemaphoreSlim(maxParallel, maxParallel);
+            
+            var tasks = jobsToProcess.Select(async jobId =>
+            {
+                await semaphore.WaitAsync(cancellationToken);
+                try
+                {
+                    var statusResult = await CheckJobStatusAsync(jobId, cancellationToken);
+                    statusResults[jobId] = statusResult;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error checking status for job {JobId}", jobId);
+                    statusResults[jobId] = null;
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks);
+
+            _logger.LogInformation("Completed {Count} parallel status checks, updating job statuses", statusResults.Count);
+
+            // Step 3: Update job statuses sequentially
+            int processedSinceLastSave = 0;
+            int batchNumber = 1;
+
+            foreach (var jobId in jobsToProcess)
+            {
+                try
+                {
+                    result.JobsChecked++;
+
+                    if (!statusResults.TryGetValue(jobId, out var statusResult) || statusResult == null)
+                    {
+                        result.Errors++;
+                        result.ErrorMessages.Add($"Job {jobId}: No status result found");
+                        continue;
+                    }
+
+                    var job = await _unitOfWork.AdrJobs.GetByIdAsync(jobId);
+                    if (job == null)
+                    {
+                        result.Errors++;
+                        result.ErrorMessages.Add($"Job {jobId}: Job not found after status check");
+                        continue;
+                    }
+
+                    job.AdrStatusId = statusResult.StatusId;
+                    job.AdrStatusDescription = statusResult.StatusDescription;
+
+                    if (statusResult.IsFinal)
+                    {
+                        if (statusResult.StatusId == (int)AdrStatus.Complete)
+                        {
+                            job.Status = "Completed";
+                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                            result.JobsCompleted++;
+                        }
+                        else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
+                        {
+                            job.Status = "NeedsReview";
+                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                            result.JobsNeedingReview++;
+                        }
+                    }
+                    else
+                    {
+                        // Job is still processing - revert to ScrapeRequested so it gets picked up again
+                        job.Status = "ScrapeRequested";
+                        result.JobsStillProcessing++;
+                    }
+
+                    job.ModifiedDateTime = DateTime.UtcNow;
+                    job.ModifiedBy = "System Created";
+                    await _unitOfWork.AdrJobs.UpdateAsync(job);
+                    processedSinceLastSave++;
+
+                    if (processedSinceLastSave >= BatchSize)
+                    {
+                        await _unitOfWork.SaveChangesAsync();
+                        _logger.LogInformation("Status check batch {BatchNumber} saved: {Count} jobs checked so far", 
+                            batchNumber, result.JobsChecked);
+                        processedSinceLastSave = 0;
+                        batchNumber++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error updating job {JobId} after status check", jobId);
+                    result.Errors++;
+                    result.ErrorMessages.Add($"Job {jobId}: {ex.Message}");
+                }
+            }
+
+            if (processedSinceLastSave > 0)
+            {
+                await _unitOfWork.SaveChangesAsync();
+            }
 
             _logger.LogInformation(
                 "Status check completed. Checked: {Checked}, Completed: {Completed}, NeedsReview: {NeedsReview}, Processing: {Processing}, Errors: {Errors}",
@@ -492,31 +824,133 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
             if (response.IsSuccessStatusCode)
             {
-                var apiResponse = JsonSerializer.Deserialize<AdrApiResponse>(responseContent, new JsonSerializerOptions
+                if (string.IsNullOrWhiteSpace(responseContent))
                 {
-                    PropertyNameCaseInsensitive = true
-                });
-
-                if (apiResponse != null)
-                {
-                    result.StatusId = apiResponse.StatusId;
-                    result.StatusDescription = apiResponse.StatusDescription;
-                    result.IndexId = apiResponse.IndexId;
+                    _logger.LogWarning("ADR API returned empty response for job {JobId}", jobId);
                     result.IsSuccess = true;
-                    result.IsError = apiResponse.IsError;
-                    result.IsFinal = apiResponse.IsFinal;
+                    result.IsError = false;
+                    result.StatusDescription = "ADR API returned no content.";
+                }
+                else
+                {
+                    try
+                    {
+                        var trimmed = responseContent.TrimStart();
+                        if (trimmed.StartsWith("{"))
+                        {
+                            var apiResponse = JsonSerializer.Deserialize<AdrApiResponse>(responseContent, new JsonSerializerOptions
+                            {
+                                PropertyNameCaseInsensitive = true
+                            });
+
+                            if (apiResponse != null)
+                            {
+                                result.StatusId = apiResponse.StatusId;
+                                result.StatusDescription = apiResponse.StatusDescription;
+                                result.IndexId = apiResponse.IndexId;
+                                result.IsSuccess = true;
+                                result.IsError = apiResponse.IsError;
+                                result.IsFinal = apiResponse.IsFinal;
+                            }
+                            else
+                            {
+                                result.IsSuccess = false;
+                                result.IsError = true;
+                                result.ErrorMessage = "ADR API returned an empty JSON object.";
+                            }
+                        }
+                        else if (trimmed.StartsWith("["))
+                        {
+                            var list = JsonSerializer.Deserialize<List<AdrApiResponse>>(responseContent, new JsonSerializerOptions
+                            {
+                                PropertyNameCaseInsensitive = true
+                            });
+                            var apiResponse = list?.FirstOrDefault();
+                            if (apiResponse != null)
+                            {
+                                result.StatusId = apiResponse.StatusId;
+                                result.StatusDescription = apiResponse.StatusDescription;
+                                result.IndexId = apiResponse.IndexId;
+                                result.IsSuccess = true;
+                                result.IsError = apiResponse.IsError;
+                                result.IsFinal = apiResponse.IsFinal;
+                                _logger.LogInformation("ADR API returned array response for job {JobId}, using first element", jobId);
+                            }
+                            else
+                            {
+                                result.IsSuccess = false;
+                                result.IsError = true;
+                                result.ErrorMessage = "ADR API returned an empty JSON array.";
+                            }
+                        }
+                        else if (long.TryParse(trimmed, out var indexId))
+                        {
+                            // API returned just a number - this is the IndexId
+                            result.IndexId = indexId;
+                            result.IsSuccess = true;
+                            result.IsError = false;
+                            result.StatusDescription = "Request submitted successfully";
+                            _logger.LogInformation("ADR API returned IndexId {IndexId} for job {JobId}", indexId, jobId);
+                        }
+                        else
+                        {
+                            _logger.LogWarning("ADR API returned unexpected content for job {JobId}: {Response}", 
+                                jobId, TruncateResponse(responseContent));
+                            result.IsSuccess = false;
+                            result.IsError = true;
+                            result.ErrorMessage = $"ADR API returned unexpected content: {TruncateResponse(responseContent)}";
+                        }
+                    }
+                    catch (JsonException jsonEx)
+                    {
+                        _logger.LogError(jsonEx, "Error deserializing ADR API response for job {JobId}: {Response}", 
+                            jobId, TruncateResponse(responseContent));
+                        result.IsSuccess = false;
+                        result.IsError = true;
+                        result.ErrorMessage = $"Error deserializing ADR API response: {jsonEx.Message}. Raw: {TruncateResponse(responseContent)}";
+                    }
                 }
             }
             else
             {
+                // 4XX errors may still contain an IndexId if the record was created
+                // but credential verification or enqueuing failed
                 result.IsSuccess = false;
                 result.IsError = true;
-                result.ErrorMessage = $"API returned {response.StatusCode}: {responseContent}";
+                result.ErrorMessage = $"API returned {response.StatusCode}: {TruncateResponse(responseContent)}";
+                
+                // Try to extract IndexId from error response if present
+                if (!string.IsNullOrWhiteSpace(responseContent))
+                {
+                    try
+                    {
+                        // Try to parse as JSON object with IndexId
+                        var trimmed = responseContent.TrimStart();
+                        if (trimmed.StartsWith("{"))
+                        {
+                            using var doc = JsonDocument.Parse(responseContent);
+                            if (doc.RootElement.TryGetProperty("indexId", out var indexIdProp) ||
+                                doc.RootElement.TryGetProperty("IndexId", out indexIdProp))
+                            {
+                                if (indexIdProp.TryGetInt64(out var indexId))
+                                {
+                                    result.IndexId = indexId;
+                                    _logger.LogWarning("ADR API returned error with IndexId {IndexId} for job {JobId}: {Error}", 
+                                        indexId, jobId, result.ErrorMessage);
+                                }
+                            }
+                        }
+                    }
+                    catch (JsonException)
+                    {
+                        // Ignore JSON parsing errors for error responses
+                    }
+                }
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error calling ADR API");
+            _logger.LogError(ex, "Error calling ADR API for job {JobId}", jobId);
             result.IsSuccess = false;
             result.IsError = true;
             result.ErrorMessage = ex.Message;
@@ -570,6 +1004,13 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             _logger.LogError(ex, "Error checking job status for job {JobId}", jobId);
             return null;
         }
+    }
+
+    private static string TruncateResponse(string? response, int maxLength = 500)
+    {
+        if (string.IsNullOrEmpty(response))
+            return string.Empty;
+        return response.Length <= maxLength ? response : response.Substring(0, maxLength) + "...";
     }
 
     #endregion

@@ -74,6 +74,34 @@ public class AdrService : IAdrService
         return result ?? new AdrAccountStats();
     }
 
+    public async Task<byte[]> DownloadAccountsExportAsync(
+        int? clientId = null,
+        string? searchTerm = null,
+        string? nextRunStatus = null,
+        string? historicalBillingStatus = null,
+        string format = "excel")
+    {
+        var client = CreateClient();
+        var queryParams = new List<string> { $"format={format}" };
+
+        if (clientId.HasValue)
+            queryParams.Add($"clientId={clientId.Value}");
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+            queryParams.Add($"searchTerm={Uri.EscapeDataString(searchTerm)}");
+
+        if (!string.IsNullOrWhiteSpace(nextRunStatus))
+            queryParams.Add($"nextRunStatus={Uri.EscapeDataString(nextRunStatus)}");
+
+        if (!string.IsNullOrWhiteSpace(historicalBillingStatus))
+            queryParams.Add($"historicalBillingStatus={Uri.EscapeDataString(historicalBillingStatus)}");
+
+        var query = "?" + string.Join("&", queryParams);
+        var response = await client.GetAsync($"adr/accounts/export{query}");
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsByteArrayAsync();
+    }
+
     #endregion
 
     #region Job Operations
@@ -84,7 +112,8 @@ public class AdrService : IAdrService
             int? adrAccountId = null,
             string? status = null,
             string? vendorCode = null,
-            string? vmAccountNumber = null)
+            string? vmAccountNumber = null,
+            bool latestPerAccount = false)
         {
             var client = CreateClient();
             var queryParams = new List<string>
@@ -104,6 +133,9 @@ public class AdrService : IAdrService
 
             if (!string.IsNullOrWhiteSpace(vmAccountNumber))
                 queryParams.Add($"vmAccountNumber={Uri.EscapeDataString(vmAccountNumber)}");
+
+            if (latestPerAccount)
+                queryParams.Add("latestPerAccount=true");
 
             var query = "?" + string.Join("&", queryParams);
             var result = await client.GetFromJsonAsync<PagedResult<AdrJob>>($"adr/jobs{query}");
@@ -135,6 +167,34 @@ public class AdrService : IAdrService
         var client = CreateClient();
         var result = await client.GetFromJsonAsync<AdrJobStats>($"adr/jobs/stats");
         return result ?? new AdrJobStats();
+    }
+
+    public async Task<byte[]> DownloadJobsExportAsync(
+        string? status = null,
+        string? vendorCode = null,
+        string? vmAccountNumber = null,
+        bool latestPerAccount = false,
+        string format = "excel")
+    {
+        var client = CreateClient();
+        var queryParams = new List<string> { $"format={format}" };
+
+        if (!string.IsNullOrWhiteSpace(status))
+            queryParams.Add($"status={Uri.EscapeDataString(status)}");
+
+        if (!string.IsNullOrWhiteSpace(vendorCode))
+            queryParams.Add($"vendorCode={Uri.EscapeDataString(vendorCode)}");
+
+        if (!string.IsNullOrWhiteSpace(vmAccountNumber))
+            queryParams.Add($"vmAccountNumber={Uri.EscapeDataString(vmAccountNumber)}");
+
+        if (latestPerAccount)
+            queryParams.Add("latestPerAccount=true");
+
+        var query = "?" + string.Join("&", queryParams);
+        var response = await client.GetAsync($"adr/jobs/export{query}");
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsByteArrayAsync();
     }
 
     #endregion
@@ -173,6 +233,28 @@ public class AdrService : IAdrService
         var client = CreateClient();
         var result = await client.GetFromJsonAsync<List<AdrJobExecution>>($"adr/executions/by-job/{adrJobId}");
         return result ?? new List<AdrJobExecution>();
+    }
+
+    #endregion
+
+    #region Job Refire Operations
+
+    public async Task<RefireJobResult> RefireJobAsync(int jobId)
+    {
+        var client = CreateClient();
+        var response = await client.PostAsync($"adr/jobs/{jobId}/refire", null);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<RefireJobResult>();
+        return result ?? new RefireJobResult { Message = "Job refired", JobId = jobId };
+    }
+
+    public async Task<RefireJobsBulkResult> RefireJobsBulkAsync(List<int> jobIds)
+    {
+        var client = CreateClient();
+        var response = await client.PostAsJsonAsync("adr/jobs/refire-bulk", new { JobIds = jobIds });
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<RefireJobsBulkResult>();
+        return result ?? new RefireJobsBulkResult { Message = "Jobs refired", RefiredCount = jobIds.Count, TotalRequested = jobIds.Count };
     }
 
     #endregion

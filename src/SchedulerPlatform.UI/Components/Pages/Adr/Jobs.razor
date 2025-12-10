@@ -5,6 +5,7 @@
 @inject NavigationManager Navigation
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
 
 <PageTitle>ADR Jobs</PageTitle>
 
@@ -44,34 +45,70 @@
                     <MudSelectItem Value="@("NeedsReview")">Needs Review</MudSelectItem>
                 </MudSelect>
             </MudItem>
-            <MudItem xs="12" md="3" Class="d-flex align-center justify-end gap-2">
+            <MudItem xs="12" md="2" Class="d-flex align-center">
+                <MudSwitch @bind-Value="_showLatestPerAccount" Color="Color.Primary" Label="Latest per Account" />
+            </MudItem>
+            <MudItem xs="12" md="4" Class="d-flex align-center justify-end gap-2">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters" StartIcon="@Icons.Material.Filled.FilterAlt">
                     Apply
                 </MudButton>
                 <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ClearFilters" StartIcon="@Icons.Material.Filled.Clear">
                     Clear
                 </MudButton>
+                @if (_selectedJobs.Any())
+                {
+                    @if (_isRefiring)
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Warning" Disabled="true">
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            Refiring...
+                        </MudButton>
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="RefireSelectedJobs" StartIcon="@Icons.Material.Filled.Replay">
+                            Refire Selected (@_selectedJobs.Count)
+                        </MudButton>
+                    }
+                }
+                @if (_isExporting)
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="true">
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        Exporting...
+                    </MudButton>
+                }
+                else
+                {
+                    <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+                        <ActivatorContent>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download">
+                                Export
+                            </MudButton>
+                        </ActivatorContent>
+                        <ChildContent>
+                            <MudMenuItem OnClick="@(() => ExportJobs("excel"))">Excel</MudMenuItem>
+                            <MudMenuItem OnClick="@(() => ExportJobs("csv"))">CSV</MudMenuItem>
+                        </ChildContent>
+                    </MudMenu>
+                }
             </MudItem>
         </MudGrid>
 
-    @if (_loading)
-    {
-        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
-    }
-    else
-    {
         <MudTable T="AdrJob" ServerData="@ServerReload" 
-                  @ref="_table" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
+                  @ref="_table" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true"
+                  Loading="@_loading" LoadingProgressColor="Color.Primary"
+                  MultiSelection="true" @bind-SelectedItems="_selectedJobs">
                         <HeaderContent>
-                            <MudTh>Job ID</MudTh>
-                            <MudTh>Vendor</MudTh>
-                            <MudTh>Account #</MudTh>
-                            <MudTh>Billing Period</MudTh>
-                            <MudTh>Period Type</MudTh>
-                            <MudTh>Next Run</MudTh>
-                            <MudTh>Status</MudTh>
-                            <MudTh>ADR Status</MudTh>
-                            <MudTh>Retry Count</MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="Id" T="AdrJob" InitialDirection="SortDirection.Descending">Job ID</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="VendorCode" T="AdrJob">Vendor</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="VMAccountNumber" T="AdrJob">Account #</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="BillingPeriodStartDateTime" T="AdrJob">Billing Period</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="PeriodType" T="AdrJob">Period Type</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="NextRunDateTime" T="AdrJob">Next Run</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="Status" T="AdrJob">Status</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="AdrStatusId" T="AdrJob">ADR Status</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="RetryCount" T="AdrJob">Retry Count</MudTableSortLabel></MudTh>
                             <MudTh>Actions</MudTh>
                         </HeaderContent>
                         <RowTemplate>
@@ -135,9 +172,12 @@
                                 <MudTd DataLabel="Actions">
                                     <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
                                         <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewJobDetails(context)">View Details</MudMenuItem>
-                                        <MudMenuItem Icon="@Icons.Material.Filled.History" OnClick="() => ViewExecutions(context.Id)">View Executions</MudMenuItem>
-                                        <MudMenuItem Icon="@Icons.Material.Filled.AccountBalance" OnClick="() => ViewAccount(context.AdrAccountId)">View Account</MudMenuItem>
-                                        <MudMenuItem Icon="@Icons.Material.Filled.Schedule" OnClick="() => ViewSchedule(context)">View Schedule</MudMenuItem>
+                                        @if (_showLatestPerAccount)
+                                        {
+                                            <MudMenuItem Icon="@Icons.Material.Filled.List" OnClick="() => ViewJobHistory(context)">View Job History</MudMenuItem>
+                                        }
+                                        <MudMenuItem Icon="@Icons.Material.Filled.AccountBalance" OnClick="() => ViewAccount(context)">View Account</MudMenuItem>
+                                        <MudMenuItem Icon="@Icons.Material.Filled.Replay" OnClick="() => RefireJob(context)">Refire Job</MudMenuItem>
                                     </MudMenu>
                                 </MudTd>
             </RowTemplate>
@@ -161,18 +201,21 @@
                 <MudTablePager PageSizeOptions="new int[] { 20, 50, 100 }" />
             </PagerContent>
         </MudTable>
-    }
 </MudPaper>
 
 @code {
     private MudTable<AdrJob> _table = null!;
     private bool _loading = true;
+    private bool _isExporting = false;
+    private bool _isRefiring = false;
     private string? _searchVendorCode;
     private string? _searchAccountNumber;
     private string _selectedStatus = "";
     private string? _filterVendorCode;
     private string? _filterAccountNumber;
     private string? _filterStatus;
+    private bool _showLatestPerAccount = true;
+    private HashSet<AdrJob> _selectedJobs = new();
 
     [Parameter]
     [SupplyParameterFromQuery(Name = "vendorCode")]
@@ -211,11 +254,15 @@
                 null, // adrAccountId - no longer used for filtering
                 _filterStatus,
                 _filterVendorCode,
-                _filterAccountNumber);
+                _filterAccountNumber,
+                _showLatestPerAccount);
+
+            // Apply sorting
+            var sortedItems = ApplySorting(result.Items, state.SortLabel, state.SortDirection);
 
             return new TableData<AdrJob>
             {
-                Items = result.Items,
+                Items = sortedItems,
                 TotalItems = result.TotalCount
             };
         }
@@ -228,6 +275,49 @@
         {
             _loading = false;
         }
+    }
+
+    private List<AdrJob> ApplySorting(List<AdrJob> items, string? sortLabel, SortDirection sortDirection)
+    {
+        if (string.IsNullOrEmpty(sortLabel))
+        {
+            // Default sort: Job ID descending (most recent first)
+            return items.OrderByDescending(j => j.Id).ToList();
+        }
+
+        var isDescending = sortDirection == SortDirection.Descending;
+
+        return sortLabel switch
+        {
+            "Id" => isDescending 
+                ? items.OrderByDescending(j => j.Id).ToList() 
+                : items.OrderBy(j => j.Id).ToList(),
+            "VendorCode" => isDescending 
+                ? items.OrderByDescending(j => j.VendorCode ?? "").ToList() 
+                : items.OrderBy(j => j.VendorCode ?? "").ToList(),
+            "VMAccountNumber" => isDescending 
+                ? items.OrderByDescending(j => j.VMAccountNumber ?? "").ToList() 
+                : items.OrderBy(j => j.VMAccountNumber ?? "").ToList(),
+            "BillingPeriodStartDateTime" => isDescending 
+                ? items.OrderByDescending(j => j.BillingPeriodStartDateTime).ToList() 
+                : items.OrderBy(j => j.BillingPeriodStartDateTime).ToList(),
+            "PeriodType" => isDescending 
+                ? items.OrderByDescending(j => j.PeriodType ?? "").ToList() 
+                : items.OrderBy(j => j.PeriodType ?? "").ToList(),
+            "NextRunDateTime" => isDescending 
+                ? items.OrderByDescending(j => j.NextRunDateTime ?? DateTime.MinValue).ToList() 
+                : items.OrderBy(j => j.NextRunDateTime ?? DateTime.MaxValue).ToList(),
+            "Status" => isDescending 
+                ? items.OrderByDescending(j => j.Status ?? "").ToList() 
+                : items.OrderBy(j => j.Status ?? "").ToList(),
+            "AdrStatusId" => isDescending 
+                ? items.OrderByDescending(j => j.AdrStatusId ?? 0).ToList() 
+                : items.OrderBy(j => j.AdrStatusId ?? int.MaxValue).ToList(),
+            "RetryCount" => isDescending 
+                ? items.OrderByDescending(j => j.RetryCount).ToList() 
+                : items.OrderBy(j => j.RetryCount).ToList(),
+            _ => items.OrderByDescending(j => j.Id).ToList()
+        };
     }
 
     private async Task ApplyFilters()
@@ -280,20 +370,117 @@
         await DialogService.ShowAsync<JobDetailsDialog>("Job Details", parameters, options);
     }
 
-    private void ViewExecutions(int jobId)
+    private void ViewAccount(AdrJob job)
     {
-        Navigation.NavigateTo($"/adr/executions?jobId={jobId}");
+        // Navigate to Accounts page with account number filter (searchTerm searches by account number)
+        Navigation.NavigateTo($"/adr/accounts?accountNumber={Uri.EscapeDataString(job.VMAccountNumber ?? "")}");
     }
 
-    private void ViewAccount(int accountId)
+    private void ViewJobHistory(AdrJob job)
     {
-        Navigation.NavigateTo($"/adr/accounts?accountId={accountId}");
+        // Turn off "Latest per Account" mode and filter by the specific account's account number
+        // VendorCode filter is only applied if it's not null/empty to avoid filtering issues
+        _showLatestPerAccount = false;
+        _searchAccountNumber = job.VMAccountNumber;
+        _filterAccountNumber = job.VMAccountNumber;
+        
+        if (!string.IsNullOrWhiteSpace(job.VendorCode))
+        {
+            _searchVendorCode = job.VendorCode;
+            _filterVendorCode = job.VendorCode;
+        }
+        else
+        {
+            _searchVendorCode = null;
+            _filterVendorCode = null;
+        }
+        
+        _table.ReloadServerData();
     }
 
-    private void ViewSchedule(AdrJob job)
+    private async Task ExportJobs(string format)
     {
-        // Navigate to Schedules page with search filter using VendorCode_VMAccountNumber_ naming convention
-        var schedulePrefix = $"{job.VendorCode}_{job.VMAccountNumber}_";
-        Navigation.NavigateTo($"/schedules?search={Uri.EscapeDataString(schedulePrefix)}");
+        _isExporting = true;
+        StateHasChanged();
+        try
+        {
+            var bytes = await AdrService.DownloadJobsExportAsync(
+                _filterStatus,
+                _filterVendorCode,
+                _filterAccountNumber,
+                _showLatestPerAccount,
+                format);
+
+            var contentType = format.Equals("excel", StringComparison.OrdinalIgnoreCase)
+                ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                : "text/csv";
+
+            var filename = $"adr_jobs_{DateTime.UtcNow:yyyyMMddHHmmss}.{(format.Equals("excel", StringComparison.OrdinalIgnoreCase) ? "xlsx" : "csv")}";
+
+            var base64 = Convert.ToBase64String(bytes);
+            await JSRuntime.InvokeVoidAsync("downloadFile", filename, contentType, base64);
+
+            Snackbar.Add($"Export downloaded: {filename}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Export failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isExporting = false;
+        }
+    }
+
+    private async Task RefireJob(AdrJob job)
+    {
+        try
+        {
+            var result = await AdrService.RefireJobAsync(job.Id);
+            Snackbar.Add($"Job {job.Id} refired successfully. It will be picked up by the next orchestration run.", Severity.Success);
+            await _table.ReloadServerData();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to refire job: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task RefireSelectedJobs()
+    {
+        if (!_selectedJobs.Any())
+        {
+            Snackbar.Add("No jobs selected", Severity.Warning);
+            return;
+        }
+
+        _isRefiring = true;
+        StateHasChanged();
+        try
+        {
+            var jobIds = _selectedJobs.Select(j => j.Id).ToList();
+            var result = await AdrService.RefireJobsBulkAsync(jobIds);
+            
+            Snackbar.Add($"{result.RefiredCount} job(s) refired successfully. They will be picked up by the next orchestration run.", Severity.Success);
+            
+            if (result.Errors != null && result.Errors.Any())
+            {
+                foreach (var error in result.Errors)
+                {
+                    Snackbar.Add(error, Severity.Warning);
+                }
+            }
+            
+            _selectedJobs.Clear();
+            await _table.ReloadServerData();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to refire jobs: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isRefiring = false;
+        }
     }
 }

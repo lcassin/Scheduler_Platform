@@ -30,6 +30,8 @@ public class Schedule
     
     public bool IsEnabled { get; set; }
     
+    public bool IsSystemSchedule { get; set; }
+    
     public int MaxRetries { get; set; } = 3;
     
     public int RetryDelayMinutes { get; set; } = 5;

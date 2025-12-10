@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Hosting;
 using Quartz;
@@ -23,8 +24,9 @@ public class ApiCallJob : IJob
     private readonly IEmailService _emailService;
     private readonly ISchedulerService _schedulerService;
     private readonly IHostEnvironment _environment;
+    private readonly IConfiguration _configuration;
 
-    public ApiCallJob(ILogger<ApiCallJob> logger, IUnitOfWork unitOfWork, IHttpClientFactory httpClientFactory, IEmailService emailService, ISchedulerService schedulerService, IHostEnvironment environment)
+    public ApiCallJob(ILogger<ApiCallJob> logger, IUnitOfWork unitOfWork, IHttpClientFactory httpClientFactory, IEmailService emailService, ISchedulerService schedulerService, IHostEnvironment environment, IConfiguration configuration)
     {
         _logger = logger;
         _unitOfWork = unitOfWork;
@@ -32,6 +34,7 @@ public class ApiCallJob : IJob
         _emailService = emailService;
         _schedulerService = schedulerService;
         _environment = environment;
+        _configuration = configuration;
     }
 
     public async Task Execute(IJobExecutionContext context)
@@ -88,15 +91,23 @@ public class ApiCallJob : IJob
             
             using var request = new HttpRequestMessage(new HttpMethod(jobConfig.Method ?? "GET"), jobConfig.Url);
             
-            if (jobConfig.Headers != null)
-            {
-                foreach (var header in jobConfig.Headers)
-                {
-                    request.Headers.Add(header.Key, header.Value);
-                }
-            }
+                        if (jobConfig.Headers != null)
+                        {
+                            foreach (var header in jobConfig.Headers)
+                            {
+                                request.Headers.Add(header.Key, header.Value);
+                            }
+                        }
             
-            if (!string.IsNullOrEmpty(jobConfig.AuthorizationType) && !string.IsNullOrEmpty(jobConfig.AuthorizationValue))
+                        // Add internal scheduler API key for authentication to internal endpoints
+                        var schedulerApiKey = _configuration["Scheduler:InternalApiKey"];
+                        if (!string.IsNullOrEmpty(schedulerApiKey))
+                        {
+                            request.Headers.Add("X-Scheduler-Api-Key", schedulerApiKey);
+                            _logger.LogDebug("Added scheduler API key header for internal authentication");
+                        }
+            
+                        if (!string.IsNullOrEmpty(jobConfig.AuthorizationType) && !string.IsNullOrEmpty(jobConfig.AuthorizationValue))
             {
                 request.Headers.Authorization = new AuthenticationHeaderValue(
                     jobConfig.AuthorizationType, jobConfig.AuthorizationValue);
