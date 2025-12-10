@@ -445,7 +445,7 @@
 		}
 	}
 
-	private IList<Schedule> ApplySorting(IList<Schedule> items, string? sortLabel, SortDirection sortDirection)
+	private List<Schedule> ApplySorting(IList<Schedule> items, string? sortLabel, SortDirection sortDirection)
 	{
 		if (string.IsNullOrEmpty(sortLabel))
 		{
