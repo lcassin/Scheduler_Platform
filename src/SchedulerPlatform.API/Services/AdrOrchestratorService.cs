@@ -233,6 +233,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             // Step 1: Mark all jobs as "InProgress" sequentially (for idempotency)
             // This prevents double-billing if the process crashes after the API call
             var jobsToProcess = new List<(int JobId, int CredentialId, DateTime? StartDate, DateTime? EndDate, int ExecutionId)>();
+            int markedCount = 0;
             
             foreach (var job in jobsNeedingVerification)
             {
@@ -246,12 +247,20 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
                     var execution = await CreateExecutionAsync(job.Id, (int)AdrRequestType.AttemptLogin);
                     jobsToProcess.Add((job.Id, job.CredentialId, job.NextRangeStartDateTime, job.NextRangeEndDateTime, execution.Id));
+                    
+                    // Report progress during setup phase (negative progress indicates setup)
+                    markedCount++;
+                    if (markedCount % 100 == 0 || markedCount == jobsNeedingVerification.Count)
+                    {
+                        _logger.LogInformation("Marking jobs as in-progress: {Marked}/{Total}", markedCount, jobsNeedingVerification.Count);
+                    }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error marking job {JobId} as in-progress", job.Id);
                     result.Errors++;
                     result.ErrorMessages.Add($"Job {job.Id}: {ex.Message}");
+                    markedCount++;
                 }
             }
 
@@ -278,9 +287,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
                     apiResults[jobInfo.JobId] = (apiResult, jobInfo.ExecutionId);
                     
-                    // Log and report progress every 100 completions or at the end
+                    // Log and report progress every 50 completions or at the end
                     var count = Interlocked.Increment(ref completedApiCalls);
-                    if (count % 100 == 0 || count == totalApiCalls)
+                    if (count % 50 == 0 || count == totalApiCalls)
                     {
                         progressCallback?.Invoke(count, totalApiCalls);
                     }
@@ -302,7 +311,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     }, jobInfo.ExecutionId);
                     
                     var count = Interlocked.Increment(ref completedApiCalls);
-                    if (count % 100 == 0 || count == totalApiCalls)
+                    if (count % 50 == 0 || count == totalApiCalls)
                     {
                         progressCallback?.Invoke(count, totalApiCalls);
                     }
@@ -488,9 +497,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
                     apiResults[jobInfo.JobId] = (apiResult, jobInfo.ExecutionId);
                     
-                    // Log and report progress every 100 completions or at the end
+                    // Log and report progress every 50 completions or at the end
                     var count = Interlocked.Increment(ref completedApiCalls);
-                    if (count % 100 == 0 || count == totalApiCalls)
+                    if (count % 50 == 0 || count == totalApiCalls)
                     {
                         progressCallback?.Invoke(count, totalApiCalls);
                     }
@@ -512,7 +521,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     }, jobInfo.ExecutionId);
                     
                     var count = Interlocked.Increment(ref completedApiCalls);
-                    if (count % 100 == 0 || count == totalApiCalls)
+                    if (count % 50 == 0 || count == totalApiCalls)
                     {
                         progressCallback?.Invoke(count, totalApiCalls);
                     }
@@ -697,9 +706,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     var statusResult = await CheckJobStatusAsync(jobId, cancellationToken);
                     statusResults[jobId] = statusResult;
                     
-                    // Log and report progress every 100 completions or at the end
+                    // Log and report progress every 50 completions or at the end
                     var count = Interlocked.Increment(ref completedStatusChecks);
-                    if (count % 100 == 0 || count == totalStatusChecks)
+                    if (count % 50 == 0 || count == totalStatusChecks)
                     {
                         progressCallback?.Invoke(count, totalStatusChecks);
                     }
@@ -715,7 +724,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     _logger.LogError(ex, "Error checking status for job {JobId}", jobId);
                     statusResults[jobId] = null;
                     var count = Interlocked.Increment(ref completedStatusChecks);
-                    if (count % 100 == 0 || count == totalStatusChecks)
+                    if (count % 50 == 0 || count == totalStatusChecks)
                     {
                         progressCallback?.Invoke(count, totalStatusChecks);
                     }

@@ -239,10 +239,21 @@ public class AdrBackgroundOrchestrationService : BackgroundService
             // Step 1: Sync accounts
             if (request.RunSync)
             {
-                _queue.UpdateStatus(request.RequestId, s => s.CurrentStep = "Syncing accounts");
+                _queue.UpdateStatus(request.RequestId, s => 
+                {
+                    s.CurrentStep = "Syncing accounts";
+                    s.CurrentStepProgress = 0;
+                    s.CurrentStepTotal = 0;
+                });
                 _logger.LogInformation("Request {RequestId}: Starting account sync", request.RequestId);
                 
-                var syncResult = await syncService.SyncAccountsAsync(stoppingToken);
+                var syncResult = await syncService.SyncAccountsAsync(
+                    (progress, total) => _queue.UpdateStatus(request.RequestId, s => 
+                    {
+                        s.CurrentStepProgress = progress;
+                        s.CurrentStepTotal = total;
+                    }),
+                    stoppingToken);
                 _queue.UpdateStatus(request.RequestId, s => s.SyncResult = syncResult);
                 
                 _logger.LogInformation(
