@@ -246,6 +246,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         job.ErrorMessage = apiResult.ErrorMessage;
                         job.AdrStatusId = apiResult.StatusId;
                         job.AdrStatusDescription = apiResult.StatusDescription;
+                        // Save IndexId even on failure - record may have been created
+                        if (apiResult.IndexId.HasValue)
+                        {
+                            job.AdrIndexId = apiResult.IndexId;
+                        }
                         job.RetryCount++;
                         result.CredentialsFailed++;
                     }
@@ -358,6 +363,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         job.ErrorMessage = apiResult.ErrorMessage;
                         job.AdrStatusId = apiResult.StatusId;
                         job.AdrStatusDescription = apiResult.StatusDescription;
+                        // Save IndexId even on failure - record may have been created
+                        if (apiResult.IndexId.HasValue)
+                        {
+                            job.AdrIndexId = apiResult.IndexId;
+                        }
                         job.RetryCount++;
                         result.ScrapesFailed++;
                     }
