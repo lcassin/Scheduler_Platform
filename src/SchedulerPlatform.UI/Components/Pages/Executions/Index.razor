@@ -66,13 +66,14 @@
     }
     else if (_executions.Any())
     {
-        <MudTable Items="@_executions" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true" Class="mt-4">
+        <MudTable Items="@_executions" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true" Class="mt-4"
+                  SortLabel="@_sortLabel" SortLabelChanged="OnSortChanged">
             <HeaderContent>
-                <MudTh>Schedule</MudTh>
-                <MudTh>Started</MudTh>
-                <MudTh>Completed</MudTh>
+                <MudTh><MudTableSortLabel SortLabel="ScheduleName" T="JobExecution">Schedule</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="StartDateTime" T="JobExecution" InitialDirection="SortDirection.Descending">Started</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="EndDateTime" T="JobExecution">Completed</MudTableSortLabel></MudTh>
                 <MudTh>Duration</MudTh>
-                <MudTh>Status</MudTh>
+                <MudTh><MudTableSortLabel SortLabel="Status" T="JobExecution">Status</MudTableSortLabel></MudTh>
                 <MudTh>Details</MudTh>
                 <MudTh>Actions</MudTh>
             </HeaderContent>
@@ -159,6 +160,10 @@
     private int _totalPages = 1;
     private int PageSize => ScheduleIdParam.HasValue ? 100 : int.MaxValue;
     
+    // Sorting state
+    private string _sortLabel = "StartDateTime";
+    private SortDirection _sortDirection = SortDirection.Descending;
+    
     // Cached timezone info for display
     private string _userTimeZoneAbbr = "";
     private string _userTimeZoneId = "";
@@ -187,7 +192,7 @@
                 pageNumber: _currentPage,
                 pageSize: PageSize);
             
-            _executions = result.Items;
+            _executions = ApplySorting(result.Items);
             _totalPages = (int)Math.Ceiling((double)result.TotalCount / PageSize);
         }
         catch (Exception ex)
@@ -198,6 +203,50 @@
         {
             _loading = false;
         }
+    }
+
+    private async Task OnSortChanged(string sortLabel)
+    {
+        if (_sortLabel == sortLabel)
+        {
+            _sortDirection = _sortDirection == SortDirection.Ascending 
+                ? SortDirection.Descending 
+                : SortDirection.Ascending;
+        }
+        else
+        {
+            _sortLabel = sortLabel;
+            _sortDirection = SortDirection.Ascending;
+        }
+        await LoadExecutions();
+    }
+
+    private List<JobExecution> ApplySorting(List<JobExecution> items)
+    {
+        if (string.IsNullOrEmpty(_sortLabel))
+        {
+            // Default sort: Started descending (most recent first)
+            return items.OrderByDescending(e => e.StartDateTime).ToList();
+        }
+
+        var isDescending = _sortDirection == SortDirection.Descending;
+
+        return _sortLabel switch
+        {
+            "ScheduleName" => isDescending 
+                ? items.OrderByDescending(e => e.ScheduleName).ToList() 
+                : items.OrderBy(e => e.ScheduleName).ToList(),
+            "StartDateTime" => isDescending 
+                ? items.OrderByDescending(e => e.StartDateTime).ToList() 
+                : items.OrderBy(e => e.StartDateTime).ToList(),
+            "EndDateTime" => isDescending 
+                ? items.OrderByDescending(e => e.EndDateTime ?? DateTime.MinValue).ToList() 
+                : items.OrderBy(e => e.EndDateTime ?? DateTime.MaxValue).ToList(),
+            "Status" => isDescending 
+                ? items.OrderByDescending(e => e.Status).ToList() 
+                : items.OrderBy(e => e.Status).ToList(),
+            _ => items.OrderByDescending(e => e.StartDateTime).ToList()
+        };
     }
 
     private async Task OnFilterChanged(string newStatus)

@@ -137,12 +137,12 @@
                 <MudTh Style="width: 50px;">
                     <MudCheckBox T="bool" Value="@_selectAll" ValueChanged="@((bool value) => SelectAllVisible(value))" />
                 </MudTh>
-                <MudTh>Name</MudTh>
-                <MudTh>Type</MudTh>
-                <MudTh>Frequency</MudTh>
-                <MudTh>Next Run</MudTh>
-                <MudTh>Last Run Status</MudTh>
-                <MudTh>Status</MudTh>
+                <MudTh><MudTableSortLabel SortLabel="Name" T="Schedule">Name</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="JobType" T="Schedule">Type</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="Frequency" T="Schedule">Frequency</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="NextRunDateTime" T="Schedule" InitialDirection="SortDirection.Ascending">Next Run</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="LastRunDateTime" T="Schedule">Last Run Status</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="IsEnabled" T="Schedule">Status</MudTableSortLabel></MudTh>
                 <MudTh>Actions</MudTh>
             </HeaderContent>
             <RowTemplate>
@@ -421,6 +421,9 @@
 				};
 			}
 
+			// Apply sorting
+			items = ApplySorting(items, state.SortLabel, state.SortDirection);
+
 			// Store current page items for select all functionality
 			_currentPageItems = items.ToList();
 			_selectAll = _currentPageItems.Any() && _currentPageItems.All(s => _selectedIds.Contains(s.Id));
@@ -440,6 +443,40 @@
 		{
 			_loading = false;
 		}
+	}
+
+	private IList<Schedule> ApplySorting(IList<Schedule> items, string? sortLabel, SortDirection sortDirection)
+	{
+		if (string.IsNullOrEmpty(sortLabel))
+		{
+			// Default sort: Next Run ascending (soonest first)
+			return items.OrderBy(s => s.NextRunDateTime ?? DateTime.MaxValue).ToList();
+		}
+
+		var isDescending = sortDirection == SortDirection.Descending;
+
+		return sortLabel switch
+		{
+			"Name" => isDescending 
+				? items.OrderByDescending(s => s.Name).ToList() 
+				: items.OrderBy(s => s.Name).ToList(),
+			"JobType" => isDescending 
+				? items.OrderByDescending(s => s.JobType).ToList() 
+				: items.OrderBy(s => s.JobType).ToList(),
+			"Frequency" => isDescending 
+				? items.OrderByDescending(s => s.Frequency).ToList() 
+				: items.OrderBy(s => s.Frequency).ToList(),
+			"NextRunDateTime" => isDescending 
+				? items.OrderByDescending(s => s.NextRunDateTime ?? DateTime.MaxValue).ToList() 
+				: items.OrderBy(s => s.NextRunDateTime ?? DateTime.MaxValue).ToList(),
+			"LastRunDateTime" => isDescending 
+				? items.OrderByDescending(s => s.LastRunDateTime ?? DateTime.MinValue).ToList() 
+				: items.OrderBy(s => s.LastRunDateTime ?? DateTime.MinValue).ToList(),
+			"IsEnabled" => isDescending 
+				? items.OrderByDescending(s => s.IsEnabled).ToList() 
+				: items.OrderBy(s => s.IsEnabled).ToList(),
+			_ => items.OrderBy(s => s.NextRunDateTime ?? DateTime.MaxValue).ToList()
+		};
 	}
 
 	private async Task<IEnumerable<Client>> SearchClients(string value, CancellationToken cancellationToken)

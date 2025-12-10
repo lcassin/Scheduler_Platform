@@ -299,6 +299,7 @@ public class AdrController : ControllerBase
                     j.Status,
                     j.AdrStatusId,
                     j.AdrStatusDescription,
+                    j.AdrIndexId,
                     j.IsMissing,
                     j.RetryCount,
                     j.CredentialVerifiedDateTime,
