@@ -80,109 +80,7 @@
     </MudItem>
 </MudGrid>
 
-<MudGrid Class="mt-4" Spacing="2">
-    <MudItem xs="6" md="2" lg="2">
-        <MudCard Style="cursor: pointer;" @onclick="@(() => NavigateToSchedules())">
-            <MudCardContent>
-                <MudText Typo="Typo.h6" Color="Color.Primary">Total Schedules</MudText>
-                @if (_overviewLoading && _overview == null)
-                {
-                    <MudProgressCircular Color="Color.Primary" Size="Size.Small" Indeterminate="true" />
-                }
-                else if (_overview != null)
-                {
-                    <MudText Typo="Typo.h3">@FormatNumber(_overview.TotalSchedules)</MudText>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">
-                        @FormatNumber(_overview.EnabledSchedules) enabled, @FormatNumber(_overview.DisabledSchedules) disabled
-                    </MudText>
-                    <MudText Typo="Typo.caption" Color="Color.Primary">(click to view)</MudText>
-                }
-            </MudCardContent>
-        </MudCard>
-    </MudItem>
-
-    <MudItem xs="6" md="2" lg="2">
-        <MudCard Style="cursor: pointer;" @onclick="@(() => NavigateToExecutions("Running"))">
-            <MudCardContent>
-                <MudText Typo="Typo.h6" Color="Color.Info">Running Now</MudText>
-                @if (_overviewLoading && _overview == null)
-                {
-                    <MudProgressCircular Color="Color.Info" Size="Size.Small" Indeterminate="true" />
-                }
-                else if (_overview != null)
-                {
-                    <MudText Typo="Typo.h3">@FormatNumber(_overview.RunningExecutions)</MudText>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">
-                        Peak: @FormatNumber(_overview.PeakConcurrentExecutions) concurrent
-                    </MudText>
-                    <MudText Typo="Typo.caption" Color="Color.Info">(click to view)</MudText>
-                }
-            </MudCardContent>
-        </MudCard>
-    </MudItem>
-
-    <MudItem xs="6" md="2" lg="2">
-        <MudCard Style="cursor: pointer;" @onclick="@(() => NavigateToExecutions("Completed"))">
-            <MudCardContent>
-                <MudText Typo="Typo.h6" Color="Color.Success">Completed Today</MudText>
-                @if (_overviewLoading && _overview == null)
-                {
-                    <MudProgressCircular Color="Color.Success" Size="Size.Small" Indeterminate="true" />
-                }
-                else if (_overview != null)
-                {
-                    <MudText Typo="Typo.h3">@FormatNumber(_overview.CompletedToday)</MudText>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">
-                        Avg: @_overview.AverageDurationSeconds.ToString("F1")s
-                    </MudText>
-                    <MudText Typo="Typo.caption" Color="Color.Success">(click to view)</MudText>
-                }
-            </MudCardContent>
-        </MudCard>
-    </MudItem>
-
-    <MudItem xs="6" md="2" lg="2">
-        <MudCard Style="cursor: pointer;" @onclick="@(() => NavigateToExecutions("Failed"))">
-            <MudCardContent>
-                <MudText Typo="Typo.h6" Color="Color.Error">Failed Today</MudText>
-                @if (_overviewLoading && _overview == null)
-                {
-                    <MudProgressCircular Color="Color.Error" Size="Size.Small" Indeterminate="true" />
-                }
-                else if (_overview != null)
-                {
-                    <MudText Typo="Typo.h3">@FormatNumber(_overview.FailedToday)</MudText>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">
-                        Total in window: @FormatNumber(_overview.TotalExecutionsInWindow)
-                    </MudText>
-                    <MudText Typo="Typo.caption" Color="Color.Error">(click to view)</MudText>
-                }
-            </MudCardContent>
-        </MudCard>
-    </MudItem>
-
-    <MudItem xs="6" md="2" lg="2">
-        <MudCard Style="cursor: pointer;" @onclick="NavigateToMissedSchedules">
-            <MudCardContent>
-                <MudText Typo="Typo.h6" Color="Color.Warning">Missed Schedules</MudText>
-                @if (_missedLoading && _missedSchedulesCount == 0)
-                {
-                    <MudProgressCircular Color="Color.Warning" Size="Size.Small" Indeterminate="true" />
-                }
-                else
-                {
-                    <MudText Typo="Typo.h3" Color="@(_missedSchedulesCount > 0 ? Color.Warning : Color.Default)">@FormatNumber(_missedSchedulesCount)</MudText>
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">
-                        In last 24 hours
-                    </MudText>
-                    <MudText Typo="Typo.caption" Color="Color.Warning">(click to view)</MudText>
-                }
-            </MudCardContent>
-        </MudCard>
-    </MudItem>
-</MudGrid>
-
-<MudText Typo="Typo.h5" Class="mt-6 mb-2">ADR (Automated Document Retrieval)</MudText>
+<MudText Typo="Typo.h5" Class="mt-4 mb-2">ADR (Automated Document Retrieval)</MudText>
 <MudGrid Class="mb-4" Spacing="2">
     <MudItem xs="6" md="2" lg="2">
         <MudCard Style="cursor: pointer;" @onclick="@(() => NavigationManager.NavigateTo("/adr/accounts"))">
@@ -286,8 +184,8 @@
 </MudGrid>
 
 <MudGrid Class="mt-2 mb-4" Spacing="2">
-    <MudItem xs="12" md="6">
-        <MudPaper Class="pa-4">
+    <MudItem xs="12" md="6" Class="d-flex">
+        <MudPaper Class="pa-4 d-flex flex-column flex-grow-1">
             <MudText Typo="Typo.h6" Class="mb-4">ADR Account Status</MudText>
             @if (_adrLoading && _adrStats == null)
             {
@@ -297,12 +195,13 @@
             }
             else if (_adrStats != null && _adrAccountChartData.Any())
             {
-                <MudChart ChartType="ChartType.Donut" 
-                         InputData="@_adrAccountChartData" 
-                         InputLabels="@_adrAccountChartLabels"
-                         Width="100%" 
-                         Height="300px">
-                </MudChart>
+                                <MudChart ChartType="ChartType.Donut" 
+                                         InputData="@_adrAccountChartData" 
+                                         InputLabels="@_adrAccountChartLabels"
+                                         ChartOptions="@_adrAccountChartOptions"
+                                         Width="100%" 
+                                         Height="300px">
+                                </MudChart>
                 <MudGrid Class="mt-2">
                     <MudItem xs="6">
                         <MudText Typo="Typo.body2"><strong>Run Now:</strong> @FormatNumber(_adrStats.RunNowCount)</MudText>
@@ -328,8 +227,8 @@
         </MudPaper>
     </MudItem>
 
-    <MudItem xs="12" md="6">
-        <MudPaper Class="pa-4">
+    <MudItem xs="12" md="6" Class="d-flex">
+        <MudPaper Class="pa-4 d-flex flex-column flex-grow-1">
             <MudText Typo="Typo.h6" Class="mb-4">ADR Job Status</MudText>
             @if (_adrJobStatsLoading && _adrJobStats == null)
             {
@@ -339,13 +238,13 @@
             }
             else if (_adrJobStats != null && _adrJobChartData.Any())
             {
-                <MudChart ChartType="ChartType.Bar" 
-                         ChartSeries="@_adrJobChartSeries" 
-                         XAxisLabels="@_adrJobChartLabels"
-                         ChartOptions="@_barChartOptions"
-                         Width="100%" 
-                         Height="300px">
-                </MudChart>
+                                <MudChart ChartType="ChartType.Bar" 
+                                         ChartSeries="@_adrJobChartSeries" 
+                                         XAxisLabels="@_adrJobChartLabels"
+                                         ChartOptions="@_adrJobChartOptions"
+                                         Width="100%" 
+                                         Height="300px">
+                                </MudChart>
                 <MudGrid Class="mt-2">
                     <MudItem xs="4">
                         <MudText Typo="Typo.body2"><strong>Pending:</strong> @FormatNumber(_adrJobStats.PendingCount)</MudText>
@@ -375,8 +274,110 @@
     </MudItem>
 </MudGrid>
 
-<MudText Typo="Typo.h5" Class="mt-4 mb-2">Scheduler Metrics</MudText>
-<MudGrid Class="mt-4 mb-4 dashboard-charts-grid">
+<MudText Typo="Typo.h5" Class="mt-6 mb-2">Scheduler Metrics</MudText>
+<MudGrid Class="mb-4" Spacing="2">
+    <MudItem xs="6" md="2" lg="2">
+        <MudCard Style="cursor: pointer;" @onclick="@(() => NavigateToSchedules())">
+            <MudCardContent>
+                <MudText Typo="Typo.h6" Color="Color.Primary">Total Schedules</MudText>
+                @if (_overviewLoading && _overview == null)
+                {
+                    <MudProgressCircular Color="Color.Primary" Size="Size.Small" Indeterminate="true" />
+                }
+                else if (_overview != null)
+                {
+                    <MudText Typo="Typo.h3">@FormatNumber(_overview.TotalSchedules)</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        @FormatNumber(_overview.EnabledSchedules) enabled, @FormatNumber(_overview.DisabledSchedules) disabled
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Primary">(click to view)</MudText>
+                }
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="6" md="2" lg="2">
+        <MudCard Style="cursor: pointer;" @onclick="@(() => NavigateToExecutions("Running"))">
+            <MudCardContent>
+                <MudText Typo="Typo.h6" Color="Color.Info">Running Now</MudText>
+                @if (_overviewLoading && _overview == null)
+                {
+                    <MudProgressCircular Color="Color.Info" Size="Size.Small" Indeterminate="true" />
+                }
+                else if (_overview != null)
+                {
+                    <MudText Typo="Typo.h3">@FormatNumber(_overview.RunningExecutions)</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Peak: @FormatNumber(_overview.PeakConcurrentExecutions) concurrent
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Info">(click to view)</MudText>
+                }
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="6" md="2" lg="2">
+        <MudCard Style="cursor: pointer;" @onclick="@(() => NavigateToExecutions("Completed"))">
+            <MudCardContent>
+                <MudText Typo="Typo.h6" Color="Color.Success">Completed Today</MudText>
+                @if (_overviewLoading && _overview == null)
+                {
+                    <MudProgressCircular Color="Color.Success" Size="Size.Small" Indeterminate="true" />
+                }
+                else if (_overview != null)
+                {
+                    <MudText Typo="Typo.h3">@FormatNumber(_overview.CompletedToday)</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Avg: @_overview.AverageDurationSeconds.ToString("F1")s
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Success">(click to view)</MudText>
+                }
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="6" md="2" lg="2">
+        <MudCard Style="cursor: pointer;" @onclick="@(() => NavigateToExecutions("Failed"))">
+            <MudCardContent>
+                <MudText Typo="Typo.h6" Color="Color.Error">Failed Today</MudText>
+                @if (_overviewLoading && _overview == null)
+                {
+                    <MudProgressCircular Color="Color.Error" Size="Size.Small" Indeterminate="true" />
+                }
+                else if (_overview != null)
+                {
+                    <MudText Typo="Typo.h3">@FormatNumber(_overview.FailedToday)</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Total in window: @FormatNumber(_overview.TotalExecutionsInWindow)
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Error">(click to view)</MudText>
+                }
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="6" md="2" lg="2">
+        <MudCard Style="cursor: pointer;" @onclick="NavigateToMissedSchedules">
+            <MudCardContent>
+                <MudText Typo="Typo.h6" Color="Color.Warning">Missed Schedules</MudText>
+                @if (_missedLoading && _missedSchedulesCount == 0)
+                {
+                    <MudProgressCircular Color="Color.Warning" Size="Size.Small" Indeterminate="true" />
+                }
+                else
+                {
+                    <MudText Typo="Typo.h3" Color="@(_missedSchedulesCount > 0 ? Color.Warning : Color.Default)">@FormatNumber(_missedSchedulesCount)</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        In last 24 hours
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Warning">(click to view)</MudText>
+                }
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+<MudGrid Class="mt-2 mb-4 dashboard-charts-grid">
     <MudItem xs="12" md="6">
         <MudPaper Class="pa-4">
             <MudText Typo="Typo.h6" Class="mb-4">Status Breakdown</MudText>
@@ -555,6 +556,36 @@
     private ChartOptions _barChartOptions = new ChartOptions
     {
         YAxisTicks = 10
+    };
+
+    // Custom color palette for ADR Account Status chart to match tile colors
+    // Order matches: Run Now, Due Soon, Upcoming, Future, Missing
+    private ChartOptions _adrAccountChartOptions = new ChartOptions
+    {
+        ChartPalette = new[]
+        {
+            "#f44336", // Run Now (Error/Red)
+            "#ff9800", // Due Soon (Warning/Orange)
+            "#26c6da", // Upcoming (Info/Teal)
+            "#66bb6a", // Future (Success/Green)
+            "#f44336"  // Missing (Error/Red)
+        }
+    };
+
+    // Custom color palette for ADR Job Status chart
+    // Order matches: Pending, Verified, Requested, Completed, Failed, Review
+    private ChartOptions _adrJobChartOptions = new ChartOptions
+    {
+        YAxisTicks = 10,
+        ChartPalette = new[]
+        {
+            "#42a5f5", // Pending (Blue)
+            "#66bb6a", // Verified (Green)
+            "#ffca28", // Requested (Yellow)
+            "#26c6da", // Completed (Teal)
+            "#f44336", // Failed (Red)
+            "#ff9800"  // Review (Orange)
+        }
     };
 
         protected override async Task OnInitializedAsync()
