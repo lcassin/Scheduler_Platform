@@ -681,9 +681,39 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             }
             else
             {
+                // 4XX errors may still contain an IndexId if the record was created
+                // but credential verification or enqueuing failed
                 result.IsSuccess = false;
                 result.IsError = true;
                 result.ErrorMessage = $"API returned {response.StatusCode}: {TruncateResponse(responseContent)}";
+                
+                // Try to extract IndexId from error response if present
+                if (!string.IsNullOrWhiteSpace(responseContent))
+                {
+                    try
+                    {
+                        // Try to parse as JSON object with IndexId
+                        var trimmed = responseContent.TrimStart();
+                        if (trimmed.StartsWith("{"))
+                        {
+                            using var doc = JsonDocument.Parse(responseContent);
+                            if (doc.RootElement.TryGetProperty("indexId", out var indexIdProp) ||
+                                doc.RootElement.TryGetProperty("IndexId", out indexIdProp))
+                            {
+                                if (indexIdProp.TryGetInt64(out var indexId))
+                                {
+                                    result.IndexId = indexId;
+                                    _logger.LogWarning("ADR API returned error with IndexId {IndexId} for job {JobId}: {Error}", 
+                                        indexId, jobId, result.ErrorMessage);
+                                }
+                            }
+                        }
+                    }
+                    catch (JsonException)
+                    {
+                        // Ignore JSON parsing errors for error responses
+                    }
+                }
             }
         }
         catch (Exception ex)
