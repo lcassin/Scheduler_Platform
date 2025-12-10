@@ -195,7 +195,21 @@
 
             <div class="d-flex justify-space-between align-center mt-4">
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    Auto-refresh: @(_autoRefreshEnabled ? "On (every 60 seconds)" : "Off")
+                    @if (_autoRefreshEnabled)
+                    {
+                        @if (_isProgressPolling)
+                        {
+                            <text>Auto-refresh: On (progress every 5 sec, full refresh every 60 sec)</text>
+                        }
+                        else
+                        {
+                            <text>Auto-refresh: On (every 60 seconds)</text>
+                        }
+                    }
+                    else
+                    {
+                        <text>Auto-refresh: Off</text>
+                    }
                 </MudText>
                 <MudSwitch @bind-Value="_autoRefreshEnabled" 
                            Color="Color.Primary" 
@@ -297,11 +311,22 @@
     private bool _autoRefreshEnabled = true;
     private DateTime? _lastRefresh;
     private System.Threading.Timer? _refreshTimer;
+    
+    // Fast progress polling (every 5 seconds when orchestration is running)
+    private PeriodicTimer? _progressTimer;
+    private CancellationTokenSource? _progressTimerCts;
+    private bool _isProgressPolling = false;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadDataAsync();
         StartAutoRefresh();
+        
+        // Start fast progress polling if orchestration is already running
+        if (_currentStatus?.IsRunning == true)
+        {
+            StartProgressPolling();
+        }
     }
 
     private async Task LoadDataAsync()
@@ -320,6 +345,16 @@
             _currentStatus = await statusTask;
             _history = await historyTask;
             _lastRefresh = DateTime.Now;
+            
+            // Start/stop fast progress polling based on orchestration state
+            if (_currentStatus?.IsRunning == true && !_isProgressPolling)
+            {
+                StartProgressPolling();
+            }
+            else if (_currentStatus?.IsRunning != true && _isProgressPolling)
+            {
+                StopProgressPolling();
+            }
         }
         catch (SessionExpiredException)
         {
@@ -335,6 +370,35 @@
             _loading = false;
             _historyLoading = false;
             StateHasChanged();
+        }
+    }
+    
+    private async Task LoadCurrentStatusAsync()
+    {
+        try
+        {
+            _currentStatus = await AdrService.GetCurrentOrchestrationAsync();
+            _lastRefresh = DateTime.Now;
+            StateHasChanged();
+            
+            // Stop polling if orchestration completed
+            if (_currentStatus?.IsRunning != true)
+            {
+                StopProgressPolling();
+                // Refresh history to show completed run
+                _history = await AdrService.GetOrchestrationHistoryAsync(10);
+                StateHasChanged();
+            }
+        }
+        catch (SessionExpiredException)
+        {
+            StopProgressPolling();
+            Snackbar.Add("Your session has expired. Redirecting to login...", Severity.Warning);
+            Navigation.NavigateTo("/Account/Login", forceLoad: true);
+        }
+        catch
+        {
+            // Ignore errors during progress polling
         }
     }
 
@@ -409,6 +473,63 @@
             }
         }, null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
     }
+    
+    private void StartProgressPolling()
+    {
+        if (_isProgressPolling) return;
+        
+        _isProgressPolling = true;
+        _progressTimerCts = new CancellationTokenSource();
+        _progressTimer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await _progressTimer.WaitForNextTickAsync(_progressTimerCts.Token))
+                {
+                    if (_autoRefreshEnabled && _currentStatus?.IsRunning == true)
+                    {
+                        await InvokeAsync(async () =>
+                        {
+                            await LoadCurrentStatusAsync();
+                        });
+                    }
+                }
+            }
+            catch (SessionExpiredException)
+            {
+                await InvokeAsync(() =>
+                {
+                    Snackbar.Add("Your session has expired. Redirecting to login...", Severity.Warning);
+                    Navigation.NavigateTo("/Account/Login", forceLoad: true);
+                    return Task.CompletedTask;
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                // Timer was cancelled, this is expected
+            }
+            catch
+            {
+                // Ignore other errors during progress polling
+            }
+            finally
+            {
+                _isProgressPolling = false;
+            }
+        });
+    }
+    
+    private void StopProgressPolling()
+    {
+        _progressTimerCts?.Cancel();
+        _progressTimerCts?.Dispose();
+        _progressTimerCts = null;
+        _progressTimer?.Dispose();
+        _progressTimer = null;
+        _isProgressPolling = false;
+    }
 
     private Color GetStatusColor(string status) => status switch
     {
@@ -451,5 +572,6 @@
     public void Dispose()
     {
         _refreshTimer?.Dispose();
+        StopProgressPolling();
     }
 }
