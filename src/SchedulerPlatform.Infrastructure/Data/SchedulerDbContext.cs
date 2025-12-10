@@ -280,6 +280,7 @@ public class SchedulerDbContext : DbContext
             entity.Property(e => e.Id).HasColumnName("AdrJobId");
             
             entity.Property(e => e.VMAccountNumber).IsRequired().HasMaxLength(30);
+            entity.Property(e => e.VendorCode).HasMaxLength(30);
             entity.Property(e => e.PeriodType).HasMaxLength(13);
             entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
             entity.Property(e => e.AdrStatusDescription).HasMaxLength(100);
