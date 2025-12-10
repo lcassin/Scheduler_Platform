@@ -32,6 +32,10 @@ public class AdrOrchestrationStatus
     public string? CurrentStep { get; set; }
     public string? ErrorMessage { get; set; }
     
+    // Progress tracking for current step
+    public int CurrentStepProgress { get; set; }
+    public int CurrentStepTotal { get; set; }
+    
     // Results from each step
     public AdrAccountSyncResult? SyncResult { get; set; }
     public JobCreationResult? JobCreationResult { get; set; }
@@ -263,10 +267,21 @@ public class AdrBackgroundOrchestrationService : BackgroundService
             // Step 3: Verify credentials
             if (request.RunCredentialVerification)
             {
-                _queue.UpdateStatus(request.RequestId, s => s.CurrentStep = "Verifying credentials");
+                _queue.UpdateStatus(request.RequestId, s => 
+                {
+                    s.CurrentStep = "Verifying credentials";
+                    s.CurrentStepProgress = 0;
+                    s.CurrentStepTotal = 0;
+                });
                 _logger.LogInformation("Request {RequestId}: Starting credential verification", request.RequestId);
                 
-                var credResult = await orchestratorService.VerifyCredentialsAsync(stoppingToken);
+                var credResult = await orchestratorService.VerifyCredentialsAsync(
+                    (progress, total) => _queue.UpdateStatus(request.RequestId, s => 
+                    {
+                        s.CurrentStepProgress = progress;
+                        s.CurrentStepTotal = total;
+                    }),
+                    stoppingToken);
                 _queue.UpdateStatus(request.RequestId, s => s.CredentialVerificationResult = credResult);
                 
                 _logger.LogInformation(
@@ -277,10 +292,21 @@ public class AdrBackgroundOrchestrationService : BackgroundService
             // Step 4: Process scraping
             if (request.RunScraping)
             {
-                _queue.UpdateStatus(request.RequestId, s => s.CurrentStep = "Processing scraping");
+                _queue.UpdateStatus(request.RequestId, s => 
+                {
+                    s.CurrentStep = "Processing scraping";
+                    s.CurrentStepProgress = 0;
+                    s.CurrentStepTotal = 0;
+                });
                 _logger.LogInformation("Request {RequestId}: Starting scraping", request.RequestId);
                 
-                var scrapeResult = await orchestratorService.ProcessScrapingAsync(stoppingToken);
+                var scrapeResult = await orchestratorService.ProcessScrapingAsync(
+                    (progress, total) => _queue.UpdateStatus(request.RequestId, s => 
+                    {
+                        s.CurrentStepProgress = progress;
+                        s.CurrentStepTotal = total;
+                    }),
+                    stoppingToken);
                 _queue.UpdateStatus(request.RequestId, s => s.ScrapeResult = scrapeResult);
                 
                 _logger.LogInformation(
@@ -291,10 +317,21 @@ public class AdrBackgroundOrchestrationService : BackgroundService
             // Step 5: Check statuses
             if (request.RunStatusCheck)
             {
-                _queue.UpdateStatus(request.RequestId, s => s.CurrentStep = "Checking statuses");
+                _queue.UpdateStatus(request.RequestId, s => 
+                {
+                    s.CurrentStep = "Checking statuses";
+                    s.CurrentStepProgress = 0;
+                    s.CurrentStepTotal = 0;
+                });
                 _logger.LogInformation("Request {RequestId}: Starting status check", request.RequestId);
                 
-                var statusResult = await orchestratorService.CheckPendingStatusesAsync(stoppingToken);
+                var statusResult = await orchestratorService.CheckPendingStatusesAsync(
+                    (progress, total) => _queue.UpdateStatus(request.RequestId, s => 
+                    {
+                        s.CurrentStepProgress = progress;
+                        s.CurrentStepTotal = total;
+                    }),
+                    stoppingToken);
                 _queue.UpdateStatus(request.RequestId, s => s.StatusCheckResult = statusResult);
                 
                 _logger.LogInformation(

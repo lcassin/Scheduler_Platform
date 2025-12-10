@@ -101,6 +101,10 @@ public class AdrOrchestrationStatus
     public string? CurrentStep { get; set; }
     public string? ErrorMessage { get; set; }
     
+    // Progress tracking for current step
+    public int CurrentStepProgress { get; set; }
+    public int CurrentStepTotal { get; set; }
+    
     // Results from each step
     public AdrAccountSyncResult? SyncResult { get; set; }
     public JobCreationResult? JobCreationResult { get; set; }
