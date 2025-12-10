@@ -242,8 +242,8 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                 _queue.UpdateStatus(request.RequestId, s => s.SyncResult = syncResult);
                 
                 _logger.LogInformation(
-                    "Request {RequestId}: Account sync completed. Added: {Added}, Updated: {Updated}",
-                    request.RequestId, syncResult.AccountsAdded, syncResult.AccountsUpdated);
+                    "Request {RequestId}: Account sync completed. Inserted: {Inserted}, Updated: {Updated}",
+                    request.RequestId, syncResult.AccountsInserted, syncResult.AccountsUpdated);
             }
 
             // Step 2: Create jobs
