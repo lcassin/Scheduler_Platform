@@ -651,6 +651,15 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                                 result.ErrorMessage = "ADR API returned an empty JSON array.";
                             }
                         }
+                        else if (long.TryParse(trimmed, out var indexId))
+                        {
+                            // API returned just a number - this is the IndexId
+                            result.IndexId = indexId;
+                            result.IsSuccess = true;
+                            result.IsError = false;
+                            result.StatusDescription = "Request submitted successfully";
+                            _logger.LogInformation("ADR API returned IndexId {IndexId} for job {JobId}", indexId, jobId);
+                        }
                         else
                         {
                             _logger.LogWarning("ADR API returned unexpected content for job {JobId}: {Response}", 
