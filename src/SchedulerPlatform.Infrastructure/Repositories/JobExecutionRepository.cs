@@ -224,21 +224,23 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
 
     public async Task<List<JobExecution>> GetExecutionsForPeakCalculationAsync(DateTime startDate, int? clientId)
     {
-        var query = _dbSet.AsNoTracking()
+        var baseQuery = _dbSet.AsNoTracking()
             .Where(e => e.StartDateTime >= startDate)
-            .Where(e => !e.Schedule.IsDeleted)
-            .Select(e => new JobExecution
-            {
-                Id = e.Id,
-                StartDateTime = e.StartDateTime,
-                EndDateTime = e.EndDateTime,
-                Status = e.Status
-            });
+            .Where(e => !e.Schedule.IsDeleted);
 
         if (clientId.HasValue)
         {
-            query = query.Where(e => e.Schedule.ClientId == clientId.Value);
+            baseQuery = baseQuery.Where(e => e.Schedule.ClientId == clientId.Value);
         }
+
+        // Project to minimal DTO after all filters are applied
+        var query = baseQuery.Select(e => new JobExecution
+        {
+            Id = e.Id,
+            StartDateTime = e.StartDateTime,
+            EndDateTime = e.EndDateTime,
+            Status = e.Status
+        });
 
         return await query.ToListAsync();
     }

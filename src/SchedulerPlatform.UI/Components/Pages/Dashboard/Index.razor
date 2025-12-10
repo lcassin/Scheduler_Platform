@@ -16,71 +16,7 @@
 
 <MudText Typo="Typo.h4" Class="mb-4">Dashboard</MudText>
 
-<MudGrid>
-    <MudItem xs="12">
-        <MudPaper Class="pa-4">
-            <MudGrid>
-                <MudItem xs="12" md="3">
-                    <MudSelect Value="_selectedTimeWindow" 
-                              Label="Time Window" 
-                              Variant="Variant.Outlined" 
-                              Margin="Margin.Dense"
-                              ValueChanged="@(async (int value) => await OnTimeWindowChanged(value))">
-                        <MudSelectItem Value="24">Last 24 Hours</MudSelectItem>
-                        <MudSelectItem Value="168">Last 7 Days</MudSelectItem>
-                        <MudSelectItem Value="720">Last 30 Days</MudSelectItem>
-                    </MudSelect>
-                </MudItem>
-                <MudItem xs="12" md="3">
-                    <MudSelect Value="_selectedClientId" 
-                              Label="Filter by Client" 
-                              Variant="Variant.Outlined" 
-                              Margin="Margin.Dense" 
-                              Clearable="true"
-                              ValueChanged="@(async (int? value) => await OnClientChanged(value))">
-                        <MudSelectItem Value="@((int?)null)">All Clients</MudSelectItem>
-                        @foreach (var client in _clients)
-                        {
-                            <MudSelectItem Value="@((int?)client.Id)">@client.ClientName</MudSelectItem>
-                        }
-                    </MudSelect>
-                </MudItem>
-                <MudItem xs="12" md="4">
-                    <MudSelect T="JobStatus" 
-                              @bind-Value="_selectedStatusesValue"
-                              @bind-SelectedValues="SelectedStatuses"
-                              Label="Filter by Status" 
-                              Placeholder="All Statuses"
-                              MultiSelectionTextFunc="@(selectedItems => selectedItems.Any() ? $"{selectedItems.Count} selected" : "All Statuses")"
-                              Variant="Variant.Outlined" 
-                              Margin="Margin.Dense" 
-                              Clearable="true"
-                              MultiSelection="true">
-                        <MudSelectItem Value="@JobStatus.Failed">Failed</MudSelectItem>
-                        <MudSelectItem Value="@JobStatus.Running">Running</MudSelectItem>
-                        <MudSelectItem Value="@JobStatus.Completed">Completed</MudSelectItem>
-                        <MudSelectItem Value="@JobStatus.Retrying">Retrying</MudSelectItem>
-                        <MudSelectItem Value="@JobStatus.Cancelled">Cancelled</MudSelectItem>
-                        <MudSelectItem Value="@JobStatus.Scheduled">Scheduled</MudSelectItem>
-                    </MudSelect>
-                </MudItem>
-                <MudItem xs="12" md="2" Class="d-flex align-center justify-end">
-                    <MudIconButton Icon="@Icons.Material.Filled.Refresh" 
-                                  Color="Color.Primary" 
-                                  OnClick="RefreshData"
-                                  Disabled="@(_overviewLoading || _statusLoading || _trendsLoading || _longestLoading || _missedLoading)"
-                                  Title="Refresh Dashboard">
-                    </MudIconButton>
-                </MudItem>
-            </MudGrid>
-            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
-                Auto-refresh every @(_refreshInterval) seconds
-            </MudText>
-        </MudPaper>
-    </MudItem>
-</MudGrid>
-
-<MudText Typo="Typo.h5" Class="mt-4 mb-2">ADR (Automated Document Retrieval)</MudText>
+<MudText Typo="Typo.h5" Class="mb-2">ADR (Automated Document Retrieval)</MudText>
 <MudGrid Class="mb-4" Spacing="2">
     <MudItem xs="6" md="2" lg="2">
         <MudCard Style="cursor: pointer;" @onclick="@(() => NavigationManager.NavigateTo("/adr/accounts"))">
@@ -275,6 +211,65 @@
 </MudGrid>
 
 <MudText Typo="Typo.h5" Class="mt-6 mb-2">Scheduler Metrics</MudText>
+<MudPaper Class="pa-4 mb-4">
+    <MudGrid>
+        <MudItem xs="12" md="3">
+            <MudSelect Value="_selectedTimeWindow" 
+                      Label="Time Window" 
+                      Variant="Variant.Outlined" 
+                      Margin="Margin.Dense"
+                      ValueChanged="@(async (int value) => await OnTimeWindowChanged(value))">
+                <MudSelectItem Value="24">Last 24 Hours</MudSelectItem>
+                <MudSelectItem Value="168">Last 7 Days</MudSelectItem>
+                <MudSelectItem Value="720">Last 30 Days</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="3">
+            <MudSelect Value="_selectedClientId" 
+                      Label="Filter by Client" 
+                      Variant="Variant.Outlined" 
+                      Margin="Margin.Dense" 
+                      Clearable="true"
+                      ValueChanged="@(async (int? value) => await OnClientChanged(value))">
+                <MudSelectItem Value="@((int?)null)">All Clients</MudSelectItem>
+                @foreach (var client in _clients)
+                {
+                    <MudSelectItem Value="@((int?)client.Id)">@client.ClientName</MudSelectItem>
+                }
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudSelect T="JobStatus" 
+                      @bind-Value="_selectedStatusesValue"
+                      @bind-SelectedValues="SelectedStatuses"
+                      Label="Filter by Status" 
+                      Placeholder="All Statuses"
+                      MultiSelectionTextFunc="@(selectedItems => selectedItems.Any() ? $"{selectedItems.Count} selected" : "All Statuses")"
+                      Variant="Variant.Outlined" 
+                      Margin="Margin.Dense" 
+                      Clearable="true"
+                      MultiSelection="true">
+                <MudSelectItem Value="@JobStatus.Failed">Failed</MudSelectItem>
+                <MudSelectItem Value="@JobStatus.Running">Running</MudSelectItem>
+                <MudSelectItem Value="@JobStatus.Completed">Completed</MudSelectItem>
+                <MudSelectItem Value="@JobStatus.Retrying">Retrying</MudSelectItem>
+                <MudSelectItem Value="@JobStatus.Cancelled">Cancelled</MudSelectItem>
+                <MudSelectItem Value="@JobStatus.Scheduled">Scheduled</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="2" Class="d-flex align-center justify-end">
+            <MudIconButton Icon="@Icons.Material.Filled.Refresh" 
+                          Color="Color.Primary" 
+                          OnClick="RefreshData"
+                          Disabled="@(_overviewLoading || _statusLoading || _trendsLoading || _longestLoading || _missedLoading)"
+                          Title="Refresh Dashboard">
+            </MudIconButton>
+        </MudItem>
+    </MudGrid>
+    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+        Auto-refresh every @(_refreshInterval) seconds
+    </MudText>
+</MudPaper>
 <MudGrid Class="mb-4" Spacing="2">
     <MudItem xs="6" md="2" lg="2">
         <MudCard Style="cursor: pointer;" @onclick="@(() => NavigateToSchedules())">
