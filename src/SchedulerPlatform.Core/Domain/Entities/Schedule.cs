@@ -19,6 +19,7 @@ public class Schedule : BaseEntity
     public JobStatus? LastRunStatus { get; set; }
     
     public bool IsEnabled { get; set; }
+    public bool IsSystemSchedule { get; set; }
     public int MaxRetries { get; set; } = 3;
     public int RetryDelayMinutes { get; set; } = 5;
     public int? TimeoutMinutes { get; set; }

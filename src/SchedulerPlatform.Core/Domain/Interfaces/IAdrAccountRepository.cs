@@ -15,8 +15,10 @@ public interface IAdrAccountRepository : IRepository<AdrAccount>
         int? clientId = null,
         int? credentialId = null,
         string? nextRunStatus = null,
-        string? searchTerm = null);
+        string? searchTerm = null,
+        string? historicalBillingStatus = null);
     Task<int> GetTotalCountAsync(int? clientId = null);
-    Task<int> GetCountByStatusAsync(string status, int? clientId = null);
+    Task<int> GetCountByNextRunStatusAsync(string status, int? clientId = null);
+    Task<int> GetCountByHistoricalStatusAsync(string status, int? clientId = null);
     Task BulkUpsertAsync(IEnumerable<AdrAccount> accounts);
 }

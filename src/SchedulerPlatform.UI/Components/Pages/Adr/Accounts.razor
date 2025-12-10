@@ -7,6 +7,7 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject IPermissionService PermissionService
+@inject IJSRuntime JSRuntime
 
 <PageTitle>ADR Accounts</PageTitle>
 
@@ -62,6 +63,27 @@
             <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ClearFilters" StartIcon="@Icons.Material.Filled.Clear">
                 Clear
             </MudButton>
+            @if (_isExporting)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="true">
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    Exporting...
+                </MudButton>
+            }
+            else
+            {
+                <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+                    <ActivatorContent>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download">
+                            Export
+                        </MudButton>
+                    </ActivatorContent>
+                    <ChildContent>
+                        <MudMenuItem OnClick="@(() => ExportAccounts("excel"))">Excel</MudMenuItem>
+                        <MudMenuItem OnClick="@(() => ExportAccounts("csv"))">CSV</MudMenuItem>
+                    </ChildContent>
+                </MudMenu>
+            }
         </MudItem>
     </MudGrid>
 
@@ -74,14 +96,14 @@
         <MudTable T="AdrAccount" ServerData="@ServerReload" 
                   @ref="_table" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
             <HeaderContent>
-                <MudTh>Account #</MudTh>
-                <MudTh>Interface Account ID</MudTh>
-                <MudTh>Client</MudTh>
-                <MudTh>Vendor</MudTh>
-                <MudTh>Period Type</MudTh>
-                <MudTh>Next Run</MudTh>
-                <MudTh>Run Status</MudTh>
-                <MudTh>Historical Status</MudTh>
+                <MudTh><MudTableSortLabel SortLabel="VMAccountNumber" T="AdrAccount">Account #</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="InterfaceAccountId" T="AdrAccount">Interface Account ID</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="ClientName" T="AdrAccount">Client</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="VendorCode" T="AdrAccount">Vendor Code</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="PeriodType" T="AdrAccount">Period Type</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="NextRunDateTime" T="AdrAccount" InitialDirection="SortDirection.Ascending">Next Run</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="NextRunStatus" T="AdrAccount">Run Status</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="HistoricalBillingStatus" T="AdrAccount">Historical Status</MudTableSortLabel></MudTh>
                 <MudTh>Actions</MudTh>
             </HeaderContent>
             <RowTemplate>
@@ -91,7 +113,7 @@
                 </MudTd>
                 <MudTd DataLabel="Interface Account ID">@(context.InterfaceAccountId ?? "N/A")</MudTd>
                 <MudTd DataLabel="Client">@(context.ClientName ?? "N/A")</MudTd>
-                <MudTd DataLabel="Vendor">@(context.VendorCode ?? "N/A")</MudTd>
+                <MudTd DataLabel="Vendor Code">@(context.VendorCode ?? "N/A")</MudTd>
                 <MudTd DataLabel="Period Type">
                     @if (!string.IsNullOrEmpty(context.PeriodType))
                     {
@@ -162,6 +184,7 @@
     private MudTable<AdrAccount> _table = null!;
     private List<Client> _clients = new();
     private bool _loading = true;
+    private bool _isExporting = false;
     private string? _searchTerm;
     private Client? _selectedClient;
     private int? _selectedClientId => _selectedClient?.Id;
@@ -170,10 +193,20 @@
     private string? _filterNextRunStatus;
     private string? _filterHistoricalStatus;
 
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "accountNumber")]
+    public string? AccountNumberParam { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
         try
         {
+            // Apply query parameters if provided (e.g., from "View Account" action on Jobs page)
+            if (!string.IsNullOrEmpty(AccountNumberParam))
+            {
+                _searchTerm = AccountNumberParam;
+            }
+            
             _clients = await ClientService.GetClientsAsync();
         }
         catch (Exception ex)
@@ -202,9 +235,12 @@
                 _filterNextRunStatus,
                 _filterHistoricalStatus);
 
+            // Apply sorting
+            var sortedItems = ApplySorting(result.Items, state.SortLabel, state.SortDirection);
+
             return new TableData<AdrAccount>
             {
-                Items = result.Items,
+                Items = sortedItems,
                 TotalItems = result.TotalCount
             };
         }
@@ -217,6 +253,46 @@
         {
             _loading = false;
         }
+    }
+
+    private List<AdrAccount> ApplySorting(List<AdrAccount> items, string? sortLabel, SortDirection sortDirection)
+    {
+        if (string.IsNullOrEmpty(sortLabel))
+        {
+            // Default sort: Next Run ascending (soonest first)
+            return items.OrderBy(a => a.NextRunDateTime ?? DateTime.MaxValue).ToList();
+        }
+
+        var isDescending = sortDirection == SortDirection.Descending;
+
+        return sortLabel switch
+        {
+            "VMAccountNumber" => isDescending 
+                ? items.OrderByDescending(a => a.VMAccountNumber ?? "").ToList() 
+                : items.OrderBy(a => a.VMAccountNumber ?? "").ToList(),
+            "InterfaceAccountId" => isDescending 
+                ? items.OrderByDescending(a => a.InterfaceAccountId ?? "").ToList() 
+                : items.OrderBy(a => a.InterfaceAccountId ?? "").ToList(),
+            "ClientName" => isDescending 
+                ? items.OrderByDescending(a => a.ClientName ?? "").ToList() 
+                : items.OrderBy(a => a.ClientName ?? "").ToList(),
+            "VendorCode" => isDescending 
+                ? items.OrderByDescending(a => a.VendorCode ?? "").ToList() 
+                : items.OrderBy(a => a.VendorCode ?? "").ToList(),
+            "PeriodType" => isDescending 
+                ? items.OrderByDescending(a => a.PeriodType ?? "").ToList() 
+                : items.OrderBy(a => a.PeriodType ?? "").ToList(),
+            "NextRunDateTime" => isDescending 
+                ? items.OrderByDescending(a => a.NextRunDateTime ?? DateTime.MinValue).ToList() 
+                : items.OrderBy(a => a.NextRunDateTime ?? DateTime.MaxValue).ToList(),
+            "NextRunStatus" => isDescending 
+                ? items.OrderByDescending(a => a.NextRunStatus ?? "").ToList() 
+                : items.OrderBy(a => a.NextRunStatus ?? "").ToList(),
+            "HistoricalBillingStatus" => isDescending 
+                ? items.OrderByDescending(a => a.HistoricalBillingStatus ?? "").ToList() 
+                : items.OrderBy(a => a.HistoricalBillingStatus ?? "").ToList(),
+            _ => items.OrderBy(a => a.NextRunDateTime ?? DateTime.MaxValue).ToList()
+        };
     }
 
     private async Task<IEnumerable<Client>> SearchClients(string value, CancellationToken cancellationToken)
@@ -275,5 +351,39 @@
     private void ViewJobs(int accountId)
     {
         Navigation.NavigateTo($"/adr/jobs?accountId={accountId}");
+    }
+
+    private async Task ExportAccounts(string format)
+    {
+        _isExporting = true;
+        StateHasChanged();
+        try
+        {
+            var bytes = await AdrService.DownloadAccountsExportAsync(
+                _selectedClientId,
+                _searchTerm,
+                _filterNextRunStatus,
+                _filterHistoricalStatus,
+                format);
+
+            var contentType = format.Equals("excel", StringComparison.OrdinalIgnoreCase)
+                ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                : "text/csv";
+
+            var filename = $"adr_accounts_{DateTime.UtcNow:yyyyMMddHHmmss}.{(format.Equals("excel", StringComparison.OrdinalIgnoreCase) ? "xlsx" : "csv")}";
+
+            var base64 = Convert.ToBase64String(bytes);
+            await JSRuntime.InvokeVoidAsync("downloadFile", filename, contentType, base64);
+
+            Snackbar.Add($"Export downloaded: {filename}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Export failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isExporting = false;
+        }
     }
 }

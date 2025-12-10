@@ -205,6 +205,12 @@ public class SchedulesController : ControllerBase
                 return NotFound();
             }
 
+            if (existingSchedule.IsSystemSchedule)
+            {
+                _logger.LogWarning("Attempted to modify system schedule {ScheduleId} ({ScheduleName})", id, existingSchedule.Name);
+                return StatusCode(403, "System schedules cannot be modified. This schedule is required for core system operations.");
+            }
+
             var notificationSetting = schedule.NotificationSetting;
             schedule.NotificationSetting = null;
 
@@ -290,6 +296,12 @@ public class SchedulesController : ControllerBase
             if (schedule == null)
             {
                 return NotFound();
+            }
+
+            if (schedule.IsSystemSchedule)
+            {
+                _logger.LogWarning("Attempted to delete system schedule {ScheduleId} ({ScheduleName})", id, schedule.Name);
+                return StatusCode(403, "System schedules cannot be deleted. This schedule is required for core system operations.");
             }
 
             var userClientId = User.FindFirst("client_id")?.Value;

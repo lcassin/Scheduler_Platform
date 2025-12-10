@@ -37,9 +37,11 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
 
     public async Task<IEnumerable<AdrJob>> GetJobsNeedingCredentialVerificationAsync(DateTime currentDate)
     {
+        // Include "CredentialCheckInProgress" to recover jobs that were interrupted mid-step
+        // These jobs already had the API called but the process crashed before updating status
         return await _dbSet
             .Where(j => !j.IsDeleted && 
-                        j.Status == "Pending" &&
+                        (j.Status == "Pending" || j.Status == "CredentialCheckInProgress") &&
                         !j.CredentialVerifiedDateTime.HasValue)
             .Include(j => j.AdrAccount)
             .ToListAsync();
@@ -47,9 +49,11 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
 
     public async Task<IEnumerable<AdrJob>> GetJobsReadyForScrapingAsync(DateTime currentDate)
     {
+        // Include "ScrapeInProgress" to recover jobs that were interrupted mid-step
+        // These jobs already had the API called but the process crashed before updating status
         return await _dbSet
             .Where(j => !j.IsDeleted && 
-                        j.Status == "CredentialVerified" &&
+                        (j.Status == "CredentialVerified" || j.Status == "ScrapeInProgress") &&
                         j.CredentialVerifiedDateTime.HasValue &&
                         j.NextRunDateTime.HasValue &&
                         j.NextRunDateTime.Value.Date <= currentDate.Date)
@@ -59,10 +63,12 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
 
     public async Task<IEnumerable<AdrJob>> GetJobsNeedingStatusCheckAsync(DateTime currentDate, int followUpDelayDays = 5)
     {
+        // Include "StatusCheckInProgress" to recover jobs that were interrupted mid-step
+        // These jobs already had the API called but the process crashed before updating status
         var checkDate = currentDate.AddDays(-followUpDelayDays);
         return await _dbSet
             .Where(j => !j.IsDeleted && 
-                        j.Status == "ScrapeRequested" &&
+                        (j.Status == "ScrapeRequested" || j.Status == "StatusCheckInProgress") &&
                         j.AdrStatusId.HasValue &&
                         !j.ScrapingCompletedDateTime.HasValue &&
                         j.ModifiedDateTime <= checkDate)
@@ -90,7 +96,8 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             DateTime? billingPeriodStart = null,
             DateTime? billingPeriodEnd = null,
             string? vendorCode = null,
-            string? vmAccountNumber = null)
+            string? vmAccountNumber = null,
+            bool latestPerAccount = false)
         {
             var query = _dbSet.Where(j => !j.IsDeleted);
 
@@ -116,7 +123,10 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
 
             if (!string.IsNullOrWhiteSpace(vendorCode))
             {
-                query = query.Where(j => j.VendorCode != null && j.VendorCode.Contains(vendorCode));
+                // Check both job's VendorCode and fallback to AdrAccount's VendorCode
+                query = query.Where(j => 
+                    (j.VendorCode != null && j.VendorCode.Contains(vendorCode)) ||
+                    (j.VendorCode == null && j.AdrAccount != null && j.AdrAccount.VendorCode != null && j.AdrAccount.VendorCode.Contains(vendorCode)));
             }
 
             if (!string.IsNullOrWhiteSpace(vmAccountNumber))
@@ -124,12 +134,39 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                 query = query.Where(j => j.VMAccountNumber.Contains(vmAccountNumber));
             }
 
-            var totalCount = await query.CountAsync();
-            var items = await query
+            int totalCount;
+            IQueryable<AdrJob> finalQuery;
+
+            // If latestPerAccount is true, get only the most recent job per account
+            // Use ID subquery approach to allow Include to work properly
+            if (latestPerAccount)
+            {
+                // Build a subquery that returns the IDs of the latest job per account
+                var latestJobIdsQuery = query
+                    .GroupBy(j => j.AdrAccountId)
+                    .Select(g => g
+                        .OrderByDescending(j => j.BillingPeriodStartDateTime)
+                        .Select(j => j.Id)
+                        .First());
+
+                // Count is based on the number of accounts (distinct latest jobs)
+                totalCount = await latestJobIdsQuery.CountAsync();
+
+                // Rebase query to entity set using the ID subquery - this allows Include to work
+                finalQuery = _dbSet
+                    .Where(j => latestJobIdsQuery.Contains(j.Id));
+            }
+            else
+            {
+                totalCount = await query.CountAsync();
+                finalQuery = query;
+            }
+
+            var items = await finalQuery
+                .Include(j => j.AdrAccount)
                 .OrderByDescending(j => j.BillingPeriodStartDateTime)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
-                .Include(j => j.AdrAccount)
                 .ToListAsync();
 
             return (items, totalCount);
@@ -151,6 +188,15 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
     {
         return await _dbSet
             .Where(j => !j.IsDeleted && j.Status == status)
+            .CountAsync();
+    }
+
+    public async Task<int> GetActiveJobsCountAsync()
+    {
+        // Active jobs are those that are not completed, failed, or cancelled
+        var activeStatuses = new[] { "Pending", "CredentialVerified", "ScrapeRequested" };
+        return await _dbSet
+            .Where(j => !j.IsDeleted && activeStatuses.Contains(j.Status))
             .CountAsync();
     }
 
