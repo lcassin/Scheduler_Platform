@@ -237,10 +237,10 @@ public class SchedulerDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("AdrAccountId");
             
-            entity.Property(e => e.VMAccountNumber).IsRequired().HasMaxLength(30);
-            entity.Property(e => e.InterfaceAccountId).HasMaxLength(30);
+            entity.Property(e => e.VMAccountNumber).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.InterfaceAccountId).HasMaxLength(128);
             entity.Property(e => e.ClientName).HasMaxLength(128);
-            entity.Property(e => e.VendorCode).HasMaxLength(30);
+            entity.Property(e => e.VendorCode).HasMaxLength(128);
             entity.Property(e => e.PeriodType).HasMaxLength(13);
             entity.Property(e => e.NextRunStatus).HasMaxLength(10);
             entity.Property(e => e.HistoricalBillingStatus).HasMaxLength(10);
@@ -279,8 +279,8 @@ public class SchedulerDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("AdrJobId");
             
-            entity.Property(e => e.VMAccountNumber).IsRequired().HasMaxLength(30);
-            entity.Property(e => e.VendorCode).HasMaxLength(30);
+            entity.Property(e => e.VMAccountNumber).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.VendorCode).HasMaxLength(128);
             entity.Property(e => e.PeriodType).HasMaxLength(13);
             entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
             entity.Property(e => e.AdrStatusDescription).HasMaxLength(100);
