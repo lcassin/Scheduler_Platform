@@ -936,7 +936,7 @@ public class AdrController : ControllerBase
         try
         {
             _logger.LogInformation("Manual account sync triggered by {User}", User.Identity?.Name ?? "Unknown");
-            var result = await _syncService.SyncAccountsAsync(cancellationToken);
+            var result = await _syncService.SyncAccountsAsync(null, cancellationToken);
             return Ok(result);
         }
         catch (Exception ex)

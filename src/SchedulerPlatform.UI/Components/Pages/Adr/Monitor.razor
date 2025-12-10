@@ -107,7 +107,14 @@
                                 <MudTimelineItem Color="@GetStepColor("Syncing accounts", _currentStatus.Status)" Icon="@GetStepIcon("Syncing accounts", _currentStatus.Status)">
                                     <ItemContent>
                                         <MudText Typo="Typo.body2">Sync Accounts</MudText>
-                                        @if (_currentStatus.Status.SyncResult != null)
+                                        @if (_currentStatus.Status.CurrentStep == "Syncing accounts" && _currentStatus.Status.CurrentStepTotal > 0)
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Info">
+                                                @_currentStatus.Status.CurrentStepProgress / @_currentStatus.Status.CurrentStepTotal (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
+                                            </MudText>
+                                            <MudProgressLinear Color="Color.Info" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
+                                        }
+                                        else if (_currentStatus.Status.SyncResult != null)
                                         {
                                             <MudText Typo="Typo.caption" Color="Color.Secondary">
                                                 @_currentStatus.Status.SyncResult.AccountsInserted inserted, @_currentStatus.Status.SyncResult.AccountsUpdated updated
