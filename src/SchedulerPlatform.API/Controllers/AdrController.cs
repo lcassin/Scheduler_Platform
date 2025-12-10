@@ -1022,7 +1022,7 @@ public class AdrController : ControllerBase
         {
             _logger.LogInformation("Full ADR cycle triggered by {User}", User.Identity?.Name ?? "Unknown");
 
-            var syncResult = await _syncService.SyncAccountsAsync(cancellationToken);
+            var syncResult = await _syncService.SyncAccountsAsync(null, cancellationToken);
             var jobCreationResult = await _orchestratorService.CreateJobsForDueAccountsAsync(cancellationToken);
             var credentialResult = await _orchestratorService.VerifyCredentialsAsync(null, cancellationToken);
             var scrapeResult = await _orchestratorService.ProcessScrapingAsync(null, cancellationToken);
