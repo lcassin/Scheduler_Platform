@@ -236,7 +236,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             const int setupBatchSize = 500;
             var jobsToProcess = new List<(int JobId, int CredentialId, DateTime? StartDate, DateTime? EndDate, int ExecutionId)>();
             int markedCount = 0;
-            int processedSinceLastSave = 0;
+            int setupProcessedSinceLastSave = 0;
             var startTime = DateTime.UtcNow;
             
             _logger.LogInformation("Starting to mark {Count} jobs as in-progress (batch size: {BatchSize})", 
@@ -255,13 +255,13 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     jobsToProcess.Add((job.Id, job.CredentialId, job.NextRangeStartDateTime, job.NextRangeEndDateTime, execution.Id));
                     
                     markedCount++;
-                    processedSinceLastSave++;
+                    setupProcessedSinceLastSave++;
                     
                     // Save in batches to reduce database round-trips
-                    if (processedSinceLastSave >= setupBatchSize)
+                    if (setupProcessedSinceLastSave >= setupBatchSize)
                     {
                         await _unitOfWork.SaveChangesAsync();
-                        processedSinceLastSave = 0;
+                        setupProcessedSinceLastSave = 0;
                         _logger.LogInformation("Marked {Marked}/{Total} jobs as in-progress (batch saved)", 
                             markedCount, jobsNeedingVerification.Count);
                     }
@@ -276,7 +276,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             }
             
             // Save any remaining jobs
-            if (processedSinceLastSave > 0)
+            if (setupProcessedSinceLastSave > 0)
             {
                 await _unitOfWork.SaveChangesAsync();
             }
@@ -473,7 +473,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             const int setupBatchSize = 500;
             var jobsToProcess = new List<(int JobId, int CredentialId, DateTime? StartDate, DateTime? EndDate, int ExecutionId)>();
             int markedCount = 0;
-            int processedSinceLastSave = 0;
+            int setupProcessedSinceLastSave = 0;
             var startTime = DateTime.UtcNow;
             
             _logger.LogInformation("Starting to mark {Count} jobs as in-progress for scraping (batch size: {BatchSize})", 
@@ -492,13 +492,13 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     jobsToProcess.Add((job.Id, job.CredentialId, job.NextRangeStartDateTime, job.NextRangeEndDateTime, execution.Id));
                     
                     markedCount++;
-                    processedSinceLastSave++;
+                    setupProcessedSinceLastSave++;
                     
                     // Save in batches to reduce database round-trips
-                    if (processedSinceLastSave >= setupBatchSize)
+                    if (setupProcessedSinceLastSave >= setupBatchSize)
                     {
                         await _unitOfWork.SaveChangesAsync();
-                        processedSinceLastSave = 0;
+                        setupProcessedSinceLastSave = 0;
                         _logger.LogInformation("Marked {Marked}/{Total} jobs as in-progress for scraping (batch saved)", 
                             markedCount, jobsReadyForScraping.Count);
                     }
@@ -513,7 +513,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             }
             
             // Save any remaining jobs
-            if (processedSinceLastSave > 0)
+            if (setupProcessedSinceLastSave > 0)
             {
                 await _unitOfWork.SaveChangesAsync();
             }
@@ -718,7 +718,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             const int setupBatchSize = 500;
             var jobsToProcess = new List<int>();
             int markedCount = 0;
-            int processedSinceLastSave = 0;
+            int setupProcessedSinceLastSave = 0;
             var startTime = DateTime.UtcNow;
             
             _logger.LogInformation("Starting to mark {Count} jobs as in-progress for status check (batch size: {BatchSize})", 
@@ -735,13 +735,13 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     jobsToProcess.Add(job.Id);
                     
                     markedCount++;
-                    processedSinceLastSave++;
+                    setupProcessedSinceLastSave++;
                     
                     // Save in batches to reduce database round-trips
-                    if (processedSinceLastSave >= setupBatchSize)
+                    if (setupProcessedSinceLastSave >= setupBatchSize)
                     {
                         await _unitOfWork.SaveChangesAsync();
-                        processedSinceLastSave = 0;
+                        setupProcessedSinceLastSave = 0;
                         _logger.LogInformation("Marked {Marked}/{Total} jobs as in-progress for status check (batch saved)", 
                             markedCount, jobsNeedingStatusCheck.Count);
                     }
@@ -756,7 +756,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             }
             
             // Save any remaining jobs
-            if (processedSinceLastSave > 0)
+            if (setupProcessedSinceLastSave > 0)
             {
                 await _unitOfWork.SaveChangesAsync();
             }
