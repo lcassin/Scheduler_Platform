@@ -316,4 +316,44 @@ public class AdrService : IAdrService
     }
 
     #endregion
+
+    #region Background Orchestration Monitoring
+
+    public async Task<BackgroundOrchestrationResponse> StartBackgroundOrchestrationAsync()
+    {
+        var client = CreateClient();
+        var response = await client.PostAsync("adr/orchestrate/run-background", null);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<BackgroundOrchestrationResponse>();
+        return result ?? new BackgroundOrchestrationResponse();
+    }
+
+    public async Task<OrchestrationCurrentResponse> GetCurrentOrchestrationAsync()
+    {
+        var client = CreateClient();
+        var result = await client.GetFromJsonAsync<OrchestrationCurrentResponse>("adr/orchestrate/current");
+        return result ?? new OrchestrationCurrentResponse { IsRunning = false, Message = "Unable to get status" };
+    }
+
+    public async Task<AdrOrchestrationStatus?> GetOrchestrationStatusAsync(string requestId)
+    {
+        var client = CreateClient();
+        try
+        {
+            return await client.GetFromJsonAsync<AdrOrchestrationStatus>($"adr/orchestrate/status/{requestId}");
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+    }
+
+    public async Task<List<AdrOrchestrationStatus>> GetOrchestrationHistoryAsync(int count = 10)
+    {
+        var client = CreateClient();
+        var result = await client.GetFromJsonAsync<List<AdrOrchestrationStatus>>($"adr/orchestrate/history?count={count}");
+        return result ?? new List<AdrOrchestrationStatus>();
+    }
+
+    #endregion
 }

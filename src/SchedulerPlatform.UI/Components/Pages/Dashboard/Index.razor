@@ -117,6 +117,36 @@
             </MudCardContent>
         </MudCard>
     </MudItem>
+
+    <MudItem xs="6" md="2" lg="2">
+        <MudCard Style="cursor: pointer;" @onclick="@(() => NavigationManager.NavigateTo("/adr/monitor"))">
+            <MudCardContent>
+                <MudText Typo="Typo.h6" Color="@GetOrchestrationStatusColor()">Orchestration</MudText>
+                @if (_orchestrationLoading && _orchestrationStatus == null)
+                {
+                    <MudProgressCircular Color="Color.Primary" Size="Size.Small" Indeterminate="true" />
+                }
+                else if (_orchestrationStatus != null)
+                {
+                    @if (_orchestrationStatus.IsRunning && _orchestrationStatus.Status != null)
+                    {
+                        <MudText Typo="Typo.h5" Color="Color.Info">Running</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            @(_orchestrationStatus.Status.CurrentStep ?? "Processing...")
+                        </MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.h5" Color="Color.Success">Idle</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            Ready to run
+                        </MudText>
+                    }
+                    <MudText Typo="Typo.caption" Color="@GetOrchestrationStatusColor()">(click to monitor)</MudText>
+                }
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
 </MudGrid>
 
 <MudGrid Class="mt-2 mb-4" Spacing="2">
@@ -512,6 +542,8 @@
                 private AdrAccountStats? _adrStats;
                 private AdrJobStats? _adrJobStats;
                 private bool _adrJobStatsLoading;
+                private OrchestrationCurrentResponse? _orchestrationStatus;
+                private bool _orchestrationLoading;
                 
                 private double[] _adrAccountChartData = Array.Empty<double>();
                 private string[] _adrAccountChartLabels = Array.Empty<string>();
@@ -651,6 +683,7 @@
             _ = LoadMissedSchedulesAsync();
             _ = LoadAdrStatsAsync();
             _ = LoadAdrJobStatsAsync();
+            _ = LoadOrchestrationStatusAsync();
         }
     
         private async Task LoadOverviewAsync()
@@ -876,6 +909,33 @@
                 _adrJobStatsLoading = false;
                 await InvokeAsync(StateHasChanged);
             }
+        }
+
+        private async Task LoadOrchestrationStatusAsync()
+        {
+            if (_orchestrationLoading) return;
+            _orchestrationLoading = true;
+            try
+            {
+                _orchestrationStatus = await AdrService.GetCurrentOrchestrationAsync();
+            }
+            catch (Exception ex)
+            {
+                // Orchestration status is optional - don't show error to user if ADR is not configured
+                Console.WriteLine($"Error loading orchestration status: {ex.Message}");
+            }
+            finally
+            {
+                _orchestrationLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+
+        private Color GetOrchestrationStatusColor()
+        {
+            if (_orchestrationStatus == null) return Color.Default;
+            if (_orchestrationStatus.IsRunning) return Color.Info;
+            return Color.Success;
         }
 
         private string FormatDateLabel(DateTime dateTime)
