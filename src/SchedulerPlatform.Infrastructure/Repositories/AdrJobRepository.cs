@@ -131,20 +131,39 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                 query = query.Where(j => j.VMAccountNumber.Contains(vmAccountNumber));
             }
 
+            int totalCount;
+            IQueryable<AdrJob> finalQuery;
+
             // If latestPerAccount is true, get only the most recent job per account
+            // Use ID subquery approach to allow Include to work properly
             if (latestPerAccount)
             {
-                query = query
+                // Build a subquery that returns the IDs of the latest job per account
+                var latestJobIdsQuery = query
                     .GroupBy(j => j.AdrAccountId)
-                    .Select(g => g.OrderByDescending(j => j.BillingPeriodStartDateTime).First());
+                    .Select(g => g
+                        .OrderByDescending(j => j.BillingPeriodStartDateTime)
+                        .Select(j => j.Id)
+                        .First());
+
+                // Count is based on the number of accounts (distinct latest jobs)
+                totalCount = await latestJobIdsQuery.CountAsync();
+
+                // Rebase query to entity set using the ID subquery - this allows Include to work
+                finalQuery = _dbSet
+                    .Where(j => latestJobIdsQuery.Contains(j.Id));
+            }
+            else
+            {
+                totalCount = await query.CountAsync();
+                finalQuery = query;
             }
 
-            var totalCount = await query.CountAsync();
-            var items = await query
+            var items = await finalQuery
+                .Include(j => j.AdrAccount)
                 .OrderByDescending(j => j.BillingPeriodStartDateTime)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
-                .Include(j => j.AdrAccount)
                 .ToListAsync();
 
             return (items, totalCount);
