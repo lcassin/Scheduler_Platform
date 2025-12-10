@@ -69,14 +69,9 @@
             </MudItem>
         </MudGrid>
 
-    @if (_loading)
-    {
-        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
-    }
-    else
-    {
         <MudTable T="AdrJob" ServerData="@ServerReload" 
-                  @ref="_table" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
+                  @ref="_table" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true"
+                  Loading="@_loading" LoadingProgressColor="Color.Primary">
                         <HeaderContent>
                             <MudTh>Job ID</MudTh>
                             <MudTh>Vendor</MudTh>
@@ -178,7 +173,6 @@
                 <MudTablePager PageSizeOptions="new int[] { 20, 50, 100 }" />
             </PagerContent>
         </MudTable>
-    }
 </MudPaper>
 
 @code {
@@ -307,12 +301,23 @@
 
     private void ViewJobHistory(AdrJob job)
     {
-        // Turn off "Latest per Account" mode and filter by the specific account's vendor code and account number
+        // Turn off "Latest per Account" mode and filter by the specific account's account number
+        // VendorCode filter is only applied if it's not null/empty to avoid filtering issues
         _showLatestPerAccount = false;
-        _searchVendorCode = job.VendorCode;
         _searchAccountNumber = job.VMAccountNumber;
-        _filterVendorCode = job.VendorCode;
         _filterAccountNumber = job.VMAccountNumber;
+        
+        if (!string.IsNullOrWhiteSpace(job.VendorCode))
+        {
+            _searchVendorCode = job.VendorCode;
+            _filterVendorCode = job.VendorCode;
+        }
+        else
+        {
+            _searchVendorCode = null;
+            _filterVendorCode = null;
+        }
+        
         _table.ReloadServerData();
     }
 

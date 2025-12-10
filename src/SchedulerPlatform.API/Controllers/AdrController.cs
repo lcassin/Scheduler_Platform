@@ -281,9 +281,39 @@ public class AdrController : ControllerBase
                     vmAccountNumber,
                     latestPerAccount);
 
+                // Map to DTOs with VendorCode fallback from AdrAccount when job's VendorCode is null
+                var mappedItems = items.Select(j => new
+                {
+                    j.Id,
+                    j.AdrAccountId,
+                    j.VMAccountId,
+                    j.VMAccountNumber,
+                    VendorCode = !string.IsNullOrEmpty(j.VendorCode) ? j.VendorCode : j.AdrAccount?.VendorCode,
+                    j.CredentialId,
+                    j.PeriodType,
+                    j.BillingPeriodStartDateTime,
+                    j.BillingPeriodEndDateTime,
+                    j.NextRunDateTime,
+                    j.NextRangeStartDateTime,
+                    j.NextRangeEndDateTime,
+                    j.Status,
+                    j.AdrStatusId,
+                    j.AdrStatusDescription,
+                    j.IsMissing,
+                    j.RetryCount,
+                    j.CredentialVerifiedDateTime,
+                    j.ScrapingRequestedDateTime,
+                    j.ScrapingCompletedDateTime,
+                    j.LastErrorMessage,
+                    j.CreatedDateTime,
+                    j.CreatedBy,
+                    j.ModifiedDateTime,
+                    j.ModifiedBy
+                }).ToList();
+
                 return Ok(new
                 {
-                    items,
+                    items = mappedItems,
                     totalCount,
                     pageNumber,
                     pageSize
