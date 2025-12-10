@@ -48,6 +48,10 @@ public interface IAdrService
         int? adrJobId = null);
     Task<List<AdrJobExecution>> GetExecutionsByJobAsync(int adrJobId);
     
+    // Job refire operations
+    Task<RefireJobResult> RefireJobAsync(int jobId);
+    Task<RefireJobsBulkResult> RefireJobsBulkAsync(List<int> jobIds);
+    
     // Orchestration operations
     Task<AdrAccountSyncResult> SyncAccountsAsync();
     Task<JobCreationResult> CreateJobsAsync();

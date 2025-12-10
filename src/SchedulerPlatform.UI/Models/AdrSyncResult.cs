@@ -55,3 +55,17 @@ public class FullCycleResult
     public ScrapeResult? ScrapeResult { get; set; }
     public StatusCheckResult? StatusResult { get; set; }
 }
+
+public class RefireJobResult
+{
+    public string Message { get; set; } = string.Empty;
+    public int JobId { get; set; }
+}
+
+public class RefireJobsBulkResult
+{
+    public string Message { get; set; } = string.Empty;
+    public int RefiredCount { get; set; }
+    public int TotalRequested { get; set; }
+    public List<string>? Errors { get; set; }
+}

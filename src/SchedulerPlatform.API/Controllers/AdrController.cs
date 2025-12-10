@@ -647,6 +647,107 @@ public class AdrController : ControllerBase
         }
     }
 
+    [HttpPost("jobs/{id}/refire")]
+    public async Task<ActionResult<object>> RefireJob(int id)
+    {
+        try
+        {
+            var job = await _unitOfWork.AdrJobs.GetByIdAsync(id);
+            if (job == null)
+            {
+                return NotFound();
+            }
+
+            // Reset job to Pending status so it gets picked up by the orchestrator
+            job.Status = "Pending";
+            job.AdrStatusId = null;
+            job.AdrStatusDescription = null;
+            job.AdrIndexId = null;
+            job.ErrorMessage = null;
+            job.CredentialVerifiedDateTime = null;
+            job.ScrapingCompletedDateTime = null;
+            job.RetryCount = 0;
+            job.ModifiedDateTime = DateTime.UtcNow;
+            job.ModifiedBy = User.Identity?.Name ?? "System Created";
+
+            await _unitOfWork.AdrJobs.UpdateAsync(job);
+            await _unitOfWork.SaveChangesAsync();
+
+            _logger.LogInformation("Job {JobId} refired by {User}", id, User.Identity?.Name ?? "Unknown");
+
+            return Ok(new { message = "Job refired successfully", jobId = id });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error refiring ADR job {JobId}", id);
+            return StatusCode(500, "An error occurred while refiring the ADR job");
+        }
+    }
+
+    [HttpPost("jobs/refire-bulk")]
+    public async Task<ActionResult<object>> RefireJobsBulk([FromBody] RefireJobsRequest request)
+    {
+        try
+        {
+            if (request.JobIds == null || !request.JobIds.Any())
+            {
+                return BadRequest("No job IDs provided");
+            }
+
+            var refiredCount = 0;
+            var errors = new List<string>();
+
+            foreach (var jobId in request.JobIds)
+            {
+                try
+                {
+                    var job = await _unitOfWork.AdrJobs.GetByIdAsync(jobId);
+                    if (job == null)
+                    {
+                        errors.Add($"Job {jobId} not found");
+                        continue;
+                    }
+
+                    // Reset job to Pending status so it gets picked up by the orchestrator
+                    job.Status = "Pending";
+                    job.AdrStatusId = null;
+                    job.AdrStatusDescription = null;
+                    job.AdrIndexId = null;
+                    job.ErrorMessage = null;
+                    job.CredentialVerifiedDateTime = null;
+                    job.ScrapingCompletedDateTime = null;
+                    job.RetryCount = 0;
+                    job.ModifiedDateTime = DateTime.UtcNow;
+                    job.ModifiedBy = User.Identity?.Name ?? "System Created";
+
+                    await _unitOfWork.AdrJobs.UpdateAsync(job);
+                    refiredCount++;
+                }
+                catch (Exception ex)
+                {
+                    errors.Add($"Job {jobId}: {ex.Message}");
+                }
+            }
+
+            await _unitOfWork.SaveChangesAsync();
+
+            _logger.LogInformation("Bulk refire: {Count} jobs refired by {User}", refiredCount, User.Identity?.Name ?? "Unknown");
+
+            return Ok(new
+            {
+                message = $"{refiredCount} job(s) refired successfully",
+                refiredCount,
+                totalRequested = request.JobIds.Count,
+                errors = errors.Any() ? errors : null
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during bulk job refire");
+            return StatusCode(500, "An error occurred while refiring jobs");
+        }
+    }
+
     #endregion
 
     #region AdrJobExecution Endpoints
@@ -989,6 +1090,11 @@ public class CompleteExecutionRequest
     public bool IsFinal { get; set; }
     public string? ErrorMessage { get; set; }
     public string? ApiResponse { get; set; }
+}
+
+public class RefireJobsRequest
+{
+    public List<int> JobIds { get; set; } = new();
 }
 
 #endregion
