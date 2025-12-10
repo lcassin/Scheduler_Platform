@@ -123,7 +123,10 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
 
             if (!string.IsNullOrWhiteSpace(vendorCode))
             {
-                query = query.Where(j => j.VendorCode != null && j.VendorCode.Contains(vendorCode));
+                // Check both job's VendorCode and fallback to AdrAccount's VendorCode
+                query = query.Where(j => 
+                    (j.VendorCode != null && j.VendorCode.Contains(vendorCode)) ||
+                    (j.VendorCode == null && j.AdrAccount != null && j.AdrAccount.VendorCode != null && j.AdrAccount.VendorCode.Contains(vendorCode)));
             }
 
             if (!string.IsNullOrWhiteSpace(vmAccountNumber))
