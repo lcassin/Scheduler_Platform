@@ -10,9 +10,9 @@ namespace SchedulerPlatform.API.Services;
 public interface IAdrOrchestratorService
 {
     Task<JobCreationResult> CreateJobsForDueAccountsAsync(CancellationToken cancellationToken = default);
-    Task<CredentialVerificationResult> VerifyCredentialsAsync(CancellationToken cancellationToken = default);
-    Task<ScrapeResult> ProcessScrapingAsync(CancellationToken cancellationToken = default);
-    Task<StatusCheckResult> CheckPendingStatusesAsync(CancellationToken cancellationToken = default);
+    Task<CredentialVerificationResult> VerifyCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
+    Task<ScrapeResult> ProcessScrapingAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
+    Task<StatusCheckResult> CheckPendingStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
 }
 
 #region Result Classes
@@ -207,7 +207,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
     #region Step 3: Credential Verification
 
-    public async Task<CredentialVerificationResult> VerifyCredentialsAsync(CancellationToken cancellationToken = default)
+    public async Task<CredentialVerificationResult> VerifyCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
     {
         var result = new CredentialVerificationResult();
         var maxParallel = GetMaxParallelRequests();
@@ -221,6 +221,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             var jobsNeedingVerification = (await _unitOfWork.AdrJobs.GetJobsNeedingCredentialVerificationAsync(DateTime.UtcNow, credentialCheckLeadDays)).ToList();
             _logger.LogInformation("Found {Count} jobs needing credential verification (NextRunDate within {LeadDays} days)", 
                 jobsNeedingVerification.Count, credentialCheckLeadDays);
+
+            // Report initial progress (0 of total)
+            progressCallback?.Invoke(0, jobsNeedingVerification.Count);
 
             if (!jobsNeedingVerification.Any())
             {
@@ -275,8 +278,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
                     apiResults[jobInfo.JobId] = (apiResult, jobInfo.ExecutionId);
                     
-                    // Log progress every 500 completions or at the end
+                    // Log and report progress every 100 completions or at the end
                     var count = Interlocked.Increment(ref completedApiCalls);
+                    if (count % 100 == 0 || count == totalApiCalls)
+                    {
+                        progressCallback?.Invoke(count, totalApiCalls);
+                    }
                     if (count % 500 == 0 || count == totalApiCalls)
                     {
                         _logger.LogInformation(
@@ -294,7 +301,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         ErrorMessage = ex.Message 
                     }, jobInfo.ExecutionId);
                     
-                    Interlocked.Increment(ref completedApiCalls);
+                    var count = Interlocked.Increment(ref completedApiCalls);
+                    if (count % 100 == 0 || count == totalApiCalls)
+                    {
+                        progressCallback?.Invoke(count, totalApiCalls);
+                    }
                 }
                 finally
                 {
@@ -410,7 +421,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
     #region Step 4: Invoice Scraping
 
-    public async Task<ScrapeResult> ProcessScrapingAsync(CancellationToken cancellationToken = default)
+    public async Task<ScrapeResult> ProcessScrapingAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
     {
         var result = new ScrapeResult();
         var maxParallel = GetMaxParallelRequests();
@@ -421,6 +432,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
             var jobsReadyForScraping = (await _unitOfWork.AdrJobs.GetJobsReadyForScrapingAsync(DateTime.UtcNow)).ToList();
             _logger.LogInformation("Found {Count} jobs ready for scraping", jobsReadyForScraping.Count);
+
+            // Report initial progress (0 of total)
+            progressCallback?.Invoke(0, jobsReadyForScraping.Count);
 
             if (!jobsReadyForScraping.Any())
             {
@@ -474,8 +488,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
                     apiResults[jobInfo.JobId] = (apiResult, jobInfo.ExecutionId);
                     
-                    // Log progress every 500 completions or at the end
+                    // Log and report progress every 100 completions or at the end
                     var count = Interlocked.Increment(ref completedApiCalls);
+                    if (count % 100 == 0 || count == totalApiCalls)
+                    {
+                        progressCallback?.Invoke(count, totalApiCalls);
+                    }
                     if (count % 500 == 0 || count == totalApiCalls)
                     {
                         _logger.LogInformation(
@@ -493,7 +511,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         ErrorMessage = ex.Message 
                     }, jobInfo.ExecutionId);
                     
-                    Interlocked.Increment(ref completedApiCalls);
+                    var count = Interlocked.Increment(ref completedApiCalls);
+                    if (count % 100 == 0 || count == totalApiCalls)
+                    {
+                        progressCallback?.Invoke(count, totalApiCalls);
+                    }
                 }
                 finally
                 {
@@ -615,7 +637,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
     #region Status Checking
 
-    public async Task<StatusCheckResult> CheckPendingStatusesAsync(CancellationToken cancellationToken = default)
+    public async Task<StatusCheckResult> CheckPendingStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
     {
         var result = new StatusCheckResult();
         var maxParallel = GetMaxParallelRequests();
@@ -628,6 +650,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 DateTime.UtcNow, 
                 DefaultFollowUpDelayDays)).ToList();
             _logger.LogInformation("Found {Count} jobs needing status check", jobsNeedingStatusCheck.Count);
+
+            // Report initial progress (0 of total)
+            progressCallback?.Invoke(0, jobsNeedingStatusCheck.Count);
 
             if (!jobsNeedingStatusCheck.Any())
             {
@@ -672,8 +697,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     var statusResult = await CheckJobStatusAsync(jobId, cancellationToken);
                     statusResults[jobId] = statusResult;
                     
-                    // Log progress every 500 completions or at the end
+                    // Log and report progress every 100 completions or at the end
                     var count = Interlocked.Increment(ref completedStatusChecks);
+                    if (count % 100 == 0 || count == totalStatusChecks)
+                    {
+                        progressCallback?.Invoke(count, totalStatusChecks);
+                    }
                     if (count % 500 == 0 || count == totalStatusChecks)
                     {
                         _logger.LogInformation(
@@ -685,7 +714,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 {
                     _logger.LogError(ex, "Error checking status for job {JobId}", jobId);
                     statusResults[jobId] = null;
-                    Interlocked.Increment(ref completedStatusChecks);
+                    var count = Interlocked.Increment(ref completedStatusChecks);
+                    if (count % 100 == 0 || count == totalStatusChecks)
+                    {
+                        progressCallback?.Invoke(count, totalStatusChecks);
+                    }
                 }
                 finally
                 {
