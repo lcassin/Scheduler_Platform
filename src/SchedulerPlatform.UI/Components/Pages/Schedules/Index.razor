@@ -73,17 +73,27 @@
                         <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters" StartIcon="@Icons.Material.Filled.FilterAlt">
                             Apply
                         </MudButton>
-            <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
-                <ActivatorContent>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download">
-                        Export
-                    </MudButton>
-                </ActivatorContent>
-                <ChildContent>
-                    <MudMenuItem OnClick="@(() => ExportSchedules("excel"))">Excel</MudMenuItem>
-                    <MudMenuItem OnClick="@(() => ExportSchedules("csv"))">CSV</MudMenuItem>
-                </ChildContent>
-            </MudMenu>
+            @if (_isExporting)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="true">
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    Exporting...
+                </MudButton>
+            }
+            else
+            {
+                <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+                    <ActivatorContent>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download">
+                            Export
+                        </MudButton>
+                    </ActivatorContent>
+                    <ChildContent>
+                        <MudMenuItem OnClick="@(() => ExportSchedules("excel"))">Excel</MudMenuItem>
+                        <MudMenuItem OnClick="@(() => ExportSchedules("csv"))">CSV</MudMenuItem>
+                    </ChildContent>
+                </MudMenu>
+            }
         </MudItem>
     </MudGrid>
     
@@ -265,6 +275,7 @@
 	private HashSet<int> _selectedIds = new();
 	private bool _selectAll = false;
 	private bool _isBulkTriggering = false;
+	private bool _isExporting = false;
 	private int _delayMs = 1000;
 	private List<Schedule> _currentPageItems = new();
 	
@@ -522,6 +533,8 @@
 
 	private async Task ExportSchedules(string format)
 	{
+		_isExporting = true;
+		StateHasChanged();
 		try
 		{
 			var startDate = _filterDate?.Date;
@@ -548,6 +561,10 @@
 		catch (Exception ex)
 		{
 			Snackbar.Add($"Export failed: {ex.Message}", Severity.Error);
+		}
+		finally
+		{
+			_isExporting = false;
 		}
 	}
 

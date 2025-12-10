@@ -49,17 +49,27 @@
             <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ClearFilters" StartIcon="@Icons.Material.Filled.Clear">
                 Clear
             </MudButton>
-            <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
-                <ActivatorContent>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download">
-                        Export
-                    </MudButton>
-                </ActivatorContent>
-                <ChildContent>
-                    <MudMenuItem OnClick="@(() => ExportReport("excel"))">Excel</MudMenuItem>
-                    <MudMenuItem OnClick="@(() => ExportReport("csv"))">CSV</MudMenuItem>
-                </ChildContent>
-            </MudMenu>
+            @if (_isExporting)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="true">
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    Exporting...
+                </MudButton>
+            }
+            else
+            {
+                <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+                    <ActivatorContent>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download">
+                            Export
+                        </MudButton>
+                    </ActivatorContent>
+                    <ChildContent>
+                        <MudMenuItem OnClick="@(() => ExportReport("excel"))">Excel</MudMenuItem>
+                        <MudMenuItem OnClick="@(() => ExportReport("csv"))">CSV</MudMenuItem>
+                    </ChildContent>
+                </MudMenu>
+            }
         </MudItem>
     </MudGrid>
 
@@ -162,6 +172,7 @@
     private MudTable<AdrAccount> _table = null!;
     private List<Client> _clients = new();
     private bool _loading = true;
+    private bool _isExporting = false;
     private string? _searchTerm;
     private Client? _selectedClient;
     private int? _filterClientId;
@@ -239,6 +250,8 @@
 
     private async Task ExportReport(string format)
     {
+        _isExporting = true;
+        StateHasChanged();
         try
         {
             var bytes = await AdrService.DownloadAccountsExportAsync(
@@ -262,6 +275,10 @@
         catch (Exception ex)
         {
             Snackbar.Add($"Export failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isExporting = false;
         }
     }
 

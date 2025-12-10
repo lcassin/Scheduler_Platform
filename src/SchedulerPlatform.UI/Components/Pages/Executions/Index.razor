@@ -35,17 +35,27 @@
                         <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters" StartIcon="@Icons.Material.Filled.FilterAlt">
                             Apply
                         </MudButton>
-            <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
-                <ActivatorContent>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download">
-                        Export
-                    </MudButton>
-                </ActivatorContent>
-                <ChildContent>
-                    <MudMenuItem OnClick="@(() => ExportExecutions("excel"))">Excel</MudMenuItem>
-                    <MudMenuItem OnClick="@(() => ExportExecutions("csv"))">CSV</MudMenuItem>
-                </ChildContent>
-            </MudMenu>
+            @if (_isExporting)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="true">
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    Exporting...
+                </MudButton>
+            }
+            else
+            {
+                <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+                    <ActivatorContent>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download">
+                            Export
+                        </MudButton>
+                    </ActivatorContent>
+                    <ChildContent>
+                        <MudMenuItem OnClick="@(() => ExportExecutions("excel"))">Excel</MudMenuItem>
+                        <MudMenuItem OnClick="@(() => ExportExecutions("csv"))">CSV</MudMenuItem>
+                    </ChildContent>
+                </MudMenu>
+            }
         </MudItem>
     </MudGrid>
 
@@ -140,6 +150,7 @@
 
     private List<JobExecution> _executions = new();
     private bool _loading = true;
+    private bool _isExporting = false;
     private string _statusFilter = "All";
     private DateTime? _startDate;
     private DateTime? _endDate;
@@ -201,6 +212,8 @@
 
     private async Task ExportExecutions(string format)
     {
+        _isExporting = true;
+        StateHasChanged();
         try
         {
             var bytes = await ExecutionService.DownloadJobExecutionsExportAsync(
@@ -224,6 +237,10 @@
         catch (Exception ex)
         {
             Snackbar.Add($"Export failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isExporting = false;
         }
     }
 
