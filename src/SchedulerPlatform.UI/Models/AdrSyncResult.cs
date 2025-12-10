@@ -6,7 +6,12 @@ public class AdrAccountSyncResult
     public int AccountsInserted { get; set; }
     public int AccountsUpdated { get; set; }
     public int AccountsMarkedDeleted { get; set; }
-    public List<string> Errors { get; set; } = new();
+    public int ClientsCreated { get; set; }
+    public int ClientsUpdated { get; set; }
+    public int Errors { get; set; }
+    public List<string> ErrorMessages { get; set; } = new();
+    public DateTime SyncStartDateTime { get; set; }
+    public DateTime SyncEndDateTime { get; set; }
     public TimeSpan Duration { get; set; }
 }
 
