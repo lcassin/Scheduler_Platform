@@ -970,7 +970,7 @@ public class AdrController : ControllerBase
         try
         {
             _logger.LogInformation("Manual credential verification triggered by {User}", User.Identity?.Name ?? "Unknown");
-            var result = await _orchestratorService.VerifyCredentialsAsync(cancellationToken);
+            var result = await _orchestratorService.VerifyCredentialsAsync(null, cancellationToken);
             return Ok(result);
         }
         catch (Exception ex)
@@ -987,7 +987,7 @@ public class AdrController : ControllerBase
         try
         {
             _logger.LogInformation("Manual scraping triggered by {User}", User.Identity?.Name ?? "Unknown");
-            var result = await _orchestratorService.ProcessScrapingAsync(cancellationToken);
+            var result = await _orchestratorService.ProcessScrapingAsync(null, cancellationToken);
             return Ok(result);
         }
         catch (Exception ex)
@@ -1004,7 +1004,7 @@ public class AdrController : ControllerBase
         try
         {
             _logger.LogInformation("Manual status check triggered by {User}", User.Identity?.Name ?? "Unknown");
-            var result = await _orchestratorService.CheckPendingStatusesAsync(cancellationToken);
+            var result = await _orchestratorService.CheckPendingStatusesAsync(null, cancellationToken);
             return Ok(result);
         }
         catch (Exception ex)
@@ -1024,9 +1024,9 @@ public class AdrController : ControllerBase
 
             var syncResult = await _syncService.SyncAccountsAsync(cancellationToken);
             var jobCreationResult = await _orchestratorService.CreateJobsForDueAccountsAsync(cancellationToken);
-            var credentialResult = await _orchestratorService.VerifyCredentialsAsync(cancellationToken);
-            var scrapeResult = await _orchestratorService.ProcessScrapingAsync(cancellationToken);
-            var statusResult = await _orchestratorService.CheckPendingStatusesAsync(cancellationToken);
+            var credentialResult = await _orchestratorService.VerifyCredentialsAsync(null, cancellationToken);
+            var scrapeResult = await _orchestratorService.ProcessScrapingAsync(null, cancellationToken);
+            var statusResult = await _orchestratorService.CheckPendingStatusesAsync(null, cancellationToken);
 
             return Ok(new
             {
