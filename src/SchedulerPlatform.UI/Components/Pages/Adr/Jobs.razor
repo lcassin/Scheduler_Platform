@@ -107,6 +107,7 @@
                             <MudTh><MudTableSortLabel SortLabel="PeriodType" T="AdrJob">Period Type</MudTableSortLabel></MudTh>
                             <MudTh><MudTableSortLabel SortLabel="NextRunDateTime" T="AdrJob">Next Run</MudTableSortLabel></MudTh>
                             <MudTh><MudTableSortLabel SortLabel="Status" T="AdrJob">Status</MudTableSortLabel></MudTh>
+                            <MudTh>Next Action</MudTh>
                             <MudTh><MudTableSortLabel SortLabel="AdrStatusId" T="AdrJob">ADR Status</MudTableSortLabel></MudTh>
                             <MudTh><MudTableSortLabel SortLabel="RetryCount" T="AdrJob">Retry Count</MudTableSortLabel></MudTh>
                             <MudTh>Actions</MudTh>
@@ -153,6 +154,20 @@
                     <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
                         @context.Status
                     </MudChip>
+                </MudTd>
+                <MudTd DataLabel="Next Action">
+                    @{
+                        var (action, actionDate, actionColor) = GetNextAction(context);
+                    }
+                    <MudTooltip Text="@GetNextActionTooltip(context)">
+                        <MudText Typo="Typo.body2" Color="@actionColor">
+                            @action
+                            @if (actionDate.HasValue)
+                            {
+                                <br /><small>@actionDate.Value.ToString("MM/dd/yy")</small>
+                            }
+                        </MudText>
+                    </MudTooltip>
                 </MudTd>
                 <MudTd DataLabel="ADR Status">
                     @if (context.AdrStatusId.HasValue)
@@ -359,6 +374,90 @@
         3 or 4 or 5 or 7 or 8 => Color.Error, // Error statuses
         _ => Color.Info
     };
+
+    private (string Action, DateTime? ActionDate, Color ActionColor) GetNextAction(AdrJob job)
+    {
+        var today = DateTime.UtcNow.Date;
+        
+        return job.Status switch
+        {
+            "Pending" => GetPendingNextAction(job, today),
+            "CredentialCheckInProgress" => ("Checking credentials...", null, Color.Info),
+            "CredentialVerified" => GetCredentialVerifiedNextAction(job, today),
+            "CredentialFailed" => ("Fix credentials", null, Color.Error),
+            "ScrapeInProgress" => ("Scraping...", null, Color.Info),
+            "ScrapeRequested" => ("Awaiting scrape result", null, Color.Warning),
+            "StatusCheckInProgress" => ("Checking status...", null, Color.Info),
+            "ScrapeFailed" => job.RetryCount < 5 
+                ? ("Retry scheduled", job.NextRunDateTime, Color.Warning)
+                : ("Max retries reached", null, Color.Error),
+            "Completed" => ("Complete", job.ScrapingCompletedDateTime, Color.Success),
+            "NeedsReview" => ("Manual review required", null, Color.Warning),
+            _ => ("Unknown", null, Color.Default)
+        };
+    }
+
+    private (string Action, DateTime? ActionDate, Color ActionColor) GetPendingNextAction(AdrJob job, DateTime today)
+    {
+        if (!job.NextRunDateTime.HasValue)
+            return ("Awaiting schedule", null, Color.Default);
+        
+        var nextRunDate = job.NextRunDateTime.Value.Date;
+        var daysUntilNextRun = (nextRunDate - today).Days;
+        
+        // Credential check happens 7 days before NextRunDate
+        var credentialCheckDate = nextRunDate.AddDays(-7);
+        var daysUntilCredCheck = (credentialCheckDate - today).Days;
+        
+        if (daysUntilCredCheck <= 0)
+            return ("Credential check due", credentialCheckDate, Color.Info);
+        else if (daysUntilCredCheck <= 7)
+            return ($"Cred check in {daysUntilCredCheck}d", credentialCheckDate, Color.Default);
+        else
+            return ($"Scheduled", credentialCheckDate, Color.Default);
+    }
+
+    private (string Action, DateTime? ActionDate, Color ActionColor) GetCredentialVerifiedNextAction(AdrJob job, DateTime today)
+    {
+        if (!job.NextRunDateTime.HasValue)
+            return ("Awaiting scrape date", null, Color.Info);
+        
+        var nextRunDate = job.NextRunDateTime.Value.Date;
+        var daysUntilScrape = (nextRunDate - today).Days;
+        
+        if (daysUntilScrape <= 0)
+            return ("Scrape due now", nextRunDate, Color.Warning);
+        else if (daysUntilScrape == 1)
+            return ("Scrape tomorrow", nextRunDate, Color.Info);
+        else
+            return ($"Scrape in {daysUntilScrape}d", nextRunDate, Color.Info);
+    }
+
+    private string GetNextActionTooltip(AdrJob job)
+    {
+        var today = DateTime.UtcNow.Date;
+        
+        return job.Status switch
+        {
+            "Pending" when job.NextRunDateTime.HasValue => 
+                $"Credential check: {job.NextRunDateTime.Value.AddDays(-7):MM/dd/yyyy}\nScrape starts: {job.NextRunDateTime.Value:MM/dd/yyyy}",
+            "CredentialVerified" when job.NextRunDateTime.HasValue =>
+                $"Credentials verified: {job.CredentialVerifiedDateTime?.ToString("MM/dd/yyyy") ?? "N/A"}\nScrape starts: {job.NextRunDateTime.Value:MM/dd/yyyy}",
+            "CredentialFailed" =>
+                "Credentials need to be updated in the vendor portal. A helpdesk ticket has been created.",
+            "ScrapeRequested" =>
+                $"Scrape requested. Checking status daily until {job.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? "range end"}.",
+            "Completed" =>
+                $"Invoice retrieved successfully on {job.ScrapingCompletedDateTime?.ToString("MM/dd/yyyy") ?? "N/A"}.",
+            "ScrapeFailed" when job.RetryCount < 5 =>
+                $"Scrape failed. Retry {job.RetryCount + 1} of 5 scheduled.",
+            "ScrapeFailed" =>
+                "Maximum retries reached. Manual intervention required.",
+            "NeedsReview" =>
+                "ADR API returned a status requiring human review.",
+            _ => ""
+        };
+    }
 
     private async Task ViewJobDetails(AdrJob job)
     {

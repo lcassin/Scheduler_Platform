@@ -90,6 +90,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         return _configuration.GetValue<int>("AdrOrchestration:MaxParallelRequests", DefaultMaxParallelRequests);
     }
 
+    private int GetCredentialCheckLeadDays()
+    {
+        return _configuration.GetValue<int>("AdrOrchestration:CredentialCheckLeadDays", DefaultCredentialCheckLeadDays);
+    }
+
     #region Step 2: Job Creation
 
     public async Task<JobCreationResult> CreateJobsForDueAccountsAsync(CancellationToken cancellationToken = default)
@@ -206,13 +211,16 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     {
         var result = new CredentialVerificationResult();
         var maxParallel = GetMaxParallelRequests();
+        var credentialCheckLeadDays = GetCredentialCheckLeadDays();
 
         try
         {
-            _logger.LogInformation("Starting credential verification with {MaxParallel} parallel workers", maxParallel);
+            _logger.LogInformation("Starting credential verification with {MaxParallel} parallel workers, {LeadDays} day lead time", 
+                maxParallel, credentialCheckLeadDays);
 
-            var jobsNeedingVerification = (await _unitOfWork.AdrJobs.GetJobsNeedingCredentialVerificationAsync(DateTime.UtcNow)).ToList();
-            _logger.LogInformation("Found {Count} jobs needing credential verification", jobsNeedingVerification.Count);
+            var jobsNeedingVerification = (await _unitOfWork.AdrJobs.GetJobsNeedingCredentialVerificationAsync(DateTime.UtcNow, credentialCheckLeadDays)).ToList();
+            _logger.LogInformation("Found {Count} jobs needing credential verification (NextRunDate within {LeadDays} days)", 
+                jobsNeedingVerification.Count, credentialCheckLeadDays);
 
             if (!jobsNeedingVerification.Any())
             {
