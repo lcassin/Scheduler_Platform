@@ -51,12 +51,14 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
     {
         // Include "ScrapeInProgress" to recover jobs that were interrupted mid-step
         // These jobs already had the API called but the process crashed before updating status
+        // Note: We don't filter by NextRunDateTime here because:
+        // 1. The job was already created because the account was due (Run Now/Due Soon)
+        // 2. Credential verification has succeeded
+        // 3. The job should proceed to scraping immediately - NextRunDateTime is for retry scheduling
         return await _dbSet
             .Where(j => !j.IsDeleted && 
                         (j.Status == "CredentialVerified" || j.Status == "ScrapeInProgress") &&
-                        j.CredentialVerifiedDateTime.HasValue &&
-                        j.NextRunDateTime.HasValue &&
-                        j.NextRunDateTime.Value.Date <= currentDate.Date)
+                        j.CredentialVerifiedDateTime.HasValue)
             .Include(j => j.AdrAccount)
             .ToListAsync();
     }
