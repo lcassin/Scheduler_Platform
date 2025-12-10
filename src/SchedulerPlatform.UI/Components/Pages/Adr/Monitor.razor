@@ -1,0 +1,422 @@
+@page "/adr/monitor"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject IAdrService AdrService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+<PageTitle>ADR Job Monitor</PageTitle>
+
+<MudText Typo="Typo.h4" Class="mb-4">ADR Job Monitor</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="8">
+        <MudPaper Class="pa-4 mb-4">
+            <div class="d-flex justify-space-between align-center mb-4">
+                <MudText Typo="Typo.h6">Current Orchestration Status</MudText>
+                <div class="d-flex gap-2">
+                    <MudButton Variant="Variant.Outlined" 
+                               Color="Color.Primary" 
+                               StartIcon="@Icons.Material.Filled.Refresh"
+                               OnClick="RefreshStatus"
+                               Disabled="_isRefreshing">
+                        @if (_isRefreshing)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            <text>Refreshing...</text>
+                        }
+                        else
+                        {
+                            <text>Refresh</text>
+                        }
+                    </MudButton>
+                    <MudButton Variant="Variant.Filled" 
+                               Color="Color.Success" 
+                               StartIcon="@Icons.Material.Filled.PlayArrow"
+                               OnClick="StartOrchestration"
+                               Disabled="_isStarting || (_currentStatus?.IsRunning ?? false)">
+                        @if (_isStarting)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            <text>Starting...</text>
+                        }
+                        else
+                        {
+                            <text>Start Orchestration</text>
+                        }
+                    </MudButton>
+                </div>
+            </div>
+
+            @if (_loading)
+            {
+                <div class="d-flex justify-center pa-8">
+                    <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+                </div>
+            }
+            else if (_currentStatus == null)
+            {
+                <MudAlert Severity="Severity.Error">Unable to load orchestration status</MudAlert>
+            }
+            else if (!_currentStatus.IsRunning)
+            {
+                <MudAlert Severity="Severity.Info" Icon="@Icons.Material.Filled.Info">
+                    No orchestration is currently running. Click "Start Orchestration" to begin a new run.
+                </MudAlert>
+            }
+            else if (_currentStatus.Status != null)
+            {
+                <MudCard Outlined="true">
+                    <MudCardContent>
+                        <MudGrid>
+                            <MudItem xs="12" md="6">
+                                <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Request ID</MudText>
+                                <MudText Typo="Typo.body1" Class="mb-3">@_currentStatus.Status.RequestId</MudText>
+                                
+                                <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Requested By</MudText>
+                                <MudText Typo="Typo.body1" Class="mb-3">@_currentStatus.Status.RequestedBy</MudText>
+                                
+                                <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Started At</MudText>
+                                <MudText Typo="Typo.body1">@(_currentStatus.Status.StartedAt?.ToString("MM/dd/yyyy hh:mm:ss tt") ?? "Not started")</MudText>
+                            </MudItem>
+                            <MudItem xs="12" md="6">
+                                <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Status</MudText>
+                                <MudChip T="string" Size="Size.Medium" Color="@GetStatusColor(_currentStatus.Status.Status)" Class="mb-3">
+                                    @_currentStatus.Status.Status
+                                </MudChip>
+                                
+                                <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Current Step</MudText>
+                                <MudText Typo="Typo.body1" Class="mb-3">
+                                    @(_currentStatus.Status.CurrentStep ?? "N/A")
+                                </MudText>
+                                
+                                @if (!string.IsNullOrEmpty(_currentStatus.Status.ErrorMessage))
+                                {
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Error</MudText>
+                                    <MudText Typo="Typo.body1" Color="Color.Error">@_currentStatus.Status.ErrorMessage</MudText>
+                                }
+                            </MudItem>
+                        </MudGrid>
+
+                        @if (_currentStatus.Status.Status == "Running")
+                        {
+                            <MudDivider Class="my-4" />
+                            <MudText Typo="Typo.subtitle1" Class="mb-2">Step Progress</MudText>
+                            <MudTimeline TimelinePosition="TimelinePosition.Start">
+                                <MudTimelineItem Color="@GetStepColor("Syncing accounts", _currentStatus.Status)" Icon="@GetStepIcon("Syncing accounts", _currentStatus.Status)">
+                                    <ItemContent>
+                                        <MudText Typo="Typo.body2">Sync Accounts</MudText>
+                                        @if (_currentStatus.Status.SyncResult != null)
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                @_currentStatus.Status.SyncResult.AccountsInserted inserted, @_currentStatus.Status.SyncResult.AccountsUpdated updated
+                                            </MudText>
+                                        }
+                                    </ItemContent>
+                                </MudTimelineItem>
+                                <MudTimelineItem Color="@GetStepColor("Creating jobs", _currentStatus.Status)" Icon="@GetStepIcon("Creating jobs", _currentStatus.Status)">
+                                    <ItemContent>
+                                        <MudText Typo="Typo.body2">Create Jobs</MudText>
+                                        @if (_currentStatus.Status.JobCreationResult != null)
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                @_currentStatus.Status.JobCreationResult.JobsCreated created, @_currentStatus.Status.JobCreationResult.JobsSkipped skipped
+                                            </MudText>
+                                        }
+                                    </ItemContent>
+                                </MudTimelineItem>
+                                <MudTimelineItem Color="@GetStepColor("Verifying credentials", _currentStatus.Status)" Icon="@GetStepIcon("Verifying credentials", _currentStatus.Status)">
+                                    <ItemContent>
+                                        <MudText Typo="Typo.body2">Verify Credentials</MudText>
+                                        @if (_currentStatus.Status.CredentialVerificationResult != null)
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                @_currentStatus.Status.CredentialVerificationResult.CredentialsVerified verified, @_currentStatus.Status.CredentialVerificationResult.CredentialsFailed failed
+                                            </MudText>
+                                        }
+                                    </ItemContent>
+                                </MudTimelineItem>
+                                <MudTimelineItem Color="@GetStepColor("Processing scraping", _currentStatus.Status)" Icon="@GetStepIcon("Processing scraping", _currentStatus.Status)">
+                                    <ItemContent>
+                                        <MudText Typo="Typo.body2">Process Scraping</MudText>
+                                        @if (_currentStatus.Status.ScrapeResult != null)
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                @_currentStatus.Status.ScrapeResult.ScrapesRequested requested, @_currentStatus.Status.ScrapeResult.ScrapesCompleted completed
+                                            </MudText>
+                                        }
+                                    </ItemContent>
+                                </MudTimelineItem>
+                                <MudTimelineItem Color="@GetStepColor("Checking statuses", _currentStatus.Status)" Icon="@GetStepIcon("Checking statuses", _currentStatus.Status)">
+                                    <ItemContent>
+                                        <MudText Typo="Typo.body2">Check Statuses</MudText>
+                                        @if (_currentStatus.Status.StatusCheckResult != null)
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                @_currentStatus.Status.StatusCheckResult.JobsCompleted completed, @_currentStatus.Status.StatusCheckResult.JobsNeedingReview need review
+                                            </MudText>
+                                        }
+                                    </ItemContent>
+                                </MudTimelineItem>
+                            </MudTimeline>
+                        }
+                    </MudCardContent>
+                </MudCard>
+            }
+
+            <div class="d-flex justify-space-between align-center mt-4">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    Auto-refresh: @(_autoRefreshEnabled ? "On (every 60 seconds)" : "Off")
+                </MudText>
+                <MudSwitch @bind-Value="_autoRefreshEnabled" 
+                           Color="Color.Primary" 
+                           Label="Auto-refresh" 
+                           T="bool" />
+            </div>
+            @if (_lastRefresh.HasValue)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    Last refreshed: @_lastRefresh.Value.ToString("hh:mm:ss tt")
+                </MudText>
+            }
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="4">
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-4">Quick Links</MudText>
+            <MudList T="string" Dense="true">
+                <MudListItem Icon="@Icons.Material.Filled.AccountBalance" OnClick="@(() => Navigation.NavigateTo("/adr/accounts"))">
+                    View Accounts
+                </MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.Work" OnClick="@(() => Navigation.NavigateTo("/adr/jobs"))">
+                    View Jobs
+                </MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.Warning" OnClick="@(() => Navigation.NavigateTo("/adr/missing-accounts"))">
+                    Missing Accounts
+                </MudListItem>
+            </MudList>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudPaper Class="pa-4 mt-4">
+    <MudText Typo="Typo.h6" Class="mb-4">Recent Orchestration History</MudText>
+    
+    @if (_historyLoading)
+    {
+        <div class="d-flex justify-center pa-4">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Small" />
+        </div>
+    }
+    else if (_history == null || !_history.Any())
+    {
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center" Class="pa-4">
+            No orchestration history available
+        </MudText>
+    }
+    else
+    {
+        <MudTable Items="_history" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm">
+            <HeaderContent>
+                <MudTh>Request ID</MudTh>
+                <MudTh>Requested By</MudTh>
+                <MudTh>Requested At</MudTh>
+                <MudTh>Started At</MudTh>
+                <MudTh>Completed At</MudTh>
+                <MudTh>Status</MudTh>
+                <MudTh>Duration</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Request ID">
+                    <MudText Typo="Typo.caption">@context.RequestId[..8]...</MudText>
+                </MudTd>
+                <MudTd DataLabel="Requested By">@context.RequestedBy</MudTd>
+                <MudTd DataLabel="Requested At">@context.RequestedAt.ToString("MM/dd/yyyy hh:mm tt")</MudTd>
+                <MudTd DataLabel="Started At">@(context.StartedAt?.ToString("hh:mm:ss tt") ?? "N/A")</MudTd>
+                <MudTd DataLabel="Completed At">@(context.CompletedAt?.ToString("hh:mm:ss tt") ?? "N/A")</MudTd>
+                <MudTd DataLabel="Status">
+                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">@context.Status</MudChip>
+                </MudTd>
+                <MudTd DataLabel="Duration">
+                    @if (context.StartedAt.HasValue && context.CompletedAt.HasValue)
+                    {
+                        var duration = context.CompletedAt.Value - context.StartedAt.Value;
+                        <text>@duration.ToString(@"hh\:mm\:ss")</text>
+                    }
+                    else if (context.StartedAt.HasValue)
+                    {
+                        <text>In progress...</text>
+                    }
+                    else
+                    {
+                        <text>N/A</text>
+                    }
+                </MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
+
+@code {
+    private OrchestrationCurrentResponse? _currentStatus;
+    private List<AdrOrchestrationStatus>? _history;
+    private bool _loading = true;
+    private bool _historyLoading = true;
+    private bool _isRefreshing = false;
+    private bool _isStarting = false;
+    private bool _autoRefreshEnabled = true;
+    private DateTime? _lastRefresh;
+    private System.Threading.Timer? _refreshTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDataAsync();
+        StartAutoRefresh();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        try
+        {
+            _loading = true;
+            _historyLoading = true;
+            StateHasChanged();
+
+            var statusTask = AdrService.GetCurrentOrchestrationAsync();
+            var historyTask = AdrService.GetOrchestrationHistoryAsync(10);
+
+            await Task.WhenAll(statusTask, historyTask);
+
+            _currentStatus = await statusTask;
+            _history = await historyTask;
+            _lastRefresh = DateTime.Now;
+        }
+        catch (SessionExpiredException)
+        {
+            Snackbar.Add("Your session has expired. Redirecting to login...", Severity.Warning);
+            Navigation.NavigateTo("/Account/Login", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading data: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+            _historyLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshStatus()
+    {
+        _isRefreshing = true;
+        StateHasChanged();
+
+        try
+        {
+            await LoadDataAsync();
+        }
+        finally
+        {
+            _isRefreshing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task StartOrchestration()
+    {
+        _isStarting = true;
+        StateHasChanged();
+
+        try
+        {
+            var response = await AdrService.StartBackgroundOrchestrationAsync();
+            Snackbar.Add($"Orchestration started! Request ID: {response.RequestId[..8]}...", Severity.Success);
+            
+            // Wait a moment then refresh to show the running status
+            await Task.Delay(1000);
+            await LoadDataAsync();
+        }
+        catch (SessionExpiredException)
+        {
+            Snackbar.Add("Your session has expired. Redirecting to login...", Severity.Warning);
+            Navigation.NavigateTo("/Account/Login", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to start orchestration: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isStarting = false;
+            StateHasChanged();
+        }
+    }
+
+    private void StartAutoRefresh()
+    {
+        _refreshTimer = new System.Threading.Timer(async _ =>
+        {
+            if (_autoRefreshEnabled)
+            {
+                await InvokeAsync(async () =>
+                {
+                    try
+                    {
+                        await LoadDataAsync();
+                    }
+                    catch
+                    {
+                        // Ignore errors during auto-refresh
+                    }
+                });
+            }
+        }, null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
+    }
+
+    private Color GetStatusColor(string status) => status switch
+    {
+        "Queued" => Color.Default,
+        "Running" => Color.Info,
+        "Completed" => Color.Success,
+        "Failed" => Color.Error,
+        "Cancelled" => Color.Warning,
+        _ => Color.Default
+    };
+
+    private Color GetStepColor(string stepName, AdrOrchestrationStatus status)
+    {
+        var steps = new[] { "Syncing accounts", "Creating jobs", "Verifying credentials", "Processing scraping", "Checking statuses" };
+        var currentIndex = Array.IndexOf(steps, status.CurrentStep);
+        var stepIndex = Array.IndexOf(steps, stepName);
+
+        if (status.CurrentStep == stepName)
+            return Color.Info; // Current step
+        else if (stepIndex < currentIndex || (status.Status == "Completed" && stepIndex <= steps.Length))
+            return Color.Success; // Completed step
+        else
+            return Color.Default; // Pending step
+    }
+
+    private string GetStepIcon(string stepName, AdrOrchestrationStatus status)
+    {
+        var steps = new[] { "Syncing accounts", "Creating jobs", "Verifying credentials", "Processing scraping", "Checking statuses" };
+        var currentIndex = Array.IndexOf(steps, status.CurrentStep);
+        var stepIndex = Array.IndexOf(steps, stepName);
+
+        if (status.CurrentStep == stepName)
+            return Icons.Material.Filled.PlayCircle;
+        else if (stepIndex < currentIndex || status.Status == "Completed")
+            return Icons.Material.Filled.CheckCircle;
+        else
+            return Icons.Material.Filled.Circle;
+    }
+
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+    }
+}

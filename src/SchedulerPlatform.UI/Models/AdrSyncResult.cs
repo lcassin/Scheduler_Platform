@@ -69,3 +69,37 @@ public class RefireJobsBulkResult
     public int TotalRequested { get; set; }
     public List<string>? Errors { get; set; }
 }
+
+public class BackgroundOrchestrationResponse
+{
+    public string Message { get; set; } = string.Empty;
+    public string RequestId { get; set; } = string.Empty;
+    public DateTime RequestedAt { get; set; }
+    public string RequestedBy { get; set; } = string.Empty;
+}
+
+public class OrchestrationCurrentResponse
+{
+    public bool IsRunning { get; set; }
+    public string? Message { get; set; }
+    public AdrOrchestrationStatus? Status { get; set; }
+}
+
+public class AdrOrchestrationStatus
+{
+    public string RequestId { get; set; } = string.Empty;
+    public string RequestedBy { get; set; } = string.Empty;
+    public DateTime RequestedAt { get; set; }
+    public DateTime? StartedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public string Status { get; set; } = "Queued"; // Queued, Running, Completed, Failed, Cancelled
+    public string? CurrentStep { get; set; }
+    public string? ErrorMessage { get; set; }
+    
+    // Results from each step
+    public AdrAccountSyncResult? SyncResult { get; set; }
+    public JobCreationResult? JobCreationResult { get; set; }
+    public CredentialVerificationResult? CredentialVerificationResult { get; set; }
+    public ScrapeResult? ScrapeResult { get; set; }
+    public StatusCheckResult? StatusCheckResult { get; set; }
+}

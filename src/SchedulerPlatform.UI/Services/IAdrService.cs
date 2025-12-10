@@ -59,4 +59,10 @@ public interface IAdrService
     Task<ScrapeResult> ProcessScrapingAsync();
     Task<StatusCheckResult> CheckStatusesAsync();
     Task<FullCycleResult> RunFullCycleAsync();
+    
+    // Background orchestration monitoring
+    Task<BackgroundOrchestrationResponse> StartBackgroundOrchestrationAsync();
+    Task<OrchestrationCurrentResponse> GetCurrentOrchestrationAsync();
+    Task<AdrOrchestrationStatus?> GetOrchestrationStatusAsync(string requestId);
+    Task<List<AdrOrchestrationStatus>> GetOrchestrationHistoryAsync(int count = 10);
 }
