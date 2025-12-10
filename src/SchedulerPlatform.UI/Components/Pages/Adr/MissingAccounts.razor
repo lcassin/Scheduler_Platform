@@ -6,6 +6,7 @@
 @inject NavigationManager Navigation
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Missing Accounts Report</PageTitle>
 
@@ -48,9 +49,17 @@
             <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ClearFilters" StartIcon="@Icons.Material.Filled.Clear">
                 Clear
             </MudButton>
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ExportReport" StartIcon="@Icons.Material.Filled.Download">
-                Export
-            </MudButton>
+            <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+                <ActivatorContent>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download">
+                        Export
+                    </MudButton>
+                </ActivatorContent>
+                <ChildContent>
+                    <MudMenuItem OnClick="@(() => ExportReport("excel"))">Excel</MudMenuItem>
+                    <MudMenuItem OnClick="@(() => ExportReport("csv"))">CSV</MudMenuItem>
+                </ChildContent>
+            </MudMenu>
         </MudItem>
     </MudGrid>
 
@@ -228,9 +237,32 @@
         await _table.ReloadServerData();
     }
 
-    private async Task ExportReport()
+    private async Task ExportReport(string format)
     {
-        Snackbar.Add("Export functionality coming soon", Severity.Info);
+        try
+        {
+            var bytes = await AdrService.DownloadAccountsExportAsync(
+                _filterClientId,
+                _searchTerm,
+                null,
+                "Missing",
+                format);
+
+            var contentType = format.Equals("excel", StringComparison.OrdinalIgnoreCase)
+                ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                : "text/csv";
+
+            var filename = $"missing_accounts_{DateTime.UtcNow:yyyyMMddHHmmss}.{(format.Equals("excel", StringComparison.OrdinalIgnoreCase) ? "xlsx" : "csv")}";
+
+            var base64 = Convert.ToBase64String(bytes);
+            await JSRuntime.InvokeVoidAsync("downloadFile", filename, contentType, base64);
+
+            Snackbar.Add($"Export downloaded: {filename}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Export failed: {ex.Message}", Severity.Error);
+        }
     }
 
     private int CalculateDaysOverdue(AdrAccount account)

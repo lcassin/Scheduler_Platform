@@ -7,6 +7,7 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject IPermissionService PermissionService
+@inject IJSRuntime JSRuntime
 
 <PageTitle>ADR Accounts</PageTitle>
 
@@ -62,6 +63,17 @@
             <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ClearFilters" StartIcon="@Icons.Material.Filled.Clear">
                 Clear
             </MudButton>
+            <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+                <ActivatorContent>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download">
+                        Export
+                    </MudButton>
+                </ActivatorContent>
+                <ChildContent>
+                    <MudMenuItem OnClick="@(() => ExportAccounts("excel"))">Excel</MudMenuItem>
+                    <MudMenuItem OnClick="@(() => ExportAccounts("csv"))">CSV</MudMenuItem>
+                </ChildContent>
+            </MudMenu>
         </MudItem>
     </MudGrid>
 
@@ -285,5 +297,33 @@
     private void ViewJobs(int accountId)
     {
         Navigation.NavigateTo($"/adr/jobs?accountId={accountId}");
+    }
+
+    private async Task ExportAccounts(string format)
+    {
+        try
+        {
+            var bytes = await AdrService.DownloadAccountsExportAsync(
+                _selectedClientId,
+                _searchTerm,
+                _filterNextRunStatus,
+                _filterHistoricalStatus,
+                format);
+
+            var contentType = format.Equals("excel", StringComparison.OrdinalIgnoreCase)
+                ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                : "text/csv";
+
+            var filename = $"adr_accounts_{DateTime.UtcNow:yyyyMMddHHmmss}.{(format.Equals("excel", StringComparison.OrdinalIgnoreCase) ? "xlsx" : "csv")}";
+
+            var base64 = Convert.ToBase64String(bytes);
+            await JSRuntime.InvokeVoidAsync("downloadFile", filename, contentType, base64);
+
+            Snackbar.Add($"Export downloaded: {filename}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Export failed: {ex.Message}", Severity.Error);
+        }
     }
 }

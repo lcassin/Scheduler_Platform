@@ -1,3 +1,4 @@
+using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SchedulerPlatform.API.Services;
@@ -170,6 +171,84 @@ public class AdrController : ControllerBase
         {
             _logger.LogError(ex, "Error retrieving ADR account stats");
             return StatusCode(500, "An error occurred while retrieving ADR account stats");
+        }
+    }
+
+    [HttpGet("accounts/export")]
+    public async Task<IActionResult> ExportAccounts(
+        [FromQuery] int? clientId = null,
+        [FromQuery] string? searchTerm = null,
+        [FromQuery] string? nextRunStatus = null,
+        [FromQuery] string? historicalBillingStatus = null,
+        [FromQuery] string format = "excel")
+    {
+        try
+        {
+            // Get all accounts matching the filters (no pagination for export)
+            var (accounts, _) = await _unitOfWork.AdrAccounts.GetPagedAsync(
+                1, int.MaxValue, clientId, null, nextRunStatus, searchTerm, historicalBillingStatus);
+
+            if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
+            {
+                var csv = new System.Text.StringBuilder();
+                csv.AppendLine("Account #,Interface Account ID,Client,Vendor Code,Period Type,Next Run,Run Status,Historical Status,Last Invoice,Expected Next");
+
+                foreach (var a in accounts)
+                {
+                    csv.AppendLine($"{CsvEscape(a.VMAccountNumber)},{CsvEscape(a.InterfaceAccountId)},{CsvEscape(a.ClientName)},{CsvEscape(a.VendorCode)},{CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.NextRunStatus)},{CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""}");
+                }
+
+                return File(System.Text.Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", $"adr_accounts_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
+            }
+
+            // Excel format
+            using var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("ADR Accounts");
+
+            // Headers
+            worksheet.Cell(1, 1).Value = "Account #";
+            worksheet.Cell(1, 2).Value = "VM Account ID";
+            worksheet.Cell(1, 3).Value = "Interface Account ID";
+            worksheet.Cell(1, 4).Value = "Client";
+            worksheet.Cell(1, 5).Value = "Vendor Code";
+            worksheet.Cell(1, 6).Value = "Period Type";
+            worksheet.Cell(1, 7).Value = "Next Run";
+            worksheet.Cell(1, 8).Value = "Run Status";
+            worksheet.Cell(1, 9).Value = "Historical Status";
+            worksheet.Cell(1, 10).Value = "Last Invoice";
+            worksheet.Cell(1, 11).Value = "Expected Next";
+
+            var headerRow = worksheet.Row(1);
+            headerRow.Style.Font.Bold = true;
+
+            int row = 2;
+            foreach (var a in accounts)
+            {
+                worksheet.Cell(row, 1).Value = a.VMAccountNumber;
+                worksheet.Cell(row, 2).Value = a.VMAccountId;
+                worksheet.Cell(row, 3).Value = a.InterfaceAccountId;
+                worksheet.Cell(row, 4).Value = a.ClientName;
+                worksheet.Cell(row, 5).Value = a.VendorCode;
+                worksheet.Cell(row, 6).Value = a.PeriodType;
+                if (a.NextRunDateTime.HasValue) worksheet.Cell(row, 7).Value = a.NextRunDateTime.Value;
+                worksheet.Cell(row, 8).Value = a.NextRunStatus;
+                worksheet.Cell(row, 9).Value = a.HistoricalBillingStatus;
+                if (a.LastInvoiceDateTime.HasValue) worksheet.Cell(row, 10).Value = a.LastInvoiceDateTime.Value;
+                if (a.ExpectedNextDateTime.HasValue) worksheet.Cell(row, 11).Value = a.ExpectedNextDateTime.Value;
+                row++;
+            }
+
+            worksheet.Columns().AdjustToContents();
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"adr_accounts_{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting ADR accounts");
+            return StatusCode(500, "An error occurred while exporting ADR accounts");
         }
     }
 
@@ -361,6 +440,86 @@ public class AdrController : ControllerBase
         {
             _logger.LogError(ex, "Error retrieving ADR job stats");
             return StatusCode(500, "An error occurred while retrieving ADR job stats");
+        }
+    }
+
+    [HttpGet("jobs/export")]
+    public async Task<IActionResult> ExportJobs(
+        [FromQuery] string? status = null,
+        [FromQuery] string? vendorCode = null,
+        [FromQuery] string? vmAccountNumber = null,
+        [FromQuery] bool latestPerAccount = false,
+        [FromQuery] string format = "excel")
+    {
+        try
+        {
+            // Get all jobs matching the filters (no pagination for export)
+            var (jobs, _) = await _unitOfWork.AdrJobs.GetPagedAsync(
+                1, int.MaxValue, null, status, null, null, vendorCode, vmAccountNumber, latestPerAccount);
+
+            if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
+            {
+                var csv = new System.Text.StringBuilder();
+                csv.AppendLine("Job ID,Vendor Code,Account #,Billing Period Start,Billing Period End,Period Type,Next Run,Status,ADR Status,ADR Status Description,Retry Count,Created");
+
+                foreach (var j in jobs)
+                {
+                    csv.AppendLine($"{j.Id},{CsvEscape(j.VendorCode)},{CsvEscape(j.VMAccountNumber)},{j.BillingPeriodStartDateTime:MM/dd/yyyy},{j.BillingPeriodEndDateTime:MM/dd/yyyy},{CsvEscape(j.PeriodType)},{j.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(j.Status)},{j.AdrStatusId?.ToString() ?? ""},{CsvEscape(j.AdrStatusDescription)},{j.RetryCount},{j.CreatedDateTime:MM/dd/yyyy HH:mm}");
+                }
+
+                return File(System.Text.Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", $"adr_jobs_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
+            }
+
+            // Excel format
+            using var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("ADR Jobs");
+
+            // Headers
+            worksheet.Cell(1, 1).Value = "Job ID";
+            worksheet.Cell(1, 2).Value = "Vendor Code";
+            worksheet.Cell(1, 3).Value = "Account #";
+            worksheet.Cell(1, 4).Value = "Billing Period Start";
+            worksheet.Cell(1, 5).Value = "Billing Period End";
+            worksheet.Cell(1, 6).Value = "Period Type";
+            worksheet.Cell(1, 7).Value = "Next Run";
+            worksheet.Cell(1, 8).Value = "Status";
+            worksheet.Cell(1, 9).Value = "ADR Status";
+            worksheet.Cell(1, 10).Value = "ADR Status Description";
+            worksheet.Cell(1, 11).Value = "Retry Count";
+            worksheet.Cell(1, 12).Value = "Created";
+
+            var headerRow = worksheet.Row(1);
+            headerRow.Style.Font.Bold = true;
+
+            int row = 2;
+            foreach (var j in jobs)
+            {
+                worksheet.Cell(row, 1).Value = j.Id;
+                worksheet.Cell(row, 2).Value = j.VendorCode;
+                worksheet.Cell(row, 3).Value = j.VMAccountNumber;
+                worksheet.Cell(row, 4).Value = j.BillingPeriodStartDateTime;
+                worksheet.Cell(row, 5).Value = j.BillingPeriodEndDateTime;
+                worksheet.Cell(row, 6).Value = j.PeriodType;
+                if (j.NextRunDateTime.HasValue) worksheet.Cell(row, 7).Value = j.NextRunDateTime.Value;
+                worksheet.Cell(row, 8).Value = j.Status;
+                if (j.AdrStatusId.HasValue) worksheet.Cell(row, 9).Value = j.AdrStatusId.Value;
+                worksheet.Cell(row, 10).Value = j.AdrStatusDescription;
+                worksheet.Cell(row, 11).Value = j.RetryCount;
+                worksheet.Cell(row, 12).Value = j.CreatedDateTime;
+                row++;
+            }
+
+            worksheet.Columns().AdjustToContents();
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"adr_jobs_{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting ADR jobs");
+            return StatusCode(500, "An error occurred while exporting ADR jobs");
         }
     }
 
@@ -752,6 +911,16 @@ public class AdrController : ControllerBase
     }
 
     #endregion
+
+    private static string CsvEscape(string? value)
+    {
+        if (value == null) return "";
+        if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
+        {
+            return $"\"{value.Replace("\"", "\"\"")}\"";
+        }
+        return value;
+    }
 }
 
 #region Request DTOs
