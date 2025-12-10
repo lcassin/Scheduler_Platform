@@ -396,9 +396,14 @@
                     {
                         await LoadDataAsync();
                     }
+                    catch (SessionExpiredException)
+                    {
+                        Snackbar.Add("Your session has expired. Redirecting to login...", Severity.Warning);
+                        Navigation.NavigateTo("/Account/Login", forceLoad: true);
+                    }
                     catch
                     {
-                        // Ignore errors during auto-refresh
+                        // Ignore other errors during auto-refresh
                     }
                 });
             }
