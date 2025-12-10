@@ -35,14 +35,23 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             .ToListAsync();
     }
 
-    public async Task<IEnumerable<AdrJob>> GetJobsNeedingCredentialVerificationAsync(DateTime currentDate)
+    public async Task<IEnumerable<AdrJob>> GetJobsNeedingCredentialVerificationAsync(DateTime currentDate, int credentialCheckLeadDays = 7)
     {
         // Include "CredentialCheckInProgress" to recover jobs that were interrupted mid-step
         // These jobs already had the API called but the process crashed before updating status
+        // 
+        // Credential verification should happen within the lead days window before NextRunDate:
+        // - Jobs where NextRunDateTime is within the next N days (configurable, default 7)
+        // - Also include jobs where NextRunDateTime has already passed (late jobs still need verification)
+        var today = currentDate.Date;
+        var leadDateCutoff = today.AddDays(credentialCheckLeadDays);
+        
         return await _dbSet
             .Where(j => !j.IsDeleted && 
                         (j.Status == "Pending" || j.Status == "CredentialCheckInProgress") &&
-                        !j.CredentialVerifiedDateTime.HasValue)
+                        !j.CredentialVerifiedDateTime.HasValue &&
+                        j.NextRunDateTime.HasValue &&
+                        j.NextRunDateTime.Value.Date <= leadDateCutoff)
             .Include(j => j.AdrAccount)
             .ToListAsync();
     }
