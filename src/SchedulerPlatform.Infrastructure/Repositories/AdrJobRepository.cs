@@ -40,9 +40,10 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
         // Include "CredentialCheckInProgress" to recover jobs that were interrupted mid-step
         // These jobs already had the API called but the process crashed before updating status
         // 
-        // Credential verification should happen within the lead days window before NextRunDate:
+        // Credential verification window: 7 days before NextRunDate up to (but not including) NextRunDate
+        // Example: If NextRunDate = Dec 17, credential check window is Dec 10-16
         // - Jobs where NextRunDateTime is within the next N days (configurable, default 7)
-        // - Also include jobs where NextRunDateTime has already passed (late jobs still need verification)
+        // - Only future NextRunDates - jobs with past NextRunDates should be in scraping phase, not credential check
         var today = currentDate.Date;
         var leadDateCutoff = today.AddDays(credentialCheckLeadDays);
         
@@ -51,6 +52,7 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                         (j.Status == "Pending" || j.Status == "CredentialCheckInProgress") &&
                         !j.CredentialVerifiedDateTime.HasValue &&
                         j.NextRunDateTime.HasValue &&
+                        j.NextRunDateTime.Value.Date > today &&
                         j.NextRunDateTime.Value.Date <= leadDateCutoff)
             .Include(j => j.AdrAccount)
             .ToListAsync();

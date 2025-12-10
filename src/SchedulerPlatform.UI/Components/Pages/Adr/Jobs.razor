@@ -411,14 +411,22 @@
         var nextRunDate = job.NextRunDateTime.Value.Date;
         var daysUntilNextRun = (nextRunDate - today).Days;
         
-        // Credential check happens 7 days before NextRunDate
+        // Credential check window: 7 days before NextRunDate up to (but not including) NextRunDate
+        // Example: If NextRunDate = Dec 17, credential check window is Dec 10-16
         var credentialCheckDate = nextRunDate.AddDays(-7);
         var daysUntilCredCheck = (credentialCheckDate - today).Days;
         
-        if (daysUntilCredCheck <= 0)
+        // If NextRunDate is today or past, job should be in scraping phase (not Pending)
+        // This is an edge case - show that scraping should have started
+        if (daysUntilNextRun <= 0)
+            return ("Scrape overdue", nextRunDate, Color.Error);
+        // In credential check window (today is between credentialCheckDate and NextRunDate-1)
+        else if (daysUntilCredCheck <= 0)
             return ("Credential check due", credentialCheckDate, Color.Info);
+        // Credential check coming up within 7 days
         else if (daysUntilCredCheck <= 7)
             return ($"Cred check in {daysUntilCredCheck}d", credentialCheckDate, Color.Default);
+        // More than 7 days until credential check
         else
             return ($"Scheduled", credentialCheckDate, Color.Default);
     }
@@ -446,7 +454,7 @@
         return job.Status switch
         {
             "Pending" when job.NextRunDateTime.HasValue => 
-                $"Credential check: {job.NextRunDateTime.Value.AddDays(-7):MM/dd/yyyy}\nScrape starts: {job.NextRunDateTime.Value:MM/dd/yyyy}",
+                $"Credential check window: {job.NextRunDateTime.Value.AddDays(-7):MM/dd/yyyy} - {job.NextRunDateTime.Value.AddDays(-1):MM/dd/yyyy}\nScrape starts: {job.NextRunDateTime.Value:MM/dd/yyyy}",
             "CredentialVerified" when job.NextRunDateTime.HasValue =>
                 $"Credentials verified: {job.CredentialVerifiedDateTime?.ToString("MM/dd/yyyy") ?? "N/A"}\nScrape starts: {job.NextRunDateTime.Value:MM/dd/yyyy}",
             "CredentialFailed" =>
