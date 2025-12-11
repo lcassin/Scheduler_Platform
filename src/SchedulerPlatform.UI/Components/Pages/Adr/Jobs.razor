@@ -428,7 +428,7 @@
             "Pending" => GetPendingNextAction(job, today),
             "CredentialCheckInProgress" => ("Checking credentials...", null, Color.Info),
             "CredentialVerified" => GetCredentialVerifiedNextAction(job, today),
-            "CredentialFailed" => ("Fix credentials", null, Color.Error),
+            "CredentialFailed" => GetCredentialFailedNextAction(job, today),
             "ScrapeInProgress" => ("Scraping...", null, Color.Info),
             "ScrapeRequested" => ("Awaiting scrape result", null, Color.Warning),
             "StatusCheckInProgress" => ("Checking status...", null, Color.Info),
@@ -485,6 +485,25 @@
             return ($"Scrape in {daysUntilScrape}d", nextRunDate, Color.Info);
     }
 
+    private (string Action, DateTime? ActionDate, Color ActionColor) GetCredentialFailedNextAction(AdrJob job, DateTime today)
+    {
+        // Even though credentials failed, we still attempt to scrape daily
+        // Helpdesk may have fixed the credential since the last attempt
+        // Each failure sends another reminder to helpdesk to fix or inactivate
+        if (!job.NextRunDateTime.HasValue)
+            return ("Awaiting scrape date", null, Color.Warning);
+        
+        var nextRunDate = job.NextRunDateTime.Value.Date;
+        var daysUntilScrape = (nextRunDate - today).Days;
+        
+        if (daysUntilScrape <= 0)
+            return ("Scrape retry due", nextRunDate, Color.Warning);
+        else if (daysUntilScrape == 1)
+            return ("Scrape retry tomorrow", nextRunDate, Color.Warning);
+        else
+            return ($"Scrape retry in {daysUntilScrape}d", nextRunDate, Color.Warning);
+    }
+
     private string GetNextActionTooltip(AdrJob job)
     {
         var today = DateTime.UtcNow.Date;
@@ -498,7 +517,7 @@
             "CredentialVerified" when job.NextRunDateTime.HasValue =>
                 $"Credentials verified: {job.CredentialVerifiedDateTime?.ToString("MM/dd/yyyy") ?? "N/A"}\nScrape starts: {job.NextRunDateTime.Value:MM/dd/yyyy}",
             "CredentialFailed" =>
-                "Credentials need to be updated in the vendor portal. A helpdesk ticket has been created.",
+                $"Credential verification failed. Scraping will still be attempted daily until {job.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? "range end"}.\nEach failure sends a reminder to helpdesk to fix credentials or inactivate the account.",
             "ScrapeRequested" =>
                 $"Scrape requested. Checking status daily until {job.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? "range end"}.",
             "Completed" =>
