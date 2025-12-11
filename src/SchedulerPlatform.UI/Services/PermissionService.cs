@@ -20,7 +20,12 @@ public class PermissionService : IPermissionService
         if (!user.Identity?.IsAuthenticated ?? true)
             return false;
 
-        if (user.HasClaim("is_system_admin", "true"))
+        // Check is_system_admin case-insensitively to handle both "true" and "True"
+        var isSystemAdmin = user.Claims.Any(c =>
+            c.Type == "is_system_admin" &&
+            string.Equals(c.Value, "true", StringComparison.OrdinalIgnoreCase));
+        
+        if (isSystemAdmin)
             return true;
 
         return user.HasClaim("permission", permission);
@@ -59,6 +64,9 @@ public class PermissionService : IPermissionService
         if (!user.Identity?.IsAuthenticated ?? true)
             return false;
 
-        return user.HasClaim("is_system_admin", "true");
+        // Check is_system_admin case-insensitively to handle both "true" and "True"
+        return user.Claims.Any(c =>
+            c.Type == "is_system_admin" &&
+            string.Equals(c.Value, "true", StringComparison.OrdinalIgnoreCase));
     }
 }
