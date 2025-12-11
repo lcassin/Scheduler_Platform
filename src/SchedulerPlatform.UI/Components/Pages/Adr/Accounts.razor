@@ -56,7 +56,14 @@
                 <MudSelectItem Value="@("Due Now")">Due Now</MudSelectItem>
             </MudSelect>
         </MudItem>
-        <MudItem xs="12" md="3" Class="d-flex align-center justify-end gap-2">
+        <MudItem xs="12" md="1">
+            <MudSelect T="string" @bind-Value="_selectedOverrideFilter" Label="Override" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                <MudSelectItem Value="@("")">All</MudSelectItem>
+                <MudSelectItem Value="@("true")">Overridden</MudSelectItem>
+                <MudSelectItem Value="@("false")">Not Overridden</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="2" Class="d-flex align-center justify-end gap-2">
             <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters" StartIcon="@Icons.Material.Filled.FilterAlt">
                 Apply
             </MudButton>
@@ -108,8 +115,18 @@
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Account #">
-                    <MudText Typo="Typo.body2"><strong>@context.VMAccountNumber</strong></MudText>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @context.VMAccountId</MudText>
+                    <div class="d-flex align-center gap-1">
+                        <div>
+                            <MudText Typo="Typo.body2"><strong>@context.VMAccountNumber</strong></MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @context.VMAccountId</MudText>
+                        </div>
+                        @if (context.IsManuallyOverridden)
+                        {
+                            <MudTooltip Text="@($"Manually overridden by {context.OverriddenBy} on {context.OverriddenDateTime?.ToString("MM/dd/yyyy")}")">
+                                <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Warning" />
+                            </MudTooltip>
+                        }
+                    </div>
                 </MudTd>
                 <MudTd DataLabel="Interface Account ID">@(context.InterfaceAccountId ?? "N/A")</MudTd>
                 <MudTd DataLabel="Client">@(context.ClientName ?? "N/A")</MudTd>
@@ -154,6 +171,14 @@
                     <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
                         <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewAccountDetails(context)">View Details</MudMenuItem>
                         <MudMenuItem Icon="@Icons.Material.Filled.Work" OnClick="() => ViewJobs(context.Id)">View Jobs</MudMenuItem>
+                        @if (_canEdit)
+                        {
+                            <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => EditBilling(context)">Edit Billing</MudMenuItem>
+                            @if (context.IsManuallyOverridden)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="() => ClearOverride(context)">Clear Override</MudMenuItem>
+                            }
+                        }
                     </MudMenu>
                 </MudTd>
             </RowTemplate>
@@ -185,13 +210,16 @@
     private List<Client> _clients = new();
     private bool _loading = true;
     private bool _isExporting = false;
+    private bool _canEdit = false;
     private string? _searchTerm;
     private Client? _selectedClient;
     private int? _selectedClientId => _selectedClient?.Id;
     private string _selectedNextRunStatus = "";
     private string _selectedHistoricalStatus = "";
+    private string _selectedOverrideFilter = "";
     private string? _filterNextRunStatus;
     private string? _filterHistoricalStatus;
+    private bool? _filterIsOverridden;
 
     [Parameter]
     [SupplyParameterFromQuery(Name = "accountNumber")]
@@ -208,6 +236,7 @@
             }
             
             _clients = await ClientService.GetClientsAsync();
+            _canEdit = await PermissionService.CanEditAsync();
         }
         catch (Exception ex)
         {
@@ -313,6 +342,7 @@
     {
         _filterNextRunStatus = string.IsNullOrEmpty(_selectedNextRunStatus) ? null : _selectedNextRunStatus;
         _filterHistoricalStatus = string.IsNullOrEmpty(_selectedHistoricalStatus) ? null : _selectedHistoricalStatus;
+        _filterIsOverridden = string.IsNullOrEmpty(_selectedOverrideFilter) ? null : bool.Parse(_selectedOverrideFilter);
         await _table.ReloadServerData();
     }
 
@@ -322,8 +352,10 @@
         _selectedClient = null;
         _selectedNextRunStatus = "";
         _selectedHistoricalStatus = "";
+        _selectedOverrideFilter = "";
         _filterNextRunStatus = null;
         _filterHistoricalStatus = null;
+        _filterIsOverridden = null;
         await _table.ReloadServerData();
     }
 
@@ -390,6 +422,46 @@
         finally
         {
             _isExporting = false;
+        }
+    }
+
+    private async Task EditBilling(AdrAccount account)
+    {
+        var parameters = new DialogParameters<EditBillingDialog>
+        {
+            { x => x.Account, account }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<EditBillingDialog>("Edit Billing Data", parameters, options);
+        var result = await dialog.Result;
+        
+        if (result != null && !result.Canceled)
+        {
+            await _table.ReloadServerData();
+            Snackbar.Add("Account billing data updated successfully", Severity.Success);
+        }
+    }
+
+    private async Task ClearOverride(AdrAccount account)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Clear Override",
+            $"Are you sure you want to clear the manual override for account {account.VMAccountNumber}? The next sync will update billing data from the external source.",
+            yesText: "Clear Override",
+            cancelText: "Cancel");
+        
+        if (confirmed == true)
+        {
+            try
+            {
+                await AdrService.ClearAccountOverrideAsync(account.Id);
+                await _table.ReloadServerData();
+                Snackbar.Add("Override cleared successfully", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error clearing override: {ex.Message}", Severity.Error);
+            }
         }
     }
 }

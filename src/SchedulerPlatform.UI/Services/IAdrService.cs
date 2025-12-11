@@ -15,6 +15,8 @@ public interface IAdrService
     Task<AdrAccount?> GetAccountAsync(int id);
     Task<AdrAccount?> GetAccountByVMAccountIdAsync(long vmAccountId);
     Task<AdrAccountStats> GetAccountStatsAsync();
+    Task<AdrAccount> UpdateAccountBillingAsync(int accountId, DateTime? expectedBillingDate, string? periodType, string? historicalBillingStatus);
+    Task<AdrAccount> ClearAccountOverrideAsync(int accountId);
     Task<byte[]> DownloadAccountsExportAsync(
         int? clientId = null,
         string? searchTerm = null,
