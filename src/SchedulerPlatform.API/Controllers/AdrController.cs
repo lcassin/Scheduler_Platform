@@ -178,7 +178,7 @@ public class AdrController : ControllerBase
     }
 
     [HttpPut("accounts/{id}/billing")]
-    [Authorize(Roles = "Admin,Editor")]
+    [Authorize(Policy = "AdrAccounts.Update")]
     public async Task<ActionResult<AdrAccount>> UpdateAccountBilling(int id, [FromBody] UpdateAccountBillingRequest request)
     {
         try
@@ -305,7 +305,7 @@ public class AdrController : ControllerBase
     }
 
     [HttpPost("accounts/{id}/clear-override")]
-    [Authorize(Roles = "Admin,Editor")]
+    [Authorize(Policy = "AdrAccounts.Update")]
     public async Task<ActionResult<AdrAccount>> ClearAccountOverride(int id)
     {
         try

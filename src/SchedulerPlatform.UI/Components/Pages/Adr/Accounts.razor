@@ -7,7 +7,7 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject IJSRuntime JSRuntime
-@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IPermissionService PermissionService
 
 <PageTitle>ADR Accounts</PageTitle>
 
@@ -239,10 +239,8 @@
             
             _clients = await ClientService.GetClientsAsync();
             
-            // Check if user has Admin or Editor role for editing billing data
-            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
-            var user = authState.User;
-            _canEditBilling = user.IsInRole("Admin") || user.IsInRole("Editor");
+            // Check if user has permission to update scheduler (which includes ADR account billing)
+            _canEditBilling = await PermissionService.CanUpdateAsync("scheduler");
         }
         catch (Exception ex)
         {
