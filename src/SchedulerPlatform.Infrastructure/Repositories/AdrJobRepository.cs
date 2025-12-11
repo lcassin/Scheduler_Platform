@@ -82,6 +82,9 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
         //    - Their account is not "Missing" (Missing accounts need manual investigation)
         //    The downstream API will handle any credential issues and create helpdesk tickets
         //
+        // BOUNDARY CHECK: Only scrape jobs within their billing window (NextRunDate to NextRangeEndDate)
+        // Jobs past their NextRangeEndDate should not be retried here - they go to final retry logic
+        //
         // IDEMPOTENCY CHECK: Also exclude jobs that already have a successful scrape execution
         // This prevents duplicate API calls (and duplicate billing) even if the job status wasn't saved correctly
         // AdrRequestTypeId = 2 is DownloadInvoice (scraping)
@@ -92,6 +95,10 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             .Where(j => !j.IsDeleted && 
                         j.NextRunDateTime.HasValue &&
                         j.NextRunDateTime.Value.Date <= today &&
+                        // BOUNDARY: Only include jobs within their scraping window
+                        // If NextRangeEndDateTime is set, today must be <= that date
+                        // If not set, allow scraping (backwards compatibility)
+                        (!j.NextRangeEndDateTime.HasValue || j.NextRangeEndDateTime.Value.Date >= today) &&
                         (
                             // Normal flow: credential verified jobs
                             ((j.Status == "CredentialVerified" || j.Status == "ScrapeInProgress") &&
@@ -137,6 +144,37 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                         j.RetryCount < maxRetries &&
                         j.NextRunDateTime.HasValue &&
                         j.NextRunDateTime.Value.Date <= currentDate.Date)
+            .Include(j => j.AdrAccount)
+            .ToListAsync();
+    }
+
+    public async Task<IEnumerable<AdrJob>> GetJobsForFinalRetryAsync(DateTime currentDate, int finalRetryDelayDays = 5)
+    {
+        // Final retry logic: Jobs that are past their NextRangeEndDate but haven't completed
+        // These get one more scrape attempt 5 days after NextRangeEndDate
+        // 
+        // Criteria:
+        // 1. Status is ScrapeRequested (scrape was sent but not completed)
+        // 2. NextRangeEndDateTime has passed
+        // 3. Today is at least finalRetryDelayDays after NextRangeEndDateTime
+        // 4. Job hasn't been marked as completed or failed
+        // 5. No successful scrape execution exists (idempotency)
+        var today = currentDate.Date;
+        const int downloadInvoiceRequestType = 2; // AdrRequestType.DownloadInvoice
+        
+        return await _dbSet
+            .Where(j => !j.IsDeleted && 
+                        j.Status == "ScrapeRequested" &&
+                        !j.ScrapingCompletedDateTime.HasValue &&
+                        j.NextRangeEndDateTime.HasValue &&
+                        j.NextRangeEndDateTime.Value.Date < today &&
+                        j.NextRangeEndDateTime.Value.Date.AddDays(finalRetryDelayDays) <= today &&
+                        // IDEMPOTENCY: Exclude jobs that already have a successful scrape request (HTTP 200)
+                        !_context.AdrJobExecutions.Any(e => 
+                            e.AdrJobId == j.Id && 
+                            e.AdrRequestTypeId == downloadInvoiceRequestType && 
+                            e.HttpStatusCode == 200 &&
+                            !e.IsDeleted))
             .Include(j => j.AdrAccount)
             .ToListAsync();
     }

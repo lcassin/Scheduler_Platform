@@ -1042,6 +1042,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         try
         {
             var baseUrl = _configuration["AdrApi:BaseUrl"] ?? "https://nuse2etsadrdevfn01.azurewebsites.net/api/";
+            var sourceApplicationName = _configuration["AdrApi:SourceApplicationName"] ?? "ADRScheduler";
             var recipientEmail = _configuration["AdrApi:RecipientEmail"] ?? "lcassin@cassinfo.com";
 
             var client = _httpClientFactory.CreateClient("AdrApi");
@@ -1052,7 +1053,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 CredentialId = credentialId,
                 StartDate = startDate?.ToString("yyyy-MM-dd"),
                 EndDate = endDate?.ToString("yyyy-MM-dd"),
-                SourceApplicationName = "ADRScheduler",
+                SourceApplicationName = sourceApplicationName,
                 RecipientEmail = recipientEmail,
                 JobId = jobId
             };

@@ -177,6 +177,147 @@ public class AdrController : ControllerBase
         }
     }
 
+    [HttpPut("accounts/{id}/billing")]
+    [Authorize(Roles = "Admin,Editor")]
+    public async Task<ActionResult<AdrAccount>> UpdateAccountBilling(int id, [FromBody] UpdateAccountBillingRequest request)
+    {
+        try
+        {
+            var account = await _unitOfWork.AdrAccounts.GetByIdAsync(id);
+            if (account == null)
+            {
+                return NotFound();
+            }
+
+            var username = User.Identity?.Name ?? "Unknown";
+
+            // Update billing-related fields
+            if (request.ExpectedBillingDate.HasValue)
+            {
+                account.LastInvoiceDateTime = request.ExpectedBillingDate.Value;
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.PeriodType))
+            {
+                account.PeriodType = request.PeriodType;
+                // Set PeriodDays based on PeriodType
+                account.PeriodDays = request.PeriodType switch
+                {
+                    "Bi-Weekly" => 14,
+                    "Monthly" => 30,
+                    "Bi-Monthly" => 60,
+                    "Quarterly" => 90,
+                    "Semi-Annually" => 180,
+                    "Annually" => 365,
+                    _ => 30
+                };
+                account.MedianDays = account.PeriodDays;
+            }
+
+            // Recalculate derived dates based on updated historical data
+            if (account.LastInvoiceDateTime.HasValue && account.PeriodDays.HasValue)
+            {
+                var windowDays = account.PeriodType switch
+                {
+                    "Bi-Weekly" => 3,
+                    "Monthly" => 5,
+                    "Bi-Monthly" => 7,
+                    "Quarterly" => 10,
+                    "Semi-Annually" => 14,
+                    "Annually" => 21,
+                    _ => 5
+                };
+
+                var expectedNext = account.LastInvoiceDateTime.Value.AddDays(account.PeriodDays.Value);
+                
+                // If expected date is in the past, calculate next future date
+                var today = DateTime.UtcNow.Date;
+                while (expectedNext < today)
+                {
+                    expectedNext = expectedNext.AddDays(account.PeriodDays.Value);
+                }
+
+                account.ExpectedNextDateTime = expectedNext;
+                account.ExpectedRangeStartDateTime = expectedNext.AddDays(-windowDays);
+                account.ExpectedRangeEndDateTime = expectedNext.AddDays(windowDays);
+                account.NextRunDateTime = expectedNext;
+                account.NextRangeStartDateTime = expectedNext.AddDays(-windowDays);
+                account.NextRangeEndDateTime = expectedNext.AddDays(windowDays);
+                account.DaysUntilNextRun = (int)(expectedNext - today).TotalDays;
+
+                // Update NextRunStatus based on days until next run
+                account.NextRunStatus = account.DaysUntilNextRun switch
+                {
+                    <= 0 => "Run Now",
+                    <= 7 => "Due Soon",
+                    <= 30 => "Upcoming",
+                    _ => "Future"
+                };
+            }
+
+            // Update Historical Billing Status if provided
+            if (!string.IsNullOrWhiteSpace(request.HistoricalBillingStatus))
+            {
+                account.HistoricalBillingStatus = request.HistoricalBillingStatus;
+            }
+
+            // Set override flag and audit fields
+            account.IsManuallyOverridden = true;
+            account.OverriddenBy = username;
+            account.OverriddenDateTime = DateTime.UtcNow;
+            account.ModifiedDateTime = DateTime.UtcNow;
+            account.ModifiedBy = username;
+
+            await _unitOfWork.AdrAccounts.UpdateAsync(account);
+            await _unitOfWork.SaveChangesAsync();
+
+            _logger.LogInformation("Account {AccountId} billing data updated by {User}. ExpectedBillingDate: {Date}, PeriodType: {Period}",
+                id, username, request.ExpectedBillingDate, request.PeriodType);
+
+            return Ok(account);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating ADR account billing for {AccountId}", id);
+            return StatusCode(500, "An error occurred while updating the ADR account billing");
+        }
+    }
+
+    [HttpPost("accounts/{id}/clear-override")]
+    [Authorize(Roles = "Admin,Editor")]
+    public async Task<ActionResult<AdrAccount>> ClearAccountOverride(int id)
+    {
+        try
+        {
+            var account = await _unitOfWork.AdrAccounts.GetByIdAsync(id);
+            if (account == null)
+            {
+                return NotFound();
+            }
+
+            var username = User.Identity?.Name ?? "Unknown";
+
+            // Clear override flag - next sync will update billing data from external source
+            account.IsManuallyOverridden = false;
+            account.OverriddenBy = null;
+            account.OverriddenDateTime = null;
+            account.ModifiedDateTime = DateTime.UtcNow;
+            account.ModifiedBy = username;
+
+            await _unitOfWork.AdrAccounts.UpdateAsync(account);
+            await _unitOfWork.SaveChangesAsync();
+
+            _logger.LogInformation("Account {AccountId} override cleared by {User}", id, username);
+
+            return Ok(account);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error clearing ADR account override for {AccountId}", id);
+            return StatusCode(500, "An error occurred while clearing the ADR account override");
+        }
+    }
+
     [HttpGet("accounts/export")]
     public async Task<IActionResult> ExportAccounts(
         [FromQuery] int? clientId = null,
@@ -1220,6 +1361,25 @@ public class BackgroundOrchestrationRequest
     public bool RunCredentialVerification { get; set; } = true;
     public bool RunScraping { get; set; } = true;
     public bool RunStatusCheck { get; set; } = true;
+}
+
+public class UpdateAccountBillingRequest
+{
+    /// <summary>
+    /// The expected billing date (displayed as "Expected Billing Date" in UI)
+    /// This updates the LastInvoiceDateTime field which drives the billing calculations
+    /// </summary>
+    public DateTime? ExpectedBillingDate { get; set; }
+    
+    /// <summary>
+    /// Billing frequency: Bi-Weekly, Monthly, Bi-Monthly, Quarterly, Semi-Annually, Annually
+    /// </summary>
+    public string? PeriodType { get; set; }
+    
+    /// <summary>
+    /// Historical billing status: Missing, Overdue, Due Now, Due Soon, Upcoming, Future
+    /// </summary>
+    public string? HistoricalBillingStatus { get; set; }
 }
 
 #endregion

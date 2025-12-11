@@ -544,26 +544,34 @@ DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
 
     private void UpdateExistingAccount(AdrAccount existing, ExternalAccountData external, int? internalClientId)
     {
+        // Always update these fields (not affected by manual override)
         existing.VMAccountNumber = external.VMAccountNumber;
         existing.InterfaceAccountId = external.InterfaceAccountId;
         existing.ClientId = internalClientId;
         existing.ClientName = external.ClientName;
         existing.CredentialId = external.CredentialId;
         existing.VendorCode = external.VendorCode;
-        existing.PeriodType = external.PeriodType;
-        existing.PeriodDays = external.PeriodDays;
-        existing.MedianDays = external.MedianDays;
-        existing.InvoiceCount = external.InvoiceCount;
-        existing.LastInvoiceDateTime = external.LastInvoiceDateTime;
-        existing.ExpectedNextDateTime = external.ExpectedNextDateTime;
-        existing.ExpectedRangeStartDateTime = external.ExpectedRangeStartDateTime;
-        existing.ExpectedRangeEndDateTime = external.ExpectedRangeEndDateTime;
-        existing.NextRunDateTime = external.NextRunDateTime;
-        existing.NextRangeStartDateTime = external.NextRangeStartDateTime;
-        existing.NextRangeEndDateTime = external.NextRangeEndDateTime;
-        existing.DaysUntilNextRun = external.DaysUntilNextRun;
-        existing.NextRunStatus = external.NextRunStatus;
-        existing.HistoricalBillingStatus = external.HistoricalBillingStatus;
+        
+        // Only update billing-related fields if NOT manually overridden
+        // When IsManuallyOverridden = true, preserve the manually set values
+        if (!existing.IsManuallyOverridden)
+        {
+            existing.PeriodType = external.PeriodType;
+            existing.PeriodDays = external.PeriodDays;
+            existing.MedianDays = external.MedianDays;
+            existing.InvoiceCount = external.InvoiceCount;
+            existing.LastInvoiceDateTime = external.LastInvoiceDateTime;
+            existing.ExpectedNextDateTime = external.ExpectedNextDateTime;
+            existing.ExpectedRangeStartDateTime = external.ExpectedRangeStartDateTime;
+            existing.ExpectedRangeEndDateTime = external.ExpectedRangeEndDateTime;
+            existing.NextRunDateTime = external.NextRunDateTime;
+            existing.NextRangeStartDateTime = external.NextRangeStartDateTime;
+            existing.NextRangeEndDateTime = external.NextRangeEndDateTime;
+            existing.DaysUntilNextRun = external.DaysUntilNextRun;
+            existing.NextRunStatus = external.NextRunStatus;
+            existing.HistoricalBillingStatus = external.HistoricalBillingStatus;
+        }
+        
         existing.LastSyncedDateTime = DateTime.UtcNow;
         existing.ModifiedDateTime = DateTime.UtcNow;
         existing.ModifiedBy = "System Created";

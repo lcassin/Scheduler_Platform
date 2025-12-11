@@ -74,6 +74,30 @@ public class AdrService : IAdrService
         return result ?? new AdrAccountStats();
     }
 
+    public async Task<AdrAccount> UpdateAccountBillingAsync(int accountId, DateTime? expectedBillingDate, string? periodType, string? historicalBillingStatus)
+    {
+        var client = CreateClient();
+        var request = new
+        {
+            ExpectedBillingDate = expectedBillingDate,
+            PeriodType = periodType,
+            HistoricalBillingStatus = historicalBillingStatus
+        };
+        var response = await client.PutAsJsonAsync($"adr/accounts/{accountId}/billing", request);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<AdrAccount>();
+        return result ?? throw new InvalidOperationException("Failed to update account billing");
+    }
+
+    public async Task<AdrAccount> ClearAccountOverrideAsync(int accountId)
+    {
+        var client = CreateClient();
+        var response = await client.PostAsync($"adr/accounts/{accountId}/clear-override", null);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<AdrAccount>();
+        return result ?? throw new InvalidOperationException("Failed to clear account override");
+    }
+
     public async Task<byte[]> DownloadAccountsExportAsync(
         int? clientId = null,
         string? searchTerm = null,
