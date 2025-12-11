@@ -61,9 +61,123 @@
             }
             else if (!_currentStatus.IsRunning)
             {
-                <MudAlert Severity="Severity.Info" Icon="@Icons.Material.Filled.Info">
+                <MudAlert Severity="Severity.Info" Icon="@Icons.Material.Filled.Info" Class="mb-4">
                     No orchestration is currently running. Click "Start Orchestration" to begin a new run.
                 </MudAlert>
+                
+                @if (_lastCompletedRun != null)
+                {
+                    <MudCard Outlined="true">
+                        <MudCardContent>
+                            <MudText Typo="Typo.subtitle1" Class="mb-3">Last Completed Run</MudText>
+                            <MudGrid>
+                                <MudItem xs="12" md="6">
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Request ID</MudText>
+                                    <MudText Typo="Typo.body1" Class="mb-3">@_lastCompletedRun.RequestId</MudText>
+                                    
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Requested By</MudText>
+                                    <MudText Typo="Typo.body1" Class="mb-3">@_lastCompletedRun.RequestedBy</MudText>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Status</MudText>
+                                    <MudChip T="string" Size="Size.Medium" Color="@GetStatusColor(_lastCompletedRun.Status)" Class="mb-3">
+                                        @_lastCompletedRun.Status
+                                    </MudChip>
+                                    
+                                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Completed At</MudText>
+                                    <MudText Typo="Typo.body1" Class="mb-3">@(_lastCompletedRun.CompletedAt?.ToString("MM/dd/yyyy hh:mm:ss tt") ?? "N/A")</MudText>
+                                    
+                                    @if (_lastCompletedRun.StartedAt.HasValue && _lastCompletedRun.CompletedAt.HasValue)
+                                    {
+                                        var duration = _lastCompletedRun.CompletedAt.Value - _lastCompletedRun.StartedAt.Value;
+                                        <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Duration</MudText>
+                                        <MudText Typo="Typo.body1">@duration.ToString(@"hh\:mm\:ss")</MudText>
+                                    }
+                                </MudItem>
+                            </MudGrid>
+                            
+                            <MudDivider Class="my-4" />
+                            <MudText Typo="Typo.subtitle1" Class="mb-2">Step Results</MudText>
+                            <MudTimeline TimelinePosition="TimelinePosition.Start">
+                                <MudTimelineItem Color="@GetLastRunStepColor("Syncing accounts")" Icon="@Icons.Material.Filled.CheckCircle">
+                                    <ItemContent>
+                                        <MudText Typo="Typo.body2">Sync Accounts</MudText>
+                                        @if (_lastCompletedRun.SyncResult != null)
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                @_lastCompletedRun.SyncResult.AccountsInserted inserted, @_lastCompletedRun.SyncResult.AccountsUpdated updated
+                                            </MudText>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">Completed</MudText>
+                                        }
+                                    </ItemContent>
+                                </MudTimelineItem>
+                                <MudTimelineItem Color="@GetLastRunStepColor("Creating jobs")" Icon="@Icons.Material.Filled.CheckCircle">
+                                    <ItemContent>
+                                        <MudText Typo="Typo.body2">Create Jobs</MudText>
+                                        @if (_lastCompletedRun.JobCreationResult != null)
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                @_lastCompletedRun.JobCreationResult.JobsCreated created, @_lastCompletedRun.JobCreationResult.JobsSkipped skipped
+                                            </MudText>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">Completed</MudText>
+                                        }
+                                    </ItemContent>
+                                </MudTimelineItem>
+                                <MudTimelineItem Color="@GetLastRunStepColor("Verifying credentials")" Icon="@Icons.Material.Filled.CheckCircle">
+                                    <ItemContent>
+                                        <MudText Typo="Typo.body2">Verify Credentials</MudText>
+                                        @if (_lastCompletedRun.CredentialVerificationResult != null)
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                @_lastCompletedRun.CredentialVerificationResult.CredentialsVerified verified, @_lastCompletedRun.CredentialVerificationResult.CredentialsFailed failed
+                                            </MudText>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">Completed</MudText>
+                                        }
+                                    </ItemContent>
+                                </MudTimelineItem>
+                                <MudTimelineItem Color="@GetLastRunStepColor("Processing scraping")" Icon="@Icons.Material.Filled.CheckCircle">
+                                    <ItemContent>
+                                        <MudText Typo="Typo.body2">Process Scraping</MudText>
+                                        @if (_lastCompletedRun.ScrapeResult != null)
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                @_lastCompletedRun.ScrapeResult.ScrapesRequested requested, @_lastCompletedRun.ScrapeResult.ScrapesCompleted completed
+                                            </MudText>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">Completed</MudText>
+                                        }
+                                    </ItemContent>
+                                </MudTimelineItem>
+                                <MudTimelineItem Color="@GetLastRunStepColor("Checking statuses")" Icon="@Icons.Material.Filled.CheckCircle">
+                                    <ItemContent>
+                                        <MudText Typo="Typo.body2">Check Statuses</MudText>
+                                        @if (_lastCompletedRun.StatusCheckResult != null)
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                @_lastCompletedRun.StatusCheckResult.JobsCompleted completed, @_lastCompletedRun.StatusCheckResult.JobsNeedingReview need review
+                                            </MudText>
+                                        }
+                                        else
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">Completed</MudText>
+                                        }
+                                    </ItemContent>
+                                </MudTimelineItem>
+                            </MudTimeline>
+                        </MudCardContent>
+                    </MudCard>
+                }
             }
             else if (_currentStatus.Status != null)
             {
@@ -340,6 +454,7 @@
 @code {
     private OrchestrationCurrentResponse? _currentStatus;
     private List<AdrOrchestrationStatus>? _history;
+    private AdrOrchestrationStatus? _lastCompletedRun;
     private bool _loading = true;
     private bool _historyLoading = true;
     private bool _isRefreshing = false;
@@ -381,6 +496,9 @@
             _currentStatus = await statusTask;
             _history = await historyTask;
             _lastRefresh = DateTime.Now;
+            
+            // Get the most recent completed run from history for display when not running
+            _lastCompletedRun = _history?.FirstOrDefault(h => h.Status == "Completed" || h.Status == "Failed");
             
             // Start/stop fast progress polling based on orchestration state
             if (_currentStatus?.IsRunning == true && !_isProgressPolling)
@@ -610,6 +728,14 @@
             return Icons.Material.Filled.CheckCircle;
         else
             return Icons.Material.Filled.Circle;
+    }
+    
+    private Color GetLastRunStepColor(string stepName)
+    {
+        // For completed runs, show success for all steps (or error if the run failed)
+        if (_lastCompletedRun?.Status == "Failed")
+            return Color.Error;
+        return Color.Success;
     }
 
     public void Dispose()
