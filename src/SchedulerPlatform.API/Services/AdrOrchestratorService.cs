@@ -275,6 +275,10 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         setupProcessedSinceLastSave = 0;
                         _logger.LogInformation("Saved credential-check setup batch: {Marked}/{Total} jobs in {Duration:F1} seconds", 
                             markedCount, jobsNeedingVerification.Count, batchSaveDuration);
+                        
+                        // Report progress during setup phase (use negative values to indicate setup)
+                        // UI can show "Preparing: X / Total" instead of "Processing: X / Total"
+                        progressCallback?.Invoke(-markedCount, jobsNeedingVerification.Count);
                     }
                 }
                 catch (Exception ex)
@@ -290,6 +294,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             if (setupProcessedSinceLastSave > 0)
             {
                 await _unitOfWork.SaveChangesAsync();
+                progressCallback?.Invoke(-markedCount, jobsNeedingVerification.Count);
             }
             
             // Build jobsToProcess AFTER SaveChangesAsync so execution IDs are populated
@@ -366,8 +371,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             _logger.LogInformation("Completed {Count} parallel API calls, updating job statuses", apiResults.Count);
 
             // Step 3: Update job statuses sequentially (EF DbContext is not thread-safe)
+            // Use the job and execution objects we already have from the setup phase - no need to re-fetch
             int processedSinceLastSave = 0;
             int batchNumber = 1;
+
+            // Create a lookup for jobs by ID (they're already tracked by EF from the setup phase)
+            var jobsById = jobsNeedingVerification.ToDictionary(j => j.Id);
 
             foreach (var jobInfo in jobsToProcess)
             {
@@ -384,16 +393,20 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
                     var (apiResult, executionId) = apiResultInfo;
 
-                    // Update execution record
-                    var execution = await _unitOfWork.AdrJobExecutions.GetByIdAsync(executionId);
-                    if (execution != null)
+                    // Update execution record - use the one from our dictionary (already tracked by EF)
+                    if (executionsByJobId.TryGetValue(jobInfo.JobId, out var execution))
                     {
-                        await CompleteExecutionAsync(execution, apiResult);
+                        // Update execution properties directly - no need to call UpdateAsync
+                        execution.CompletedDateTime = DateTime.UtcNow;
+                        execution.ResponseCode = apiResult.StatusCode;
+                        execution.ResponseMessage = apiResult.IsSuccess ? "Success" : apiResult.ErrorMessage;
+                        execution.AdrIndexId = apiResult.IndexId;
+                        execution.ModifiedDateTime = DateTime.UtcNow;
+                        execution.ModifiedBy = "System Created";
                     }
 
-                    // Update job record
-                    var job = await _unitOfWork.AdrJobs.GetByIdAsync(jobInfo.JobId);
-                    if (job == null)
+                    // Update job record - use the one from our dictionary (already tracked by EF)
+                    if (!jobsById.TryGetValue(jobInfo.JobId, out var job))
                     {
                         result.Errors++;
                         result.ErrorMessages.Add($"Job {jobInfo.JobId}: Job not found after API call");
@@ -423,9 +436,10 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         result.CredentialsFailed++;
                     }
 
+                    // Update job properties directly - no need to call UpdateAsync since
+                    // the entity is already tracked by EF (loaded from same DbContext)
                     job.ModifiedDateTime = DateTime.UtcNow;
                     job.ModifiedBy = "System Created";
-                    await _unitOfWork.AdrJobs.UpdateAsync(job);
                     processedSinceLastSave++;
 
                     if (processedSinceLastSave >= BatchSize)
@@ -524,6 +538,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         setupProcessedSinceLastSave = 0;
                         _logger.LogInformation("Marked {Marked}/{Total} jobs as in-progress for scraping (batch saved)", 
                             markedCount, jobsReadyForScraping.Count);
+                        
+                        // Report progress during setup phase (use negative values to indicate setup)
+                        progressCallback?.Invoke(-markedCount, jobsReadyForScraping.Count);
                     }
                 }
                 catch (Exception ex)
@@ -539,6 +556,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             if (setupProcessedSinceLastSave > 0)
             {
                 await _unitOfWork.SaveChangesAsync();
+                progressCallback?.Invoke(-markedCount, jobsReadyForScraping.Count);
             }
             
             // Build jobsToProcess AFTER SaveChangesAsync so execution IDs are populated
@@ -614,9 +632,13 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
             _logger.LogInformation("Completed {Count} parallel API calls, updating job statuses", apiResults.Count);
 
-            // Step 3: Update job statuses sequentially
+            // Step 3: Update job statuses sequentially (EF DbContext is not thread-safe)
+            // Use the job and execution objects we already have from the setup phase - no need to re-fetch
             int processedSinceLastSave = 0;
             int batchNumber = 1;
+
+            // Create a lookup for jobs by ID (they're already tracked by EF from the setup phase)
+            var jobsById = jobsReadyForScraping.ToDictionary(j => j.Id);
 
             foreach (var jobInfo in jobsToProcess)
             {
@@ -633,16 +655,20 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
                     var (apiResult, executionId) = apiResultInfo;
 
-                    // Update execution record
-                    var execution = await _unitOfWork.AdrJobExecutions.GetByIdAsync(executionId);
-                    if (execution != null)
+                    // Update execution record - use the one from our dictionary (already tracked by EF)
+                    if (executionsByJobId.TryGetValue(jobInfo.JobId, out var execution))
                     {
-                        await CompleteExecutionAsync(execution, apiResult);
+                        // Update execution properties directly - no need to call UpdateAsync
+                        execution.CompletedDateTime = DateTime.UtcNow;
+                        execution.ResponseCode = apiResult.StatusCode;
+                        execution.ResponseMessage = apiResult.IsSuccess ? "Success" : apiResult.ErrorMessage;
+                        execution.AdrIndexId = apiResult.IndexId;
+                        execution.ModifiedDateTime = DateTime.UtcNow;
+                        execution.ModifiedBy = "System Created";
                     }
 
-                    // Update job record
-                    var job = await _unitOfWork.AdrJobs.GetByIdAsync(jobInfo.JobId);
-                    if (job == null)
+                    // Update job record - use the one from our dictionary (already tracked by EF)
+                    if (!jobsById.TryGetValue(jobInfo.JobId, out var job))
                     {
                         result.Errors++;
                         result.ErrorMessages.Add($"Job {jobInfo.JobId}: Job not found after API call");
@@ -678,9 +704,10 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         result.ScrapesFailed++;
                     }
 
+                    // Update job properties directly - no need to call UpdateAsync since
+                    // the entity is already tracked by EF (loaded from same DbContext)
                     job.ModifiedDateTime = DateTime.UtcNow;
                     job.ModifiedBy = "System Created";
-                    await _unitOfWork.AdrJobs.UpdateAsync(job);
                     processedSinceLastSave++;
 
                     if (processedSinceLastSave >= BatchSize)
@@ -778,6 +805,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         setupProcessedSinceLastSave = 0;
                         _logger.LogInformation("Marked {Marked}/{Total} jobs as in-progress for status check (batch saved)", 
                             markedCount, jobsNeedingStatusCheck.Count);
+                        
+                        // Report progress during setup phase (use negative values to indicate setup)
+                        progressCallback?.Invoke(-markedCount, jobsNeedingStatusCheck.Count);
                     }
                 }
                 catch (Exception ex)
@@ -793,6 +823,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             if (setupProcessedSinceLastSave > 0)
             {
                 await _unitOfWork.SaveChangesAsync();
+                progressCallback?.Invoke(-markedCount, jobsNeedingStatusCheck.Count);
             }
             
             var setupDuration = DateTime.UtcNow - startTime;
@@ -846,9 +877,13 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
             _logger.LogInformation("Completed {Count} parallel status checks, updating job statuses", statusResults.Count);
 
-            // Step 3: Update job statuses sequentially
+            // Step 3: Update job statuses sequentially (EF DbContext is not thread-safe)
+            // Use the job objects we already have from the setup phase - no need to re-fetch
             int processedSinceLastSave = 0;
             int batchNumber = 1;
+
+            // Create a lookup for jobs by ID (they're already tracked by EF from the setup phase)
+            var jobsById = jobsNeedingStatusCheck.ToDictionary(j => j.Id);
 
             foreach (var jobId in jobsToProcess)
             {
@@ -863,8 +898,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         continue;
                     }
 
-                    var job = await _unitOfWork.AdrJobs.GetByIdAsync(jobId);
-                    if (job == null)
+                    // Use the job from our dictionary (already tracked by EF)
+                    if (!jobsById.TryGetValue(jobId, out var job))
                     {
                         result.Errors++;
                         result.ErrorMessages.Add($"Job {jobId}: Job not found after status check");
@@ -896,9 +931,10 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         result.JobsStillProcessing++;
                     }
 
+                    // Update job properties directly - no need to call UpdateAsync since
+                    // the entity is already tracked by EF (loaded from same DbContext)
                     job.ModifiedDateTime = DateTime.UtcNow;
                     job.ModifiedBy = "System Created";
-                    await _unitOfWork.AdrJobs.UpdateAsync(job);
                     processedSinceLastSave++;
 
                     if (processedSinceLastSave >= BatchSize)
