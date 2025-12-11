@@ -9,7 +9,7 @@ namespace SchedulerPlatform.API.Services;
 
 public interface IAdrAccountSyncService
 {
-    Task<AdrAccountSyncResult> SyncAccountsAsync(CancellationToken cancellationToken = default);
+    Task<AdrAccountSyncResult> SyncAccountsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
 }
 
 public class AdrAccountSyncResult
@@ -46,7 +46,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
         _logger = logger;
     }
 
-    public async Task<AdrAccountSyncResult> SyncAccountsAsync(CancellationToken cancellationToken = default)
+    public async Task<AdrAccountSyncResult> SyncAccountsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
     {
         var result = new AdrAccountSyncResult
         {
@@ -66,6 +66,9 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             // Step 1: Fetch external accounts from VendorCred
             var externalAccounts = await FetchExternalAccountsAsync(externalConnectionString, cancellationToken);
             _logger.LogInformation("Fetched {Count} accounts from external database", externalAccounts.Count);
+            
+            // Report initial progress (0 of total)
+            progressCallback?.Invoke(0, externalAccounts.Count);
 
             // Step 2: Sync Clients - create/update Client records based on ExternalClientId
             var externalClientIdToInternalClientId = await SyncClientsAsync(externalAccounts, result, cancellationToken);
@@ -147,6 +150,10 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                         await _dbContext.SaveChangesAsync(cancellationToken);
                         _logger.LogInformation("Batch {BatchNumber} saved: {Count} accounts processed so far", 
                             batchNumber, result.TotalAccountsProcessed);
+                        
+                        // Report progress after each batch
+                        progressCallback?.Invoke(result.TotalAccountsProcessed, externalAccounts.Count);
+                        
                         processedSinceLastSave = 0;
                         batchNumber++;
                     }
@@ -188,6 +195,9 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             // Final save for any remaining changes
             await _dbContext.SaveChangesAsync(cancellationToken);
             _logger.LogInformation("Final batch saved. Total batches: {BatchCount}", batchNumber);
+            
+            // Report final progress (100%)
+            progressCallback?.Invoke(externalAccounts.Count, externalAccounts.Count);
 
             result.SyncEndDateTime = DateTime.UtcNow;
             _logger.LogInformation(

@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @attribute [Authorize]
 @using SchedulerPlatform.Core.Domain.Enums
+@using SchedulerPlatform.UI.Services
 @inject IScheduleService ScheduleService
 @inject IClientService ClientService
 @inject IUserTimeZoneService TimeZoneService
@@ -336,30 +337,43 @@
 		}
 	
 		private void StartAutoRefresh()
-		{
-			_timerCts = new CancellationTokenSource();
-			_timer = new PeriodicTimer(TimeSpan.FromSeconds(_refreshInterval));
-			_ = Task.Run(async () =>
 			{
-				try
+				_timerCts = new CancellationTokenSource();
+				_timer = new PeriodicTimer(TimeSpan.FromSeconds(_refreshInterval));
+				_ = Task.Run(async () =>
 				{
-					while (await _timer.WaitForNextTickAsync(_timerCts.Token))
+					try
 					{
-						await InvokeAsync(async () =>
+						while (await _timer.WaitForNextTickAsync(_timerCts.Token))
 						{
-							if (_table != null && !_loading)
+							await InvokeAsync(async () =>
 							{
-								await _table.ReloadServerData();
-							}
+								if (_table != null && !_loading)
+								{
+									await _table.ReloadServerData();
+								}
+							});
+						}
+					}
+					catch (SessionExpiredException)
+					{
+						await InvokeAsync(() =>
+						{
+							Snackbar.Add("Your session has expired. Redirecting to login...", Severity.Warning);
+							Navigation.NavigateTo("/Account/Login", forceLoad: true);
+							return Task.CompletedTask;
 						});
 					}
-				}
-				catch (OperationCanceledException)
-				{
-					// Timer was cancelled, this is expected on dispose
-				}
-			});
-		}
+					catch (OperationCanceledException)
+					{
+						// Timer was cancelled, this is expected on dispose
+					}
+					catch
+					{
+						// Ignore other errors during auto-refresh
+					}
+				});
+			}
 
 	private async Task LoadPermissionsAsync()
 	{
