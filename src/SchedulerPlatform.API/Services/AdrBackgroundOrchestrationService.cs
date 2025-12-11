@@ -30,6 +30,7 @@ public class AdrOrchestrationStatus
     public DateTime? CompletedAt { get; set; }
     public string Status { get; set; } = "Queued"; // Queued, Running, Completed, Failed
     public string? CurrentStep { get; set; }
+    public string? CurrentStepPhase { get; set; } // Preparing, Calling API, Saving results
     public string? ErrorMessage { get; set; }
     
     // Progress tracking for current step
@@ -281,6 +282,7 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                 _queue.UpdateStatus(request.RequestId, s => 
                 {
                     s.CurrentStep = "Verifying credentials";
+                    s.CurrentStepPhase = "Preparing";
                     s.CurrentStepProgress = 0;
                     s.CurrentStepTotal = 0;
                 });
@@ -289,11 +291,25 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                 var credResult = await orchestratorService.VerifyCredentialsAsync(
                     (progress, total) => _queue.UpdateStatus(request.RequestId, s => 
                     {
-                        s.CurrentStepProgress = progress;
+                        // Negative progress indicates setup/preparing phase
+                        if (progress < 0)
+                        {
+                            s.CurrentStepPhase = "Preparing";
+                            s.CurrentStepProgress = Math.Abs(progress);
+                        }
+                        else
+                        {
+                            s.CurrentStepPhase = "Calling API";
+                            s.CurrentStepProgress = progress;
+                        }
                         s.CurrentStepTotal = total;
                     }),
                     stoppingToken);
-                _queue.UpdateStatus(request.RequestId, s => s.CredentialVerificationResult = credResult);
+                _queue.UpdateStatus(request.RequestId, s => 
+                {
+                    s.CurrentStepPhase = null;
+                    s.CredentialVerificationResult = credResult;
+                });
                 
                 _logger.LogInformation(
                     "Request {RequestId}: Credential verification completed. Verified: {Verified}, Failed: {Failed}",
@@ -306,6 +322,7 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                 _queue.UpdateStatus(request.RequestId, s => 
                 {
                     s.CurrentStep = "Processing scraping";
+                    s.CurrentStepPhase = "Preparing";
                     s.CurrentStepProgress = 0;
                     s.CurrentStepTotal = 0;
                 });
@@ -314,11 +331,25 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                 var scrapeResult = await orchestratorService.ProcessScrapingAsync(
                     (progress, total) => _queue.UpdateStatus(request.RequestId, s => 
                     {
-                        s.CurrentStepProgress = progress;
+                        // Negative progress indicates setup/preparing phase
+                        if (progress < 0)
+                        {
+                            s.CurrentStepPhase = "Preparing";
+                            s.CurrentStepProgress = Math.Abs(progress);
+                        }
+                        else
+                        {
+                            s.CurrentStepPhase = "Calling API";
+                            s.CurrentStepProgress = progress;
+                        }
                         s.CurrentStepTotal = total;
                     }),
                     stoppingToken);
-                _queue.UpdateStatus(request.RequestId, s => s.ScrapeResult = scrapeResult);
+                _queue.UpdateStatus(request.RequestId, s => 
+                {
+                    s.CurrentStepPhase = null;
+                    s.ScrapeResult = scrapeResult;
+                });
                 
                 _logger.LogInformation(
                     "Request {RequestId}: Scraping completed. Requested: {Requested}, Completed: {Completed}",
@@ -331,6 +362,7 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                 _queue.UpdateStatus(request.RequestId, s => 
                 {
                     s.CurrentStep = "Checking statuses";
+                    s.CurrentStepPhase = "Preparing";
                     s.CurrentStepProgress = 0;
                     s.CurrentStepTotal = 0;
                 });
@@ -339,11 +371,25 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                 var statusResult = await orchestratorService.CheckPendingStatusesAsync(
                     (progress, total) => _queue.UpdateStatus(request.RequestId, s => 
                     {
-                        s.CurrentStepProgress = progress;
+                        // Negative progress indicates setup/preparing phase
+                        if (progress < 0)
+                        {
+                            s.CurrentStepPhase = "Preparing";
+                            s.CurrentStepProgress = Math.Abs(progress);
+                        }
+                        else
+                        {
+                            s.CurrentStepPhase = "Calling API";
+                            s.CurrentStepProgress = progress;
+                        }
                         s.CurrentStepTotal = total;
                     }),
                     stoppingToken);
-                _queue.UpdateStatus(request.RequestId, s => s.StatusCheckResult = statusResult);
+                _queue.UpdateStatus(request.RequestId, s => 
+                {
+                    s.CurrentStepPhase = null;
+                    s.StatusCheckResult = statusResult;
+                });
                 
                 _logger.LogInformation(
                     "Request {RequestId}: Status check completed. Completed: {Completed}, NeedsReview: {NeedsReview}",

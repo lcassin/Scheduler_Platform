@@ -89,6 +89,12 @@
                                 <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Current Step</MudText>
                                 <MudText Typo="Typo.body1" Class="mb-3">
                                     @(_currentStatus.Status.CurrentStep ?? "N/A")
+                                    @if (!string.IsNullOrEmpty(_currentStatus.Status.CurrentStepPhase))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="@(_currentStatus.Status.CurrentStepPhase == "Preparing" ? Color.Warning : Color.Info)" Class="ml-2">
+                                            @_currentStatus.Status.CurrentStepPhase
+                                        </MudChip>
+                                    }
                                 </MudText>
                                 
                                 @if (!string.IsNullOrEmpty(_currentStatus.Status.ErrorMessage))
@@ -138,18 +144,17 @@
                                             <MudText Typo="Typo.body2">Verify Credentials</MudText>
                                             @if (_currentStatus.Status.CurrentStep == "Verifying credentials" && _currentStatus.Status.CurrentStepTotal > 0)
                                             {
-                                                @if (_currentStatus.Status.CurrentStepProgress < 0)
+                                                @if (_currentStatus.Status.CurrentStepPhase == "Preparing")
                                                 {
-                                                    var prepProgress = Math.Abs(_currentStatus.Status.CurrentStepProgress);
                                                     <MudText Typo="Typo.caption" Color="Color.Warning">
-                                                        Preparing: @prepProgress / @_currentStatus.Status.CurrentStepTotal (@((prepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
+                                                        Preparing: @_currentStatus.Status.CurrentStepProgress / @_currentStatus.Status.CurrentStepTotal (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
                                                     </MudText>
-                                                    <MudProgressLinear Color="Color.Warning" Value="@(prepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
+                                                    <MudProgressLinear Color="Color.Warning" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
                                                 }
                                                 else
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Info">
-                                                        @_currentStatus.Status.CurrentStepProgress / @_currentStatus.Status.CurrentStepTotal (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
+                                                        @(_currentStatus.Status.CurrentStepPhase ?? "Calling API"): @_currentStatus.Status.CurrentStepProgress / @_currentStatus.Status.CurrentStepTotal (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
                                                     </MudText>
                                                     <MudProgressLinear Color="Color.Info" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
                                                 }
@@ -167,18 +172,17 @@
                                             <MudText Typo="Typo.body2">Process Scraping</MudText>
                                             @if (_currentStatus.Status.CurrentStep == "Processing scraping" && _currentStatus.Status.CurrentStepTotal > 0)
                                             {
-                                                @if (_currentStatus.Status.CurrentStepProgress < 0)
+                                                @if (_currentStatus.Status.CurrentStepPhase == "Preparing")
                                                 {
-                                                    var prepProgress = Math.Abs(_currentStatus.Status.CurrentStepProgress);
                                                     <MudText Typo="Typo.caption" Color="Color.Warning">
-                                                        Preparing: @prepProgress / @_currentStatus.Status.CurrentStepTotal (@((prepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
+                                                        Preparing: @_currentStatus.Status.CurrentStepProgress / @_currentStatus.Status.CurrentStepTotal (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
                                                     </MudText>
-                                                    <MudProgressLinear Color="Color.Warning" Value="@(prepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
+                                                    <MudProgressLinear Color="Color.Warning" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
                                                 }
                                                 else
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Info">
-                                                        @_currentStatus.Status.CurrentStepProgress / @_currentStatus.Status.CurrentStepTotal (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
+                                                        @(_currentStatus.Status.CurrentStepPhase ?? "Calling API"): @_currentStatus.Status.CurrentStepProgress / @_currentStatus.Status.CurrentStepTotal (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
                                                     </MudText>
                                                     <MudProgressLinear Color="Color.Info" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
                                                 }
@@ -196,18 +200,17 @@
                                             <MudText Typo="Typo.body2">Check Statuses</MudText>
                                             @if (_currentStatus.Status.CurrentStep == "Checking statuses" && _currentStatus.Status.CurrentStepTotal > 0)
                                             {
-                                                @if (_currentStatus.Status.CurrentStepProgress < 0)
+                                                @if (_currentStatus.Status.CurrentStepPhase == "Preparing")
                                                 {
-                                                    var prepProgress = Math.Abs(_currentStatus.Status.CurrentStepProgress);
                                                     <MudText Typo="Typo.caption" Color="Color.Warning">
-                                                        Preparing: @prepProgress / @_currentStatus.Status.CurrentStepTotal (@((prepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
+                                                        Preparing: @_currentStatus.Status.CurrentStepProgress / @_currentStatus.Status.CurrentStepTotal (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
                                                     </MudText>
-                                                    <MudProgressLinear Color="Color.Warning" Value="@(prepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
+                                                    <MudProgressLinear Color="Color.Warning" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
                                                 }
                                                 else
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Info">
-                                                        @_currentStatus.Status.CurrentStepProgress / @_currentStatus.Status.CurrentStepTotal (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
+                                                        @(_currentStatus.Status.CurrentStepPhase ?? "Calling API"): @_currentStatus.Status.CurrentStepProgress / @_currentStatus.Status.CurrentStepTotal (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
                                                     </MudText>
                                                     <MudProgressLinear Color="Color.Info" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
                                                 }

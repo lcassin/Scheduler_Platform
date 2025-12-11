@@ -99,6 +99,7 @@ public class AdrOrchestrationStatus
     public DateTime? CompletedAt { get; set; }
     public string Status { get; set; } = "Queued"; // Queued, Running, Completed, Failed, Cancelled
     public string? CurrentStep { get; set; }
+    public string? CurrentStepPhase { get; set; } // Preparing, Calling API, Saving results
     public string? ErrorMessage { get; set; }
     
     // Progress tracking for current step
