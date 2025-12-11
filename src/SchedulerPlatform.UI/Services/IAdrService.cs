@@ -11,7 +11,8 @@ public interface IAdrService
         int? clientId = null,
         string? searchTerm = null,
         string? nextRunStatus = null,
-        string? historicalBillingStatus = null);
+        string? historicalBillingStatus = null,
+        bool? isOverridden = null);
     Task<AdrAccount?> GetAccountAsync(int id);
     Task<AdrAccount?> GetAccountByVMAccountIdAsync(long vmAccountId);
     Task<AdrAccountStats> GetAccountStatsAsync();
