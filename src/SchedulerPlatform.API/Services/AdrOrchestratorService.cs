@@ -275,6 +275,10 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         setupProcessedSinceLastSave = 0;
                         _logger.LogInformation("Saved credential-check setup batch: {Marked}/{Total} jobs in {Duration:F1} seconds", 
                             markedCount, jobsNeedingVerification.Count, batchSaveDuration);
+                        
+                        // Report progress during setup phase (use negative values to indicate setup)
+                        // UI can show "Preparing: X / Total" instead of "Processing: X / Total"
+                        progressCallback?.Invoke(-markedCount, jobsNeedingVerification.Count);
                     }
                 }
                 catch (Exception ex)
@@ -290,6 +294,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             if (setupProcessedSinceLastSave > 0)
             {
                 await _unitOfWork.SaveChangesAsync();
+                progressCallback?.Invoke(-markedCount, jobsNeedingVerification.Count);
             }
             
             // Build jobsToProcess AFTER SaveChangesAsync so execution IDs are populated
@@ -524,6 +529,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         setupProcessedSinceLastSave = 0;
                         _logger.LogInformation("Marked {Marked}/{Total} jobs as in-progress for scraping (batch saved)", 
                             markedCount, jobsReadyForScraping.Count);
+                        
+                        // Report progress during setup phase (use negative values to indicate setup)
+                        progressCallback?.Invoke(-markedCount, jobsReadyForScraping.Count);
                     }
                 }
                 catch (Exception ex)
@@ -539,6 +547,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             if (setupProcessedSinceLastSave > 0)
             {
                 await _unitOfWork.SaveChangesAsync();
+                progressCallback?.Invoke(-markedCount, jobsReadyForScraping.Count);
             }
             
             // Build jobsToProcess AFTER SaveChangesAsync so execution IDs are populated
@@ -778,6 +787,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         setupProcessedSinceLastSave = 0;
                         _logger.LogInformation("Marked {Marked}/{Total} jobs as in-progress for status check (batch saved)", 
                             markedCount, jobsNeedingStatusCheck.Count);
+                        
+                        // Report progress during setup phase (use negative values to indicate setup)
+                        progressCallback?.Invoke(-markedCount, jobsNeedingStatusCheck.Count);
                     }
                 }
                 catch (Exception ex)
@@ -793,6 +805,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             if (setupProcessedSinceLastSave > 0)
             {
                 await _unitOfWork.SaveChangesAsync();
+                progressCallback?.Invoke(-markedCount, jobsNeedingStatusCheck.Count);
             }
             
             var setupDuration = DateTime.UtcNow - startTime;

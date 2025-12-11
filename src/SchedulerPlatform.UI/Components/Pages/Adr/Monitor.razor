@@ -138,10 +138,21 @@
                                             <MudText Typo="Typo.body2">Verify Credentials</MudText>
                                             @if (_currentStatus.Status.CurrentStep == "Verifying credentials" && _currentStatus.Status.CurrentStepTotal > 0)
                                             {
-                                                <MudText Typo="Typo.caption" Color="Color.Info">
-                                                    @_currentStatus.Status.CurrentStepProgress / @_currentStatus.Status.CurrentStepTotal (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
-                                                </MudText>
-                                                <MudProgressLinear Color="Color.Info" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
+                                                @if (_currentStatus.Status.CurrentStepProgress < 0)
+                                                {
+                                                    var prepProgress = Math.Abs(_currentStatus.Status.CurrentStepProgress);
+                                                    <MudText Typo="Typo.caption" Color="Color.Warning">
+                                                        Preparing: @prepProgress / @_currentStatus.Status.CurrentStepTotal (@((prepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
+                                                    </MudText>
+                                                    <MudProgressLinear Color="Color.Warning" Value="@(prepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
+                                                }
+                                                else
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Info">
+                                                        @_currentStatus.Status.CurrentStepProgress / @_currentStatus.Status.CurrentStepTotal (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
+                                                    </MudText>
+                                                    <MudProgressLinear Color="Color.Info" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
+                                                }
                                             }
                                             else if (_currentStatus.Status.CredentialVerificationResult != null)
                                             {
@@ -156,10 +167,21 @@
                                             <MudText Typo="Typo.body2">Process Scraping</MudText>
                                             @if (_currentStatus.Status.CurrentStep == "Processing scraping" && _currentStatus.Status.CurrentStepTotal > 0)
                                             {
-                                                <MudText Typo="Typo.caption" Color="Color.Info">
-                                                    @_currentStatus.Status.CurrentStepProgress / @_currentStatus.Status.CurrentStepTotal (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
-                                                </MudText>
-                                                <MudProgressLinear Color="Color.Info" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
+                                                @if (_currentStatus.Status.CurrentStepProgress < 0)
+                                                {
+                                                    var prepProgress = Math.Abs(_currentStatus.Status.CurrentStepProgress);
+                                                    <MudText Typo="Typo.caption" Color="Color.Warning">
+                                                        Preparing: @prepProgress / @_currentStatus.Status.CurrentStepTotal (@((prepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
+                                                    </MudText>
+                                                    <MudProgressLinear Color="Color.Warning" Value="@(prepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
+                                                }
+                                                else
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Info">
+                                                        @_currentStatus.Status.CurrentStepProgress / @_currentStatus.Status.CurrentStepTotal (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
+                                                    </MudText>
+                                                    <MudProgressLinear Color="Color.Info" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
+                                                }
                                             }
                                             else if (_currentStatus.Status.ScrapeResult != null)
                                             {
@@ -174,10 +196,21 @@
                                             <MudText Typo="Typo.body2">Check Statuses</MudText>
                                             @if (_currentStatus.Status.CurrentStep == "Checking statuses" && _currentStatus.Status.CurrentStepTotal > 0)
                                             {
-                                                <MudText Typo="Typo.caption" Color="Color.Info">
-                                                    @_currentStatus.Status.CurrentStepProgress / @_currentStatus.Status.CurrentStepTotal (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
-                                                </MudText>
-                                                <MudProgressLinear Color="Color.Info" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
+                                                @if (_currentStatus.Status.CurrentStepProgress < 0)
+                                                {
+                                                    var prepProgress = Math.Abs(_currentStatus.Status.CurrentStepProgress);
+                                                    <MudText Typo="Typo.caption" Color="Color.Warning">
+                                                        Preparing: @prepProgress / @_currentStatus.Status.CurrentStepTotal (@((prepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
+                                                    </MudText>
+                                                    <MudProgressLinear Color="Color.Warning" Value="@(prepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
+                                                }
+                                                else
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Info">
+                                                        @_currentStatus.Status.CurrentStepProgress / @_currentStatus.Status.CurrentStepTotal (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
+                                                    </MudText>
+                                                    <MudProgressLinear Color="Color.Info" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
+                                                }
                                             }
                                             else if (_currentStatus.Status.StatusCheckResult != null)
                                             {
