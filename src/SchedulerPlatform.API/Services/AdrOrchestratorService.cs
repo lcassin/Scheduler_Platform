@@ -242,26 +242,25 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             _logger.LogInformation("Starting to mark {Count} jobs as in-progress (batch size: {BatchSize})", 
                 jobsNeedingVerification.Count, setupBatchSize);
             
+            // Store execution objects (not IDs) since IDs aren't assigned until SaveChangesAsync
+            var executionsByJobId = new Dictionary<int, AdrJobExecution>();
+            
             foreach (var job in jobsNeedingVerification)
             {
                 try
                 {
+                    // Update job properties directly - no need to call UpdateAsync since
+                    // the entity is already tracked by EF (loaded from same DbContext)
+                    // Calling UpdateAsync would scan all tracked entities on each iteration = O(N²)
                     job.Status = "CredentialCheckInProgress";
                     job.ModifiedDateTime = DateTime.UtcNow;
                     job.ModifiedBy = "System Created";
-                    await _unitOfWork.AdrJobs.UpdateAsync(job);
 
                     var execution = await CreateExecutionAsync(job.Id, (int)AdrRequestType.AttemptLogin, saveChanges: false);
-                    jobsToProcess.Add((job.Id, job.CredentialId, job.NextRangeStartDateTime, job.NextRangeEndDateTime, execution.Id));
+                    executionsByJobId[job.Id] = execution;
                     
                     markedCount++;
                     setupProcessedSinceLastSave++;
-                    
-                    // Log progress every 100 jobs to show loop is running
-                    if (markedCount % 100 == 0)
-                    {
-                        _logger.LogDebug("Credential verification setup: processed {Count} jobs in memory", markedCount);
-                    }
                     
                     // Save in batches to reduce database round-trips
                     if (setupProcessedSinceLastSave >= setupBatchSize)
@@ -291,6 +290,15 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             if (setupProcessedSinceLastSave > 0)
             {
                 await _unitOfWork.SaveChangesAsync();
+            }
+            
+            // Build jobsToProcess AFTER SaveChangesAsync so execution IDs are populated
+            foreach (var job in jobsNeedingVerification)
+            {
+                if (executionsByJobId.TryGetValue(job.Id, out var execution))
+                {
+                    jobsToProcess.Add((job.Id, job.CredentialId, job.NextRangeStartDateTime, job.NextRangeEndDateTime, execution.Id));
+                }
             }
             
             var setupDuration = DateTime.UtcNow - startTime;
@@ -484,6 +492,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             // Step 1: Mark all jobs as "InProgress" in batches (for idempotency)
             const int setupBatchSize = 500;
             var jobsToProcess = new List<(int JobId, int CredentialId, DateTime? StartDate, DateTime? EndDate, int ExecutionId)>();
+            var executionsByJobId = new Dictionary<int, AdrJobExecution>();
             int markedCount = 0;
             int setupProcessedSinceLastSave = 0;
             var startTime = DateTime.UtcNow;
@@ -495,13 +504,15 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             {
                 try
                 {
+                    // Update job properties directly - no need to call UpdateAsync since
+                    // the entity is already tracked by EF (loaded from same DbContext)
+                    // Calling UpdateAsync would scan all tracked entities on each iteration = O(N²)
                     job.Status = "ScrapeInProgress";
                     job.ModifiedDateTime = DateTime.UtcNow;
                     job.ModifiedBy = "System Created";
-                    await _unitOfWork.AdrJobs.UpdateAsync(job);
 
                     var execution = await CreateExecutionAsync(job.Id, (int)AdrRequestType.DownloadInvoice, saveChanges: false);
-                    jobsToProcess.Add((job.Id, job.CredentialId, job.NextRangeStartDateTime, job.NextRangeEndDateTime, execution.Id));
+                    executionsByJobId[job.Id] = execution;
                     
                     markedCount++;
                     setupProcessedSinceLastSave++;
@@ -528,6 +539,15 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             if (setupProcessedSinceLastSave > 0)
             {
                 await _unitOfWork.SaveChangesAsync();
+            }
+            
+            // Build jobsToProcess AFTER SaveChangesAsync so execution IDs are populated
+            foreach (var job in jobsReadyForScraping)
+            {
+                if (executionsByJobId.TryGetValue(job.Id, out var execution))
+                {
+                    jobsToProcess.Add((job.Id, job.CredentialId, job.NextRangeStartDateTime, job.NextRangeEndDateTime, execution.Id));
+                }
             }
             
             var setupDuration = DateTime.UtcNow - startTime;
@@ -740,10 +760,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             {
                 try
                 {
+                    // Update job properties directly - no need to call UpdateAsync since
+                    // the entity is already tracked by EF (loaded from same DbContext)
+                    // Calling UpdateAsync would scan all tracked entities on each iteration = O(N²)
                     job.Status = "StatusCheckInProgress";
                     job.ModifiedDateTime = DateTime.UtcNow;
                     job.ModifiedBy = "System Created";
-                    await _unitOfWork.AdrJobs.UpdateAsync(job);
                     jobsToProcess.Add(job.Id);
                     
                     markedCount++;
