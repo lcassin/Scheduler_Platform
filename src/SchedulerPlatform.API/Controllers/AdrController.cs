@@ -431,7 +431,10 @@ public class AdrController : ControllerBase
             [FromQuery] string? vmAccountNumber = null,
             [FromQuery] bool latestPerAccount = false,
             [FromQuery] int pageNumber = 1,
-            [FromQuery] int pageSize = 20)
+            [FromQuery] int pageSize = 20,
+            [FromQuery] long? vmAccountId = null,
+            [FromQuery] string? interfaceAccountId = null,
+            [FromQuery] int? credentialId = null)
         {
             try
             {
@@ -444,7 +447,10 @@ public class AdrController : ControllerBase
                     billingPeriodEnd,
                     vendorCode,
                     vmAccountNumber,
-                    latestPerAccount);
+                    latestPerAccount,
+                    vmAccountId,
+                    interfaceAccountId,
+                    credentialId);
 
                 // Map to DTOs with VendorCode fallback from AdrAccount when job's VendorCode is null
                 var mappedItems = items.Select(j => new

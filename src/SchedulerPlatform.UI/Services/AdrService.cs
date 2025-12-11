@@ -137,7 +137,10 @@ public class AdrService : IAdrService
             string? status = null,
             string? vendorCode = null,
             string? vmAccountNumber = null,
-            bool latestPerAccount = false)
+            bool latestPerAccount = false,
+            long? vmAccountId = null,
+            string? interfaceAccountId = null,
+            int? credentialId = null)
         {
             var client = CreateClient();
             var queryParams = new List<string>
@@ -160,6 +163,15 @@ public class AdrService : IAdrService
 
             if (latestPerAccount)
                 queryParams.Add("latestPerAccount=true");
+
+            if (vmAccountId.HasValue)
+                queryParams.Add($"vmAccountId={vmAccountId.Value}");
+
+            if (!string.IsNullOrWhiteSpace(interfaceAccountId))
+                queryParams.Add($"interfaceAccountId={Uri.EscapeDataString(interfaceAccountId)}");
+
+            if (credentialId.HasValue)
+                queryParams.Add($"credentialId={credentialId.Value}");
 
             var query = "?" + string.Join("&", queryParams);
             var result = await client.GetFromJsonAsync<PagedResult<AdrJob>>($"adr/jobs{query}");

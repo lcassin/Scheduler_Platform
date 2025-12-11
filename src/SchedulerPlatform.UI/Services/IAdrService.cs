@@ -32,7 +32,10 @@ public interface IAdrService
             string? status = null,
             string? vendorCode = null,
             string? vmAccountNumber = null,
-            bool latestPerAccount = false);
+            bool latestPerAccount = false,
+            long? vmAccountId = null,
+            string? interfaceAccountId = null,
+            int? credentialId = null);
     Task<AdrJob?> GetJobAsync(int id);
     Task<List<AdrJob>> GetJobsByAccountAsync(int adrAccountId);
     Task<AdrJobStats> GetJobStatsAsync();
