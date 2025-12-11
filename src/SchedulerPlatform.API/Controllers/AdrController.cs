@@ -1,10 +1,12 @@
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using SchedulerPlatform.API.Services;
 using SchedulerPlatform.Core.Domain.Entities;
 using SchedulerPlatform.Core.Domain.Enums;
 using SchedulerPlatform.Core.Domain.Interfaces;
+using SchedulerPlatform.Infrastructure.Data;
 
 namespace SchedulerPlatform.API.Controllers;
 
@@ -17,6 +19,7 @@ public class AdrController : ControllerBase
     private readonly IAdrAccountSyncService _syncService;
     private readonly IAdrOrchestratorService _orchestratorService;
     private readonly IAdrOrchestrationQueue _orchestrationQueue;
+    private readonly SchedulerDbContext _dbContext;
     private readonly ILogger<AdrController> _logger;
 
     public AdrController(
@@ -24,12 +27,14 @@ public class AdrController : ControllerBase
         IAdrAccountSyncService syncService,
         IAdrOrchestratorService orchestratorService,
         IAdrOrchestrationQueue orchestrationQueue,
+        SchedulerDbContext dbContext,
         ILogger<AdrController> logger)
     {
         _unitOfWork = unitOfWork;
         _syncService = syncService;
         _orchestratorService = orchestratorService;
         _orchestrationQueue = orchestrationQueue;
+        _dbContext = dbContext;
         _logger = logger;
     }
 
