@@ -60,10 +60,12 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                         j.NextRunDateTime.Value.Date > today &&
                         j.NextRunDateTime.Value.Date <= leadDateCutoff &&
                         // IDEMPOTENCY: Exclude jobs that already have a successful credential check (HTTP 200)
+                        // Note: Include !e.IsDeleted so Force Refire (soft-delete) works
                         !_context.AdrJobExecutions.Any(e => 
                             e.AdrJobId == j.Id && 
                             e.AdrRequestTypeId == attemptLoginRequestType && 
-                            e.HttpStatusCode == 200))
+                            e.HttpStatusCode == 200 &&
+                            !e.IsDeleted))
             .Include(j => j.AdrAccount)
             .ToListAsync();
     }
@@ -102,10 +104,12 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                              j.AdrAccount.HistoricalBillingStatus != "Missing")
                         ) &&
                         // IDEMPOTENCY: Exclude jobs that already have a successful scrape request (HTTP 200)
+                        // Note: Include !e.IsDeleted so Force Refire (soft-delete) works
                         !_context.AdrJobExecutions.Any(e => 
                             e.AdrJobId == j.Id && 
                             e.AdrRequestTypeId == downloadInvoiceRequestType && 
-                            e.HttpStatusCode == 200))
+                            e.HttpStatusCode == 200 &&
+                            !e.IsDeleted))
             .Include(j => j.AdrAccount)
             .ToListAsync();
     }
