@@ -236,7 +236,7 @@
             }
             
             _clients = await ClientService.GetClientsAsync();
-            _canEdit = await PermissionService.CanEditAsync();
+            _canEdit = await PermissionService.CanUpdateAsync("AdrAccount");
         }
         catch (Exception ex)
         {
