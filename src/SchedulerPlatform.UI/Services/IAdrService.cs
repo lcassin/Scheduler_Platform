@@ -70,5 +70,5 @@ public interface IAdrService
     Task<BackgroundOrchestrationResponse> StartBackgroundOrchestrationAsync();
     Task<OrchestrationCurrentResponse> GetCurrentOrchestrationAsync();
     Task<AdrOrchestrationStatus?> GetOrchestrationStatusAsync(string requestId);
-    Task<List<AdrOrchestrationStatus>> GetOrchestrationHistoryAsync(int count = 10);
+    Task<List<AdrOrchestrationStatus>> GetOrchestrationHistoryAsync(int? count = 10);
 }

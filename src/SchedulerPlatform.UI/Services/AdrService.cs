@@ -389,10 +389,11 @@ public class AdrService : IAdrService
         }
     }
 
-    public async Task<List<AdrOrchestrationStatus>> GetOrchestrationHistoryAsync(int count = 10)
+    public async Task<List<AdrOrchestrationStatus>> GetOrchestrationHistoryAsync(int? count = 10)
     {
         var client = CreateClient();
-        var result = await client.GetFromJsonAsync<List<AdrOrchestrationStatus>>($"adr/orchestrate/history?count={count}");
+        var url = count.HasValue ? $"adr/orchestrate/history?count={count}" : "adr/orchestrate/history";
+        var result = await client.GetFromJsonAsync<List<AdrOrchestrationStatus>>(url);
         return result ?? new List<AdrOrchestrationStatus>();
     }
 
