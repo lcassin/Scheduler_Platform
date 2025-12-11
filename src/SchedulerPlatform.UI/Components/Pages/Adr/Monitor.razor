@@ -514,15 +514,21 @@
     {
         if (_isProgressPolling) return;
         
+        // Capture locals to avoid race condition where StopProgressPolling sets fields to null
+        // while the background task is still running
+        var cts = new CancellationTokenSource();
+        var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        
+        _progressTimerCts = cts;
+        _progressTimer = timer;
         _isProgressPolling = true;
-        _progressTimerCts = new CancellationTokenSource();
-        _progressTimer = new PeriodicTimer(TimeSpan.FromSeconds(5));
         
         _ = Task.Run(async () =>
         {
             try
             {
-                while (await _progressTimer.WaitForNextTickAsync(_progressTimerCts.Token))
+                // Use local variables (timer, cts) instead of fields to avoid NullReferenceException
+                while (await timer.WaitForNextTickAsync(cts.Token))
                 {
                     if (_autoRefreshEnabled && _currentStatus?.IsRunning == true)
                     {
@@ -552,19 +558,20 @@
             }
             finally
             {
+                // Dispose in finally block to ensure cleanup happens in one place
+                timer.Dispose();
+                cts.Dispose();
                 _isProgressPolling = false;
+                _progressTimer = null;
+                _progressTimerCts = null;
             }
         });
     }
     
     private void StopProgressPolling()
     {
+        // Only cancel - the background task will handle disposal in its finally block
         _progressTimerCts?.Cancel();
-        _progressTimerCts?.Dispose();
-        _progressTimerCts = null;
-        _progressTimer?.Dispose();
-        _progressTimer = null;
-        _isProgressPolling = false;
     }
 
     private Color GetStatusColor(string status) => status switch
