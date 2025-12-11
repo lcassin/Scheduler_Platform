@@ -239,19 +239,20 @@ public class AdrService : IAdrService
 
     #region Job Refire Operations
 
-    public async Task<RefireJobResult> RefireJobAsync(int jobId)
+    public async Task<RefireJobResult> RefireJobAsync(int jobId, bool forceRefire = false)
     {
         var client = CreateClient();
-        var response = await client.PostAsync($"adr/jobs/{jobId}/refire", null);
+        var url = forceRefire ? $"adr/jobs/{jobId}/refire?forceRefire=true" : $"adr/jobs/{jobId}/refire";
+        var response = await client.PostAsync(url, null);
         response.EnsureSuccessStatusCode();
         var result = await response.Content.ReadFromJsonAsync<RefireJobResult>();
         return result ?? new RefireJobResult { Message = "Job refired", JobId = jobId };
     }
 
-    public async Task<RefireJobsBulkResult> RefireJobsBulkAsync(List<int> jobIds)
+    public async Task<RefireJobsBulkResult> RefireJobsBulkAsync(List<int> jobIds, bool forceRefire = false)
     {
         var client = CreateClient();
-        var response = await client.PostAsJsonAsync("adr/jobs/refire-bulk", new { JobIds = jobIds });
+        var response = await client.PostAsJsonAsync("adr/jobs/refire-bulk", new { JobIds = jobIds, ForceRefire = forceRefire });
         response.EnsureSuccessStatusCode();
         var result = await response.Content.ReadFromJsonAsync<RefireJobsBulkResult>();
         return result ?? new RefireJobsBulkResult { Message = "Jobs refired", RefiredCount = jobIds.Count, TotalRequested = jobIds.Count };

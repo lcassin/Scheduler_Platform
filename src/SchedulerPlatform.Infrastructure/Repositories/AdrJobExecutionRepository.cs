@@ -79,4 +79,21 @@ public class AdrJobExecutionRepository : Repository<AdrJobExecution>, IAdrJobExe
 
         return (items, totalCount);
     }
+
+    public async Task<int> DeleteByJobIdAsync(int adrJobId)
+    {
+        // Soft delete all executions for this job to allow force refire
+        var executions = await _dbSet
+            .Where(e => e.AdrJobId == adrJobId && !e.IsDeleted)
+            .ToListAsync();
+
+        foreach (var execution in executions)
+        {
+            execution.IsDeleted = true;
+            execution.ModifiedDateTime = DateTime.UtcNow;
+            execution.ModifiedBy = "System Created";
+        }
+
+        return executions.Count;
+    }
 }
