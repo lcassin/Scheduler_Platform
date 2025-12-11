@@ -1314,12 +1314,69 @@ public class AdrController : ControllerBase
     }
 
     /// <summary>
-    /// Gets the recent orchestration run history.
+    /// Gets the recent orchestration run history from database.
+    /// Falls back to in-memory if database is unavailable.
     /// </summary>
     [HttpGet("orchestrate/history")]
     [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
-    public ActionResult<IEnumerable<AdrOrchestrationStatus>> GetOrchestrationHistory([FromQuery] int count = 10)
+    public async Task<ActionResult<IEnumerable<object>>> GetOrchestrationHistory([FromQuery] int count = 10)
     {
+        try
+        {
+            // Try to get history from database first
+            var dbHistory = await _dbContext.AdrOrchestrationRuns
+                .Where(r => !r.IsDeleted)
+                .OrderByDescending(r => r.RequestedDateTime)
+                .Take(count)
+                .Select(r => new AdrOrchestrationStatus
+                {
+                    RequestId = r.RequestId,
+                    RequestedBy = r.RequestedBy,
+                    RequestedAt = r.RequestedDateTime,
+                    StartedAt = r.StartedDateTime,
+                    CompletedAt = r.CompletedDateTime,
+                    Status = r.Status,
+                    CurrentStep = r.CurrentStep,
+                    ErrorMessage = r.ErrorMessage,
+                    SyncResult = r.SyncAccountsInserted.HasValue ? new AdrAccountSyncResult
+                    {
+                        AccountsInserted = r.SyncAccountsInserted ?? 0,
+                        AccountsUpdated = r.SyncAccountsUpdated ?? 0
+                    } : null,
+                    JobCreationResult = r.JobsCreated.HasValue ? new JobCreationResult
+                    {
+                        JobsCreated = r.JobsCreated ?? 0,
+                        JobsSkipped = r.JobsSkipped ?? 0
+                    } : null,
+                    CredentialVerificationResult = r.CredentialsVerified.HasValue ? new CredentialVerificationResult
+                    {
+                        CredentialsVerified = r.CredentialsVerified ?? 0,
+                        CredentialsFailed = r.CredentialsFailed ?? 0
+                    } : null,
+                    ScrapeResult = r.ScrapingRequested.HasValue ? new ScrapeResult
+                    {
+                        ScrapesRequested = r.ScrapingRequested ?? 0,
+                        ScrapesFailed = r.ScrapingFailed ?? 0
+                    } : null,
+                    StatusCheckResult = r.StatusesChecked.HasValue ? new StatusCheckResult
+                    {
+                        JobsCompleted = r.StatusesChecked ?? 0,
+                        JobsNeedingReview = r.StatusesFailed ?? 0
+                    } : null
+                })
+                .ToListAsync();
+            
+            if (dbHistory.Any())
+            {
+                return Ok(dbHistory);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get orchestration history from database, falling back to in-memory");
+        }
+        
+        // Fall back to in-memory statuses
         var statuses = _orchestrationQueue.GetRecentStatuses(count);
         return Ok(statuses);
     }

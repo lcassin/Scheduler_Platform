@@ -1,5 +1,8 @@
 using System.Threading.Channels;
+using Microsoft.EntityFrameworkCore;
+using SchedulerPlatform.Core.Domain.Entities;
 using SchedulerPlatform.Core.Domain.Interfaces;
+using SchedulerPlatform.Infrastructure.Data;
 
 namespace SchedulerPlatform.API.Services;
 
@@ -230,6 +233,34 @@ public class AdrBackgroundOrchestrationService : BackgroundService
             s.StartedAt = DateTime.UtcNow;
         });
 
+        // Create database record for this orchestration run
+        int dbRunId = 0;
+        try
+        {
+            using var initScope = _scopeFactory.CreateScope();
+            var initDb = initScope.ServiceProvider.GetRequiredService<SchedulerDbContext>();
+            var dbRun = new AdrOrchestrationRun
+            {
+                RequestId = request.RequestId,
+                RequestedBy = request.RequestedBy,
+                RequestedDateTime = request.RequestedAt,
+                StartedDateTime = DateTime.UtcNow,
+                Status = "Running",
+                CreatedBy = "System",
+                CreatedDateTime = DateTime.UtcNow,
+                ModifiedBy = "System",
+                ModifiedDateTime = DateTime.UtcNow
+            };
+            initDb.AdrOrchestrationRuns.Add(dbRun);
+            await initDb.SaveChangesAsync(stoppingToken);
+            dbRunId = dbRun.Id;
+            _logger.LogInformation("Request {RequestId}: Created database record with ID {DbRunId}", request.RequestId, dbRunId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Request {RequestId}: Failed to create database record, continuing with in-memory only", request.RequestId);
+        }
+
         try
         {
             // Create a new scope for this request - this gives us fresh DbContext instances
@@ -404,6 +435,9 @@ public class AdrBackgroundOrchestrationService : BackgroundService
             });
 
             _logger.LogInformation("Request {RequestId}: ADR orchestration completed successfully", request.RequestId);
+            
+            // Save final results to database
+            await SaveOrchestrationResultAsync(request.RequestId, dbRunId, "Completed", null, stoppingToken);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
@@ -413,6 +447,7 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                 s.ErrorMessage = "Operation was cancelled";
                 s.CompletedAt = DateTime.UtcNow;
             });
+            await SaveOrchestrationResultAsync(request.RequestId, dbRunId, "Cancelled", "Operation was cancelled", CancellationToken.None);
             throw;
         }
         catch (Exception ex)
@@ -425,10 +460,76 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                 s.ErrorMessage = ex.Message;
                 s.CompletedAt = DateTime.UtcNow;
             });
+            await SaveOrchestrationResultAsync(request.RequestId, dbRunId, "Failed", ex.Message, CancellationToken.None);
         }
         finally
         {
             _queue.SetCurrentRun(null);
+        }
+    }
+    
+    private async Task SaveOrchestrationResultAsync(string requestId, int dbRunId, string status, string? errorMessage, CancellationToken cancellationToken)
+    {
+        if (dbRunId == 0) return; // No database record was created
+        
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<SchedulerDbContext>();
+            
+            var dbRun = await db.AdrOrchestrationRuns.FindAsync(new object[] { dbRunId }, cancellationToken);
+            if (dbRun == null) return;
+            
+            // Get the in-memory status to copy results from
+            var memStatus = _queue.GetStatus(requestId);
+            
+            dbRun.Status = status;
+            dbRun.CompletedDateTime = DateTime.UtcNow;
+            dbRun.ErrorMessage = errorMessage;
+            dbRun.ModifiedDateTime = DateTime.UtcNow;
+            dbRun.ModifiedBy = "System";
+            
+            if (memStatus != null)
+            {
+                // Copy step results from in-memory status
+                if (memStatus.SyncResult != null)
+                {
+                    dbRun.SyncAccountsInserted = memStatus.SyncResult.AccountsInserted;
+                    dbRun.SyncAccountsUpdated = memStatus.SyncResult.AccountsUpdated;
+                    dbRun.SyncAccountsTotal = memStatus.SyncResult.AccountsInserted + memStatus.SyncResult.AccountsUpdated;
+                }
+                
+                if (memStatus.JobCreationResult != null)
+                {
+                    dbRun.JobsCreated = memStatus.JobCreationResult.JobsCreated;
+                    dbRun.JobsSkipped = memStatus.JobCreationResult.JobsSkipped;
+                }
+                
+                if (memStatus.CredentialVerificationResult != null)
+                {
+                    dbRun.CredentialsVerified = memStatus.CredentialVerificationResult.CredentialsVerified;
+                    dbRun.CredentialsFailed = memStatus.CredentialVerificationResult.CredentialsFailed;
+                }
+                
+                if (memStatus.ScrapeResult != null)
+                {
+                    dbRun.ScrapingRequested = memStatus.ScrapeResult.ScrapesRequested;
+                    dbRun.ScrapingFailed = memStatus.ScrapeResult.ScrapesFailed;
+                }
+                
+                if (memStatus.StatusCheckResult != null)
+                {
+                    dbRun.StatusesChecked = memStatus.StatusCheckResult.JobsCompleted + memStatus.StatusCheckResult.JobsNeedingReview;
+                    dbRun.StatusesFailed = memStatus.StatusCheckResult.JobsNeedingReview;
+                }
+            }
+            
+            await db.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation("Request {RequestId}: Saved orchestration results to database", requestId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Request {RequestId}: Failed to save orchestration results to database", requestId);
         }
     }
 }
