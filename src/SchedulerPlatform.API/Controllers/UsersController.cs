@@ -624,7 +624,8 @@ public class UsersController : ControllerBase
                 {
                     new() { PermissionName = "scheduler", CanRead = true },
                     new() { PermissionName = "schedules", CanRead = true },
-                    new() { PermissionName = "jobs", CanRead = true }
+                    new() { PermissionName = "jobs", CanRead = true },
+                    new() { PermissionName = "adr", CanRead = true }
                 }
             },
             "editor" => new PermissionTemplateResponse
@@ -635,7 +636,8 @@ public class UsersController : ControllerBase
                 {
                     new() { PermissionName = "scheduler", CanRead = true },
                     new() { PermissionName = "schedules", CanCreate = true, CanRead = true, CanUpdate = true, CanDelete = true, CanExecute = true },
-                    new() { PermissionName = "jobs", CanRead = true }
+                    new() { PermissionName = "jobs", CanRead = true },
+                    new() { PermissionName = "adr", CanRead = true, CanUpdate = true }
                 }
             },
             "admin" => new PermissionTemplateResponse
@@ -647,7 +649,8 @@ public class UsersController : ControllerBase
                     new() { PermissionName = "scheduler", CanCreate = true, CanRead = true, CanUpdate = true, CanDelete = true },
                     new() { PermissionName = "schedules", CanCreate = true, CanRead = true, CanUpdate = true, CanDelete = true, CanExecute = true },
                     new() { PermissionName = "jobs", CanCreate = true, CanRead = true, CanUpdate = true, CanDelete = true, CanExecute = true },
-                    new() { PermissionName = "users:manage", CanRead = true, CanUpdate = true }
+                    new() { PermissionName = "users:manage", CanRead = true, CanUpdate = true },
+                    new() { PermissionName = "adr", CanCreate = true, CanRead = true, CanUpdate = true, CanDelete = true, CanExecute = true }
                 }
             },
             _ => null

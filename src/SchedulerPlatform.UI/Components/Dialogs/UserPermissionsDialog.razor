@@ -125,7 +125,7 @@
     private bool _loading = true;
     private Dictionary<string, PermissionGroup> _permissionGroups = new(StringComparer.OrdinalIgnoreCase);
     private List<PermissionGroup> _permissionGroupList = new();
-    private readonly string[] _permissionNames = new[] { "scheduler", "schedules", "jobs", "users:manage" };
+    private readonly string[] _permissionNames = new[] { "scheduler", "schedules", "jobs", "users:manage", "adr" };
 
     protected override async Task OnInitializedAsync()
     {
