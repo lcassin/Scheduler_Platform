@@ -40,18 +40,30 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
         // Include "CredentialCheckInProgress" to recover jobs that were interrupted mid-step
         // These jobs already had the API called but the process crashed before updating status
         // 
-        // Credential verification should happen within the lead days window before NextRunDate:
+        // Credential verification window: 7 days before NextRunDate up to (but not including) NextRunDate
+        // Example: If NextRunDate = Dec 17, credential check window is Dec 10-16
         // - Jobs where NextRunDateTime is within the next N days (configurable, default 7)
-        // - Also include jobs where NextRunDateTime has already passed (late jobs still need verification)
+        // - Only future NextRunDates - jobs with past NextRunDates should be in scraping phase, not credential check
+        //
+        // IDEMPOTENCY CHECK: Also exclude jobs that already have a successful credential check execution
+        // This prevents duplicate API calls (and duplicate billing) even if the job status wasn't saved correctly
+        // AdrRequestTypeId = 1 is AttemptLogin (credential verification)
         var today = currentDate.Date;
         var leadDateCutoff = today.AddDays(credentialCheckLeadDays);
+        const int attemptLoginRequestType = 1; // AdrRequestType.AttemptLogin
         
         return await _dbSet
             .Where(j => !j.IsDeleted && 
                         (j.Status == "Pending" || j.Status == "CredentialCheckInProgress") &&
                         !j.CredentialVerifiedDateTime.HasValue &&
                         j.NextRunDateTime.HasValue &&
-                        j.NextRunDateTime.Value.Date <= leadDateCutoff)
+                        j.NextRunDateTime.Value.Date > today &&
+                        j.NextRunDateTime.Value.Date <= leadDateCutoff &&
+                        // IDEMPOTENCY: Exclude jobs that already have a successful credential check (HTTP 200)
+                        !_context.AdrJobExecutions.Any(e => 
+                            e.AdrJobId == j.Id && 
+                            e.AdrRequestTypeId == attemptLoginRequestType && 
+                            e.HttpStatusCode == 200))
             .Include(j => j.AdrAccount)
             .ToListAsync();
     }
@@ -60,12 +72,40 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
     {
         // Include "ScrapeInProgress" to recover jobs that were interrupted mid-step
         // These jobs already had the API called but the process crashed before updating status
+        //
+        // Two categories of jobs are ready for scraping:
+        // 1. Normal flow: CredentialVerified or ScrapeInProgress jobs where NextRunDate has arrived
+        // 2. Missed credential window: Pending jobs where NextRunDate has arrived AND:
+        //    - They have a CredentialId (so we can attempt scraping)
+        //    - Their account is not "Missing" (Missing accounts need manual investigation)
+        //    The downstream API will handle any credential issues and create helpdesk tickets
+        //
+        // IDEMPOTENCY CHECK: Also exclude jobs that already have a successful scrape execution
+        // This prevents duplicate API calls (and duplicate billing) even if the job status wasn't saved correctly
+        // AdrRequestTypeId = 2 is DownloadInvoice (scraping)
+        var today = currentDate.Date;
+        const int downloadInvoiceRequestType = 2; // AdrRequestType.DownloadInvoice
+        
         return await _dbSet
             .Where(j => !j.IsDeleted && 
-                        (j.Status == "CredentialVerified" || j.Status == "ScrapeInProgress") &&
-                        j.CredentialVerifiedDateTime.HasValue &&
                         j.NextRunDateTime.HasValue &&
-                        j.NextRunDateTime.Value.Date <= currentDate.Date)
+                        j.NextRunDateTime.Value.Date <= today &&
+                        (
+                            // Normal flow: credential verified jobs
+                            ((j.Status == "CredentialVerified" || j.Status == "ScrapeInProgress") &&
+                             j.CredentialVerifiedDateTime.HasValue)
+                            ||
+                            // Missed credential window: Pending jobs that can still be scraped
+                            (j.Status == "Pending" &&
+                             j.CredentialId > 0 &&
+                             j.AdrAccount != null &&
+                             j.AdrAccount.HistoricalBillingStatus != "Missing")
+                        ) &&
+                        // IDEMPOTENCY: Exclude jobs that already have a successful scrape request (HTTP 200)
+                        !_context.AdrJobExecutions.Any(e => 
+                            e.AdrJobId == j.Id && 
+                            e.AdrRequestTypeId == downloadInvoiceRequestType && 
+                            e.HttpStatusCode == 200))
             .Include(j => j.AdrAccount)
             .ToListAsync();
     }

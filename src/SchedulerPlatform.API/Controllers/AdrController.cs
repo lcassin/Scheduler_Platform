@@ -651,7 +651,7 @@ public class AdrController : ControllerBase
     }
 
     [HttpPost("jobs/{id}/refire")]
-    public async Task<ActionResult<object>> RefireJob(int id)
+    public async Task<ActionResult<object>> RefireJob(int id, [FromQuery] bool forceRefire = false)
     {
         try
         {
@@ -659,6 +659,14 @@ public class AdrController : ControllerBase
             if (job == null)
             {
                 return NotFound();
+            }
+
+            var executionsDeleted = 0;
+            if (forceRefire)
+            {
+                // Force refire: delete execution history to bypass idempotency check
+                executionsDeleted = await _unitOfWork.AdrJobExecutions.DeleteByJobIdAsync(id);
+                _logger.LogInformation("Force refire: deleted {Count} execution records for job {JobId}", executionsDeleted, id);
             }
 
             // Reset job to Pending status so it gets picked up by the orchestrator
@@ -676,9 +684,9 @@ public class AdrController : ControllerBase
             await _unitOfWork.AdrJobs.UpdateAsync(job);
             await _unitOfWork.SaveChangesAsync();
 
-            _logger.LogInformation("Job {JobId} refired by {User}", id, User.Identity?.Name ?? "Unknown");
+            _logger.LogInformation("Job {JobId} refired by {User} (forceRefire={ForceRefire})", id, User.Identity?.Name ?? "Unknown", forceRefire);
 
-            return Ok(new { message = "Job refired successfully", jobId = id });
+            return Ok(new { message = forceRefire ? $"Job force refired successfully ({executionsDeleted} execution records cleared)" : "Job refired successfully", jobId = id, forceRefire, executionsDeleted });
         }
         catch (Exception ex)
         {
@@ -698,6 +706,7 @@ public class AdrController : ControllerBase
             }
 
             var refiredCount = 0;
+            var totalExecutionsDeleted = 0;
             var errors = new List<string>();
 
             foreach (var jobId in request.JobIds)
@@ -709,6 +718,13 @@ public class AdrController : ControllerBase
                     {
                         errors.Add($"Job {jobId} not found");
                         continue;
+                    }
+
+                    if (request.ForceRefire)
+                    {
+                        // Force refire: delete execution history to bypass idempotency check
+                        var executionsDeleted = await _unitOfWork.AdrJobExecutions.DeleteByJobIdAsync(jobId);
+                        totalExecutionsDeleted += executionsDeleted;
                     }
 
                     // Reset job to Pending status so it gets picked up by the orchestrator
@@ -734,13 +750,20 @@ public class AdrController : ControllerBase
 
             await _unitOfWork.SaveChangesAsync();
 
-            _logger.LogInformation("Bulk refire: {Count} jobs refired by {User}", refiredCount, User.Identity?.Name ?? "Unknown");
+            _logger.LogInformation("Bulk refire: {Count} jobs refired by {User} (forceRefire={ForceRefire}, executionsDeleted={ExecutionsDeleted})", 
+                refiredCount, User.Identity?.Name ?? "Unknown", request.ForceRefire, totalExecutionsDeleted);
+
+            var message = request.ForceRefire 
+                ? $"{refiredCount} job(s) force refired successfully ({totalExecutionsDeleted} execution records cleared)"
+                : $"{refiredCount} job(s) refired successfully";
 
             return Ok(new
             {
-                message = $"{refiredCount} job(s) refired successfully",
+                message,
                 refiredCount,
                 totalRequested = request.JobIds.Count,
+                forceRefire = request.ForceRefire,
+                executionsDeleted = totalExecutionsDeleted,
                 errors = errors.Any() ? errors : null
             });
         }
@@ -936,7 +959,7 @@ public class AdrController : ControllerBase
         try
         {
             _logger.LogInformation("Manual account sync triggered by {User}", User.Identity?.Name ?? "Unknown");
-            var result = await _syncService.SyncAccountsAsync(cancellationToken);
+            var result = await _syncService.SyncAccountsAsync(null, cancellationToken);
             return Ok(result);
         }
         catch (Exception ex)
@@ -970,7 +993,7 @@ public class AdrController : ControllerBase
         try
         {
             _logger.LogInformation("Manual credential verification triggered by {User}", User.Identity?.Name ?? "Unknown");
-            var result = await _orchestratorService.VerifyCredentialsAsync(cancellationToken);
+            var result = await _orchestratorService.VerifyCredentialsAsync(null, cancellationToken);
             return Ok(result);
         }
         catch (Exception ex)
@@ -987,7 +1010,7 @@ public class AdrController : ControllerBase
         try
         {
             _logger.LogInformation("Manual scraping triggered by {User}", User.Identity?.Name ?? "Unknown");
-            var result = await _orchestratorService.ProcessScrapingAsync(cancellationToken);
+            var result = await _orchestratorService.ProcessScrapingAsync(null, cancellationToken);
             return Ok(result);
         }
         catch (Exception ex)
@@ -1004,7 +1027,7 @@ public class AdrController : ControllerBase
         try
         {
             _logger.LogInformation("Manual status check triggered by {User}", User.Identity?.Name ?? "Unknown");
-            var result = await _orchestratorService.CheckPendingStatusesAsync(cancellationToken);
+            var result = await _orchestratorService.CheckPendingStatusesAsync(null, cancellationToken);
             return Ok(result);
         }
         catch (Exception ex)
@@ -1022,11 +1045,11 @@ public class AdrController : ControllerBase
         {
             _logger.LogInformation("Full ADR cycle triggered by {User}", User.Identity?.Name ?? "Unknown");
 
-            var syncResult = await _syncService.SyncAccountsAsync(cancellationToken);
+            var syncResult = await _syncService.SyncAccountsAsync(null, cancellationToken);
             var jobCreationResult = await _orchestratorService.CreateJobsForDueAccountsAsync(cancellationToken);
-            var credentialResult = await _orchestratorService.VerifyCredentialsAsync(cancellationToken);
-            var scrapeResult = await _orchestratorService.ProcessScrapingAsync(cancellationToken);
-            var statusResult = await _orchestratorService.CheckPendingStatusesAsync(cancellationToken);
+            var credentialResult = await _orchestratorService.VerifyCredentialsAsync(null, cancellationToken);
+            var scrapeResult = await _orchestratorService.ProcessScrapingAsync(null, cancellationToken);
+            var statusResult = await _orchestratorService.CheckPendingStatusesAsync(null, cancellationToken);
 
             return Ok(new
             {
@@ -1187,6 +1210,7 @@ public class CompleteExecutionRequest
 public class RefireJobsRequest
 {
     public List<int> JobIds { get; set; } = new();
+    public bool ForceRefire { get; set; } = false;
 }
 
 public class BackgroundOrchestrationRequest

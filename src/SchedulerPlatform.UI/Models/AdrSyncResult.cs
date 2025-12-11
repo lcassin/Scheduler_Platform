@@ -6,7 +6,12 @@ public class AdrAccountSyncResult
     public int AccountsInserted { get; set; }
     public int AccountsUpdated { get; set; }
     public int AccountsMarkedDeleted { get; set; }
-    public List<string> Errors { get; set; } = new();
+    public int ClientsCreated { get; set; }
+    public int ClientsUpdated { get; set; }
+    public int Errors { get; set; }
+    public List<string> ErrorMessages { get; set; } = new();
+    public DateTime SyncStartDateTime { get; set; }
+    public DateTime SyncEndDateTime { get; set; }
     public TimeSpan Duration { get; set; }
 }
 
@@ -68,4 +73,43 @@ public class RefireJobsBulkResult
     public int RefiredCount { get; set; }
     public int TotalRequested { get; set; }
     public List<string>? Errors { get; set; }
+}
+
+public class BackgroundOrchestrationResponse
+{
+    public string Message { get; set; } = string.Empty;
+    public string RequestId { get; set; } = string.Empty;
+    public DateTime RequestedAt { get; set; }
+    public string RequestedBy { get; set; } = string.Empty;
+}
+
+public class OrchestrationCurrentResponse
+{
+    public bool IsRunning { get; set; }
+    public string? Message { get; set; }
+    public AdrOrchestrationStatus? Status { get; set; }
+}
+
+public class AdrOrchestrationStatus
+{
+    public string RequestId { get; set; } = string.Empty;
+    public string RequestedBy { get; set; } = string.Empty;
+    public DateTime RequestedAt { get; set; }
+    public DateTime? StartedAt { get; set; }
+    public DateTime? CompletedAt { get; set; }
+    public string Status { get; set; } = "Queued"; // Queued, Running, Completed, Failed, Cancelled
+    public string? CurrentStep { get; set; }
+    public string? CurrentStepPhase { get; set; } // Preparing, Calling API, Saving results
+    public string? ErrorMessage { get; set; }
+    
+    // Progress tracking for current step
+    public int CurrentStepProgress { get; set; }
+    public int CurrentStepTotal { get; set; }
+    
+    // Results from each step
+    public AdrAccountSyncResult? SyncResult { get; set; }
+    public JobCreationResult? JobCreationResult { get; set; }
+    public CredentialVerificationResult? CredentialVerificationResult { get; set; }
+    public ScrapeResult? ScrapeResult { get; set; }
+    public StatusCheckResult? StatusCheckResult { get; set; }
 }

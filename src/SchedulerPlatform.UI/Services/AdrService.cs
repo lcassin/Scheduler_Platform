@@ -239,19 +239,20 @@ public class AdrService : IAdrService
 
     #region Job Refire Operations
 
-    public async Task<RefireJobResult> RefireJobAsync(int jobId)
+    public async Task<RefireJobResult> RefireJobAsync(int jobId, bool forceRefire = false)
     {
         var client = CreateClient();
-        var response = await client.PostAsync($"adr/jobs/{jobId}/refire", null);
+        var url = forceRefire ? $"adr/jobs/{jobId}/refire?forceRefire=true" : $"adr/jobs/{jobId}/refire";
+        var response = await client.PostAsync(url, null);
         response.EnsureSuccessStatusCode();
         var result = await response.Content.ReadFromJsonAsync<RefireJobResult>();
         return result ?? new RefireJobResult { Message = "Job refired", JobId = jobId };
     }
 
-    public async Task<RefireJobsBulkResult> RefireJobsBulkAsync(List<int> jobIds)
+    public async Task<RefireJobsBulkResult> RefireJobsBulkAsync(List<int> jobIds, bool forceRefire = false)
     {
         var client = CreateClient();
-        var response = await client.PostAsJsonAsync("adr/jobs/refire-bulk", new { JobIds = jobIds });
+        var response = await client.PostAsJsonAsync("adr/jobs/refire-bulk", new { JobIds = jobIds, ForceRefire = forceRefire });
         response.EnsureSuccessStatusCode();
         var result = await response.Content.ReadFromJsonAsync<RefireJobsBulkResult>();
         return result ?? new RefireJobsBulkResult { Message = "Jobs refired", RefiredCount = jobIds.Count, TotalRequested = jobIds.Count };
@@ -313,6 +314,46 @@ public class AdrService : IAdrService
         response.EnsureSuccessStatusCode();
         var result = await response.Content.ReadFromJsonAsync<FullCycleResult>();
         return result ?? new FullCycleResult();
+    }
+
+    #endregion
+
+    #region Background Orchestration Monitoring
+
+    public async Task<BackgroundOrchestrationResponse> StartBackgroundOrchestrationAsync()
+    {
+        var client = CreateClient();
+        var response = await client.PostAsync("adr/orchestrate/run-background", null);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<BackgroundOrchestrationResponse>();
+        return result ?? new BackgroundOrchestrationResponse();
+    }
+
+    public async Task<OrchestrationCurrentResponse> GetCurrentOrchestrationAsync()
+    {
+        var client = CreateClient();
+        var result = await client.GetFromJsonAsync<OrchestrationCurrentResponse>("adr/orchestrate/current");
+        return result ?? new OrchestrationCurrentResponse { IsRunning = false, Message = "Unable to get status" };
+    }
+
+    public async Task<AdrOrchestrationStatus?> GetOrchestrationStatusAsync(string requestId)
+    {
+        var client = CreateClient();
+        try
+        {
+            return await client.GetFromJsonAsync<AdrOrchestrationStatus>($"adr/orchestrate/status/{requestId}");
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+    }
+
+    public async Task<List<AdrOrchestrationStatus>> GetOrchestrationHistoryAsync(int count = 10)
+    {
+        var client = CreateClient();
+        var result = await client.GetFromJsonAsync<List<AdrOrchestrationStatus>>($"adr/orchestrate/history?count={count}");
+        return result ?? new List<AdrOrchestrationStatus>();
     }
 
     #endregion
