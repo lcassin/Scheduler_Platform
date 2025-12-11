@@ -44,8 +44,13 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
         // Example: If NextRunDate = Dec 17, credential check window is Dec 10-16
         // - Jobs where NextRunDateTime is within the next N days (configurable, default 7)
         // - Only future NextRunDates - jobs with past NextRunDates should be in scraping phase, not credential check
+        //
+        // IDEMPOTENCY CHECK: Also exclude jobs that already have a successful credential check execution
+        // This prevents duplicate API calls (and duplicate billing) even if the job status wasn't saved correctly
+        // AdrRequestTypeId = 1 is AttemptLogin (credential verification)
         var today = currentDate.Date;
         var leadDateCutoff = today.AddDays(credentialCheckLeadDays);
+        const int attemptLoginRequestType = 1; // AdrRequestType.AttemptLogin
         
         return await _dbSet
             .Where(j => !j.IsDeleted && 
@@ -53,7 +58,12 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                         !j.CredentialVerifiedDateTime.HasValue &&
                         j.NextRunDateTime.HasValue &&
                         j.NextRunDateTime.Value.Date > today &&
-                        j.NextRunDateTime.Value.Date <= leadDateCutoff)
+                        j.NextRunDateTime.Value.Date <= leadDateCutoff &&
+                        // IDEMPOTENCY: Exclude jobs that already have a successful credential check (HTTP 200)
+                        !_context.AdrJobExecutions.Any(e => 
+                            e.AdrJobId == j.Id && 
+                            e.AdrRequestTypeId == attemptLoginRequestType && 
+                            e.HttpStatusCode == 200))
             .Include(j => j.AdrAccount)
             .ToListAsync();
     }
@@ -69,7 +79,12 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
         //    - They have a CredentialId (so we can attempt scraping)
         //    - Their account is not "Missing" (Missing accounts need manual investigation)
         //    The downstream API will handle any credential issues and create helpdesk tickets
+        //
+        // IDEMPOTENCY CHECK: Also exclude jobs that already have a successful scrape execution
+        // This prevents duplicate API calls (and duplicate billing) even if the job status wasn't saved correctly
+        // AdrRequestTypeId = 2 is DownloadInvoice (scraping)
         var today = currentDate.Date;
+        const int downloadInvoiceRequestType = 2; // AdrRequestType.DownloadInvoice
         
         return await _dbSet
             .Where(j => !j.IsDeleted && 
@@ -85,7 +100,12 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                              j.CredentialId > 0 &&
                              j.AdrAccount != null &&
                              j.AdrAccount.HistoricalBillingStatus != "Missing")
-                        ))
+                        ) &&
+                        // IDEMPOTENCY: Exclude jobs that already have a successful scrape request (HTTP 200)
+                        !_context.AdrJobExecutions.Any(e => 
+                            e.AdrJobId == j.Id && 
+                            e.AdrRequestTypeId == downloadInvoiceRequestType && 
+                            e.HttpStatusCode == 200))
             .Include(j => j.AdrAccount)
             .ToListAsync();
     }
