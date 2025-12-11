@@ -7,6 +7,7 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject IJSRuntime JSRuntime
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
 <PageTitle>ADR Accounts</PageTitle>
 
@@ -172,10 +173,13 @@
                     <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
                         <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewAccountDetails(context)">View Details</MudMenuItem>
                         <MudMenuItem Icon="@Icons.Material.Filled.Work" OnClick="() => ViewJobs(context.Id)">View Jobs</MudMenuItem>
-                        <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => EditBilling(context)">Edit Billing</MudMenuItem>
-                        @if (context.IsManuallyOverridden)
+                        @if (_canEditBilling)
                         {
-                            <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="() => ClearOverride(context)">Clear Override</MudMenuItem>
+                            <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => EditBilling(context)">Edit Billing</MudMenuItem>
+                            @if (context.IsManuallyOverridden)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="() => ClearOverride(context)">Clear Override</MudMenuItem>
+                            }
                         }
                     </MudMenu>
                 </MudTd>
@@ -208,6 +212,7 @@
     private List<Client> _clients = new();
     private bool _loading = true;
     private bool _isExporting = false;
+    private bool _canEditBilling = false;
     private string? _searchTerm;
     private Client? _selectedClient;
     private int? _selectedClientId => _selectedClient?.Id;
@@ -233,6 +238,11 @@
             }
             
             _clients = await ClientService.GetClientsAsync();
+            
+            // Check if user has Admin or Editor role for editing billing data
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            _canEditBilling = user.IsInRole("Admin") || user.IsInRole("Editor");
         }
         catch (Exception ex)
         {
