@@ -257,13 +257,25 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     markedCount++;
                     setupProcessedSinceLastSave++;
                     
+                    // Log progress every 100 jobs to show loop is running
+                    if (markedCount % 100 == 0)
+                    {
+                        _logger.LogDebug("Credential verification setup: processed {Count} jobs in memory", markedCount);
+                    }
+                    
                     // Save in batches to reduce database round-trips
                     if (setupProcessedSinceLastSave >= setupBatchSize)
                     {
-                        await _unitOfWork.SaveChangesAsync();
-                        setupProcessedSinceLastSave = 0;
-                        _logger.LogInformation("Marked {Marked}/{Total} jobs as in-progress (batch saved)", 
+                        _logger.LogInformation("About to save credential-check setup batch: {Marked}/{Total} jobs", 
                             markedCount, jobsNeedingVerification.Count);
+                        
+                        var batchSaveStart = DateTime.UtcNow;
+                        await _unitOfWork.SaveChangesAsync();
+                        var batchSaveDuration = (DateTime.UtcNow - batchSaveStart).TotalSeconds;
+                        
+                        setupProcessedSinceLastSave = 0;
+                        _logger.LogInformation("Saved credential-check setup batch: {Marked}/{Total} jobs in {Duration:F1} seconds", 
+                            markedCount, jobsNeedingVerification.Count, batchSaveDuration);
                     }
                 }
                 catch (Exception ex)
