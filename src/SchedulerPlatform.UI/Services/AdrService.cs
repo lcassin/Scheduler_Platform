@@ -22,7 +22,8 @@ public class AdrService : IAdrService
         int? clientId = null,
         string? searchTerm = null,
         string? nextRunStatus = null,
-        string? historicalBillingStatus = null)
+        string? historicalBillingStatus = null,
+        bool? isOverridden = null)
     {
         var client = CreateClient();
         var queryParams = new List<string>
@@ -42,6 +43,9 @@ public class AdrService : IAdrService
 
         if (!string.IsNullOrWhiteSpace(historicalBillingStatus))
             queryParams.Add($"historicalBillingStatus={Uri.EscapeDataString(historicalBillingStatus)}");
+
+        if (isOverridden.HasValue)
+            queryParams.Add($"isOverridden={isOverridden.Value.ToString().ToLowerInvariant()}");
 
         var query = "?" + string.Join("&", queryParams);
         var result = await client.GetFromJsonAsync<PagedResult<AdrAccount>>($"adr/accounts{query}");

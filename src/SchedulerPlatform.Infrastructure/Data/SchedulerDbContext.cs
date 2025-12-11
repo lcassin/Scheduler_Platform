@@ -245,6 +245,7 @@ public class SchedulerDbContext : DbContext
             entity.Property(e => e.PeriodType).HasMaxLength(13);
             entity.Property(e => e.NextRunStatus).HasMaxLength(10);
             entity.Property(e => e.HistoricalBillingStatus).HasMaxLength(10);
+            entity.Property(e => e.OverriddenBy).HasMaxLength(200);
             
             entity.Property(e => e.ClientId)
                 .HasColumnType("bigint")

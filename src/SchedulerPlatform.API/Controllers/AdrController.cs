@@ -47,6 +47,7 @@ public class AdrController : ControllerBase
         [FromQuery] string? nextRunStatus = null,
         [FromQuery] string? searchTerm = null,
         [FromQuery] string? historicalBillingStatus = null,
+        [FromQuery] bool? isOverridden = null,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20)
     {
@@ -59,7 +60,8 @@ public class AdrController : ControllerBase
                 credentialId,
                 nextRunStatus,
                 searchTerm,
-                historicalBillingStatus);
+                historicalBillingStatus,
+                isOverridden);
 
             return Ok(new
             {
