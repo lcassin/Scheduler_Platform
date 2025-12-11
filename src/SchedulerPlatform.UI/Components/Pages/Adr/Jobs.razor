@@ -55,6 +55,8 @@
                 <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ClearFilters" StartIcon="@Icons.Material.Filled.Clear">
                     Clear
                 </MudButton>
+                <MudCheckBox @bind-Value="_forceRefire" Label="Force Refire" Color="Color.Warning" Dense="true"
+                             Title="Clear execution history to bypass idempotency check (use when downstream issues require re-processing)" />
                 @if (_selectedJobs.Any())
                 {
                     @if (_isRefiring)
@@ -66,8 +68,8 @@
                     }
                     else
                     {
-                        <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="RefireSelectedJobs" StartIcon="@Icons.Material.Filled.Replay">
-                            Refire Selected (@_selectedJobs.Count)
+                        <MudButton Variant="Variant.Filled" Color="@(_forceRefire ? Color.Error : Color.Warning)" OnClick="RefireSelectedJobs" StartIcon="@Icons.Material.Filled.Replay">
+                            @(_forceRefire ? "Force " : "")Refire Selected (@_selectedJobs.Count)
                         </MudButton>
                     }
                 }
@@ -223,6 +225,7 @@
     private bool _loading = true;
     private bool _isExporting = false;
     private bool _isRefiring = false;
+    private bool _forceRefire = false;
     private string? _searchVendorCode;
     private string? _searchAccountNumber;
     private string _selectedStatus = "";
@@ -551,8 +554,11 @@
     {
         try
         {
-            var result = await AdrService.RefireJobAsync(job.Id);
-            Snackbar.Add($"Job {job.Id} refired successfully. It will be picked up by the next orchestration run.", Severity.Success);
+            var result = await AdrService.RefireJobAsync(job.Id, _forceRefire);
+            var message = _forceRefire 
+                ? $"Job {job.Id} force refired successfully (execution history cleared). It will be picked up by the next orchestration run."
+                : $"Job {job.Id} refired successfully. It will be picked up by the next orchestration run.";
+            Snackbar.Add(message, Severity.Success);
             await _table.ReloadServerData();
         }
         catch (Exception ex)
@@ -574,9 +580,12 @@
         try
         {
             var jobIds = _selectedJobs.Select(j => j.Id).ToList();
-            var result = await AdrService.RefireJobsBulkAsync(jobIds);
+            var result = await AdrService.RefireJobsBulkAsync(jobIds, _forceRefire);
             
-            Snackbar.Add($"{result.RefiredCount} job(s) refired successfully. They will be picked up by the next orchestration run.", Severity.Success);
+            var message = _forceRefire 
+                ? $"{result.RefiredCount} job(s) force refired successfully (execution history cleared). They will be picked up by the next orchestration run."
+                : $"{result.RefiredCount} job(s) refired successfully. They will be picked up by the next orchestration run.";
+            Snackbar.Add(message, Severity.Success);
             
             if (result.Errors != null && result.Errors.Any())
             {
