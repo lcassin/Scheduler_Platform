@@ -239,8 +239,8 @@
             
             _clients = await ClientService.GetClientsAsync();
             
-            // Check if user has permission to update scheduler (which includes ADR account billing)
-            _canEditBilling = await PermissionService.CanUpdateAsync("scheduler");
+            // Check if user has permission to update ADR accounts (for editing billing data)
+            _canEditBilling = await PermissionService.CanUpdateAsync("adr");
         }
         catch (Exception ex)
         {

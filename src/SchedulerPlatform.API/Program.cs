@@ -179,7 +179,7 @@ builder.Services.AddAuthorization(options =>
     
     // ADR Account policies
     options.AddPolicy("AdrAccounts.Update", policy => 
-        policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("scheduler:update")));
+        policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("adr:update")));
 });
 
 builder.Services.AddAzureClients(builder =>
