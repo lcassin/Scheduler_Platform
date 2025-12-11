@@ -6,7 +6,6 @@
 @inject NavigationManager Navigation
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
-@inject IPermissionService PermissionService
 @inject IJSRuntime JSRuntime
 
 <PageTitle>ADR Accounts</PageTitle>
@@ -63,7 +62,9 @@
                 <MudSelectItem Value="@("false")">Not Overridden</MudSelectItem>
             </MudSelect>
         </MudItem>
-        <MudItem xs="12" md="2" Class="d-flex align-center justify-end gap-2">
+    </MudGrid>
+    <MudGrid Class="mb-4" Spacing="2">
+        <MudItem xs="12" Class="d-flex align-center justify-end gap-2">
             <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters" StartIcon="@Icons.Material.Filled.FilterAlt">
                 Apply
             </MudButton>
@@ -171,13 +172,10 @@
                     <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
                         <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewAccountDetails(context)">View Details</MudMenuItem>
                         <MudMenuItem Icon="@Icons.Material.Filled.Work" OnClick="() => ViewJobs(context.Id)">View Jobs</MudMenuItem>
-                        @if (_canEdit)
+                        <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => EditBilling(context)">Edit Billing</MudMenuItem>
+                        @if (context.IsManuallyOverridden)
                         {
-                            <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => EditBilling(context)">Edit Billing</MudMenuItem>
-                            @if (context.IsManuallyOverridden)
-                            {
-                                <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="() => ClearOverride(context)">Clear Override</MudMenuItem>
-                            }
+                            <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="() => ClearOverride(context)">Clear Override</MudMenuItem>
                         }
                     </MudMenu>
                 </MudTd>
@@ -210,7 +208,6 @@
     private List<Client> _clients = new();
     private bool _loading = true;
     private bool _isExporting = false;
-    private bool _canEdit = false;
     private string? _searchTerm;
     private Client? _selectedClient;
     private int? _selectedClientId => _selectedClient?.Id;
@@ -236,7 +233,6 @@
             }
             
             _clients = await ClientService.GetClientsAsync();
-            _canEdit = await PermissionService.CanUpdateAsync("AdrAccount");
         }
         catch (Exception ex)
         {

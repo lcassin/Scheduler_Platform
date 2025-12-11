@@ -268,6 +268,27 @@ public class AdrController : ControllerBase
             account.ModifiedDateTime = DateTime.UtcNow;
             account.ModifiedBy = username;
 
+            // Check for existing pending jobs for this account and cancel them if dates changed
+            // This prevents duplicate jobs when billing dates are manually corrected
+            if (account.NextRangeStartDateTime.HasValue && account.NextRangeEndDateTime.HasValue)
+            {
+                var existingJobs = await _unitOfWork.AdrJobs.GetByAccountIdAsync(account.Id);
+                var pendingJobs = existingJobs.Where(j => 
+                    (j.Status == "Pending" || j.Status == "CredentialCheckInProgress" || j.Status == "CredentialVerified") &&
+                    (j.BillingPeriodStartDateTime != account.NextRangeStartDateTime.Value ||
+                     j.BillingPeriodEndDateTime != account.NextRangeEndDateTime.Value));
+                
+                foreach (var job in pendingJobs)
+                {
+                    job.Status = "Cancelled";
+                    job.ErrorMessage = $"Cancelled due to manual billing date override by {username}";
+                    job.ModifiedDateTime = DateTime.UtcNow;
+                    job.ModifiedBy = username;
+                    await _unitOfWork.AdrJobs.UpdateAsync(job);
+                    _logger.LogInformation("Cancelled job {JobId} for account {AccountId} due to billing date override", job.Id, account.Id);
+                }
+            }
+
             await _unitOfWork.AdrAccounts.UpdateAsync(account);
             await _unitOfWork.SaveChangesAsync();
 
@@ -410,7 +431,10 @@ public class AdrController : ControllerBase
             [FromQuery] string? vmAccountNumber = null,
             [FromQuery] bool latestPerAccount = false,
             [FromQuery] int pageNumber = 1,
-            [FromQuery] int pageSize = 20)
+            [FromQuery] int pageSize = 20,
+            [FromQuery] long? vmAccountId = null,
+            [FromQuery] string? interfaceAccountId = null,
+            [FromQuery] int? credentialId = null)
         {
             try
             {
@@ -423,7 +447,10 @@ public class AdrController : ControllerBase
                     billingPeriodEnd,
                     vendorCode,
                     vmAccountNumber,
-                    latestPerAccount);
+                    latestPerAccount,
+                    vmAccountId,
+                    interfaceAccountId,
+                    credentialId);
 
                 // Map to DTOs with VendorCode fallback from AdrAccount when job's VendorCode is null
                 var mappedItems = items.Select(j => new

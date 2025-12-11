@@ -188,7 +188,10 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             DateTime? billingPeriodEnd = null,
             string? vendorCode = null,
             string? vmAccountNumber = null,
-            bool latestPerAccount = false)
+            bool latestPerAccount = false,
+            long? vmAccountId = null,
+            string? interfaceAccountId = null,
+            int? credentialId = null)
         {
             var query = _dbSet.Where(j => !j.IsDeleted);
 
@@ -223,6 +226,21 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             if (!string.IsNullOrWhiteSpace(vmAccountNumber))
             {
                 query = query.Where(j => j.VMAccountNumber.Contains(vmAccountNumber));
+            }
+
+            if (vmAccountId.HasValue)
+            {
+                query = query.Where(j => j.VMAccountId == vmAccountId.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(interfaceAccountId))
+            {
+                query = query.Where(j => j.AdrAccount != null && j.AdrAccount.InterfaceAccountId == interfaceAccountId);
+            }
+
+            if (credentialId.HasValue)
+            {
+                query = query.Where(j => j.CredentialId == credentialId.Value);
             }
 
             int totalCount;
