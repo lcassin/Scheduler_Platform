@@ -397,9 +397,14 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     if (executionsByJobId.TryGetValue(jobInfo.JobId, out var execution))
                     {
                         // Update execution properties directly - no need to call UpdateAsync
-                        execution.CompletedDateTime = DateTime.UtcNow;
-                        execution.ResponseCode = apiResult.StatusCode;
-                        execution.ResponseMessage = apiResult.IsSuccess ? "Success" : apiResult.ErrorMessage;
+                        execution.EndDateTime = DateTime.UtcNow;
+                        execution.HttpStatusCode = apiResult.HttpStatusCode;
+                        execution.IsSuccess = apiResult.IsSuccess;
+                        execution.IsError = apiResult.IsError;
+                        execution.IsFinal = apiResult.IsFinal;
+                        execution.AdrStatusId = apiResult.StatusId;
+                        execution.AdrStatusDescription = apiResult.StatusDescription;
+                        execution.ErrorMessage = apiResult.IsSuccess ? null : apiResult.ErrorMessage;
                         execution.AdrIndexId = apiResult.IndexId;
                         execution.ModifiedDateTime = DateTime.UtcNow;
                         execution.ModifiedBy = "System Created";
@@ -659,9 +664,14 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     if (executionsByJobId.TryGetValue(jobInfo.JobId, out var execution))
                     {
                         // Update execution properties directly - no need to call UpdateAsync
-                        execution.CompletedDateTime = DateTime.UtcNow;
-                        execution.ResponseCode = apiResult.StatusCode;
-                        execution.ResponseMessage = apiResult.IsSuccess ? "Success" : apiResult.ErrorMessage;
+                        execution.EndDateTime = DateTime.UtcNow;
+                        execution.HttpStatusCode = apiResult.HttpStatusCode;
+                        execution.IsSuccess = apiResult.IsSuccess;
+                        execution.IsError = apiResult.IsError;
+                        execution.IsFinal = apiResult.IsFinal;
+                        execution.AdrStatusId = apiResult.StatusId;
+                        execution.AdrStatusDescription = apiResult.StatusDescription;
+                        execution.ErrorMessage = apiResult.IsSuccess ? null : apiResult.ErrorMessage;
                         execution.AdrIndexId = apiResult.IndexId;
                         execution.ModifiedDateTime = DateTime.UtcNow;
                         execution.ModifiedBy = "System Created";
