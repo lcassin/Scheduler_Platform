@@ -55,7 +55,9 @@ public class AdrController : ControllerBase
         [FromQuery] string? historicalBillingStatus = null,
         [FromQuery] bool? isOverridden = null,
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20)
+        [FromQuery] int pageSize = 20,
+        [FromQuery] string? sortColumn = null,
+        [FromQuery] bool sortDescending = false)
     {
         try
         {
@@ -67,7 +69,9 @@ public class AdrController : ControllerBase
                 nextRunStatus,
                 searchTerm,
                 historicalBillingStatus,
-                isOverridden);
+                isOverridden,
+                sortColumn,
+                sortDescending);
 
             return Ok(new
             {
@@ -841,22 +845,26 @@ public class AdrController : ControllerBase
         [FromQuery] string? searchTerm = null,
         [FromQuery] string? nextRunStatus = null,
         [FromQuery] string? historicalBillingStatus = null,
+        [FromQuery] bool? isOverridden = null,
+        [FromQuery] string? sortColumn = null,
+        [FromQuery] bool sortDescending = false,
         [FromQuery] string format = "excel")
     {
         try
         {
             // Get all accounts matching the filters (no pagination for export)
             var (accounts, _) = await _unitOfWork.AdrAccounts.GetPagedAsync(
-                1, int.MaxValue, clientId, null, nextRunStatus, searchTerm, historicalBillingStatus);
+                1, int.MaxValue, clientId, null, nextRunStatus, searchTerm, historicalBillingStatus,
+                isOverridden, sortColumn, sortDescending);
 
             if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
             {
                 var csv = new System.Text.StringBuilder();
-                csv.AppendLine("Account #,Interface Account ID,Client,Vendor Code,Period Type,Next Run,Run Status,Historical Status,Last Invoice,Expected Next");
+                csv.AppendLine("Account #,VM Account ID,Interface Account ID,Client,Vendor Code,Period Type,Next Run,Run Status,Historical Status,Last Invoice,Expected Next,Is Overridden,Overridden By,Overridden Date");
 
                 foreach (var a in accounts)
                 {
-                    csv.AppendLine($"{CsvEscape(a.VMAccountNumber)},{CsvEscape(a.InterfaceAccountId)},{CsvEscape(a.ClientName)},{CsvEscape(a.VendorCode)},{CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.NextRunStatus)},{CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""}");
+                    csv.AppendLine($"{CsvEscape(a.VMAccountNumber)},{a.VMAccountId},{CsvEscape(a.InterfaceAccountId)},{CsvEscape(a.ClientName)},{CsvEscape(a.VendorCode)},{CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.NextRunStatus)},{CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.IsManuallyOverridden},{CsvEscape(a.OverriddenBy)},{a.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""}");
                 }
 
                 return File(System.Text.Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", $"adr_accounts_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
@@ -878,6 +886,9 @@ public class AdrController : ControllerBase
             worksheet.Cell(1, 9).Value = "Historical Status";
             worksheet.Cell(1, 10).Value = "Last Invoice";
             worksheet.Cell(1, 11).Value = "Expected Next";
+            worksheet.Cell(1, 12).Value = "Is Overridden";
+            worksheet.Cell(1, 13).Value = "Overridden By";
+            worksheet.Cell(1, 14).Value = "Overridden Date";
 
             var headerRow = worksheet.Row(1);
             headerRow.Style.Font.Bold = true;
@@ -896,6 +907,9 @@ public class AdrController : ControllerBase
                 worksheet.Cell(row, 9).Value = a.HistoricalBillingStatus;
                 if (a.LastInvoiceDateTime.HasValue) worksheet.Cell(row, 10).Value = a.LastInvoiceDateTime.Value;
                 if (a.ExpectedNextDateTime.HasValue) worksheet.Cell(row, 11).Value = a.ExpectedNextDateTime.Value;
+                worksheet.Cell(row, 12).Value = a.IsManuallyOverridden ? "Yes" : "No";
+                worksheet.Cell(row, 13).Value = a.OverriddenBy ?? "";
+                if (a.OverriddenDateTime.HasValue) worksheet.Cell(row, 14).Value = a.OverriddenDateTime.Value;
                 row++;
             }
 
@@ -931,7 +945,9 @@ public class AdrController : ControllerBase
             [FromQuery] long? vmAccountId = null,
             [FromQuery] string? interfaceAccountId = null,
             [FromQuery] int? credentialId = null,
-            [FromQuery] bool? isManualRequest = null)
+            [FromQuery] bool? isManualRequest = null,
+            [FromQuery] string? sortColumn = null,
+            [FromQuery] bool sortDescending = true)
         {
             try
             {
@@ -948,7 +964,9 @@ public class AdrController : ControllerBase
                     vmAccountId,
                     interfaceAccountId,
                     credentialId,
-                    isManualRequest);
+                    isManualRequest,
+                    sortColumn,
+                    sortDescending);
 
                 // Map to DTOs with VendorCode fallback from AdrAccount when job's VendorCode is null
                 var mappedItems = items.Select(j => new
@@ -1148,22 +1166,27 @@ public class AdrController : ControllerBase
         [FromQuery] string? vendorCode = null,
         [FromQuery] string? vmAccountNumber = null,
         [FromQuery] bool latestPerAccount = false,
+        [FromQuery] bool? isManualRequest = null,
+        [FromQuery] string? sortColumn = null,
+        [FromQuery] bool sortDescending = true,
         [FromQuery] string format = "excel")
     {
         try
         {
             // Get all jobs matching the filters (no pagination for export)
             var (jobs, _) = await _unitOfWork.AdrJobs.GetPagedAsync(
-                1, int.MaxValue, null, status, null, null, vendorCode, vmAccountNumber, latestPerAccount);
+                1, int.MaxValue, null, status, null, null, vendorCode, vmAccountNumber, latestPerAccount,
+                null, null, null, isManualRequest, sortColumn, sortDescending);
 
             if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
             {
                 var csv = new System.Text.StringBuilder();
-                csv.AppendLine("Job ID,Vendor Code,Account #,Billing Period Start,Billing Period End,Period Type,Next Run,Status,ADR Status,ADR Status Description,Retry Count,Created");
+                csv.AppendLine("Job ID,Vendor Code,Account #,VM Account ID,Interface Account ID,Billing Period Start,Billing Period End,Period Type,Next Run,Status,ADR Status,ADR Status Description,Retry Count,Is Manual,Created");
 
                 foreach (var j in jobs)
                 {
-                    csv.AppendLine($"{j.Id},{CsvEscape(j.VendorCode)},{CsvEscape(j.VMAccountNumber)},{j.BillingPeriodStartDateTime:MM/dd/yyyy},{j.BillingPeriodEndDateTime:MM/dd/yyyy},{CsvEscape(j.PeriodType)},{j.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(j.Status)},{j.AdrStatusId?.ToString() ?? ""},{CsvEscape(j.AdrStatusDescription)},{j.RetryCount},{j.CreatedDateTime:MM/dd/yyyy HH:mm}");
+                    var interfaceAccountId = j.AdrAccount?.InterfaceAccountId ?? "";
+                    csv.AppendLine($"{j.Id},{CsvEscape(j.VendorCode)},{CsvEscape(j.VMAccountNumber)},{j.VMAccountId},{CsvEscape(interfaceAccountId)},{j.BillingPeriodStartDateTime:MM/dd/yyyy},{j.BillingPeriodEndDateTime:MM/dd/yyyy},{CsvEscape(j.PeriodType)},{j.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(j.Status)},{j.AdrStatusId?.ToString() ?? ""},{CsvEscape(j.AdrStatusDescription)},{j.RetryCount},{j.IsManualRequest},{j.CreatedDateTime:MM/dd/yyyy HH:mm}");
                 }
 
                 return File(System.Text.Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", $"adr_jobs_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
@@ -1177,15 +1200,18 @@ public class AdrController : ControllerBase
             worksheet.Cell(1, 1).Value = "Job ID";
             worksheet.Cell(1, 2).Value = "Vendor Code";
             worksheet.Cell(1, 3).Value = "Account #";
-            worksheet.Cell(1, 4).Value = "Billing Period Start";
-            worksheet.Cell(1, 5).Value = "Billing Period End";
-            worksheet.Cell(1, 6).Value = "Period Type";
-            worksheet.Cell(1, 7).Value = "Next Run";
-            worksheet.Cell(1, 8).Value = "Status";
-            worksheet.Cell(1, 9).Value = "ADR Status";
-            worksheet.Cell(1, 10).Value = "ADR Status Description";
-            worksheet.Cell(1, 11).Value = "Retry Count";
-            worksheet.Cell(1, 12).Value = "Created";
+            worksheet.Cell(1, 4).Value = "VM Account ID";
+            worksheet.Cell(1, 5).Value = "Interface Account ID";
+            worksheet.Cell(1, 6).Value = "Billing Period Start";
+            worksheet.Cell(1, 7).Value = "Billing Period End";
+            worksheet.Cell(1, 8).Value = "Period Type";
+            worksheet.Cell(1, 9).Value = "Next Run";
+            worksheet.Cell(1, 10).Value = "Status";
+            worksheet.Cell(1, 11).Value = "ADR Status";
+            worksheet.Cell(1, 12).Value = "ADR Status Description";
+            worksheet.Cell(1, 13).Value = "Retry Count";
+            worksheet.Cell(1, 14).Value = "Is Manual";
+            worksheet.Cell(1, 15).Value = "Created";
 
             var headerRow = worksheet.Row(1);
             headerRow.Style.Font.Bold = true;
@@ -1196,15 +1222,18 @@ public class AdrController : ControllerBase
                 worksheet.Cell(row, 1).Value = j.Id;
                 worksheet.Cell(row, 2).Value = j.VendorCode;
                 worksheet.Cell(row, 3).Value = j.VMAccountNumber;
-                worksheet.Cell(row, 4).Value = j.BillingPeriodStartDateTime;
-                worksheet.Cell(row, 5).Value = j.BillingPeriodEndDateTime;
-                worksheet.Cell(row, 6).Value = j.PeriodType;
-                if (j.NextRunDateTime.HasValue) worksheet.Cell(row, 7).Value = j.NextRunDateTime.Value;
-                worksheet.Cell(row, 8).Value = j.Status;
-                if (j.AdrStatusId.HasValue) worksheet.Cell(row, 9).Value = j.AdrStatusId.Value;
-                worksheet.Cell(row, 10).Value = j.AdrStatusDescription;
-                worksheet.Cell(row, 11).Value = j.RetryCount;
-                worksheet.Cell(row, 12).Value = j.CreatedDateTime;
+                worksheet.Cell(row, 4).Value = j.VMAccountId;
+                worksheet.Cell(row, 5).Value = j.AdrAccount?.InterfaceAccountId ?? "";
+                worksheet.Cell(row, 6).Value = j.BillingPeriodStartDateTime;
+                worksheet.Cell(row, 7).Value = j.BillingPeriodEndDateTime;
+                worksheet.Cell(row, 8).Value = j.PeriodType;
+                if (j.NextRunDateTime.HasValue) worksheet.Cell(row, 9).Value = j.NextRunDateTime.Value;
+                worksheet.Cell(row, 10).Value = j.Status;
+                if (j.AdrStatusId.HasValue) worksheet.Cell(row, 11).Value = j.AdrStatusId.Value;
+                worksheet.Cell(row, 12).Value = j.AdrStatusDescription;
+                worksheet.Cell(row, 13).Value = j.RetryCount;
+                worksheet.Cell(row, 14).Value = j.IsManualRequest ? "Yes" : "No";
+                worksheet.Cell(row, 15).Value = j.CreatedDateTime;
                 row++;
             }
 

@@ -299,6 +299,11 @@
             var pageNumber = state.Page + 1;
             var pageSize = state.PageSize;
 
+            // Determine sort direction (default to descending for Id)
+            var sortDescending = state.SortDirection == SortDirection.Descending || 
+                                 (state.SortDirection == SortDirection.None && string.IsNullOrEmpty(state.SortLabel));
+            var sortColumn = string.IsNullOrEmpty(state.SortLabel) ? "Id" : state.SortLabel;
+
             var result = await AdrService.GetJobsPagedAsync(
                 pageNumber,
                 pageSize,
@@ -310,14 +315,13 @@
                 null, // vmAccountId - not used for filtering
                 _filterInterfaceAccountId,
                 null, // credentialId - removed from UI
-                _showManualJobs ? true : false); // false = hide manual jobs (default), true = show only manual jobs
-
-            // Apply sorting
-            var sortedItems = ApplySorting(result.Items, state.SortLabel, state.SortDirection);
+                _showManualJobs ? true : false, // false = hide manual jobs (default), true = show only manual jobs
+                sortColumn,
+                sortDescending);
 
             return new TableData<AdrJob>
             {
-                Items = sortedItems,
+                Items = result.Items,
                 TotalItems = result.TotalCount
             };
         }
@@ -336,49 +340,6 @@
         {
             _loading = false;
         }
-    }
-
-    private List<AdrJob> ApplySorting(List<AdrJob> items, string? sortLabel, SortDirection sortDirection)
-    {
-        if (string.IsNullOrEmpty(sortLabel))
-        {
-            // Default sort: Job ID descending (most recent first)
-            return items.OrderByDescending(j => j.Id).ToList();
-        }
-
-        var isDescending = sortDirection == SortDirection.Descending;
-
-        return sortLabel switch
-        {
-            "Id" => isDescending 
-                ? items.OrderByDescending(j => j.Id).ToList() 
-                : items.OrderBy(j => j.Id).ToList(),
-            "VendorCode" => isDescending 
-                ? items.OrderByDescending(j => j.VendorCode ?? "").ToList() 
-                : items.OrderBy(j => j.VendorCode ?? "").ToList(),
-            "VMAccountNumber" => isDescending 
-                ? items.OrderByDescending(j => j.VMAccountNumber ?? "").ToList() 
-                : items.OrderBy(j => j.VMAccountNumber ?? "").ToList(),
-            "BillingPeriodStartDateTime" => isDescending 
-                ? items.OrderByDescending(j => j.BillingPeriodStartDateTime).ToList() 
-                : items.OrderBy(j => j.BillingPeriodStartDateTime).ToList(),
-            "PeriodType" => isDescending 
-                ? items.OrderByDescending(j => j.PeriodType ?? "").ToList() 
-                : items.OrderBy(j => j.PeriodType ?? "").ToList(),
-            "NextRunDateTime" => isDescending 
-                ? items.OrderByDescending(j => j.NextRunDateTime ?? DateTime.MinValue).ToList() 
-                : items.OrderBy(j => j.NextRunDateTime ?? DateTime.MaxValue).ToList(),
-            "Status" => isDescending 
-                ? items.OrderByDescending(j => j.Status ?? "").ToList() 
-                : items.OrderBy(j => j.Status ?? "").ToList(),
-            "AdrStatusId" => isDescending 
-                ? items.OrderByDescending(j => j.AdrStatusId ?? 0).ToList() 
-                : items.OrderBy(j => j.AdrStatusId ?? int.MaxValue).ToList(),
-            "RetryCount" => isDescending 
-                ? items.OrderByDescending(j => j.RetryCount).ToList() 
-                : items.OrderBy(j => j.RetryCount).ToList(),
-            _ => items.OrderByDescending(j => j.Id).ToList()
-        };
     }
 
     private async Task OnSearchKeyDown(KeyboardEventArgs e)

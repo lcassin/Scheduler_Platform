@@ -208,7 +208,9 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             long? vmAccountId = null,
             string? interfaceAccountId = null,
             int? credentialId = null,
-            bool? isManualRequest = null)
+            bool? isManualRequest = null,
+            string? sortColumn = null,
+            bool sortDescending = true)
         {
             var query = _dbSet.Where(j => !j.IsDeleted);
             
@@ -297,9 +299,43 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                 finalQuery = query;
             }
 
-            var items = await finalQuery
+            // Apply dynamic sorting
+            IQueryable<AdrJob> orderedQuery = sortColumn switch
+            {
+                "Id" => sortDescending 
+                    ? finalQuery.OrderByDescending(j => j.Id) 
+                    : finalQuery.OrderBy(j => j.Id),
+                "VendorCode" => sortDescending 
+                    ? finalQuery.OrderByDescending(j => j.VendorCode ?? "") 
+                    : finalQuery.OrderBy(j => j.VendorCode ?? ""),
+                "VMAccountNumber" => sortDescending 
+                    ? finalQuery.OrderByDescending(j => j.VMAccountNumber ?? "") 
+                    : finalQuery.OrderBy(j => j.VMAccountNumber ?? ""),
+                "BillingPeriodStartDateTime" => sortDescending 
+                    ? finalQuery.OrderByDescending(j => j.BillingPeriodStartDateTime) 
+                    : finalQuery.OrderBy(j => j.BillingPeriodStartDateTime),
+                "PeriodType" => sortDescending 
+                    ? finalQuery.OrderByDescending(j => j.PeriodType ?? "") 
+                    : finalQuery.OrderBy(j => j.PeriodType ?? ""),
+                "NextRunDateTime" => sortDescending 
+                    ? finalQuery.OrderByDescending(j => j.NextRunDateTime ?? DateTime.MinValue) 
+                    : finalQuery.OrderBy(j => j.NextRunDateTime ?? DateTime.MaxValue),
+                "Status" => sortDescending 
+                    ? finalQuery.OrderByDescending(j => j.Status ?? "") 
+                    : finalQuery.OrderBy(j => j.Status ?? ""),
+                "AdrStatusId" => sortDescending 
+                    ? finalQuery.OrderByDescending(j => j.AdrStatusId ?? 0) 
+                    : finalQuery.OrderBy(j => j.AdrStatusId ?? int.MaxValue),
+                "RetryCount" => sortDescending 
+                    ? finalQuery.OrderByDescending(j => j.RetryCount) 
+                    : finalQuery.OrderBy(j => j.RetryCount),
+                _ => sortDescending 
+                    ? finalQuery.OrderByDescending(j => j.Id) 
+                    : finalQuery.OrderBy(j => j.Id)
+            };
+
+            var items = await orderedQuery
                 .Include(j => j.AdrAccount)
-                .OrderByDescending(j => j.BillingPeriodStartDateTime)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();

@@ -12,7 +12,9 @@ public interface IAdrService
         string? searchTerm = null,
         string? nextRunStatus = null,
         string? historicalBillingStatus = null,
-        bool? isOverridden = null);
+        bool? isOverridden = null,
+        string? sortColumn = null,
+        bool sortDescending = false);
     Task<AdrAccount?> GetAccountAsync(int id);
     Task<AdrAccount?> GetAccountByVMAccountIdAsync(long vmAccountId);
     Task<AdrAccountStats> GetAccountStatsAsync();
@@ -38,7 +40,9 @@ public interface IAdrService
             long? vmAccountId = null,
             string? interfaceAccountId = null,
             int? credentialId = null,
-            bool? isManualRequest = null);
+            bool? isManualRequest = null,
+            string? sortColumn = null,
+            bool sortDescending = true);
     Task<AdrJob?> GetJobAsync(int id);
     Task<List<AdrJob>> GetJobsByAccountAsync(int adrAccountId);
     Task<AdrJobStats> GetJobStatsAsync();

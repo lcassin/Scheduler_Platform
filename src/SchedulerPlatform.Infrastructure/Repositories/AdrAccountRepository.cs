@@ -59,7 +59,9 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
         string? nextRunStatus = null,
         string? searchTerm = null,
         string? historicalBillingStatus = null,
-        bool? isOverridden = null)
+        bool? isOverridden = null,
+        string? sortColumn = null,
+        bool sortDescending = false)
     {
         var query = _dbSet.Where(a => !a.IsDeleted);
 
@@ -98,8 +100,46 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
         }
 
         var totalCount = await query.CountAsync();
-        var items = await query
-            .OrderBy(a => a.NextRunDateTime)
+
+        // Apply dynamic sorting
+        IQueryable<AdrAccount> orderedQuery = sortColumn switch
+        {
+            "VMAccountNumber" => sortDescending 
+                ? query.OrderByDescending(a => a.VMAccountNumber ?? "") 
+                : query.OrderBy(a => a.VMAccountNumber ?? ""),
+            "InterfaceAccountId" => sortDescending 
+                ? query.OrderByDescending(a => a.InterfaceAccountId ?? "") 
+                : query.OrderBy(a => a.InterfaceAccountId ?? ""),
+            "ClientName" => sortDescending 
+                ? query.OrderByDescending(a => a.ClientName ?? "") 
+                : query.OrderBy(a => a.ClientName ?? ""),
+            "VendorCode" => sortDescending 
+                ? query.OrderByDescending(a => a.VendorCode ?? "") 
+                : query.OrderBy(a => a.VendorCode ?? ""),
+            "PeriodType" => sortDescending 
+                ? query.OrderByDescending(a => a.PeriodType ?? "") 
+                : query.OrderBy(a => a.PeriodType ?? ""),
+            "NextRunDateTime" => sortDescending 
+                ? query.OrderByDescending(a => a.NextRunDateTime ?? DateTime.MaxValue) 
+                : query.OrderBy(a => a.NextRunDateTime ?? DateTime.MaxValue),
+            "NextRunStatus" => sortDescending 
+                ? query.OrderByDescending(a => a.NextRunStatus ?? "") 
+                : query.OrderBy(a => a.NextRunStatus ?? ""),
+            "HistoricalBillingStatus" => sortDescending 
+                ? query.OrderByDescending(a => a.HistoricalBillingStatus ?? "") 
+                : query.OrderBy(a => a.HistoricalBillingStatus ?? ""),
+            "LastInvoiceDateTime" => sortDescending 
+                ? query.OrderByDescending(a => a.LastInvoiceDateTime ?? DateTime.MinValue) 
+                : query.OrderBy(a => a.LastInvoiceDateTime ?? DateTime.MinValue),
+            "ExpectedNextDateTime" => sortDescending 
+                ? query.OrderByDescending(a => a.ExpectedNextDateTime ?? DateTime.MaxValue) 
+                : query.OrderBy(a => a.ExpectedNextDateTime ?? DateTime.MaxValue),
+            _ => sortDescending 
+                ? query.OrderByDescending(a => a.NextRunDateTime ?? DateTime.MaxValue) 
+                : query.OrderBy(a => a.NextRunDateTime ?? DateTime.MaxValue)
+        };
+
+        var items = await orderedQuery
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();

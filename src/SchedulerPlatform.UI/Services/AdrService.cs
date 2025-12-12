@@ -23,7 +23,9 @@ public class AdrService : IAdrService
         string? searchTerm = null,
         string? nextRunStatus = null,
         string? historicalBillingStatus = null,
-        bool? isOverridden = null)
+        bool? isOverridden = null,
+        string? sortColumn = null,
+        bool sortDescending = false)
     {
         var client = CreateClient();
         var queryParams = new List<string>
@@ -46,6 +48,11 @@ public class AdrService : IAdrService
 
         if (isOverridden.HasValue)
             queryParams.Add($"isOverridden={isOverridden.Value.ToString().ToLowerInvariant()}");
+
+        if (!string.IsNullOrWhiteSpace(sortColumn))
+            queryParams.Add($"sortColumn={Uri.EscapeDataString(sortColumn)}");
+
+        queryParams.Add($"sortDescending={sortDescending.ToString().ToLower()}");
 
         var query = "?" + string.Join("&", queryParams);
         var result = await client.GetFromJsonAsync<PagedResult<AdrAccount>>($"adr/accounts{query}");
@@ -161,7 +168,9 @@ public class AdrService : IAdrService
             long? vmAccountId = null,
             string? interfaceAccountId = null,
             int? credentialId = null,
-            bool? isManualRequest = null)
+            bool? isManualRequest = null,
+            string? sortColumn = null,
+            bool sortDescending = true)
         {
             var client = CreateClient();
             var queryParams = new List<string>
@@ -196,6 +205,11 @@ public class AdrService : IAdrService
 
             if (isManualRequest.HasValue)
                 queryParams.Add($"isManualRequest={isManualRequest.Value.ToString().ToLower()}");
+
+            if (!string.IsNullOrWhiteSpace(sortColumn))
+                queryParams.Add($"sortColumn={Uri.EscapeDataString(sortColumn)}");
+
+            queryParams.Add($"sortDescending={sortDescending.ToString().ToLower()}");
 
             var query = "?" + string.Join("&", queryParams);
             var result = await client.GetFromJsonAsync<PagedResult<AdrJob>>($"adr/jobs{query}");
