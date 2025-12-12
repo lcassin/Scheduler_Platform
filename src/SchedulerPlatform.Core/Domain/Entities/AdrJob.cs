@@ -103,12 +103,24 @@ public class AdrJob : BaseEntity
     /// </summary>
     public string? ErrorMessage { get; set; }
     
-    /// <summary>
-    /// Number of scrape retry attempts
-    /// </summary>
-    public int RetryCount { get; set; }
+        /// <summary>
+        /// Number of scrape retry attempts
+        /// </summary>
+        public int RetryCount { get; set; }
     
-    // Navigation properties
+        /// <summary>
+        /// Indicates this job was created manually by an admin (not through orchestration).
+        /// Manual jobs are excluded from normal orchestration processing but can be tracked
+        /// and have their status checked through the UI.
+        /// </summary>
+        public bool IsManualRequest { get; set; }
+    
+        /// <summary>
+        /// Reason provided by admin for manual request (for audit purposes)
+        /// </summary>
+        public string? ManualRequestReason { get; set; }
+    
+        // Navigation properties
     [JsonIgnore]
     public AdrAccount AdrAccount { get; set; } = null!;
     

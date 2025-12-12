@@ -52,22 +52,23 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
         var leadDateCutoff = today.AddDays(credentialCheckLeadDays);
         const int attemptLoginRequestType = 1; // AdrRequestType.AttemptLogin
         
-        return await _dbSet
-            .Where(j => !j.IsDeleted && 
-                        (j.Status == "Pending" || j.Status == "CredentialCheckInProgress") &&
-                        !j.CredentialVerifiedDateTime.HasValue &&
-                        j.NextRunDateTime.HasValue &&
-                        j.NextRunDateTime.Value.Date > today &&
-                        j.NextRunDateTime.Value.Date <= leadDateCutoff &&
-                        // IDEMPOTENCY: Exclude jobs that already have a successful credential check (HTTP 200)
-                        // Note: Include !e.IsDeleted so Force Refire (soft-delete) works
-                        !_context.AdrJobExecutions.Any(e => 
-                            e.AdrJobId == j.Id && 
-                            e.AdrRequestTypeId == attemptLoginRequestType && 
-                            e.HttpStatusCode == 200 &&
-                            !e.IsDeleted))
-            .Include(j => j.AdrAccount)
-            .ToListAsync();
+                return await _dbSet
+                    .Where(j => !j.IsDeleted && 
+                                !j.IsManualRequest && // Exclude manual jobs from orchestration
+                                (j.Status == "Pending" || j.Status == "CredentialCheckInProgress") &&
+                                !j.CredentialVerifiedDateTime.HasValue &&
+                                j.NextRunDateTime.HasValue &&
+                                j.NextRunDateTime.Value.Date > today &&
+                                j.NextRunDateTime.Value.Date <= leadDateCutoff &&
+                                // IDEMPOTENCY: Exclude jobs that already have a successful credential check (HTTP 200)
+                                // Note: Include !e.IsDeleted so Force Refire (soft-delete) works
+                                !_context.AdrJobExecutions.Any(e => 
+                                    e.AdrJobId == j.Id && 
+                                    e.AdrRequestTypeId == attemptLoginRequestType && 
+                                    e.HttpStatusCode == 200 &&
+                                    !e.IsDeleted))
+                    .Include(j => j.AdrAccount)
+                    .ToListAsync();
     }
 
     public async Task<IEnumerable<AdrJob>> GetJobsReadyForScrapingAsync(DateTime currentDate)
@@ -95,69 +96,72 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
         var today = currentDate.Date;
         const int downloadInvoiceRequestType = 2; // AdrRequestType.DownloadInvoice
         
-        return await _dbSet
-            .Where(j => !j.IsDeleted && 
-                        j.NextRunDateTime.HasValue &&
-                        j.NextRunDateTime.Value.Date <= today &&
-                        // BOUNDARY: Only include jobs within their scraping window
-                        // If NextRangeEndDateTime is set, today must be <= that date
-                        // If not set, allow scraping (backwards compatibility)
-                        (!j.NextRangeEndDateTime.HasValue || j.NextRangeEndDateTime.Value.Date >= today) &&
-                        (
-                            // Normal flow: credential verified jobs
-                            ((j.Status == "CredentialVerified" || j.Status == "ScrapeInProgress") &&
-                             j.CredentialVerifiedDateTime.HasValue)
-                            ||
-                            // Credential failed: still attempt scraping (helpdesk may have fixed it)
-                            // Each failure sends another reminder to helpdesk
-                            (j.Status == "CredentialFailed" &&
-                             j.CredentialId > 0 &&
-                             j.AdrAccount != null &&
-                             j.AdrAccount.HistoricalBillingStatus != "Missing")
-                            ||
-                            // Missed credential window: Pending jobs that can still be scraped
-                            (j.Status == "Pending" &&
-                             j.CredentialId > 0 &&
-                             j.AdrAccount != null &&
-                             j.AdrAccount.HistoricalBillingStatus != "Missing")
-                        ) &&
-                        // IDEMPOTENCY: Exclude jobs that already have a successful scrape request (HTTP 200)
-                        // Note: Include !e.IsDeleted so Force Refire (soft-delete) works
-                        !_context.AdrJobExecutions.Any(e => 
-                            e.AdrJobId == j.Id && 
-                            e.AdrRequestTypeId == downloadInvoiceRequestType && 
-                            e.HttpStatusCode == 200 &&
-                            !e.IsDeleted))
-            .Include(j => j.AdrAccount)
-            .ToListAsync();
+                return await _dbSet
+                    .Where(j => !j.IsDeleted && 
+                                !j.IsManualRequest && // Exclude manual jobs from orchestration
+                                j.NextRunDateTime.HasValue &&
+                                j.NextRunDateTime.Value.Date <= today &&
+                                // BOUNDARY: Only include jobs within their scraping window
+                                // If NextRangeEndDateTime is set, today must be <= that date
+                                // If not set, allow scraping (backwards compatibility)
+                                (!j.NextRangeEndDateTime.HasValue || j.NextRangeEndDateTime.Value.Date >= today) &&
+                                (
+                                    // Normal flow: credential verified jobs
+                                    ((j.Status == "CredentialVerified" || j.Status == "ScrapeInProgress") &&
+                                     j.CredentialVerifiedDateTime.HasValue)
+                                    ||
+                                    // Credential failed: still attempt scraping (helpdesk may have fixed it)
+                                    // Each failure sends another reminder to helpdesk
+                                    (j.Status == "CredentialFailed" &&
+                                     j.CredentialId > 0 &&
+                                     j.AdrAccount != null &&
+                                     j.AdrAccount.HistoricalBillingStatus != "Missing")
+                                    ||
+                                    // Missed credential window: Pending jobs that can still be scraped
+                                    (j.Status == "Pending" &&
+                                     j.CredentialId > 0 &&
+                                     j.AdrAccount != null &&
+                                     j.AdrAccount.HistoricalBillingStatus != "Missing")
+                                ) &&
+                                // IDEMPOTENCY: Exclude jobs that already have a successful scrape request (HTTP 200)
+                                // Note: Include !e.IsDeleted so Force Refire (soft-delete) works
+                                !_context.AdrJobExecutions.Any(e => 
+                                    e.AdrJobId == j.Id && 
+                                    e.AdrRequestTypeId == downloadInvoiceRequestType && 
+                                    e.HttpStatusCode == 200 &&
+                                    !e.IsDeleted))
+                    .Include(j => j.AdrAccount)
+                    .ToListAsync();
     }
 
     public async Task<IEnumerable<AdrJob>> GetJobsNeedingStatusCheckAsync(DateTime currentDate, int followUpDelayDays = 5)
     {
-        // Include "StatusCheckInProgress" to recover jobs that were interrupted mid-step
-        // These jobs already had the API called but the process crashed before updating status
-        var checkDate = currentDate.AddDays(-followUpDelayDays);
-        return await _dbSet
-            .Where(j => !j.IsDeleted && 
-                        (j.Status == "ScrapeRequested" || j.Status == "StatusCheckInProgress") &&
-                        j.AdrStatusId.HasValue &&
-                        !j.ScrapingCompletedDateTime.HasValue &&
-                        j.ModifiedDateTime <= checkDate)
-            .Include(j => j.AdrAccount)
-            .ToListAsync();
+                // Include "StatusCheckInProgress" to recover jobs that were interrupted mid-step
+                // These jobs already had the API called but the process crashed before updating status
+                var checkDate = currentDate.AddDays(-followUpDelayDays);
+                return await _dbSet
+                    .Where(j => !j.IsDeleted && 
+                                !j.IsManualRequest && // Exclude manual jobs from orchestration
+                                (j.Status == "ScrapeRequested" || j.Status == "StatusCheckInProgress") &&
+                                j.AdrStatusId.HasValue &&
+                                !j.ScrapingCompletedDateTime.HasValue &&
+                                j.ModifiedDateTime <= checkDate)
+                    .Include(j => j.AdrAccount)
+                    .ToListAsync();
     }
 
-    public async Task<IEnumerable<AdrJob>> GetJobsForRetryAsync(DateTime currentDate, int maxRetries = 5)
-    {
-        return await _dbSet
-            .Where(j => !j.IsDeleted && 
-                        (j.Status == "CredentialFailed" || j.Status == "ScrapeFailed") &&
-                        j.RetryCount < maxRetries &&
-                        j.NextRunDateTime.HasValue &&
-                        j.NextRunDateTime.Value.Date <= currentDate.Date)
-            .Include(j => j.AdrAccount)
-            .ToListAsync();
-    }
+        public async Task<IEnumerable<AdrJob>> GetJobsForRetryAsync(DateTime currentDate, int maxRetries = 5)
+        {
+            return await _dbSet
+                .Where(j => !j.IsDeleted && 
+                            !j.IsManualRequest && // Exclude manual jobs from orchestration
+                            (j.Status == "CredentialFailed" || j.Status == "ScrapeFailed") &&
+                            j.RetryCount < maxRetries &&
+                            j.NextRunDateTime.HasValue &&
+                            j.NextRunDateTime.Value.Date <= currentDate.Date)
+                .Include(j => j.AdrAccount)
+                .ToListAsync();
+        }
 
     public async Task<IEnumerable<AdrJob>> GetJobsForFinalRetryAsync(DateTime currentDate, int finalRetryDelayDays = 5)
     {
@@ -173,21 +177,22 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
         var today = currentDate.Date;
         const int downloadInvoiceRequestType = 2; // AdrRequestType.DownloadInvoice
         
-        return await _dbSet
-            .Where(j => !j.IsDeleted && 
-                        j.Status == "ScrapeRequested" &&
-                        !j.ScrapingCompletedDateTime.HasValue &&
-                        j.NextRangeEndDateTime.HasValue &&
-                        j.NextRangeEndDateTime.Value.Date < today &&
-                        j.NextRangeEndDateTime.Value.Date.AddDays(finalRetryDelayDays) <= today &&
-                        // IDEMPOTENCY: Exclude jobs that already have a successful scrape request (HTTP 200)
-                        !_context.AdrJobExecutions.Any(e => 
-                            e.AdrJobId == j.Id && 
-                            e.AdrRequestTypeId == downloadInvoiceRequestType && 
-                            e.HttpStatusCode == 200 &&
-                            !e.IsDeleted))
-            .Include(j => j.AdrAccount)
-            .ToListAsync();
+                return await _dbSet
+                    .Where(j => !j.IsDeleted && 
+                                !j.IsManualRequest && // Exclude manual jobs from orchestration
+                                j.Status == "ScrapeRequested" &&
+                                !j.ScrapingCompletedDateTime.HasValue &&
+                                j.NextRangeEndDateTime.HasValue &&
+                                j.NextRangeEndDateTime.Value.Date < today &&
+                                j.NextRangeEndDateTime.Value.Date.AddDays(finalRetryDelayDays) <= today &&
+                                // IDEMPOTENCY: Exclude jobs that already have a successful scrape request (HTTP 200)
+                                !_context.AdrJobExecutions.Any(e => 
+                                    e.AdrJobId == j.Id && 
+                                    e.AdrRequestTypeId == downloadInvoiceRequestType && 
+                                    e.HttpStatusCode == 200 &&
+                                    !e.IsDeleted))
+                    .Include(j => j.AdrAccount)
+                    .ToListAsync();
     }
 
         public async Task<(IEnumerable<AdrJob> items, int totalCount)> GetPagedAsync(

@@ -78,6 +78,7 @@ public class RefireJobsBulkResult
 public class ManualScrapeResult
 {
     public string Message { get; set; } = string.Empty;
+    public int JobId { get; set; }
     public int ExecutionId { get; set; }
     public int AccountId { get; set; }
     public string? VMAccountNumber { get; set; }
@@ -86,6 +87,30 @@ public class ManualScrapeResult
     public DateTime RangeEndDate { get; set; }
     public string? RequestedBy { get; set; }
     public DateTime RequestedAt { get; set; }
+    // API Response details
+    public int? HttpStatusCode { get; set; }
+    public bool IsSuccess { get; set; }
+    public bool IsError { get; set; }
+    public bool IsFinal { get; set; }
+    public int? StatusId { get; set; }
+    public string? StatusDescription { get; set; }
+    public long? IndexId { get; set; }
+    public string? ErrorMessage { get; set; }
+}
+
+public class CheckJobStatusResult
+{
+    public int JobId { get; set; }
+    public int ExecutionId { get; set; }
+    public int? HttpStatusCode { get; set; }
+    public bool IsSuccess { get; set; }
+    public bool IsError { get; set; }
+    public bool IsFinal { get; set; }
+    public int? StatusId { get; set; }
+    public string? StatusDescription { get; set; }
+    public long? IndexId { get; set; }
+    public string? ErrorMessage { get; set; }
+    public string? JobStatus { get; set; }
 }
 
 public class BackgroundOrchestrationResponse

@@ -305,16 +305,25 @@ public class AdrService : IAdrService
         return result ?? new RefireJobResult { Message = "Job refired", JobId = jobId };
     }
 
-    public async Task<RefireJobsBulkResult> RefireJobsBulkAsync(List<int> jobIds, bool forceRefire = false)
-    {
-        var client = CreateClient();
-        var response = await client.PostAsJsonAsync("adr/jobs/refire-bulk", new { JobIds = jobIds, ForceRefire = forceRefire });
-        response.EnsureSuccessStatusCode();
-        var result = await response.Content.ReadFromJsonAsync<RefireJobsBulkResult>();
-        return result ?? new RefireJobsBulkResult { Message = "Jobs refired", RefiredCount = jobIds.Count, TotalRequested = jobIds.Count };
-    }
+        public async Task<RefireJobsBulkResult> RefireJobsBulkAsync(List<int> jobIds, bool forceRefire = false)
+        {
+            var client = CreateClient();
+            var response = await client.PostAsJsonAsync("adr/jobs/refire-bulk", new { JobIds = jobIds, ForceRefire = forceRefire });
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<RefireJobsBulkResult>();
+            return result ?? new RefireJobsBulkResult { Message = "Jobs refired", RefiredCount = jobIds.Count, TotalRequested = jobIds.Count };
+        }
 
-    #endregion
+        public async Task<CheckJobStatusResult> CheckJobStatusAsync(int jobId)
+        {
+            var client = CreateClient();
+            var response = await client.PostAsync($"adr/jobs/{jobId}/check-status", null);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<CheckJobStatusResult>();
+            return result ?? new CheckJobStatusResult { JobId = jobId, IsSuccess = false, ErrorMessage = "Failed to parse response" };
+        }
+
+        #endregion
 
     #region Orchestration Operations
 
