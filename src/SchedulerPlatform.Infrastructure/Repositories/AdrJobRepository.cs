@@ -60,10 +60,12 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                         j.NextRunDateTime.Value.Date > today &&
                         j.NextRunDateTime.Value.Date <= leadDateCutoff &&
                         // IDEMPOTENCY: Exclude jobs that already have a successful credential check (HTTP 200)
+                        // Note: Include !e.IsDeleted so Force Refire (soft-delete) works
                         !_context.AdrJobExecutions.Any(e => 
                             e.AdrJobId == j.Id && 
                             e.AdrRequestTypeId == attemptLoginRequestType && 
-                            e.HttpStatusCode == 200))
+                            e.HttpStatusCode == 200 &&
+                            !e.IsDeleted))
             .Include(j => j.AdrAccount)
             .ToListAsync();
     }
@@ -73,12 +75,19 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
         // Include "ScrapeInProgress" to recover jobs that were interrupted mid-step
         // These jobs already had the API called but the process crashed before updating status
         //
-        // Two categories of jobs are ready for scraping:
+        // Three categories of jobs are ready for scraping:
         // 1. Normal flow: CredentialVerified or ScrapeInProgress jobs where NextRunDate has arrived
-        // 2. Missed credential window: Pending jobs where NextRunDate has arrived AND:
+        // 2. Credential failed: CredentialFailed jobs should still attempt scraping daily
+        //    - Helpdesk may have fixed the credential since the last attempt
+        //    - Each failed scrape sends another reminder to helpdesk to fix or inactivate
+        //    - Continue retrying until NextRangeEndDate is reached
+        // 3. Missed credential window: Pending jobs where NextRunDate has arrived AND:
         //    - They have a CredentialId (so we can attempt scraping)
         //    - Their account is not "Missing" (Missing accounts need manual investigation)
         //    The downstream API will handle any credential issues and create helpdesk tickets
+        //
+        // BOUNDARY CHECK: Only scrape jobs within their billing window (NextRunDate to NextRangeEndDate)
+        // Jobs past their NextRangeEndDate should not be retried here - they go to final retry logic
         //
         // IDEMPOTENCY CHECK: Also exclude jobs that already have a successful scrape execution
         // This prevents duplicate API calls (and duplicate billing) even if the job status wasn't saved correctly
@@ -90,10 +99,21 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             .Where(j => !j.IsDeleted && 
                         j.NextRunDateTime.HasValue &&
                         j.NextRunDateTime.Value.Date <= today &&
+                        // BOUNDARY: Only include jobs within their scraping window
+                        // If NextRangeEndDateTime is set, today must be <= that date
+                        // If not set, allow scraping (backwards compatibility)
+                        (!j.NextRangeEndDateTime.HasValue || j.NextRangeEndDateTime.Value.Date >= today) &&
                         (
                             // Normal flow: credential verified jobs
                             ((j.Status == "CredentialVerified" || j.Status == "ScrapeInProgress") &&
                              j.CredentialVerifiedDateTime.HasValue)
+                            ||
+                            // Credential failed: still attempt scraping (helpdesk may have fixed it)
+                            // Each failure sends another reminder to helpdesk
+                            (j.Status == "CredentialFailed" &&
+                             j.CredentialId > 0 &&
+                             j.AdrAccount != null &&
+                             j.AdrAccount.HistoricalBillingStatus != "Missing")
                             ||
                             // Missed credential window: Pending jobs that can still be scraped
                             (j.Status == "Pending" &&
@@ -102,10 +122,12 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                              j.AdrAccount.HistoricalBillingStatus != "Missing")
                         ) &&
                         // IDEMPOTENCY: Exclude jobs that already have a successful scrape request (HTTP 200)
+                        // Note: Include !e.IsDeleted so Force Refire (soft-delete) works
                         !_context.AdrJobExecutions.Any(e => 
                             e.AdrJobId == j.Id && 
                             e.AdrRequestTypeId == downloadInvoiceRequestType && 
-                            e.HttpStatusCode == 200))
+                            e.HttpStatusCode == 200 &&
+                            !e.IsDeleted))
             .Include(j => j.AdrAccount)
             .ToListAsync();
     }
@@ -137,6 +159,37 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             .ToListAsync();
     }
 
+    public async Task<IEnumerable<AdrJob>> GetJobsForFinalRetryAsync(DateTime currentDate, int finalRetryDelayDays = 5)
+    {
+        // Final retry logic: Jobs that are past their NextRangeEndDate but haven't completed
+        // These get one more scrape attempt 5 days after NextRangeEndDate
+        // 
+        // Criteria:
+        // 1. Status is ScrapeRequested (scrape was sent but not completed)
+        // 2. NextRangeEndDateTime has passed
+        // 3. Today is at least finalRetryDelayDays after NextRangeEndDateTime
+        // 4. Job hasn't been marked as completed or failed
+        // 5. No successful scrape execution exists (idempotency)
+        var today = currentDate.Date;
+        const int downloadInvoiceRequestType = 2; // AdrRequestType.DownloadInvoice
+        
+        return await _dbSet
+            .Where(j => !j.IsDeleted && 
+                        j.Status == "ScrapeRequested" &&
+                        !j.ScrapingCompletedDateTime.HasValue &&
+                        j.NextRangeEndDateTime.HasValue &&
+                        j.NextRangeEndDateTime.Value.Date < today &&
+                        j.NextRangeEndDateTime.Value.Date.AddDays(finalRetryDelayDays) <= today &&
+                        // IDEMPOTENCY: Exclude jobs that already have a successful scrape request (HTTP 200)
+                        !_context.AdrJobExecutions.Any(e => 
+                            e.AdrJobId == j.Id && 
+                            e.AdrRequestTypeId == downloadInvoiceRequestType && 
+                            e.HttpStatusCode == 200 &&
+                            !e.IsDeleted))
+            .Include(j => j.AdrAccount)
+            .ToListAsync();
+    }
+
         public async Task<(IEnumerable<AdrJob> items, int totalCount)> GetPagedAsync(
             int pageNumber,
             int pageSize,
@@ -146,7 +199,10 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             DateTime? billingPeriodEnd = null,
             string? vendorCode = null,
             string? vmAccountNumber = null,
-            bool latestPerAccount = false)
+            bool latestPerAccount = false,
+            long? vmAccountId = null,
+            string? interfaceAccountId = null,
+            int? credentialId = null)
         {
             var query = _dbSet.Where(j => !j.IsDeleted);
 
@@ -181,6 +237,21 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             if (!string.IsNullOrWhiteSpace(vmAccountNumber))
             {
                 query = query.Where(j => j.VMAccountNumber.Contains(vmAccountNumber));
+            }
+
+            if (vmAccountId.HasValue)
+            {
+                query = query.Where(j => j.VMAccountId == vmAccountId.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(interfaceAccountId))
+            {
+                query = query.Where(j => j.AdrAccount != null && j.AdrAccount.InterfaceAccountId == interfaceAccountId);
+            }
+
+            if (credentialId.HasValue)
+            {
+                query = query.Where(j => j.CredentialId == credentialId.Value);
             }
 
             int totalCount;

@@ -25,6 +25,7 @@ public class SchedulerDbContext : DbContext
     public DbSet<AdrAccount> AdrAccounts { get; set; }
     public DbSet<AdrJob> AdrJobs { get; set; }
     public DbSet<AdrJobExecution> AdrJobExecutions { get; set; }
+    public DbSet<AdrOrchestrationRun> AdrOrchestrationRuns { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -244,6 +245,7 @@ public class SchedulerDbContext : DbContext
             entity.Property(e => e.PeriodType).HasMaxLength(13);
             entity.Property(e => e.NextRunStatus).HasMaxLength(10);
             entity.Property(e => e.HistoricalBillingStatus).HasMaxLength(10);
+            entity.Property(e => e.OverriddenBy).HasMaxLength(200);
             
             entity.Property(e => e.ClientId)
                 .HasColumnType("bigint")
@@ -329,6 +331,26 @@ public class SchedulerDbContext : DbContext
             entity.HasIndex(e => e.StartDateTime);
             entity.HasIndex(e => e.AdrRequestTypeId);
             entity.HasIndex(e => e.IsSuccess);
+        });
+
+        // ADR Orchestration Run entity configuration
+        modelBuilder.Entity<AdrOrchestrationRun>(entity =>
+        {
+            entity.ToTable("AdrOrchestrationRun");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("AdrOrchestrationRunId");
+            
+            entity.Property(e => e.RequestId).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.RequestedBy).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Status).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.CurrentStep).HasMaxLength(50);
+            entity.Property(e => e.CurrentProgress).HasMaxLength(50);
+            entity.Property(e => e.ErrorMessage).HasColumnType("nvarchar(max)");
+            
+            entity.HasIndex(e => e.RequestId).IsUnique();
+            entity.HasIndex(e => e.RequestedDateTime);
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => new { e.Status, e.RequestedDateTime });
         });
     }
 }

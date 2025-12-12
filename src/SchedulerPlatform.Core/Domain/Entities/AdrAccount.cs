@@ -118,6 +118,23 @@ public class AdrAccount : BaseEntity
     /// </summary>
     public DateTime? LastSyncedDateTime { get; set; }
     
+    /// <summary>
+    /// Flag indicating if billing dates/frequency have been manually overridden.
+    /// When true, account sync will skip updating: LastInvoiceDateTime, PeriodType, 
+    /// PeriodDays, MedianDays, ExpectedNextDateTime, ExpectedRangeStartDateTime, ExpectedRangeEndDateTime
+    /// </summary>
+    public bool IsManuallyOverridden { get; set; }
+    
+    /// <summary>
+    /// User who manually overrode the billing data
+    /// </summary>
+    public string? OverriddenBy { get; set; }
+    
+    /// <summary>
+    /// Date/time when billing data was manually overridden
+    /// </summary>
+    public DateTime? OverriddenDateTime { get; set; }
+    
     // Navigation properties
     [JsonIgnore]
     public Client? Client { get; set; }

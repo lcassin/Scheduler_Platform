@@ -58,7 +58,8 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
         int? credentialId = null,
         string? nextRunStatus = null,
         string? searchTerm = null,
-        string? historicalBillingStatus = null)
+        string? historicalBillingStatus = null,
+        bool? isOverridden = null)
     {
         var query = _dbSet.Where(a => !a.IsDeleted);
 
@@ -82,10 +83,16 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
             query = query.Where(a => a.HistoricalBillingStatus == historicalBillingStatus);
         }
 
+        if (isOverridden.HasValue)
+        {
+            query = query.Where(a => a.IsManuallyOverridden == isOverridden.Value);
+        }
+
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
             query = query.Where(a => 
                 a.VMAccountNumber.Contains(searchTerm) ||
+                (a.InterfaceAccountId != null && a.InterfaceAccountId.Contains(searchTerm)) ||
                 (a.ClientName != null && a.ClientName.Contains(searchTerm)) ||
                 (a.VendorCode != null && a.VendorCode.Contains(searchTerm)));
         }

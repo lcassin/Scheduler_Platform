@@ -11,6 +11,7 @@ public interface IAdrJobRepository : IRepository<AdrJob>
     Task<IEnumerable<AdrJob>> GetJobsReadyForScrapingAsync(DateTime currentDate);
     Task<IEnumerable<AdrJob>> GetJobsNeedingStatusCheckAsync(DateTime currentDate, int followUpDelayDays = 5);
     Task<IEnumerable<AdrJob>> GetJobsForRetryAsync(DateTime currentDate, int maxRetries = 5);
+    Task<IEnumerable<AdrJob>> GetJobsForFinalRetryAsync(DateTime currentDate, int finalRetryDelayDays = 5);
         Task<(IEnumerable<AdrJob> items, int totalCount)> GetPagedAsync(
             int pageNumber,
             int pageSize,
@@ -20,7 +21,10 @@ public interface IAdrJobRepository : IRepository<AdrJob>
             DateTime? billingPeriodEnd = null,
             string? vendorCode = null,
             string? vmAccountNumber = null,
-            bool latestPerAccount = false);
+            bool latestPerAccount = false,
+            long? vmAccountId = null,
+            string? interfaceAccountId = null,
+            int? credentialId = null);
     Task<int> GetTotalCountAsync(int? adrAccountId = null);
     Task<int> GetCountByStatusAsync(string status);
     Task<int> GetActiveJobsCountAsync();

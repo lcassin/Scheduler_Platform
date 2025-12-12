@@ -11,10 +11,13 @@ public interface IAdrService
         int? clientId = null,
         string? searchTerm = null,
         string? nextRunStatus = null,
-        string? historicalBillingStatus = null);
+        string? historicalBillingStatus = null,
+        bool? isOverridden = null);
     Task<AdrAccount?> GetAccountAsync(int id);
     Task<AdrAccount?> GetAccountByVMAccountIdAsync(long vmAccountId);
     Task<AdrAccountStats> GetAccountStatsAsync();
+    Task<AdrAccount> UpdateAccountBillingAsync(int accountId, DateTime? expectedBillingDate, string? periodType, string? historicalBillingStatus);
+    Task<AdrAccount> ClearAccountOverrideAsync(int accountId);
     Task<byte[]> DownloadAccountsExportAsync(
         int? clientId = null,
         string? searchTerm = null,
@@ -30,7 +33,10 @@ public interface IAdrService
             string? status = null,
             string? vendorCode = null,
             string? vmAccountNumber = null,
-            bool latestPerAccount = false);
+            bool latestPerAccount = false,
+            long? vmAccountId = null,
+            string? interfaceAccountId = null,
+            int? credentialId = null);
     Task<AdrJob?> GetJobAsync(int id);
     Task<List<AdrJob>> GetJobsByAccountAsync(int adrAccountId);
     Task<AdrJobStats> GetJobStatsAsync();
@@ -64,5 +70,6 @@ public interface IAdrService
     Task<BackgroundOrchestrationResponse> StartBackgroundOrchestrationAsync();
     Task<OrchestrationCurrentResponse> GetCurrentOrchestrationAsync();
     Task<AdrOrchestrationStatus?> GetOrchestrationStatusAsync(string requestId);
-    Task<List<AdrOrchestrationStatus>> GetOrchestrationHistoryAsync(int count = 10);
+    Task<List<AdrOrchestrationStatus>> GetOrchestrationHistoryAsync(int? count = 10);
+    Task<OrchestrationHistoryPagedResponse> GetOrchestrationHistoryPagedAsync(int pageNumber = 1, int pageSize = 20);
 }

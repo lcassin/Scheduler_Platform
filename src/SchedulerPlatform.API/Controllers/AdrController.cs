@@ -1,10 +1,12 @@
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using SchedulerPlatform.API.Services;
 using SchedulerPlatform.Core.Domain.Entities;
 using SchedulerPlatform.Core.Domain.Enums;
 using SchedulerPlatform.Core.Domain.Interfaces;
+using SchedulerPlatform.Infrastructure.Data;
 
 namespace SchedulerPlatform.API.Controllers;
 
@@ -17,6 +19,7 @@ public class AdrController : ControllerBase
     private readonly IAdrAccountSyncService _syncService;
     private readonly IAdrOrchestratorService _orchestratorService;
     private readonly IAdrOrchestrationQueue _orchestrationQueue;
+    private readonly SchedulerDbContext _dbContext;
     private readonly ILogger<AdrController> _logger;
 
     public AdrController(
@@ -24,12 +27,14 @@ public class AdrController : ControllerBase
         IAdrAccountSyncService syncService,
         IAdrOrchestratorService orchestratorService,
         IAdrOrchestrationQueue orchestrationQueue,
+        SchedulerDbContext dbContext,
         ILogger<AdrController> logger)
     {
         _unitOfWork = unitOfWork;
         _syncService = syncService;
         _orchestratorService = orchestratorService;
         _orchestrationQueue = orchestrationQueue;
+        _dbContext = dbContext;
         _logger = logger;
     }
 
@@ -42,6 +47,7 @@ public class AdrController : ControllerBase
         [FromQuery] string? nextRunStatus = null,
         [FromQuery] string? searchTerm = null,
         [FromQuery] string? historicalBillingStatus = null,
+        [FromQuery] bool? isOverridden = null,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20)
     {
@@ -54,7 +60,8 @@ public class AdrController : ControllerBase
                 credentialId,
                 nextRunStatus,
                 searchTerm,
-                historicalBillingStatus);
+                historicalBillingStatus,
+                isOverridden);
 
             return Ok(new
             {
@@ -177,6 +184,168 @@ public class AdrController : ControllerBase
         }
     }
 
+    [HttpPut("accounts/{id}/billing")]
+    [Authorize(Policy = "AdrAccounts.Update")]
+    public async Task<ActionResult<AdrAccount>> UpdateAccountBilling(int id, [FromBody] UpdateAccountBillingRequest request)
+    {
+        try
+        {
+            var account = await _unitOfWork.AdrAccounts.GetByIdAsync(id);
+            if (account == null)
+            {
+                return NotFound();
+            }
+
+            var username = User.Identity?.Name ?? "Unknown";
+
+            // Update billing-related fields
+            if (request.ExpectedBillingDate.HasValue)
+            {
+                account.LastInvoiceDateTime = request.ExpectedBillingDate.Value;
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.PeriodType))
+            {
+                account.PeriodType = request.PeriodType;
+                // Set PeriodDays based on PeriodType
+                account.PeriodDays = request.PeriodType switch
+                {
+                    "Bi-Weekly" => 14,
+                    "Monthly" => 30,
+                    "Bi-Monthly" => 60,
+                    "Quarterly" => 90,
+                    "Semi-Annually" => 180,
+                    "Annually" => 365,
+                    _ => 30
+                };
+                account.MedianDays = account.PeriodDays;
+            }
+
+            // Recalculate derived dates based on updated historical data
+            if (account.LastInvoiceDateTime.HasValue && account.PeriodDays.HasValue)
+            {
+                var windowDays = account.PeriodType switch
+                {
+                    "Bi-Weekly" => 3,
+                    "Monthly" => 5,
+                    "Bi-Monthly" => 7,
+                    "Quarterly" => 10,
+                    "Semi-Annually" => 14,
+                    "Annually" => 21,
+                    _ => 5
+                };
+
+                var expectedNext = account.LastInvoiceDateTime.Value.AddDays(account.PeriodDays.Value);
+                
+                // If expected date is in the past, calculate next future date
+                var today = DateTime.UtcNow.Date;
+                while (expectedNext < today)
+                {
+                    expectedNext = expectedNext.AddDays(account.PeriodDays.Value);
+                }
+
+                account.ExpectedNextDateTime = expectedNext;
+                account.ExpectedRangeStartDateTime = expectedNext.AddDays(-windowDays);
+                account.ExpectedRangeEndDateTime = expectedNext.AddDays(windowDays);
+                account.NextRunDateTime = expectedNext;
+                account.NextRangeStartDateTime = expectedNext.AddDays(-windowDays);
+                account.NextRangeEndDateTime = expectedNext.AddDays(windowDays);
+                account.DaysUntilNextRun = (int)(expectedNext - today).TotalDays;
+
+                // Update NextRunStatus based on days until next run
+                account.NextRunStatus = account.DaysUntilNextRun switch
+                {
+                    <= 0 => "Run Now",
+                    <= 7 => "Due Soon",
+                    <= 30 => "Upcoming",
+                    _ => "Future"
+                };
+            }
+
+            // Update Historical Billing Status if provided
+            if (!string.IsNullOrWhiteSpace(request.HistoricalBillingStatus))
+            {
+                account.HistoricalBillingStatus = request.HistoricalBillingStatus;
+            }
+
+            // Set override flag and audit fields
+            account.IsManuallyOverridden = true;
+            account.OverriddenBy = username;
+            account.OverriddenDateTime = DateTime.UtcNow;
+            account.ModifiedDateTime = DateTime.UtcNow;
+            account.ModifiedBy = username;
+
+            // Check for existing pending jobs for this account and cancel them if dates changed
+            // This prevents duplicate jobs when billing dates are manually corrected
+            if (account.NextRangeStartDateTime.HasValue && account.NextRangeEndDateTime.HasValue)
+            {
+                var existingJobs = await _unitOfWork.AdrJobs.GetByAccountIdAsync(account.Id);
+                var pendingJobs = existingJobs.Where(j => 
+                    (j.Status == "Pending" || j.Status == "CredentialCheckInProgress" || j.Status == "CredentialVerified") &&
+                    (j.BillingPeriodStartDateTime != account.NextRangeStartDateTime.Value ||
+                     j.BillingPeriodEndDateTime != account.NextRangeEndDateTime.Value));
+                
+                foreach (var job in pendingJobs)
+                {
+                    job.Status = "Cancelled";
+                    job.ErrorMessage = $"Cancelled due to manual billing date override by {username}";
+                    job.ModifiedDateTime = DateTime.UtcNow;
+                    job.ModifiedBy = username;
+                    await _unitOfWork.AdrJobs.UpdateAsync(job);
+                    _logger.LogInformation("Cancelled job {JobId} for account {AccountId} due to billing date override", job.Id, account.Id);
+                }
+            }
+
+            await _unitOfWork.AdrAccounts.UpdateAsync(account);
+            await _unitOfWork.SaveChangesAsync();
+
+            _logger.LogInformation("Account {AccountId} billing data updated by {User}. ExpectedBillingDate: {Date}, PeriodType: {Period}",
+                id, username, request.ExpectedBillingDate, request.PeriodType);
+
+            return Ok(account);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating ADR account billing for {AccountId}", id);
+            return StatusCode(500, "An error occurred while updating the ADR account billing");
+        }
+    }
+
+    [HttpPost("accounts/{id}/clear-override")]
+    [Authorize(Policy = "AdrAccounts.Update")]
+    public async Task<ActionResult<AdrAccount>> ClearAccountOverride(int id)
+    {
+        try
+        {
+            var account = await _unitOfWork.AdrAccounts.GetByIdAsync(id);
+            if (account == null)
+            {
+                return NotFound();
+            }
+
+            var username = User.Identity?.Name ?? "Unknown";
+
+            // Clear override flag - next sync will update billing data from external source
+            account.IsManuallyOverridden = false;
+            account.OverriddenBy = null;
+            account.OverriddenDateTime = null;
+            account.ModifiedDateTime = DateTime.UtcNow;
+            account.ModifiedBy = username;
+
+            await _unitOfWork.AdrAccounts.UpdateAsync(account);
+            await _unitOfWork.SaveChangesAsync();
+
+            _logger.LogInformation("Account {AccountId} override cleared by {User}", id, username);
+
+            return Ok(account);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error clearing ADR account override for {AccountId}", id);
+            return StatusCode(500, "An error occurred while clearing the ADR account override");
+        }
+    }
+
     [HttpGet("accounts/export")]
     public async Task<IActionResult> ExportAccounts(
         [FromQuery] int? clientId = null,
@@ -269,7 +438,10 @@ public class AdrController : ControllerBase
             [FromQuery] string? vmAccountNumber = null,
             [FromQuery] bool latestPerAccount = false,
             [FromQuery] int pageNumber = 1,
-            [FromQuery] int pageSize = 20)
+            [FromQuery] int pageSize = 20,
+            [FromQuery] long? vmAccountId = null,
+            [FromQuery] string? interfaceAccountId = null,
+            [FromQuery] int? credentialId = null)
         {
             try
             {
@@ -282,7 +454,10 @@ public class AdrController : ControllerBase
                     billingPeriodEnd,
                     vendorCode,
                     vmAccountNumber,
-                    latestPerAccount);
+                    latestPerAccount,
+                    vmAccountId,
+                    interfaceAccountId,
+                    credentialId);
 
                 // Map to DTOs with VendorCode fallback from AdrAccount when job's VendorCode is null
                 var mappedItems = items.Select(j => new
@@ -1146,13 +1321,105 @@ public class AdrController : ControllerBase
     }
 
     /// <summary>
-    /// Gets the recent orchestration run history.
+    /// Gets the recent orchestration run history from database.
+    /// Falls back to in-memory if database is unavailable.
+    /// Supports pagination with pageNumber and pageSize parameters.
     /// </summary>
     [HttpGet("orchestrate/history")]
     [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
-    public ActionResult<IEnumerable<AdrOrchestrationStatus>> GetOrchestrationHistory([FromQuery] int count = 10)
+    public async Task<ActionResult<object>> GetOrchestrationHistory(
+        [FromQuery] int? count = null,
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 20)
     {
-        var statuses = _orchestrationQueue.GetRecentStatuses(count);
+        try
+        {
+            // Try to get history from database first
+            var query = _dbContext.AdrOrchestrationRuns
+                .Where(r => !r.IsDeleted)
+                .OrderByDescending(r => r.RequestedDateTime);
+            
+            // Get total count for pagination
+            var totalCount = await query.CountAsync();
+            
+            // Apply pagination or simple count limit
+            IQueryable<AdrOrchestrationRun> pagedQuery;
+            if (count.HasValue)
+            {
+                // Legacy mode: just return count items (no pagination info)
+                pagedQuery = query.Take(count.Value);
+            }
+            else
+            {
+                // Pagination mode
+                pagedQuery = query
+                    .Skip((pageNumber - 1) * pageSize)
+                    .Take(pageSize);
+            }
+            
+            var dbHistory = await pagedQuery
+                .Select(r => new AdrOrchestrationStatus
+                {
+                    RequestId = r.RequestId,
+                    RequestedBy = r.RequestedBy,
+                    RequestedAt = r.RequestedDateTime,
+                    StartedAt = r.StartedDateTime,
+                    CompletedAt = r.CompletedDateTime,
+                    Status = r.Status,
+                    CurrentStep = r.CurrentStep,
+                    ErrorMessage = r.ErrorMessage,
+                    SyncResult = r.SyncAccountsInserted.HasValue ? new AdrAccountSyncResult
+                    {
+                        AccountsInserted = r.SyncAccountsInserted ?? 0,
+                        AccountsUpdated = r.SyncAccountsUpdated ?? 0
+                    } : null,
+                    JobCreationResult = r.JobsCreated.HasValue ? new JobCreationResult
+                    {
+                        JobsCreated = r.JobsCreated ?? 0,
+                        JobsSkipped = r.JobsSkipped ?? 0
+                    } : null,
+                    CredentialVerificationResult = r.CredentialsVerified.HasValue ? new CredentialVerificationResult
+                    {
+                        CredentialsVerified = r.CredentialsVerified ?? 0,
+                        CredentialsFailed = r.CredentialsFailed ?? 0
+                    } : null,
+                    ScrapeResult = r.ScrapingRequested.HasValue ? new ScrapeResult
+                    {
+                        ScrapesRequested = r.ScrapingRequested ?? 0,
+                        ScrapesFailed = r.ScrapingFailed ?? 0
+                    } : null,
+                    StatusCheckResult = r.StatusesChecked.HasValue ? new StatusCheckResult
+                    {
+                        JobsCompleted = r.StatusesChecked ?? 0,
+                        JobsNeedingReview = r.StatusesFailed ?? 0
+                    } : null
+                })
+                .ToListAsync();
+            
+            if (dbHistory.Any())
+            {
+                // Return with pagination info if not using legacy count mode
+                if (!count.HasValue)
+                {
+                    return Ok(new OrchestrationHistoryPagedResponse
+                    {
+                        Items = dbHistory,
+                        TotalCount = totalCount,
+                        PageNumber = pageNumber,
+                        PageSize = pageSize,
+                        TotalPages = (int)Math.Ceiling((double)totalCount / pageSize)
+                    });
+                }
+                return Ok(dbHistory);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get orchestration history from database, falling back to in-memory");
+        }
+        
+        // Fall back to in-memory statuses
+        var statuses = _orchestrationQueue.GetRecentStatuses(count ?? 100);
         return Ok(statuses);
     }
 
@@ -1220,6 +1487,34 @@ public class BackgroundOrchestrationRequest
     public bool RunCredentialVerification { get; set; } = true;
     public bool RunScraping { get; set; } = true;
     public bool RunStatusCheck { get; set; } = true;
+}
+
+public class UpdateAccountBillingRequest
+{
+    /// <summary>
+    /// The expected billing date (displayed as "Expected Billing Date" in UI)
+    /// This updates the LastInvoiceDateTime field which drives the billing calculations
+    /// </summary>
+    public DateTime? ExpectedBillingDate { get; set; }
+    
+    /// <summary>
+    /// Billing frequency: Bi-Weekly, Monthly, Bi-Monthly, Quarterly, Semi-Annually, Annually
+    /// </summary>
+    public string? PeriodType { get; set; }
+    
+    /// <summary>
+    /// Historical billing status: Missing, Overdue, Due Now, Due Soon, Upcoming, Future
+    /// </summary>
+    public string? HistoricalBillingStatus { get; set; }
+}
+
+public class OrchestrationHistoryPagedResponse
+{
+    public List<AdrOrchestrationStatus> Items { get; set; } = new();
+    public int TotalCount { get; set; }
+    public int PageNumber { get; set; }
+    public int PageSize { get; set; }
+    public int TotalPages { get; set; }
 }
 
 #endregion

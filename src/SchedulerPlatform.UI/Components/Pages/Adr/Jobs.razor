@@ -21,7 +21,8 @@
                               Margin="Margin.Dense" 
                               Clearable="true"
                               Adornment="Adornment.Start"
-                              AdornmentIcon="@Icons.Material.Filled.Business" />
+                              AdornmentIcon="@Icons.Material.Filled.Business"
+                              OnKeyDown="@OnSearchKeyDown" />
             </MudItem>
             <MudItem xs="12" md="2">
                 <MudTextField @bind-Value="_searchAccountNumber" 
@@ -31,7 +32,8 @@
                               Margin="Margin.Dense" 
                               Clearable="true"
                               Adornment="Adornment.Start"
-                              AdornmentIcon="@Icons.Material.Filled.Search" />
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              OnKeyDown="@OnSearchKeyDown" />
             </MudItem>
             <MudItem xs="12" md="2">
                 <MudSelect T="string" @bind-Value="_selectedStatus" Label="Status" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
@@ -45,10 +47,34 @@
                     <MudSelectItem Value="@("NeedsReview")">Needs Review</MudSelectItem>
                 </MudSelect>
             </MudItem>
+            <MudItem xs="12" md="2">
+                <MudTextField @bind-Value="_searchCredentialId" 
+                              Label="Credential ID" 
+                              Placeholder="Enter credential ID"
+                              Variant="Variant.Outlined" 
+                              Margin="Margin.Dense" 
+                              Clearable="true"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Key"
+                              OnKeyDown="@OnSearchKeyDown" />
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudTextField @bind-Value="_searchInterfaceAccountId" 
+                              Label="Interface Account ID" 
+                              Placeholder="Enter interface acct"
+                              Variant="Variant.Outlined" 
+                              Margin="Margin.Dense" 
+                              Clearable="true"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Link"
+                              OnKeyDown="@OnSearchKeyDown" />
+            </MudItem>
             <MudItem xs="12" md="2" Class="d-flex align-center">
                 <MudSwitch @bind-Value="_showLatestPerAccount" Color="Color.Primary" Label="Latest per Account" />
             </MudItem>
-            <MudItem xs="12" md="4" Class="d-flex align-center justify-end gap-2">
+        </MudGrid>
+        <MudGrid Class="mb-4" Spacing="2">
+            <MudItem xs="12" Class="d-flex align-center justify-end gap-2">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters" StartIcon="@Icons.Material.Filled.FilterAlt">
                     Apply
                 </MudButton>
@@ -229,9 +255,13 @@
     private string? _searchVendorCode;
     private string? _searchAccountNumber;
     private string _selectedStatus = "";
+    private string? _searchCredentialId;
+    private string? _searchInterfaceAccountId;
     private string? _filterVendorCode;
     private string? _filterAccountNumber;
     private string? _filterStatus;
+    private int? _filterCredentialId;
+    private string? _filterInterfaceAccountId;
     private bool _showLatestPerAccount = true;
     private HashSet<AdrJob> _selectedJobs = new();
 
@@ -273,7 +303,10 @@
                 _filterStatus,
                 _filterVendorCode,
                 _filterAccountNumber,
-                _showLatestPerAccount);
+                _showLatestPerAccount,
+                null, // vmAccountId - not used for filtering
+                _filterInterfaceAccountId,
+                _filterCredentialId);
 
             // Apply sorting
             var sortedItems = ApplySorting(result.Items, state.SortLabel, state.SortDirection);
@@ -344,11 +377,21 @@
         };
     }
 
+    private async Task OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await ApplyFilters();
+        }
+    }
+
     private async Task ApplyFilters()
     {
         _filterVendorCode = string.IsNullOrWhiteSpace(_searchVendorCode) ? null : _searchVendorCode;
         _filterAccountNumber = string.IsNullOrWhiteSpace(_searchAccountNumber) ? null : _searchAccountNumber;
         _filterStatus = string.IsNullOrEmpty(_selectedStatus) ? null : _selectedStatus;
+        _filterCredentialId = int.TryParse(_searchCredentialId, out var credId) ? credId : null;
+        _filterInterfaceAccountId = string.IsNullOrWhiteSpace(_searchInterfaceAccountId) ? null : _searchInterfaceAccountId;
         await _table.ReloadServerData();
     }
 
@@ -357,9 +400,13 @@
         _searchVendorCode = null;
         _searchAccountNumber = null;
         _selectedStatus = "";
+        _searchCredentialId = null;
+        _searchInterfaceAccountId = null;
         _filterVendorCode = null;
         _filterAccountNumber = null;
         _filterStatus = null;
+        _filterCredentialId = null;
+        _filterInterfaceAccountId = null;
         Navigation.NavigateTo("/adr/jobs");
         await _table.ReloadServerData();
     }
@@ -393,7 +440,7 @@
             "Pending" => GetPendingNextAction(job, today),
             "CredentialCheckInProgress" => ("Checking credentials...", null, Color.Info),
             "CredentialVerified" => GetCredentialVerifiedNextAction(job, today),
-            "CredentialFailed" => ("Fix credentials", null, Color.Error),
+            "CredentialFailed" => GetCredentialFailedNextAction(job, today),
             "ScrapeInProgress" => ("Scraping...", null, Color.Info),
             "ScrapeRequested" => ("Awaiting scrape result", null, Color.Warning),
             "StatusCheckInProgress" => ("Checking status...", null, Color.Info),
@@ -450,6 +497,25 @@
             return ($"Scrape in {daysUntilScrape}d", nextRunDate, Color.Info);
     }
 
+    private (string Action, DateTime? ActionDate, Color ActionColor) GetCredentialFailedNextAction(AdrJob job, DateTime today)
+    {
+        // Even though credentials failed, we still attempt to scrape daily
+        // Helpdesk may have fixed the credential since the last attempt
+        // Each failure sends another reminder to helpdesk to fix or inactivate
+        if (!job.NextRunDateTime.HasValue)
+            return ("Awaiting scrape date", null, Color.Warning);
+        
+        var nextRunDate = job.NextRunDateTime.Value.Date;
+        var daysUntilScrape = (nextRunDate - today).Days;
+        
+        if (daysUntilScrape <= 0)
+            return ("Scrape retry due", nextRunDate, Color.Warning);
+        else if (daysUntilScrape == 1)
+            return ("Scrape retry tomorrow", nextRunDate, Color.Warning);
+        else
+            return ($"Scrape retry in {daysUntilScrape}d", nextRunDate, Color.Warning);
+    }
+
     private string GetNextActionTooltip(AdrJob job)
     {
         var today = DateTime.UtcNow.Date;
@@ -463,7 +529,7 @@
             "CredentialVerified" when job.NextRunDateTime.HasValue =>
                 $"Credentials verified: {job.CredentialVerifiedDateTime?.ToString("MM/dd/yyyy") ?? "N/A"}\nScrape starts: {job.NextRunDateTime.Value:MM/dd/yyyy}",
             "CredentialFailed" =>
-                "Credentials need to be updated in the vendor portal. A helpdesk ticket has been created.",
+                $"Credential verification failed. Scraping will still be attempted daily until {job.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? "range end"}.\nEach failure sends a reminder to helpdesk to fix credentials or inactivate the account.",
             "ScrapeRequested" =>
                 $"Scrape requested. Checking status daily until {job.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? "range end"}.",
             "Completed" =>

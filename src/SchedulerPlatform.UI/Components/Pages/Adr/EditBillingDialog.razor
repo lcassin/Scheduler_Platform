@@ -1,0 +1,132 @@
+@using SchedulerPlatform.UI.Models
+@inject IAdrService AdrService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-2" />
+            Edit Billing Data
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (Account != null)
+        {
+            <MudText Typo="Typo.body2" Class="mb-4">
+                Editing billing data for account <strong>@Account.VMAccountNumber</strong>
+            </MudText>
+            
+            @if (Account.IsManuallyOverridden)
+            {
+                <MudAlert Severity="Severity.Info" Class="mb-4">
+                    This account was previously overridden by @Account.OverriddenBy on @Account.OverriddenDateTime?.ToString("MM/dd/yyyy")
+                </MudAlert>
+            }
+
+            <MudGrid>
+                <MudItem xs="12">
+                    <MudDatePicker @bind-Date="_expectedBillingDate" 
+                                   Label="Expected Billing Date" 
+                                   Placeholder="Select the expected billing date"
+                                   Variant="Variant.Outlined"
+                                   HelperText="The day of the month when invoices are expected" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudSelect T="string" @bind-Value="_periodType" 
+                               Label="Billing Frequency" 
+                               Variant="Variant.Outlined"
+                               HelperText="How often invoices are generated">
+                        <MudSelectItem Value="@("Bi-Weekly")">Bi-Weekly (14 days)</MudSelectItem>
+                        <MudSelectItem Value="@("Monthly")">Monthly (30 days)</MudSelectItem>
+                        <MudSelectItem Value="@("Bi-Monthly")">Bi-Monthly (60 days)</MudSelectItem>
+                        <MudSelectItem Value="@("Quarterly")">Quarterly (90 days)</MudSelectItem>
+                        <MudSelectItem Value="@("Semi-Annually")">Semi-Annually (180 days)</MudSelectItem>
+                        <MudSelectItem Value="@("Annually")">Annually (365 days)</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudSelect T="string" @bind-Value="_historicalBillingStatus" 
+                               Label="Historical Billing Status" 
+                               Variant="Variant.Outlined"
+                               HelperText="Current status of historical billing data">
+                        <MudSelectItem Value="@("Missing")">Missing</MudSelectItem>
+                        <MudSelectItem Value="@("Overdue")">Overdue</MudSelectItem>
+                        <MudSelectItem Value="@("Due Now")">Due Now</MudSelectItem>
+                        <MudSelectItem Value="@("Due Soon")">Due Soon</MudSelectItem>
+                        <MudSelectItem Value="@("Upcoming")">Upcoming</MudSelectItem>
+                        <MudSelectItem Value="@("Future")">Future</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+            </MudGrid>
+
+            <MudAlert Severity="Severity.Warning" Class="mt-4">
+                <strong>Note:</strong> Saving these changes will mark this account as manually overridden. 
+                The next account sync will preserve these values instead of updating them from the external source.
+            </MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="_saving">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="_saving">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Saving...</span>
+            }
+            else
+            {
+                <span>Save Changes</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] 
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public AdrAccount? Account { get; set; }
+
+    private DateTime? _expectedBillingDate;
+    private string? _periodType;
+    private string? _historicalBillingStatus;
+    private bool _saving = false;
+
+    protected override void OnParametersSet()
+    {
+        if (Account != null)
+        {
+            _expectedBillingDate = Account.LastInvoiceDateTime;
+            _periodType = Account.PeriodType;
+            _historicalBillingStatus = Account.HistoricalBillingStatus;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        if (Account == null) return;
+
+        _saving = true;
+        try
+        {
+            await AdrService.UpdateAccountBillingAsync(
+                Account.Id,
+                _expectedBillingDate,
+                _periodType,
+                _historicalBillingStatus);
+            
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving billing data: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}
