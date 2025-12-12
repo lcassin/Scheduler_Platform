@@ -22,7 +22,8 @@ public class AdrService : IAdrService
         int? clientId = null,
         string? searchTerm = null,
         string? nextRunStatus = null,
-        string? historicalBillingStatus = null)
+        string? historicalBillingStatus = null,
+        bool? isOverridden = null)
     {
         var client = CreateClient();
         var queryParams = new List<string>
@@ -42,6 +43,9 @@ public class AdrService : IAdrService
 
         if (!string.IsNullOrWhiteSpace(historicalBillingStatus))
             queryParams.Add($"historicalBillingStatus={Uri.EscapeDataString(historicalBillingStatus)}");
+
+        if (isOverridden.HasValue)
+            queryParams.Add($"isOverridden={isOverridden.Value.ToString().ToLowerInvariant()}");
 
         var query = "?" + string.Join("&", queryParams);
         var result = await client.GetFromJsonAsync<PagedResult<AdrAccount>>($"adr/accounts{query}");
@@ -72,6 +76,30 @@ public class AdrService : IAdrService
         var client = CreateClient();
         var result = await client.GetFromJsonAsync<AdrAccountStats>($"adr/accounts/stats");
         return result ?? new AdrAccountStats();
+    }
+
+    public async Task<AdrAccount> UpdateAccountBillingAsync(int accountId, DateTime? expectedBillingDate, string? periodType, string? historicalBillingStatus)
+    {
+        var client = CreateClient();
+        var request = new
+        {
+            ExpectedBillingDate = expectedBillingDate,
+            PeriodType = periodType,
+            HistoricalBillingStatus = historicalBillingStatus
+        };
+        var response = await client.PutAsJsonAsync($"adr/accounts/{accountId}/billing", request);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<AdrAccount>();
+        return result ?? throw new InvalidOperationException("Failed to update account billing");
+    }
+
+    public async Task<AdrAccount> ClearAccountOverrideAsync(int accountId)
+    {
+        var client = CreateClient();
+        var response = await client.PostAsync($"adr/accounts/{accountId}/clear-override", null);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<AdrAccount>();
+        return result ?? throw new InvalidOperationException("Failed to clear account override");
     }
 
     public async Task<byte[]> DownloadAccountsExportAsync(
@@ -113,7 +141,10 @@ public class AdrService : IAdrService
             string? status = null,
             string? vendorCode = null,
             string? vmAccountNumber = null,
-            bool latestPerAccount = false)
+            bool latestPerAccount = false,
+            long? vmAccountId = null,
+            string? interfaceAccountId = null,
+            int? credentialId = null)
         {
             var client = CreateClient();
             var queryParams = new List<string>
@@ -136,6 +167,15 @@ public class AdrService : IAdrService
 
             if (latestPerAccount)
                 queryParams.Add("latestPerAccount=true");
+
+            if (vmAccountId.HasValue)
+                queryParams.Add($"vmAccountId={vmAccountId.Value}");
+
+            if (!string.IsNullOrWhiteSpace(interfaceAccountId))
+                queryParams.Add($"interfaceAccountId={Uri.EscapeDataString(interfaceAccountId)}");
+
+            if (credentialId.HasValue)
+                queryParams.Add($"credentialId={credentialId.Value}");
 
             var query = "?" + string.Join("&", queryParams);
             var result = await client.GetFromJsonAsync<PagedResult<AdrJob>>($"adr/jobs{query}");
@@ -349,12 +389,30 @@ public class AdrService : IAdrService
         }
     }
 
-    public async Task<List<AdrOrchestrationStatus>> GetOrchestrationHistoryAsync(int count = 10)
+    public async Task<List<AdrOrchestrationStatus>> GetOrchestrationHistoryAsync(int? count = 10)
     {
         var client = CreateClient();
-        var result = await client.GetFromJsonAsync<List<AdrOrchestrationStatus>>($"adr/orchestrate/history?count={count}");
+        var url = count.HasValue ? $"adr/orchestrate/history?count={count}" : "adr/orchestrate/history";
+        var result = await client.GetFromJsonAsync<List<AdrOrchestrationStatus>>(url);
         return result ?? new List<AdrOrchestrationStatus>();
     }
 
+    public async Task<OrchestrationHistoryPagedResponse> GetOrchestrationHistoryPagedAsync(int pageNumber = 1, int pageSize = 20)
+    {
+        var client = CreateClient();
+        var result = await client.GetFromJsonAsync<OrchestrationHistoryPagedResponse>(
+            $"adr/orchestrate/history?pageNumber={pageNumber}&pageSize={pageSize}");
+        return result ?? new OrchestrationHistoryPagedResponse();
+    }
+
     #endregion
+}
+
+public class OrchestrationHistoryPagedResponse
+{
+    public List<AdrOrchestrationStatus> Items { get; set; } = new();
+    public int TotalCount { get; set; }
+    public int PageNumber { get; set; }
+    public int PageSize { get; set; }
+    public int TotalPages { get; set; }
 }

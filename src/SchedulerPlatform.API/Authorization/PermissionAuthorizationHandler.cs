@@ -9,8 +9,12 @@ public class PermissionAuthorizationHandler : AuthorizationHandler<PermissionReq
         PermissionRequirement requirement)
     {
         // System admins and Admin role users bypass all permission checks
-        if (context.User.HasClaim("is_system_admin", "True") ||
-            context.User.HasClaim("role", "Admin"))
+        // Check is_system_admin case-insensitively to handle both "true" and "True"
+        var isSystemAdmin = context.User.Claims.Any(c =>
+            c.Type == "is_system_admin" &&
+            string.Equals(c.Value, "true", StringComparison.OrdinalIgnoreCase));
+        
+        if (isSystemAdmin || context.User.HasClaim("role", "Admin"))
         {
             context.Succeed(requirement);
             return Task.CompletedTask;

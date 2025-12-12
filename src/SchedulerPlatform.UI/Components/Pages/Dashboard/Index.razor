@@ -203,39 +203,163 @@
                     <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
                 </div>
             }
-            else if (_adrJobStats != null && _adrJobChartData.Any())
+            else if (_adrJobStats != null)
             {
-                                <MudChart ChartType="ChartType.Bar" 
-                                         ChartSeries="@_adrJobChartSeries" 
-                                         XAxisLabels="@_adrJobChartLabels"
-                                         ChartOptions="@_adrJobChartOptions"
-                                         Width="100%" 
-                                         Height="300px">
-                                </MudChart>
-                <MudGrid Class="mt-2">
+                <MudGrid Spacing="2" Class="mb-4">
                     <MudItem xs="4">
-                        <MudText Typo="Typo.body2"><strong>Pending:</strong> @FormatNumber(_adrJobStats.PendingCount)</MudText>
+                        <MudPaper Class="pa-3 d-flex flex-column align-center" Style="background-color: rgba(66, 165, 245, 0.1); border-left: 4px solid #42a5f5;">
+                            <MudText Typo="Typo.h5" Style="color: #42a5f5;">@FormatNumber(_adrJobStats.PendingCount)</MudText>
+                            <MudText Typo="Typo.caption">Pending</MudText>
+                        </MudPaper>
                     </MudItem>
                     <MudItem xs="4">
-                        <MudText Typo="Typo.body2"><strong>Verified:</strong> @FormatNumber(_adrJobStats.CredentialVerifiedCount)</MudText>
+                        <MudPaper Class="pa-3 d-flex flex-column align-center" Style="background-color: rgba(102, 187, 106, 0.1); border-left: 4px solid #66bb6a;">
+                            <MudText Typo="Typo.h5" Style="color: #66bb6a;">@FormatNumber(_adrJobStats.CredentialVerifiedCount)</MudText>
+                            <MudText Typo="Typo.caption">Verified</MudText>
+                        </MudPaper>
                     </MudItem>
                     <MudItem xs="4">
-                        <MudText Typo="Typo.body2"><strong>Requested:</strong> @FormatNumber(_adrJobStats.ScrapeRequestedCount)</MudText>
+                        <MudPaper Class="pa-3 d-flex flex-column align-center" Style="background-color: rgba(255, 202, 40, 0.1); border-left: 4px solid #ffca28;">
+                            <MudText Typo="Typo.h5" Style="color: #ffca28;">@FormatNumber(_adrJobStats.ScrapeRequestedCount)</MudText>
+                            <MudText Typo="Typo.caption">Requested</MudText>
+                        </MudPaper>
                     </MudItem>
                     <MudItem xs="4">
-                        <MudText Typo="Typo.body2"><strong>Completed:</strong> @FormatNumber(_adrJobStats.CompletedCount)</MudText>
+                        <MudPaper Class="pa-3 d-flex flex-column align-center" Style="background-color: rgba(38, 198, 218, 0.1); border-left: 4px solid #26c6da;">
+                            <MudText Typo="Typo.h5" Style="color: #26c6da;">@FormatNumber(_adrJobStats.CompletedCount)</MudText>
+                            <MudText Typo="Typo.caption">Completed</MudText>
+                        </MudPaper>
                     </MudItem>
                     <MudItem xs="4">
-                        <MudText Typo="Typo.body2"><strong>Failed:</strong> @FormatNumber(_adrJobStats.FailedCount)</MudText>
+                        <MudPaper Class="pa-3 d-flex flex-column align-center" Style="background-color: rgba(244, 67, 54, 0.1); border-left: 4px solid #f44336;">
+                            <MudText Typo="Typo.h5" Style="color: #f44336;">@FormatNumber(_adrJobStats.FailedCount)</MudText>
+                            <MudText Typo="Typo.caption">Failed</MudText>
+                        </MudPaper>
                     </MudItem>
                     <MudItem xs="4">
-                        <MudText Typo="Typo.body2"><strong>Review:</strong> @FormatNumber(_adrJobStats.NeedsReviewCount)</MudText>
+                        <MudPaper Class="pa-3 d-flex flex-column align-center" Style="background-color: rgba(255, 152, 0, 0.1); border-left: 4px solid #ff9800;">
+                            <MudText Typo="Typo.h5" Style="color: #ff9800;">@FormatNumber(_adrJobStats.NeedsReviewCount)</MudText>
+                            <MudText Typo="Typo.caption">Review</MudText>
+                        </MudPaper>
                     </MudItem>
                 </MudGrid>
+                @if (_adrJobChartData.Any(d => d > 0))
+                {
+                    <MudChart ChartType="ChartType.Bar" 
+                              ChartSeries="@_adrJobChartSeries" 
+                              XAxisLabels="@_adrJobChartLabels"
+                              ChartOptions="@_adrJobChartOptions"
+                              Width="100%" 
+                              Height="200px">
+                    </MudChart>
+                }
             }
             else
             {
                 <MudText Typo="Typo.body1" Color="Color.Secondary">No ADR job data available</MudText>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+<MudGrid Class="mt-2 mb-4" Spacing="2">
+    <MudItem xs="12">
+        <MudPaper Class="pa-4">
+            <div class="d-flex justify-space-between align-center mb-4">
+                <MudText Typo="Typo.h6">Recent Orchestration Runs</MudText>
+                <MudButton Variant="Variant.Text" 
+                           Color="Color.Primary" 
+                           EndIcon="@Icons.Material.Filled.ArrowForward"
+                           OnClick="@(() => NavigationManager.NavigateTo("/adr/monitor"))">
+                    View All
+                </MudButton>
+            </div>
+            @if (_orchestrationHistoryLoading && _orchestrationHistory == null)
+            {
+                <div class="d-flex justify-center py-4">
+                    <MudProgressCircular Color="Color.Primary" Size="Size.Small" Indeterminate="true" />
+                </div>
+            }
+            else if (_orchestrationHistory == null || !_orchestrationHistory.Any())
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center">
+                    No orchestration history available
+                </MudText>
+            }
+            else
+            {
+                <MudTable Items="_orchestrationHistory" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm">
+                    <HeaderContent>
+                        <MudTh>Date</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Duration</MudTh>
+                        <MudTh>Accounts Synced</MudTh>
+                        <MudTh>Jobs Created</MudTh>
+                        <MudTh>Credentials</MudTh>
+                        <MudTh>Scrapes</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Date">@context.RequestedAt.ToString("MM/dd hh:mm tt")</MudTd>
+                        <MudTd DataLabel="Status">
+                            <MudChip T="string" Size="Size.Small" Color="@GetOrchestrationHistoryStatusColor(context.Status)">@context.Status</MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Duration">
+                            @if (context.StartedAt.HasValue && context.CompletedAt.HasValue)
+                            {
+                                var duration = context.CompletedAt.Value - context.StartedAt.Value;
+                                <text>@duration.ToString(@"mm\:ss")</text>
+                            }
+                            else
+                            {
+                                <text>-</text>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Accounts Synced">
+                            @if (context.SyncResult != null)
+                            {
+                                <text>@FormatNumber(context.SyncResult.AccountsInserted + context.SyncResult.AccountsUpdated)</text>
+                            }
+                            else
+                            {
+                                <text>-</text>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Jobs Created">
+                            @if (context.JobCreationResult != null)
+                            {
+                                <text>@FormatNumber(context.JobCreationResult.JobsCreated)</text>
+                            }
+                            else
+                            {
+                                <text>-</text>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Credentials">
+                            @if (context.CredentialVerificationResult != null)
+                            {
+                                <MudText Typo="Typo.body2">
+                                    <span style="color: var(--mud-palette-success);">@context.CredentialVerificationResult.CredentialsVerified</span>
+                                    /
+                                    <span style="color: var(--mud-palette-error);">@context.CredentialVerificationResult.CredentialsFailed</span>
+                                </MudText>
+                            }
+                            else
+                            {
+                                <text>-</text>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Scrapes">
+                            @if (context.ScrapeResult != null)
+                            {
+                                <text>@FormatNumber(context.ScrapeResult.ScrapesRequested)</text>
+                            }
+                            else
+                            {
+                                <text>-</text>
+                            }
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
             }
         </MudPaper>
     </MudItem>
@@ -545,6 +669,8 @@
                 private bool _adrJobStatsLoading;
                 private OrchestrationCurrentResponse? _orchestrationStatus;
                 private bool _orchestrationLoading;
+                private List<AdrOrchestrationStatus>? _orchestrationHistory;
+                private bool _orchestrationHistoryLoading;
                 
                 private double[] _adrAccountChartData = Array.Empty<double>();
                 private string[] _adrAccountChartLabels = Array.Empty<string>();
@@ -705,6 +831,7 @@
             _ = LoadAdrStatsAsync();
             _ = LoadAdrJobStatsAsync();
             _ = LoadOrchestrationStatusAsync();
+            _ = LoadOrchestrationHistoryAsync();
         }
     
         private async Task LoadOverviewAsync()
@@ -958,6 +1085,36 @@
             if (_orchestrationStatus.IsRunning) return Color.Info;
             return Color.Success;
         }
+
+        private async Task LoadOrchestrationHistoryAsync()
+        {
+            if (_orchestrationHistoryLoading) return;
+            _orchestrationHistoryLoading = true;
+            try
+            {
+                _orchestrationHistory = await AdrService.GetOrchestrationHistoryAsync(5);
+            }
+            catch (Exception ex)
+            {
+                // Orchestration history is optional - don't show error to user if ADR is not configured
+                Console.WriteLine($"Error loading orchestration history: {ex.Message}");
+            }
+            finally
+            {
+                _orchestrationHistoryLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+
+        private Color GetOrchestrationHistoryStatusColor(string status) => status switch
+        {
+            "Queued" => Color.Default,
+            "Running" => Color.Info,
+            "Completed" => Color.Success,
+            "Failed" => Color.Error,
+            "Cancelled" => Color.Warning,
+            _ => Color.Default
+        };
 
         private string FormatDateLabel(DateTime dateTime)
     {

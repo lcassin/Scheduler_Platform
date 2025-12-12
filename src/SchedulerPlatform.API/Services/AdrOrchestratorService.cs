@@ -234,7 +234,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             // This prevents double-billing if the process crashes after the API call
             // Batching reduces database round-trips from 2*N to N/batchSize
             const int setupBatchSize = 500;
-            var jobsToProcess = new List<(int JobId, int CredentialId, DateTime? StartDate, DateTime? EndDate, int ExecutionId)>();
+            var jobsToProcess = new List<(int JobId, int CredentialId, DateTime? StartDate, DateTime? EndDate, int ExecutionId, long VMAccountId, string? InterfaceAccountId)>();
             int markedCount = 0;
             int setupProcessedSinceLastSave = 0;
             var startTime = DateTime.UtcNow;
@@ -302,7 +302,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             {
                 if (executionsByJobId.TryGetValue(job.Id, out var execution))
                 {
-                    jobsToProcess.Add((job.Id, job.CredentialId, job.NextRangeStartDateTime, job.NextRangeEndDateTime, execution.Id));
+                    jobsToProcess.Add((job.Id, job.CredentialId, job.NextRangeStartDateTime, job.NextRangeEndDateTime, execution.Id, job.VMAccountId, job.AdrAccount?.InterfaceAccountId));
                 }
             }
             
@@ -327,6 +327,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         jobInfo.StartDate,
                         jobInfo.EndDate,
                         jobInfo.JobId,
+                        jobInfo.VMAccountId,
+                        jobInfo.InterfaceAccountId,
                         cancellationToken);
 
                     apiResults[jobInfo.JobId] = (apiResult, jobInfo.ExecutionId);
@@ -510,7 +512,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
             // Step 1: Mark all jobs as "InProgress" in batches (for idempotency)
             const int setupBatchSize = 500;
-            var jobsToProcess = new List<(int JobId, int CredentialId, DateTime? StartDate, DateTime? EndDate, int ExecutionId)>();
+            var jobsToProcess = new List<(int JobId, int CredentialId, DateTime? StartDate, DateTime? EndDate, int ExecutionId, long VMAccountId, string? InterfaceAccountId)>();
             var executionsByJobId = new Dictionary<int, AdrJobExecution>();
             int markedCount = 0;
             int setupProcessedSinceLastSave = 0;
@@ -569,7 +571,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             {
                 if (executionsByJobId.TryGetValue(job.Id, out var execution))
                 {
-                    jobsToProcess.Add((job.Id, job.CredentialId, job.NextRangeStartDateTime, job.NextRangeEndDateTime, execution.Id));
+                    jobsToProcess.Add((job.Id, job.CredentialId, job.NextRangeStartDateTime, job.NextRangeEndDateTime, execution.Id, job.VMAccountId, job.AdrAccount?.InterfaceAccountId));
                 }
             }
             
@@ -594,6 +596,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         jobInfo.StartDate,
                         jobInfo.EndDate,
                         jobInfo.JobId,
+                        jobInfo.VMAccountId,
+                        jobInfo.InterfaceAccountId,
                         cancellationToken);
 
                     apiResults[jobInfo.JobId] = (apiResult, jobInfo.ExecutionId);
@@ -1035,6 +1039,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         DateTime? startDate,
         DateTime? endDate,
         int jobId,
+        long vmAccountId,
+        string? interfaceAccountId,
         CancellationToken cancellationToken)
     {
         var result = new AdrApiResult();
@@ -1042,6 +1048,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         try
         {
             var baseUrl = _configuration["AdrApi:BaseUrl"] ?? "https://nuse2etsadrdevfn01.azurewebsites.net/api/";
+            var sourceApplicationName = _configuration["AdrApi:SourceApplicationName"] ?? "ADRScheduler";
             var recipientEmail = _configuration["AdrApi:RecipientEmail"] ?? "lcassin@cassinfo.com";
 
             var client = _httpClientFactory.CreateClient("AdrApi");
@@ -1052,9 +1059,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 CredentialId = credentialId,
                 StartDate = startDate?.ToString("yyyy-MM-dd"),
                 EndDate = endDate?.ToString("yyyy-MM-dd"),
-                SourceApplicationName = "ADRScheduler",
+                SourceApplicationName = sourceApplicationName,
                 RecipientEmail = recipientEmail,
-                JobId = jobId
+                JobId = jobId,
+                AccountId = vmAccountId,
+                InterfaceAccountId = interfaceAccountId
             };
 
             var response = await client.PostAsJsonAsync(

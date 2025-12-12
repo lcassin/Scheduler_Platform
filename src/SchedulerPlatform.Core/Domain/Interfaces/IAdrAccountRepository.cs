@@ -16,7 +16,8 @@ public interface IAdrAccountRepository : IRepository<AdrAccount>
         int? credentialId = null,
         string? nextRunStatus = null,
         string? searchTerm = null,
-        string? historicalBillingStatus = null);
+        string? historicalBillingStatus = null,
+        bool? isOverridden = null);
     Task<int> GetTotalCountAsync(int? clientId = null);
     Task<int> GetCountByNextRunStatusAsync(string status, int? clientId = null);
     Task<int> GetCountByHistoricalStatusAsync(string status, int? clientId = null);
