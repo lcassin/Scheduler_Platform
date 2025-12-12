@@ -37,7 +37,8 @@ public interface IAdrService
             bool latestPerAccount = false,
             long? vmAccountId = null,
             string? interfaceAccountId = null,
-            int? credentialId = null);
+            int? credentialId = null,
+            bool? isManualRequest = null);
     Task<AdrJob?> GetJobAsync(int id);
     Task<List<AdrJob>> GetJobsByAccountAsync(int adrAccountId);
     Task<AdrJobStats> GetJobStatsAsync();
