@@ -1823,6 +1823,27 @@ public class AdrController : ControllerBase
     {
         try
         {
+            // First, detect and fix stale "Running" records (running for more than 30 minutes without completion)
+            var staleThreshold = DateTime.UtcNow.AddMinutes(-30);
+            var staleRuns = await _dbContext.AdrOrchestrationRuns
+                .Where(r => !r.IsDeleted && r.Status == "Running" && r.StartedDateTime.HasValue && r.StartedDateTime < staleThreshold && r.CompletedDateTime == null)
+                .ToListAsync();
+            
+            if (staleRuns.Any())
+            {
+                foreach (var staleRun in staleRuns)
+                {
+                    staleRun.Status = "Failed";
+                    staleRun.CompletedDateTime = DateTime.UtcNow;
+                    staleRun.ErrorMessage = "Orchestration run exceeded maximum expected duration (30 minutes) and was marked as failed. The process may have crashed or been terminated unexpectedly.";
+                    staleRun.ModifiedDateTime = DateTime.UtcNow;
+                    staleRun.ModifiedBy = "System";
+                    _logger.LogWarning("Marking stale orchestration run {RequestId} as Failed - started at {StartedAt}, exceeded 30 minute threshold", 
+                        staleRun.RequestId, staleRun.StartedDateTime);
+                }
+                await _dbContext.SaveChangesAsync();
+            }
+            
             // Try to get history from database first
             var query = _dbContext.AdrOrchestrationRuns
                 .Where(r => !r.IsDeleted)
