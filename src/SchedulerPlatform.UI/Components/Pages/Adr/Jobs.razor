@@ -178,11 +178,21 @@
                         <MudText Typo="Typo.body2" Color="Color.Secondary">N/A</MudText>
                     }
                 </MudTd>
-                <MudTd DataLabel="Status">
-                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
-                        @context.Status
-                    </MudChip>
-                </MudTd>
+                                <MudTd DataLabel="Status">
+                                    <div class="d-flex align-center gap-1">
+                                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
+                                            @context.Status
+                                        </MudChip>
+                                        @if (context.IsManualRequest)
+                                        {
+                                            <MudTooltip Text="@($"Manual request: {context.ManualRequestReason ?? "No reason provided"}")">
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
+                                                    Manual
+                                                </MudChip>
+                                            </MudTooltip>
+                                        }
+                                    </div>
+                                </MudTd>
                 <MudTd DataLabel="Next Action">
                     @{
                         var (action, actionDate, actionColor) = GetNextAction(context);
@@ -212,17 +222,21 @@
                     }
                 </MudTd>
                 <MudTd DataLabel="Retry Count">@context.RetryCount</MudTd>
-                                <MudTd DataLabel="Actions">
-                                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
-                                        <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewJobDetails(context)">View Details</MudMenuItem>
-                                        @if (_showLatestPerAccount)
-                                        {
-                                            <MudMenuItem Icon="@Icons.Material.Filled.List" OnClick="() => ViewJobHistory(context)">View Job History</MudMenuItem>
-                                        }
-                                        <MudMenuItem Icon="@Icons.Material.Filled.AccountBalance" OnClick="() => ViewAccount(context)">View Account</MudMenuItem>
-                                        <MudMenuItem Icon="@Icons.Material.Filled.Replay" OnClick="() => RefireJob(context)">Refire Job</MudMenuItem>
-                                    </MudMenu>
-                                </MudTd>
+                                                                <MudTd DataLabel="Actions">
+                                                                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
+                                                                        <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewJobDetails(context)">View Details</MudMenuItem>
+                                                                        @if (_showLatestPerAccount)
+                                                                        {
+                                                                            <MudMenuItem Icon="@Icons.Material.Filled.List" OnClick="() => ViewJobHistory(context)">View Job History</MudMenuItem>
+                                                                        }
+                                                                        <MudMenuItem Icon="@Icons.Material.Filled.AccountBalance" OnClick="() => ViewAccount(context)">View Account</MudMenuItem>
+                                                                        <MudMenuItem Icon="@Icons.Material.Filled.Replay" OnClick="() => RefireJob(context)">Refire Job</MudMenuItem>
+                                                                        @if (context.IsManualRequest && (context.Status == "ScrapeRequested" || context.Status == "ScrapeInProgress"))
+                                                                        {
+                                                                            <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="() => CheckJobStatus(context)">Check Status</MudMenuItem>
+                                                                        }
+                                                                    </MudMenu>
+                                                                </MudTd>
             </RowTemplate>
                         <NoRecordsContent>
                             <MudText Align="Align.Center" Class="my-8">
@@ -671,6 +685,30 @@
         finally
         {
             _isRefiring = false;
+        }
+    }
+
+    private async Task CheckJobStatus(AdrJob job)
+    {
+        try
+        {
+            var result = await AdrService.CheckJobStatusAsync(job.Id);
+            if (result.IsSuccess)
+            {
+                var message = result.IsFinal 
+                    ? $"Job {job.Id} status: {result.StatusDescription ?? "Unknown"} (Final). Job status: {result.JobStatus}"
+                    : $"Job {job.Id} status: {result.StatusDescription ?? "Unknown"}. IndexId: {result.IndexId}";
+                Snackbar.Add(message, result.IsError ? Severity.Warning : Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add($"Status check failed: {result.ErrorMessage}", Severity.Error);
+            }
+            await _table.ReloadServerData();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to check job status: {ex.Message}", Severity.Error);
         }
     }
 }

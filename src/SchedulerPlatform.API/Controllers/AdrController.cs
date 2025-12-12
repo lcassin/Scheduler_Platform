@@ -20,6 +20,8 @@ public class AdrController : ControllerBase
     private readonly IAdrOrchestratorService _orchestratorService;
     private readonly IAdrOrchestrationQueue _orchestrationQueue;
     private readonly SchedulerDbContext _dbContext;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<AdrController> _logger;
 
     public AdrController(
@@ -28,6 +30,8 @@ public class AdrController : ControllerBase
         IAdrOrchestratorService orchestratorService,
         IAdrOrchestrationQueue orchestrationQueue,
         SchedulerDbContext dbContext,
+        IHttpClientFactory httpClientFactory,
+        IConfiguration configuration,
         ILogger<AdrController> logger)
     {
         _unitOfWork = unitOfWork;
@@ -35,6 +39,8 @@ public class AdrController : ControllerBase
         _orchestratorService = orchestratorService;
         _orchestrationQueue = orchestrationQueue;
         _dbContext = dbContext;
+        _httpClientFactory = httpClientFactory;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -381,114 +387,453 @@ public class AdrController : ControllerBase
         }
     }
 
-    /// <summary>
-    /// Admin-only endpoint to manually fire a scrape request for any date range.
-    /// This allows admins to re-request specific invoices without interfering with normal job/schedules.
-    /// </summary>
-    [HttpPost("accounts/{id}/manual-scrape")]
-    [Authorize(Policy = "AdrAccounts.Execute")]
-    public async Task<ActionResult<object>> ManualScrapeRequest(int id, [FromBody] ManualScrapeRequest request)
-    {
-        try
+        /// <summary>
+        /// Admin-only endpoint to manually fire an ADR request for any date range.
+        /// This creates a real AdrJob with IsManualRequest=true and makes the actual API call.
+        /// The job is excluded from normal orchestration but visible in the Jobs UI.
+        /// </summary>
+        [HttpPost("accounts/{id}/manual-scrape")]
+        [Authorize(Policy = "AdrAccounts.Execute")]
+        public async Task<ActionResult<object>> ManualScrapeRequest(int id, [FromBody] ManualScrapeRequest request)
         {
-            // Check if user is admin or super admin
-            var isSystemAdmin = User.Claims.Any(c => c.Type == "is_system_admin" && c.Value == "True");
-            var isAdmin = User.Claims.Any(c => c.Type == "role" && c.Value == "Admin");
+            try
+            {
+                // Check if user is admin or super admin
+                var isSystemAdmin = User.Claims.Any(c => c.Type == "is_system_admin" && c.Value == "True");
+                var isAdmin = User.Claims.Any(c => c.Type == "role" && c.Value == "Admin");
             
-            if (!isSystemAdmin && !isAdmin)
-            {
-                return Forbid("Only administrators can perform manual scrape requests");
-            }
-
-            var account = await _unitOfWork.AdrAccounts.GetByIdAsync(id);
-            if (account == null)
-            {
-                return NotFound("Account not found");
-            }
-
-            if (account.CredentialId <= 0)
-            {
-                return BadRequest("Account does not have a credential ID assigned");
-            }
-
-            var username = User.Identity?.Name ?? "Unknown";
-
-            // Calculate date range based on period type if not provided
-            var windowDays = account.PeriodType switch
-            {
-                "Bi-Weekly" => 3,
-                "Monthly" => 5,
-                "Bi-Monthly" => 7,
-                "Quarterly" => 10,
-                "Semi-Annually" => 14,
-                "Annually" => 21,
-                _ => 5
-            };
-
-            var rangeStart = request.RangeStartDate ?? request.TargetDate.AddDays(-windowDays);
-            var rangeEnd = request.RangeEndDate ?? request.TargetDate.AddDays(windowDays);
-
-            // Create an execution record to track this admin request (not tied to a job)
-            var execution = new AdrJobExecution
-            {
-                AdrJobId = 0, // Special value indicating admin manual request (not tied to a job)
-                AdrRequestTypeId = 2, // Download Invoice
-                StartDateTime = DateTime.UtcNow,
-                IsSuccess = false, // Will be updated when we get a response
-                RequestPayload = System.Text.Json.JsonSerializer.Serialize(new
+                if (!isSystemAdmin && !isAdmin)
                 {
-                    AccountId = account.Id,
+                    return Forbid("Only administrators can perform manual ADR requests");
+                }
+
+                var account = await _unitOfWork.AdrAccounts.GetByIdAsync(id);
+                if (account == null)
+                {
+                    return NotFound("Account not found");
+                }
+
+                if (account.CredentialId <= 0)
+                {
+                    return BadRequest("Account does not have a credential ID assigned");
+                }
+
+                var username = User.Identity?.Name ?? "Unknown";
+
+                // Calculate date range based on period type if not provided
+                var windowDays = account.PeriodType switch
+                {
+                    "Bi-Weekly" => 3,
+                    "Monthly" => 5,
+                    "Bi-Monthly" => 7,
+                    "Quarterly" => 10,
+                    "Semi-Annually" => 14,
+                    "Annually" => 21,
+                    _ => 5
+                };
+
+                var rangeStart = request.RangeStartDate ?? request.TargetDate.AddDays(-windowDays);
+                var rangeEnd = request.RangeEndDate ?? request.TargetDate.AddDays(windowDays);
+
+                // Step 1: Create a real AdrJob record with IsManualRequest = true
+                // This job is excluded from orchestration but visible in Jobs UI
+                var job = new AdrJob
+                {
+                    AdrAccountId = account.Id,
                     VMAccountId = account.VMAccountId,
                     VMAccountNumber = account.VMAccountNumber,
-                    InterfaceAccountId = account.InterfaceAccountId,
-                    CredentialId = account.CredentialId,
                     VendorCode = account.VendorCode,
-                    ClientName = account.ClientName,
-                    RangeStartDate = rangeStart,
-                    RangeEndDate = rangeEnd,
-                    TargetDate = request.TargetDate,
-                    RequestedBy = username,
-                    RequestedAt = DateTime.UtcNow,
-                    Reason = request.Reason,
-                    IsAdminManualRequest = true
-                }),
-                CreatedDateTime = DateTime.UtcNow,
-                CreatedBy = username,
-                ModifiedDateTime = DateTime.UtcNow,
-                ModifiedBy = username
-            };
+                    CredentialId = account.CredentialId,
+                    PeriodType = account.PeriodType,
+                    BillingPeriodStartDateTime = rangeStart,
+                    BillingPeriodEndDateTime = rangeEnd,
+                    NextRunDateTime = DateTime.UtcNow,
+                    NextRangeStartDateTime = rangeStart,
+                    NextRangeEndDateTime = rangeEnd,
+                    Status = "ScrapeInProgress",
+                    IsMissing = false,
+                    IsManualRequest = true,
+                    ManualRequestReason = request.Reason,
+                    CreatedDateTime = DateTime.UtcNow,
+                    CreatedBy = username,
+                    ModifiedDateTime = DateTime.UtcNow,
+                    ModifiedBy = username
+                };
 
-            // Note: The actual API call would be made here in a real implementation
-            // For now, we're just recording the request for tracking purposes
-            // The orchestrator service would need to be extended to handle these manual requests
+                await _unitOfWork.AdrJobs.AddAsync(job);
+                await _unitOfWork.SaveChangesAsync();
 
-            await _unitOfWork.AdrJobExecutions.AddAsync(execution);
-            await _unitOfWork.SaveChangesAsync();
+                _logger.LogInformation(
+                    "Created manual AdrJob {JobId} for account {AccountId} ({VMAccountNumber}). Range: {RangeStart} to {RangeEnd}",
+                    job.Id, id, account.VMAccountNumber, rangeStart, rangeEnd);
 
-            _logger.LogInformation(
-                "Admin manual scrape request created by {User} for account {AccountId} ({VMAccountNumber}). " +
-                "Range: {RangeStart} to {RangeEnd}. Reason: {Reason}",
-                username, id, account.VMAccountNumber, rangeStart, rangeEnd, request.Reason);
+                // Step 2: Create an AdrJobExecution linked to the job
+                var execution = new AdrJobExecution
+                {
+                    AdrJobId = job.Id,
+                    AdrRequestTypeId = 2, // Download Invoice
+                    StartDateTime = DateTime.UtcNow,
+                    IsSuccess = false,
+                    RequestPayload = System.Text.Json.JsonSerializer.Serialize(new
+                    {
+                        JobId = job.Id,
+                        AccountId = account.Id,
+                        VMAccountId = account.VMAccountId,
+                        VMAccountNumber = account.VMAccountNumber,
+                        InterfaceAccountId = account.InterfaceAccountId,
+                        CredentialId = account.CredentialId,
+                        VendorCode = account.VendorCode,
+                        ClientName = account.ClientName,
+                        RangeStartDate = rangeStart,
+                        RangeEndDate = rangeEnd,
+                        TargetDate = request.TargetDate,
+                        RequestedBy = username,
+                        RequestedAt = DateTime.UtcNow,
+                        Reason = request.Reason,
+                        IsManualRequest = true
+                    }),
+                    CreatedDateTime = DateTime.UtcNow,
+                    CreatedBy = username,
+                    ModifiedDateTime = DateTime.UtcNow,
+                    ModifiedBy = username
+                };
 
-            return Ok(new
+                await _unitOfWork.AdrJobExecutions.AddAsync(execution);
+                await _unitOfWork.SaveChangesAsync();
+
+                // Step 3: Make the actual ADR API call (same as orchestrator)
+                var baseUrl = _configuration["AdrApi:BaseUrl"] ?? "https://nuse2etsadrdevfn01.azurewebsites.net/api/";
+                var sourceApplicationName = _configuration["AdrApi:SourceApplicationName"] ?? "ADRScheduler";
+                var recipientEmail = _configuration["AdrApi:RecipientEmail"] ?? "lcassin@cassinfo.com";
+
+                var client = _httpClientFactory.CreateClient("AdrApi");
+
+                var apiRequest = new
+                {
+                    ADRRequestTypeId = 2, // Download Invoice
+                    CredentialId = account.CredentialId,
+                    StartDate = rangeStart.ToString("yyyy-MM-dd"),
+                    EndDate = rangeEnd.ToString("yyyy-MM-dd"),
+                    SourceApplicationName = sourceApplicationName,
+                    RecipientEmail = recipientEmail,
+                    JobId = job.Id,
+                    AccountId = account.VMAccountId,
+                    InterfaceAccountId = account.InterfaceAccountId
+                };
+
+                _logger.LogInformation(
+                    "Calling ADR API for manual job {JobId}. Request: {@Request}",
+                    job.Id, apiRequest);
+
+                int? httpStatusCode = null;
+                int? statusId = null;
+                string? statusDescription = null;
+                long? indexId = null;
+                bool isSuccess = false;
+                bool isError = false;
+                bool isFinal = false;
+                string? errorMessage = null;
+                string? rawResponse = null;
+
+                try
+                {
+                    var response = await client.PostAsJsonAsync($"{baseUrl}IngestAdrRequest", apiRequest);
+                    httpStatusCode = (int)response.StatusCode;
+                    rawResponse = await response.Content.ReadAsStringAsync();
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        if (!string.IsNullOrWhiteSpace(rawResponse))
+                        {
+                            var trimmed = rawResponse.TrimStart();
+                            if (trimmed.StartsWith("{"))
+                            {
+                                var apiResponse = System.Text.Json.JsonSerializer.Deserialize<ManualAdrApiResponse>(rawResponse, new System.Text.Json.JsonSerializerOptions
+                                {
+                                    PropertyNameCaseInsensitive = true
+                                });
+
+                                if (apiResponse != null)
+                                {
+                                    statusId = apiResponse.StatusId;
+                                    statusDescription = apiResponse.StatusDescription;
+                                    indexId = apiResponse.IndexId;
+                                    isSuccess = true;
+                                    isError = apiResponse.IsError;
+                                    isFinal = apiResponse.IsFinal;
+                                }
+                            }
+                            else if (trimmed.StartsWith("["))
+                            {
+                                var list = System.Text.Json.JsonSerializer.Deserialize<List<ManualAdrApiResponse>>(rawResponse, new System.Text.Json.JsonSerializerOptions
+                                {
+                                    PropertyNameCaseInsensitive = true
+                                });
+                                var apiResponse = list?.FirstOrDefault();
+                                if (apiResponse != null)
+                                {
+                                    statusId = apiResponse.StatusId;
+                                    statusDescription = apiResponse.StatusDescription;
+                                    indexId = apiResponse.IndexId;
+                                    isSuccess = true;
+                                    isError = apiResponse.IsError;
+                                    isFinal = apiResponse.IsFinal;
+                                }
+                            }
+                            else if (long.TryParse(trimmed, out var parsedIndexId))
+                            {
+                                indexId = parsedIndexId;
+                                isSuccess = true;
+                                statusDescription = "Request submitted successfully";
+                            }
+                            else
+                            {
+                                isSuccess = true;
+                                statusDescription = rawResponse.Length > 200 ? rawResponse.Substring(0, 200) + "..." : rawResponse;
+                            }
+                        }
+                        else
+                        {
+                            isSuccess = true;
+                            statusDescription = "Request submitted (no response body)";
+                        }
+                    }
+                    else
+                    {
+                        isError = true;
+                        errorMessage = $"API returned {response.StatusCode}: {(rawResponse?.Length > 200 ? rawResponse.Substring(0, 200) + "..." : rawResponse)}";
+                    
+                        // Try to extract IndexId from error response
+                        if (!string.IsNullOrWhiteSpace(rawResponse) && rawResponse.TrimStart().StartsWith("{"))
+                        {
+                            try
+                            {
+                                using var doc = System.Text.Json.JsonDocument.Parse(rawResponse);
+                                if (doc.RootElement.TryGetProperty("indexId", out var indexIdProp) ||
+                                    doc.RootElement.TryGetProperty("IndexId", out indexIdProp))
+                                {
+                                    if (indexIdProp.TryGetInt64(out var extractedIndexId))
+                                    {
+                                        indexId = extractedIndexId;
+                                    }
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                }
+                catch (Exception apiEx)
+                {
+                    isError = true;
+                    errorMessage = $"API call failed: {apiEx.Message}";
+                    _logger.LogError(apiEx, "Error calling ADR API for manual job {JobId}", job.Id);
+                }
+
+                // Step 4: Update execution with API response
+                execution.EndDateTime = DateTime.UtcNow;
+                execution.HttpStatusCode = httpStatusCode;
+                execution.AdrStatusId = statusId;
+                execution.AdrStatusDescription = statusDescription;
+                execution.AdrIndexId = indexId;
+                execution.IsSuccess = isSuccess;
+                execution.IsError = isError;
+                execution.IsFinal = isFinal;
+                execution.ErrorMessage = errorMessage;
+                execution.ApiResponse = rawResponse?.Length > 4000 ? rawResponse.Substring(0, 4000) : rawResponse;
+                execution.ModifiedDateTime = DateTime.UtcNow;
+                execution.ModifiedBy = username;
+
+                await _unitOfWork.AdrJobExecutions.UpdateAsync(execution);
+
+                // Update job status based on API response
+                if (isSuccess && !isError)
+                {
+                    job.Status = "ScrapeRequested";
+                    job.AdrStatusId = statusId;
+                    job.AdrStatusDescription = statusDescription;
+                    job.AdrIndexId = indexId;
+                }
+                else
+                {
+                    job.Status = "ScrapeFailed";
+                    job.ErrorMessage = errorMessage;
+                }
+                job.ModifiedDateTime = DateTime.UtcNow;
+                job.ModifiedBy = username;
+
+                await _unitOfWork.AdrJobs.UpdateAsync(job);
+                await _unitOfWork.SaveChangesAsync();
+
+                _logger.LogInformation(
+                    "Manual ADR request completed for job {JobId}. Success: {IsSuccess}, StatusCode: {StatusCode}, IndexId: {IndexId}",
+                    job.Id, isSuccess, httpStatusCode, indexId);
+
+                // Step 5: Return full API response to UI
+                return Ok(new
+                {
+                    message = isSuccess ? "Manual ADR request submitted successfully" : "Manual ADR request failed",
+                    jobId = job.Id,
+                    executionId = execution.Id,
+                    accountId = id,
+                    vmAccountNumber = account.VMAccountNumber,
+                    credentialId = account.CredentialId,
+                    rangeStartDate = rangeStart,
+                    rangeEndDate = rangeEnd,
+                    requestedBy = username,
+                    requestedAt = execution.StartDateTime,
+                    // API Response details
+                    httpStatusCode = httpStatusCode,
+                    isSuccess = isSuccess,
+                    isError = isError,
+                    isFinal = isFinal,
+                    statusId = statusId,
+                    statusDescription = statusDescription,
+                    indexId = indexId,
+                    errorMessage = errorMessage
+                });
+            }
+            catch (Exception ex)
             {
-                message = "Manual scrape request recorded successfully",
-                executionId = execution.Id,
-                accountId = id,
-                vmAccountNumber = account.VMAccountNumber,
-                credentialId = account.CredentialId,
-                rangeStartDate = rangeStart,
-                rangeEndDate = rangeEnd,
-                requestedBy = username,
-                requestedAt = DateTime.UtcNow
-            });
+                _logger.LogError(ex, "Error creating manual ADR request for account {AccountId}", id);
+                return StatusCode(500, "An error occurred while creating the manual ADR request");
+            }
         }
-        catch (Exception ex)
+
+        /// <summary>
+        /// Check the status of a manual ADR job using the same API as orchestrated jobs.
+        /// </summary>
+        [HttpPost("jobs/{jobId}/check-status")]
+        [Authorize(Policy = "AdrAccounts.Execute")]
+        public async Task<ActionResult<object>> CheckManualJobStatus(int jobId)
         {
-            _logger.LogError(ex, "Error creating manual scrape request for account {AccountId}", id);
-            return StatusCode(500, "An error occurred while creating the manual scrape request");
+            try
+            {
+                var job = await _unitOfWork.AdrJobs.GetByIdAsync(jobId);
+                if (job == null)
+                {
+                    return NotFound("Job not found");
+                }
+
+                var username = User.Identity?.Name ?? "Unknown";
+
+                // Create execution record for status check
+                var execution = new AdrJobExecution
+                {
+                    AdrJobId = job.Id,
+                    AdrRequestTypeId = 3, // Check Status
+                    StartDateTime = DateTime.UtcNow,
+                    IsSuccess = false,
+                    CreatedDateTime = DateTime.UtcNow,
+                    CreatedBy = username,
+                    ModifiedDateTime = DateTime.UtcNow,
+                    ModifiedBy = username
+                };
+
+                await _unitOfWork.AdrJobExecutions.AddAsync(execution);
+                await _unitOfWork.SaveChangesAsync();
+
+                // Call the status check API
+                var baseUrl = _configuration["AdrApi:BaseUrl"] ?? "https://nuse2etsadrdevfn01.azurewebsites.net/api/";
+                var client = _httpClientFactory.CreateClient("AdrApi");
+
+                int? httpStatusCode = null;
+                int? statusId = null;
+                string? statusDescription = null;
+                long? indexId = null;
+                bool isSuccess = false;
+                bool isError = false;
+                bool isFinal = false;
+                string? errorMessage = null;
+                string? rawResponse = null;
+
+                try
+                {
+                    var response = await client.GetAsync($"{baseUrl}GetRequestStatusByJobId/{jobId}");
+                    httpStatusCode = (int)response.StatusCode;
+                    rawResponse = await response.Content.ReadAsStringAsync();
+
+                    if (response.IsSuccessStatusCode && !string.IsNullOrWhiteSpace(rawResponse))
+                    {
+                        var apiResponse = System.Text.Json.JsonSerializer.Deserialize<ManualAdrApiResponse>(rawResponse, new System.Text.Json.JsonSerializerOptions
+                        {
+                            PropertyNameCaseInsensitive = true
+                        });
+
+                        if (apiResponse != null)
+                        {
+                            statusId = apiResponse.StatusId;
+                            statusDescription = apiResponse.StatusDescription;
+                            indexId = apiResponse.IndexId;
+                            isSuccess = true;
+                            isError = apiResponse.IsError;
+                            isFinal = apiResponse.IsFinal;
+                        }
+                    }
+                    else
+                    {
+                        isError = true;
+                        errorMessage = $"API returned {response.StatusCode}: {rawResponse}";
+                    }
+                }
+                catch (Exception apiEx)
+                {
+                    isError = true;
+                    errorMessage = $"API call failed: {apiEx.Message}";
+                    _logger.LogError(apiEx, "Error checking status for job {JobId}", jobId);
+                }
+
+                // Update execution
+                execution.EndDateTime = DateTime.UtcNow;
+                execution.HttpStatusCode = httpStatusCode;
+                execution.AdrStatusId = statusId;
+                execution.AdrStatusDescription = statusDescription;
+                execution.AdrIndexId = indexId;
+                execution.IsSuccess = isSuccess;
+                execution.IsError = isError;
+                execution.IsFinal = isFinal;
+                execution.ErrorMessage = errorMessage;
+                execution.ApiResponse = rawResponse?.Length > 4000 ? rawResponse.Substring(0, 4000) : rawResponse;
+                execution.ModifiedDateTime = DateTime.UtcNow;
+                execution.ModifiedBy = username;
+
+                await _unitOfWork.AdrJobExecutions.UpdateAsync(execution);
+
+                // Update job status if we got a final status
+                if (isSuccess && isFinal)
+                {
+                    job.Status = isError ? "ScrapeFailed" : "Completed";
+                    job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                }
+                job.AdrStatusId = statusId ?? job.AdrStatusId;
+                job.AdrStatusDescription = statusDescription ?? job.AdrStatusDescription;
+                job.AdrIndexId = indexId ?? job.AdrIndexId;
+                job.ModifiedDateTime = DateTime.UtcNow;
+                job.ModifiedBy = username;
+
+                await _unitOfWork.AdrJobs.UpdateAsync(job);
+                await _unitOfWork.SaveChangesAsync();
+
+                return Ok(new
+                {
+                    jobId = job.Id,
+                    executionId = execution.Id,
+                    httpStatusCode = httpStatusCode,
+                    isSuccess = isSuccess,
+                    isError = isError,
+                    isFinal = isFinal,
+                    statusId = statusId,
+                    statusDescription = statusDescription,
+                    indexId = indexId,
+                    errorMessage = errorMessage,
+                    jobStatus = job.Status
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking status for job {JobId}", jobId);
+                return StatusCode(500, "An error occurred while checking job status");
+            }
         }
-    }
 
     [HttpGet("accounts/export")]
     public async Task<IActionResult> ExportAccounts(
@@ -1685,6 +2030,18 @@ public class ManualScrapeRequest
     /// Reason for the manual scrape request (for audit purposes)
     /// </summary>
     public string? Reason { get; set; }
+}
+
+/// <summary>
+/// Response from ADR API for manual requests
+/// </summary>
+public class ManualAdrApiResponse
+{
+    public int StatusId { get; set; }
+    public string? StatusDescription { get; set; }
+    public long? IndexId { get; set; }
+    public bool IsError { get; set; }
+    public bool IsFinal { get; set; }
 }
 
 #endregion
