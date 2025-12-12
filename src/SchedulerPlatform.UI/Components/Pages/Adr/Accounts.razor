@@ -184,7 +184,7 @@
                                         }
                                         @if (_canExecuteManualScrape)
                                         {
-                                            <MudMenuItem Icon="@Icons.Material.Filled.CloudDownload" OnClick="() => OpenManualScrapeDialog(context)">Manual Scrape (Admin)</MudMenuItem>
+                                            <MudMenuItem Icon="@Icons.Material.Filled.CloudDownload" OnClick="() => OpenManualScrapeDialog(context)">Manual ADR Request (Admin)</MudMenuItem>
                                         }
                                     </MudMenu>
                                 </MudTd>
@@ -493,12 +493,12 @@
             { x => x.Account, account }
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
-        var dialog = await DialogService.ShowAsync<ManualScrapeDialog>("Manual Scrape Request", parameters, options);
+        var dialog = await DialogService.ShowAsync<ManualScrapeDialog>("Manual ADR Request", parameters, options);
         var result = await dialog.Result;
         
         if (result != null && !result.Canceled)
         {
-            Snackbar.Add("Manual scrape request submitted successfully", Severity.Success);
+            Snackbar.Add("Manual ADR request submitted successfully", Severity.Success);
         }
     }
 }
