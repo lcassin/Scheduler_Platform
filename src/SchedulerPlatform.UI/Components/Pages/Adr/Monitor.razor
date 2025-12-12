@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @attribute [Authorize]
 @inject IAdrService AdrService
+@inject IUserTimeZoneService TimeZoneService
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 @implements IDisposable
@@ -85,7 +86,7 @@
                                     </MudChip>
                                     
                                     <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Completed At</MudText>
-                                    <MudText Typo="Typo.body1" Class="mb-3">@(_lastCompletedRun.CompletedAt?.ToString("MM/dd/yyyy hh:mm:ss tt") ?? "N/A")</MudText>
+                                    <MudText Typo="Typo.body1" Class="mb-3">@FormatDateTime(_lastCompletedRun.CompletedAt, "MM/dd/yyyy hh:mm:ss tt")</MudText>
                                     
                                     @if (_lastCompletedRun.StartedAt.HasValue && _lastCompletedRun.CompletedAt.HasValue)
                                     {
@@ -192,7 +193,7 @@
                                 <MudText Typo="Typo.body1" Class="mb-3">@_currentStatus.Status.RequestedBy</MudText>
                                 
                                 <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Started At</MudText>
-                                <MudText Typo="Typo.body1">@(_currentStatus.Status.StartedAt?.ToString("MM/dd/yyyy hh:mm:ss tt") ?? "Not started")</MudText>
+                                <MudText Typo="Typo.body1">@(_currentStatus.Status.StartedAt.HasValue ? FormatDateTime(_currentStatus.Status.StartedAt, "MM/dd/yyyy hh:mm:ss tt") : "Not started")</MudText>
                             </MudItem>
                             <MudItem xs="12" md="6">
                                 <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Status</MudText>
@@ -434,9 +435,9 @@
                     <MudText Typo="Typo.caption">@context.RequestId[..8]...</MudText>
                 </MudTd>
                 <MudTd DataLabel="Requested By">@context.RequestedBy</MudTd>
-                <MudTd DataLabel="Requested At">@context.RequestedAt.ToString("MM/dd/yyyy hh:mm tt")</MudTd>
-                <MudTd DataLabel="Started At">@(context.StartedAt?.ToString("hh:mm:ss tt") ?? "N/A")</MudTd>
-                <MudTd DataLabel="Completed At">@(context.CompletedAt?.ToString("hh:mm:ss tt") ?? "N/A")</MudTd>
+                <MudTd DataLabel="Requested At">@FormatDateTime(context.RequestedAt, "MM/dd/yyyy hh:mm tt")</MudTd>
+                <MudTd DataLabel="Started At">@(context.StartedAt.HasValue ? ConvertToUserTime(context.StartedAt.Value).ToString("hh:mm:ss tt") : "N/A")</MudTd>
+                <MudTd DataLabel="Completed At">@(context.CompletedAt.HasValue ? ConvertToUserTime(context.CompletedAt.Value).ToString("hh:mm:ss tt") : "N/A")</MudTd>
                 <MudTd DataLabel="Status">
                     <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">@context.Status</MudChip>
                 </MudTd>
@@ -495,9 +496,17 @@
     private PeriodicTimer? _progressTimer;
     private CancellationTokenSource? _progressTimerCts;
     private bool _isProgressPolling = false;
+    
+    // Cached timezone info for display
+    private string _userTimeZoneAbbr = "";
+    private string _userTimeZoneId = "";
 
     protected override async Task OnInitializedAsync()
     {
+        // Initialize timezone info
+        _userTimeZoneId = await TimeZoneService.GetUserTimeZoneIdAsync();
+        _userTimeZoneAbbr = await TimeZoneService.GetUserTimeZoneAbbreviationAsync();
+        
         await LoadDataAsync();
         StartAutoRefresh();
         
@@ -840,5 +849,42 @@
     {
         _refreshTimer?.Dispose();
         StopProgressPolling();
+    }
+    
+    /// <summary>
+    /// Converts a UTC DateTime to the user's preferred timezone.
+    /// Uses the cached timezone ID from initialization.
+    /// </summary>
+    private DateTime ConvertToUserTime(DateTime utcDateTime)
+    {
+        if (string.IsNullOrEmpty(_userTimeZoneId))
+            return utcDateTime;
+        
+        try
+        {
+            // Handle Unspecified kind by treating it as UTC
+            if (utcDateTime.Kind == DateTimeKind.Unspecified)
+                utcDateTime = DateTime.SpecifyKind(utcDateTime, DateTimeKind.Utc);
+            
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(_userTimeZoneId);
+            return TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, tz);
+        }
+        catch
+        {
+            return utcDateTime;
+        }
+    }
+    
+    /// <summary>
+    /// Formats a DateTime for display with the user's timezone abbreviation.
+    /// </summary>
+    private string FormatDateTime(DateTime? dateTime, string format = "g")
+    {
+        if (!dateTime.HasValue)
+            return "N/A";
+        
+        var localTime = ConvertToUserTime(dateTime.Value);
+        var abbr = !string.IsNullOrEmpty(_userTimeZoneAbbr) ? $" ({_userTimeZoneAbbr})" : "";
+        return $"{localTime.ToString(format)}{abbr}";
     }
 }
