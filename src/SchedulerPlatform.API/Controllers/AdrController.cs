@@ -406,7 +406,7 @@ public class AdrController : ControllerBase
                 return NotFound("Account not found");
             }
 
-            if (!account.CredentialId.HasValue)
+            if (account.CredentialId <= 0)
             {
                 return BadRequest("Account does not have a credential ID assigned");
             }
