@@ -24,7 +24,8 @@ public interface IAdrJobRepository : IRepository<AdrJob>
             bool latestPerAccount = false,
             long? vmAccountId = null,
             string? interfaceAccountId = null,
-            int? credentialId = null);
+            int? credentialId = null,
+            bool? isManualRequest = null);
     Task<int> GetTotalCountAsync(int? adrAccountId = null);
     Task<int> GetCountByStatusAsync(string status);
     Task<int> GetActiveJobsCountAsync();
