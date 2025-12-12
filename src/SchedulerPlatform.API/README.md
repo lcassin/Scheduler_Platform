@@ -263,6 +263,115 @@ This is how users interact with the scheduling system. Whether through a web UI,
 - Store database connection strings for StoredProcedureJob
 - Centralized credential management with encryption
 
+#### AdrController
+**Purpose**: Manage ADR (Automated Data Retrieval) process for automated invoice scraping from vendor portals.
+
+For the complete workflow diagram, see [ADR Workflow Diagram](../../../Documents/Technical/diagrams/adr-workflow.png).
+For the sequence diagram, see [ADR Sequence Diagram](../../../Documents/Technical/diagrams/adr-sequence-orchestration.png).
+
+**Account Endpoints:**
+
+**GET /api/adr/accounts**
+- List ADR accounts with filtering and pagination
+- Query params: ?search=term&clientId=1&vendorCode=ABC&overrideFilter=all|overridden|not-overridden&page=1&pageSize=50
+- Returns: Paged list of AdrAccount entities
+- Authorization: `adr:view` permission
+
+**GET /api/adr/accounts/{id}**
+- Get specific ADR account by ID
+- Returns: AdrAccount entity with related data
+- Authorization: `adr:view` permission
+
+**PUT /api/adr/accounts/{id}/billing**
+- Update billing data for an account (manual override)
+- Request body: { lastInvoiceDateTime, periodType, periodDays, expectedNextDateTime, expectedRangeStartDateTime, expectedRangeEndDateTime }
+- Sets IsManuallyOverridden=true, OverriddenBy, OverriddenDateTime
+- Returns: 200 OK
+- Authorization: `adr:edit` permission
+
+**DELETE /api/adr/accounts/{id}/override**
+- Clear manual override flag (allow sync to update again)
+- Sets IsManuallyOverridden=false
+- Returns: 200 OK
+- Authorization: `adr:edit` permission
+
+**Job Endpoints:**
+
+**GET /api/adr/jobs**
+- List ADR jobs with filtering and pagination
+- Query params: ?search=term&status=Pending&latestPerAccount=true&page=1&pageSize=50
+- Returns: Paged list of AdrJob entities
+- Authorization: `adr:view` permission
+
+**GET /api/adr/jobs/{id}**
+- Get specific ADR job by ID
+- Returns: AdrJob entity with executions
+- Authorization: `adr:view` permission
+
+**POST /api/adr/jobs/{id}/refire**
+- Force refire a job (bypass idempotency check)
+- Use case: Re-run a job that failed or needs to be re-processed
+- Returns: 200 OK with new execution result
+- Authorization: `adr:execute` permission
+
+**Orchestration Endpoints:**
+
+**POST /api/adr/orchestrate/sync-accounts**
+- Sync accounts from VendorCredNewUAT database
+- Preserves manual overrides during sync
+- Returns: { inserted, updated, total }
+- Authorization: `adr:execute` permission
+
+**POST /api/adr/orchestrate/create-jobs**
+- Create jobs for accounts with NextRunStatus = "Run Now" or "Due Soon"
+- Excludes accounts with HistoricalBillingStatus = "Missing"
+- Prevents duplicate jobs via unique constraint
+- Returns: { created, skipped }
+- Authorization: `adr:execute` permission
+
+**POST /api/adr/orchestrate/run-full-cycle**
+- Run complete orchestration synchronously (for testing)
+- Steps: Sync Accounts → Create Jobs → Verify Credentials → Process Scraping → Check Statuses
+- Returns: Complete orchestration results
+- Authorization: `adr:execute` permission
+- Note: Use run-background for production
+
+**POST /api/adr/orchestrate/run-background**
+- Queue orchestration to run in background (for scheduled jobs)
+- Returns immediately with requestId
+- Progress tracked in AdrOrchestrationRun table
+- Returns: { requestId }
+- Authorization: `adr:execute` permission
+
+**GET /api/adr/orchestrate/current**
+- Get current orchestration status
+- Returns: AdrOrchestrationRun with progress (currentStep, processedItems, totalItems)
+- Authorization: `adr:view` permission
+
+**GET /api/adr/orchestrate/history**
+- Get orchestration run history with pagination
+- Query params: ?page=1&pageSize=10
+- Returns: Paged list of AdrOrchestrationRun entities
+- Authorization: `adr:view` permission
+
+**Monitoring Endpoints:**
+
+**GET /api/adr/missing-accounts**
+- Get accounts with HistoricalBillingStatus = "Missing"
+- Returns: List of accounts needing research
+- Authorization: `adr:view` permission
+
+**GET /api/adr/job-status-summary**
+- Get job counts by status for dashboard charts
+- Returns: { pending, credentialVerified, credentialFailed, completed, failed, needsReview }
+- Authorization: `adr:view` permission
+
+**ADR API Integration Notes:**
+- External ADR API returns IndexId (64-bit integer) on success
+- Request payload must include AccountId (VMAccountId) and InterfaceAccountId
+- Idempotency: Check AdrJobExecution before making API calls to prevent duplicate charges
+- Parallel processing: Configurable worker threads (default: 15) via AdrParallelWorkers setting
+
 ### Request/Response Models
 
 #### BulkScheduleRequest

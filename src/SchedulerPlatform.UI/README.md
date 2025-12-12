@@ -341,6 +341,8 @@ private async Task LoadCalendarData()
 - **Status Breakdown**: Pie chart showing distribution of execution statuses
 - **Top Longest Executions**: Table showing the 10 longest-running job executions
 - **Real-Time Metrics**: Active jobs count, success rate, failure rate
+- **ADR Orchestration Card**: Shows current ADR orchestration status with link to Job Monitor
+- **Recent Orchestration Runs**: Table showing last 5 ADR orchestration runs with status and results
 
 **Multi-Select Status Filter**:
 ```csharp
@@ -400,6 +402,88 @@ protected override async Task OnInitializedAsync()
 - **Timezone Abbreviations**: Display timestamps with local timezone abbreviations using `GetLocalTimeZoneAbbreviation()`
 - **Execution Details Dialog**: Click on execution row to open detailed dialog with full information
 - **Cancel Execution**: Ability to cancel running executions with user tracking
+
+### ADR UI Pages
+
+The ADR (Automated Data Retrieval) section provides pages for managing automated invoice scraping from vendor portals. Access requires `adr:view` permission; editing requires `adr:edit`; orchestration requires `adr:execute`.
+
+#### Adr/Monitor.razor
+**Purpose**: Real-time monitoring of ADR orchestration runs with progress tracking.
+
+**Route**: `/adr/monitor`
+
+**Features**:
+- **Orchestration Status Card**: Shows current run status (Queued, Running, Completed, Failed)
+- **Step Timeline**: Visual timeline showing progress through 5 orchestration steps
+- **Progress Bars**: Real-time progress bars for each step showing processed/total items
+- **Step Results**: Displays results for each completed step (e.g., "Inserted: 150, Updated: 25,000")
+- **Auto-Refresh**: Polls every 2 seconds during active orchestration
+- **Start Orchestration Button**: Triggers new orchestration run (requires `adr:execute`)
+- **Recent Runs Table**: Shows last 5 orchestration runs with expandable history
+- **Job Status Chart**: Bar chart showing job counts by status
+
+**Orchestration Steps Displayed**:
+1. Sync Accounts - Shows inserted/updated/total counts
+2. Create Jobs - Shows created/skipped counts
+3. Verify Credentials - Shows verified/failed counts
+4. Process Scraping - Shows requested/failed counts
+5. Check Statuses - Shows checked/failed counts
+
+#### Adr/Accounts.razor
+**Purpose**: View and manage ADR accounts synced from VendorCredNewUAT database.
+
+**Route**: `/adr/accounts`
+
+**Features**:
+- **Search**: Filter by account number, client name, or vendor code
+- **Client Filter**: Dropdown to filter by specific client
+- **Vendor Code Filter**: Dropdown to filter by vendor
+- **Override Filter**: Filter by override status (All, Overridden Only, Not Overridden)
+- **Override Badge**: Visual indicator (orange "Override" chip) on manually overridden accounts
+- **Edit Billing Dialog**: Modal to edit billing dates and frequency (requires `adr:edit`)
+- **Clear Override**: Button to remove manual override flag
+- **Pagination**: Server-side paging with configurable page size
+- **Enter Key Support**: Press Enter in search field to apply filters
+
+**Editable Fields** (via Edit Billing dialog):
+- Last Invoice Date
+- Period Type (Monthly, Quarterly, etc.)
+- Period Days
+- Expected Next Date
+- Expected Range Start/End Dates
+
+#### Adr/Jobs.razor
+**Purpose**: View and manage ADR scraping jobs for each account/billing period.
+
+**Route**: `/adr/jobs`
+
+**Features**:
+- **Search**: Filter by account number or vendor code
+- **Status Filter**: Filter by job status (Pending, CredentialVerified, CredentialFailed, Completed, Failed, NeedsReview)
+- **Latest Per Account Toggle**: Show only the most recent job per account
+- **Next Action Column**: Shows what action is next and when (e.g., "Scrape on 12/17/2025")
+- **Force Refire Button**: Re-run a job bypassing idempotency (requires `adr:execute`)
+- **Pagination**: Server-side paging with configurable page size
+- **Enter Key Support**: Press Enter in search field to apply filters
+
+**Job Status Colors**:
+- Pending: Default
+- CredentialVerified: Success (green)
+- CredentialFailed: Warning (orange)
+- Completed: Success (green)
+- Failed: Error (red)
+- NeedsReview: Warning (orange)
+
+#### Adr/MissingAccounts.razor
+**Purpose**: Report of accounts with HistoricalBillingStatus = "Missing" that need research.
+
+**Route**: `/adr/missing`
+
+**Features**:
+- **Missing Accounts List**: Shows accounts where billing history is missing
+- **Account Details**: Displays account number, client, vendor, last invoice date
+- **Research Workflow**: Helps operators identify accounts needing investigation
+- **Link to Account**: Click to navigate to account details
 
 ### Services
 
