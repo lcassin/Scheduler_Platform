@@ -94,6 +94,26 @@ VALUES (3, 'ADR Full Cycle', 'Runs full ADR orchestration cycle: create jobs, ve
 SET IDENTITY_INSERT [Schedule] OFF;
 
 -- =============================================
+-- 5. NotificationSetting Table (3 records - one per system schedule)
+-- Sends failure notifications to lcassin@cassinfo.com
+-- =============================================
+SET IDENTITY_INSERT [NotificationSetting] ON;
+
+-- Notification for Daily Log Cleanup (ScheduleId 1)
+INSERT INTO [NotificationSetting] (NotificationSettingId, ScheduleId, EnableSuccessNotifications, EnableFailureNotifications, SuccessEmailRecipients, FailureEmailRecipients, SuccessEmailSubject, FailureEmailSubject, IncludeExecutionDetails, IncludeOutput, CreatedDateTime, ModifiedDateTime, CreatedBy, ModifiedBy, IsDeleted)
+VALUES (1, 1, 0, 1, NULL, 'lcassin@cassinfo.com', NULL, 'FAILED: Daily Log Cleanup', 1, 1, GETUTCDATE(), GETUTCDATE(), 'System Seed', 'System Seed', 0);
+
+-- Notification for ADR Account Sync (ScheduleId 2)
+INSERT INTO [NotificationSetting] (NotificationSettingId, ScheduleId, EnableSuccessNotifications, EnableFailureNotifications, SuccessEmailRecipients, FailureEmailRecipients, SuccessEmailSubject, FailureEmailSubject, IncludeExecutionDetails, IncludeOutput, CreatedDateTime, ModifiedDateTime, CreatedBy, ModifiedBy, IsDeleted)
+VALUES (2, 2, 0, 1, NULL, 'lcassin@cassinfo.com', NULL, 'FAILED: ADR Account Sync', 1, 1, GETUTCDATE(), GETUTCDATE(), 'System Seed', 'System Seed', 0);
+
+-- Notification for ADR Full Cycle (ScheduleId 3)
+INSERT INTO [NotificationSetting] (NotificationSettingId, ScheduleId, EnableSuccessNotifications, EnableFailureNotifications, SuccessEmailRecipients, FailureEmailRecipients, SuccessEmailSubject, FailureEmailSubject, IncludeExecutionDetails, IncludeOutput, CreatedDateTime, ModifiedDateTime, CreatedBy, ModifiedBy, IsDeleted)
+VALUES (3, 3, 0, 1, NULL, 'lcassin@cassinfo.com', NULL, 'FAILED: ADR Full Cycle', 1, 1, GETUTCDATE(), GETUTCDATE(), 'System Seed', 'System Seed', 0);
+
+SET IDENTITY_INSERT [NotificationSetting] OFF;
+
+-- =============================================
 -- End of Seed Data Script
 -- =============================================
 PRINT 'Seed data inserted successfully!';
