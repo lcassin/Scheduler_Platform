@@ -268,6 +268,10 @@
             var pageNumber = state.Page + 1;
             var pageSize = state.PageSize;
 
+            // Determine sort direction (default to ascending for NextRunDateTime)
+            var sortDescending = state.SortDirection == SortDirection.Descending;
+            var sortColumn = string.IsNullOrEmpty(state.SortLabel) ? "NextRunDateTime" : state.SortLabel;
+
             var result = await AdrService.GetAccountsPagedAsync(
                 pageNumber,
                 pageSize,
@@ -275,14 +279,13 @@
                 _searchTerm,
                 _filterNextRunStatus,
                 _filterHistoricalStatus,
-                _filterIsOverridden);
-
-            // Apply sorting
-            var sortedItems = ApplySorting(result.Items, state.SortLabel, state.SortDirection);
+                _filterIsOverridden,
+                sortColumn,
+                sortDescending);
 
             return new TableData<AdrAccount>
             {
-                Items = sortedItems,
+                Items = result.Items,
                 TotalItems = result.TotalCount
             };
         }
@@ -301,46 +304,6 @@
         {
             _loading = false;
         }
-    }
-
-    private List<AdrAccount> ApplySorting(List<AdrAccount> items, string? sortLabel, SortDirection sortDirection)
-    {
-        if (string.IsNullOrEmpty(sortLabel))
-        {
-            // Default sort: Next Run ascending (soonest first)
-            return items.OrderBy(a => a.NextRunDateTime ?? DateTime.MaxValue).ToList();
-        }
-
-        var isDescending = sortDirection == SortDirection.Descending;
-
-        return sortLabel switch
-        {
-            "VMAccountNumber" => isDescending 
-                ? items.OrderByDescending(a => a.VMAccountNumber ?? "").ToList() 
-                : items.OrderBy(a => a.VMAccountNumber ?? "").ToList(),
-            "InterfaceAccountId" => isDescending 
-                ? items.OrderByDescending(a => a.InterfaceAccountId ?? "").ToList() 
-                : items.OrderBy(a => a.InterfaceAccountId ?? "").ToList(),
-            "ClientName" => isDescending 
-                ? items.OrderByDescending(a => a.ClientName ?? "").ToList() 
-                : items.OrderBy(a => a.ClientName ?? "").ToList(),
-            "VendorCode" => isDescending 
-                ? items.OrderByDescending(a => a.VendorCode ?? "").ToList() 
-                : items.OrderBy(a => a.VendorCode ?? "").ToList(),
-            "PeriodType" => isDescending 
-                ? items.OrderByDescending(a => a.PeriodType ?? "").ToList() 
-                : items.OrderBy(a => a.PeriodType ?? "").ToList(),
-            "NextRunDateTime" => isDescending 
-                ? items.OrderByDescending(a => a.NextRunDateTime ?? DateTime.MinValue).ToList() 
-                : items.OrderBy(a => a.NextRunDateTime ?? DateTime.MaxValue).ToList(),
-            "NextRunStatus" => isDescending 
-                ? items.OrderByDescending(a => a.NextRunStatus ?? "").ToList() 
-                : items.OrderBy(a => a.NextRunStatus ?? "").ToList(),
-            "HistoricalBillingStatus" => isDescending 
-                ? items.OrderByDescending(a => a.HistoricalBillingStatus ?? "").ToList() 
-                : items.OrderBy(a => a.HistoricalBillingStatus ?? "").ToList(),
-            _ => items.OrderBy(a => a.NextRunDateTime ?? DateTime.MaxValue).ToList()
-        };
     }
 
     private async Task<IEnumerable<Client>> SearchClients(string value, CancellationToken cancellationToken)
