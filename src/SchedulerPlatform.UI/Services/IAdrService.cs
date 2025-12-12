@@ -71,4 +71,5 @@ public interface IAdrService
     Task<OrchestrationCurrentResponse> GetCurrentOrchestrationAsync();
     Task<AdrOrchestrationStatus?> GetOrchestrationStatusAsync(string requestId);
     Task<List<AdrOrchestrationStatus>> GetOrchestrationHistoryAsync(int? count = 10);
+    Task<OrchestrationHistoryPagedResponse> GetOrchestrationHistoryPagedAsync(int pageNumber = 1, int pageSize = 20);
 }

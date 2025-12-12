@@ -395,7 +395,7 @@
 
 <MudPaper Class="pa-4 mt-4">
     <div class="d-flex justify-space-between align-center mb-4">
-        <MudText Typo="Typo.h6">@(_showAllHistory ? "All Orchestration History" : "Recent Orchestration History")</MudText>
+        <MudText Typo="Typo.h6">@(_showAllHistory ? $"All Orchestration History ({_historyTotalCount} runs)" : "Recent Orchestration History")</MudText>
         <MudButton Variant="Variant.Text" 
                    Color="Color.Primary" 
                    StartIcon="@(_showAllHistory ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
@@ -457,6 +457,18 @@
                 </MudTd>
             </RowTemplate>
         </MudTable>
+        
+        @if (_showAllHistory && _historyTotalPages > 1)
+        {
+            <div class="d-flex justify-center mt-4">
+                <MudPagination Count="@_historyTotalPages" 
+                               Selected="@_historyPageNumber" 
+                               SelectedChanged="OnHistoryPageChanged"
+                               Color="Color.Primary"
+                               ShowFirstButton="true"
+                               ShowLastButton="true" />
+            </div>
+        }
     }
 </MudPaper>
 
@@ -472,6 +484,12 @@
     private bool _showAllHistory = false;
     private DateTime? _lastRefresh;
     private System.Threading.Timer? _refreshTimer;
+    
+    // Paging state for history
+    private int _historyPageNumber = 1;
+    private int _historyPageSize = 20;
+    private int _historyTotalCount = 0;
+    private int _historyTotalPages = 0;
     
     // Fast progress polling (every 5 seconds when orchestration is running)
     private PeriodicTimer? _progressTimer;
@@ -585,13 +603,56 @@
     private async Task ToggleShowAllHistory()
     {
         _showAllHistory = !_showAllHistory;
+        _historyPageNumber = 1; // Reset to first page when toggling
         _historyLoading = true;
         StateHasChanged();
 
         try
         {
-            // Load all history (no limit) or just recent (10 records)
-            _history = await AdrService.GetOrchestrationHistoryAsync(_showAllHistory ? null : 10);
+            if (_showAllHistory)
+            {
+                // Load paged history
+                var pagedResult = await AdrService.GetOrchestrationHistoryPagedAsync(_historyPageNumber, _historyPageSize);
+                _history = pagedResult.Items;
+                _historyTotalCount = pagedResult.TotalCount;
+                _historyTotalPages = pagedResult.TotalPages;
+            }
+            else
+            {
+                // Load just recent (10 records)
+                _history = await AdrService.GetOrchestrationHistoryAsync(10);
+                _historyTotalCount = 0;
+                _historyTotalPages = 0;
+            }
+        }
+        catch (SessionExpiredException)
+        {
+            Snackbar.Add("Your session has expired. Redirecting to login...", Severity.Warning);
+            Navigation.NavigateTo("/Account/Login", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading history: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _historyLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnHistoryPageChanged(int page)
+    {
+        _historyPageNumber = page;
+        _historyLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var pagedResult = await AdrService.GetOrchestrationHistoryPagedAsync(_historyPageNumber, _historyPageSize);
+            _history = pagedResult.Items;
+            _historyTotalCount = pagedResult.TotalCount;
+            _historyTotalPages = pagedResult.TotalPages;
         }
         catch (SessionExpiredException)
         {

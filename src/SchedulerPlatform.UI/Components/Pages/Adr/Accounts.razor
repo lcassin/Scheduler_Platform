@@ -23,7 +23,8 @@
                           Margin="Margin.Dense" 
                           Clearable="true"
                           Adornment="Adornment.Start"
-                          AdornmentIcon="@Icons.Material.Filled.Search" />
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          OnKeyDown="@OnSearchKeyDown" />
         </MudItem>
         <MudItem xs="12" md="2">
             <MudAutocomplete T="Client" 
@@ -341,6 +342,14 @@
             return _clients;
 
         return _clients.Where(c => c.ClientName.Contains(value, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await ApplyFilters();
+        }
     }
 
     private async Task ApplyFilters()

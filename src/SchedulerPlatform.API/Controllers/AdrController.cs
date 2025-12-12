@@ -1323,10 +1323,14 @@ public class AdrController : ControllerBase
     /// <summary>
     /// Gets the recent orchestration run history from database.
     /// Falls back to in-memory if database is unavailable.
+    /// Supports pagination with pageNumber and pageSize parameters.
     /// </summary>
     [HttpGet("orchestrate/history")]
     [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
-    public async Task<ActionResult<IEnumerable<object>>> GetOrchestrationHistory([FromQuery] int? count = 10)
+    public async Task<ActionResult<object>> GetOrchestrationHistory(
+        [FromQuery] int? count = null,
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 20)
     {
         try
         {
@@ -1335,10 +1339,25 @@ public class AdrController : ControllerBase
                 .Where(r => !r.IsDeleted)
                 .OrderByDescending(r => r.RequestedDateTime);
             
-            // Apply limit if count is specified
-            var limitedQuery = count.HasValue ? query.Take(count.Value) : query;
+            // Get total count for pagination
+            var totalCount = await query.CountAsync();
             
-            var dbHistory = await limitedQuery
+            // Apply pagination or simple count limit
+            IQueryable<AdrOrchestrationRun> pagedQuery;
+            if (count.HasValue)
+            {
+                // Legacy mode: just return count items (no pagination info)
+                pagedQuery = query.Take(count.Value);
+            }
+            else
+            {
+                // Pagination mode
+                pagedQuery = query
+                    .Skip((pageNumber - 1) * pageSize)
+                    .Take(pageSize);
+            }
+            
+            var dbHistory = await pagedQuery
                 .Select(r => new AdrOrchestrationStatus
                 {
                     RequestId = r.RequestId,
@@ -1379,6 +1398,18 @@ public class AdrController : ControllerBase
             
             if (dbHistory.Any())
             {
+                // Return with pagination info if not using legacy count mode
+                if (!count.HasValue)
+                {
+                    return Ok(new OrchestrationHistoryPagedResponse
+                    {
+                        Items = dbHistory,
+                        TotalCount = totalCount,
+                        PageNumber = pageNumber,
+                        PageSize = pageSize,
+                        TotalPages = (int)Math.Ceiling((double)totalCount / pageSize)
+                    });
+                }
                 return Ok(dbHistory);
             }
         }
@@ -1475,6 +1506,15 @@ public class UpdateAccountBillingRequest
     /// Historical billing status: Missing, Overdue, Due Now, Due Soon, Upcoming, Future
     /// </summary>
     public string? HistoricalBillingStatus { get; set; }
+}
+
+public class OrchestrationHistoryPagedResponse
+{
+    public List<AdrOrchestrationStatus> Items { get; set; } = new();
+    public int TotalCount { get; set; }
+    public int PageNumber { get; set; }
+    public int PageSize { get; set; }
+    public int TotalPages { get; set; }
 }
 
 #endregion
