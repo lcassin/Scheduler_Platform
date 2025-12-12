@@ -163,38 +163,6 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                 .ToListAsync();
         }
 
-    public async Task<IEnumerable<AdrJob>> GetJobsForFinalRetryAsync(DateTime currentDate, int finalRetryDelayDays = 5)
-    {
-        // Final retry logic: Jobs that are past their NextRangeEndDate but haven't completed
-        // These get one more scrape attempt 5 days after NextRangeEndDate
-        // 
-        // Criteria:
-        // 1. Status is ScrapeRequested (scrape was sent but not completed)
-        // 2. NextRangeEndDateTime has passed
-        // 3. Today is at least finalRetryDelayDays after NextRangeEndDateTime
-        // 4. Job hasn't been marked as completed or failed
-        // 5. No successful scrape execution exists (idempotency)
-        var today = currentDate.Date;
-        const int downloadInvoiceRequestType = 2; // AdrRequestType.DownloadInvoice
-        
-                return await _dbSet
-                    .Where(j => !j.IsDeleted && 
-                                !j.IsManualRequest && // Exclude manual jobs from orchestration
-                                j.Status == "ScrapeRequested" &&
-                                !j.ScrapingCompletedDateTime.HasValue &&
-                                j.NextRangeEndDateTime.HasValue &&
-                                j.NextRangeEndDateTime.Value.Date < today &&
-                                j.NextRangeEndDateTime.Value.Date.AddDays(finalRetryDelayDays) <= today &&
-                                // IDEMPOTENCY: Exclude jobs that already have a successful scrape request (HTTP 200)
-                                !_context.AdrJobExecutions.Any(e => 
-                                    e.AdrJobId == j.Id && 
-                                    e.AdrRequestTypeId == downloadInvoiceRequestType && 
-                                    e.HttpStatusCode == 200 &&
-                                    !e.IsDeleted))
-                    .Include(j => j.AdrAccount)
-                    .ToListAsync();
-    }
-
         public async Task<(IEnumerable<AdrJob> items, int totalCount)> GetPagedAsync(
             int pageNumber,
             int pageSize,
