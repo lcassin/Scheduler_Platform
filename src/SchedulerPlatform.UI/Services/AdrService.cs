@@ -397,5 +397,22 @@ public class AdrService : IAdrService
         return result ?? new List<AdrOrchestrationStatus>();
     }
 
+    public async Task<OrchestrationHistoryPagedResponse> GetOrchestrationHistoryPagedAsync(int pageNumber = 1, int pageSize = 20)
+    {
+        var client = CreateClient();
+        var result = await client.GetFromJsonAsync<OrchestrationHistoryPagedResponse>(
+            $"adr/orchestrate/history?pageNumber={pageNumber}&pageSize={pageSize}");
+        return result ?? new OrchestrationHistoryPagedResponse();
+    }
+
     #endregion
+}
+
+public class OrchestrationHistoryPagedResponse
+{
+    public List<AdrOrchestrationStatus> Items { get; set; } = new();
+    public int TotalCount { get; set; }
+    public int PageNumber { get; set; }
+    public int PageSize { get; set; }
+    public int TotalPages { get; set; }
 }

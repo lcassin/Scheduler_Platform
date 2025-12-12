@@ -21,7 +21,8 @@
                               Margin="Margin.Dense" 
                               Clearable="true"
                               Adornment="Adornment.Start"
-                              AdornmentIcon="@Icons.Material.Filled.Business" />
+                              AdornmentIcon="@Icons.Material.Filled.Business"
+                              OnKeyDown="@OnSearchKeyDown" />
             </MudItem>
             <MudItem xs="12" md="2">
                 <MudTextField @bind-Value="_searchAccountNumber" 
@@ -31,7 +32,8 @@
                               Margin="Margin.Dense" 
                               Clearable="true"
                               Adornment="Adornment.Start"
-                              AdornmentIcon="@Icons.Material.Filled.Search" />
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              OnKeyDown="@OnSearchKeyDown" />
             </MudItem>
             <MudItem xs="12" md="2">
                 <MudSelect T="string" @bind-Value="_selectedStatus" Label="Status" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
@@ -53,7 +55,8 @@
                               Margin="Margin.Dense" 
                               Clearable="true"
                               Adornment="Adornment.Start"
-                              AdornmentIcon="@Icons.Material.Filled.Key" />
+                              AdornmentIcon="@Icons.Material.Filled.Key"
+                              OnKeyDown="@OnSearchKeyDown" />
             </MudItem>
             <MudItem xs="12" md="2">
                 <MudTextField @bind-Value="_searchInterfaceAccountId" 
@@ -63,7 +66,8 @@
                               Margin="Margin.Dense" 
                               Clearable="true"
                               Adornment="Adornment.Start"
-                              AdornmentIcon="@Icons.Material.Filled.Link" />
+                              AdornmentIcon="@Icons.Material.Filled.Link"
+                              OnKeyDown="@OnSearchKeyDown" />
             </MudItem>
             <MudItem xs="12" md="2" Class="d-flex align-center">
                 <MudSwitch @bind-Value="_showLatestPerAccount" Color="Color.Primary" Label="Latest per Account" />
@@ -371,6 +375,14 @@
                 : items.OrderBy(j => j.RetryCount).ToList(),
             _ => items.OrderByDescending(j => j.Id).ToList()
         };
+    }
+
+    private async Task OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await ApplyFilters();
+        }
     }
 
     private async Task ApplyFilters()
