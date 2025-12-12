@@ -58,15 +58,9 @@
                               AdornmentIcon="@Icons.Material.Filled.Link"
                               OnKeyDown="@OnSearchKeyDown" />
             </MudItem>
-            <MudItem xs="12" md="1" Class="d-flex align-center">
+            <MudItem xs="12" md="2" Class="d-flex flex-column justify-center">
                 <MudSwitch @bind-Value="_showLatestPerAccount" Color="Color.Primary" Label="Latest per Account" />
-            </MudItem>
-            <MudItem xs="12" md="1">
-                <MudSelect T="string" @bind-Value="_selectedManualRequest" Label="Manual Jobs" Variant="Variant.Outlined" Margin="Margin.Dense">
-                    <MudSelectItem Value="@("No")">No</MudSelectItem>
-                    <MudSelectItem Value="@("Yes")">Yes</MudSelectItem>
-                    <MudSelectItem Value="@("")">All</MudSelectItem>
-                </MudSelect>
+                <MudSwitch @bind-Value="_showManualJobs" Color="Color.Secondary" Label="Show Manual Jobs" />
             </MudItem>
         </MudGrid>
         <MudGrid Class="mb-4" Spacing="2">
@@ -271,8 +265,7 @@
     private string? _filterStatus;
     private string? _filterInterfaceAccountId;
     private bool _showLatestPerAccount = true;
-    private string _selectedManualRequest = "No";
-    private bool? _filterIsManualRequest = false;
+    private bool _showManualJobs = false;
     private HashSet<AdrJob> _selectedJobs = new();
 
     [Parameter]
@@ -317,7 +310,7 @@
                 null, // vmAccountId - not used for filtering
                 _filterInterfaceAccountId,
                 null, // credentialId - removed from UI
-                _filterIsManualRequest);
+                _showManualJobs ? true : false); // false = hide manual jobs (default), true = show only manual jobs
 
             // Apply sorting
             var sortedItems = ApplySorting(result.Items, state.SortLabel, state.SortDirection);
@@ -402,12 +395,6 @@
         _filterAccountNumber = string.IsNullOrWhiteSpace(_searchAccountNumber) ? null : _searchAccountNumber;
         _filterStatus = string.IsNullOrEmpty(_selectedStatus) ? null : _selectedStatus;
         _filterInterfaceAccountId = string.IsNullOrWhiteSpace(_searchInterfaceAccountId) ? null : _searchInterfaceAccountId;
-        _filterIsManualRequest = _selectedManualRequest switch
-        {
-            "Yes" => true,
-            "No" => false,
-            _ => null
-        };
         await _table.ReloadServerData();
     }
 
@@ -417,12 +404,11 @@
         _searchAccountNumber = null;
         _selectedStatus = "";
         _searchInterfaceAccountId = null;
-        _selectedManualRequest = "No";
+        _showManualJobs = false;
         _filterVendorCode = null;
         _filterAccountNumber = null;
         _filterStatus = null;
         _filterInterfaceAccountId = null;
-        _filterIsManualRequest = false;
         Navigation.NavigateTo("/adr/jobs");
         await _table.ReloadServerData();
     }
