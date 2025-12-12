@@ -394,7 +394,16 @@
 </MudGrid>
 
 <MudPaper Class="pa-4 mt-4">
-    <MudText Typo="Typo.h6" Class="mb-4">Recent Orchestration History</MudText>
+    <div class="d-flex justify-space-between align-center mb-4">
+        <MudText Typo="Typo.h6">@(_showAllHistory ? "All Orchestration History" : "Recent Orchestration History")</MudText>
+        <MudButton Variant="Variant.Text" 
+                   Color="Color.Primary" 
+                   StartIcon="@(_showAllHistory ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                   OnClick="ToggleShowAllHistory"
+                   Disabled="_historyLoading">
+            @(_showAllHistory ? "Show Recent" : "Show All")
+        </MudButton>
+    </div>
     
     @if (_historyLoading)
     {
@@ -460,6 +469,7 @@
     private bool _isRefreshing = false;
     private bool _isStarting = false;
     private bool _autoRefreshEnabled = true;
+    private bool _showAllHistory = false;
     private DateTime? _lastRefresh;
     private System.Threading.Timer? _refreshTimer;
     
@@ -568,6 +578,33 @@
         finally
         {
             _isRefreshing = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ToggleShowAllHistory()
+    {
+        _showAllHistory = !_showAllHistory;
+        _historyLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            // Load all history (no limit) or just recent (10 records)
+            _history = await AdrService.GetOrchestrationHistoryAsync(_showAllHistory ? null : 10);
+        }
+        catch (SessionExpiredException)
+        {
+            Snackbar.Add("Your session has expired. Redirecting to login...", Severity.Warning);
+            Navigation.NavigateTo("/Account/Login", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading history: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _historyLoading = false;
             StateHasChanged();
         }
     }

@@ -241,6 +241,109 @@
     </MudItem>
 </MudGrid>
 
+<MudGrid Class="mt-2 mb-4" Spacing="2">
+    <MudItem xs="12">
+        <MudPaper Class="pa-4">
+            <div class="d-flex justify-space-between align-center mb-4">
+                <MudText Typo="Typo.h6">Recent Orchestration Runs</MudText>
+                <MudButton Variant="Variant.Text" 
+                           Color="Color.Primary" 
+                           EndIcon="@Icons.Material.Filled.ArrowForward"
+                           OnClick="@(() => NavigationManager.NavigateTo("/adr/monitor"))">
+                    View All
+                </MudButton>
+            </div>
+            @if (_orchestrationHistoryLoading && _orchestrationHistory == null)
+            {
+                <div class="d-flex justify-center py-4">
+                    <MudProgressCircular Color="Color.Primary" Size="Size.Small" Indeterminate="true" />
+                </div>
+            }
+            else if (_orchestrationHistory == null || !_orchestrationHistory.Any())
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center">
+                    No orchestration history available
+                </MudText>
+            }
+            else
+            {
+                <MudTable Items="_orchestrationHistory" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm">
+                    <HeaderContent>
+                        <MudTh>Date</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Duration</MudTh>
+                        <MudTh>Accounts Synced</MudTh>
+                        <MudTh>Jobs Created</MudTh>
+                        <MudTh>Credentials</MudTh>
+                        <MudTh>Scrapes</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Date">@context.RequestedAt.ToString("MM/dd hh:mm tt")</MudTd>
+                        <MudTd DataLabel="Status">
+                            <MudChip T="string" Size="Size.Small" Color="@GetOrchestrationHistoryStatusColor(context.Status)">@context.Status</MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Duration">
+                            @if (context.StartedAt.HasValue && context.CompletedAt.HasValue)
+                            {
+                                var duration = context.CompletedAt.Value - context.StartedAt.Value;
+                                <text>@duration.ToString(@"mm\:ss")</text>
+                            }
+                            else
+                            {
+                                <text>-</text>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Accounts Synced">
+                            @if (context.SyncResult != null)
+                            {
+                                <text>@FormatNumber(context.SyncResult.AccountsInserted + context.SyncResult.AccountsUpdated)</text>
+                            }
+                            else
+                            {
+                                <text>-</text>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Jobs Created">
+                            @if (context.JobCreationResult != null)
+                            {
+                                <text>@FormatNumber(context.JobCreationResult.JobsCreated)</text>
+                            }
+                            else
+                            {
+                                <text>-</text>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Credentials">
+                            @if (context.CredentialVerificationResult != null)
+                            {
+                                <MudText Typo="Typo.body2">
+                                    <span style="color: var(--mud-palette-success);">@context.CredentialVerificationResult.CredentialsVerified</span>
+                                    /
+                                    <span style="color: var(--mud-palette-error);">@context.CredentialVerificationResult.CredentialsFailed</span>
+                                </MudText>
+                            }
+                            else
+                            {
+                                <text>-</text>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Scrapes">
+                            @if (context.ScrapeResult != null)
+                            {
+                                <text>@FormatNumber(context.ScrapeResult.ScrapesRequested)</text>
+                            }
+                            else
+                            {
+                                <text>-</text>
+                            }
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
 <MudText Typo="Typo.h5" Class="mt-6 mb-2">Scheduler Metrics</MudText>
 <MudPaper Class="pa-4 mb-4">
     <MudGrid>
@@ -545,6 +648,8 @@
                 private bool _adrJobStatsLoading;
                 private OrchestrationCurrentResponse? _orchestrationStatus;
                 private bool _orchestrationLoading;
+                private List<AdrOrchestrationStatus>? _orchestrationHistory;
+                private bool _orchestrationHistoryLoading;
                 
                 private double[] _adrAccountChartData = Array.Empty<double>();
                 private string[] _adrAccountChartLabels = Array.Empty<string>();
@@ -705,6 +810,7 @@
             _ = LoadAdrStatsAsync();
             _ = LoadAdrJobStatsAsync();
             _ = LoadOrchestrationStatusAsync();
+            _ = LoadOrchestrationHistoryAsync();
         }
     
         private async Task LoadOverviewAsync()
@@ -958,6 +1064,36 @@
             if (_orchestrationStatus.IsRunning) return Color.Info;
             return Color.Success;
         }
+
+        private async Task LoadOrchestrationHistoryAsync()
+        {
+            if (_orchestrationHistoryLoading) return;
+            _orchestrationHistoryLoading = true;
+            try
+            {
+                _orchestrationHistory = await AdrService.GetOrchestrationHistoryAsync(5);
+            }
+            catch (Exception ex)
+            {
+                // Orchestration history is optional - don't show error to user if ADR is not configured
+                Console.WriteLine($"Error loading orchestration history: {ex.Message}");
+            }
+            finally
+            {
+                _orchestrationHistoryLoading = false;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+
+        private Color GetOrchestrationHistoryStatusColor(string status) => status switch
+        {
+            "Queued" => Color.Default,
+            "Running" => Color.Info,
+            "Completed" => Color.Success,
+            "Failed" => Color.Error,
+            "Cancelled" => Color.Warning,
+            _ => Color.Default
+        };
 
         private string FormatDateLabel(DateTime dateTime)
     {

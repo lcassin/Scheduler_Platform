@@ -1326,15 +1326,19 @@ public class AdrController : ControllerBase
     /// </summary>
     [HttpGet("orchestrate/history")]
     [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
-    public async Task<ActionResult<IEnumerable<object>>> GetOrchestrationHistory([FromQuery] int count = 10)
+    public async Task<ActionResult<IEnumerable<object>>> GetOrchestrationHistory([FromQuery] int? count = 10)
     {
         try
         {
             // Try to get history from database first
-            var dbHistory = await _dbContext.AdrOrchestrationRuns
+            var query = _dbContext.AdrOrchestrationRuns
                 .Where(r => !r.IsDeleted)
-                .OrderByDescending(r => r.RequestedDateTime)
-                .Take(count)
+                .OrderByDescending(r => r.RequestedDateTime);
+            
+            // Apply limit if count is specified
+            var limitedQuery = count.HasValue ? query.Take(count.Value) : query;
+            
+            var dbHistory = await limitedQuery
                 .Select(r => new AdrOrchestrationStatus
                 {
                     RequestId = r.RequestId,
@@ -1384,7 +1388,7 @@ public class AdrController : ControllerBase
         }
         
         // Fall back to in-memory statuses
-        var statuses = _orchestrationQueue.GetRecentStatuses(count);
+        var statuses = _orchestrationQueue.GetRecentStatuses(count ?? 100);
         return Ok(statuses);
     }
 
