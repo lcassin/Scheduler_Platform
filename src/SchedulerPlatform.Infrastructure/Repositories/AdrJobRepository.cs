@@ -207,9 +207,19 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             bool latestPerAccount = false,
             long? vmAccountId = null,
             string? interfaceAccountId = null,
-            int? credentialId = null)
+            int? credentialId = null,
+            bool? isManualRequest = null)
         {
             var query = _dbSet.Where(j => !j.IsDeleted);
+            
+            // Filter by manual request status
+            // null = show all jobs (default)
+            // true = show only manual jobs
+            // false = show only non-manual jobs
+            if (isManualRequest.HasValue)
+            {
+                query = query.Where(j => j.IsManualRequest == isManualRequest.Value);
+            }
 
             if (adrAccountId.HasValue)
             {

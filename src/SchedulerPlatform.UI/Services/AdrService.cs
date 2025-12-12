@@ -160,7 +160,8 @@ public class AdrService : IAdrService
             bool latestPerAccount = false,
             long? vmAccountId = null,
             string? interfaceAccountId = null,
-            int? credentialId = null)
+            int? credentialId = null,
+            bool? isManualRequest = null)
         {
             var client = CreateClient();
             var queryParams = new List<string>
@@ -192,6 +193,9 @@ public class AdrService : IAdrService
 
             if (credentialId.HasValue)
                 queryParams.Add($"credentialId={credentialId.Value}");
+
+            if (isManualRequest.HasValue)
+                queryParams.Add($"isManualRequest={isManualRequest.Value.ToString().ToLower()}");
 
             var query = "?" + string.Join("&", queryParams);
             var result = await client.GetFromJsonAsync<PagedResult<AdrJob>>($"adr/jobs{query}");

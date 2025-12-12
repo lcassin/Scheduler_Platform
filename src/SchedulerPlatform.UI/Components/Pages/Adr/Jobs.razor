@@ -69,8 +69,15 @@
                               AdornmentIcon="@Icons.Material.Filled.Link"
                               OnKeyDown="@OnSearchKeyDown" />
             </MudItem>
-            <MudItem xs="12" md="2" Class="d-flex align-center">
+            <MudItem xs="12" md="1" Class="d-flex align-center">
                 <MudSwitch @bind-Value="_showLatestPerAccount" Color="Color.Primary" Label="Latest per Account" />
+            </MudItem>
+            <MudItem xs="12" md="1">
+                <MudSelect T="string" @bind-Value="_selectedManualRequest" Label="Manual Jobs" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    <MudSelectItem Value="@("No")">No</MudSelectItem>
+                    <MudSelectItem Value="@("Yes")">Yes</MudSelectItem>
+                    <MudSelectItem Value="@("")">All</MudSelectItem>
+                </MudSelect>
             </MudItem>
         </MudGrid>
         <MudGrid Class="mb-4" Spacing="2">
@@ -277,6 +284,8 @@
     private int? _filterCredentialId;
     private string? _filterInterfaceAccountId;
     private bool _showLatestPerAccount = true;
+    private string _selectedManualRequest = "No";
+    private bool? _filterIsManualRequest = false;
     private HashSet<AdrJob> _selectedJobs = new();
 
     [Parameter]
@@ -320,7 +329,8 @@
                 _showLatestPerAccount,
                 null, // vmAccountId - not used for filtering
                 _filterInterfaceAccountId,
-                _filterCredentialId);
+                _filterCredentialId,
+                _filterIsManualRequest);
 
             // Apply sorting
             var sortedItems = ApplySorting(result.Items, state.SortLabel, state.SortDirection);
@@ -406,6 +416,12 @@
         _filterStatus = string.IsNullOrEmpty(_selectedStatus) ? null : _selectedStatus;
         _filterCredentialId = int.TryParse(_searchCredentialId, out var credId) ? credId : null;
         _filterInterfaceAccountId = string.IsNullOrWhiteSpace(_searchInterfaceAccountId) ? null : _searchInterfaceAccountId;
+        _filterIsManualRequest = _selectedManualRequest switch
+        {
+            "Yes" => true,
+            "No" => false,
+            _ => null
+        };
         await _table.ReloadServerData();
     }
 
@@ -416,11 +432,13 @@
         _selectedStatus = "";
         _searchCredentialId = null;
         _searchInterfaceAccountId = null;
+        _selectedManualRequest = "No";
         _filterVendorCode = null;
         _filterAccountNumber = null;
         _filterStatus = null;
         _filterCredentialId = null;
         _filterInterfaceAccountId = null;
+        _filterIsManualRequest = false;
         Navigation.NavigateTo("/adr/jobs");
         await _table.ReloadServerData();
     }
