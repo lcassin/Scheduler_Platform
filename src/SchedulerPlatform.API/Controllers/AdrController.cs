@@ -275,26 +275,61 @@ public class AdrController : ControllerBase
             account.ModifiedDateTime = DateTime.UtcNow;
             account.ModifiedBy = username;
 
-            // Check for existing pending jobs for this account and cancel them if dates changed
-            // This prevents duplicate jobs when billing dates are manually corrected
-            if (account.NextRangeStartDateTime.HasValue && account.NextRangeEndDateTime.HasValue)
-            {
-                var existingJobs = await _unitOfWork.AdrJobs.GetByAccountIdAsync(account.Id);
-                var pendingJobs = existingJobs.Where(j => 
-                    (j.Status == "Pending" || j.Status == "CredentialCheckInProgress" || j.Status == "CredentialVerified") &&
-                    (j.BillingPeriodStartDateTime != account.NextRangeStartDateTime.Value ||
-                     j.BillingPeriodEndDateTime != account.NextRangeEndDateTime.Value));
+                        // Check for existing pending jobs for this account and update them if dates changed
+                        // Instead of cancelling, we update the job's billing period dates to preserve credential status
+                        if (account.NextRangeStartDateTime.HasValue && account.NextRangeEndDateTime.HasValue)
+                        {
+                            var existingJobs = await _unitOfWork.AdrJobs.GetByAccountIdAsync(account.Id);
+                            var jobsWithOldDates = existingJobs.Where(j => 
+                                (j.Status == "Pending" || j.Status == "CredentialCheckInProgress" || j.Status == "CredentialVerified" || j.Status == "CredentialFailed") &&
+                                (j.BillingPeriodStartDateTime != account.NextRangeStartDateTime.Value ||
+                                 j.BillingPeriodEndDateTime != account.NextRangeEndDateTime.Value)).ToList();
                 
-                foreach (var job in pendingJobs)
-                {
-                    job.Status = "Cancelled";
-                    job.ErrorMessage = $"Cancelled due to manual billing date override by {username}";
-                    job.ModifiedDateTime = DateTime.UtcNow;
-                    job.ModifiedBy = username;
-                    await _unitOfWork.AdrJobs.UpdateAsync(job);
-                    _logger.LogInformation("Cancelled job {JobId} for account {AccountId} due to billing date override", job.Id, account.Id);
-                }
-            }
+                            // Check if there's already a job with the new dates
+                            var existingJobWithNewDates = existingJobs.FirstOrDefault(j =>
+                                j.BillingPeriodStartDateTime == account.NextRangeStartDateTime.Value &&
+                                j.BillingPeriodEndDateTime == account.NextRangeEndDateTime.Value &&
+                                j.Status != "Cancelled");
+                
+                            foreach (var job in jobsWithOldDates)
+                            {
+                                if (existingJobWithNewDates != null && existingJobWithNewDates.Id != job.Id)
+                                {
+                                    // There's already a job with the new dates, so cancel this one
+                                    // But transfer credential status if applicable
+                                    if ((job.Status == "CredentialVerified" || job.Status == "CredentialFailed") &&
+                                        existingJobWithNewDates.Status == "Pending")
+                                    {
+                                        existingJobWithNewDates.Status = job.Status;
+                                        existingJobWithNewDates.CredentialVerifiedDateTime = job.CredentialVerifiedDateTime;
+                                        existingJobWithNewDates.ModifiedDateTime = DateTime.UtcNow;
+                                        existingJobWithNewDates.ModifiedBy = username;
+                                        await _unitOfWork.AdrJobs.UpdateAsync(existingJobWithNewDates);
+                                        _logger.LogInformation("Transferred credential status {Status} from job {OldJobId} to job {NewJobId}", 
+                                            job.Status, job.Id, existingJobWithNewDates.Id);
+                                    }
+                        
+                                    job.Status = "Cancelled";
+                                    job.ErrorMessage = $"Cancelled due to manual billing date override by {username}. Credential status transferred to job {existingJobWithNewDates.Id}.";
+                                }
+                                else
+                                {
+                                    // No existing job with new dates, update this job's dates in place
+                                    // This preserves the credential verification status
+                                    var oldStart = job.BillingPeriodStartDateTime;
+                                    var oldEnd = job.BillingPeriodEndDateTime;
+                                    job.BillingPeriodStartDateTime = account.NextRangeStartDateTime.Value;
+                                    job.BillingPeriodEndDateTime = account.NextRangeEndDateTime.Value;
+                                    job.ErrorMessage = $"Billing period updated from {oldStart:MM/dd/yyyy}-{oldEnd:MM/dd/yyyy} to {account.NextRangeStartDateTime.Value:MM/dd/yyyy}-{account.NextRangeEndDateTime.Value:MM/dd/yyyy} by {username}";
+                                    _logger.LogInformation("Updated job {JobId} billing period from {OldStart}-{OldEnd} to {NewStart}-{NewEnd}, preserving status {Status}", 
+                                        job.Id, oldStart, oldEnd, account.NextRangeStartDateTime.Value, account.NextRangeEndDateTime.Value, job.Status);
+                                }
+                    
+                                job.ModifiedDateTime = DateTime.UtcNow;
+                                job.ModifiedBy = username;
+                                await _unitOfWork.AdrJobs.UpdateAsync(job);
+                            }
+                        }
 
             await _unitOfWork.AdrAccounts.UpdateAsync(account);
             await _unitOfWork.SaveChangesAsync();
@@ -343,6 +378,115 @@ public class AdrController : ControllerBase
         {
             _logger.LogError(ex, "Error clearing ADR account override for {AccountId}", id);
             return StatusCode(500, "An error occurred while clearing the ADR account override");
+        }
+    }
+
+    /// <summary>
+    /// Admin-only endpoint to manually fire a scrape request for any date range.
+    /// This allows admins to re-request specific invoices without interfering with normal job/schedules.
+    /// </summary>
+    [HttpPost("accounts/{id}/manual-scrape")]
+    [Authorize(Policy = "AdrAccounts.Execute")]
+    public async Task<ActionResult<object>> ManualScrapeRequest(int id, [FromBody] ManualScrapeRequest request)
+    {
+        try
+        {
+            // Check if user is admin or super admin
+            var isSystemAdmin = User.Claims.Any(c => c.Type == "is_system_admin" && c.Value == "True");
+            var isAdmin = User.Claims.Any(c => c.Type == "role" && c.Value == "Admin");
+            
+            if (!isSystemAdmin && !isAdmin)
+            {
+                return Forbid("Only administrators can perform manual scrape requests");
+            }
+
+            var account = await _unitOfWork.AdrAccounts.GetByIdAsync(id);
+            if (account == null)
+            {
+                return NotFound("Account not found");
+            }
+
+            if (!account.CredentialId.HasValue)
+            {
+                return BadRequest("Account does not have a credential ID assigned");
+            }
+
+            var username = User.Identity?.Name ?? "Unknown";
+
+            // Calculate date range based on period type if not provided
+            var windowDays = account.PeriodType switch
+            {
+                "Bi-Weekly" => 3,
+                "Monthly" => 5,
+                "Bi-Monthly" => 7,
+                "Quarterly" => 10,
+                "Semi-Annually" => 14,
+                "Annually" => 21,
+                _ => 5
+            };
+
+            var rangeStart = request.RangeStartDate ?? request.TargetDate.AddDays(-windowDays);
+            var rangeEnd = request.RangeEndDate ?? request.TargetDate.AddDays(windowDays);
+
+            // Create an execution record to track this admin request (not tied to a job)
+            var execution = new AdrJobExecution
+            {
+                AdrJobId = 0, // Special value indicating admin manual request (not tied to a job)
+                AdrRequestTypeId = 2, // Download Invoice
+                StartDateTime = DateTime.UtcNow,
+                IsSuccess = false, // Will be updated when we get a response
+                RequestPayload = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    AccountId = account.Id,
+                    VMAccountId = account.VMAccountId,
+                    VMAccountNumber = account.VMAccountNumber,
+                    InterfaceAccountId = account.InterfaceAccountId,
+                    CredentialId = account.CredentialId,
+                    VendorCode = account.VendorCode,
+                    ClientName = account.ClientName,
+                    RangeStartDate = rangeStart,
+                    RangeEndDate = rangeEnd,
+                    TargetDate = request.TargetDate,
+                    RequestedBy = username,
+                    RequestedAt = DateTime.UtcNow,
+                    Reason = request.Reason,
+                    IsAdminManualRequest = true
+                }),
+                CreatedDateTime = DateTime.UtcNow,
+                CreatedBy = username,
+                ModifiedDateTime = DateTime.UtcNow,
+                ModifiedBy = username
+            };
+
+            // Note: The actual API call would be made here in a real implementation
+            // For now, we're just recording the request for tracking purposes
+            // The orchestrator service would need to be extended to handle these manual requests
+
+            await _unitOfWork.AdrJobExecutions.AddAsync(execution);
+            await _unitOfWork.SaveChangesAsync();
+
+            _logger.LogInformation(
+                "Admin manual scrape request created by {User} for account {AccountId} ({VMAccountNumber}). " +
+                "Range: {RangeStart} to {RangeEnd}. Reason: {Reason}",
+                username, id, account.VMAccountNumber, rangeStart, rangeEnd, request.Reason);
+
+            return Ok(new
+            {
+                message = "Manual scrape request recorded successfully",
+                executionId = execution.Id,
+                accountId = id,
+                vmAccountNumber = account.VMAccountNumber,
+                credentialId = account.CredentialId,
+                rangeStartDate = rangeStart,
+                rangeEndDate = rangeEnd,
+                requestedBy = username,
+                requestedAt = DateTime.UtcNow
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating manual scrape request for account {AccountId}", id);
+            return StatusCode(500, "An error occurred while creating the manual scrape request");
         }
     }
 
@@ -1515,6 +1659,32 @@ public class OrchestrationHistoryPagedResponse
     public int PageNumber { get; set; }
     public int PageSize { get; set; }
     public int TotalPages { get; set; }
+}
+
+/// <summary>
+/// Request for admin-only manual scrape operation
+/// </summary>
+public class ManualScrapeRequest
+{
+    /// <summary>
+    /// Target date for the invoice search (center of the date range)
+    /// </summary>
+    public DateTime TargetDate { get; set; }
+    
+    /// <summary>
+    /// Optional custom range start date (if not provided, calculated from period type)
+    /// </summary>
+    public DateTime? RangeStartDate { get; set; }
+    
+    /// <summary>
+    /// Optional custom range end date (if not provided, calculated from period type)
+    /// </summary>
+    public DateTime? RangeEndDate { get; set; }
+    
+    /// <summary>
+    /// Reason for the manual scrape request (for audit purposes)
+    /// </summary>
+    public string? Reason { get; set; }
 }
 
 #endregion

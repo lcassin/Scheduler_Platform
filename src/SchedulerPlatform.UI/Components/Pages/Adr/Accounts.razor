@@ -170,20 +170,24 @@
                         </MudChip>
                     }
                 </MudTd>
-                <MudTd DataLabel="Actions">
-                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
-                        <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewAccountDetails(context)">View Details</MudMenuItem>
-                        <MudMenuItem Icon="@Icons.Material.Filled.Work" OnClick="() => ViewJobs(context.Id)">View Jobs</MudMenuItem>
-                        @if (_canEditBilling)
-                        {
-                            <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => EditBilling(context)">Edit Billing</MudMenuItem>
-                            @if (context.IsManuallyOverridden)
-                            {
-                                <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="() => ClearOverride(context)">Clear Override</MudMenuItem>
-                            }
-                        }
-                    </MudMenu>
-                </MudTd>
+                                <MudTd DataLabel="Actions">
+                                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
+                                        <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewAccountDetails(context)">View Details</MudMenuItem>
+                                        <MudMenuItem Icon="@Icons.Material.Filled.Work" OnClick="() => ViewJobs(context.Id)">View Jobs</MudMenuItem>
+                                        @if (_canEditBilling)
+                                        {
+                                            <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => EditBilling(context)">Edit Billing</MudMenuItem>
+                                            @if (context.IsManuallyOverridden)
+                                            {
+                                                <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="() => ClearOverride(context)">Clear Override</MudMenuItem>
+                                            }
+                                        }
+                                        @if (_canExecuteManualScrape)
+                                        {
+                                            <MudMenuItem Icon="@Icons.Material.Filled.CloudDownload" OnClick="() => OpenManualScrapeDialog(context)">Manual Scrape (Admin)</MudMenuItem>
+                                        }
+                                    </MudMenu>
+                                </MudTd>
             </RowTemplate>
             <NoRecordsContent>
                 <MudText Align="Align.Center" Class="my-8">
@@ -209,12 +213,13 @@
 </MudPaper>
 
 @code {
-    private MudTable<AdrAccount> _table = null!;
-    private List<Client> _clients = new();
-    private bool _loading = true;
-    private bool _isExporting = false;
-    private bool _canEditBilling = false;
-    private string? _searchTerm;
+        private MudTable<AdrAccount> _table = null!;
+        private List<Client> _clients = new();
+        private bool _loading = true;
+        private bool _isExporting = false;
+        private bool _canEditBilling = false;
+        private bool _canExecuteManualScrape = false;
+        private string? _searchTerm;
     private Client? _selectedClient;
     private int? _selectedClientId => _selectedClient?.Id;
     private string _selectedNextRunStatus = "";
@@ -240,8 +245,10 @@
             
             _clients = await ClientService.GetClientsAsync();
             
-            // Check if user has permission to update ADR accounts (for editing billing data)
-            _canEditBilling = await PermissionService.CanUpdateAsync("adr");
+                        // Check if user has permission to update ADR accounts (for editing billing data)
+                        _canEditBilling = await PermissionService.CanUpdateAsync("adr");
+                        // Check if user has permission to execute manual scrape (Admin/Super Admin only)
+                        _canExecuteManualScrape = await PermissionService.CanExecuteAsync("adr");
         }
         catch (Exception ex)
         {
@@ -476,6 +483,22 @@
             {
                 Snackbar.Add($"Error clearing override: {ex.Message}", Severity.Error);
             }
+        }
+    }
+
+    private async Task OpenManualScrapeDialog(AdrAccount account)
+    {
+        var parameters = new DialogParameters<ManualScrapeDialog>
+        {
+            { x => x.Account, account }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<ManualScrapeDialog>("Manual Scrape Request", parameters, options);
+        var result = await dialog.Result;
+        
+        if (result != null && !result.Canceled)
+        {
+            Snackbar.Add("Manual scrape request submitted successfully", Severity.Success);
         }
     }
 }

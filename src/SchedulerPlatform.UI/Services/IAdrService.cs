@@ -17,8 +17,9 @@ public interface IAdrService
     Task<AdrAccount?> GetAccountByVMAccountIdAsync(long vmAccountId);
     Task<AdrAccountStats> GetAccountStatsAsync();
     Task<AdrAccount> UpdateAccountBillingAsync(int accountId, DateTime? expectedBillingDate, string? periodType, string? historicalBillingStatus);
-    Task<AdrAccount> ClearAccountOverrideAsync(int accountId);
-    Task<byte[]> DownloadAccountsExportAsync(
+        Task<AdrAccount> ClearAccountOverrideAsync(int accountId);
+        Task<ManualScrapeResult> ManualScrapeRequestAsync(int accountId, DateTime targetDate, DateTime? rangeStartDate = null, DateTime? rangeEndDate = null, string? reason = null);
+        Task<byte[]> DownloadAccountsExportAsync(
         int? clientId = null,
         string? searchTerm = null,
         string? nextRunStatus = null,

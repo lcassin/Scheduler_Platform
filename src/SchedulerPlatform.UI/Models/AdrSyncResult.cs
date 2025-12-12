@@ -75,6 +75,19 @@ public class RefireJobsBulkResult
     public List<string>? Errors { get; set; }
 }
 
+public class ManualScrapeResult
+{
+    public string Message { get; set; } = string.Empty;
+    public int ExecutionId { get; set; }
+    public int AccountId { get; set; }
+    public string? VMAccountNumber { get; set; }
+    public int? CredentialId { get; set; }
+    public DateTime RangeStartDate { get; set; }
+    public DateTime RangeEndDate { get; set; }
+    public string? RequestedBy { get; set; }
+    public DateTime RequestedAt { get; set; }
+}
+
 public class BackgroundOrchestrationResponse
 {
     public string Message { get; set; } = string.Empty;

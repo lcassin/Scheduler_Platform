@@ -93,16 +93,32 @@ public class AdrService : IAdrService
         return result ?? throw new InvalidOperationException("Failed to update account billing");
     }
 
-    public async Task<AdrAccount> ClearAccountOverrideAsync(int accountId)
-    {
-        var client = CreateClient();
-        var response = await client.PostAsync($"adr/accounts/{accountId}/clear-override", null);
-        response.EnsureSuccessStatusCode();
-        var result = await response.Content.ReadFromJsonAsync<AdrAccount>();
-        return result ?? throw new InvalidOperationException("Failed to clear account override");
-    }
+        public async Task<AdrAccount> ClearAccountOverrideAsync(int accountId)
+        {
+            var client = CreateClient();
+            var response = await client.PostAsync($"adr/accounts/{accountId}/clear-override", null);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<AdrAccount>();
+            return result ?? throw new InvalidOperationException("Failed to clear account override");
+        }
 
-    public async Task<byte[]> DownloadAccountsExportAsync(
+        public async Task<ManualScrapeResult> ManualScrapeRequestAsync(int accountId, DateTime targetDate, DateTime? rangeStartDate = null, DateTime? rangeEndDate = null, string? reason = null)
+        {
+            var client = CreateClient();
+            var request = new
+            {
+                TargetDate = targetDate,
+                RangeStartDate = rangeStartDate,
+                RangeEndDate = rangeEndDate,
+                Reason = reason
+            };
+            var response = await client.PostAsJsonAsync($"adr/accounts/{accountId}/manual-scrape", request);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<ManualScrapeResult>();
+            return result ?? throw new InvalidOperationException("Failed to create manual scrape request");
+        }
+
+        public async Task<byte[]> DownloadAccountsExportAsync(
         int? clientId = null,
         string? searchTerm = null,
         string? nextRunStatus = null,
