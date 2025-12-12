@@ -76,6 +76,42 @@ SchedulerPlatform is a comprehensive job scheduling system that enables organiza
 - **Dashboard API**: New `DashboardController` with endpoints for overview statistics, execution trends, status breakdown, and performance metrics
 - **Cancel Execution**: `POST /api/jobexecutions/{id}/cancel` endpoint for programmatically cancelling running jobs
 
+### ADR (Automated Data Retrieval) Process (December 2025)
+
+The ADR Process is a comprehensive automated invoice scraping system that retrieves billing documents from vendor portals. It orchestrates the entire workflow from account synchronization through credential verification to invoice download.
+
+**Key Features:**
+- **Account Synchronization**: Syncs ~200k accounts from external VendorCredNewUAT database with billing pattern analysis
+- **4-Step Orchestration**: Automated workflow (Sync Accounts → Create Jobs → Verify Credentials → Process Scraping → Check Statuses)
+- **Idempotency**: Prevents duplicate API calls for paid external services by tracking execution history
+- **Manual Override Support**: Allows operators to correct billing dates/frequencies when historical data is incorrect
+- **Real-Time Monitoring**: Job Monitor page with progress tracking, step timeline, and auto-refresh
+- **Parallel Processing**: Configurable worker threads (default: 15) for credential verification and scraping
+- **Resilient Processing**: Individual job failures don't stop the batch - processing continues for remaining jobs
+
+**New Entities:**
+- `AdrAccount`: Vendor accounts with billing patterns and scrape schedules
+- `AdrJob`: Individual scraping jobs per account/billing period (unique constraint on account + period)
+- `AdrJobExecution`: Execution history for credential checks and scrape requests
+- `AdrOrchestrationRun`: Orchestration run history with step-by-step progress
+
+**New UI Pages:**
+- `/adr/monitor`: Real-time orchestration monitoring with progress bars and step timeline
+- `/adr/accounts`: Account management with search, filters, and manual override capability
+- `/adr/jobs`: Job tracking with status filters and "Latest per Account" toggle
+- `/adr/missing`: Report of accounts with missing billing history
+
+**ADR Permissions:**
+- `adr:view`: View ADR accounts, jobs, and monitor
+- `adr:edit`: Edit account billing data and manual overrides
+- `adr:execute`: Trigger orchestration and force refire jobs
+
+For detailed technical documentation, see:
+- [Core README - ADR Domain Model](src/SchedulerPlatform.Core/README.md#adr-domain-model)
+- [API README - ADR API Endpoints](src/SchedulerPlatform.API/README.md#adr-api)
+- [UI README - ADR UI Pages](src/SchedulerPlatform.UI/README.md#adr-ui-pages)
+- [ADR Diagrams](Documents/Technical/diagrams/) - ER diagram, workflow, and sequence diagrams
+
 ## Architecture Overview
 
 ```mermaid
