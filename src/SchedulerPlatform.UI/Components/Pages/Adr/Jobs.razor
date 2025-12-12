@@ -48,17 +48,6 @@
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" md="2">
-                <MudTextField @bind-Value="_searchCredentialId" 
-                              Label="Credential ID" 
-                              Placeholder="Enter credential ID"
-                              Variant="Variant.Outlined" 
-                              Margin="Margin.Dense" 
-                              Clearable="true"
-                              Adornment="Adornment.Start"
-                              AdornmentIcon="@Icons.Material.Filled.Key"
-                              OnKeyDown="@OnSearchKeyDown" />
-            </MudItem>
-            <MudItem xs="12" md="2">
                 <MudTextField @bind-Value="_searchInterfaceAccountId" 
                               Label="Interface Account ID" 
                               Placeholder="Enter interface acct"
@@ -276,12 +265,10 @@
     private string? _searchVendorCode;
     private string? _searchAccountNumber;
     private string _selectedStatus = "";
-    private string? _searchCredentialId;
     private string? _searchInterfaceAccountId;
     private string? _filterVendorCode;
     private string? _filterAccountNumber;
     private string? _filterStatus;
-    private int? _filterCredentialId;
     private string? _filterInterfaceAccountId;
     private bool _showLatestPerAccount = true;
     private string _selectedManualRequest = "No";
@@ -329,7 +316,7 @@
                 _showLatestPerAccount,
                 null, // vmAccountId - not used for filtering
                 _filterInterfaceAccountId,
-                _filterCredentialId,
+                null, // credentialId - removed from UI
                 _filterIsManualRequest);
 
             // Apply sorting
@@ -414,7 +401,6 @@
         _filterVendorCode = string.IsNullOrWhiteSpace(_searchVendorCode) ? null : _searchVendorCode;
         _filterAccountNumber = string.IsNullOrWhiteSpace(_searchAccountNumber) ? null : _searchAccountNumber;
         _filterStatus = string.IsNullOrEmpty(_selectedStatus) ? null : _selectedStatus;
-        _filterCredentialId = int.TryParse(_searchCredentialId, out var credId) ? credId : null;
         _filterInterfaceAccountId = string.IsNullOrWhiteSpace(_searchInterfaceAccountId) ? null : _searchInterfaceAccountId;
         _filterIsManualRequest = _selectedManualRequest switch
         {
@@ -430,13 +416,11 @@
         _searchVendorCode = null;
         _searchAccountNumber = null;
         _selectedStatus = "";
-        _searchCredentialId = null;
         _searchInterfaceAccountId = null;
         _selectedManualRequest = "No";
         _filterVendorCode = null;
         _filterAccountNumber = null;
         _filterStatus = null;
-        _filterCredentialId = null;
         _filterInterfaceAccountId = null;
         _filterIsManualRequest = false;
         Navigation.NavigateTo("/adr/jobs");
