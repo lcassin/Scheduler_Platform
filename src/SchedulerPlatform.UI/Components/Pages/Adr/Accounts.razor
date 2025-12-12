@@ -147,7 +147,15 @@
                 <MudTd DataLabel="Next Run">
                     @if (context.NextRunDateTime.HasValue)
                     {
-                        <text>@context.NextRunDateTime.Value.ToString("MM/dd/yyyy")</text>
+                        <div class="d-flex align-center gap-1">
+                            <text>@context.NextRunDateTime.Value.ToString("MM/dd/yyyy")</text>
+                            @if (context.LastInvoiceDateTime.HasValue && context.LastInvoiceDateTime.Value > DateTime.Today)
+                            {
+                                <MudTooltip Text="@($"Data Issue: Last Invoice Date ({context.LastInvoiceDateTime.Value:MM/dd/yyyy}) is in the future")">
+                                    <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" Color="Color.Warning" />
+                                </MudTooltip>
+                            }
+                        </div>
                     }
                     else
                     {
