@@ -37,6 +37,7 @@ public class AdrJobStats
     public int TotalJobs { get; set; }
     public int PendingCount { get; set; }
     public int CredentialVerifiedCount { get; set; }
+    public int CredentialFailedCount { get; set; }
     public int ScrapeRequestedCount { get; set; }
     public int CompletedCount { get; set; }
     public int FailedCount { get; set; }

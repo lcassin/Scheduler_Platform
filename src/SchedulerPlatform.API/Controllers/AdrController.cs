@@ -1132,25 +1132,69 @@ public class AdrController : ControllerBase
     }
 
     [HttpGet("jobs/stats")]
-    public async Task<ActionResult<object>> GetJobStats([FromQuery] int? adrAccountId = null)
+    public async Task<ActionResult<object>> GetJobStats(
+        [FromQuery] int? adrAccountId = null,
+        [FromQuery] int? lastOrchestrationRuns = null)
     {
         try
         {
-            var totalCount = await _unitOfWork.AdrJobs.GetTotalCountAsync(adrAccountId);
-            var pendingCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("Pending");
-            var credentialVerifiedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("CredentialVerified");
-            var scrapeRequestedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("ScrapeRequested");
-            var completedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("Completed");
-            var failedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("Failed");
+            int totalCount, pendingCount, credentialVerifiedCount, scrapeRequestedCount, 
+                completedCount, failedCount, needsReviewCount, credentialFailedCount;
+
+            if (lastOrchestrationRuns.HasValue && lastOrchestrationRuns.Value > 0)
+            {
+                // Get the last N orchestration runs to determine the time window
+                var recentRuns = await _unitOfWork.AdrOrchestrationRuns.GetRecentRunsAsync(lastOrchestrationRuns.Value);
+                
+                if (recentRuns.Any())
+                {
+                    // Get the earliest start time from recent runs to define our window
+                    var earliestRunTime = recentRuns.Min(r => r.StartedDateTime ?? r.RequestedDateTime);
+                    
+                    // Get distinct job IDs that have executions created during these runs
+                    var jobIds = await _unitOfWork.AdrJobExecutions.GetJobIdsModifiedSinceAsync(earliestRunTime);
+                    var jobIdSet = jobIds.ToHashSet();
+                    
+                    // Count jobs by status, filtered to only those touched by recent runs
+                    totalCount = jobIdSet.Count;
+                    pendingCount = await _unitOfWork.AdrJobs.GetCountByStatusAndIdsAsync("Pending", jobIdSet);
+                    credentialVerifiedCount = await _unitOfWork.AdrJobs.GetCountByStatusAndIdsAsync("CredentialVerified", jobIdSet);
+                    credentialFailedCount = await _unitOfWork.AdrJobs.GetCountByStatusAndIdsAsync("CredentialFailed", jobIdSet);
+                    scrapeRequestedCount = await _unitOfWork.AdrJobs.GetCountByStatusAndIdsAsync("ScrapeRequested", jobIdSet);
+                    completedCount = await _unitOfWork.AdrJobs.GetCountByStatusAndIdsAsync("Completed", jobIdSet);
+                    failedCount = await _unitOfWork.AdrJobs.GetCountByStatusAndIdsAsync("Failed", jobIdSet);
+                    needsReviewCount = await _unitOfWork.AdrJobs.GetCountByStatusAndIdsAsync("NeedsReview", jobIdSet);
+                }
+                else
+                {
+                    // No recent runs, return zeros
+                    totalCount = pendingCount = credentialVerifiedCount = credentialFailedCount = 
+                        scrapeRequestedCount = completedCount = failedCount = needsReviewCount = 0;
+                }
+            }
+            else
+            {
+                // Original behavior: count all jobs
+                totalCount = await _unitOfWork.AdrJobs.GetTotalCountAsync(adrAccountId);
+                pendingCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("Pending");
+                credentialVerifiedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("CredentialVerified");
+                credentialFailedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("CredentialFailed");
+                scrapeRequestedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("ScrapeRequested");
+                completedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("Completed");
+                failedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("Failed");
+                needsReviewCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("NeedsReview");
+            }
 
             return Ok(new
             {
                 totalCount,
                 pendingCount,
                 credentialVerifiedCount,
+                credentialFailedCount,
                 scrapeRequestedCount,
                 completedCount,
-                failedCount
+                failedCount,
+                needsReviewCount
             });
         }
         catch (Exception ex)

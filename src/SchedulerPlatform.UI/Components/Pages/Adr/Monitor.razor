@@ -420,7 +420,7 @@
     </MudItem>
 
     <MudItem xs="12" md="4">
-        <MudPaper Class="pa-4">
+        <MudPaper Class="pa-4 mb-4">
             <MudText Typo="Typo.h6" Class="mb-4">Quick Links</MudText>
             <MudList T="string" Dense="true">
                 <MudListItem Icon="@Icons.Material.Filled.AccountBalance" OnClick="@(() => Navigation.NavigateTo("/adr/accounts"))">
@@ -433,6 +433,52 @@
                     Missing Accounts
                 </MudListItem>
             </MudList>
+        </MudPaper>
+        
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-3">Job Pipeline Status</MudText>
+            @if (_jobStats != null)
+            {
+                <MudSimpleTable Dense="true" Hover="true" Style="overflow-x: auto;">
+                    <tbody>
+                        <tr>
+                            <td><MudIcon Icon="@Icons.Material.Filled.Work" Size="Size.Small" Class="mr-2" />Total Jobs</td>
+                            <td class="text-right"><strong>@_jobStats.TotalJobs</strong></td>
+                        </tr>
+                        <tr>
+                            <td><MudIcon Icon="@Icons.Material.Filled.HourglassEmpty" Size="Size.Small" Color="Color.Default" Class="mr-2" />Pending</td>
+                            <td class="text-right">@_jobStats.PendingCount</td>
+                        </tr>
+                        <tr>
+                            <td><MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Size="Size.Small" Color="Color.Info" Class="mr-2" />Credential Verified</td>
+                            <td class="text-right"><strong style="color: var(--mud-palette-info);">@_jobStats.CredentialVerifiedCount</strong></td>
+                        </tr>
+                        <tr>
+                            <td><MudIcon Icon="@Icons.Material.Filled.CloudDownload" Size="Size.Small" Color="Color.Primary" Class="mr-2" />Scrape Requested</td>
+                            <td class="text-right"><strong style="color: var(--mud-palette-primary);">@_jobStats.ScrapeRequestedCount</strong></td>
+                        </tr>
+                        <tr>
+                            <td><MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" Class="mr-2" />Completed</td>
+                            <td class="text-right"><strong style="color: var(--mud-palette-success);">@_jobStats.CompletedCount</strong></td>
+                        </tr>
+                        <tr>
+                            <td><MudIcon Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error" Class="mr-2" />Failed</td>
+                            <td class="text-right"><strong style="color: var(--mud-palette-error);">@_jobStats.FailedCount</strong></td>
+                        </tr>
+                        <tr>
+                            <td><MudIcon Icon="@Icons.Material.Filled.RateReview" Size="Size.Small" Color="Color.Warning" Class="mr-2" />Needs Review</td>
+                            <td class="text-right"><strong style="color: var(--mud-palette-warning);">@_jobStats.NeedsReviewCount</strong></td>
+                        </tr>
+                    </tbody>
+                </MudSimpleTable>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">Current status of all jobs in pipeline</MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center" Class="pa-4">
+                    Loading job stats...
+                </MudText>
+            }
         </MudPaper>
     </MudItem>
 </MudGrid>
@@ -743,6 +789,9 @@
             "#9e9e9e"  // Queued (Gray)
         }
     };
+    
+    // Job pipeline stats
+    private AdrJobStats? _jobStats;
 
     protected override async Task OnInitializedAsync()
     {
@@ -781,8 +830,9 @@
             // Get the most recent completed run from history for display when not running
             _lastCompletedRun = _history?.FirstOrDefault(h => h.Status == "Completed" || h.Status == "Failed");
             
-            // Update chart data
+            // Update chart data and load job stats (scoped to last 20 orchestration runs)
             UpdateChartData();
+            _jobStats = await AdrService.GetJobStatsAsync(lastOrchestrationRuns: 20);
             
             // Start/stop fast progress polling based on orchestration state
             if (_currentStatus?.IsRunning == true && !_isProgressPolling)

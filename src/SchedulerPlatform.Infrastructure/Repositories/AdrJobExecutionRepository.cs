@@ -70,4 +70,15 @@ public class AdrJobExecutionRepository : Repository<AdrJobExecution>, IAdrJobExe
 
         return executions.Count;
     }
+
+    public async Task<IEnumerable<int>> GetJobIdsModifiedSinceAsync(DateTime sinceDateTime)
+    {
+        // Get distinct job IDs that have executions created since the given date
+        // This is used to scope job stats to jobs touched by recent orchestration runs
+        return await _dbSet
+            .Where(e => !e.IsDeleted && e.StartDateTime >= sinceDateTime)
+            .Select(e => e.AdrJobId)
+            .Distinct()
+            .ToListAsync();
+    }
 }

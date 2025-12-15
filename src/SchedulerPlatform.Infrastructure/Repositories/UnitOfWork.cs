@@ -23,6 +23,7 @@ public class UnitOfWork : IUnitOfWork
     public IAdrAccountRepository AdrAccounts { get; }
     public IAdrJobRepository AdrJobs { get; }
     public IAdrJobExecutionRepository AdrJobExecutions { get; }
+    public IAdrOrchestrationRunRepository AdrOrchestrationRuns { get; }
 
     public UnitOfWork(SchedulerDbContext context)
     {
@@ -40,6 +41,7 @@ public class UnitOfWork : IUnitOfWork
         AdrAccounts = new AdrAccountRepository(_context);
         AdrJobs = new AdrJobRepository(_context);
         AdrJobExecutions = new AdrJobExecutionRepository(_context);
+        AdrOrchestrationRuns = new AdrOrchestrationRunRepository(_context);
     }
 
     public Task<int> SaveChangesAsync()

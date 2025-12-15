@@ -236,10 +236,13 @@ public class AdrService : IAdrService
         return result ?? new List<AdrJob>();
     }
 
-    public async Task<AdrJobStats> GetJobStatsAsync()
+    public async Task<AdrJobStats> GetJobStatsAsync(int? lastOrchestrationRuns = null)
     {
         var client = CreateClient();
-        var result = await client.GetFromJsonAsync<AdrJobStats>($"adr/jobs/stats");
+        var url = lastOrchestrationRuns.HasValue 
+            ? $"adr/jobs/stats?lastOrchestrationRuns={lastOrchestrationRuns.Value}"
+            : "adr/jobs/stats";
+        var result = await client.GetFromJsonAsync<AdrJobStats>(url);
         return result ?? new AdrJobStats();
     }
 

@@ -45,7 +45,7 @@ public interface IAdrService
             bool sortDescending = true);
     Task<AdrJob?> GetJobAsync(int id);
     Task<List<AdrJob>> GetJobsByAccountAsync(int adrAccountId);
-    Task<AdrJobStats> GetJobStatsAsync();
+    Task<AdrJobStats> GetJobStatsAsync(int? lastOrchestrationRuns = null);
     Task<byte[]> DownloadJobsExportAsync(
         string? status = null,
         string? vendorCode = null,
