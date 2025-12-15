@@ -19,6 +19,13 @@ public class AdrOrchestrationRequest
     public bool RunCredentialVerification { get; set; } = true;
     public bool RunScraping { get; set; } = true;
     public bool RunStatusCheck { get; set; } = true;
+    
+    /// <summary>
+    /// When true and RunStatusCheck is true, uses CheckAllScrapedStatusesAsync instead of CheckPendingStatusesAsync.
+    /// This checks ALL jobs with ScrapeRequested status regardless of timing criteria.
+    /// Used by the "Check Statuses Only" button for manual status checks.
+    /// </summary>
+    public bool CheckAllScrapedStatuses { get; set; } = false;
 }
 
 /// <summary>
@@ -351,32 +358,59 @@ public class AdrBackgroundOrchestrationService : BackgroundService
             // This prevents duplicate scrape requests for jobs that already completed
             if (request.RunStatusCheck)
             {
+                var checkAllStatuses = request.CheckAllScrapedStatuses;
                 _queue.UpdateStatus(request.RequestId, s => 
                 {
-                    s.CurrentStep = "Checking statuses";
+                    s.CurrentStep = checkAllStatuses ? "Checking all scraped statuses" : "Checking statuses";
                     s.CurrentStepPhase = "Preparing";
                     s.CurrentStepProgress = 0;
                     s.CurrentStepTotal = 0;
                 });
-                _logger.LogInformation("Request {RequestId}: Starting status check", request.RequestId);
+                _logger.LogInformation(
+                    "Request {RequestId}: Starting status check (CheckAllScrapedStatuses={CheckAll})", 
+                    request.RequestId, checkAllStatuses);
                 
-                var statusResult = await orchestratorService.CheckPendingStatusesAsync(
-                    (progress, total) => _queue.UpdateStatus(request.RequestId, s => 
-                    {
-                        // Negative progress indicates setup/preparing phase
-                        if (progress < 0)
+                // Use CheckAllScrapedStatusesAsync for manual "Check Statuses Only" button
+                // Use CheckPendingStatusesAsync for regular orchestration runs
+                StatusCheckResult statusResult;
+                if (checkAllStatuses)
+                {
+                    statusResult = await orchestratorService.CheckAllScrapedStatusesAsync(
+                        (progress, total) => _queue.UpdateStatus(request.RequestId, s => 
                         {
-                            s.CurrentStepPhase = "Preparing";
-                            s.CurrentStepProgress = Math.Abs(progress);
-                        }
-                        else
+                            if (progress < 0)
+                            {
+                                s.CurrentStepPhase = "Preparing";
+                                s.CurrentStepProgress = Math.Abs(progress);
+                            }
+                            else
+                            {
+                                s.CurrentStepPhase = "Calling API";
+                                s.CurrentStepProgress = progress;
+                            }
+                            s.CurrentStepTotal = total;
+                        }),
+                        stoppingToken);
+                }
+                else
+                {
+                    statusResult = await orchestratorService.CheckPendingStatusesAsync(
+                        (progress, total) => _queue.UpdateStatus(request.RequestId, s => 
                         {
-                            s.CurrentStepPhase = "Calling API";
-                            s.CurrentStepProgress = progress;
-                        }
-                        s.CurrentStepTotal = total;
-                    }),
-                    stoppingToken);
+                            if (progress < 0)
+                            {
+                                s.CurrentStepPhase = "Preparing";
+                                s.CurrentStepProgress = Math.Abs(progress);
+                            }
+                            else
+                            {
+                                s.CurrentStepPhase = "Calling API";
+                                s.CurrentStepProgress = progress;
+                            }
+                            s.CurrentStepTotal = total;
+                        }),
+                        stoppingToken);
+                }
                 _queue.UpdateStatus(request.RequestId, s => 
                 {
                     s.CurrentStepPhase = null;

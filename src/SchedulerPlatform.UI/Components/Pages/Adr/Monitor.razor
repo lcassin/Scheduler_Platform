@@ -1124,28 +1124,25 @@
 
         try
         {
-            var result = await AdrService.CheckStatusesAsync();
-            _statusCheckResult = result; // Store result for display in the panel
-            
-            // Build message with job counts
-            var message = $"Status check complete! Checked: {result.JobsChecked}, Completed: {result.JobsCompleted}, Need Review: {result.JobsNeedingReview}";
-            
-            // Show appropriate severity based on results
-            if (result.Errors > 0)
+            // Use background orchestration with only status check enabled
+            // This runs CheckAllScrapedStatusesAsync which checks ALL jobs with ScrapeRequested status
+            var response = await AdrService.StartBackgroundOrchestrationAsync(new BackgroundOrchestrationRequest
             {
-                Snackbar.Add($"{message} (with {result.Errors} errors - see logs)", Severity.Warning);
-            }
-            else if (result.JobsChecked == 0)
-            {
-                Snackbar.Add("No jobs found in ScrapeRequested status to check", Severity.Info);
-            }
-            else
-            {
-                Snackbar.Add(message, Severity.Success);
-            }
+                RunSync = false,
+                RunCreateJobs = false,
+                RunCredentialVerification = false,
+                RunScraping = false,
+                RunStatusCheck = true,
+                CheckAllScrapedStatuses = true // Use CheckAllScrapedStatusesAsync instead of CheckPendingStatusesAsync
+            });
             
-            // Refresh job stats to show updated counts
+            Snackbar.Add($"Status check started in background. Request ID: {response.RequestId}", Severity.Info);
+            
+            // Refresh to show the running orchestration
             await LoadDataAsync();
+            
+            // Start progress polling to show updates
+            StartProgressPolling();
         }
         catch (SessionExpiredException)
         {
@@ -1154,7 +1151,7 @@
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Failed to check statuses: {ex.Message}", Severity.Error);
+            Snackbar.Add($"Failed to start status check: {ex.Message}", Severity.Error);
         }
         finally
         {
@@ -1272,10 +1269,12 @@
     private Color GetStepColor(string stepName, AdrOrchestrationStatus status)
     {
         var steps = new[] { "Syncing accounts", "Creating jobs", "Verifying credentials", "Processing scraping", "Checking statuses" };
-        var currentIndex = Array.IndexOf(steps, status.CurrentStep);
+        // Normalize "Checking all scraped statuses" to "Checking statuses" for comparison
+        var normalizedCurrentStep = status.CurrentStep == "Checking all scraped statuses" ? "Checking statuses" : status.CurrentStep;
+        var currentIndex = Array.IndexOf(steps, normalizedCurrentStep);
         var stepIndex = Array.IndexOf(steps, stepName);
 
-        if (status.CurrentStep == stepName)
+        if (normalizedCurrentStep == stepName)
             return Color.Info; // Current step
         else if (stepIndex < currentIndex || (status.Status == "Completed" && stepIndex <= steps.Length))
             return Color.Success; // Completed step
@@ -1286,10 +1285,12 @@
     private string GetStepIcon(string stepName, AdrOrchestrationStatus status)
     {
         var steps = new[] { "Syncing accounts", "Creating jobs", "Verifying credentials", "Processing scraping", "Checking statuses" };
-        var currentIndex = Array.IndexOf(steps, status.CurrentStep);
+        // Normalize "Checking all scraped statuses" to "Checking statuses" for comparison
+        var normalizedCurrentStep = status.CurrentStep == "Checking all scraped statuses" ? "Checking statuses" : status.CurrentStep;
+        var currentIndex = Array.IndexOf(steps, normalizedCurrentStep);
         var stepIndex = Array.IndexOf(steps, stepName);
 
-        if (status.CurrentStep == stepName)
+        if (normalizedCurrentStep == stepName)
             return Icons.Material.Filled.PlayCircle;
         else if (stepIndex < currentIndex || status.Status == "Completed")
             return Icons.Material.Filled.CheckCircle;
