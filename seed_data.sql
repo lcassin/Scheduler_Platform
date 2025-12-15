@@ -75,7 +75,8 @@ VALUES (159, 4, 'users:manage', NULL, NULL, 0, 1, 1, 0, 0, '2025-11-26 03:16:06.
 SET IDENTITY_INSERT [UserPermission] OFF;
 
 -- =============================================
--- 4. Schedule Table (3 records)
+-- 4. Schedule Table (2 records)
+-- Note: ADR Account Sync schedule removed - Full Cycle already includes account sync as first step
 -- =============================================
 SET IDENTITY_INSERT [Schedule] ON;
 
@@ -83,18 +84,15 @@ SET IDENTITY_INSERT [Schedule] ON;
 INSERT INTO [Schedule] (ScheduleId, Name, Description, ClientId, JobType, Frequency, CronExpression, ModifiedDateTime, LastRunDateTime, IsEnabled, IsSystemSchedule, MaxRetries, RetryDelayMinutes, TimeZone, JobConfiguration, CreatedDateTime, NextRunDateTime, CreatedBy, ModifiedBy, IsDeleted, TimeoutMinutes)
 VALUES (1, 'Daily Log Cleanup', 'Automatically deletes log files older than 7 days from API and IdentityServer directories', 1, 1, 1, '0 0 2 * * ?', '2025-12-08 14:45:18.0915794', NULL, 1, 1, 3, 5, 'Central Standard Time', '{"ExecutablePath":"C:\\Users\\LCassin\\source\\repos\\Scheduler_Platform\\src\\SchedulerPlatform.LogCleanup\\bin\\Release\\net10.0\\SchedulerPlatform.LogCleanup.exe","Arguments":"1","WorkingDirectory":"C:\\Users\\LCassin\\source\\repos\\Scheduler_Platform"}', '2025-10-24 23:03:13.4966667', '2025-12-09 08:00:00.0000000', 'System', 'Default Admin', 0, NULL);
 
--- ADR Account Sync - runs daily at 1:00 AM CT (API Call job - JobType 3) - IsSystemSchedule = 1 (protected)
+-- ADR Full Cycle - runs daily at 1:00 AM CT (API Call job - JobType 3) - IsSystemSchedule = 1 (protected)
+-- This schedule runs the full ADR orchestration which includes: sync accounts, create jobs, verify credentials, process scraping, check statuses
 INSERT INTO [Schedule] (ScheduleId, Name, Description, ClientId, JobType, Frequency, CronExpression, ModifiedDateTime, LastRunDateTime, IsEnabled, IsSystemSchedule, MaxRetries, RetryDelayMinutes, TimeZone, JobConfiguration, CreatedDateTime, NextRunDateTime, CreatedBy, ModifiedBy, IsDeleted, TimeoutMinutes)
-VALUES (2, 'ADR Account Sync', 'Syncs ADR accounts from VendorCredNewUAT database daily', 1, 3, 1, '0 0 1 * * ?', GETUTCDATE(), NULL, 1, 1, 3, 5, 'Central Standard Time', '{"Url":"https://localhost:7008/api/adr/sync/accounts","Method":"POST","TimeoutSeconds":600,"AuthorizationType":"ApiKey","AuthorizationValue":"{{Scheduler:InternalApiKey}}"}', GETUTCDATE(), NULL, 'System Created', 'System Created', 0, 10);
-
--- ADR Full Cycle - runs daily at 2:00 AM CT after sync completes (API Call job - JobType 3) - IsSystemSchedule = 1 (protected)
-INSERT INTO [Schedule] (ScheduleId, Name, Description, ClientId, JobType, Frequency, CronExpression, ModifiedDateTime, LastRunDateTime, IsEnabled, IsSystemSchedule, MaxRetries, RetryDelayMinutes, TimeZone, JobConfiguration, CreatedDateTime, NextRunDateTime, CreatedBy, ModifiedBy, IsDeleted, TimeoutMinutes)
-VALUES (3, 'ADR Full Cycle', 'Runs full ADR orchestration cycle: create jobs, verify credentials, process scraping, check statuses', 1, 3, 1, '0 0 2 * * ?', GETUTCDATE(), NULL, 1, 1, 3, 5, 'Central Standard Time', '{"Url":"https://localhost:7008/api/adr/orchestrate/run-full-cycle","Method":"POST","TimeoutSeconds":1800,"AuthorizationType":"ApiKey","AuthorizationValue":"{{Scheduler:InternalApiKey}}"}', GETUTCDATE(), NULL, 'System Created', 'System Created', 0, 30);
+VALUES (2, 'ADR Full Cycle', 'Runs full ADR orchestration cycle: sync accounts, create jobs, verify credentials, process scraping, check statuses', 1, 3, 1, '0 0 1 * * ?', GETUTCDATE(), NULL, 1, 1, 3, 5, 'Central Standard Time', '{"Url":"https://localhost:7008/api/adr/orchestrate/run-full-cycle","Method":"POST","TimeoutSeconds":1800,"AuthorizationType":"ApiKey","AuthorizationValue":"{{Scheduler:InternalApiKey}}"}', GETUTCDATE(), NULL, 'System Created', 'System Created', 0, 30);
 
 SET IDENTITY_INSERT [Schedule] OFF;
 
 -- =============================================
--- 5. NotificationSetting Table (3 records - one per system schedule)
+-- 5. NotificationSetting Table (2 records - one per system schedule)
 -- Sends failure notifications to lcassin@cassinfo.com
 -- =============================================
 SET IDENTITY_INSERT [NotificationSetting] ON;
@@ -103,13 +101,9 @@ SET IDENTITY_INSERT [NotificationSetting] ON;
 INSERT INTO [NotificationSetting] (NotificationSettingId, ScheduleId, EnableSuccessNotifications, EnableFailureNotifications, SuccessEmailRecipients, FailureEmailRecipients, SuccessEmailSubject, FailureEmailSubject, IncludeExecutionDetails, IncludeOutput, CreatedDateTime, ModifiedDateTime, CreatedBy, ModifiedBy, IsDeleted)
 VALUES (1, 1, 0, 1, NULL, 'lcassin@cassinfo.com', NULL, 'FAILED: Daily Log Cleanup', 1, 1, GETUTCDATE(), GETUTCDATE(), 'System Seed', 'System Seed', 0);
 
--- Notification for ADR Account Sync (ScheduleId 2)
+-- Notification for ADR Full Cycle (ScheduleId 2)
 INSERT INTO [NotificationSetting] (NotificationSettingId, ScheduleId, EnableSuccessNotifications, EnableFailureNotifications, SuccessEmailRecipients, FailureEmailRecipients, SuccessEmailSubject, FailureEmailSubject, IncludeExecutionDetails, IncludeOutput, CreatedDateTime, ModifiedDateTime, CreatedBy, ModifiedBy, IsDeleted)
-VALUES (2, 2, 0, 1, NULL, 'lcassin@cassinfo.com', NULL, 'FAILED: ADR Account Sync', 1, 1, GETUTCDATE(), GETUTCDATE(), 'System Seed', 'System Seed', 0);
-
--- Notification for ADR Full Cycle (ScheduleId 3)
-INSERT INTO [NotificationSetting] (NotificationSettingId, ScheduleId, EnableSuccessNotifications, EnableFailureNotifications, SuccessEmailRecipients, FailureEmailRecipients, SuccessEmailSubject, FailureEmailSubject, IncludeExecutionDetails, IncludeOutput, CreatedDateTime, ModifiedDateTime, CreatedBy, ModifiedBy, IsDeleted)
-VALUES (3, 3, 0, 1, NULL, 'lcassin@cassinfo.com', NULL, 'FAILED: ADR Full Cycle', 1, 1, GETUTCDATE(), GETUTCDATE(), 'System Seed', 'System Seed', 0);
+VALUES (2, 2, 0, 1, NULL, 'lcassin@cassinfo.com', NULL, 'FAILED: ADR Full Cycle', 1, 1, GETUTCDATE(), GETUTCDATE(), 'System Seed', 'System Seed', 0);
 
 SET IDENTITY_INSERT [NotificationSetting] OFF;
 

@@ -47,6 +47,21 @@
                             <text>Start Orchestration</text>
                         }
                     </MudButton>
+                    <MudButton Variant="Variant.Outlined" 
+                               Color="Color.Info" 
+                               StartIcon="@Icons.Material.Filled.CheckCircle"
+                               OnClick="CheckStatusesOnly"
+                               Disabled="_isCheckingStatuses || (_currentStatus?.IsRunning ?? false)">
+                        @if (_isCheckingStatuses)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            <text>Checking...</text>
+                        }
+                        else
+                        {
+                            <text>Check Statuses Only</text>
+                        }
+                    </MudButton>
                 </div>
             </div>
 
@@ -744,6 +759,7 @@
     private bool _historyLoading = true;
     private bool _isRefreshing = false;
     private bool _isStarting = false;
+    private bool _isCheckingStatuses = false;
     private bool _autoRefreshEnabled = true;
     private bool _showAllHistory = false;
     private DateTime? _lastRefresh;
@@ -1035,6 +1051,35 @@
         finally
         {
             _isStarting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CheckStatusesOnly()
+    {
+        _isCheckingStatuses = true;
+        StateHasChanged();
+
+        try
+        {
+            var result = await AdrService.CheckStatusesAsync();
+            Snackbar.Add($"Status check complete! {result.JobsCompleted} completed, {result.JobsNeedingReview} need review", Severity.Success);
+            
+            // Refresh job stats to show updated counts
+            await LoadDataAsync();
+        }
+        catch (SessionExpiredException)
+        {
+            Snackbar.Add("Your session has expired. Redirecting to login...", Severity.Warning);
+            Navigation.NavigateTo("/Account/Login", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to check statuses: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isCheckingStatuses = false;
             StateHasChanged();
         }
     }
