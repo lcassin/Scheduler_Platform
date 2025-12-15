@@ -381,7 +381,6 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             .Where(j => !j.IsDeleted &&
                         !j.IsManualRequest &&
                         (j.Status == "ScrapeRequested" || j.Status == "StatusCheckInProgress") &&
-                        j.AdrStatusId.HasValue &&
                         !j.ScrapingCompletedDateTime.HasValue &&
                         // At least delayDays since last modification
                         j.ModifiedDateTime <= checkDate &&
@@ -402,7 +401,6 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             .Where(j => !j.IsDeleted &&
                         !j.IsManualRequest &&
                         (j.Status == "ScrapeRequested" || j.Status == "StatusCheckInProgress") &&
-                        j.AdrStatusId.HasValue &&
                         !j.ScrapingCompletedDateTime.HasValue &&
                         // Billing window ended at least finalDelayDays ago
                         j.NextRangeEndDateTime.HasValue &&
