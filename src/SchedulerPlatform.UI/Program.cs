@@ -95,11 +95,15 @@ app.UseAuthorization();
 
 app.MapGet("/logout", async (HttpContext context) =>
 {
+    // Check if this is a session expiration logout
+    var sessionExpired = context.Request.Query["sessionExpired"].ToString() == "true";
+    var redirectUri = sessionExpired ? "/Account/Login?sessionExpired=true" : "/";
+    
     await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     await context.SignOutAsync(OpenIdConnectDefaults.AuthenticationScheme, 
         new Microsoft.AspNetCore.Authentication.AuthenticationProperties 
         { 
-            RedirectUri = "/" 
+            RedirectUri = redirectUri 
         });
 });
 

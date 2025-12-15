@@ -54,7 +54,8 @@
         InvokeAsync(() =>
         {
             Snackbar.Add("Your session has expired. Redirecting to login...", Severity.Warning);
-            Navigation.NavigateTo("/Account/Logout", forceLoad: true);
+            // Pass sessionExpired=true so the login page can show an alert
+            Navigation.NavigateTo("/Account/Logout?sessionExpired=true", forceLoad: true);
         });
     }
 
