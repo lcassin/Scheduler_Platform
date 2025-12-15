@@ -76,7 +76,7 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
         // Include "ScrapeInProgress" to recover jobs that were interrupted mid-step
         // These jobs already had the API called but the process crashed before updating status
         //
-        // Three categories of jobs are ready for scraping:
+        // Four categories of jobs are ready for scraping:
         // 1. Normal flow: CredentialVerified or ScrapeInProgress jobs where NextRunDate has arrived
         // 2. Credential failed: CredentialFailed jobs should still attempt scraping daily
         //    - Helpdesk may have fixed the credential since the last attempt
@@ -86,6 +86,11 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
         //    - They have a CredentialId (so we can attempt scraping)
         //    - Their account is not "Missing" (Missing accounts need manual investigation)
         //    The downstream API will handle any credential issues and create helpdesk tickets
+        // 4. Stuck in credential check: CredentialCheckInProgress jobs where NextRunDate has passed
+        //    - These jobs were interrupted mid-credential-check (system shutdown/crash between API call and status save)
+        //    - Once NextRunDate passes, they can no longer be picked up by credential verification query
+        //    - Treat them like "missed credential window" jobs and proceed to scraping
+        //    - The idempotency check prevents duplicate API calls
         //
         // BOUNDARY CHECK: Only scrape jobs within their billing window (NextRunDate to NextRangeEndDate)
         // Jobs past their NextRangeEndDate should not be retried here - they go to final retry logic
@@ -119,6 +124,13 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                                     ||
                                     // Missed credential window: Pending jobs that can still be scraped
                                     (j.Status == "Pending" &&
+                                     j.CredentialId > 0 &&
+                                     j.AdrAccount != null &&
+                                     j.AdrAccount.HistoricalBillingStatus != "Missing")
+                                    ||
+                                    // Stuck in credential check: jobs interrupted during credential verification
+                                    // whose NextRunDate has now passed (can't go back to credential check)
+                                    (j.Status == "CredentialCheckInProgress" &&
                                      j.CredentialId > 0 &&
                                      j.AdrAccount != null &&
                                      j.AdrAccount.HistoricalBillingStatus != "Missing")
