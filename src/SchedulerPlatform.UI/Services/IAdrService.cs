@@ -76,7 +76,7 @@ public interface IAdrService
     Task<FullCycleResult> RunFullCycleAsync();
     
     // Background orchestration monitoring
-    Task<BackgroundOrchestrationResponse> StartBackgroundOrchestrationAsync();
+    Task<BackgroundOrchestrationResponse> StartBackgroundOrchestrationAsync(BackgroundOrchestrationRequest? request = null);
     Task<OrchestrationCurrentResponse> GetCurrentOrchestrationAsync();
     Task<AdrOrchestrationStatus?> GetOrchestrationStatusAsync(string requestId);
     Task<List<AdrOrchestrationStatus>> GetOrchestrationHistoryAsync(int? count = 10);

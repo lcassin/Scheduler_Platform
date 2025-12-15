@@ -406,10 +406,18 @@ public class AdrService : IAdrService
 
     #region Background Orchestration Monitoring
 
-    public async Task<BackgroundOrchestrationResponse> StartBackgroundOrchestrationAsync()
+    public async Task<BackgroundOrchestrationResponse> StartBackgroundOrchestrationAsync(BackgroundOrchestrationRequest? request = null)
     {
         var client = CreateClient();
-        var response = await client.PostAsync("adr/orchestrate/run-background", null);
+        HttpResponseMessage response;
+        if (request != null)
+        {
+            response = await client.PostAsJsonAsync("adr/orchestrate/run-background", request);
+        }
+        else
+        {
+            response = await client.PostAsync("adr/orchestrate/run-background", null);
+        }
         response.EnsureSuccessStatusCode();
         var result = await response.Content.ReadFromJsonAsync<BackgroundOrchestrationResponse>();
         return result ?? new BackgroundOrchestrationResponse();

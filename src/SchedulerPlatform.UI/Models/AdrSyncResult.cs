@@ -113,6 +113,21 @@ public class CheckJobStatusResult
     public string? JobStatus { get; set; }
 }
 
+public class BackgroundOrchestrationRequest
+{
+    public bool RunSync { get; set; } = true;
+    public bool RunCreateJobs { get; set; } = true;
+    public bool RunCredentialVerification { get; set; } = true;
+    public bool RunScraping { get; set; } = true;
+    public bool RunStatusCheck { get; set; } = true;
+    
+    /// <summary>
+    /// When true and RunStatusCheck is true, checks ALL jobs with ScrapeRequested status
+    /// regardless of timing criteria. Used by the "Check Statuses Only" button.
+    /// </summary>
+    public bool CheckAllScrapedStatuses { get; set; } = false;
+}
+
 public class BackgroundOrchestrationResponse
 {
     public string Message { get; set; } = string.Empty;
