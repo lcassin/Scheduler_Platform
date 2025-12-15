@@ -197,7 +197,11 @@
                                     }
                                 </MudTd>
                 <MudTd DataLabel="Status">
-                    <MudSwitch T="bool" Value="context.IsEnabled" ValueChanged="@((bool value) => HandleToggleSchedule(context, value))" Color="Color.Primary" Disabled="@(!_canUpdate || context.IsSystemSchedule)" />
+                    @if (!context.IsEnabled)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="mr-2">Paused</MudChip>
+                    }
+                    <MudSwitch T="bool" Value="context.IsEnabled" ValueChanged="@((bool value) => HandleToggleSchedule(context, value))" Color="Color.Primary" Disabled="@(!_canUpdate || (context.IsSystemSchedule && !_isSystemAdmin))" />
                 </MudTd>
                 <MudTd DataLabel="Actions">
                     <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
@@ -211,11 +215,22 @@
                         {
                             <MudMenuItem Icon="@Icons.Material.Filled.PlayArrow" OnClick="() => TriggerSchedule(context)">Trigger Now</MudMenuItem>
                         }
+                        @if (_canUpdate && (!context.IsSystemSchedule || _isSystemAdmin))
+                        {
+                            @if (context.IsEnabled)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.Pause" OnClick="() => HandleToggleSchedule(context, false)">Pause Schedule</MudMenuItem>
+                            }
+                            else
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.PlayCircle" OnClick="() => HandleToggleSchedule(context, true)">Resume Schedule</MudMenuItem>
+                            }
+                        }
                         @if (_canDelete && !context.IsSystemSchedule)
                         {
                             <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="() => DeleteSchedule(context)">Delete</MudMenuItem>
                         }
-                        @if (context.IsSystemSchedule)
+                        @if (context.IsSystemSchedule && !_isSystemAdmin)
                         {
                             <MudMenuItem Icon="@Icons.Material.Filled.Lock" Disabled="true">System Schedule (Protected)</MudMenuItem>
                         }
@@ -270,6 +285,7 @@
 	private bool _canUpdate = false;
 	private bool _canDelete = false;
 	private bool _canExecute = false;
+	private bool _isSystemAdmin = false;
 	
 	// Bulk selection state
 	private HashSet<int> _selectedIds = new();
@@ -381,6 +397,7 @@
 		_canUpdate = await PermissionService.CanUpdateAsync("schedules");
 		_canDelete = await PermissionService.CanDeleteAsync("schedules");
 		_canExecute = await PermissionService.CanExecuteAsync("schedules");
+		_isSystemAdmin = await PermissionService.IsSystemAdminAsync();
 	}
 
 	private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)

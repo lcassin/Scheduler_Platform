@@ -82,13 +82,13 @@
         <MudTable T="AdrAccount" ServerData="@ServerReload" 
                   @ref="_table" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
             <HeaderContent>
-                <MudTh>Account #</MudTh>
-                <MudTh>Interface Account ID</MudTh>
-                <MudTh>Client</MudTh>
-                <MudTh>Vendor Code</MudTh>
-                <MudTh>Period Type</MudTh>
-                <MudTh>Last Invoice</MudTh>
-                <MudTh>Expected Next</MudTh>
+                <MudTh><MudTableSortLabel SortLabel="VMAccountNumber" T="AdrAccount">Account #</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="InterfaceAccountId" T="AdrAccount">Interface Account ID</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="ClientName" T="AdrAccount">Client</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="VendorCode" T="AdrAccount">Vendor Code</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="PeriodType" T="AdrAccount">Period Type</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="LastInvoiceDateTime" T="AdrAccount">Last Invoice</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="ExpectedNextDateTime" T="AdrAccount">Expected Next</MudTableSortLabel></MudTh>
                 <MudTh>Days Overdue</MudTh>
                 <MudTh>Actions</MudTh>
             </HeaderContent>
@@ -201,13 +201,21 @@
             var pageNumber = state.Page + 1;
             var pageSize = state.PageSize;
 
+            // Determine sort direction (default to ascending for ExpectedNextDateTime)
+            var sortDescending = state.SortDirection == SortDirection.Descending;
+            var sortColumn = string.IsNullOrEmpty(state.SortLabel) ? "ExpectedNextDateTime" : state.SortLabel;
+
             var result = await AdrService.GetAccountsPagedAsync(
                 pageNumber,
                 pageSize,
                 _filterClientId,
                 _searchTerm,
                 null,
-                "Missing");
+                "Missing",
+                null,
+                null,
+                sortColumn,
+                sortDescending);
 
             return new TableData<AdrAccount>
             {

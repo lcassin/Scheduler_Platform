@@ -1,0 +1,77 @@
+flowchart TB
+    subgraph "ADR Orchestration Process"
+        Start([Start Orchestration]) --> Step1
+        
+        subgraph Step1["Step 1: Sync Accounts"]
+            S1A[Query VendorCredNewUAT Database] --> S1B[Analyze Billing Patterns]
+            S1B --> S1C{Account Exists?}
+            S1C -->|No| S1D[Insert New AdrAccount]
+            S1C -->|Yes| S1E{Manually Overridden?}
+            S1E -->|Yes| S1F[Skip Protected Fields]
+            S1E -->|No| S1G[Update All Fields]
+            S1D --> S1H[Calculate NextRunDateTime]
+            S1F --> S1H
+            S1G --> S1H
+        end
+        
+        Step1 --> Step2
+        
+        subgraph Step2["Step 2: Create Jobs"]
+            S2A[Find Accounts with NextRunStatus = Run Now or Due Soon] --> S2B{HistoricalBillingStatus = Missing?}
+            S2B -->|Yes| S2C[Skip - Needs Research]
+            S2B -->|No| S2D{Job Already Exists for Period?}
+            S2D -->|Yes| S2E[Skip - Duplicate Prevention]
+            S2D -->|No| S2F[Create AdrJob with Status = Pending]
+        end
+        
+        Step2 --> Step3
+        
+        subgraph Step3["Step 3: Verify Credentials"]
+            S3A[Find Jobs where NextRunDateTime within 7-day window] --> S3B{Status = Pending AND has CredentialId?}
+            S3B -->|No| S3C[Skip]
+            S3B -->|Yes| S3D{Already Verified This Period?}
+            S3D -->|Yes| S3E[Skip - Idempotency]
+            S3D -->|No| S3F[Call ADR API: Attempt Login]
+            S3F --> S3G{API Response}
+            S3G -->|Success| S3H[Status = CredentialVerified]
+            S3G -->|Failed| S3I[Status = CredentialFailed]
+            S3H --> S3J[Record AdrJobExecution]
+            S3I --> S3J
+        end
+        
+        Step3 --> Step4
+        
+        subgraph Step4["Step 4: Process Scraping"]
+            S4A[Find Jobs where NextRunDateTime <= Today] --> S4B{Status = CredentialVerified OR CredentialFailed?}
+            S4B -->|No| S4C[Skip]
+            S4B -->|Yes| S4D{Already Scraped This Period?}
+            S4D -->|Yes| S4E[Skip - Idempotency]
+            S4D -->|No| S4F{NextRangeEndDateTime Passed?}
+            S4F -->|Yes| S4G[Status = NeedsReview]
+            S4F -->|No| S4H[Call ADR API: Download Invoice]
+            S4H --> S4I{API Response}
+            S4I -->|Success| S4J[Status = Completed]
+            S4I -->|In Progress| S4K[Retry Tomorrow]
+            S4I -->|Failed| S4L[Increment RetryCount]
+        end
+        
+        Step4 --> Step5
+        
+        subgraph Step5["Step 5: Check Statuses"]
+            S5A[Find Jobs with AdrIndexId and Status != Completed] --> S5B[Call ADR API: Get Status]
+            S5B --> S5C{Status Response}
+            S5C -->|Complete| S5D[Status = Completed]
+            S5C -->|Failed| S5E[Status = Failed]
+            S5C -->|In Progress| S5F[Keep Current Status]
+        end
+        
+        Step5 --> End([Orchestration Complete])
+    end
+    
+    style Start fill:#4CAF50,color:white
+    style End fill:#4CAF50,color:white
+    style Step1 fill:#e3f2fd
+    style Step2 fill:#fff3e0
+    style Step3 fill:#f3e5f5
+    style Step4 fill:#e8f5e9
+    style Step5 fill:#fce4ec

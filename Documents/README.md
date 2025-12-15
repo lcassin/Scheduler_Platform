@@ -68,3 +68,37 @@ The platform uses Cass Information Systems branding:
 - Added missed schedules detection and bulk trigger feature
 - Updated database naming conventions to company standards
 - Made ModifiedBy/ModifiedDateTime non-nullable audit fields
+
+## Recent Updates (December 2025)
+
+- **ADR (Automated Data Retrieval) Process**: Complete implementation of automated invoice scraping from vendor portals
+  - New entities: AdrAccount, AdrJob, AdrJobExecution, AdrOrchestrationRun
+  - 4-step orchestration workflow: Sync Accounts → Create Jobs → Verify Credentials → Process Scraping → Check Statuses
+  - Real-time Job Monitor page with progress tracking
+  - Manual override support for billing dates/frequencies
+  - Idempotency to prevent duplicate API calls to paid services
+  - ADR-specific permissions (adr:view, adr:edit, adr:execute)
+
+### ADR Documentation
+
+Technical documentation for the ADR process is distributed across project READMEs:
+
+| Topic | Location |
+|-------|----------|
+| ADR Overview | [Root README - ADR Section](/README.md#adr-automated-data-retrieval-process-december-2025) |
+| ADR Domain Model | [Core README - ADR Domain Model](/src/SchedulerPlatform.Core/README.md#adr-domain-model) |
+| ADR API Endpoints | [API README - AdrController](/src/SchedulerPlatform.API/README.md#adrcontroller) |
+| ADR UI Pages | [UI README - ADR UI Pages](/src/SchedulerPlatform.UI/README.md#adr-ui-pages) |
+| ADR Persistence | [Infrastructure README - ADR Persistence](/src/SchedulerPlatform.Infrastructure/README.md#adr-persistence-and-indexing) |
+
+### ADR Diagrams
+
+Technical diagrams for the ADR process are in `/Technical/diagrams/`:
+
+| Diagram | Description |
+|---------|-------------|
+| [adr-er-diagram.png](/Documents/Technical/diagrams/adr-er-diagram.png) | Entity relationship diagram showing AdrAccount, AdrJob, AdrJobExecution, AdrOrchestrationRun |
+| [adr-workflow.png](/Documents/Technical/diagrams/adr-workflow.png) | Flowchart showing the 4-step orchestration workflow |
+| [adr-sequence-orchestration.png](/Documents/Technical/diagrams/adr-sequence-orchestration.png) | Sequence diagram showing API orchestration flow |
+
+Source Mermaid files (.mmd) are also available for editing. See [Technical/diagrams/README.md](/Documents/Technical/diagrams/README.md) for regeneration instructions.

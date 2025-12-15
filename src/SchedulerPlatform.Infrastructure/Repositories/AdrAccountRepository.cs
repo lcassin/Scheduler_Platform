@@ -17,20 +17,6 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
             .FirstOrDefaultAsync(a => a.VMAccountId == vmAccountId && !a.IsDeleted);
     }
 
-    public async Task<IEnumerable<AdrAccount>> GetByCredentialIdAsync(int credentialId)
-    {
-        return await _dbSet
-            .Where(a => a.CredentialId == credentialId && !a.IsDeleted)
-            .ToListAsync();
-    }
-
-    public async Task<IEnumerable<AdrAccount>> GetByClientIdAsync(int clientId)
-    {
-        return await _dbSet
-            .Where(a => a.ClientId == clientId && !a.IsDeleted)
-            .ToListAsync();
-    }
-
     public async Task<IEnumerable<AdrAccount>> GetAccountsDueForRunAsync(DateTime currentDate)
     {
         return await _dbSet
@@ -59,9 +45,18 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
         string? nextRunStatus = null,
         string? searchTerm = null,
         string? historicalBillingStatus = null,
-        bool? isOverridden = null)
+        bool? isOverridden = null,
+        string? sortColumn = null,
+        bool sortDescending = false,
+        List<int>? accountIdsFilter = null)
     {
         var query = _dbSet.Where(a => !a.IsDeleted);
+
+        // Apply account IDs filter (for job status filtering)
+        if (accountIdsFilter != null)
+        {
+            query = query.Where(a => accountIdsFilter.Contains(a.Id));
+        }
 
         if (clientId.HasValue)
         {
@@ -98,8 +93,46 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
         }
 
         var totalCount = await query.CountAsync();
-        var items = await query
-            .OrderBy(a => a.NextRunDateTime)
+
+        // Apply dynamic sorting
+        IQueryable<AdrAccount> orderedQuery = sortColumn switch
+        {
+            "VMAccountNumber" => sortDescending 
+                ? query.OrderByDescending(a => a.VMAccountNumber ?? "") 
+                : query.OrderBy(a => a.VMAccountNumber ?? ""),
+            "InterfaceAccountId" => sortDescending 
+                ? query.OrderByDescending(a => a.InterfaceAccountId ?? "") 
+                : query.OrderBy(a => a.InterfaceAccountId ?? ""),
+            "ClientName" => sortDescending 
+                ? query.OrderByDescending(a => a.ClientName ?? "") 
+                : query.OrderBy(a => a.ClientName ?? ""),
+            "VendorCode" => sortDescending 
+                ? query.OrderByDescending(a => a.VendorCode ?? "") 
+                : query.OrderBy(a => a.VendorCode ?? ""),
+            "PeriodType" => sortDescending 
+                ? query.OrderByDescending(a => a.PeriodType ?? "") 
+                : query.OrderBy(a => a.PeriodType ?? ""),
+            "NextRunDateTime" => sortDescending 
+                ? query.OrderByDescending(a => a.NextRunDateTime ?? DateTime.MaxValue) 
+                : query.OrderBy(a => a.NextRunDateTime ?? DateTime.MaxValue),
+            "NextRunStatus" => sortDescending 
+                ? query.OrderByDescending(a => a.NextRunStatus ?? "") 
+                : query.OrderBy(a => a.NextRunStatus ?? ""),
+            "HistoricalBillingStatus" => sortDescending 
+                ? query.OrderByDescending(a => a.HistoricalBillingStatus ?? "") 
+                : query.OrderBy(a => a.HistoricalBillingStatus ?? ""),
+            "LastInvoiceDateTime" => sortDescending 
+                ? query.OrderByDescending(a => a.LastInvoiceDateTime ?? DateTime.MinValue) 
+                : query.OrderBy(a => a.LastInvoiceDateTime ?? DateTime.MinValue),
+            "ExpectedNextDateTime" => sortDescending 
+                ? query.OrderByDescending(a => a.ExpectedNextDateTime ?? DateTime.MaxValue) 
+                : query.OrderBy(a => a.ExpectedNextDateTime ?? DateTime.MaxValue),
+            _ => sortDescending 
+                ? query.OrderByDescending(a => a.NextRunDateTime ?? DateTime.MaxValue) 
+                : query.OrderBy(a => a.NextRunDateTime ?? DateTime.MaxValue)
+        };
+
+        var items = await orderedQuery
             .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
@@ -141,51 +174,5 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
         }
 
         return await query.CountAsync();
-    }
-
-    public async Task BulkUpsertAsync(IEnumerable<AdrAccount> accounts)
-    {
-        foreach (var account in accounts)
-        {
-            var existing = await GetByVMAccountIdAsync(account.VMAccountId);
-            if (existing != null)
-            {
-                existing.VMAccountNumber = account.VMAccountNumber;
-                existing.InterfaceAccountId = account.InterfaceAccountId;
-                existing.ClientId = account.ClientId;
-                existing.ClientName = account.ClientName;
-                existing.CredentialId = account.CredentialId;
-                existing.VendorCode = account.VendorCode;
-                existing.PeriodType = account.PeriodType;
-                existing.PeriodDays = account.PeriodDays;
-                existing.MedianDays = account.MedianDays;
-                existing.InvoiceCount = account.InvoiceCount;
-                existing.LastInvoiceDateTime = account.LastInvoiceDateTime;
-                existing.ExpectedNextDateTime = account.ExpectedNextDateTime;
-                existing.ExpectedRangeStartDateTime = account.ExpectedRangeStartDateTime;
-                existing.ExpectedRangeEndDateTime = account.ExpectedRangeEndDateTime;
-                existing.NextRunDateTime = account.NextRunDateTime;
-                existing.NextRangeStartDateTime = account.NextRangeStartDateTime;
-                existing.NextRangeEndDateTime = account.NextRangeEndDateTime;
-                existing.DaysUntilNextRun = account.DaysUntilNextRun;
-                existing.NextRunStatus = account.NextRunStatus;
-                existing.HistoricalBillingStatus = account.HistoricalBillingStatus;
-                existing.LastSyncedDateTime = DateTime.UtcNow;
-                existing.ModifiedDateTime = DateTime.UtcNow;
-                existing.ModifiedBy = "System Created";
-                
-                _context.Entry(existing).State = EntityState.Modified;
-            }
-            else
-            {
-                account.CreatedDateTime = DateTime.UtcNow;
-                account.CreatedBy = "System Created";
-                account.ModifiedDateTime = DateTime.UtcNow;
-                account.ModifiedBy = "System Created";
-                account.LastSyncedDateTime = DateTime.UtcNow;
-                
-                await _dbSet.AddAsync(account);
-            }
-        }
     }
 }

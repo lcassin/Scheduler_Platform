@@ -17,13 +17,16 @@ public class AuthTokenHandler : DelegatingHandler
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<AuthTokenHandler> _logger;
+    private readonly SessionStateService _sessionStateService;
 
     public AuthTokenHandler(
         IHttpContextAccessor httpContextAccessor,
-        ILogger<AuthTokenHandler> logger)
+        ILogger<AuthTokenHandler> logger,
+        SessionStateService sessionStateService)
     {
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
+        _sessionStateService = sessionStateService;
     }
 
     protected override async Task<HttpResponseMessage> SendAsync(
@@ -63,7 +66,11 @@ public class AuthTokenHandler : DelegatingHandler
                 "Received 401 Unauthorized from API. User session may have expired. Request: {Method} {Uri}",
                 request.Method, request.RequestUri);
             
-            // Throw a custom exception that UI components can catch and handle
+            // Notify all subscribers (like MainLayout) that the session has expired
+            // This allows centralized handling of session expiration with automatic redirect
+            _sessionStateService.NotifySessionExpired();
+            
+            // Also throw the exception for any code that wants to handle it explicitly
             throw new SessionExpiredException();
         }
 

@@ -31,6 +31,10 @@ public class AdrAccount
     public bool IsDeleted { get; set; }
     public DateTime CreatedDateTime { get; set; }
     public DateTime? ModifiedDateTime { get; set; }
+    
+    // Job status fields - populated from current billing period's job
+    public string? CurrentJobStatus { get; set; }
+    public DateTime? LastCompletedDateTime { get; set; }
 }
 
 public class AdrAccountStats

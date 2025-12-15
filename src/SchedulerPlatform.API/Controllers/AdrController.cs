@@ -20,6 +20,8 @@ public class AdrController : ControllerBase
     private readonly IAdrOrchestratorService _orchestratorService;
     private readonly IAdrOrchestrationQueue _orchestrationQueue;
     private readonly SchedulerDbContext _dbContext;
+    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<AdrController> _logger;
 
     public AdrController(
@@ -28,6 +30,8 @@ public class AdrController : ControllerBase
         IAdrOrchestratorService orchestratorService,
         IAdrOrchestrationQueue orchestrationQueue,
         SchedulerDbContext dbContext,
+        IHttpClientFactory httpClientFactory,
+        IConfiguration configuration,
         ILogger<AdrController> logger)
     {
         _unitOfWork = unitOfWork;
@@ -35,6 +39,8 @@ public class AdrController : ControllerBase
         _orchestratorService = orchestratorService;
         _orchestrationQueue = orchestrationQueue;
         _dbContext = dbContext;
+        _httpClientFactory = httpClientFactory;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -48,11 +54,50 @@ public class AdrController : ControllerBase
         [FromQuery] string? searchTerm = null,
         [FromQuery] string? historicalBillingStatus = null,
         [FromQuery] bool? isOverridden = null,
+        [FromQuery] string? jobStatus = null,
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20)
+        [FromQuery] int pageSize = 20,
+        [FromQuery] string? sortColumn = null,
+        [FromQuery] bool sortDescending = false)
     {
         try
         {
+            // If filtering by job status, we need to get the account IDs first
+            List<int>? accountIdsWithJobStatus = null;
+            if (!string.IsNullOrWhiteSpace(jobStatus))
+            {
+                if (jobStatus == "NoJob")
+                {
+                    // Get accounts that have no jobs at all
+                    var accountsWithJobs = await _dbContext.AdrJobs
+                        .Where(j => !j.IsDeleted)
+                        .Select(j => j.AdrAccountId)
+                        .Distinct()
+                        .ToListAsync();
+                    
+                    // We'll filter to accounts NOT in this list
+                    accountIdsWithJobStatus = await _dbContext.AdrAccounts
+                        .Where(a => !a.IsDeleted && !accountsWithJobs.Contains(a.Id))
+                        .Select(a => a.Id)
+                        .ToListAsync();
+                }
+                else
+                {
+                    // Get accounts where the latest job has the specified status
+                    accountIdsWithJobStatus = await _dbContext.AdrJobs
+                        .Where(j => !j.IsDeleted)
+                        .GroupBy(j => j.AdrAccountId)
+                        .Select(g => new
+                        {
+                            AdrAccountId = g.Key,
+                            LatestStatus = g.OrderByDescending(j => j.BillingPeriodStartDateTime).Select(j => j.Status).FirstOrDefault()
+                        })
+                        .Where(x => x.LatestStatus == jobStatus)
+                        .Select(x => x.AdrAccountId)
+                        .ToListAsync();
+                }
+            }
+
             var (items, totalCount) = await _unitOfWork.AdrAccounts.GetPagedAsync(
                 pageNumber,
                 pageSize,
@@ -61,11 +106,77 @@ public class AdrController : ControllerBase
                 nextRunStatus,
                 searchTerm,
                 historicalBillingStatus,
-                isOverridden);
+                isOverridden,
+                sortColumn,
+                sortDescending,
+                accountIdsWithJobStatus);
+
+            // Get account IDs from the current page
+            var accountIds = items.Select(a => a.Id).ToList();
+            
+            // Get current billing period job status for each account (single query)
+            var currentJobStatuses = await _dbContext.AdrJobs
+                .Where(j => !j.IsDeleted && accountIds.Contains(j.AdrAccountId))
+                .GroupBy(j => j.AdrAccountId)
+                .Select(g => new 
+                {
+                    AdrAccountId = g.Key,
+                    // Get the job for the current billing period (matching NextRangeStart/End)
+                    CurrentJobStatus = g
+                        .OrderByDescending(j => j.BillingPeriodStartDateTime)
+                        .Select(j => j.Status)
+                        .FirstOrDefault(),
+                    // Get the last completed job's date
+                    LastCompletedDateTime = g
+                        .Where(j => j.ScrapingCompletedDateTime.HasValue)
+                        .OrderByDescending(j => j.ScrapingCompletedDateTime)
+                        .Select(j => j.ScrapingCompletedDateTime)
+                        .FirstOrDefault()
+                })
+                .ToListAsync();
+            
+            // Create a lookup dictionary
+            var jobStatusLookup = currentJobStatuses.ToDictionary(x => x.AdrAccountId);
+            
+            // Map to response with job status
+            var itemsWithJobStatus = items.Select(a => new
+            {
+                a.Id,
+                a.VMAccountId,
+                a.VMAccountNumber,
+                a.InterfaceAccountId,
+                a.ClientId,
+                a.ClientName,
+                a.CredentialId,
+                a.VendorCode,
+                a.PeriodType,
+                a.PeriodDays,
+                a.MedianDays,
+                a.InvoiceCount,
+                a.LastInvoiceDateTime,
+                a.ExpectedNextDateTime,
+                a.ExpectedRangeStartDateTime,
+                a.ExpectedRangeEndDateTime,
+                a.NextRunDateTime,
+                a.NextRangeStartDateTime,
+                a.NextRangeEndDateTime,
+                a.DaysUntilNextRun,
+                a.NextRunStatus,
+                a.HistoricalBillingStatus,
+                a.LastSyncedDateTime,
+                a.IsManuallyOverridden,
+                a.OverriddenBy,
+                a.OverriddenDateTime,
+                a.IsDeleted,
+                a.CreatedDateTime,
+                a.ModifiedDateTime,
+                CurrentJobStatus = jobStatusLookup.TryGetValue(a.Id, out var js) ? js.CurrentJobStatus : null,
+                LastCompletedDateTime = jobStatusLookup.TryGetValue(a.Id, out var js2) ? js2.LastCompletedDateTime : null
+            }).ToList();
 
             return Ok(new
             {
-                items,
+                items = itemsWithJobStatus,
                 totalCount,
                 pageNumber,
                 pageSize
@@ -275,26 +386,61 @@ public class AdrController : ControllerBase
             account.ModifiedDateTime = DateTime.UtcNow;
             account.ModifiedBy = username;
 
-            // Check for existing pending jobs for this account and cancel them if dates changed
-            // This prevents duplicate jobs when billing dates are manually corrected
-            if (account.NextRangeStartDateTime.HasValue && account.NextRangeEndDateTime.HasValue)
-            {
-                var existingJobs = await _unitOfWork.AdrJobs.GetByAccountIdAsync(account.Id);
-                var pendingJobs = existingJobs.Where(j => 
-                    (j.Status == "Pending" || j.Status == "CredentialCheckInProgress" || j.Status == "CredentialVerified") &&
-                    (j.BillingPeriodStartDateTime != account.NextRangeStartDateTime.Value ||
-                     j.BillingPeriodEndDateTime != account.NextRangeEndDateTime.Value));
+                        // Check for existing pending jobs for this account and update them if dates changed
+                        // Instead of cancelling, we update the job's billing period dates to preserve credential status
+                        if (account.NextRangeStartDateTime.HasValue && account.NextRangeEndDateTime.HasValue)
+                        {
+                            var existingJobs = await _unitOfWork.AdrJobs.GetByAccountIdAsync(account.Id);
+                            var jobsWithOldDates = existingJobs.Where(j => 
+                                (j.Status == "Pending" || j.Status == "CredentialCheckInProgress" || j.Status == "CredentialVerified" || j.Status == "CredentialFailed") &&
+                                (j.BillingPeriodStartDateTime != account.NextRangeStartDateTime.Value ||
+                                 j.BillingPeriodEndDateTime != account.NextRangeEndDateTime.Value)).ToList();
                 
-                foreach (var job in pendingJobs)
-                {
-                    job.Status = "Cancelled";
-                    job.ErrorMessage = $"Cancelled due to manual billing date override by {username}";
-                    job.ModifiedDateTime = DateTime.UtcNow;
-                    job.ModifiedBy = username;
-                    await _unitOfWork.AdrJobs.UpdateAsync(job);
-                    _logger.LogInformation("Cancelled job {JobId} for account {AccountId} due to billing date override", job.Id, account.Id);
-                }
-            }
+                            // Check if there's already a job with the new dates
+                            var existingJobWithNewDates = existingJobs.FirstOrDefault(j =>
+                                j.BillingPeriodStartDateTime == account.NextRangeStartDateTime.Value &&
+                                j.BillingPeriodEndDateTime == account.NextRangeEndDateTime.Value &&
+                                j.Status != "Cancelled");
+                
+                            foreach (var job in jobsWithOldDates)
+                            {
+                                if (existingJobWithNewDates != null && existingJobWithNewDates.Id != job.Id)
+                                {
+                                    // There's already a job with the new dates, so cancel this one
+                                    // But transfer credential status if applicable
+                                    if ((job.Status == "CredentialVerified" || job.Status == "CredentialFailed") &&
+                                        existingJobWithNewDates.Status == "Pending")
+                                    {
+                                        existingJobWithNewDates.Status = job.Status;
+                                        existingJobWithNewDates.CredentialVerifiedDateTime = job.CredentialVerifiedDateTime;
+                                        existingJobWithNewDates.ModifiedDateTime = DateTime.UtcNow;
+                                        existingJobWithNewDates.ModifiedBy = username;
+                                        await _unitOfWork.AdrJobs.UpdateAsync(existingJobWithNewDates);
+                                        _logger.LogInformation("Transferred credential status {Status} from job {OldJobId} to job {NewJobId}", 
+                                            job.Status, job.Id, existingJobWithNewDates.Id);
+                                    }
+                        
+                                    job.Status = "Cancelled";
+                                    job.ErrorMessage = $"Cancelled due to manual billing date override by {username}. Credential status transferred to job {existingJobWithNewDates.Id}.";
+                                }
+                                else
+                                {
+                                    // No existing job with new dates, update this job's dates in place
+                                    // This preserves the credential verification status
+                                    var oldStart = job.BillingPeriodStartDateTime;
+                                    var oldEnd = job.BillingPeriodEndDateTime;
+                                    job.BillingPeriodStartDateTime = account.NextRangeStartDateTime.Value;
+                                    job.BillingPeriodEndDateTime = account.NextRangeEndDateTime.Value;
+                                    job.ErrorMessage = $"Billing period updated from {oldStart:MM/dd/yyyy}-{oldEnd:MM/dd/yyyy} to {account.NextRangeStartDateTime.Value:MM/dd/yyyy}-{account.NextRangeEndDateTime.Value:MM/dd/yyyy} by {username}";
+                                    _logger.LogInformation("Updated job {JobId} billing period from {OldStart}-{OldEnd} to {NewStart}-{NewEnd}, preserving status {Status}", 
+                                        job.Id, oldStart, oldEnd, account.NextRangeStartDateTime.Value, account.NextRangeEndDateTime.Value, job.Status);
+                                }
+                    
+                                job.ModifiedDateTime = DateTime.UtcNow;
+                                job.ModifiedBy = username;
+                                await _unitOfWork.AdrJobs.UpdateAsync(job);
+                            }
+                        }
 
             await _unitOfWork.AdrAccounts.UpdateAsync(account);
             await _unitOfWork.SaveChangesAsync();
@@ -346,28 +492,508 @@ public class AdrController : ControllerBase
         }
     }
 
+        /// <summary>
+        /// Admin-only endpoint to manually fire an ADR request for any date range.
+        /// This creates a real AdrJob with IsManualRequest=true and makes the actual API call.
+        /// The job is excluded from normal orchestration but visible in the Jobs UI.
+        /// </summary>
+        [HttpPost("accounts/{id}/manual-scrape")]
+        [Authorize(Policy = "AdrAccounts.Execute")]
+        public async Task<ActionResult<object>> ManualScrapeRequest(int id, [FromBody] ManualScrapeRequest request)
+        {
+            try
+            {
+                // Check if user is admin or super admin
+                var isSystemAdmin = User.Claims.Any(c => c.Type == "is_system_admin" && c.Value == "True");
+                var isAdmin = User.Claims.Any(c => c.Type == "role" && c.Value == "Admin");
+            
+                if (!isSystemAdmin && !isAdmin)
+                {
+                    return Forbid("Only administrators can perform manual ADR requests");
+                }
+
+                var account = await _unitOfWork.AdrAccounts.GetByIdAsync(id);
+                if (account == null)
+                {
+                    return NotFound("Account not found");
+                }
+
+                if (account.CredentialId <= 0)
+                {
+                    return BadRequest("Account does not have a credential ID assigned");
+                }
+
+                var username = User.Identity?.Name ?? "Unknown";
+
+                // Calculate date range based on period type if not provided
+                var windowDays = account.PeriodType switch
+                {
+                    "Bi-Weekly" => 3,
+                    "Monthly" => 5,
+                    "Bi-Monthly" => 7,
+                    "Quarterly" => 10,
+                    "Semi-Annually" => 14,
+                    "Annually" => 21,
+                    _ => 5
+                };
+
+                var rangeStart = request.RangeStartDate ?? request.TargetDate.AddDays(-windowDays);
+                var rangeEnd = request.RangeEndDate ?? request.TargetDate.AddDays(windowDays);
+
+                // Step 1: Create a real AdrJob record with IsManualRequest = true
+                // This job is excluded from orchestration but visible in Jobs UI
+                var job = new AdrJob
+                {
+                    AdrAccountId = account.Id,
+                    VMAccountId = account.VMAccountId,
+                    VMAccountNumber = account.VMAccountNumber,
+                    VendorCode = account.VendorCode,
+                    CredentialId = account.CredentialId,
+                    PeriodType = account.PeriodType,
+                    BillingPeriodStartDateTime = rangeStart,
+                    BillingPeriodEndDateTime = rangeEnd,
+                    NextRunDateTime = DateTime.UtcNow,
+                    NextRangeStartDateTime = rangeStart,
+                    NextRangeEndDateTime = rangeEnd,
+                    Status = "ScrapeInProgress",
+                    IsMissing = false,
+                    IsManualRequest = true,
+                    ManualRequestReason = request.Reason,
+                    CreatedDateTime = DateTime.UtcNow,
+                    CreatedBy = username,
+                    ModifiedDateTime = DateTime.UtcNow,
+                    ModifiedBy = username
+                };
+
+                await _unitOfWork.AdrJobs.AddAsync(job);
+                await _unitOfWork.SaveChangesAsync();
+
+                _logger.LogInformation(
+                    "Created manual AdrJob {JobId} for account {AccountId} ({VMAccountNumber}). Range: {RangeStart} to {RangeEnd}",
+                    job.Id, id, account.VMAccountNumber, rangeStart, rangeEnd);
+
+                // Step 2: Create an AdrJobExecution linked to the job
+                var execution = new AdrJobExecution
+                {
+                    AdrJobId = job.Id,
+                    AdrRequestTypeId = 2, // Download Invoice
+                    StartDateTime = DateTime.UtcNow,
+                    IsSuccess = false,
+                    RequestPayload = System.Text.Json.JsonSerializer.Serialize(new
+                    {
+                        JobId = job.Id,
+                        AccountId = account.Id,
+                        VMAccountId = account.VMAccountId,
+                        VMAccountNumber = account.VMAccountNumber,
+                        InterfaceAccountId = account.InterfaceAccountId,
+                        CredentialId = account.CredentialId,
+                        VendorCode = account.VendorCode,
+                        ClientName = account.ClientName,
+                        RangeStartDate = rangeStart,
+                        RangeEndDate = rangeEnd,
+                        TargetDate = request.TargetDate,
+                        RequestedBy = username,
+                        RequestedAt = DateTime.UtcNow,
+                        Reason = request.Reason,
+                        IsManualRequest = true
+                    }),
+                    CreatedDateTime = DateTime.UtcNow,
+                    CreatedBy = username,
+                    ModifiedDateTime = DateTime.UtcNow,
+                    ModifiedBy = username
+                };
+
+                await _unitOfWork.AdrJobExecutions.AddAsync(execution);
+                await _unitOfWork.SaveChangesAsync();
+
+                // Step 3: Make the actual ADR API call (same as orchestrator)
+                var baseUrl = _configuration["AdrApi:BaseUrl"] ?? "https://nuse2etsadrdevfn01.azurewebsites.net/api/";
+                var sourceApplicationName = _configuration["AdrApi:SourceApplicationName"] ?? "ADRScheduler";
+                var recipientEmail = _configuration["AdrApi:RecipientEmail"] ?? "lcassin@cassinfo.com";
+
+                var client = _httpClientFactory.CreateClient("AdrApi");
+
+                var apiRequest = new
+                {
+                    ADRRequestTypeId = 2, // Download Invoice
+                    CredentialId = account.CredentialId,
+                    StartDate = rangeStart.ToString("yyyy-MM-dd"),
+                    EndDate = rangeEnd.ToString("yyyy-MM-dd"),
+                    SourceApplicationName = sourceApplicationName,
+                    RecipientEmail = recipientEmail,
+                    JobId = job.Id,
+                    AccountId = account.VMAccountId,
+                    InterfaceAccountId = account.InterfaceAccountId
+                };
+
+                _logger.LogInformation(
+                    "Calling ADR API for manual job {JobId}. Request: {@Request}",
+                    job.Id, apiRequest);
+
+                int? httpStatusCode = null;
+                int? statusId = null;
+                string? statusDescription = null;
+                long? indexId = null;
+                bool isSuccess = false;
+                bool isError = false;
+                bool isFinal = false;
+                string? errorMessage = null;
+                string? rawResponse = null;
+
+                try
+                {
+                    var response = await client.PostAsJsonAsync($"{baseUrl}IngestAdrRequest", apiRequest);
+                    httpStatusCode = (int)response.StatusCode;
+                    rawResponse = await response.Content.ReadAsStringAsync();
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        if (!string.IsNullOrWhiteSpace(rawResponse))
+                        {
+                            var trimmed = rawResponse.TrimStart();
+                            if (trimmed.StartsWith("{"))
+                            {
+                                var apiResponse = System.Text.Json.JsonSerializer.Deserialize<ManualAdrApiResponse>(rawResponse, new System.Text.Json.JsonSerializerOptions
+                                {
+                                    PropertyNameCaseInsensitive = true
+                                });
+
+                                if (apiResponse != null)
+                                {
+                                    statusId = apiResponse.StatusId;
+                                    statusDescription = apiResponse.StatusDescription;
+                                    indexId = apiResponse.IndexId;
+                                    isSuccess = true;
+                                    isError = apiResponse.IsError;
+                                    isFinal = apiResponse.IsFinal;
+                                }
+                            }
+                            else if (trimmed.StartsWith("["))
+                            {
+                                var list = System.Text.Json.JsonSerializer.Deserialize<List<ManualAdrApiResponse>>(rawResponse, new System.Text.Json.JsonSerializerOptions
+                                {
+                                    PropertyNameCaseInsensitive = true
+                                });
+                                var apiResponse = list?.FirstOrDefault();
+                                if (apiResponse != null)
+                                {
+                                    statusId = apiResponse.StatusId;
+                                    statusDescription = apiResponse.StatusDescription;
+                                    indexId = apiResponse.IndexId;
+                                    isSuccess = true;
+                                    isError = apiResponse.IsError;
+                                    isFinal = apiResponse.IsFinal;
+                                }
+                            }
+                            else if (long.TryParse(trimmed, out var parsedIndexId))
+                            {
+                                indexId = parsedIndexId;
+                                isSuccess = true;
+                                statusDescription = "Request submitted successfully";
+                            }
+                            else
+                            {
+                                isSuccess = true;
+                                statusDescription = rawResponse.Length > 200 ? rawResponse.Substring(0, 200) + "..." : rawResponse;
+                            }
+                        }
+                        else
+                        {
+                            isSuccess = true;
+                            statusDescription = "Request submitted (no response body)";
+                        }
+                    }
+                    else
+                    {
+                        isError = true;
+                        errorMessage = $"API returned {response.StatusCode}: {(rawResponse?.Length > 200 ? rawResponse.Substring(0, 200) + "..." : rawResponse)}";
+                    
+                        // Try to extract IndexId from error response
+                        if (!string.IsNullOrWhiteSpace(rawResponse) && rawResponse.TrimStart().StartsWith("{"))
+                        {
+                            try
+                            {
+                                using var doc = System.Text.Json.JsonDocument.Parse(rawResponse);
+                                if (doc.RootElement.TryGetProperty("indexId", out var indexIdProp) ||
+                                    doc.RootElement.TryGetProperty("IndexId", out indexIdProp))
+                                {
+                                    if (indexIdProp.TryGetInt64(out var extractedIndexId))
+                                    {
+                                        indexId = extractedIndexId;
+                                    }
+                                }
+                            }
+                            catch { }
+                        }
+                    }
+                }
+                catch (Exception apiEx)
+                {
+                    isError = true;
+                    errorMessage = $"API call failed: {apiEx.Message}";
+                    _logger.LogError(apiEx, "Error calling ADR API for manual job {JobId}", job.Id);
+                }
+
+                // Step 4: Update execution with API response
+                execution.EndDateTime = DateTime.UtcNow;
+                execution.HttpStatusCode = httpStatusCode;
+                execution.AdrStatusId = statusId;
+                execution.AdrStatusDescription = statusDescription;
+                execution.AdrIndexId = indexId;
+                execution.IsSuccess = isSuccess;
+                execution.IsError = isError;
+                execution.IsFinal = isFinal;
+                execution.ErrorMessage = errorMessage;
+                execution.ApiResponse = rawResponse?.Length > 4000 ? rawResponse.Substring(0, 4000) : rawResponse;
+                execution.ModifiedDateTime = DateTime.UtcNow;
+                execution.ModifiedBy = username;
+
+                await _unitOfWork.AdrJobExecutions.UpdateAsync(execution);
+
+                // Update job status based on API response
+                if (isSuccess && !isError)
+                {
+                    job.Status = "ScrapeRequested";
+                    job.AdrStatusId = statusId;
+                    job.AdrStatusDescription = statusDescription;
+                    job.AdrIndexId = indexId;
+                }
+                else
+                {
+                    job.Status = "ScrapeFailed";
+                    job.ErrorMessage = errorMessage;
+                }
+                job.ModifiedDateTime = DateTime.UtcNow;
+                job.ModifiedBy = username;
+
+                await _unitOfWork.AdrJobs.UpdateAsync(job);
+                await _unitOfWork.SaveChangesAsync();
+
+                _logger.LogInformation(
+                    "Manual ADR request completed for job {JobId}. Success: {IsSuccess}, StatusCode: {StatusCode}, IndexId: {IndexId}",
+                    job.Id, isSuccess, httpStatusCode, indexId);
+
+                // Step 5: Return full API response to UI
+                return Ok(new
+                {
+                    message = isSuccess ? "Manual ADR request submitted successfully" : "Manual ADR request failed",
+                    jobId = job.Id,
+                    executionId = execution.Id,
+                    accountId = id,
+                    vmAccountNumber = account.VMAccountNumber,
+                    credentialId = account.CredentialId,
+                    rangeStartDate = rangeStart,
+                    rangeEndDate = rangeEnd,
+                    requestedBy = username,
+                    requestedAt = execution.StartDateTime,
+                    // API Response details
+                    httpStatusCode = httpStatusCode,
+                    isSuccess = isSuccess,
+                    isError = isError,
+                    isFinal = isFinal,
+                    statusId = statusId,
+                    statusDescription = statusDescription,
+                    indexId = indexId,
+                    errorMessage = errorMessage
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating manual ADR request for account {AccountId}", id);
+                return StatusCode(500, "An error occurred while creating the manual ADR request");
+            }
+        }
+
+        /// <summary>
+        /// Check the status of a manual ADR job using the same API as orchestrated jobs.
+        /// </summary>
+        [HttpPost("jobs/{jobId}/check-status")]
+        [Authorize(Policy = "AdrAccounts.Execute")]
+        public async Task<ActionResult<object>> CheckManualJobStatus(int jobId)
+        {
+            try
+            {
+                var job = await _unitOfWork.AdrJobs.GetByIdAsync(jobId);
+                if (job == null)
+                {
+                    return NotFound("Job not found");
+                }
+
+                var username = User.Identity?.Name ?? "Unknown";
+
+                // Create execution record for status check
+                var execution = new AdrJobExecution
+                {
+                    AdrJobId = job.Id,
+                    AdrRequestTypeId = 3, // Check Status
+                    StartDateTime = DateTime.UtcNow,
+                    IsSuccess = false,
+                    CreatedDateTime = DateTime.UtcNow,
+                    CreatedBy = username,
+                    ModifiedDateTime = DateTime.UtcNow,
+                    ModifiedBy = username
+                };
+
+                await _unitOfWork.AdrJobExecutions.AddAsync(execution);
+                await _unitOfWork.SaveChangesAsync();
+
+                // Call the status check API
+                var baseUrl = _configuration["AdrApi:BaseUrl"] ?? "https://nuse2etsadrdevfn01.azurewebsites.net/api/";
+                var client = _httpClientFactory.CreateClient("AdrApi");
+
+                int? httpStatusCode = null;
+                int? statusId = null;
+                string? statusDescription = null;
+                long? indexId = null;
+                bool isSuccess = false;
+                bool isError = false;
+                bool isFinal = false;
+                string? errorMessage = null;
+                string? rawResponse = null;
+
+                try
+                {
+                    var response = await client.GetAsync($"{baseUrl}GetRequestStatusByJobId/{jobId}");
+                    httpStatusCode = (int)response.StatusCode;
+                    rawResponse = await response.Content.ReadAsStringAsync();
+
+                    if (response.IsSuccessStatusCode && !string.IsNullOrWhiteSpace(rawResponse))
+                    {
+                        var apiResponse = System.Text.Json.JsonSerializer.Deserialize<ManualAdrApiResponse>(rawResponse, new System.Text.Json.JsonSerializerOptions
+                        {
+                            PropertyNameCaseInsensitive = true
+                        });
+
+                        if (apiResponse != null)
+                        {
+                            statusId = apiResponse.StatusId;
+                            statusDescription = apiResponse.StatusDescription;
+                            indexId = apiResponse.IndexId;
+                            isSuccess = true;
+                            isError = apiResponse.IsError;
+                            isFinal = apiResponse.IsFinal;
+                        }
+                    }
+                    else
+                    {
+                        isError = true;
+                        errorMessage = $"API returned {response.StatusCode}: {rawResponse}";
+                    }
+                }
+                catch (Exception apiEx)
+                {
+                    isError = true;
+                    errorMessage = $"API call failed: {apiEx.Message}";
+                    _logger.LogError(apiEx, "Error checking status for job {JobId}", jobId);
+                }
+
+                // Update execution
+                execution.EndDateTime = DateTime.UtcNow;
+                execution.HttpStatusCode = httpStatusCode;
+                execution.AdrStatusId = statusId;
+                execution.AdrStatusDescription = statusDescription;
+                execution.AdrIndexId = indexId;
+                execution.IsSuccess = isSuccess;
+                execution.IsError = isError;
+                execution.IsFinal = isFinal;
+                execution.ErrorMessage = errorMessage;
+                execution.ApiResponse = rawResponse?.Length > 4000 ? rawResponse.Substring(0, 4000) : rawResponse;
+                execution.ModifiedDateTime = DateTime.UtcNow;
+                execution.ModifiedBy = username;
+
+                await _unitOfWork.AdrJobExecutions.UpdateAsync(execution);
+
+                // Update job status if we got a final status
+                if (isSuccess && isFinal)
+                {
+                    job.Status = isError ? "ScrapeFailed" : "Completed";
+                    job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                }
+                job.AdrStatusId = statusId ?? job.AdrStatusId;
+                job.AdrStatusDescription = statusDescription ?? job.AdrStatusDescription;
+                job.AdrIndexId = indexId ?? job.AdrIndexId;
+                job.ModifiedDateTime = DateTime.UtcNow;
+                job.ModifiedBy = username;
+
+                await _unitOfWork.AdrJobs.UpdateAsync(job);
+                await _unitOfWork.SaveChangesAsync();
+
+                return Ok(new
+                {
+                    jobId = job.Id,
+                    executionId = execution.Id,
+                    httpStatusCode = httpStatusCode,
+                    isSuccess = isSuccess,
+                    isError = isError,
+                    isFinal = isFinal,
+                    statusId = statusId,
+                    statusDescription = statusDescription,
+                    indexId = indexId,
+                    errorMessage = errorMessage,
+                    jobStatus = job.Status
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error checking status for job {JobId}", jobId);
+                return StatusCode(500, "An error occurred while checking job status");
+            }
+        }
+
     [HttpGet("accounts/export")]
     public async Task<IActionResult> ExportAccounts(
         [FromQuery] int? clientId = null,
         [FromQuery] string? searchTerm = null,
         [FromQuery] string? nextRunStatus = null,
         [FromQuery] string? historicalBillingStatus = null,
+        [FromQuery] bool? isOverridden = null,
+        [FromQuery] string? sortColumn = null,
+        [FromQuery] bool sortDescending = false,
         [FromQuery] string format = "excel")
     {
         try
         {
             // Get all accounts matching the filters (no pagination for export)
             var (accounts, _) = await _unitOfWork.AdrAccounts.GetPagedAsync(
-                1, int.MaxValue, clientId, null, nextRunStatus, searchTerm, historicalBillingStatus);
+                1, int.MaxValue, clientId, null, nextRunStatus, searchTerm, historicalBillingStatus,
+                isOverridden, sortColumn, sortDescending);
+
+            // Get account IDs for job status lookup
+            var accountIds = accounts.Select(a => a.Id).ToList();
+            
+            // Get current job status for each account (single query)
+            var jobStatuses = await _dbContext.AdrJobs
+                .Where(j => !j.IsDeleted && accountIds.Contains(j.AdrAccountId))
+                .GroupBy(j => j.AdrAccountId)
+                .Select(g => new 
+                {
+                    AdrAccountId = g.Key,
+                    CurrentJobStatus = g
+                        .OrderByDescending(j => j.BillingPeriodStartDateTime)
+                        .Select(j => j.Status)
+                        .FirstOrDefault(),
+                    LastCompletedDateTime = g
+                        .Where(j => j.ScrapingCompletedDateTime.HasValue)
+                        .OrderByDescending(j => j.ScrapingCompletedDateTime)
+                        .Select(j => j.ScrapingCompletedDateTime)
+                        .FirstOrDefault()
+                })
+                .ToListAsync();
+            
+            var jobStatusLookup = jobStatuses.ToDictionary(x => x.AdrAccountId);
 
             if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
             {
                 var csv = new System.Text.StringBuilder();
-                csv.AppendLine("Account #,Interface Account ID,Client,Vendor Code,Period Type,Next Run,Run Status,Historical Status,Last Invoice,Expected Next");
+                csv.AppendLine("Account #,VM Account ID,Interface Account ID,Client,Vendor Code,Period Type,Next Run,Run Status,Job Status,Last Completed,Historical Status,Last Invoice,Expected Next,Is Overridden,Overridden By,Overridden Date");
 
                 foreach (var a in accounts)
                 {
-                    csv.AppendLine($"{CsvEscape(a.VMAccountNumber)},{CsvEscape(a.InterfaceAccountId)},{CsvEscape(a.ClientName)},{CsvEscape(a.VendorCode)},{CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.NextRunStatus)},{CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""}");
+                    var hasJobStatus = jobStatusLookup.TryGetValue(a.Id, out var js);
+                    var currentJobStatus = hasJobStatus ? js?.CurrentJobStatus : null;
+                    var lastCompleted = hasJobStatus ? js?.LastCompletedDateTime : null;
+                    
+                    csv.AppendLine($"{CsvEscape(a.VMAccountNumber)},{a.VMAccountId},{CsvEscape(a.InterfaceAccountId)},{CsvEscape(a.ClientName)},{CsvEscape(a.VendorCode)},{CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.NextRunStatus)},{CsvEscape(currentJobStatus)},{lastCompleted?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.IsManuallyOverridden},{CsvEscape(a.OverriddenBy)},{a.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""}");
                 }
 
                 return File(System.Text.Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", $"adr_accounts_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
@@ -386,9 +1012,14 @@ public class AdrController : ControllerBase
             worksheet.Cell(1, 6).Value = "Period Type";
             worksheet.Cell(1, 7).Value = "Next Run";
             worksheet.Cell(1, 8).Value = "Run Status";
-            worksheet.Cell(1, 9).Value = "Historical Status";
-            worksheet.Cell(1, 10).Value = "Last Invoice";
-            worksheet.Cell(1, 11).Value = "Expected Next";
+            worksheet.Cell(1, 9).Value = "Job Status";
+            worksheet.Cell(1, 10).Value = "Last Completed";
+            worksheet.Cell(1, 11).Value = "Historical Status";
+            worksheet.Cell(1, 12).Value = "Last Invoice";
+            worksheet.Cell(1, 13).Value = "Expected Next";
+            worksheet.Cell(1, 14).Value = "Is Overridden";
+            worksheet.Cell(1, 15).Value = "Overridden By";
+            worksheet.Cell(1, 16).Value = "Overridden Date";
 
             var headerRow = worksheet.Row(1);
             headerRow.Style.Font.Bold = true;
@@ -396,6 +1027,10 @@ public class AdrController : ControllerBase
             int row = 2;
             foreach (var a in accounts)
             {
+                var hasJobStatus = jobStatusLookup.TryGetValue(a.Id, out var js);
+                var currentJobStatus = hasJobStatus ? js?.CurrentJobStatus : null;
+                var lastCompleted = hasJobStatus ? js?.LastCompletedDateTime : null;
+                
                 worksheet.Cell(row, 1).Value = a.VMAccountNumber;
                 worksheet.Cell(row, 2).Value = a.VMAccountId;
                 worksheet.Cell(row, 3).Value = a.InterfaceAccountId;
@@ -404,9 +1039,14 @@ public class AdrController : ControllerBase
                 worksheet.Cell(row, 6).Value = a.PeriodType;
                 if (a.NextRunDateTime.HasValue) worksheet.Cell(row, 7).Value = a.NextRunDateTime.Value;
                 worksheet.Cell(row, 8).Value = a.NextRunStatus;
-                worksheet.Cell(row, 9).Value = a.HistoricalBillingStatus;
-                if (a.LastInvoiceDateTime.HasValue) worksheet.Cell(row, 10).Value = a.LastInvoiceDateTime.Value;
-                if (a.ExpectedNextDateTime.HasValue) worksheet.Cell(row, 11).Value = a.ExpectedNextDateTime.Value;
+                worksheet.Cell(row, 9).Value = currentJobStatus ?? "";
+                if (lastCompleted.HasValue) worksheet.Cell(row, 10).Value = lastCompleted.Value;
+                worksheet.Cell(row, 11).Value = a.HistoricalBillingStatus;
+                if (a.LastInvoiceDateTime.HasValue) worksheet.Cell(row, 12).Value = a.LastInvoiceDateTime.Value;
+                if (a.ExpectedNextDateTime.HasValue) worksheet.Cell(row, 13).Value = a.ExpectedNextDateTime.Value;
+                worksheet.Cell(row, 14).Value = a.IsManuallyOverridden ? "Yes" : "No";
+                worksheet.Cell(row, 15).Value = a.OverriddenBy ?? "";
+                if (a.OverriddenDateTime.HasValue) worksheet.Cell(row, 16).Value = a.OverriddenDateTime.Value;
                 row++;
             }
 
@@ -441,7 +1081,10 @@ public class AdrController : ControllerBase
             [FromQuery] int pageSize = 20,
             [FromQuery] long? vmAccountId = null,
             [FromQuery] string? interfaceAccountId = null,
-            [FromQuery] int? credentialId = null)
+            [FromQuery] int? credentialId = null,
+            [FromQuery] bool? isManualRequest = null,
+            [FromQuery] string? sortColumn = null,
+            [FromQuery] bool sortDescending = true)
         {
             try
             {
@@ -457,7 +1100,10 @@ public class AdrController : ControllerBase
                     latestPerAccount,
                     vmAccountId,
                     interfaceAccountId,
-                    credentialId);
+                    credentialId,
+                    isManualRequest,
+                    sortColumn,
+                    sortDescending);
 
                 // Map to DTOs with VendorCode fallback from AdrAccount when job's VendorCode is null
                 var mappedItems = items.Select(j => new
@@ -623,25 +1269,77 @@ public class AdrController : ControllerBase
     }
 
     [HttpGet("jobs/stats")]
-    public async Task<ActionResult<object>> GetJobStats([FromQuery] int? adrAccountId = null)
+    public async Task<ActionResult<object>> GetJobStats(
+        [FromQuery] int? adrAccountId = null,
+        [FromQuery] int? lastOrchestrationRuns = null)
     {
         try
         {
-            var totalCount = await _unitOfWork.AdrJobs.GetTotalCountAsync(adrAccountId);
-            var pendingCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("Pending");
-            var credentialVerifiedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("CredentialVerified");
-            var scrapeRequestedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("ScrapeRequested");
-            var completedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("Completed");
-            var failedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("Failed");
+            int totalCount, pendingCount, credentialVerifiedCount, scrapeRequestedCount, 
+                completedCount, failedCount, needsReviewCount, credentialFailedCount;
+
+            if (lastOrchestrationRuns.HasValue && lastOrchestrationRuns.Value > 0)
+            {
+                // Get the last N orchestration runs to determine the time window
+                var recentRuns = await _unitOfWork.AdrOrchestrationRuns.GetRecentRunsAsync(lastOrchestrationRuns.Value);
+                
+                if (recentRuns.Any())
+                {
+                    // Get the earliest start time from recent runs to define our window
+                    var earliestRunTime = recentRuns.Min(r => r.StartedDateTime ?? r.RequestedDateTime);
+                    
+                    // Get distinct job IDs that have executions created during these runs
+                    var jobIds = await _unitOfWork.AdrJobExecutions.GetJobIdsModifiedSinceAsync(earliestRunTime);
+                    var jobIdSet = jobIds.ToHashSet();
+                    
+                    // Count jobs by status using a single GROUP BY query (instead of 7 separate queries)
+                    totalCount = jobIdSet.Count;
+                    var statusCounts = await _unitOfWork.AdrJobs.GetCountsByStatusAndIdsAsync(jobIdSet);
+                    
+                    pendingCount = statusCounts.TryGetValue("Pending", out var p) ? p : 0;
+                    credentialVerifiedCount = statusCounts.TryGetValue("CredentialVerified", out var cv) ? cv : 0;
+                    credentialFailedCount = statusCounts.TryGetValue("CredentialFailed", out var cf) ? cf : 0;
+                    // Include StatusCheckInProgress in ScrapeRequested count - these are jobs mid-status-check
+                    var sr = statusCounts.TryGetValue("ScrapeRequested", out var srVal) ? srVal : 0;
+                    var sci = statusCounts.TryGetValue("StatusCheckInProgress", out var sciVal) ? sciVal : 0;
+                    scrapeRequestedCount = sr + sci;
+                    completedCount = statusCounts.TryGetValue("Completed", out var c) ? c : 0;
+                    failedCount = statusCounts.TryGetValue("Failed", out var f) ? f : 0;
+                    needsReviewCount = statusCounts.TryGetValue("NeedsReview", out var nr) ? nr : 0;
+                }
+                else
+                {
+                    // No recent runs, return zeros
+                    totalCount = pendingCount = credentialVerifiedCount = credentialFailedCount = 
+                        scrapeRequestedCount = completedCount = failedCount = needsReviewCount = 0;
+                }
+            }
+            else
+            {
+                // Original behavior: count all jobs
+                totalCount = await _unitOfWork.AdrJobs.GetTotalCountAsync(adrAccountId);
+                pendingCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("Pending");
+                credentialVerifiedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("CredentialVerified");
+                credentialFailedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("CredentialFailed");
+                // Include StatusCheckInProgress in ScrapeRequested count - these are jobs mid-status-check
+                scrapeRequestedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("ScrapeRequested");
+                var statusCheckInProgressCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("StatusCheckInProgress");
+                scrapeRequestedCount += statusCheckInProgressCount;
+                completedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("Completed");
+                failedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("Failed");
+                needsReviewCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("NeedsReview");
+            }
 
             return Ok(new
             {
                 totalCount,
                 pendingCount,
                 credentialVerifiedCount,
+                credentialFailedCount,
                 scrapeRequestedCount,
                 completedCount,
-                failedCount
+                failedCount,
+                needsReviewCount
             });
         }
         catch (Exception ex)
@@ -657,22 +1355,27 @@ public class AdrController : ControllerBase
         [FromQuery] string? vendorCode = null,
         [FromQuery] string? vmAccountNumber = null,
         [FromQuery] bool latestPerAccount = false,
+        [FromQuery] bool? isManualRequest = null,
+        [FromQuery] string? sortColumn = null,
+        [FromQuery] bool sortDescending = true,
         [FromQuery] string format = "excel")
     {
         try
         {
             // Get all jobs matching the filters (no pagination for export)
             var (jobs, _) = await _unitOfWork.AdrJobs.GetPagedAsync(
-                1, int.MaxValue, null, status, null, null, vendorCode, vmAccountNumber, latestPerAccount);
+                1, int.MaxValue, null, status, null, null, vendorCode, vmAccountNumber, latestPerAccount,
+                null, null, null, isManualRequest, sortColumn, sortDescending);
 
             if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
             {
                 var csv = new System.Text.StringBuilder();
-                csv.AppendLine("Job ID,Vendor Code,Account #,Billing Period Start,Billing Period End,Period Type,Next Run,Status,ADR Status,ADR Status Description,Retry Count,Created");
+                csv.AppendLine("Job ID,Vendor Code,Account #,VM Account ID,Interface Account ID,Billing Period Start,Billing Period End,Period Type,Next Run,Status,ADR Status,ADR Status Description,Retry Count,Is Manual,Created");
 
                 foreach (var j in jobs)
                 {
-                    csv.AppendLine($"{j.Id},{CsvEscape(j.VendorCode)},{CsvEscape(j.VMAccountNumber)},{j.BillingPeriodStartDateTime:MM/dd/yyyy},{j.BillingPeriodEndDateTime:MM/dd/yyyy},{CsvEscape(j.PeriodType)},{j.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(j.Status)},{j.AdrStatusId?.ToString() ?? ""},{CsvEscape(j.AdrStatusDescription)},{j.RetryCount},{j.CreatedDateTime:MM/dd/yyyy HH:mm}");
+                    var interfaceAccountId = j.AdrAccount?.InterfaceAccountId ?? "";
+                    csv.AppendLine($"{j.Id},{CsvEscape(j.VendorCode)},{CsvEscape(j.VMAccountNumber)},{j.VMAccountId},{CsvEscape(interfaceAccountId)},{j.BillingPeriodStartDateTime:MM/dd/yyyy},{j.BillingPeriodEndDateTime:MM/dd/yyyy},{CsvEscape(j.PeriodType)},{j.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(j.Status)},{j.AdrStatusId?.ToString() ?? ""},{CsvEscape(j.AdrStatusDescription)},{j.RetryCount},{j.IsManualRequest},{j.CreatedDateTime:MM/dd/yyyy HH:mm}");
                 }
 
                 return File(System.Text.Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", $"adr_jobs_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
@@ -686,15 +1389,18 @@ public class AdrController : ControllerBase
             worksheet.Cell(1, 1).Value = "Job ID";
             worksheet.Cell(1, 2).Value = "Vendor Code";
             worksheet.Cell(1, 3).Value = "Account #";
-            worksheet.Cell(1, 4).Value = "Billing Period Start";
-            worksheet.Cell(1, 5).Value = "Billing Period End";
-            worksheet.Cell(1, 6).Value = "Period Type";
-            worksheet.Cell(1, 7).Value = "Next Run";
-            worksheet.Cell(1, 8).Value = "Status";
-            worksheet.Cell(1, 9).Value = "ADR Status";
-            worksheet.Cell(1, 10).Value = "ADR Status Description";
-            worksheet.Cell(1, 11).Value = "Retry Count";
-            worksheet.Cell(1, 12).Value = "Created";
+            worksheet.Cell(1, 4).Value = "VM Account ID";
+            worksheet.Cell(1, 5).Value = "Interface Account ID";
+            worksheet.Cell(1, 6).Value = "Billing Period Start";
+            worksheet.Cell(1, 7).Value = "Billing Period End";
+            worksheet.Cell(1, 8).Value = "Period Type";
+            worksheet.Cell(1, 9).Value = "Next Run";
+            worksheet.Cell(1, 10).Value = "Status";
+            worksheet.Cell(1, 11).Value = "ADR Status";
+            worksheet.Cell(1, 12).Value = "ADR Status Description";
+            worksheet.Cell(1, 13).Value = "Retry Count";
+            worksheet.Cell(1, 14).Value = "Is Manual";
+            worksheet.Cell(1, 15).Value = "Created";
 
             var headerRow = worksheet.Row(1);
             headerRow.Style.Font.Bold = true;
@@ -705,15 +1411,18 @@ public class AdrController : ControllerBase
                 worksheet.Cell(row, 1).Value = j.Id;
                 worksheet.Cell(row, 2).Value = j.VendorCode;
                 worksheet.Cell(row, 3).Value = j.VMAccountNumber;
-                worksheet.Cell(row, 4).Value = j.BillingPeriodStartDateTime;
-                worksheet.Cell(row, 5).Value = j.BillingPeriodEndDateTime;
-                worksheet.Cell(row, 6).Value = j.PeriodType;
-                if (j.NextRunDateTime.HasValue) worksheet.Cell(row, 7).Value = j.NextRunDateTime.Value;
-                worksheet.Cell(row, 8).Value = j.Status;
-                if (j.AdrStatusId.HasValue) worksheet.Cell(row, 9).Value = j.AdrStatusId.Value;
-                worksheet.Cell(row, 10).Value = j.AdrStatusDescription;
-                worksheet.Cell(row, 11).Value = j.RetryCount;
-                worksheet.Cell(row, 12).Value = j.CreatedDateTime;
+                worksheet.Cell(row, 4).Value = j.VMAccountId;
+                worksheet.Cell(row, 5).Value = j.AdrAccount?.InterfaceAccountId ?? "";
+                worksheet.Cell(row, 6).Value = j.BillingPeriodStartDateTime;
+                worksheet.Cell(row, 7).Value = j.BillingPeriodEndDateTime;
+                worksheet.Cell(row, 8).Value = j.PeriodType;
+                if (j.NextRunDateTime.HasValue) worksheet.Cell(row, 9).Value = j.NextRunDateTime.Value;
+                worksheet.Cell(row, 10).Value = j.Status;
+                if (j.AdrStatusId.HasValue) worksheet.Cell(row, 11).Value = j.AdrStatusId.Value;
+                worksheet.Cell(row, 12).Value = j.AdrStatusDescription;
+                worksheet.Cell(row, 13).Value = j.RetryCount;
+                worksheet.Cell(row, 14).Value = j.IsManualRequest ? "Yes" : "No";
+                worksheet.Cell(row, 15).Value = j.CreatedDateTime;
                 row++;
             }
 
@@ -1201,8 +1910,10 @@ public class AdrController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("Manual status check triggered by {User}", User.Identity?.Name ?? "Unknown");
-            var result = await _orchestratorService.CheckPendingStatusesAsync(null, cancellationToken);
+            // Manual status check: Check ALL scraped jobs regardless of timing criteria
+            // This is used by the "Check Statuses Only" button since there's no cost to check status
+            _logger.LogInformation("Manual status check (all scraped jobs) triggered by {User}", User.Identity?.Name ?? "Unknown");
+            var result = await _orchestratorService.CheckAllScrapedStatusesAsync(null, cancellationToken);
             return Ok(result);
         }
         catch (Exception ex)
@@ -1220,19 +1931,29 @@ public class AdrController : ControllerBase
         {
             _logger.LogInformation("Full ADR cycle triggered by {User}", User.Identity?.Name ?? "Unknown");
 
+            // Step 1: Sync accounts from VendorCred
             var syncResult = await _syncService.SyncAccountsAsync(null, cancellationToken);
+            
+            // Step 2: Create jobs for accounts due for processing
             var jobCreationResult = await _orchestratorService.CreateJobsForDueAccountsAsync(cancellationToken);
+            
+            // Step 3: Verify credentials for jobs approaching their NextRunDate
             var credentialResult = await _orchestratorService.VerifyCredentialsAsync(null, cancellationToken);
-            var scrapeResult = await _orchestratorService.ProcessScrapingAsync(null, cancellationToken);
+            
+            // Step 4: Check status of yesterday's ScrapeRequested jobs BEFORE sending new scrapes
+            // This prevents duplicate scrape requests for jobs that already completed
             var statusResult = await _orchestratorService.CheckPendingStatusesAsync(null, cancellationToken);
+            
+            // Step 5: Send scrape requests for jobs that are ready (CredentialVerified status)
+            var scrapeResult = await _orchestratorService.ProcessScrapingAsync(null, cancellationToken);
 
             return Ok(new
             {
                 syncResult,
                 jobCreationResult,
                 credentialResult,
-                scrapeResult,
-                statusResult
+                statusResult,
+                scrapeResult
             });
         }
         catch (Exception ex)
@@ -1264,7 +1985,8 @@ public class AdrController : ControllerBase
                 RunCreateJobs = request?.RunCreateJobs ?? true,
                 RunCredentialVerification = request?.RunCredentialVerification ?? true,
                 RunScraping = request?.RunScraping ?? true,
-                RunStatusCheck = request?.RunStatusCheck ?? true
+                RunStatusCheck = request?.RunStatusCheck ?? true,
+                CheckAllScrapedStatuses = request?.CheckAllScrapedStatuses ?? false
             };
 
             await _orchestrationQueue.QueueAsync(orchestrationRequest);
@@ -1334,6 +2056,27 @@ public class AdrController : ControllerBase
     {
         try
         {
+            // First, detect and fix stale "Running" records (running for more than 30 minutes without completion)
+            var staleThreshold = DateTime.UtcNow.AddMinutes(-30);
+            var staleRuns = await _dbContext.AdrOrchestrationRuns
+                .Where(r => !r.IsDeleted && r.Status == "Running" && r.StartedDateTime.HasValue && r.StartedDateTime < staleThreshold && r.CompletedDateTime == null)
+                .ToListAsync();
+            
+            if (staleRuns.Any())
+            {
+                foreach (var staleRun in staleRuns)
+                {
+                    staleRun.Status = "Failed";
+                    staleRun.CompletedDateTime = DateTime.UtcNow;
+                    staleRun.ErrorMessage = "Orchestration run exceeded maximum expected duration (30 minutes) and was marked as failed. The process may have crashed or been terminated unexpectedly.";
+                    staleRun.ModifiedDateTime = DateTime.UtcNow;
+                    staleRun.ModifiedBy = "System";
+                    _logger.LogWarning("Marking stale orchestration run {RequestId} as Failed - started at {StartedAt}, exceeded 30 minute threshold", 
+                        staleRun.RequestId, staleRun.StartedDateTime);
+                }
+                await _dbContext.SaveChangesAsync();
+            }
+            
             // Try to get history from database first
             var query = _dbContext.AdrOrchestrationRuns
                 .Where(r => !r.IsDeleted)
@@ -1487,6 +2230,12 @@ public class BackgroundOrchestrationRequest
     public bool RunCredentialVerification { get; set; } = true;
     public bool RunScraping { get; set; } = true;
     public bool RunStatusCheck { get; set; } = true;
+    
+    /// <summary>
+    /// When true and RunStatusCheck is true, checks ALL jobs with ScrapeRequested status
+    /// regardless of timing criteria. Used by the "Check Statuses Only" button.
+    /// </summary>
+    public bool CheckAllScrapedStatuses { get; set; } = false;
 }
 
 public class UpdateAccountBillingRequest
@@ -1515,6 +2264,44 @@ public class OrchestrationHistoryPagedResponse
     public int PageNumber { get; set; }
     public int PageSize { get; set; }
     public int TotalPages { get; set; }
+}
+
+/// <summary>
+/// Request for admin-only manual scrape operation
+/// </summary>
+public class ManualScrapeRequest
+{
+    /// <summary>
+    /// Target date for the invoice search (center of the date range)
+    /// </summary>
+    public DateTime TargetDate { get; set; }
+    
+    /// <summary>
+    /// Optional custom range start date (if not provided, calculated from period type)
+    /// </summary>
+    public DateTime? RangeStartDate { get; set; }
+    
+    /// <summary>
+    /// Optional custom range end date (if not provided, calculated from period type)
+    /// </summary>
+    public DateTime? RangeEndDate { get; set; }
+    
+    /// <summary>
+    /// Reason for the manual scrape request (for audit purposes)
+    /// </summary>
+    public string? Reason { get; set; }
+}
+
+/// <summary>
+/// Response from ADR API for manual requests
+/// </summary>
+public class ManualAdrApiResponse
+{
+    public int StatusId { get; set; }
+    public string? StatusDescription { get; set; }
+    public long? IndexId { get; set; }
+    public bool IsError { get; set; }
+    public bool IsFinal { get; set; }
 }
 
 #endregion

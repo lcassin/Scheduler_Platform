@@ -48,6 +48,10 @@ This project implements the data access patterns defined in the Core project. It
 - `ScheduleSyncSources`: External schedule synchronization sources
 - `AuditLogs`: Change tracking
 - `NotificationSettings`: Email configuration
+- `AdrAccounts`: ADR vendor accounts with billing patterns
+- `AdrJobs`: ADR scraping jobs per account/billing period
+- `AdrJobExecutions`: ADR job execution history (credential checks, scrape requests)
+- `AdrOrchestrationRuns`: ADR orchestration run history with step progress
 
 **Entity Configurations**:
 - Client: Unique ClientCode index, required fields
@@ -212,6 +216,38 @@ dotnet ef database update PreviousMigrationName --startup-project ../SchedulerPl
 # Generate SQL script
 dotnet ef migrations script --startup-project ../SchedulerPlatform.API
 ```
+
+### ADR Persistence and Indexing
+
+The ADR (Automated Data Retrieval) tables support automated invoice scraping from vendor portals. Due to EF Core migration reliability issues, manual SQL scripts are provided in the `/scripts` folder.
+
+**ADR Tables:**
+- `AdrAccount`: Vendor accounts synced from VendorCredNewUAT with billing patterns
+- `AdrJob`: Individual scraping jobs per account/billing period
+- `AdrJobExecution`: Execution history for credential checks and scrape requests
+- `AdrOrchestrationRun`: Orchestration run history with step-by-step progress
+
+**Manual SQL Scripts (in `/scripts` folder):**
+- `AddAdrAccountOverrideColumns.sql`: Adds manual override columns (IsManuallyOverridden, OverriddenBy, OverriddenDateTime) to AdrAccount table
+- `AddAdrOrchestrationRunTable.sql`: Creates AdrOrchestrationRun table with all columns and indexes
+- `AddAdrJobUniqueConstraint.sql`: Creates unique filtered index on AdrJob to prevent duplicate jobs for the same billing period
+
+**Key Indexes:**
+- `AdrAccount`: Index on VMAccountId, ClientId, CredentialId, VendorCode for efficient queries
+- `AdrJob`: Unique filtered index on (AdrAccountId, BillingPeriodStartDateTime, BillingPeriodEndDateTime) WHERE IsDeleted = 0
+- `AdrJob`: Index on Status, NextRunDateTime for orchestration queries
+- `AdrJobExecution`: Index on AdrJobId, AdrRequestTypeId for idempotency checks
+- `AdrOrchestrationRun`: Index on RequestedDateTime DESC for recent run queries
+
+**ADR Repositories:**
+- `AdrAccountRepository`: Handles account sync with manual override preservation
+- `AdrJobRepository`: Manages job creation with duplicate prevention
+
+**Important Notes:**
+- VMAccountId can have duplicates (account numbers change over time)
+- Manual overrides must be preserved during account sync
+- The unique constraint on AdrJob prevents duplicate jobs for the same billing period
+- AdrJobExecution records are used for idempotency to prevent duplicate API calls to paid services
 
 ## For Developers
 
