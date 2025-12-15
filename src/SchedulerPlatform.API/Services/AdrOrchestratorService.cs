@@ -1205,15 +1205,28 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     {
                         if (statusResult.StatusId == (int)AdrStatus.Complete)
                         {
+                            // StatusId 11: Document Retrieval Complete
                             job.Status = "Completed";
                             job.ScrapingCompletedDateTime = DateTime.UtcNow;
                             result.JobsCompleted++;
                         }
                         else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
                         {
+                            // StatusId 9: Needs Human Review
                             job.Status = "NeedsReview";
                             job.ScrapingCompletedDateTime = DateTime.UtcNow;
                             result.JobsNeedingReview++;
+                        }
+                        else if (statusResult.StatusId == 3 || statusResult.StatusId == 4 || statusResult.StatusId == 5)
+                        {
+                            // Error statuses:
+                            // StatusId 3: Invalid CredentialID
+                            // StatusId 4: Cannot Connect To VCM
+                            // StatusId 5: Cannot Insert Into Queue
+                            job.Status = "Failed";
+                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                            result.Errors++;
+                            result.ErrorMessages.Add($"Job {jobId}: {statusResult.StatusDescription} (StatusId={statusResult.StatusId})");
                         }
                         else
                         {
@@ -1532,11 +1545,15 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 if (apiResponse != null)
                 {
                     result.StatusId = apiResponse.StatusId;
-                    result.StatusDescription = apiResponse.StatusDescription;
+                    // Use Status field if StatusDescription is not provided
+                    result.StatusDescription = apiResponse.StatusDescription ?? apiResponse.Status;
                     result.IndexId = apiResponse.IndexId;
                     result.IsSuccess = true;
                     result.IsError = apiResponse.IsError;
-                    result.IsFinal = apiResponse.IsFinal;
+                    
+                    // Determine IsFinal based on StatusId since the API may not return IsFinal field
+                    // Final statuses: Complete (11), NeedsHumanReview (9), and error states like "Cannot Insert Into Queue" (5)
+                    result.IsFinal = apiResponse.IsFinal || IsFinalStatus(apiResponse.StatusId);
                 }
                 else
                 {
@@ -1569,6 +1586,27 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             return string.Empty;
         return response.Length <= maxLength ? response : response.Substring(0, maxLength) + "...";
     }
+    
+    /// <summary>
+    /// Determines if a StatusId represents a final state (job is done processing).
+    /// Based on ADR API status codes:
+    /// - Final success: 11 (Document Retrieval Complete)
+    /// - Final needs review: 9 (Needs Human Review)
+    /// - Final errors: 3 (Invalid CredentialID), 4 (Cannot Connect To VCM), 5 (Cannot Insert Into Queue)
+    /// - Still processing: 1 (Inserted), 6 (Sent To AI), 10 (Received From AI)
+    /// </summary>
+    private static bool IsFinalStatus(int statusId)
+    {
+        return statusId switch
+        {
+            11 => true,  // Document Retrieval Complete
+            9 => true,   // Needs Human Review
+            3 => true,   // Invalid CredentialID (error - final)
+            4 => true,   // Cannot Connect To VCM (error - final)
+            5 => true,   // Cannot Insert Into Queue (error - final)
+            _ => false   // 1 (Inserted), 6 (Sent To AI), 10 (Received From AI) - still processing
+        };
+    }
 
     #endregion
 
@@ -1591,6 +1629,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     {
         public int StatusId { get; set; }
         public string? StatusDescription { get; set; }
+        public string? Status { get; set; }  // API returns "Status" field, not "StatusDescription"
         public long? IndexId { get; set; }
         public bool IsError { get; set; }
         public bool IsFinal { get; set; }

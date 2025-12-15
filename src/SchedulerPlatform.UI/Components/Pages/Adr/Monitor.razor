@@ -416,7 +416,7 @@
                                                     <MudProgressLinear Color="Color.Info" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
                                                 }
                                                 <MudText Typo="Typo.caption" Color="Color.Tertiary" Class="mt-1">
-                                                    <em>Checks all scraped jobs in database (may differ from Job Pipeline count which shows last 20 runs)</em>
+                                                    <em>Checks all scraped jobs in database</em>
                                                 </MudText>
                                             }
                                             else if (_currentStatus.Status.StatusCheckResult != null)
@@ -549,7 +549,7 @@
                         </tr>
                     </tbody>
                 </MudSimpleTable>
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">Status of jobs from last 20 orchestration runs</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">Current status of all jobs in database</MudText>
             }
             else
             {
@@ -912,7 +912,8 @@
             
             // Update chart data and load job stats (scoped to last 20 orchestration runs)
             UpdateChartData();
-            _jobStats = await AdrService.GetJobStatsAsync(lastOrchestrationRuns: 20);
+            // Show all jobs in the pipeline, not just last 20 runs
+            _jobStats = await AdrService.GetJobStatsAsync();
             
             // Start/stop fast progress polling based on orchestration state
             if (_currentStatus?.IsRunning == true && !_isProgressPolling)
