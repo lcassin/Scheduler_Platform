@@ -70,7 +70,7 @@
                 <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
                 <MudSelectItem Value="@("CredentialVerified")">Credential Verified</MudSelectItem>
                 <MudSelectItem Value="@("CredentialFailed")">Credential Failed</MudSelectItem>
-                <MudSelectItem Value="@("ScrapeRequested")">ADR Request Sent</MudSelectItem>
+                <MudSelectItem Value="@("ScrapeRequested")">Request Sent</MudSelectItem>
                 <MudSelectItem Value="@("Completed")">Completed</MudSelectItem>
                 <MudSelectItem Value="@("Failed")">ADR Request Failed</MudSelectItem>
                 <MudSelectItem Value="@("NeedsReview")">Needs Review</MudSelectItem>
@@ -189,7 +189,7 @@
                     @if (!string.IsNullOrEmpty(context.CurrentJobStatus))
                     {
                         <MudChip T="string" Size="Size.Small" Color="@GetJobStatusColor(context.CurrentJobStatus)">
-                            @context.CurrentJobStatus
+                            @GetJobStatusDisplayName(context.CurrentJobStatus)
                         </MudChip>
                     }
                     else
@@ -416,6 +416,15 @@
         "Failed" => Color.Error,
         "NeedsReview" => Color.Warning,
         _ => Color.Default
+    };
+
+    private string GetJobStatusDisplayName(string status) => status switch
+    {
+        "ScrapeRequested" => "Request Sent",
+        "CredentialVerified" => "Credential Verified",
+        "CredentialFailed" => "Credential Failed",
+        "NeedsReview" => "Needs Review",
+        _ => status
     };
 
     private Color GetHistoricalStatusColor(string status) => status switch
