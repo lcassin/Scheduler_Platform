@@ -12,4 +12,5 @@ public interface IAdrJobExecutionRepository : IRepository<AdrJobExecution>
         int? adrRequestTypeId = null,
         bool? isSuccess = null);
     Task<int> DeleteByJobIdAsync(int adrJobId);
+    Task<IEnumerable<int>> GetJobIdsModifiedSinceAsync(DateTime sinceDateTime);
 }

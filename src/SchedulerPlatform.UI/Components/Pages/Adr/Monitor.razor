@@ -830,9 +830,9 @@
             // Get the most recent completed run from history for display when not running
             _lastCompletedRun = _history?.FirstOrDefault(h => h.Status == "Completed" || h.Status == "Failed");
             
-            // Update chart data and load job stats
+            // Update chart data and load job stats (scoped to last 20 orchestration runs)
             UpdateChartData();
-            _jobStats = await AdrService.GetJobStatsAsync();
+            _jobStats = await AdrService.GetJobStatsAsync(lastOrchestrationRuns: 20);
             
             // Start/stop fast progress polling based on orchestration state
             if (_currentStatus?.IsRunning == true && !_isProgressPolling)

@@ -29,6 +29,9 @@ public interface IAdrJobRepository : IRepository<AdrJob>
             bool sortDescending = true);
     Task<int> GetTotalCountAsync(int? adrAccountId = null);
     Task<int> GetCountByStatusAsync(string status);
+    Task<int> GetCountByStatusAndIdsAsync(string status, HashSet<int> jobIds);
     Task<int> GetActiveJobsCountAsync();
     Task<bool> ExistsForBillingPeriodAsync(int adrAccountId, DateTime billingPeriodStart, DateTime billingPeriodEnd);
+    Task<IEnumerable<AdrJob>> GetJobsNeedingDailyStatusCheckAsync(DateTime currentDate, int delayDays = 1);
+    Task<IEnumerable<AdrJob>> GetJobsNeedingFinalStatusCheckAsync(DateTime currentDate, int finalDelayDays = 5);
 }

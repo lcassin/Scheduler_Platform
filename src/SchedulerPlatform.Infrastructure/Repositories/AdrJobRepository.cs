@@ -359,4 +359,55 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                           j.BillingPeriodEndDateTime == billingPeriodEnd &&
                           !j.IsDeleted);
     }
+
+    public async Task<int> GetCountByStatusAndIdsAsync(string status, HashSet<int> jobIds)
+    {
+        if (!jobIds.Any())
+            return 0;
+            
+        return await _dbSet
+            .Where(j => !j.IsDeleted && j.Status == status && jobIds.Contains(j.Id))
+            .CountAsync();
+    }
+
+    public async Task<IEnumerable<AdrJob>> GetJobsNeedingDailyStatusCheckAsync(DateTime currentDate, int delayDays = 1)
+    {
+        // Daily status checks: Jobs that were scraped at least delayDays ago and are still in their billing window
+        // This enables the "day after scraping, check status" workflow
+        var checkDate = currentDate.AddDays(-delayDays).Date;
+        var today = currentDate.Date;
+
+        return await _dbSet
+            .Where(j => !j.IsDeleted &&
+                        !j.IsManualRequest &&
+                        (j.Status == "ScrapeRequested" || j.Status == "StatusCheckInProgress") &&
+                        j.AdrStatusId.HasValue &&
+                        !j.ScrapingCompletedDateTime.HasValue &&
+                        // At least delayDays since last modification
+                        j.ModifiedDateTime <= checkDate &&
+                        // Still in normal billing window (NextRangeEndDateTime >= today)
+                        j.NextRangeEndDateTime.HasValue &&
+                        j.NextRangeEndDateTime.Value.Date >= today)
+            .Include(j => j.AdrAccount)
+            .ToListAsync();
+    }
+
+    public async Task<IEnumerable<AdrJob>> GetJobsNeedingFinalStatusCheckAsync(DateTime currentDate, int finalDelayDays = 5)
+    {
+        // Final status checks: Jobs that have passed their billing window by at least finalDelayDays
+        // This is the "5-6 days after NextRangeEndDate" final retry logic
+        var thresholdDate = currentDate.AddDays(-finalDelayDays).Date;
+
+        return await _dbSet
+            .Where(j => !j.IsDeleted &&
+                        !j.IsManualRequest &&
+                        (j.Status == "ScrapeRequested" || j.Status == "StatusCheckInProgress") &&
+                        j.AdrStatusId.HasValue &&
+                        !j.ScrapingCompletedDateTime.HasValue &&
+                        // Billing window ended at least finalDelayDays ago
+                        j.NextRangeEndDateTime.HasValue &&
+                        j.NextRangeEndDateTime.Value.Date < thresholdDate)
+            .Include(j => j.AdrAccount)
+            .ToListAsync();
+    }
 }

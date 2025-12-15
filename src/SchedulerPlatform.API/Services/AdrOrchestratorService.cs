@@ -67,6 +67,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     private const int DefaultCredentialCheckLeadDays = 7;
     private const int DefaultScrapeRetryDays = 5;
     private const int DefaultFollowUpDelayDays = 5;
+    private const int DailyStatusCheckDelayDays = 1;  // Check status the day after scraping
+    private const int FinalStatusCheckDelayDays = 5;  // Final check 5 days after billing window ends
     private const int DefaultMaxRetries = 5;
     private const int BatchSize = 1000; // Process and save in batches to avoid large transactions
     private const int DefaultMaxParallelRequests = 8; // Default parallel API requests
@@ -774,10 +776,24 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         {
             _logger.LogInformation("Starting status check with {MaxParallel} parallel workers", maxParallel);
 
-            var jobsNeedingStatusCheck = (await _unitOfWork.AdrJobs.GetJobsNeedingStatusCheckAsync(
-                DateTime.UtcNow, 
-                DefaultFollowUpDelayDays)).ToList();
-            _logger.LogInformation("Found {Count} jobs needing status check", jobsNeedingStatusCheck.Count);
+            // Split status checks into two categories:
+            // 1. Daily status checks (1-day delay): Jobs still in their billing window
+            // 2. Final status checks (5-day delay after NextRangeEndDate): Jobs past their billing window
+            var now = DateTime.UtcNow;
+            
+            var dailyJobs = (await _unitOfWork.AdrJobs.GetJobsNeedingDailyStatusCheckAsync(now, DailyStatusCheckDelayDays)).ToList();
+            var finalJobs = (await _unitOfWork.AdrJobs.GetJobsNeedingFinalStatusCheckAsync(now, FinalStatusCheckDelayDays)).ToList();
+            
+            // Merge and deduplicate by job ID
+            var jobsNeedingStatusCheck = dailyJobs
+                .Concat(finalJobs)
+                .GroupBy(j => j.Id)
+                .Select(g => g.First())
+                .ToList();
+            
+            _logger.LogInformation(
+                "Status check selection: {DailyCount} daily, {FinalCount} final, {Total} total (after dedup)",
+                dailyJobs.Count, finalJobs.Count, jobsNeedingStatusCheck.Count);
 
             // Report initial progress (0 of total)
             progressCallback?.Invoke(0, jobsNeedingStatusCheck.Count);
