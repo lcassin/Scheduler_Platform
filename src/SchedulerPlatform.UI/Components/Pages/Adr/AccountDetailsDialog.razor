@@ -1,4 +1,6 @@
 @using SchedulerPlatform.UI.Models
+@using SchedulerPlatform.UI.Services
+@inject IAdrService AdrService
 
 <MudDialog>
     <TitleContent>
@@ -123,6 +125,61 @@
 
                 <MudItem xs="12">
                     <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.subtitle1" Class="mb-2"><strong>Current Job Status</strong></MudText>
+                </MudItem>
+                @if (_loadingJob)
+                {
+                    <MudItem xs="12">
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        <MudText Typo="Typo.body2" Style="display: inline;">Loading job information...</MudText>
+                    </MudItem>
+                }
+                else if (_latestJob != null)
+                {
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Job Status</MudText>
+                        <MudChip T="string" Size="Size.Small" Color="@GetJobStatusColor(_latestJob.Status)">
+                            @GetJobStatusDisplayName(_latestJob.Status)
+                        </MudChip>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">ADR Status</MudText>
+                        <MudText Typo="Typo.body1">@(_latestJob.AdrStatusDescription ?? "Awaiting insert")</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Billing Period</MudText>
+                        <MudText Typo="Typo.body1">@_latestJob.BillingPeriodStartDateTime.ToString("MM/dd/yyyy") - @_latestJob.BillingPeriodEndDateTime.ToString("MM/dd/yyyy")</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Last Completed</MudText>
+                        <MudText Typo="Typo.body1">@(_latestJob.ScrapingCompletedDateTime?.ToString("MM/dd/yyyy HH:mm") ?? "N/A")</MudText>
+                    </MudItem>
+                    @if (!string.IsNullOrEmpty(_latestJob.ErrorMessage))
+                    {
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Error/Failure Reason</MudText>
+                            <MudAlert Severity="Severity.Error" Dense="true" Class="mt-1">@_latestJob.ErrorMessage</MudAlert>
+                        </MudItem>
+                    }
+                    else if (_latestJob.Status == "Failed" || _latestJob.Status == "NeedsReview")
+                    {
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Failure Reason</MudText>
+                            <MudAlert Severity="@(_latestJob.Status == "Failed" ? Severity.Error : Severity.Warning)" Dense="true" Class="mt-1">
+                                @(_latestJob.AdrStatusDescription ?? "Unknown reason")
+                            </MudAlert>
+                        </MudItem>
+                    }
+                }
+                else
+                {
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">No jobs found for this account</MudText>
+                    </MudItem>
+                }
+
+                <MudItem xs="12">
+                    <MudDivider Class="my-2" />
                     <MudText Typo="Typo.subtitle1" Class="mb-2"><strong>Sync Information</strong></MudText>
                 </MudItem>
                 <MudItem xs="6">
@@ -148,6 +205,26 @@
     [Parameter]
     public AdrAccount? Account { get; set; }
 
+    private AdrJob? _latestJob;
+    private bool _loadingJob = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Account != null)
+        {
+            try
+            {
+                var jobs = await AdrService.GetJobsByAccountAsync(Account.Id);
+                _latestJob = jobs.OrderByDescending(j => j.BillingPeriodStartDateTime).FirstOrDefault();
+            }
+            catch
+            {
+                _latestJob = null;
+            }
+        }
+        _loadingJob = false;
+    }
+
     private void Cancel() => MudDialog.Cancel();
 
     private Color GetNextRunStatusColor(string status) => status switch
@@ -165,5 +242,26 @@
         "Overdue" => Color.Warning,
         "Due Now" => Color.Info,
         _ => Color.Default
+    };
+
+    private Color GetJobStatusColor(string status) => status switch
+    {
+        "Completed" => Color.Success,
+        "Failed" => Color.Error,
+        "NeedsReview" => Color.Warning,
+        "ScrapeRequested" => Color.Info,
+        "CredentialVerified" => Color.Primary,
+        "CredentialFailed" => Color.Error,
+        "Pending" => Color.Default,
+        _ => Color.Default
+    };
+
+    private string GetJobStatusDisplayName(string status) => status switch
+    {
+        "ScrapeRequested" => "ADR Request Sent",
+        "CredentialVerified" => "Credential Verified",
+        "CredentialFailed" => "Credential Failed",
+        "NeedsReview" => "Needs Review",
+        _ => status
     };
 }
