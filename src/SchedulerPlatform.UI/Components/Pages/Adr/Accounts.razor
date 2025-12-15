@@ -113,6 +113,8 @@
                 <MudTh><MudTableSortLabel SortLabel="PeriodType" T="AdrAccount">Period Type</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="NextRunDateTime" T="AdrAccount" InitialDirection="SortDirection.Ascending">Next Run</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="NextRunStatus" T="AdrAccount">Run Status</MudTableSortLabel></MudTh>
+                <MudTh>Job Status</MudTh>
+                <MudTh>Last Completed</MudTh>
                 <MudTh><MudTableSortLabel SortLabel="HistoricalBillingStatus" T="AdrAccount">Historical Status</MudTableSortLabel></MudTh>
                 <MudTh>Actions</MudTh>
             </HeaderContent>
@@ -168,6 +170,28 @@
                         <MudChip T="string" Size="Size.Small" Color="@GetNextRunStatusColor(context.NextRunStatus)">
                             @context.NextRunStatus
                         </MudChip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Job Status">
+                    @if (!string.IsNullOrEmpty(context.CurrentJobStatus))
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="@GetJobStatusColor(context.CurrentJobStatus)">
+                            @context.CurrentJobStatus
+                        </MudChip>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">No Job</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Last Completed">
+                    @if (context.LastCompletedDateTime.HasValue)
+                    {
+                        <text>@context.LastCompletedDateTime.Value.ToString("MM/dd/yyyy")</text>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">N/A</MudText>
                     }
                 </MudTd>
                 <MudTd DataLabel="Historical Status">
@@ -357,6 +381,21 @@
         "Due Soon" => Color.Warning,
         "Upcoming" => Color.Info,
         "Future" => Color.Default,
+        _ => Color.Default
+    };
+
+    private Color GetJobStatusColor(string status) => status switch
+    {
+        "Pending" => Color.Default,
+        "CredentialCheckInProgress" => Color.Info,
+        "CredentialVerified" => Color.Info,
+        "CredentialFailed" => Color.Warning,
+        "ScrapeInProgress" => Color.Info,
+        "ScrapeRequested" => Color.Primary,
+        "StatusCheckInProgress" => Color.Info,
+        "Completed" => Color.Success,
+        "Failed" => Color.Error,
+        "NeedsReview" => Color.Warning,
         _ => Color.Default
     };
 
