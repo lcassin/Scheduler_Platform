@@ -120,6 +120,17 @@ public class AdrJob : BaseEntity
         /// </summary>
         public string? ManualRequestReason { get; set; }
     
+        /// <summary>
+        /// Raw API response from the last status check (for debugging).
+        /// Stores the JSON response to help diagnose API format changes.
+        /// </summary>
+        public string? LastStatusCheckResponse { get; set; }
+    
+        /// <summary>
+        /// Timestamp of the last status check
+        /// </summary>
+        public DateTime? LastStatusCheckDateTime { get; set; }
+    
         // Navigation properties
     [JsonIgnore]
     public AdrAccount AdrAccount { get; set; } = null!;
