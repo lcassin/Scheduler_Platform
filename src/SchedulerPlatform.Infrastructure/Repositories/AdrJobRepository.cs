@@ -370,6 +370,21 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             .CountAsync();
     }
 
+    public async Task<Dictionary<string, int>> GetCountsByStatusAndIdsAsync(HashSet<int> jobIds)
+    {
+        if (!jobIds.Any())
+            return new Dictionary<string, int>();
+
+        // Single GROUP BY query instead of 7 separate COUNT queries
+        var results = await _dbSet
+            .Where(j => !j.IsDeleted && jobIds.Contains(j.Id))
+            .GroupBy(j => j.Status)
+            .Select(g => new { Status = g.Key, Count = g.Count() })
+            .ToListAsync();
+
+        return results.ToDictionary(x => x.Status ?? "", x => x.Count);
+    }
+
     public async Task<IEnumerable<AdrJob>> GetJobsNeedingDailyStatusCheckAsync(DateTime currentDate, int delayDays = 1)
     {
         // Daily status checks: Jobs that were scraped at least delayDays ago and are still in their billing window

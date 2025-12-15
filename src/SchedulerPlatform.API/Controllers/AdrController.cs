@@ -1254,15 +1254,17 @@ public class AdrController : ControllerBase
                     var jobIds = await _unitOfWork.AdrJobExecutions.GetJobIdsModifiedSinceAsync(earliestRunTime);
                     var jobIdSet = jobIds.ToHashSet();
                     
-                    // Count jobs by status, filtered to only those touched by recent runs
+                    // Count jobs by status using a single GROUP BY query (instead of 7 separate queries)
                     totalCount = jobIdSet.Count;
-                    pendingCount = await _unitOfWork.AdrJobs.GetCountByStatusAndIdsAsync("Pending", jobIdSet);
-                    credentialVerifiedCount = await _unitOfWork.AdrJobs.GetCountByStatusAndIdsAsync("CredentialVerified", jobIdSet);
-                    credentialFailedCount = await _unitOfWork.AdrJobs.GetCountByStatusAndIdsAsync("CredentialFailed", jobIdSet);
-                    scrapeRequestedCount = await _unitOfWork.AdrJobs.GetCountByStatusAndIdsAsync("ScrapeRequested", jobIdSet);
-                    completedCount = await _unitOfWork.AdrJobs.GetCountByStatusAndIdsAsync("Completed", jobIdSet);
-                    failedCount = await _unitOfWork.AdrJobs.GetCountByStatusAndIdsAsync("Failed", jobIdSet);
-                    needsReviewCount = await _unitOfWork.AdrJobs.GetCountByStatusAndIdsAsync("NeedsReview", jobIdSet);
+                    var statusCounts = await _unitOfWork.AdrJobs.GetCountsByStatusAndIdsAsync(jobIdSet);
+                    
+                    pendingCount = statusCounts.TryGetValue("Pending", out var p) ? p : 0;
+                    credentialVerifiedCount = statusCounts.TryGetValue("CredentialVerified", out var cv) ? cv : 0;
+                    credentialFailedCount = statusCounts.TryGetValue("CredentialFailed", out var cf) ? cf : 0;
+                    scrapeRequestedCount = statusCounts.TryGetValue("ScrapeRequested", out var sr) ? sr : 0;
+                    completedCount = statusCounts.TryGetValue("Completed", out var c) ? c : 0;
+                    failedCount = statusCounts.TryGetValue("Failed", out var f) ? f : 0;
+                    needsReviewCount = statusCounts.TryGetValue("NeedsReview", out var nr) ? nr : 0;
                 }
                 else
                 {
