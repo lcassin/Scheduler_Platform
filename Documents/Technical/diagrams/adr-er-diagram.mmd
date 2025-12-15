@@ -1,0 +1,121 @@
+erDiagram
+    Client ||--o{ AdrAccount : "has many"
+    AdrAccount ||--o{ AdrJob : "has many"
+    AdrJob ||--o{ AdrJobExecution : "has many"
+    
+    AdrAccount {
+        int AdrAccountId PK
+        long VMAccountId "External ID (can have duplicates)"
+        string VMAccountNumber "Account number"
+        string InterfaceAccountId "Bank payment ID"
+        int ClientId FK
+        string ClientName "Denormalized"
+        int CredentialId "Active credential"
+        string VendorCode
+        string PeriodType "Billing frequency"
+        int PeriodDays "Days between invoices"
+        double MedianDays "Calculated median"
+        int InvoiceCount "Historical count"
+        DateTime LastInvoiceDateTime
+        DateTime ExpectedNextDateTime
+        DateTime ExpectedRangeStartDateTime
+        DateTime ExpectedRangeEndDateTime
+        DateTime NextRunDateTime "Scheduled scrape"
+        DateTime NextRangeStartDateTime
+        DateTime NextRangeEndDateTime
+        int DaysUntilNextRun
+        string NextRunStatus "Run Now, Due Soon, etc"
+        string HistoricalBillingStatus "Missing, Overdue, etc"
+        DateTime LastSyncedDateTime
+        bool IsManuallyOverridden "Override flag"
+        string OverriddenBy "Who overrode"
+        DateTime OverriddenDateTime "When overridden"
+        DateTime CreatedDateTime
+        DateTime ModifiedDateTime
+        string CreatedBy
+        string ModifiedBy
+        bool IsDeleted
+    }
+    
+    AdrJob {
+        int AdrJobId PK
+        int AdrAccountId FK
+        long VMAccountId "Denormalized"
+        string VMAccountNumber "Denormalized"
+        string VendorCode "Denormalized"
+        int CredentialId
+        string PeriodType
+        DateTime BillingPeriodStartDateTime "Period start"
+        DateTime BillingPeriodEndDateTime "Period end"
+        DateTime NextRunDateTime
+        DateTime NextRangeStartDateTime
+        DateTime NextRangeEndDateTime
+        string Status "Pending, CredentialVerified, etc"
+        bool IsMissing
+        int AdrStatusId "From ADR API"
+        string AdrStatusDescription
+        long AdrIndexId "From ADR API"
+        DateTime CredentialVerifiedDateTime
+        DateTime ScrapingCompletedDateTime
+        string ErrorMessage
+        int RetryCount
+        DateTime CreatedDateTime
+        DateTime ModifiedDateTime
+        string CreatedBy
+        string ModifiedBy
+        bool IsDeleted
+    }
+    
+    AdrJobExecution {
+        int AdrJobExecutionId PK
+        int AdrJobId FK
+        int AdrRequestTypeId "1=Login, 2=Download"
+        DateTime StartDateTime
+        DateTime EndDateTime
+        int AdrStatusId
+        string AdrStatusDescription
+        bool IsError
+        bool IsFinal
+        long AdrIndexId
+        int HttpStatusCode
+        bool IsSuccess
+        string ErrorMessage
+        string ApiResponse "JSON"
+        string RequestPayload "JSON"
+        DateTime CreatedDateTime
+        DateTime ModifiedDateTime
+        string CreatedBy
+        string ModifiedBy
+        bool IsDeleted
+    }
+    
+    AdrOrchestrationRun {
+        int AdrOrchestrationRunId PK
+        string RequestId "GUID"
+        string RequestedBy
+        DateTime RequestedDateTime
+        DateTime StartedDateTime
+        DateTime CompletedDateTime
+        string Status "Queued, Running, Completed, Failed"
+        string CurrentStep
+        string CurrentProgress "e.g. 150/500"
+        int TotalItems
+        int ProcessedItems
+        string ErrorMessage
+        int SyncAccountsInserted
+        int SyncAccountsUpdated
+        int SyncAccountsTotal
+        int JobsCreated
+        int JobsSkipped
+        int CredentialsVerified
+        int CredentialsFailed
+        int ScrapingRequested
+        int ScrapingFailed
+        int StatusesChecked
+        int StatusesFailed
+        DateTime CreatedDateTime
+        DateTime ModifiedDateTime
+        string CreatedBy
+        string ModifiedBy
+        bool IsDeleted
+    }

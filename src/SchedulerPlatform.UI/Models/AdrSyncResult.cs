@@ -75,6 +75,59 @@ public class RefireJobsBulkResult
     public List<string>? Errors { get; set; }
 }
 
+public class ManualScrapeResult
+{
+    public string Message { get; set; } = string.Empty;
+    public int JobId { get; set; }
+    public int ExecutionId { get; set; }
+    public int AccountId { get; set; }
+    public string? VMAccountNumber { get; set; }
+    public int? CredentialId { get; set; }
+    public DateTime RangeStartDate { get; set; }
+    public DateTime RangeEndDate { get; set; }
+    public string? RequestedBy { get; set; }
+    public DateTime RequestedAt { get; set; }
+    // API Response details
+    public int? HttpStatusCode { get; set; }
+    public bool IsSuccess { get; set; }
+    public bool IsError { get; set; }
+    public bool IsFinal { get; set; }
+    public int? StatusId { get; set; }
+    public string? StatusDescription { get; set; }
+    public long? IndexId { get; set; }
+    public string? ErrorMessage { get; set; }
+}
+
+public class CheckJobStatusResult
+{
+    public int JobId { get; set; }
+    public int ExecutionId { get; set; }
+    public int? HttpStatusCode { get; set; }
+    public bool IsSuccess { get; set; }
+    public bool IsError { get; set; }
+    public bool IsFinal { get; set; }
+    public int? StatusId { get; set; }
+    public string? StatusDescription { get; set; }
+    public long? IndexId { get; set; }
+    public string? ErrorMessage { get; set; }
+    public string? JobStatus { get; set; }
+}
+
+public class BackgroundOrchestrationRequest
+{
+    public bool RunSync { get; set; } = true;
+    public bool RunCreateJobs { get; set; } = true;
+    public bool RunCredentialVerification { get; set; } = true;
+    public bool RunScraping { get; set; } = true;
+    public bool RunStatusCheck { get; set; } = true;
+    
+    /// <summary>
+    /// When true and RunStatusCheck is true, checks ALL jobs with ScrapeRequested status
+    /// regardless of timing criteria. Used by the "Check Statuses Only" button.
+    /// </summary>
+    public bool CheckAllScrapedStatuses { get; set; } = false;
+}
+
 public class BackgroundOrchestrationResponse
 {
     public string Message { get; set; } = string.Empty;

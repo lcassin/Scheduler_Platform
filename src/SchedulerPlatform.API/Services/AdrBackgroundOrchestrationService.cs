@@ -19,6 +19,13 @@ public class AdrOrchestrationRequest
     public bool RunCredentialVerification { get; set; } = true;
     public bool RunScraping { get; set; } = true;
     public bool RunStatusCheck { get; set; } = true;
+    
+    /// <summary>
+    /// When true and RunStatusCheck is true, uses CheckAllScrapedStatusesAsync instead of CheckPendingStatusesAsync.
+    /// This checks ALL jobs with ScrapeRequested status regardless of timing criteria.
+    /// Used by the "Check Statuses Only" button for manual status checks.
+    /// </summary>
+    public bool CheckAllScrapedStatuses { get; set; } = false;
 }
 
 /// <summary>
@@ -347,7 +354,75 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                     request.RequestId, credResult.CredentialsVerified, credResult.CredentialsFailed);
             }
 
-            // Step 4: Process scraping
+            // Step 4: Check statuses of yesterday's ScrapeRequested jobs BEFORE sending new scrapes
+            // This prevents duplicate scrape requests for jobs that already completed
+            if (request.RunStatusCheck)
+            {
+                var checkAllStatuses = request.CheckAllScrapedStatuses;
+                _queue.UpdateStatus(request.RequestId, s => 
+                {
+                    s.CurrentStep = checkAllStatuses ? "Checking all scraped statuses" : "Checking statuses";
+                    s.CurrentStepPhase = "Preparing";
+                    s.CurrentStepProgress = 0;
+                    s.CurrentStepTotal = 0;
+                });
+                _logger.LogInformation(
+                    "Request {RequestId}: Starting status check (CheckAllScrapedStatuses={CheckAll})", 
+                    request.RequestId, checkAllStatuses);
+                
+                // Use CheckAllScrapedStatusesAsync for manual "Check Statuses Only" button
+                // Use CheckPendingStatusesAsync for regular orchestration runs
+                StatusCheckResult statusResult;
+                if (checkAllStatuses)
+                {
+                    statusResult = await orchestratorService.CheckAllScrapedStatusesAsync(
+                        (progress, total) => _queue.UpdateStatus(request.RequestId, s => 
+                        {
+                            if (progress < 0)
+                            {
+                                s.CurrentStepPhase = "Preparing";
+                                s.CurrentStepProgress = Math.Abs(progress);
+                            }
+                            else
+                            {
+                                s.CurrentStepPhase = "Calling API";
+                                s.CurrentStepProgress = progress;
+                            }
+                            s.CurrentStepTotal = total;
+                        }),
+                        stoppingToken);
+                }
+                else
+                {
+                    statusResult = await orchestratorService.CheckPendingStatusesAsync(
+                        (progress, total) => _queue.UpdateStatus(request.RequestId, s => 
+                        {
+                            if (progress < 0)
+                            {
+                                s.CurrentStepPhase = "Preparing";
+                                s.CurrentStepProgress = Math.Abs(progress);
+                            }
+                            else
+                            {
+                                s.CurrentStepPhase = "Calling API";
+                                s.CurrentStepProgress = progress;
+                            }
+                            s.CurrentStepTotal = total;
+                        }),
+                        stoppingToken);
+                }
+                _queue.UpdateStatus(request.RequestId, s => 
+                {
+                    s.CurrentStepPhase = null;
+                    s.StatusCheckResult = statusResult;
+                });
+                
+                _logger.LogInformation(
+                    "Request {RequestId}: Status check completed. Completed: {Completed}, NeedsReview: {NeedsReview}",
+                    request.RequestId, statusResult.JobsCompleted, statusResult.JobsNeedingReview);
+            }
+
+            // Step 5: Process scraping for jobs that are ready (CredentialVerified status)
             if (request.RunScraping)
             {
                 _queue.UpdateStatus(request.RequestId, s => 
@@ -385,46 +460,6 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                 _logger.LogInformation(
                     "Request {RequestId}: Scraping completed. Requested: {Requested}, Completed: {Completed}",
                     request.RequestId, scrapeResult.ScrapesRequested, scrapeResult.ScrapesCompleted);
-            }
-
-            // Step 5: Check statuses
-            if (request.RunStatusCheck)
-            {
-                _queue.UpdateStatus(request.RequestId, s => 
-                {
-                    s.CurrentStep = "Checking statuses";
-                    s.CurrentStepPhase = "Preparing";
-                    s.CurrentStepProgress = 0;
-                    s.CurrentStepTotal = 0;
-                });
-                _logger.LogInformation("Request {RequestId}: Starting status check", request.RequestId);
-                
-                var statusResult = await orchestratorService.CheckPendingStatusesAsync(
-                    (progress, total) => _queue.UpdateStatus(request.RequestId, s => 
-                    {
-                        // Negative progress indicates setup/preparing phase
-                        if (progress < 0)
-                        {
-                            s.CurrentStepPhase = "Preparing";
-                            s.CurrentStepProgress = Math.Abs(progress);
-                        }
-                        else
-                        {
-                            s.CurrentStepPhase = "Calling API";
-                            s.CurrentStepProgress = progress;
-                        }
-                        s.CurrentStepTotal = total;
-                    }),
-                    stoppingToken);
-                _queue.UpdateStatus(request.RequestId, s => 
-                {
-                    s.CurrentStepPhase = null;
-                    s.StatusCheckResult = statusResult;
-                });
-                
-                _logger.LogInformation(
-                    "Request {RequestId}: Status check completed. Completed: {Completed}, NeedsReview: {NeedsReview}",
-                    request.RequestId, statusResult.JobsCompleted, statusResult.JobsNeedingReview);
             }
 
             _queue.UpdateStatus(request.RequestId, s =>

@@ -12,13 +12,17 @@ public interface IAdrService
         string? searchTerm = null,
         string? nextRunStatus = null,
         string? historicalBillingStatus = null,
-        bool? isOverridden = null);
+        bool? isOverridden = null,
+        string? jobStatus = null,
+        string? sortColumn = null,
+        bool sortDescending = false);
     Task<AdrAccount?> GetAccountAsync(int id);
     Task<AdrAccount?> GetAccountByVMAccountIdAsync(long vmAccountId);
     Task<AdrAccountStats> GetAccountStatsAsync();
     Task<AdrAccount> UpdateAccountBillingAsync(int accountId, DateTime? expectedBillingDate, string? periodType, string? historicalBillingStatus);
-    Task<AdrAccount> ClearAccountOverrideAsync(int accountId);
-    Task<byte[]> DownloadAccountsExportAsync(
+        Task<AdrAccount> ClearAccountOverrideAsync(int accountId);
+        Task<ManualScrapeResult> ManualScrapeRequestAsync(int accountId, DateTime targetDate, DateTime? rangeStartDate = null, DateTime? rangeEndDate = null, string? reason = null);
+        Task<byte[]> DownloadAccountsExportAsync(
         int? clientId = null,
         string? searchTerm = null,
         string? nextRunStatus = null,
@@ -36,10 +40,13 @@ public interface IAdrService
             bool latestPerAccount = false,
             long? vmAccountId = null,
             string? interfaceAccountId = null,
-            int? credentialId = null);
+            int? credentialId = null,
+            bool? isManualRequest = null,
+            string? sortColumn = null,
+            bool sortDescending = true);
     Task<AdrJob?> GetJobAsync(int id);
     Task<List<AdrJob>> GetJobsByAccountAsync(int adrAccountId);
-    Task<AdrJobStats> GetJobStatsAsync();
+    Task<AdrJobStats> GetJobStatsAsync(int? lastOrchestrationRuns = null);
     Task<byte[]> DownloadJobsExportAsync(
         string? status = null,
         string? vendorCode = null,
@@ -54,9 +61,12 @@ public interface IAdrService
         int? adrJobId = null);
     Task<List<AdrJobExecution>> GetExecutionsByJobAsync(int adrJobId);
     
-    // Job refire operations
-    Task<RefireJobResult> RefireJobAsync(int jobId, bool forceRefire = false);
-    Task<RefireJobsBulkResult> RefireJobsBulkAsync(List<int> jobIds, bool forceRefire = false);
+        // Job refire operations
+        Task<RefireJobResult> RefireJobAsync(int jobId, bool forceRefire = false);
+        Task<RefireJobsBulkResult> RefireJobsBulkAsync(List<int> jobIds, bool forceRefire = false);
+    
+        // Job status check (for manual jobs)
+        Task<CheckJobStatusResult> CheckJobStatusAsync(int jobId);
     
     // Orchestration operations
     Task<AdrAccountSyncResult> SyncAccountsAsync();
@@ -67,7 +77,7 @@ public interface IAdrService
     Task<FullCycleResult> RunFullCycleAsync();
     
     // Background orchestration monitoring
-    Task<BackgroundOrchestrationResponse> StartBackgroundOrchestrationAsync();
+    Task<BackgroundOrchestrationResponse> StartBackgroundOrchestrationAsync(BackgroundOrchestrationRequest? request = null);
     Task<OrchestrationCurrentResponse> GetCurrentOrchestrationAsync();
     Task<AdrOrchestrationStatus?> GetOrchestrationStatusAsync(string requestId);
     Task<List<AdrOrchestrationStatus>> GetOrchestrationHistoryAsync(int? count = 10);

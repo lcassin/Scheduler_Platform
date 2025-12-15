@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @attribute [Authorize]
 @inject IAdrService AdrService
+@inject IUserTimeZoneService TimeZoneService
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 @implements IDisposable
@@ -46,8 +47,79 @@
                             <text>Start Orchestration</text>
                         }
                     </MudButton>
+                    <MudButton Variant="Variant.Outlined" 
+                               Color="Color.Info" 
+                               StartIcon="@Icons.Material.Filled.CheckCircle"
+                               OnClick="CheckStatusesOnly"
+                               Disabled="_isCheckingStatuses || (_currentStatus?.IsRunning ?? false)">
+                        @if (_isCheckingStatuses)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            <text>Checking...</text>
+                        }
+                        else
+                        {
+                            <text>Check Statuses Only</text>
+                        }
+                    </MudButton>
                 </div>
             </div>
+
+            @* Manual Status Check Progress Panel *@
+            @if (_isCheckingStatuses || _statusCheckResult != null)
+            {
+                <MudCard Outlined="true" Class="mb-4">
+                    <MudCardContent>
+                        <div class="d-flex align-center justify-space-between mb-3">
+                            <MudText Typo="Typo.subtitle1">
+                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Class="mr-2" />
+                                Manual Status Check
+                            </MudText>
+                            @if (!_isCheckingStatuses && _statusCheckResult != null)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Close" 
+                                               Size="Size.Small" 
+                                               OnClick="ClearStatusCheckResult" />
+                            }
+                        </div>
+                        
+                        @if (_isCheckingStatuses)
+                        {
+                            <MudProgressLinear Color="Color.Info" Indeterminate="true" Class="mb-3" />
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                Checking status for all ADR requests... This may take several minutes for large datasets.
+                            </MudText>
+                        }
+                        else if (_statusCheckResult != null)
+                        {
+                            <MudGrid>
+                                <MudItem xs="6" sm="3">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Jobs Checked</MudText>
+                                    <MudText Typo="Typo.h6">@_statusCheckResult.JobsChecked.ToString("N0")</MudText>
+                                </MudItem>
+                                <MudItem xs="6" sm="3">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Completed</MudText>
+                                    <MudText Typo="Typo.h6" Color="Color.Success">@_statusCheckResult.JobsCompleted.ToString("N0")</MudText>
+                                </MudItem>
+                                <MudItem xs="6" sm="3">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Need Review</MudText>
+                                    <MudText Typo="Typo.h6" Color="Color.Warning">@_statusCheckResult.JobsNeedingReview.ToString("N0")</MudText>
+                                </MudItem>
+                                <MudItem xs="6" sm="3">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Still Processing</MudText>
+                                    <MudText Typo="Typo.h6" Color="Color.Info">@_statusCheckResult.JobsStillProcessing.ToString("N0")</MudText>
+                                </MudItem>
+                            </MudGrid>
+                            @if (_statusCheckResult.Errors > 0)
+                            {
+                                <MudAlert Severity="Severity.Warning" Class="mt-3" Dense="true">
+                                    @_statusCheckResult.Errors errors occurred during status check. Check logs for details.
+                                </MudAlert>
+                            }
+                        }
+                    </MudCardContent>
+                </MudCard>
+            }
 
             @if (_loading)
             {
@@ -65,119 +137,162 @@
                     No orchestration is currently running. Click "Start Orchestration" to begin a new run.
                 </MudAlert>
                 
-                @if (_lastCompletedRun != null)
-                {
-                    <MudCard Outlined="true">
-                        <MudCardContent>
-                            <MudText Typo="Typo.subtitle1" Class="mb-3">Last Completed Run</MudText>
-                            <MudGrid>
-                                <MudItem xs="12" md="6">
-                                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Request ID</MudText>
-                                    <MudText Typo="Typo.body1" Class="mb-3">@_lastCompletedRun.RequestId</MudText>
+                <MudGrid>
+                    <MudItem xs="12" md="7">
+                        @if (_lastCompletedRun != null)
+                        {
+                            <MudCard Outlined="true">
+                                <MudCardContent>
+                                    <MudText Typo="Typo.subtitle1" Class="mb-3">Last Completed Run</MudText>
+                                    <MudGrid>
+                                        <MudItem xs="12" md="6">
+                                            <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Request ID</MudText>
+                                            <MudText Typo="Typo.body1" Class="mb-3">@_lastCompletedRun.RequestId</MudText>
+                                            
+                                            <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Requested By</MudText>
+                                            <MudText Typo="Typo.body1" Class="mb-3">@_lastCompletedRun.RequestedBy</MudText>
+                                        </MudItem>
+                                        <MudItem xs="12" md="6">
+                                            <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Status</MudText>
+                                            <MudChip T="string" Size="Size.Medium" Color="@GetStatusColor(_lastCompletedRun.Status)" Class="mb-3">
+                                                @_lastCompletedRun.Status
+                                            </MudChip>
+                                            
+                                            <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Completed At</MudText>
+                                            <MudText Typo="Typo.body1" Class="mb-3">@FormatDateTime(_lastCompletedRun.CompletedAt, "MM/dd/yyyy hh:mm:ss tt")</MudText>
+                                            
+                                            @if (_lastCompletedRun.StartedAt.HasValue && _lastCompletedRun.CompletedAt.HasValue)
+                                            {
+                                                var duration = _lastCompletedRun.CompletedAt.Value - _lastCompletedRun.StartedAt.Value;
+                                                <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Duration</MudText>
+                                                <MudText Typo="Typo.body1">@duration.ToString(@"hh\:mm\:ss")</MudText>
+                                            }
+                                        </MudItem>
+                                    </MudGrid>
                                     
-                                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Requested By</MudText>
-                                    <MudText Typo="Typo.body1" Class="mb-3">@_lastCompletedRun.RequestedBy</MudText>
-                                </MudItem>
-                                <MudItem xs="12" md="6">
-                                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Status</MudText>
-                                    <MudChip T="string" Size="Size.Medium" Color="@GetStatusColor(_lastCompletedRun.Status)" Class="mb-3">
-                                        @_lastCompletedRun.Status
-                                    </MudChip>
-                                    
-                                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Completed At</MudText>
-                                    <MudText Typo="Typo.body1" Class="mb-3">@(_lastCompletedRun.CompletedAt?.ToString("MM/dd/yyyy hh:mm:ss tt") ?? "N/A")</MudText>
-                                    
-                                    @if (_lastCompletedRun.StartedAt.HasValue && _lastCompletedRun.CompletedAt.HasValue)
-                                    {
-                                        var duration = _lastCompletedRun.CompletedAt.Value - _lastCompletedRun.StartedAt.Value;
-                                        <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Duration</MudText>
-                                        <MudText Typo="Typo.body1">@duration.ToString(@"hh\:mm\:ss")</MudText>
-                                    }
-                                </MudItem>
-                            </MudGrid>
-                            
-                            <MudDivider Class="my-4" />
-                            <MudText Typo="Typo.subtitle1" Class="mb-2">Step Results</MudText>
-                            <MudTimeline TimelinePosition="TimelinePosition.Start">
-                                <MudTimelineItem Color="@GetLastRunStepColor("Syncing accounts")" Icon="@Icons.Material.Filled.CheckCircle">
-                                    <ItemContent>
-                                        <MudText Typo="Typo.body2">Sync Accounts</MudText>
-                                        @if (_lastCompletedRun.SyncResult != null)
+                                    <MudDivider Class="my-4" />
+                                    <MudText Typo="Typo.subtitle1" Class="mb-2">Step Results</MudText>
+                                    <MudTimeline TimelinePosition="TimelinePosition.Start">
+                                        <MudTimelineItem Color="@GetLastRunStepColor("Syncing accounts")" Icon="@Icons.Material.Filled.CheckCircle">
+                                            <ItemContent>
+                                                <MudText Typo="Typo.body2">Sync Accounts</MudText>
+                                                @if (_lastCompletedRun.SyncResult != null)
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                        @_lastCompletedRun.SyncResult.AccountsInserted inserted, @_lastCompletedRun.SyncResult.AccountsUpdated updated
+                                                    </MudText>
+                                                }
+                                                else
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Completed</MudText>
+                                                }
+                                            </ItemContent>
+                                        </MudTimelineItem>
+                                        <MudTimelineItem Color="@GetLastRunStepColor("Creating jobs")" Icon="@Icons.Material.Filled.CheckCircle">
+                                            <ItemContent>
+                                                <MudText Typo="Typo.body2">Create Jobs</MudText>
+                                                @if (_lastCompletedRun.JobCreationResult != null)
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                        @_lastCompletedRun.JobCreationResult.JobsCreated created, @_lastCompletedRun.JobCreationResult.JobsSkipped skipped
+                                                    </MudText>
+                                                }
+                                                else
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Completed</MudText>
+                                                }
+                                            </ItemContent>
+                                        </MudTimelineItem>
+                                        <MudTimelineItem Color="@GetLastRunStepColor("Verifying credentials")" Icon="@Icons.Material.Filled.CheckCircle">
+                                            <ItemContent>
+                                                <MudText Typo="Typo.body2">Verify Credentials</MudText>
+                                                @if (_lastCompletedRun.CredentialVerificationResult != null)
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                        @_lastCompletedRun.CredentialVerificationResult.CredentialsVerified verified, @_lastCompletedRun.CredentialVerificationResult.CredentialsFailed failed
+                                                    </MudText>
+                                                }
+                                                else
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Completed</MudText>
+                                                }
+                                            </ItemContent>
+                                        </MudTimelineItem>
+                                        <MudTimelineItem Color="@GetLastRunStepColor("Checking statuses")" Icon="@Icons.Material.Filled.CheckCircle">
+                                            <ItemContent>
+                                                <MudText Typo="Typo.body2">Check Statuses</MudText>
+                                                @if (_lastCompletedRun.StatusCheckResult != null)
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                        @_lastCompletedRun.StatusCheckResult.JobsCompleted completed, @_lastCompletedRun.StatusCheckResult.JobsNeedingReview need review
+                                                    </MudText>
+                                                }
+                                                else
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Completed</MudText>
+                                                }
+                                            </ItemContent>
+                                        </MudTimelineItem>
+                                        <MudTimelineItem Color="@GetLastRunStepColor("Processing scraping")" Icon="@Icons.Material.Filled.CheckCircle">
+                                            <ItemContent>
+                                                <MudText Typo="Typo.body2">Send ADR Requests</MudText>
+                                                @if (_lastCompletedRun.ScrapeResult != null)
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                        @_lastCompletedRun.ScrapeResult.ScrapesRequested ADR requests sent, @_lastCompletedRun.ScrapeResult.ScrapesCompleted completed
+                                                    </MudText>
+                                                }
+                                                else
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Completed</MudText>
+                                                }
+                                            </ItemContent>
+                                        </MudTimelineItem>
+                                    </MudTimeline>
+                                </MudCardContent>
+                            </MudCard>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">No completed runs yet</MudText>
+                        }
+                    </MudItem>
+                    <MudItem xs="12" md="5">
+                        <MudCard Outlined="true" Style="height: 100%;">
+                            <MudCardContent>
+                                <MudText Typo="Typo.subtitle1" Class="mb-3">Recent Run Results</MudText>
+                                @if (_recentHistory != null && _recentHistory.Any())
+                                {
+                                    <MudChart ChartType="ChartType.Donut" 
+                                             InputData="@_orchestrationChartData" 
+                                             InputLabels="@_orchestrationChartLabels"
+                                             ChartOptions="@_orchestrationChartOptions"
+                                             Width="100%" 
+                                             Height="220px">
+                                    </MudChart>
+                                    <MudGrid Class="mt-3" Spacing="1">
+                                        @foreach (var status in _orchestrationStatusCounts)
                                         {
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                @_lastCompletedRun.SyncResult.AccountsInserted inserted, @_lastCompletedRun.SyncResult.AccountsUpdated updated
-                                            </MudText>
+                                            <MudItem xs="6">
+                                                <MudText Typo="Typo.body2">
+                                                    <MudIcon Icon="@Icons.Material.Filled.Circle" Size="Size.Small" Color="@GetStatusColor(status.Key)" Class="mr-1" />
+                                                    @status.Key: @status.Value
+                                                </MudText>
+                                            </MudItem>
                                         }
-                                        else
-                                        {
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary">Completed</MudText>
-                                        }
-                                    </ItemContent>
-                                </MudTimelineItem>
-                                <MudTimelineItem Color="@GetLastRunStepColor("Creating jobs")" Icon="@Icons.Material.Filled.CheckCircle">
-                                    <ItemContent>
-                                        <MudText Typo="Typo.body2">Create Jobs</MudText>
-                                        @if (_lastCompletedRun.JobCreationResult != null)
-                                        {
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                @_lastCompletedRun.JobCreationResult.JobsCreated created, @_lastCompletedRun.JobCreationResult.JobsSkipped skipped
-                                            </MudText>
-                                        }
-                                        else
-                                        {
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary">Completed</MudText>
-                                        }
-                                    </ItemContent>
-                                </MudTimelineItem>
-                                <MudTimelineItem Color="@GetLastRunStepColor("Verifying credentials")" Icon="@Icons.Material.Filled.CheckCircle">
-                                    <ItemContent>
-                                        <MudText Typo="Typo.body2">Verify Credentials</MudText>
-                                        @if (_lastCompletedRun.CredentialVerificationResult != null)
-                                        {
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                @_lastCompletedRun.CredentialVerificationResult.CredentialsVerified verified, @_lastCompletedRun.CredentialVerificationResult.CredentialsFailed failed
-                                            </MudText>
-                                        }
-                                        else
-                                        {
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary">Completed</MudText>
-                                        }
-                                    </ItemContent>
-                                </MudTimelineItem>
-                                <MudTimelineItem Color="@GetLastRunStepColor("Processing scraping")" Icon="@Icons.Material.Filled.CheckCircle">
-                                    <ItemContent>
-                                        <MudText Typo="Typo.body2">Process Scraping</MudText>
-                                        @if (_lastCompletedRun.ScrapeResult != null)
-                                        {
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                @_lastCompletedRun.ScrapeResult.ScrapesRequested requested, @_lastCompletedRun.ScrapeResult.ScrapesCompleted completed
-                                            </MudText>
-                                        }
-                                        else
-                                        {
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary">Completed</MudText>
-                                        }
-                                    </ItemContent>
-                                </MudTimelineItem>
-                                <MudTimelineItem Color="@GetLastRunStepColor("Checking statuses")" Icon="@Icons.Material.Filled.CheckCircle">
-                                    <ItemContent>
-                                        <MudText Typo="Typo.body2">Check Statuses</MudText>
-                                        @if (_lastCompletedRun.StatusCheckResult != null)
-                                        {
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                @_lastCompletedRun.StatusCheckResult.JobsCompleted completed, @_lastCompletedRun.StatusCheckResult.JobsNeedingReview need review
-                                            </MudText>
-                                        }
-                                        else
-                                        {
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary">Completed</MudText>
-                                        }
-                                    </ItemContent>
-                                </MudTimelineItem>
-                            </MudTimeline>
-                        </MudCardContent>
-                    </MudCard>
-                }
+                                    </MudGrid>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">Last 10 orchestration runs</MudText>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center" Class="pa-4">
+                                        No recent runs to display
+                                    </MudText>
+                                }
+                            </MudCardContent>
+                        </MudCard>
+                    </MudItem>
+                </MudGrid>
             }
             else if (_currentStatus.Status != null)
             {
@@ -192,7 +307,7 @@
                                 <MudText Typo="Typo.body1" Class="mb-3">@_currentStatus.Status.RequestedBy</MudText>
                                 
                                 <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Started At</MudText>
-                                <MudText Typo="Typo.body1">@(_currentStatus.Status.StartedAt?.ToString("MM/dd/yyyy hh:mm:ss tt") ?? "Not started")</MudText>
+                                <MudText Typo="Typo.body1">@(_currentStatus.Status.StartedAt.HasValue ? FormatDateTime(_currentStatus.Status.StartedAt, "MM/dd/yyyy hh:mm:ss tt") : "Not started")</MudText>
                             </MudItem>
                             <MudItem xs="12" md="6">
                                 <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Status</MudText>
@@ -281,6 +396,37 @@
                                             }
                                         </ItemContent>
                                     </MudTimelineItem>
+                                    <MudTimelineItem Color="@GetStepColor("Checking statuses", _currentStatus.Status)" Icon="@GetStepIcon("Checking statuses", _currentStatus.Status)">
+                                        <ItemContent>
+                                            <MudText Typo="Typo.body2">Check Statuses</MudText>
+                                            @if ((_currentStatus.Status.CurrentStep == "Checking statuses" || _currentStatus.Status.CurrentStep == "Checking all scraped statuses") && _currentStatus.Status.CurrentStepTotal > 0)
+                                            {
+                                                @if (_currentStatus.Status.CurrentStepPhase == "Preparing")
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Warning">
+                                                        Preparing: @_currentStatus.Status.CurrentStepProgress / @_currentStatus.Status.CurrentStepTotal (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
+                                                    </MudText>
+                                                    <MudProgressLinear Color="Color.Warning" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
+                                                }
+                                                else
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Info">
+                                                        @(_currentStatus.Status.CurrentStepPhase ?? "Calling API"): @_currentStatus.Status.CurrentStepProgress / @_currentStatus.Status.CurrentStepTotal (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
+                                                    </MudText>
+                                                    <MudProgressLinear Color="Color.Info" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
+                                                }
+                                                <MudText Typo="Typo.caption" Color="Color.Tertiary" Class="mt-1">
+                                                    <em>Checks all ADR requests in database</em>
+                                                </MudText>
+                                            }
+                                            else if (_currentStatus.Status.StatusCheckResult != null)
+                                            {
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                    @_currentStatus.Status.StatusCheckResult.JobsCompleted completed, @_currentStatus.Status.StatusCheckResult.JobsNeedingReview need review
+                                                </MudText>
+                                            }
+                                        </ItemContent>
+                                    </MudTimelineItem>
                                     <MudTimelineItem Color="@GetStepColor("Processing scraping", _currentStatus.Status)" Icon="@GetStepIcon("Processing scraping", _currentStatus.Status)">
                                         <ItemContent>
                                             <MudText Typo="Typo.body2">Process Scraping</MudText>
@@ -304,35 +450,7 @@
                                             else if (_currentStatus.Status.ScrapeResult != null)
                                             {
                                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                    @_currentStatus.Status.ScrapeResult.ScrapesRequested requested, @_currentStatus.Status.ScrapeResult.ScrapesCompleted completed
-                                                </MudText>
-                                            }
-                                        </ItemContent>
-                                    </MudTimelineItem>
-                                    <MudTimelineItem Color="@GetStepColor("Checking statuses", _currentStatus.Status)" Icon="@GetStepIcon("Checking statuses", _currentStatus.Status)">
-                                        <ItemContent>
-                                            <MudText Typo="Typo.body2">Check Statuses</MudText>
-                                            @if (_currentStatus.Status.CurrentStep == "Checking statuses" && _currentStatus.Status.CurrentStepTotal > 0)
-                                            {
-                                                @if (_currentStatus.Status.CurrentStepPhase == "Preparing")
-                                                {
-                                                    <MudText Typo="Typo.caption" Color="Color.Warning">
-                                                        Preparing: @_currentStatus.Status.CurrentStepProgress / @_currentStatus.Status.CurrentStepTotal (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
-                                                    </MudText>
-                                                    <MudProgressLinear Color="Color.Warning" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
-                                                }
-                                                else
-                                                {
-                                                    <MudText Typo="Typo.caption" Color="Color.Info">
-                                                        @(_currentStatus.Status.CurrentStepPhase ?? "Calling API"): @_currentStatus.Status.CurrentStepProgress / @_currentStatus.Status.CurrentStepTotal (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
-                                                    </MudText>
-                                                    <MudProgressLinear Color="Color.Info" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
-                                                }
-                                            }
-                                            else if (_currentStatus.Status.StatusCheckResult != null)
-                                            {
-                                                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                    @_currentStatus.Status.StatusCheckResult.JobsCompleted completed, @_currentStatus.Status.StatusCheckResult.JobsNeedingReview need review
+                                                    @_currentStatus.Status.ScrapeResult.ScrapesRequested ADR requests sent, @_currentStatus.Status.ScrapeResult.ScrapesCompleted completed
                                                 </MudText>
                                             }
                                         </ItemContent>
@@ -376,7 +494,7 @@
     </MudItem>
 
     <MudItem xs="12" md="4">
-        <MudPaper Class="pa-4">
+        <MudPaper Class="pa-4 mb-4">
             <MudText Typo="Typo.h6" Class="mb-4">Quick Links</MudText>
             <MudList T="string" Dense="true">
                 <MudListItem Icon="@Icons.Material.Filled.AccountBalance" OnClick="@(() => Navigation.NavigateTo("/adr/accounts"))">
@@ -389,6 +507,56 @@
                     Missing Accounts
                 </MudListItem>
             </MudList>
+        </MudPaper>
+        
+        <MudPaper Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-3">Job Pipeline Status</MudText>
+            @if (_jobStats != null)
+            {
+                <MudSimpleTable Dense="true" Hover="true" Style="overflow-x: auto;">
+                    <tbody>
+                        <tr>
+                            <td><MudIcon Icon="@Icons.Material.Filled.Work" Size="Size.Small" Class="mr-2" />Total Jobs</td>
+                            <td class="text-right"><strong>@_jobStats.TotalCount</strong></td>
+                        </tr>
+                        <tr>
+                            <td><MudIcon Icon="@Icons.Material.Filled.HourglassEmpty" Size="Size.Small" Color="Color.Default" Class="mr-2" />Pending</td>
+                            <td class="text-right">@_jobStats.PendingCount</td>
+                        </tr>
+                        <tr>
+                            <td><MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Size="Size.Small" Color="Color.Info" Class="mr-2" />Credential Verified</td>
+                            <td class="text-right"><strong style="color: var(--mud-palette-info);">@_jobStats.CredentialVerifiedCount</strong></td>
+                        </tr>
+                        <tr>
+                            <td><MudIcon Icon="@Icons.Material.Filled.GppBad" Size="Size.Small" Color="Color.Warning" Class="mr-2" />Credential Failed</td>
+                            <td class="text-right"><strong style="color: var(--mud-palette-warning);">@_jobStats.CredentialFailedCount</strong></td>
+                        </tr>
+                        <tr>
+                            <td><MudIcon Icon="@Icons.Material.Filled.CloudDownload" Size="Size.Small" Color="Color.Primary" Class="mr-2" />ADR Request Sent</td>
+                            <td class="text-right"><strong style="color: var(--mud-palette-primary);">@_jobStats.ScrapeRequestedCount</strong></td>
+                        </tr>
+                        <tr>
+                            <td><MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" Class="mr-2" />Completed</td>
+                            <td class="text-right"><strong style="color: var(--mud-palette-success);">@_jobStats.CompletedCount</strong></td>
+                        </tr>
+                        <tr>
+                            <td><MudIcon Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error" Class="mr-2" />Failed</td>
+                            <td class="text-right"><strong style="color: var(--mud-palette-error);">@_jobStats.FailedCount</strong></td>
+                        </tr>
+                        <tr>
+                            <td><MudIcon Icon="@Icons.Material.Filled.RateReview" Size="Size.Small" Color="Color.Warning" Class="mr-2" />Needs Review</td>
+                            <td class="text-right"><strong style="color: var(--mud-palette-warning);">@_jobStats.NeedsReviewCount</strong></td>
+                        </tr>
+                    </tbody>
+                </MudSimpleTable>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">Current status of all jobs in database</MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center" Class="pa-4">
+                    Loading job stats...
+                </MudText>
+            }
         </MudPaper>
     </MudItem>
 </MudGrid>
@@ -419,7 +587,7 @@
     }
     else
     {
-        <MudTable Items="_history" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm">
+        <MudTable Items="_history" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm" OnRowClick="@OnHistoryRowClick" T="AdrOrchestrationStatus" RowStyle="cursor: pointer;">
             <HeaderContent>
                 <MudTh>Request ID</MudTh>
                 <MudTh>Requested By</MudTh>
@@ -428,15 +596,16 @@
                 <MudTh>Completed At</MudTh>
                 <MudTh>Status</MudTh>
                 <MudTh>Duration</MudTh>
+                <MudTh>Details</MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Request ID">
                     <MudText Typo="Typo.caption">@context.RequestId[..8]...</MudText>
                 </MudTd>
                 <MudTd DataLabel="Requested By">@context.RequestedBy</MudTd>
-                <MudTd DataLabel="Requested At">@context.RequestedAt.ToString("MM/dd/yyyy hh:mm tt")</MudTd>
-                <MudTd DataLabel="Started At">@(context.StartedAt?.ToString("hh:mm:ss tt") ?? "N/A")</MudTd>
-                <MudTd DataLabel="Completed At">@(context.CompletedAt?.ToString("hh:mm:ss tt") ?? "N/A")</MudTd>
+                <MudTd DataLabel="Requested At">@FormatDateTime(context.RequestedAt, "MM/dd/yyyy hh:mm tt")</MudTd>
+                <MudTd DataLabel="Started At">@(context.StartedAt.HasValue ? ConvertToUserTime(context.StartedAt.Value).ToString("hh:mm:ss tt") : "N/A")</MudTd>
+                <MudTd DataLabel="Completed At">@(context.CompletedAt.HasValue ? ConvertToUserTime(context.CompletedAt.Value).ToString("hh:mm:ss tt") : "N/A")</MudTd>
                 <MudTd DataLabel="Status">
                     <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">@context.Status</MudChip>
                 </MudTd>
@@ -455,6 +624,9 @@
                         <text>N/A</text>
                     }
                 </MudTd>
+                <MudTd DataLabel="Details">
+                    <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Color="Color.Primary" OnClick="@(() => ShowRunDetails(context))" />
+                </MudTd>
             </RowTemplate>
         </MudTable>
         
@@ -472,14 +644,186 @@
     }
 </MudPaper>
 
+<MudDialog @bind-Visible="_showRunDetailsDialog" Options="@_dialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-2" />
+            Orchestration Run Details
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_selectedRun != null)
+        {
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Request ID</MudText>
+                    <MudText Typo="Typo.body1" Class="mb-3">@_selectedRun.RequestId</MudText>
+                    
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Requested By</MudText>
+                    <MudText Typo="Typo.body1" Class="mb-3">@_selectedRun.RequestedBy</MudText>
+                    
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Requested At</MudText>
+                    <MudText Typo="Typo.body1" Class="mb-3">@FormatDateTime(_selectedRun.RequestedAt, "MM/dd/yyyy hh:mm:ss tt")</MudText>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Status</MudText>
+                    <MudChip T="string" Size="Size.Medium" Color="@GetStatusColor(_selectedRun.Status)" Class="mb-3">
+                        @_selectedRun.Status
+                    </MudChip>
+                    
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Started At</MudText>
+                    <MudText Typo="Typo.body1" Class="mb-3">@(_selectedRun.StartedAt.HasValue ? FormatDateTime(_selectedRun.StartedAt, "MM/dd/yyyy hh:mm:ss tt") : "N/A")</MudText>
+                    
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Completed At</MudText>
+                    <MudText Typo="Typo.body1" Class="mb-3">@(_selectedRun.CompletedAt.HasValue ? FormatDateTime(_selectedRun.CompletedAt, "MM/dd/yyyy hh:mm:ss tt") : "N/A")</MudText>
+                    
+                    @if (_selectedRun.StartedAt.HasValue && _selectedRun.CompletedAt.HasValue)
+                    {
+                        var duration = _selectedRun.CompletedAt.Value - _selectedRun.StartedAt.Value;
+                        <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Duration</MudText>
+                        <MudText Typo="Typo.body1">@duration.ToString(@"hh\:mm\:ss")</MudText>
+                    }
+                </MudItem>
+            </MudGrid>
+            
+            @if (!string.IsNullOrEmpty(_selectedRun.ErrorMessage))
+            {
+                <MudAlert Severity="Severity.Error" Class="my-3">@_selectedRun.ErrorMessage</MudAlert>
+            }
+            
+            <MudDivider Class="my-4" />
+            <MudText Typo="Typo.subtitle1" Class="mb-3">Step Results</MudText>
+            
+            <MudTimeline TimelinePosition="TimelinePosition.Start">
+                <MudTimelineItem Color="@GetSelectedRunStepColor("Syncing accounts")" Icon="@Icons.Material.Filled.CheckCircle">
+                    <ItemContent>
+                        <MudText Typo="Typo.body2"><strong>Sync Accounts</strong></MudText>
+                        @if (_selectedRun.SyncResult != null)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @_selectedRun.SyncResult.AccountsInserted inserted, @_selectedRun.SyncResult.AccountsUpdated updated
+                            </MudText>
+                            @if (_selectedRun.SyncResult.Errors > 0)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Error">
+                                    @_selectedRun.SyncResult.Errors errors
+                                </MudText>
+                            }
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">No data</MudText>
+                        }
+                    </ItemContent>
+                </MudTimelineItem>
+                <MudTimelineItem Color="@GetSelectedRunStepColor("Creating jobs")" Icon="@Icons.Material.Filled.CheckCircle">
+                    <ItemContent>
+                        <MudText Typo="Typo.body2"><strong>Create Jobs</strong></MudText>
+                        @if (_selectedRun.JobCreationResult != null)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @_selectedRun.JobCreationResult.JobsCreated created, @_selectedRun.JobCreationResult.JobsSkipped skipped
+                            </MudText>
+                            @if (_selectedRun.JobCreationResult.Errors > 0)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Error">
+                                    @_selectedRun.JobCreationResult.Errors errors
+                                </MudText>
+                            }
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">No data</MudText>
+                        }
+                    </ItemContent>
+                </MudTimelineItem>
+                <MudTimelineItem Color="@GetSelectedRunStepColor("Verifying credentials")" Icon="@Icons.Material.Filled.CheckCircle">
+                    <ItemContent>
+                        <MudText Typo="Typo.body2"><strong>Verify Credentials</strong></MudText>
+                        @if (_selectedRun.CredentialVerificationResult != null)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                <span style="color: var(--mud-palette-success);">@_selectedRun.CredentialVerificationResult.CredentialsVerified verified</span>,
+                                <span style="color: var(--mud-palette-error);">@_selectedRun.CredentialVerificationResult.CredentialsFailed failed</span>
+                            </MudText>
+                            @if (_selectedRun.CredentialVerificationResult.Errors > 0)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Error">
+                                    @_selectedRun.CredentialVerificationResult.Errors errors
+                                </MudText>
+                            }
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">No data</MudText>
+                        }
+                    </ItemContent>
+                </MudTimelineItem>
+                <MudTimelineItem Color="@GetSelectedRunStepColor("Checking statuses")" Icon="@Icons.Material.Filled.CheckCircle">
+                    <ItemContent>
+                        <MudText Typo="Typo.body2"><strong>Check Statuses</strong></MudText>
+                        @if (_selectedRun.StatusCheckResult != null)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @_selectedRun.StatusCheckResult.JobsChecked checked,
+                                <span style="color: var(--mud-palette-success);">@_selectedRun.StatusCheckResult.JobsCompleted completed</span>,
+                                <span style="color: var(--mud-palette-warning);">@_selectedRun.StatusCheckResult.JobsNeedingReview need review</span>
+                            </MudText>
+                            @if (_selectedRun.StatusCheckResult.Errors > 0)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Error">
+                                    @_selectedRun.StatusCheckResult.Errors errors
+                                </MudText>
+                            }
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">No data</MudText>
+                        }
+                    </ItemContent>
+                </MudTimelineItem>
+                <MudTimelineItem Color="@GetSelectedRunStepColor("Processing scraping")" Icon="@Icons.Material.Filled.CheckCircle">
+                    <ItemContent>
+                        <MudText Typo="Typo.body2"><strong>Send ADR Requests</strong></MudText>
+                        @if (_selectedRun.ScrapeResult != null)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @_selectedRun.ScrapeResult.ScrapesRequested ADR requests sent,
+                                <span style="color: var(--mud-palette-success);">@_selectedRun.ScrapeResult.ScrapesCompleted completed</span>,
+                                <span style="color: var(--mud-palette-error);">@_selectedRun.ScrapeResult.ScrapesFailed failed</span>
+                            </MudText>
+                            @if (_selectedRun.ScrapeResult.Errors > 0)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Error">
+                                    @_selectedRun.ScrapeResult.Errors errors
+                                </MudText>
+                            }
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">No data</MudText>
+                        }
+                    </ItemContent>
+                </MudTimelineItem>
+            </MudTimeline>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _showRunDetailsDialog = false)" Color="Color.Primary">Close</MudButton>
+    </DialogActions>
+</MudDialog>
+
 @code {
     private OrchestrationCurrentResponse? _currentStatus;
     private List<AdrOrchestrationStatus>? _history;
+    private List<AdrOrchestrationStatus>? _recentHistory; // Separate list for chart (always last 10)
     private AdrOrchestrationStatus? _lastCompletedRun;
     private bool _loading = true;
     private bool _historyLoading = true;
     private bool _isRefreshing = false;
     private bool _isStarting = false;
+    private bool _isCheckingStatuses = false;
+    private StatusCheckResult? _statusCheckResult = null;
     private bool _autoRefreshEnabled = true;
     private bool _showAllHistory = false;
     private DateTime? _lastRefresh;
@@ -495,9 +839,46 @@
     private PeriodicTimer? _progressTimer;
     private CancellationTokenSource? _progressTimerCts;
     private bool _isProgressPolling = false;
+    
+    // Cached timezone info for display
+    private string _userTimeZoneAbbr = "";
+    private string _userTimeZoneId = "";
+    
+    // Run details dialog state
+    private bool _showRunDetailsDialog = false;
+    private AdrOrchestrationStatus? _selectedRun;
+    private DialogOptions _dialogOptions = new DialogOptions 
+    { 
+        MaxWidth = MaxWidth.Medium, 
+        FullWidth = true,
+        CloseOnEscapeKey = true
+    };
+    
+    // Chart data for orchestration status distribution
+    private double[] _orchestrationChartData = Array.Empty<double>();
+    private string[] _orchestrationChartLabels = Array.Empty<string>();
+    private Dictionary<string, int> _orchestrationStatusCounts = new();
+    private ChartOptions _orchestrationChartOptions = new ChartOptions
+    {
+        ChartPalette = new[]
+        {
+            "#66bb6a", // Completed (Green)
+            "#f44336", // Failed (Red)
+            "#ff9800", // Cancelled (Orange)
+            "#42a5f5", // Running (Blue)
+            "#9e9e9e"  // Queued (Gray)
+        }
+    };
+    
+    // Job pipeline stats
+    private AdrJobStats? _jobStats;
 
     protected override async Task OnInitializedAsync()
     {
+        // Initialize timezone info
+        _userTimeZoneId = await TimeZoneService.GetUserTimeZoneIdAsync();
+        _userTimeZoneAbbr = await TimeZoneService.GetUserTimeZoneAbbreviationAsync();
+        
         await LoadDataAsync();
         StartAutoRefresh();
         
@@ -523,10 +904,16 @@
 
             _currentStatus = await statusTask;
             _history = await historyTask;
+            _recentHistory = _history; // Keep a copy for the chart (always last 10)
             _lastRefresh = DateTime.Now;
             
             // Get the most recent completed run from history for display when not running
             _lastCompletedRun = _history?.FirstOrDefault(h => h.Status == "Completed" || h.Status == "Failed");
+            
+            // Update chart data and load job stats (scoped to last 20 orchestration runs)
+            UpdateChartData();
+            // Show all jobs in the pipeline, not just last 20 runs
+            _jobStats = await AdrService.GetJobStatsAsync();
             
             // Start/stop fast progress polling based on orchestration state
             if (_currentStatus?.IsRunning == true && !_isProgressPolling)
@@ -553,6 +940,39 @@
             _historyLoading = false;
             StateHasChanged();
         }
+    }
+    
+    private void UpdateChartData()
+    {
+        if (_recentHistory == null || !_recentHistory.Any())
+        {
+            _orchestrationChartData = Array.Empty<double>();
+            _orchestrationChartLabels = Array.Empty<string>();
+            _orchestrationStatusCounts = new Dictionary<string, int>();
+            return;
+        }
+        
+        // Count runs by status - order matches the color palette
+        var statusOrder = new[] { "Completed", "Failed", "Cancelled", "Running", "Queued" };
+        _orchestrationStatusCounts = _recentHistory
+            .GroupBy(h => h.Status)
+            .ToDictionary(g => g.Key, g => g.Count());
+        
+        // Build chart data in the order of the color palette
+        var dataList = new List<double>();
+        var labelList = new List<string>();
+        
+        foreach (var status in statusOrder)
+        {
+            if (_orchestrationStatusCounts.TryGetValue(status, out var count) && count > 0)
+            {
+                dataList.Add(count);
+                labelList.Add(status);
+            }
+        }
+        
+        _orchestrationChartData = dataList.ToArray();
+        _orchestrationChartLabels = labelList.ToArray();
     }
     
     private async Task LoadCurrentStatusAsync()
@@ -700,6 +1120,56 @@
         }
     }
 
+    private async Task CheckStatusesOnly()
+    {
+        _isCheckingStatuses = true;
+        _statusCheckResult = null; // Clear previous result
+        StateHasChanged();
+
+        try
+        {
+            // Use background orchestration with only status check enabled
+            // This runs CheckAllScrapedStatusesAsync which checks ALL jobs with ScrapeRequested status
+            var response = await AdrService.StartBackgroundOrchestrationAsync(new BackgroundOrchestrationRequest
+            {
+                RunSync = false,
+                RunCreateJobs = false,
+                RunCredentialVerification = false,
+                RunScraping = false,
+                RunStatusCheck = true,
+                CheckAllScrapedStatuses = true // Use CheckAllScrapedStatusesAsync instead of CheckPendingStatusesAsync
+            });
+            
+            Snackbar.Add($"Status check started in background. Request ID: {response.RequestId}", Severity.Info);
+            
+            // Refresh to show the running orchestration
+            await LoadDataAsync();
+            
+            // Start progress polling to show updates
+            StartProgressPolling();
+        }
+        catch (SessionExpiredException)
+        {
+            Snackbar.Add("Your session has expired. Redirecting to login...", Severity.Warning);
+            Navigation.NavigateTo("/Account/Login", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to start status check: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isCheckingStatuses = false;
+            StateHasChanged();
+        }
+    }
+    
+    private void ClearStatusCheckResult()
+    {
+        _statusCheckResult = null;
+        StateHasChanged();
+    }
+
     private void StartAutoRefresh()
     {
         _refreshTimer = new System.Threading.Timer(async _ =>
@@ -802,11 +1272,14 @@
 
     private Color GetStepColor(string stepName, AdrOrchestrationStatus status)
     {
-        var steps = new[] { "Syncing accounts", "Creating jobs", "Verifying credentials", "Processing scraping", "Checking statuses" };
-        var currentIndex = Array.IndexOf(steps, status.CurrentStep);
+        // Step order: Sync → Create Jobs → Verify Credentials → Check Statuses → Process Scraping
+        var steps = new[] { "Syncing accounts", "Creating jobs", "Verifying credentials", "Checking statuses", "Processing scraping" };
+        // Normalize "Checking all scraped statuses" to "Checking statuses" for comparison
+        var normalizedCurrentStep = status.CurrentStep == "Checking all scraped statuses" ? "Checking statuses" : status.CurrentStep;
+        var currentIndex = Array.IndexOf(steps, normalizedCurrentStep);
         var stepIndex = Array.IndexOf(steps, stepName);
 
-        if (status.CurrentStep == stepName)
+        if (normalizedCurrentStep == stepName)
             return Color.Info; // Current step
         else if (stepIndex < currentIndex || (status.Status == "Completed" && stepIndex <= steps.Length))
             return Color.Success; // Completed step
@@ -816,11 +1289,14 @@
 
     private string GetStepIcon(string stepName, AdrOrchestrationStatus status)
     {
-        var steps = new[] { "Syncing accounts", "Creating jobs", "Verifying credentials", "Processing scraping", "Checking statuses" };
-        var currentIndex = Array.IndexOf(steps, status.CurrentStep);
+        // Step order: Sync → Create Jobs → Verify Credentials → Check Statuses → Process Scraping
+        var steps = new[] { "Syncing accounts", "Creating jobs", "Verifying credentials", "Checking statuses", "Processing scraping" };
+        // Normalize "Checking all scraped statuses" to "Checking statuses" for comparison
+        var normalizedCurrentStep = status.CurrentStep == "Checking all scraped statuses" ? "Checking statuses" : status.CurrentStep;
+        var currentIndex = Array.IndexOf(steps, normalizedCurrentStep);
         var stepIndex = Array.IndexOf(steps, stepName);
 
-        if (status.CurrentStep == stepName)
+        if (normalizedCurrentStep == stepName)
             return Icons.Material.Filled.PlayCircle;
         else if (stepIndex < currentIndex || status.Status == "Completed")
             return Icons.Material.Filled.CheckCircle;
@@ -835,10 +1311,67 @@
             return Color.Error;
         return Color.Success;
     }
+    
+    private Color GetSelectedRunStepColor(string stepName)
+    {
+        // For the selected run in the dialog, show success for all steps (or error if the run failed)
+        if (_selectedRun?.Status == "Failed")
+            return Color.Error;
+        return Color.Success;
+    }
+    
+    private void OnHistoryRowClick(TableRowClickEventArgs<AdrOrchestrationStatus> args)
+    {
+        ShowRunDetails(args.Item);
+    }
+    
+    private void ShowRunDetails(AdrOrchestrationStatus run)
+    {
+        _selectedRun = run;
+        _showRunDetailsDialog = true;
+        StateHasChanged();
+    }
 
     public void Dispose()
     {
         _refreshTimer?.Dispose();
         StopProgressPolling();
+    }
+    
+    /// <summary>
+    /// Converts a UTC DateTime to the user's preferred timezone.
+    /// Uses the cached timezone ID from initialization.
+    /// </summary>
+    private DateTime ConvertToUserTime(DateTime utcDateTime)
+    {
+        if (string.IsNullOrEmpty(_userTimeZoneId))
+            return utcDateTime;
+        
+        try
+        {
+            // Handle Unspecified kind by treating it as UTC
+            if (utcDateTime.Kind == DateTimeKind.Unspecified)
+                utcDateTime = DateTime.SpecifyKind(utcDateTime, DateTimeKind.Utc);
+            
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(_userTimeZoneId);
+            return TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, tz);
+        }
+        catch
+        {
+            return utcDateTime;
+        }
+    }
+    
+    /// <summary>
+    /// Formats a DateTime for display with the user's timezone abbreviation.
+    /// </summary>
+    private string FormatDateTime(DateTime? dateTime, string format = "g")
+    {
+        if (!dateTime.HasValue)
+            return "N/A";
+        
+        var localTime = ConvertToUserTime(dateTime.Value);
+        var abbr = !string.IsNullOrEmpty(_userTimeZoneAbbr) ? $" ({_userTimeZoneAbbr})" : "";
+        return $"{localTime.ToString(format)}{abbr}";
     }
 }

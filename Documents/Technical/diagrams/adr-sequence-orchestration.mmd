@@ -1,0 +1,113 @@
+sequenceDiagram
+    participant Schedule as Quartz Schedule
+    participant API as API Controller
+    participant BgService as AdrBackgroundOrchestrationService
+    participant Orchestrator as AdrOrchestratorService
+    participant SyncService as AdrAccountSyncService
+    participant AdrAPI as External ADR API
+    participant DB as SQL Server
+    participant Monitor as Monitor UI
+    
+    Note over Schedule,Monitor: ADR Full Cycle Orchestration (Background)
+    
+    Schedule->>API: POST /api/adr/orchestrate/run-background
+    API->>BgService: QueueOrchestrationAsync(requestedBy)
+    BgService->>DB: INSERT AdrOrchestrationRun (Status=Queued)
+    BgService-->>API: RequestId (GUID)
+    API-->>Schedule: 200 OK {requestId}
+    
+    Note over BgService,DB: Background Processing Begins
+    
+    BgService->>DB: UPDATE AdrOrchestrationRun SET Status=Running
+    
+    rect rgb(227, 242, 253)
+        Note over BgService,DB: Step 1: Sync Accounts
+        BgService->>Orchestrator: SyncAccountsAsync()
+        Orchestrator->>SyncService: SyncAccountsAsync()
+        SyncService->>DB: Query VendorCredNewUAT (billing patterns)
+        DB-->>SyncService: Account data with billing analysis
+        loop For each account
+            SyncService->>DB: UPSERT AdrAccount (preserve overrides)
+        end
+        SyncService-->>Orchestrator: {inserted, updated, total}
+        Orchestrator->>DB: UPDATE AdrOrchestrationRun (SyncAccountsInserted, etc)
+    end
+    
+    rect rgb(255, 243, 224)
+        Note over BgService,DB: Step 2: Create Jobs
+        BgService->>Orchestrator: CreateJobsAsync()
+        Orchestrator->>DB: SELECT AdrAccounts WHERE NextRunStatus IN ('Run Now', 'Due Soon')
+        DB-->>Orchestrator: Due accounts (excluding Missing)
+        loop For each account
+            Orchestrator->>DB: Check existing job for period
+            alt No existing job
+                Orchestrator->>DB: INSERT AdrJob (Status=Pending)
+            end
+        end
+        Orchestrator->>DB: UPDATE AdrOrchestrationRun (JobsCreated, JobsSkipped)
+    end
+    
+    rect rgb(243, 229, 245)
+        Note over BgService,AdrAPI: Step 3: Verify Credentials
+        BgService->>Orchestrator: VerifyCredentialsAsync()
+        Orchestrator->>DB: SELECT AdrJobs WHERE Status=Pending AND NextRunDateTime within 7 days
+        DB-->>Orchestrator: Jobs needing credential check
+        par Parallel Processing (15 workers)
+            loop For each job
+                Orchestrator->>DB: Check for existing successful execution
+                alt Not already verified
+                    Orchestrator->>AdrAPI: POST /AttemptLogin {credentialId, accountId}
+                    AdrAPI-->>Orchestrator: {statusId, statusDescription}
+                    Orchestrator->>DB: INSERT AdrJobExecution
+                    Orchestrator->>DB: UPDATE AdrJob SET Status=CredentialVerified/CredentialFailed
+                end
+            end
+        end
+        Orchestrator->>DB: UPDATE AdrOrchestrationRun (CredentialsVerified, CredentialsFailed)
+    end
+    
+    rect rgb(232, 245, 233)
+        Note over BgService,AdrAPI: Step 4: Process Scraping
+        BgService->>Orchestrator: ProcessScrapingAsync()
+        Orchestrator->>DB: SELECT AdrJobs WHERE Status IN (CredentialVerified, CredentialFailed) AND NextRunDateTime <= Today
+        DB-->>Orchestrator: Jobs ready for scraping
+        par Parallel Processing (15 workers)
+            loop For each job
+                Orchestrator->>DB: Check for existing successful scrape execution
+                alt Not already scraped AND within NextRangeEndDateTime
+                    Orchestrator->>AdrAPI: POST /DownloadInvoice {credentialId, accountId, dateRange}
+                    AdrAPI-->>Orchestrator: {indexId, statusId}
+                    Orchestrator->>DB: INSERT AdrJobExecution
+                    Orchestrator->>DB: UPDATE AdrJob SET AdrIndexId, Status
+                end
+            end
+        end
+        Orchestrator->>DB: UPDATE AdrOrchestrationRun (ScrapingRequested, ScrapingFailed)
+    end
+    
+    rect rgb(252, 228, 236)
+        Note over BgService,AdrAPI: Step 5: Check Statuses
+        BgService->>Orchestrator: CheckStatusesAsync()
+        Orchestrator->>DB: SELECT AdrJobs WHERE AdrIndexId IS NOT NULL AND Status NOT IN (Completed, Failed)
+        DB-->>Orchestrator: Jobs with pending status
+        par Parallel Processing (15 workers)
+            loop For each job
+                Orchestrator->>AdrAPI: GET /Status/{indexId}
+                AdrAPI-->>Orchestrator: {statusId, statusDescription, isFinal}
+                Orchestrator->>DB: UPDATE AdrJob SET Status based on response
+            end
+        end
+        Orchestrator->>DB: UPDATE AdrOrchestrationRun (StatusesChecked, StatusesFailed)
+    end
+    
+    BgService->>DB: UPDATE AdrOrchestrationRun SET Status=Completed, CompletedDateTime
+    
+    Note over Monitor,DB: UI Monitoring (Polling)
+    
+    loop Every 2 seconds while running
+        Monitor->>API: GET /api/adr/orchestrate/current
+        API->>DB: SELECT TOP 1 AdrOrchestrationRun ORDER BY RequestedDateTime DESC
+        DB-->>API: Current run with progress
+        API-->>Monitor: {status, currentStep, processedItems, totalItems}
+        Monitor->>Monitor: Update progress bars and step timeline
+    end

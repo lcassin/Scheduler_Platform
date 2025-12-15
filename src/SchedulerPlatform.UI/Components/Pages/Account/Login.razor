@@ -2,11 +2,40 @@
 @rendermode InteractiveServer
 @inject NavigationManager Navigation
 
+@if (_sessionExpired)
+{
+    <MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+        <MudAlert Severity="Severity.Warning" Class="mb-4">
+            Your session has expired. Please log in again to continue.
+        </MudAlert>
+        <MudText Typo="Typo.body1" Class="mb-4">
+            You will be redirected to the login page automatically...
+        </MudText>
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    </MudContainer>
+}
+
 @code {
-    protected override void OnAfterRender(bool firstRender)
+    private bool _sessionExpired = false;
+
+    protected override void OnInitialized()
+    {
+        // Check if this is a session expiration redirect
+        var uri = new Uri(Navigation.Uri);
+        var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+        _sessionExpired = query["sessionExpired"] == "true";
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
+            if (_sessionExpired)
+            {
+                // Give user time to see the session expired message before redirecting
+                await Task.Delay(2000);
+            }
+            
             // Redirect to the schedules page, which is protected with [Authorize]
             // If the user is not authenticated, the OIDC middleware will automatically
             // redirect them to IdentityServer for login

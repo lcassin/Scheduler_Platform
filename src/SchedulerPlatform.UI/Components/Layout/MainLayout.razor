@@ -1,4 +1,8 @@
 @inherits LayoutComponentBase
+@inject SchedulerPlatform.UI.Services.SessionStateService SessionStateService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@implements IDisposable
 
 <MudLayout>
     <MudAppBar Elevation="1">
@@ -33,9 +37,35 @@
 
 @code {
     private bool _drawerOpen = true;
+    private bool _sessionExpiredHandled = false;
+
+    protected override void OnInitialized()
+    {
+        // Subscribe to session expiration events for centralized handling
+        SessionStateService.OnSessionExpired += HandleSessionExpired;
+    }
+
+    private void HandleSessionExpired()
+    {
+        // Prevent multiple redirects if multiple API calls fail simultaneously
+        if (_sessionExpiredHandled) return;
+        _sessionExpiredHandled = true;
+        
+        InvokeAsync(() =>
+        {
+            Snackbar.Add("Your session has expired. Redirecting to login...", Severity.Warning);
+            // Pass sessionExpired=true so the login page can show an alert
+            Navigation.NavigateTo("/Account/Logout?sessionExpired=true", forceLoad: true);
+        });
+    }
 
     private void DrawerToggle()
     {
         _drawerOpen = !_drawerOpen;
+    }
+
+    public void Dispose()
+    {
+        SessionStateService.OnSessionExpired -= HandleSessionExpired;
     }
 }

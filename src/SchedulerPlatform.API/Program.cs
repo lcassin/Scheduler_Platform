@@ -177,9 +177,11 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("Users.Manage.Delete", policy => 
         policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("users:manage:delete")));
     
-    // ADR Account policies
-    options.AddPolicy("AdrAccounts.Update", policy => 
-        policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("adr:update")));
+        // ADR Account policies
+        options.AddPolicy("AdrAccounts.Update", policy => 
+            policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("adr:update")));
+        options.AddPolicy("AdrAccounts.Execute", policy => 
+            policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("adr:execute")));
 });
 
 builder.Services.AddAzureClients(builder =>

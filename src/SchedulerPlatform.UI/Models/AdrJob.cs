@@ -21,20 +21,23 @@ public class AdrJob
     public long? AdrIndexId { get; set; }
     public DateTime? CredentialVerifiedDateTime { get; set; }
     public DateTime? ScrapingCompletedDateTime { get; set; }
-    public string? ErrorMessage { get; set; }
-    public int RetryCount { get; set; }
-    public DateTime CreatedDateTime { get; set; }
-    public DateTime? ModifiedDateTime { get; set; }
+        public string? ErrorMessage { get; set; }
+        public int RetryCount { get; set; }
+        public bool IsManualRequest { get; set; }
+        public string? ManualRequestReason { get; set; }
+        public DateTime CreatedDateTime { get; set; }
+        public DateTime? ModifiedDateTime { get; set; }
     
-    // Navigation property
+        // Navigation property
     public AdrAccount? AdrAccount { get; set; }
 }
 
 public class AdrJobStats
 {
-    public int TotalJobs { get; set; }
+    public int TotalCount { get; set; }
     public int PendingCount { get; set; }
     public int CredentialVerifiedCount { get; set; }
+    public int CredentialFailedCount { get; set; }
     public int ScrapeRequestedCount { get; set; }
     public int CompletedCount { get; set; }
     public int FailedCount { get; set; }

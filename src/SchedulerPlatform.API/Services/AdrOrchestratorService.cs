@@ -13,6 +13,7 @@ public interface IAdrOrchestratorService
     Task<CredentialVerificationResult> VerifyCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
     Task<ScrapeResult> ProcessScrapingAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
     Task<StatusCheckResult> CheckPendingStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
+    Task<StatusCheckResult> CheckAllScrapedStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
 }
 
 #region Result Classes
@@ -67,6 +68,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     private const int DefaultCredentialCheckLeadDays = 7;
     private const int DefaultScrapeRetryDays = 5;
     private const int DefaultFollowUpDelayDays = 5;
+    private const int DailyStatusCheckDelayDays = 1;  // Check status the day after scraping
+    private const int FinalStatusCheckDelayDays = 5;  // Final check 5 days after billing window ends
     private const int DefaultMaxRetries = 5;
     private const int BatchSize = 1000; // Process and save in batches to avoid large transactions
     private const int DefaultMaxParallelRequests = 8; // Default parallel API requests
@@ -774,10 +777,24 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         {
             _logger.LogInformation("Starting status check with {MaxParallel} parallel workers", maxParallel);
 
-            var jobsNeedingStatusCheck = (await _unitOfWork.AdrJobs.GetJobsNeedingStatusCheckAsync(
-                DateTime.UtcNow, 
-                DefaultFollowUpDelayDays)).ToList();
-            _logger.LogInformation("Found {Count} jobs needing status check", jobsNeedingStatusCheck.Count);
+            // Split status checks into two categories:
+            // 1. Daily status checks (1-day delay): Jobs still in their billing window
+            // 2. Final status checks (5-day delay after NextRangeEndDate): Jobs past their billing window
+            var now = DateTime.UtcNow;
+            
+            var dailyJobs = (await _unitOfWork.AdrJobs.GetJobsNeedingDailyStatusCheckAsync(now, DailyStatusCheckDelayDays)).ToList();
+            var finalJobs = (await _unitOfWork.AdrJobs.GetJobsNeedingFinalStatusCheckAsync(now, FinalStatusCheckDelayDays)).ToList();
+            
+            // Merge and deduplicate by job ID
+            var jobsNeedingStatusCheck = dailyJobs
+                .Concat(finalJobs)
+                .GroupBy(j => j.Id)
+                .Select(g => g.First())
+                .ToList();
+            
+            _logger.LogInformation(
+                "Status check selection: {DailyCount} daily, {FinalCount} final, {Total} total (after dedup)",
+                dailyJobs.Count, finalJobs.Count, jobsNeedingStatusCheck.Count);
 
             // Report initial progress (0 of total)
             progressCallback?.Invoke(0, jobsNeedingStatusCheck.Count);
@@ -984,6 +1001,291 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             _logger.LogError(ex, "Status check failed");
             result.Errors++;
             result.ErrorMessages.Add($"Status check failed: {ex.Message}");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Manual status check: Checks status for ALL jobs that have been scraped, regardless of timing criteria.
+    /// This is used by the "Check Statuses Only" button to check status for all ScrapeRequested jobs
+    /// since there's no cost to check status from the ADR API.
+    /// </summary>
+    public async Task<StatusCheckResult> CheckAllScrapedStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    {
+        var result = new StatusCheckResult();
+        var maxParallel = GetMaxParallelRequests();
+
+        try
+        {
+            _logger.LogInformation("Starting MANUAL status check (all scraped jobs) with {MaxParallel} parallel workers", maxParallel);
+
+            // Get ALL jobs that have been scraped, regardless of timing criteria
+            var jobsNeedingStatusCheck = (await _unitOfWork.AdrJobs.GetAllJobsForManualStatusCheckAsync()).ToList();
+            
+            _logger.LogInformation(
+                "Manual status check: Found {Count} jobs in ScrapeRequested/StatusCheckInProgress status",
+                jobsNeedingStatusCheck.Count);
+
+            // Report initial progress (0 of total)
+            progressCallback?.Invoke(0, jobsNeedingStatusCheck.Count);
+
+            if (!jobsNeedingStatusCheck.Any())
+            {
+                return result;
+            }
+
+            // Step 1: Mark all jobs as "InProgress" in batches (for idempotency)
+            const int setupBatchSize = 500;
+            var jobsToProcess = new List<int>();
+            int markedCount = 0;
+            int setupProcessedSinceLastSave = 0;
+            var startTime = DateTime.UtcNow;
+            
+            _logger.LogInformation("Starting to mark {Count} jobs as in-progress for manual status check (batch size: {BatchSize})", 
+                jobsNeedingStatusCheck.Count, setupBatchSize);
+            
+            foreach (var job in jobsNeedingStatusCheck)
+            {
+                try
+                {
+                    // Update job properties directly - no need to call UpdateAsync since
+                    // the entity is already tracked by EF (loaded from same DbContext)
+                    job.Status = "StatusCheckInProgress";
+                    job.ModifiedDateTime = DateTime.UtcNow;
+                    job.ModifiedBy = "System Created";
+                    jobsToProcess.Add(job.Id);
+                    
+                    markedCount++;
+                    setupProcessedSinceLastSave++;
+                    
+                    // Save in batches to reduce database round-trips
+                    if (setupProcessedSinceLastSave >= setupBatchSize)
+                    {
+                        await _unitOfWork.SaveChangesAsync();
+                        setupProcessedSinceLastSave = 0;
+                        _logger.LogInformation("Marked {Marked}/{Total} jobs as in-progress for manual status check (batch saved)", 
+                            markedCount, jobsNeedingStatusCheck.Count);
+                        
+                        // Report progress during setup phase (use negative values to indicate setup)
+                        progressCallback?.Invoke(-markedCount, jobsNeedingStatusCheck.Count);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error marking job {JobId} as in-progress for manual status check", job.Id);
+                    result.Errors++;
+                    result.ErrorMessages.Add($"Job {job.Id}: {ex.Message}");
+                    markedCount++;
+                }
+            }
+            
+            // Save any remaining jobs
+            if (setupProcessedSinceLastSave > 0)
+            {
+                await _unitOfWork.SaveChangesAsync();
+                progressCallback?.Invoke(-markedCount, jobsNeedingStatusCheck.Count);
+            }
+            
+            var setupDuration = DateTime.UtcNow - startTime;
+            _logger.LogInformation("Marked {Count} jobs as in-progress for manual status check in {Duration:F1} seconds, starting parallel status checks", 
+                jobsToProcess.Count, setupDuration.TotalSeconds);
+
+            // Step 2: Check status in parallel with semaphore to limit concurrency
+            var statusResults = new ConcurrentDictionary<int, AdrApiResult?>();
+            using var semaphore = new SemaphoreSlim(maxParallel, maxParallel);
+            int completedStatusChecks = 0;
+            var totalStatusChecks = jobsToProcess.Count;
+            
+            var tasks = jobsToProcess.Select(async jobId =>
+            {
+                await semaphore.WaitAsync(cancellationToken);
+                try
+                {
+                    var statusResult = await CheckJobStatusAsync(jobId, cancellationToken);
+                    statusResults[jobId] = statusResult;
+                    
+                    // Log and report progress every 50 completions or at the end
+                    var count = Interlocked.Increment(ref completedStatusChecks);
+                    if (count % 50 == 0 || count == totalStatusChecks)
+                    {
+                        progressCallback?.Invoke(count, totalStatusChecks);
+                    }
+                    if (count % 500 == 0 || count == totalStatusChecks)
+                    {
+                        _logger.LogInformation(
+                            "Manual status check API calls: {Completed}/{Total} completed ({Percent:F1}%)",
+                            count, totalStatusChecks, (double)count / totalStatusChecks * 100);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error checking status for job {JobId}", jobId);
+                    statusResults[jobId] = null;
+                    var count = Interlocked.Increment(ref completedStatusChecks);
+                    if (count % 50 == 0 || count == totalStatusChecks)
+                    {
+                        progressCallback?.Invoke(count, totalStatusChecks);
+                    }
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks);
+
+            _logger.LogInformation("Completed {Count} parallel manual status checks, updating job statuses", statusResults.Count);
+
+            // Log status distribution summary for debugging
+            var statusSummary = statusResults.Values
+                .Where(r => r != null)
+                .GroupBy(r => new { r!.StatusId, r.IsFinal, r.IsSuccess })
+                .Select(g => new { g.Key.StatusId, g.Key.IsFinal, g.Key.IsSuccess, Count = g.Count() })
+                .OrderByDescending(x => x.Count)
+                .ToList();
+            
+            _logger.LogInformation("=== STATUS CHECK DISTRIBUTION SUMMARY ===");
+            _logger.LogInformation("Expected Complete StatusId = {CompleteId}, NeedsReview StatusId = {NeedsReviewId}", 
+                (int)AdrStatus.Complete, (int)AdrStatus.NeedsHumanReview);
+            foreach (var entry in statusSummary)
+            {
+                _logger.LogInformation(
+                    "StatusId={StatusId}, IsFinal={IsFinal}, IsSuccess={IsSuccess}, Count={Count}",
+                    entry.StatusId, entry.IsFinal, entry.IsSuccess, entry.Count);
+            }
+            
+            // Log a few sample raw responses for debugging
+            var sampleResponses = statusResults.Values
+                .Where(r => r != null && !string.IsNullOrEmpty(r!.RawResponse))
+                .Take(3)
+                .ToList();
+            foreach (var sample in sampleResponses)
+            {
+                _logger.LogInformation("Sample raw response: {RawResponse}", TruncateResponse(sample!.RawResponse, 500));
+            }
+            _logger.LogInformation("=== END STATUS CHECK DISTRIBUTION SUMMARY ===");
+
+            // Step 3: Update job statuses sequentially (EF DbContext is not thread-safe)
+            int processedSinceLastSave = 0;
+            int batchNumber = 1;
+
+            // Create a lookup for jobs by ID (they're already tracked by EF from the setup phase)
+            var jobsById = jobsNeedingStatusCheck.ToDictionary(j => j.Id);
+
+            foreach (var jobId in jobsToProcess)
+            {
+                try
+                {
+                    result.JobsChecked++;
+
+                    if (!statusResults.TryGetValue(jobId, out var statusResult) || statusResult == null)
+                    {
+                        result.Errors++;
+                        result.ErrorMessages.Add($"Job {jobId}: No status result found");
+                        continue;
+                    }
+
+                    // Use the job from our dictionary (already tracked by EF)
+                    if (!jobsById.TryGetValue(jobId, out var job))
+                    {
+                        result.Errors++;
+                        result.ErrorMessages.Add($"Job {jobId}: Job not found after status check");
+                        continue;
+                    }
+
+                    job.AdrStatusId = statusResult.StatusId;
+                    job.AdrStatusDescription = statusResult.StatusDescription;
+                    
+                    // Store raw API response for debugging (truncated to avoid bloating the database)
+                    job.LastStatusCheckResponse = TruncateResponse(statusResult.RawResponse, 1000);
+                    job.LastStatusCheckDateTime = DateTime.UtcNow;
+
+                    if (statusResult.IsFinal)
+                    {
+                        if (statusResult.StatusId == (int)AdrStatus.Complete)
+                        {
+                            // StatusId 11: Document Retrieval Complete
+                            job.Status = "Completed";
+                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                            result.JobsCompleted++;
+                        }
+                        else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
+                        {
+                            // StatusId 9: Needs Human Review
+                            job.Status = "NeedsReview";
+                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                            result.JobsNeedingReview++;
+                        }
+                        else if (statusResult.StatusId == 3 || statusResult.StatusId == 4 || statusResult.StatusId == 5)
+                        {
+                            // Error statuses:
+                            // StatusId 3: Invalid CredentialID
+                            // StatusId 4: Cannot Connect To VCM
+                            // StatusId 5: Cannot Insert Into Queue
+                            job.Status = "Failed";
+                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                            result.Errors++;
+                            result.ErrorMessages.Add($"Job {jobId}: {statusResult.StatusDescription} (StatusId={statusResult.StatusId})");
+                        }
+                        else
+                        {
+                            // Unrecognized final status - log for debugging but still mark as completed
+                            _logger.LogWarning(
+                                "Job {JobId}: Unrecognized final status. StatusId={StatusId}, Description={Description}, Raw={RawResponse}",
+                                jobId, statusResult.StatusId, statusResult.StatusDescription, 
+                                TruncateResponse(statusResult.RawResponse, 300));
+                            job.Status = "Completed";
+                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                            result.JobsCompleted++;
+                        }
+                    }
+                    else
+                    {
+                        // Job is still processing - revert to ScrapeRequested so it gets picked up again
+                        job.Status = "ScrapeRequested";
+                        result.JobsStillProcessing++;
+                    }
+
+                    // Update job properties directly - no need to call UpdateAsync since
+                    // the entity is already tracked by EF (loaded from same DbContext)
+                    job.ModifiedDateTime = DateTime.UtcNow;
+                    job.ModifiedBy = "System Created";
+                    processedSinceLastSave++;
+
+                    if (processedSinceLastSave >= BatchSize)
+                    {
+                        await _unitOfWork.SaveChangesAsync();
+                        _logger.LogInformation("Manual status check batch {BatchNumber} saved: {Count} jobs checked so far", 
+                            batchNumber, result.JobsChecked);
+                        processedSinceLastSave = 0;
+                        batchNumber++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error updating job {JobId} after manual status check", jobId);
+                    result.Errors++;
+                    result.ErrorMessages.Add($"Job {jobId}: {ex.Message}");
+                }
+            }
+
+            if (processedSinceLastSave > 0)
+            {
+                await _unitOfWork.SaveChangesAsync();
+            }
+
+            _logger.LogInformation(
+                "Manual status check completed. Checked: {Checked}, Completed: {Completed}, NeedsReview: {NeedsReview}, Processing: {Processing}, Errors: {Errors}",
+                result.JobsChecked, result.JobsCompleted, result.JobsNeedingReview, result.JobsStillProcessing, result.Errors);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Manual status check failed");
+            result.Errors++;
+            result.ErrorMessages.Add($"Manual status check failed: {ex.Message}");
             throw;
         }
     }
@@ -1243,12 +1545,30 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 if (apiResponse != null)
                 {
                     result.StatusId = apiResponse.StatusId;
-                    result.StatusDescription = apiResponse.StatusDescription;
+                    // Use Status field if StatusDescription is not provided
+                    result.StatusDescription = apiResponse.StatusDescription ?? apiResponse.Status;
                     result.IndexId = apiResponse.IndexId;
                     result.IsSuccess = true;
                     result.IsError = apiResponse.IsError;
-                    result.IsFinal = apiResponse.IsFinal;
+                    
+                    // Determine IsFinal based on StatusId since the API may not return IsFinal field
+                    // Final statuses: Complete (11), NeedsHumanReview (9), and error states like "Cannot Insert Into Queue" (5)
+                    result.IsFinal = apiResponse.IsFinal || IsFinalStatus(apiResponse.StatusId);
                 }
+                else
+                {
+                    // Log when deserialization returns null - may indicate API format change
+                    _logger.LogWarning(
+                        "Status check for job {JobId}: Deserialization returned null. Raw response: {RawResponse}",
+                        jobId, TruncateResponse(responseContent, 500));
+                }
+            }
+            else
+            {
+                // Log non-success HTTP responses
+                _logger.LogWarning(
+                    "Status check for job {JobId}: HTTP {StatusCode}. Raw response: {RawResponse}",
+                    jobId, (int)response.StatusCode, TruncateResponse(responseContent, 500));
             }
 
             return result;
@@ -1265,6 +1585,27 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         if (string.IsNullOrEmpty(response))
             return string.Empty;
         return response.Length <= maxLength ? response : response.Substring(0, maxLength) + "...";
+    }
+    
+    /// <summary>
+    /// Determines if a StatusId represents a final state (job is done processing).
+    /// Based on ADR API status codes:
+    /// - Final success: 11 (Document Retrieval Complete)
+    /// - Final needs review: 9 (Needs Human Review)
+    /// - Final errors: 3 (Invalid CredentialID), 4 (Cannot Connect To VCM), 5 (Cannot Insert Into Queue)
+    /// - Still processing: 1 (Inserted), 6 (Sent To AI), 10 (Received From AI)
+    /// </summary>
+    private static bool IsFinalStatus(int statusId)
+    {
+        return statusId switch
+        {
+            11 => true,  // Document Retrieval Complete
+            9 => true,   // Needs Human Review
+            3 => true,   // Invalid CredentialID (error - final)
+            4 => true,   // Cannot Connect To VCM (error - final)
+            5 => true,   // Cannot Insert Into Queue (error - final)
+            _ => false   // 1 (Inserted), 6 (Sent To AI), 10 (Received From AI) - still processing
+        };
     }
 
     #endregion
@@ -1288,6 +1629,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     {
         public int StatusId { get; set; }
         public string? StatusDescription { get; set; }
+        public string? Status { get; set; }  // API returns "Status" field, not "StatusDescription"
         public long? IndexId { get; set; }
         public bool IsError { get; set; }
         public bool IsFinal { get; set; }
