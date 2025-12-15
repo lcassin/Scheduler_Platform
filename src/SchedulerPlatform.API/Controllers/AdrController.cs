@@ -1887,19 +1887,29 @@ public class AdrController : ControllerBase
         {
             _logger.LogInformation("Full ADR cycle triggered by {User}", User.Identity?.Name ?? "Unknown");
 
+            // Step 1: Sync accounts from VendorCred
             var syncResult = await _syncService.SyncAccountsAsync(null, cancellationToken);
+            
+            // Step 2: Create jobs for accounts due for processing
             var jobCreationResult = await _orchestratorService.CreateJobsForDueAccountsAsync(cancellationToken);
+            
+            // Step 3: Verify credentials for jobs approaching their NextRunDate
             var credentialResult = await _orchestratorService.VerifyCredentialsAsync(null, cancellationToken);
-            var scrapeResult = await _orchestratorService.ProcessScrapingAsync(null, cancellationToken);
+            
+            // Step 4: Check status of yesterday's ScrapeRequested jobs BEFORE sending new scrapes
+            // This prevents duplicate scrape requests for jobs that already completed
             var statusResult = await _orchestratorService.CheckPendingStatusesAsync(null, cancellationToken);
+            
+            // Step 5: Send scrape requests for jobs that are ready (CredentialVerified status)
+            var scrapeResult = await _orchestratorService.ProcessScrapingAsync(null, cancellationToken);
 
             return Ok(new
             {
                 syncResult,
                 jobCreationResult,
                 credentialResult,
-                scrapeResult,
-                statusResult
+                statusResult,
+                scrapeResult
             });
         }
         catch (Exception ex)
