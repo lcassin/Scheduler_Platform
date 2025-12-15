@@ -423,4 +423,18 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             .Include(j => j.AdrAccount)
             .ToListAsync();
     }
+
+    public async Task<IEnumerable<AdrJob>> GetAllJobsForManualStatusCheckAsync()
+    {
+        // Manual status check: Get ALL jobs that have been through scraping, regardless of timing
+        // This is used by the "Check Statuses Only" button to check status for all scraped jobs
+        // Since there's no cost to check status, we can check all of them
+        return await _dbSet
+            .Where(j => !j.IsDeleted &&
+                        // Include all jobs that have been scraped or are in scrape-related statuses
+                        (j.Status == "ScrapeRequested" || 
+                         j.Status == "StatusCheckInProgress"))
+            .Include(j => j.AdrAccount)
+            .ToListAsync();
+    }
 }

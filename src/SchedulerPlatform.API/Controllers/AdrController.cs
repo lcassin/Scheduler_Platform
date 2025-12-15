@@ -1866,8 +1866,10 @@ public class AdrController : ControllerBase
     {
         try
         {
-            _logger.LogInformation("Manual status check triggered by {User}", User.Identity?.Name ?? "Unknown");
-            var result = await _orchestratorService.CheckPendingStatusesAsync(null, cancellationToken);
+            // Manual status check: Check ALL scraped jobs regardless of timing criteria
+            // This is used by the "Check Statuses Only" button since there's no cost to check status
+            _logger.LogInformation("Manual status check (all scraped jobs) triggered by {User}", User.Identity?.Name ?? "Unknown");
+            var result = await _orchestratorService.CheckAllScrapedStatusesAsync(null, cancellationToken);
             return Ok(result);
         }
         catch (Exception ex)

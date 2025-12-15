@@ -13,6 +13,7 @@ public interface IAdrOrchestratorService
     Task<CredentialVerificationResult> VerifyCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
     Task<ScrapeResult> ProcessScrapingAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
     Task<StatusCheckResult> CheckPendingStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
+    Task<StatusCheckResult> CheckAllScrapedStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
 }
 
 #region Result Classes
@@ -1000,6 +1001,234 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             _logger.LogError(ex, "Status check failed");
             result.Errors++;
             result.ErrorMessages.Add($"Status check failed: {ex.Message}");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Manual status check: Checks status for ALL jobs that have been scraped, regardless of timing criteria.
+    /// This is used by the "Check Statuses Only" button to check status for all ScrapeRequested jobs
+    /// since there's no cost to check status from the ADR API.
+    /// </summary>
+    public async Task<StatusCheckResult> CheckAllScrapedStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    {
+        var result = new StatusCheckResult();
+        var maxParallel = GetMaxParallelRequests();
+
+        try
+        {
+            _logger.LogInformation("Starting MANUAL status check (all scraped jobs) with {MaxParallel} parallel workers", maxParallel);
+
+            // Get ALL jobs that have been scraped, regardless of timing criteria
+            var jobsNeedingStatusCheck = (await _unitOfWork.AdrJobs.GetAllJobsForManualStatusCheckAsync()).ToList();
+            
+            _logger.LogInformation(
+                "Manual status check: Found {Count} jobs in ScrapeRequested/StatusCheckInProgress status",
+                jobsNeedingStatusCheck.Count);
+
+            // Report initial progress (0 of total)
+            progressCallback?.Invoke(0, jobsNeedingStatusCheck.Count);
+
+            if (!jobsNeedingStatusCheck.Any())
+            {
+                return result;
+            }
+
+            // Step 1: Mark all jobs as "InProgress" in batches (for idempotency)
+            const int setupBatchSize = 500;
+            var jobsToProcess = new List<int>();
+            int markedCount = 0;
+            int setupProcessedSinceLastSave = 0;
+            var startTime = DateTime.UtcNow;
+            
+            _logger.LogInformation("Starting to mark {Count} jobs as in-progress for manual status check (batch size: {BatchSize})", 
+                jobsNeedingStatusCheck.Count, setupBatchSize);
+            
+            foreach (var job in jobsNeedingStatusCheck)
+            {
+                try
+                {
+                    // Update job properties directly - no need to call UpdateAsync since
+                    // the entity is already tracked by EF (loaded from same DbContext)
+                    job.Status = "StatusCheckInProgress";
+                    job.ModifiedDateTime = DateTime.UtcNow;
+                    job.ModifiedBy = "System Created";
+                    jobsToProcess.Add(job.Id);
+                    
+                    markedCount++;
+                    setupProcessedSinceLastSave++;
+                    
+                    // Save in batches to reduce database round-trips
+                    if (setupProcessedSinceLastSave >= setupBatchSize)
+                    {
+                        await _unitOfWork.SaveChangesAsync();
+                        setupProcessedSinceLastSave = 0;
+                        _logger.LogInformation("Marked {Marked}/{Total} jobs as in-progress for manual status check (batch saved)", 
+                            markedCount, jobsNeedingStatusCheck.Count);
+                        
+                        // Report progress during setup phase (use negative values to indicate setup)
+                        progressCallback?.Invoke(-markedCount, jobsNeedingStatusCheck.Count);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error marking job {JobId} as in-progress for manual status check", job.Id);
+                    result.Errors++;
+                    result.ErrorMessages.Add($"Job {job.Id}: {ex.Message}");
+                    markedCount++;
+                }
+            }
+            
+            // Save any remaining jobs
+            if (setupProcessedSinceLastSave > 0)
+            {
+                await _unitOfWork.SaveChangesAsync();
+                progressCallback?.Invoke(-markedCount, jobsNeedingStatusCheck.Count);
+            }
+            
+            var setupDuration = DateTime.UtcNow - startTime;
+            _logger.LogInformation("Marked {Count} jobs as in-progress for manual status check in {Duration:F1} seconds, starting parallel status checks", 
+                jobsToProcess.Count, setupDuration.TotalSeconds);
+
+            // Step 2: Check status in parallel with semaphore to limit concurrency
+            var statusResults = new ConcurrentDictionary<int, AdrApiResult?>();
+            using var semaphore = new SemaphoreSlim(maxParallel, maxParallel);
+            int completedStatusChecks = 0;
+            var totalStatusChecks = jobsToProcess.Count;
+            
+            var tasks = jobsToProcess.Select(async jobId =>
+            {
+                await semaphore.WaitAsync(cancellationToken);
+                try
+                {
+                    var statusResult = await CheckJobStatusAsync(jobId, cancellationToken);
+                    statusResults[jobId] = statusResult;
+                    
+                    // Log and report progress every 50 completions or at the end
+                    var count = Interlocked.Increment(ref completedStatusChecks);
+                    if (count % 50 == 0 || count == totalStatusChecks)
+                    {
+                        progressCallback?.Invoke(count, totalStatusChecks);
+                    }
+                    if (count % 500 == 0 || count == totalStatusChecks)
+                    {
+                        _logger.LogInformation(
+                            "Manual status check API calls: {Completed}/{Total} completed ({Percent:F1}%)",
+                            count, totalStatusChecks, (double)count / totalStatusChecks * 100);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error checking status for job {JobId}", jobId);
+                    statusResults[jobId] = null;
+                    var count = Interlocked.Increment(ref completedStatusChecks);
+                    if (count % 50 == 0 || count == totalStatusChecks)
+                    {
+                        progressCallback?.Invoke(count, totalStatusChecks);
+                    }
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks);
+
+            _logger.LogInformation("Completed {Count} parallel manual status checks, updating job statuses", statusResults.Count);
+
+            // Step 3: Update job statuses sequentially (EF DbContext is not thread-safe)
+            int processedSinceLastSave = 0;
+            int batchNumber = 1;
+
+            // Create a lookup for jobs by ID (they're already tracked by EF from the setup phase)
+            var jobsById = jobsNeedingStatusCheck.ToDictionary(j => j.Id);
+
+            foreach (var jobId in jobsToProcess)
+            {
+                try
+                {
+                    result.JobsChecked++;
+
+                    if (!statusResults.TryGetValue(jobId, out var statusResult) || statusResult == null)
+                    {
+                        result.Errors++;
+                        result.ErrorMessages.Add($"Job {jobId}: No status result found");
+                        continue;
+                    }
+
+                    // Use the job from our dictionary (already tracked by EF)
+                    if (!jobsById.TryGetValue(jobId, out var job))
+                    {
+                        result.Errors++;
+                        result.ErrorMessages.Add($"Job {jobId}: Job not found after status check");
+                        continue;
+                    }
+
+                    job.AdrStatusId = statusResult.StatusId;
+                    job.AdrStatusDescription = statusResult.StatusDescription;
+
+                    if (statusResult.IsFinal)
+                    {
+                        if (statusResult.StatusId == (int)AdrStatus.Complete)
+                        {
+                            job.Status = "Completed";
+                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                            result.JobsCompleted++;
+                        }
+                        else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
+                        {
+                            job.Status = "NeedsReview";
+                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                            result.JobsNeedingReview++;
+                        }
+                    }
+                    else
+                    {
+                        // Job is still processing - revert to ScrapeRequested so it gets picked up again
+                        job.Status = "ScrapeRequested";
+                        result.JobsStillProcessing++;
+                    }
+
+                    // Update job properties directly - no need to call UpdateAsync since
+                    // the entity is already tracked by EF (loaded from same DbContext)
+                    job.ModifiedDateTime = DateTime.UtcNow;
+                    job.ModifiedBy = "System Created";
+                    processedSinceLastSave++;
+
+                    if (processedSinceLastSave >= BatchSize)
+                    {
+                        await _unitOfWork.SaveChangesAsync();
+                        _logger.LogInformation("Manual status check batch {BatchNumber} saved: {Count} jobs checked so far", 
+                            batchNumber, result.JobsChecked);
+                        processedSinceLastSave = 0;
+                        batchNumber++;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error updating job {JobId} after manual status check", jobId);
+                    result.Errors++;
+                    result.ErrorMessages.Add($"Job {jobId}: {ex.Message}");
+                }
+            }
+
+            if (processedSinceLastSave > 0)
+            {
+                await _unitOfWork.SaveChangesAsync();
+            }
+
+            _logger.LogInformation(
+                "Manual status check completed. Checked: {Checked}, Completed: {Completed}, NeedsReview: {NeedsReview}, Processing: {Processing}, Errors: {Errors}",
+                result.JobsChecked, result.JobsCompleted, result.JobsNeedingReview, result.JobsStillProcessing, result.Errors);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Manual status check failed");
+            result.Errors++;
+            result.ErrorMessages.Add($"Manual status check failed: {ex.Message}");
             throw;
         }
     }

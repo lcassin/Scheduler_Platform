@@ -35,4 +35,5 @@ public interface IAdrJobRepository : IRepository<AdrJob>
     Task<bool> ExistsForBillingPeriodAsync(int adrAccountId, DateTime billingPeriodStart, DateTime billingPeriodEnd);
     Task<IEnumerable<AdrJob>> GetJobsNeedingDailyStatusCheckAsync(DateTime currentDate, int delayDays = 1);
     Task<IEnumerable<AdrJob>> GetJobsNeedingFinalStatusCheckAsync(DateTime currentDate, int finalDelayDays = 5);
+    Task<IEnumerable<AdrJob>> GetAllJobsForManualStatusCheckAsync();
 }
