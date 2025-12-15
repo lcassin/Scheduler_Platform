@@ -1218,7 +1218,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             result.JobsNeedingReview++;
                         }
                         else if (statusResult.StatusId == 3 || statusResult.StatusId == 4 || statusResult.StatusId == 5 ||
-                                 statusResult.StatusId == 7 || statusResult.StatusId == 8)
+                                 statusResult.StatusId == 7 || statusResult.StatusId == 8 || statusResult.StatusId == 14)
                         {
                             // Error statuses:
                             // StatusId 3: Invalid CredentialID
@@ -1226,6 +1226,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             // StatusId 5: Cannot Insert Into Queue
                             // StatusId 7: Cannot Connect To AI
                             // StatusId 8: Cannot Save Result
+                            // StatusId 14: Failed To Process All Documents
                             job.Status = "Failed";
                             job.ScrapingCompletedDateTime = DateTime.UtcNow;
                             result.Errors++;
@@ -1596,8 +1597,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// - Final success: 11 (Complete/Document Retrieval Complete)
     /// - Final needs review: 9 (Needs Human Review)
     /// - Final errors: 3 (Invalid CredentialID), 4 (Cannot Connect To VCM), 5 (Cannot Insert Into Queue),
-    ///                 7 (Cannot Connect To AI), 8 (Cannot Save Result)
-    /// - Still processing: 1 (Inserted), 2 (Inserted With Priority), 6 (Sent To AI), 10 (Received From AI)
+    ///                 7 (Cannot Connect To AI), 8 (Cannot Save Result), 14 (Failed To Process All Documents)
+    /// - Still processing: 1 (Inserted), 2 (Inserted With Priority), 6 (Sent To AI), 10 (Received From AI),
+    ///                     12 (Login Attempt Succeeded), 13 (No Documents Found), 15 (No Documents Processed - TBD)
     /// </summary>
     private static bool IsFinalStatus(int statusId)
     {
@@ -1610,7 +1612,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             5 => true,   // Cannot Insert Into Queue (error - final)
             7 => true,   // Cannot Connect To AI (error - final)
             8 => true,   // Cannot Save Result (error - final)
-            _ => false   // 1 (Inserted), 2 (Inserted With Priority), 6 (Sent To AI), 10 (Received From AI) - still processing
+            14 => true,  // Failed To Process All Documents (error - final)
+            _ => false   // 1 (Inserted), 2 (Inserted With Priority), 6 (Sent To AI), 10 (Received From AI),
+                         // 12 (Login Attempt Succeeded), 13 (No Documents Found - retry next day), 15 (No Documents Processed - TBD)
         };
     }
 
