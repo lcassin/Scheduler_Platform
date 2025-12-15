@@ -73,9 +73,72 @@ public class AdrController : ControllerBase
                 sortColumn,
                 sortDescending);
 
+            // Get account IDs from the current page
+            var accountIds = items.Select(a => a.Id).ToList();
+            
+            // Get current billing period job status for each account (single query)
+            var currentJobStatuses = await _dbContext.AdrJobs
+                .Where(j => !j.IsDeleted && accountIds.Contains(j.AdrAccountId))
+                .GroupBy(j => j.AdrAccountId)
+                .Select(g => new 
+                {
+                    AdrAccountId = g.Key,
+                    // Get the job for the current billing period (matching NextRangeStart/End)
+                    CurrentJobStatus = g
+                        .OrderByDescending(j => j.BillingPeriodStartDateTime)
+                        .Select(j => j.Status)
+                        .FirstOrDefault(),
+                    // Get the last completed job's date
+                    LastCompletedDateTime = g
+                        .Where(j => j.ScrapingCompletedDateTime.HasValue)
+                        .OrderByDescending(j => j.ScrapingCompletedDateTime)
+                        .Select(j => j.ScrapingCompletedDateTime)
+                        .FirstOrDefault()
+                })
+                .ToListAsync();
+            
+            // Create a lookup dictionary
+            var jobStatusLookup = currentJobStatuses.ToDictionary(x => x.AdrAccountId);
+            
+            // Map to response with job status
+            var itemsWithJobStatus = items.Select(a => new
+            {
+                a.Id,
+                a.VMAccountId,
+                a.VMAccountNumber,
+                a.InterfaceAccountId,
+                a.ClientId,
+                a.ClientName,
+                a.CredentialId,
+                a.VendorCode,
+                a.PeriodType,
+                a.PeriodDays,
+                a.MedianDays,
+                a.InvoiceCount,
+                a.LastInvoiceDateTime,
+                a.ExpectedNextDateTime,
+                a.ExpectedRangeStartDateTime,
+                a.ExpectedRangeEndDateTime,
+                a.NextRunDateTime,
+                a.NextRangeStartDateTime,
+                a.NextRangeEndDateTime,
+                a.DaysUntilNextRun,
+                a.NextRunStatus,
+                a.HistoricalBillingStatus,
+                a.LastSyncedDateTime,
+                a.IsManuallyOverridden,
+                a.OverriddenBy,
+                a.OverriddenDateTime,
+                a.IsDeleted,
+                a.CreatedDateTime,
+                a.ModifiedDateTime,
+                CurrentJobStatus = jobStatusLookup.TryGetValue(a.Id, out var js) ? js.CurrentJobStatus : null,
+                LastCompletedDateTime = jobStatusLookup.TryGetValue(a.Id, out var js2) ? js2.LastCompletedDateTime : null
+            }).ToList();
+
             return Ok(new
             {
-                items,
+                items = itemsWithJobStatus,
                 totalCount,
                 pageNumber,
                 pageSize
@@ -857,14 +920,42 @@ public class AdrController : ControllerBase
                 1, int.MaxValue, clientId, null, nextRunStatus, searchTerm, historicalBillingStatus,
                 isOverridden, sortColumn, sortDescending);
 
+            // Get account IDs for job status lookup
+            var accountIds = accounts.Select(a => a.Id).ToList();
+            
+            // Get current job status for each account (single query)
+            var jobStatuses = await _dbContext.AdrJobs
+                .Where(j => !j.IsDeleted && accountIds.Contains(j.AdrAccountId))
+                .GroupBy(j => j.AdrAccountId)
+                .Select(g => new 
+                {
+                    AdrAccountId = g.Key,
+                    CurrentJobStatus = g
+                        .OrderByDescending(j => j.BillingPeriodStartDateTime)
+                        .Select(j => j.Status)
+                        .FirstOrDefault(),
+                    LastCompletedDateTime = g
+                        .Where(j => j.ScrapingCompletedDateTime.HasValue)
+                        .OrderByDescending(j => j.ScrapingCompletedDateTime)
+                        .Select(j => j.ScrapingCompletedDateTime)
+                        .FirstOrDefault()
+                })
+                .ToListAsync();
+            
+            var jobStatusLookup = jobStatuses.ToDictionary(x => x.AdrAccountId);
+
             if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
             {
                 var csv = new System.Text.StringBuilder();
-                csv.AppendLine("Account #,VM Account ID,Interface Account ID,Client,Vendor Code,Period Type,Next Run,Run Status,Historical Status,Last Invoice,Expected Next,Is Overridden,Overridden By,Overridden Date");
+                csv.AppendLine("Account #,VM Account ID,Interface Account ID,Client,Vendor Code,Period Type,Next Run,Run Status,Job Status,Last Completed,Historical Status,Last Invoice,Expected Next,Is Overridden,Overridden By,Overridden Date");
 
                 foreach (var a in accounts)
                 {
-                    csv.AppendLine($"{CsvEscape(a.VMAccountNumber)},{a.VMAccountId},{CsvEscape(a.InterfaceAccountId)},{CsvEscape(a.ClientName)},{CsvEscape(a.VendorCode)},{CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.NextRunStatus)},{CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.IsManuallyOverridden},{CsvEscape(a.OverriddenBy)},{a.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""}");
+                    var hasJobStatus = jobStatusLookup.TryGetValue(a.Id, out var js);
+                    var currentJobStatus = hasJobStatus ? js?.CurrentJobStatus : null;
+                    var lastCompleted = hasJobStatus ? js?.LastCompletedDateTime : null;
+                    
+                    csv.AppendLine($"{CsvEscape(a.VMAccountNumber)},{a.VMAccountId},{CsvEscape(a.InterfaceAccountId)},{CsvEscape(a.ClientName)},{CsvEscape(a.VendorCode)},{CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.NextRunStatus)},{CsvEscape(currentJobStatus)},{lastCompleted?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.IsManuallyOverridden},{CsvEscape(a.OverriddenBy)},{a.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""}");
                 }
 
                 return File(System.Text.Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", $"adr_accounts_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
@@ -883,12 +974,14 @@ public class AdrController : ControllerBase
             worksheet.Cell(1, 6).Value = "Period Type";
             worksheet.Cell(1, 7).Value = "Next Run";
             worksheet.Cell(1, 8).Value = "Run Status";
-            worksheet.Cell(1, 9).Value = "Historical Status";
-            worksheet.Cell(1, 10).Value = "Last Invoice";
-            worksheet.Cell(1, 11).Value = "Expected Next";
-            worksheet.Cell(1, 12).Value = "Is Overridden";
-            worksheet.Cell(1, 13).Value = "Overridden By";
-            worksheet.Cell(1, 14).Value = "Overridden Date";
+            worksheet.Cell(1, 9).Value = "Job Status";
+            worksheet.Cell(1, 10).Value = "Last Completed";
+            worksheet.Cell(1, 11).Value = "Historical Status";
+            worksheet.Cell(1, 12).Value = "Last Invoice";
+            worksheet.Cell(1, 13).Value = "Expected Next";
+            worksheet.Cell(1, 14).Value = "Is Overridden";
+            worksheet.Cell(1, 15).Value = "Overridden By";
+            worksheet.Cell(1, 16).Value = "Overridden Date";
 
             var headerRow = worksheet.Row(1);
             headerRow.Style.Font.Bold = true;
@@ -896,6 +989,10 @@ public class AdrController : ControllerBase
             int row = 2;
             foreach (var a in accounts)
             {
+                var hasJobStatus = jobStatusLookup.TryGetValue(a.Id, out var js);
+                var currentJobStatus = hasJobStatus ? js?.CurrentJobStatus : null;
+                var lastCompleted = hasJobStatus ? js?.LastCompletedDateTime : null;
+                
                 worksheet.Cell(row, 1).Value = a.VMAccountNumber;
                 worksheet.Cell(row, 2).Value = a.VMAccountId;
                 worksheet.Cell(row, 3).Value = a.InterfaceAccountId;
@@ -904,12 +1001,14 @@ public class AdrController : ControllerBase
                 worksheet.Cell(row, 6).Value = a.PeriodType;
                 if (a.NextRunDateTime.HasValue) worksheet.Cell(row, 7).Value = a.NextRunDateTime.Value;
                 worksheet.Cell(row, 8).Value = a.NextRunStatus;
-                worksheet.Cell(row, 9).Value = a.HistoricalBillingStatus;
-                if (a.LastInvoiceDateTime.HasValue) worksheet.Cell(row, 10).Value = a.LastInvoiceDateTime.Value;
-                if (a.ExpectedNextDateTime.HasValue) worksheet.Cell(row, 11).Value = a.ExpectedNextDateTime.Value;
-                worksheet.Cell(row, 12).Value = a.IsManuallyOverridden ? "Yes" : "No";
-                worksheet.Cell(row, 13).Value = a.OverriddenBy ?? "";
-                if (a.OverriddenDateTime.HasValue) worksheet.Cell(row, 14).Value = a.OverriddenDateTime.Value;
+                worksheet.Cell(row, 9).Value = currentJobStatus ?? "";
+                if (lastCompleted.HasValue) worksheet.Cell(row, 10).Value = lastCompleted.Value;
+                worksheet.Cell(row, 11).Value = a.HistoricalBillingStatus;
+                if (a.LastInvoiceDateTime.HasValue) worksheet.Cell(row, 12).Value = a.LastInvoiceDateTime.Value;
+                if (a.ExpectedNextDateTime.HasValue) worksheet.Cell(row, 13).Value = a.ExpectedNextDateTime.Value;
+                worksheet.Cell(row, 14).Value = a.IsManuallyOverridden ? "Yes" : "No";
+                worksheet.Cell(row, 15).Value = a.OverriddenBy ?? "";
+                if (a.OverriddenDateTime.HasValue) worksheet.Cell(row, 16).Value = a.OverriddenDateTime.Value;
                 row++;
             }
 
