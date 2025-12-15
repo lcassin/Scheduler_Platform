@@ -24,6 +24,7 @@ public class AdrService : IAdrService
         string? nextRunStatus = null,
         string? historicalBillingStatus = null,
         bool? isOverridden = null,
+        string? jobStatus = null,
         string? sortColumn = null,
         bool sortDescending = false)
     {
@@ -48,6 +49,9 @@ public class AdrService : IAdrService
 
         if (isOverridden.HasValue)
             queryParams.Add($"isOverridden={isOverridden.Value.ToString().ToLowerInvariant()}");
+
+        if (!string.IsNullOrWhiteSpace(jobStatus))
+            queryParams.Add($"jobStatus={Uri.EscapeDataString(jobStatus)}");
 
         if (!string.IsNullOrWhiteSpace(sortColumn))
             queryParams.Add($"sortColumn={Uri.EscapeDataString(sortColumn)}");

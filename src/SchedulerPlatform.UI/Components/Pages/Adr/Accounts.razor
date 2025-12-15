@@ -64,6 +64,19 @@
                 <MudSelectItem Value="@("false")">Not Overridden</MudSelectItem>
             </MudSelect>
         </MudItem>
+        <MudItem xs="12" md="2">
+            <MudSelect T="string" @bind-Value="_selectedJobStatus" Label="Job Status" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                <MudSelectItem Value="@("")">All</MudSelectItem>
+                <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
+                <MudSelectItem Value="@("CredentialVerified")">Credential Verified</MudSelectItem>
+                <MudSelectItem Value="@("CredentialFailed")">Credential Failed</MudSelectItem>
+                <MudSelectItem Value="@("ScrapeRequested")">ADR Request Sent</MudSelectItem>
+                <MudSelectItem Value="@("Completed")">Completed</MudSelectItem>
+                <MudSelectItem Value="@("Failed")">ADR Request Failed</MudSelectItem>
+                <MudSelectItem Value="@("NeedsReview")">Needs Review</MudSelectItem>
+                <MudSelectItem Value="@("NoJob")">No Job</MudSelectItem>
+            </MudSelect>
+        </MudItem>
     </MudGrid>
     <MudGrid Class="mb-4" Spacing="2">
         <MudItem xs="12" Class="d-flex align-center justify-end gap-2">
@@ -257,9 +270,11 @@
     private string _selectedNextRunStatus = "";
     private string _selectedHistoricalStatus = "";
     private string _selectedOverrideFilter = "";
+    private string _selectedJobStatus = "";
     private string? _filterNextRunStatus;
     private string? _filterHistoricalStatus;
     private bool? _filterIsOverridden;
+    private string? _filterJobStatus;
 
     [Parameter]
     [SupplyParameterFromQuery(Name = "accountNumber")]
@@ -312,6 +327,7 @@
                 _filterNextRunStatus,
                 _filterHistoricalStatus,
                 _filterIsOverridden,
+                _filterJobStatus,
                 sortColumn,
                 sortDescending);
 
@@ -359,6 +375,7 @@
         _filterNextRunStatus = string.IsNullOrEmpty(_selectedNextRunStatus) ? null : _selectedNextRunStatus;
         _filterHistoricalStatus = string.IsNullOrEmpty(_selectedHistoricalStatus) ? null : _selectedHistoricalStatus;
         _filterIsOverridden = string.IsNullOrEmpty(_selectedOverrideFilter) ? null : bool.Parse(_selectedOverrideFilter);
+        _filterJobStatus = string.IsNullOrEmpty(_selectedJobStatus) ? null : _selectedJobStatus;
         await _table.ReloadServerData();
     }
 
@@ -369,9 +386,11 @@
         _selectedNextRunStatus = "";
         _selectedHistoricalStatus = "";
         _selectedOverrideFilter = "";
+        _selectedJobStatus = "";
         _filterNextRunStatus = null;
         _filterHistoricalStatus = null;
         _filterIsOverridden = null;
+        _filterJobStatus = null;
         await _table.ReloadServerData();
     }
 

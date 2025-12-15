@@ -87,7 +87,7 @@
                         {
                             <MudProgressLinear Color="Color.Info" Indeterminate="true" Class="mb-3" />
                             <MudText Typo="Typo.body2" Color="Color.Secondary">
-                                Checking status for all scraped jobs... This may take several minutes for large datasets.
+                                Checking status for all ADR requests... This may take several minutes for large datasets.
                             </MudText>
                         }
                         else if (_statusCheckResult != null)
@@ -235,11 +235,11 @@
                                         </MudTimelineItem>
                                         <MudTimelineItem Color="@GetLastRunStepColor("Processing scraping")" Icon="@Icons.Material.Filled.CheckCircle">
                                             <ItemContent>
-                                                <MudText Typo="Typo.body2">Process Scraping</MudText>
+                                                <MudText Typo="Typo.body2">Send ADR Requests</MudText>
                                                 @if (_lastCompletedRun.ScrapeResult != null)
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                        @_lastCompletedRun.ScrapeResult.ScrapesRequested requested, @_lastCompletedRun.ScrapeResult.ScrapesCompleted completed
+                                                        @_lastCompletedRun.ScrapeResult.ScrapesRequested ADR requests sent, @_lastCompletedRun.ScrapeResult.ScrapesCompleted completed
                                                     </MudText>
                                                 }
                                                 else
@@ -416,7 +416,7 @@
                                                     <MudProgressLinear Color="Color.Info" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
                                                 }
                                                 <MudText Typo="Typo.caption" Color="Color.Tertiary" Class="mt-1">
-                                                    <em>Checks all scraped jobs in database</em>
+                                                    <em>Checks all ADR requests in database</em>
                                                 </MudText>
                                             }
                                             else if (_currentStatus.Status.StatusCheckResult != null)
@@ -450,7 +450,7 @@
                                             else if (_currentStatus.Status.ScrapeResult != null)
                                             {
                                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                    @_currentStatus.Status.ScrapeResult.ScrapesRequested requested, @_currentStatus.Status.ScrapeResult.ScrapesCompleted completed
+                                                    @_currentStatus.Status.ScrapeResult.ScrapesRequested ADR requests sent, @_currentStatus.Status.ScrapeResult.ScrapesCompleted completed
                                                 </MudText>
                                             }
                                         </ItemContent>
@@ -532,7 +532,7 @@
                             <td class="text-right"><strong style="color: var(--mud-palette-warning);">@_jobStats.CredentialFailedCount</strong></td>
                         </tr>
                         <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.CloudDownload" Size="Size.Small" Color="Color.Primary" Class="mr-2" />Scrape Requested</td>
+                            <td><MudIcon Icon="@Icons.Material.Filled.CloudDownload" Size="Size.Small" Color="Color.Primary" Class="mr-2" />ADR Request Sent</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-primary);">@_jobStats.ScrapeRequestedCount</strong></td>
                         </tr>
                         <tr>
@@ -784,11 +784,11 @@
                 </MudTimelineItem>
                 <MudTimelineItem Color="@GetSelectedRunStepColor("Processing scraping")" Icon="@Icons.Material.Filled.CheckCircle">
                     <ItemContent>
-                        <MudText Typo="Typo.body2"><strong>Process Scraping</strong></MudText>
+                        <MudText Typo="Typo.body2"><strong>Send ADR Requests</strong></MudText>
                         @if (_selectedRun.ScrapeResult != null)
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                @_selectedRun.ScrapeResult.ScrapesRequested requested,
+                                @_selectedRun.ScrapeResult.ScrapesRequested ADR requests sent,
                                 <span style="color: var(--mud-palette-success);">@_selectedRun.ScrapeResult.ScrapesCompleted completed</span>,
                                 <span style="color: var(--mud-palette-error);">@_selectedRun.ScrapeResult.ScrapesFailed failed</span>
                             </MudText>

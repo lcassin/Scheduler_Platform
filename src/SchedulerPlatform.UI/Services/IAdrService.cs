@@ -13,6 +13,7 @@ public interface IAdrService
         string? nextRunStatus = null,
         string? historicalBillingStatus = null,
         bool? isOverridden = null,
+        string? jobStatus = null,
         string? sortColumn = null,
         bool sortDescending = false);
     Task<AdrAccount?> GetAccountAsync(int id);

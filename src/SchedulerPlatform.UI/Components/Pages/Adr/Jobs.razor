@@ -41,8 +41,8 @@
                     <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
                     <MudSelectItem Value="@("CredentialVerified")">Credential Verified</MudSelectItem>
                     <MudSelectItem Value="@("CredentialFailed")">Credential Failed</MudSelectItem>
-                    <MudSelectItem Value="@("ScrapeRequested")">Scrape Requested</MudSelectItem>
-                    <MudSelectItem Value="@("ScrapeFailed")">Scrape Failed</MudSelectItem>
+                    <MudSelectItem Value="@("ScrapeRequested")">ADR Request Sent</MudSelectItem>
+                    <MudSelectItem Value="@("Failed")">ADR Request Failed</MudSelectItem>
                     <MudSelectItem Value="@("Completed")">Completed</MudSelectItem>
                     <MudSelectItem Value="@("NeedsReview")">Needs Review</MudSelectItem>
                 </MudSelect>
@@ -198,11 +198,25 @@
                     </MudTooltip>
                 </MudTd>
                 <MudTd DataLabel="ADR Status">
-                    @if (context.AdrStatusId.HasValue)
+                    @{
+                        string? adrLabel = null;
+                        int? statusId = context.AdrStatusId;
+                        
+                        if (statusId.HasValue)
+                        {
+                            adrLabel = context.AdrStatusDescription ?? statusId.Value.ToString();
+                        }
+                        else if (context.Status == "ScrapeRequested")
+                        {
+                            adrLabel = "Awaiting insert";
+                        }
+                    }
+                    @if (!string.IsNullOrEmpty(adrLabel))
                     {
-                        <MudTooltip Text="@(context.AdrStatusDescription ?? "")">
-                            <MudChip T="string" Size="Size.Small" Color="@GetAdrStatusColor(context.AdrStatusId.Value)">
-                                @context.AdrStatusId
+                        var color = statusId.HasValue ? GetAdrStatusColor(statusId.Value) : Color.Info;
+                        <MudTooltip Text="@(context.AdrStatusDescription ?? (statusId.HasValue ? $"StatusId {statusId}" : "Request sent, awaiting ADR queue insertion"))">
+                            <MudChip T="string" Size="Size.Small" Color="@color">
+                                @adrLabel
                             </MudChip>
                         </MudTooltip>
                     }
@@ -380,7 +394,7 @@
         "CredentialVerified" => Color.Info,
         "CredentialFailed" => Color.Error,
         "ScrapeRequested" => Color.Warning,
-        "ScrapeFailed" => Color.Error,
+        "Failed" => Color.Error,
         "Completed" => Color.Success,
         "NeedsReview" => Color.Warning,
         _ => Color.Default
@@ -404,10 +418,10 @@
             "CredentialCheckInProgress" => ("Checking credentials...", null, Color.Info),
             "CredentialVerified" => GetCredentialVerifiedNextAction(job, today),
             "CredentialFailed" => GetCredentialFailedNextAction(job, today),
-            "ScrapeInProgress" => ("Scraping...", null, Color.Info),
-            "ScrapeRequested" => ("Awaiting scrape result", null, Color.Warning),
+            "ScrapeInProgress" => ("ADR request in progress...", null, Color.Info),
+            "ScrapeRequested" => ("Awaiting ADR result", null, Color.Warning),
             "StatusCheckInProgress" => ("Checking status...", null, Color.Info),
-            "ScrapeFailed" => job.RetryCount < 5 
+            "Failed" => job.RetryCount < 5 
                 ? ("Retry scheduled", job.NextRunDateTime, Color.Warning)
                 : ("Max retries reached", null, Color.Error),
             "Completed" => ("Complete", job.ScrapingCompletedDateTime, Color.Success),
@@ -429,10 +443,10 @@
         var credentialCheckDate = nextRunDate.AddDays(-7);
         var daysUntilCredCheck = (credentialCheckDate - today).Days;
         
-        // If NextRunDate is today or past, job missed credential window but will still be scraped
+        // If NextRunDate is today or past, job missed credential window but will still have ADR request sent
         // (as long as it has a CredentialId and isn't a Missing account)
         if (daysUntilNextRun <= 0)
-            return ("Scrape due (no cred check)", nextRunDate, Color.Warning);
+            return ("ADR request due (no cred check)", nextRunDate, Color.Warning);
         // In credential check window (today is between credentialCheckDate and NextRunDate-1)
         else if (daysUntilCredCheck <= 0)
             return ("Credential check due", credentialCheckDate, Color.Info);
@@ -447,36 +461,36 @@
     private (string Action, DateTime? ActionDate, Color ActionColor) GetCredentialVerifiedNextAction(AdrJob job, DateTime today)
     {
         if (!job.NextRunDateTime.HasValue)
-            return ("Awaiting scrape date", null, Color.Info);
+            return ("Awaiting ADR request date", null, Color.Info);
         
         var nextRunDate = job.NextRunDateTime.Value.Date;
-        var daysUntilScrape = (nextRunDate - today).Days;
+        var daysUntilRequest = (nextRunDate - today).Days;
         
-        if (daysUntilScrape <= 0)
-            return ("Scrape due now", nextRunDate, Color.Warning);
-        else if (daysUntilScrape == 1)
-            return ("Scrape tomorrow", nextRunDate, Color.Info);
+        if (daysUntilRequest <= 0)
+            return ("ADR request due now", nextRunDate, Color.Warning);
+        else if (daysUntilRequest == 1)
+            return ("ADR request tomorrow", nextRunDate, Color.Info);
         else
-            return ($"Scrape in {daysUntilScrape}d", nextRunDate, Color.Info);
+            return ($"ADR request in {daysUntilRequest}d", nextRunDate, Color.Info);
     }
 
     private (string Action, DateTime? ActionDate, Color ActionColor) GetCredentialFailedNextAction(AdrJob job, DateTime today)
     {
-        // Even though credentials failed, we still attempt to scrape daily
+        // Even though credentials failed, we still attempt ADR request daily
         // Helpdesk may have fixed the credential since the last attempt
         // Each failure sends another reminder to helpdesk to fix or inactivate
         if (!job.NextRunDateTime.HasValue)
-            return ("Awaiting scrape date", null, Color.Warning);
+            return ("Awaiting ADR request date", null, Color.Warning);
         
         var nextRunDate = job.NextRunDateTime.Value.Date;
-        var daysUntilScrape = (nextRunDate - today).Days;
+        var daysUntilRequest = (nextRunDate - today).Days;
         
-        if (daysUntilScrape <= 0)
-            return ("Scrape retry due", nextRunDate, Color.Warning);
-        else if (daysUntilScrape == 1)
-            return ("Scrape retry tomorrow", nextRunDate, Color.Warning);
+        if (daysUntilRequest <= 0)
+            return ("ADR retry due", nextRunDate, Color.Warning);
+        else if (daysUntilRequest == 1)
+            return ("ADR retry tomorrow", nextRunDate, Color.Warning);
         else
-            return ($"Scrape retry in {daysUntilScrape}d", nextRunDate, Color.Warning);
+            return ($"ADR retry in {daysUntilRequest}d", nextRunDate, Color.Warning);
     }
 
     private string GetNextActionTooltip(AdrJob job)
@@ -486,20 +500,20 @@
         return job.Status switch
         {
             "Pending" when job.NextRunDateTime.HasValue && job.NextRunDateTime.Value.Date <= today => 
-                $"Missed credential check window. Will attempt scrape directly.\nDownstream API will handle any credential issues.",
+                $"Missed credential check window. Will attempt ADR request directly.\nDownstream API will handle any credential issues.",
             "Pending" when job.NextRunDateTime.HasValue => 
-                $"Credential check window: {job.NextRunDateTime.Value.AddDays(-7):MM/dd/yyyy} - {job.NextRunDateTime.Value.AddDays(-1):MM/dd/yyyy}\nScrape starts: {job.NextRunDateTime.Value:MM/dd/yyyy}",
+                $"Credential check window: {job.NextRunDateTime.Value.AddDays(-7):MM/dd/yyyy} - {job.NextRunDateTime.Value.AddDays(-1):MM/dd/yyyy}\nADR request starts: {job.NextRunDateTime.Value:MM/dd/yyyy}",
             "CredentialVerified" when job.NextRunDateTime.HasValue =>
-                $"Credentials verified: {job.CredentialVerifiedDateTime?.ToString("MM/dd/yyyy") ?? "N/A"}\nScrape starts: {job.NextRunDateTime.Value:MM/dd/yyyy}",
+                $"Credentials verified: {job.CredentialVerifiedDateTime?.ToString("MM/dd/yyyy") ?? "N/A"}\nADR request starts: {job.NextRunDateTime.Value:MM/dd/yyyy}",
             "CredentialFailed" =>
-                $"Credential verification failed. Scraping will still be attempted daily until {job.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? "range end"}.\nEach failure sends a reminder to helpdesk to fix credentials or inactivate the account.",
+                $"Credential verification failed. ADR requests will still be attempted daily until {job.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? "range end"}.\nEach failure sends a reminder to helpdesk to fix credentials or inactivate the account.",
             "ScrapeRequested" =>
-                $"Scrape requested. Checking status daily until {job.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? "range end"}.",
+                $"ADR request sent. Checking status daily until {job.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? "range end"}.",
             "Completed" =>
                 $"Invoice retrieved successfully on {job.ScrapingCompletedDateTime?.ToString("MM/dd/yyyy") ?? "N/A"}.",
-            "ScrapeFailed" when job.RetryCount < 5 =>
-                $"Scrape failed. Retry {job.RetryCount + 1} of 5 scheduled.",
-            "ScrapeFailed" =>
+            "Failed" when job.RetryCount < 5 =>
+                $"ADR request failed. Retry {job.RetryCount + 1} of 5 scheduled.",
+            "Failed" =>
                 "Maximum retries reached. Manual intervention required.",
             "NeedsReview" =>
                 "ADR API returned a status requiring human review.",
