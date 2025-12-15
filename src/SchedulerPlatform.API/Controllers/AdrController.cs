@@ -1261,7 +1261,10 @@ public class AdrController : ControllerBase
                     pendingCount = statusCounts.TryGetValue("Pending", out var p) ? p : 0;
                     credentialVerifiedCount = statusCounts.TryGetValue("CredentialVerified", out var cv) ? cv : 0;
                     credentialFailedCount = statusCounts.TryGetValue("CredentialFailed", out var cf) ? cf : 0;
-                    scrapeRequestedCount = statusCounts.TryGetValue("ScrapeRequested", out var sr) ? sr : 0;
+                    // Include StatusCheckInProgress in ScrapeRequested count - these are jobs mid-status-check
+                    var sr = statusCounts.TryGetValue("ScrapeRequested", out var srVal) ? srVal : 0;
+                    var sci = statusCounts.TryGetValue("StatusCheckInProgress", out var sciVal) ? sciVal : 0;
+                    scrapeRequestedCount = sr + sci;
                     completedCount = statusCounts.TryGetValue("Completed", out var c) ? c : 0;
                     failedCount = statusCounts.TryGetValue("Failed", out var f) ? f : 0;
                     needsReviewCount = statusCounts.TryGetValue("NeedsReview", out var nr) ? nr : 0;
@@ -1280,7 +1283,10 @@ public class AdrController : ControllerBase
                 pendingCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("Pending");
                 credentialVerifiedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("CredentialVerified");
                 credentialFailedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("CredentialFailed");
+                // Include StatusCheckInProgress in ScrapeRequested count - these are jobs mid-status-check
                 scrapeRequestedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("ScrapeRequested");
+                var statusCheckInProgressCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("StatusCheckInProgress");
+                scrapeRequestedCount += statusCheckInProgressCount;
                 completedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("Completed");
                 failedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("Failed");
                 needsReviewCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("NeedsReview");
