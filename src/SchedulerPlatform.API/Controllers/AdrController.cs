@@ -54,6 +54,7 @@ public class AdrController : ControllerBase
         [FromQuery] string? searchTerm = null,
         [FromQuery] string? historicalBillingStatus = null,
         [FromQuery] bool? isOverridden = null,
+        [FromQuery] string? jobStatus = null,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20,
         [FromQuery] string? sortColumn = null,
@@ -61,6 +62,42 @@ public class AdrController : ControllerBase
     {
         try
         {
+            // If filtering by job status, we need to get the account IDs first
+            List<int>? accountIdsWithJobStatus = null;
+            if (!string.IsNullOrWhiteSpace(jobStatus))
+            {
+                if (jobStatus == "NoJob")
+                {
+                    // Get accounts that have no jobs at all
+                    var accountsWithJobs = await _dbContext.AdrJobs
+                        .Where(j => !j.IsDeleted)
+                        .Select(j => j.AdrAccountId)
+                        .Distinct()
+                        .ToListAsync();
+                    
+                    // We'll filter to accounts NOT in this list
+                    accountIdsWithJobStatus = await _dbContext.AdrAccounts
+                        .Where(a => !a.IsDeleted && !accountsWithJobs.Contains(a.Id))
+                        .Select(a => a.Id)
+                        .ToListAsync();
+                }
+                else
+                {
+                    // Get accounts where the latest job has the specified status
+                    accountIdsWithJobStatus = await _dbContext.AdrJobs
+                        .Where(j => !j.IsDeleted)
+                        .GroupBy(j => j.AdrAccountId)
+                        .Select(g => new
+                        {
+                            AdrAccountId = g.Key,
+                            LatestStatus = g.OrderByDescending(j => j.BillingPeriodStartDateTime).Select(j => j.Status).FirstOrDefault()
+                        })
+                        .Where(x => x.LatestStatus == jobStatus)
+                        .Select(x => x.AdrAccountId)
+                        .ToListAsync();
+                }
+            }
+
             var (items, totalCount) = await _unitOfWork.AdrAccounts.GetPagedAsync(
                 pageNumber,
                 pageSize,
@@ -71,7 +108,8 @@ public class AdrController : ControllerBase
                 historicalBillingStatus,
                 isOverridden,
                 sortColumn,
-                sortDescending);
+                sortDescending,
+                accountIdsWithJobStatus);
 
             // Get account IDs from the current page
             var accountIds = items.Select(a => a.Id).ToList();

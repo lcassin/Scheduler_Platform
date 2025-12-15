@@ -47,9 +47,16 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
         string? historicalBillingStatus = null,
         bool? isOverridden = null,
         string? sortColumn = null,
-        bool sortDescending = false)
+        bool sortDescending = false,
+        List<int>? accountIdsFilter = null)
     {
         var query = _dbSet.Where(a => !a.IsDeleted);
+
+        // Apply account IDs filter (for job status filtering)
+        if (accountIdsFilter != null)
+        {
+            query = query.Where(a => accountIdsFilter.Contains(a.Id));
+        }
 
         if (clientId.HasValue)
         {
