@@ -1137,6 +1137,35 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
             _logger.LogInformation("Completed {Count} parallel manual status checks, updating job statuses", statusResults.Count);
 
+            // Log status distribution summary for debugging
+            var statusSummary = statusResults.Values
+                .Where(r => r != null)
+                .GroupBy(r => new { r!.StatusId, r.IsFinal, r.IsSuccess })
+                .Select(g => new { g.Key.StatusId, g.Key.IsFinal, g.Key.IsSuccess, Count = g.Count() })
+                .OrderByDescending(x => x.Count)
+                .ToList();
+            
+            _logger.LogInformation("=== STATUS CHECK DISTRIBUTION SUMMARY ===");
+            _logger.LogInformation("Expected Complete StatusId = {CompleteId}, NeedsReview StatusId = {NeedsReviewId}", 
+                (int)AdrStatus.Complete, (int)AdrStatus.NeedsHumanReview);
+            foreach (var entry in statusSummary)
+            {
+                _logger.LogInformation(
+                    "StatusId={StatusId}, IsFinal={IsFinal}, IsSuccess={IsSuccess}, Count={Count}",
+                    entry.StatusId, entry.IsFinal, entry.IsSuccess, entry.Count);
+            }
+            
+            // Log a few sample raw responses for debugging
+            var sampleResponses = statusResults.Values
+                .Where(r => r != null && !string.IsNullOrEmpty(r!.RawResponse))
+                .Take(3)
+                .ToList();
+            foreach (var sample in sampleResponses)
+            {
+                _logger.LogInformation("Sample raw response: {RawResponse}", TruncateResponse(sample!.RawResponse, 500));
+            }
+            _logger.LogInformation("=== END STATUS CHECK DISTRIBUTION SUMMARY ===");
+
             // Step 3: Update job statuses sequentially (EF DbContext is not thread-safe)
             int processedSinceLastSave = 0;
             int batchNumber = 1;
@@ -1167,6 +1196,10 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
                     job.AdrStatusId = statusResult.StatusId;
                     job.AdrStatusDescription = statusResult.StatusDescription;
+                    
+                    // Store raw API response for debugging (truncated to avoid bloating the database)
+                    job.LastStatusCheckResponse = TruncateResponse(statusResult.RawResponse, 1000);
+                    job.LastStatusCheckDateTime = DateTime.UtcNow;
 
                     if (statusResult.IsFinal)
                     {
@@ -1181,6 +1214,17 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             job.Status = "NeedsReview";
                             job.ScrapingCompletedDateTime = DateTime.UtcNow;
                             result.JobsNeedingReview++;
+                        }
+                        else
+                        {
+                            // Unrecognized final status - log for debugging but still mark as completed
+                            _logger.LogWarning(
+                                "Job {JobId}: Unrecognized final status. StatusId={StatusId}, Description={Description}, Raw={RawResponse}",
+                                jobId, statusResult.StatusId, statusResult.StatusDescription, 
+                                TruncateResponse(statusResult.RawResponse, 300));
+                            job.Status = "Completed";
+                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                            result.JobsCompleted++;
                         }
                     }
                     else
@@ -1494,6 +1538,20 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     result.IsError = apiResponse.IsError;
                     result.IsFinal = apiResponse.IsFinal;
                 }
+                else
+                {
+                    // Log when deserialization returns null - may indicate API format change
+                    _logger.LogWarning(
+                        "Status check for job {JobId}: Deserialization returned null. Raw response: {RawResponse}",
+                        jobId, TruncateResponse(responseContent, 500));
+                }
+            }
+            else
+            {
+                // Log non-success HTTP responses
+                _logger.LogWarning(
+                    "Status check for job {JobId}: HTTP {StatusCode}. Raw response: {RawResponse}",
+                    jobId, (int)response.StatusCode, TruncateResponse(responseContent, 500));
             }
 
             return result;
