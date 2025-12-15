@@ -458,7 +458,7 @@
                     <tbody>
                         <tr>
                             <td><MudIcon Icon="@Icons.Material.Filled.Work" Size="Size.Small" Class="mr-2" />Total Jobs</td>
-                            <td class="text-right"><strong>@_jobStats.TotalJobs</strong></td>
+                            <td class="text-right"><strong>@_jobStats.TotalCount</strong></td>
                         </tr>
                         <tr>
                             <td><MudIcon Icon="@Icons.Material.Filled.HourglassEmpty" Size="Size.Small" Color="Color.Default" Class="mr-2" />Pending</td>
@@ -467,6 +467,10 @@
                         <tr>
                             <td><MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Size="Size.Small" Color="Color.Info" Class="mr-2" />Credential Verified</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-info);">@_jobStats.CredentialVerifiedCount</strong></td>
+                        </tr>
+                        <tr>
+                            <td><MudIcon Icon="@Icons.Material.Filled.GppBad" Size="Size.Small" Color="Color.Warning" Class="mr-2" />Credential Failed</td>
+                            <td class="text-right"><strong style="color: var(--mud-palette-warning);">@_jobStats.CredentialFailedCount</strong></td>
                         </tr>
                         <tr>
                             <td><MudIcon Icon="@Icons.Material.Filled.CloudDownload" Size="Size.Small" Color="Color.Primary" Class="mr-2" />Scrape Requested</td>
@@ -1063,7 +1067,23 @@
         try
         {
             var result = await AdrService.CheckStatusesAsync();
-            Snackbar.Add($"Status check complete! {result.JobsCompleted} completed, {result.JobsNeedingReview} need review", Severity.Success);
+            
+            // Build message with job counts
+            var message = $"Status check complete! Checked: {result.JobsChecked}, Completed: {result.JobsCompleted}, Need Review: {result.JobsNeedingReview}";
+            
+            // Show appropriate severity based on results
+            if (result.Errors > 0)
+            {
+                Snackbar.Add($"{message} (with {result.Errors} errors - see logs)", Severity.Warning);
+            }
+            else if (result.JobsChecked == 0)
+            {
+                Snackbar.Add("No jobs found needing status check", Severity.Info);
+            }
+            else
+            {
+                Snackbar.Add(message, Severity.Success);
+            }
             
             // Refresh job stats to show updated counts
             await LoadDataAsync();
