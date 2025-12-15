@@ -410,6 +410,14 @@ public class SchedulesController : ControllerBase
                 return Forbid();
             }
 
+            // Persist the IsEnabled = false to the database
+            schedule.IsEnabled = false;
+            schedule.ModifiedDateTime = DateTime.UtcNow;
+            schedule.ModifiedBy = User.Identity?.Name ?? "System";
+            
+            await _unitOfWork.Schedules.UpdateAsync(schedule);
+            await _unitOfWork.SaveChangesAsync();
+
             await _schedulerService.PauseJob(schedule.Id, schedule.ClientId);
             
             return Ok(new { message = "Job paused successfully" });
@@ -443,6 +451,30 @@ public class SchedulesController : ControllerBase
                     userClientId, id, schedule.ClientId);
                 return Forbid();
             }
+
+            // Persist the IsEnabled = true to the database
+            schedule.IsEnabled = true;
+            schedule.ModifiedDateTime = DateTime.UtcNow;
+            schedule.ModifiedBy = User.Identity?.Name ?? "System";
+            
+            // Recalculate NextRunDateTime if we have a cron expression
+            if (!string.IsNullOrWhiteSpace(schedule.CronExpression))
+            {
+                try
+                {
+                    var trigger = TriggerBuilder.Create()
+                        .WithCronSchedule(schedule.CronExpression)
+                        .Build();
+                    schedule.NextRunDateTime = trigger.GetNextFireTimeUtc()?.DateTime;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Could not calculate NextRunDateTime for schedule {ScheduleId}", schedule.Id);
+                }
+            }
+            
+            await _unitOfWork.Schedules.UpdateAsync(schedule);
+            await _unitOfWork.SaveChangesAsync();
 
             await _schedulerService.ResumeJob(schedule.Id, schedule.ClientId);
             
