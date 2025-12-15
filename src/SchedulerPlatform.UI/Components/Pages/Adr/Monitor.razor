@@ -436,55 +436,47 @@
         </MudPaper>
         
         <MudPaper Class="pa-4">
-            <MudText Typo="Typo.h6" Class="mb-3">Last 10 Runs Totals</MudText>
-            @if (_recentHistory != null && _recentHistory.Any())
+            <MudText Typo="Typo.h6" Class="mb-3">Job Pipeline Status</MudText>
+            @if (_jobStats != null)
             {
                 <MudSimpleTable Dense="true" Hover="true" Style="overflow-x: auto;">
                     <tbody>
                         <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.Work" Size="Size.Small" Class="mr-2" />Jobs Created</td>
-                            <td class="text-right"><strong>@_aggregatedTotals.JobsCreated</strong></td>
+                            <td><MudIcon Icon="@Icons.Material.Filled.Work" Size="Size.Small" Class="mr-2" />Total Jobs</td>
+                            <td class="text-right"><strong>@_jobStats.TotalJobs</strong></td>
                         </tr>
                         <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.SkipNext" Size="Size.Small" Class="mr-2" />Jobs Skipped</td>
-                            <td class="text-right">@_aggregatedTotals.JobsSkipped</td>
+                            <td><MudIcon Icon="@Icons.Material.Filled.HourglassEmpty" Size="Size.Small" Color="Color.Default" Class="mr-2" />Pending</td>
+                            <td class="text-right">@_jobStats.PendingCount</td>
                         </tr>
                         <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" Class="mr-2" />Credentials Verified</td>
-                            <td class="text-right"><strong style="color: var(--mud-palette-success);">@_aggregatedTotals.CredentialsVerified</strong></td>
+                            <td><MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Size="Size.Small" Color="Color.Info" Class="mr-2" />Credential Verified</td>
+                            <td class="text-right"><strong style="color: var(--mud-palette-info);">@_jobStats.CredentialVerifiedCount</strong></td>
                         </tr>
                         <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error" Class="mr-2" />Credentials Failed</td>
-                            <td class="text-right"><strong style="color: var(--mud-palette-error);">@_aggregatedTotals.CredentialsFailed</strong></td>
+                            <td><MudIcon Icon="@Icons.Material.Filled.CloudDownload" Size="Size.Small" Color="Color.Primary" Class="mr-2" />Scrape Requested</td>
+                            <td class="text-right"><strong style="color: var(--mud-palette-primary);">@_jobStats.ScrapeRequestedCount</strong></td>
                         </tr>
                         <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.CloudDownload" Size="Size.Small" Class="mr-2" />Scrapes Requested</td>
-                            <td class="text-right"><strong>@_aggregatedTotals.ScrapesRequested</strong></td>
+                            <td><MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" Class="mr-2" />Completed</td>
+                            <td class="text-right"><strong style="color: var(--mud-palette-success);">@_jobStats.CompletedCount</strong></td>
                         </tr>
                         <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.CloudDone" Size="Size.Small" Color="Color.Success" Class="mr-2" />Scrapes Completed</td>
-                            <td class="text-right"><strong style="color: var(--mud-palette-success);">@_aggregatedTotals.ScrapesCompleted</strong></td>
+                            <td><MudIcon Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error" Class="mr-2" />Failed</td>
+                            <td class="text-right"><strong style="color: var(--mud-palette-error);">@_jobStats.FailedCount</strong></td>
                         </tr>
                         <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.CloudOff" Size="Size.Small" Color="Color.Error" Class="mr-2" />Scrapes Failed</td>
-                            <td class="text-right"><strong style="color: var(--mud-palette-error);">@_aggregatedTotals.ScrapesFailed</strong></td>
-                        </tr>
-                        <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.Done" Size="Size.Small" Color="Color.Success" Class="mr-2" />Status Completed</td>
-                            <td class="text-right"><strong style="color: var(--mud-palette-success);">@_aggregatedTotals.StatusCompleted</strong></td>
-                        </tr>
-                        <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.RateReview" Size="Size.Small" Color="Color.Warning" Class="mr-2" />Need Review</td>
-                            <td class="text-right"><strong style="color: var(--mud-palette-warning);">@_aggregatedTotals.StatusNeedReview</strong></td>
+                            <td><MudIcon Icon="@Icons.Material.Filled.RateReview" Size="Size.Small" Color="Color.Warning" Class="mr-2" />Needs Review</td>
+                            <td class="text-right"><strong style="color: var(--mud-palette-warning);">@_jobStats.NeedsReviewCount</strong></td>
                         </tr>
                     </tbody>
                 </MudSimpleTable>
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">Aggregated from last 10 orchestration runs</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">Current status of all jobs in pipeline</MudText>
             }
             else
             {
                 <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center" Class="pa-4">
-                    No data available
+                    Loading job stats...
                 </MudText>
             }
         </MudPaper>
@@ -798,21 +790,8 @@
         }
     };
     
-    // Aggregated totals from last 10 runs
-    private AggregatedRunTotals _aggregatedTotals = new();
-    
-    private class AggregatedRunTotals
-    {
-        public int JobsCreated { get; set; }
-        public int JobsSkipped { get; set; }
-        public int CredentialsVerified { get; set; }
-        public int CredentialsFailed { get; set; }
-        public int ScrapesRequested { get; set; }
-        public int ScrapesCompleted { get; set; }
-        public int ScrapesFailed { get; set; }
-        public int StatusCompleted { get; set; }
-        public int StatusNeedReview { get; set; }
-    }
+    // Job pipeline stats
+    private AdrJobStats? _jobStats;
 
     protected override async Task OnInitializedAsync()
     {
@@ -851,9 +830,9 @@
             // Get the most recent completed run from history for display when not running
             _lastCompletedRun = _history?.FirstOrDefault(h => h.Status == "Completed" || h.Status == "Failed");
             
-            // Update chart data and aggregated totals
+            // Update chart data and load job stats
             UpdateChartData();
-            UpdateAggregatedTotals();
+            _jobStats = await AdrService.GetJobStatsAsync();
             
             // Start/stop fast progress polling based on orchestration state
             if (_currentStatus?.IsRunning == true && !_isProgressPolling)
@@ -913,46 +892,6 @@
         
         _orchestrationChartData = dataList.ToArray();
         _orchestrationChartLabels = labelList.ToArray();
-    }
-    
-    private void UpdateAggregatedTotals()
-    {
-        _aggregatedTotals = new AggregatedRunTotals();
-        
-        if (_recentHistory == null || !_recentHistory.Any())
-            return;
-        
-        foreach (var run in _recentHistory)
-        {
-            // Aggregate job creation results
-            if (run.JobCreationResult != null)
-            {
-                _aggregatedTotals.JobsCreated += run.JobCreationResult.JobsCreated;
-                _aggregatedTotals.JobsSkipped += run.JobCreationResult.JobsSkipped;
-            }
-            
-            // Aggregate credential verification results
-            if (run.CredentialVerificationResult != null)
-            {
-                _aggregatedTotals.CredentialsVerified += run.CredentialVerificationResult.CredentialsVerified;
-                _aggregatedTotals.CredentialsFailed += run.CredentialVerificationResult.CredentialsFailed;
-            }
-            
-            // Aggregate scrape results
-            if (run.ScrapeResult != null)
-            {
-                _aggregatedTotals.ScrapesRequested += run.ScrapeResult.ScrapesRequested;
-                _aggregatedTotals.ScrapesCompleted += run.ScrapeResult.ScrapesCompleted;
-                _aggregatedTotals.ScrapesFailed += run.ScrapeResult.ScrapesFailed;
-            }
-            
-            // Aggregate status check results
-            if (run.StatusCheckResult != null)
-            {
-                _aggregatedTotals.StatusCompleted += run.StatusCheckResult.JobsCompleted;
-                _aggregatedTotals.StatusNeedReview += run.StatusCheckResult.JobsNeedingReview;
-            }
-        }
     }
     
     private async Task LoadCurrentStatusAsync()
