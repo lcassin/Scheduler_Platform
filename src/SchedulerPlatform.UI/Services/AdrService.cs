@@ -113,7 +113,7 @@ public class AdrService : IAdrService
             return result ?? throw new InvalidOperationException("Failed to clear account override");
         }
 
-        public async Task<ManualScrapeResult> ManualScrapeRequestAsync(int accountId, DateTime targetDate, DateTime? rangeStartDate = null, DateTime? rangeEndDate = null, string? reason = null)
+        public async Task<ManualScrapeResult> ManualScrapeRequestAsync(int accountId, DateTime targetDate, DateTime? rangeStartDate = null, DateTime? rangeEndDate = null, string? reason = null, bool isHighPriority = false)
         {
             var client = CreateClient();
             var request = new
@@ -121,7 +121,8 @@ public class AdrService : IAdrService
                 TargetDate = targetDate,
                 RangeStartDate = rangeStartDate,
                 RangeEndDate = rangeEndDate,
-                Reason = reason
+                Reason = reason,
+                IsHighPriority = isHighPriority
             };
             var response = await client.PostAsJsonAsync($"adr/accounts/{accountId}/manual-scrape", request);
             response.EnsureSuccessStatusCode();
