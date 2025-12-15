@@ -595,7 +595,8 @@ public class AdrController : ControllerBase
                         RequestedBy = username,
                         RequestedAt = DateTime.UtcNow,
                         Reason = request.Reason,
-                        IsManualRequest = true
+                        IsManualRequest = true,
+                        IsHighPriority = request.IsHighPriority
                     }),
                     CreatedDateTime = DateTime.UtcNow,
                     CreatedBy = username,
@@ -623,7 +624,8 @@ public class AdrController : ControllerBase
                     RecipientEmail = recipientEmail,
                     JobId = job.Id,
                     AccountId = account.VMAccountId,
-                    InterfaceAccountId = account.InterfaceAccountId
+                    InterfaceAccountId = account.InterfaceAccountId,
+                    IsHighPriority = request.IsHighPriority
                 };
 
                 _logger.LogInformation(
@@ -2290,6 +2292,11 @@ public class ManualScrapeRequest
     /// Reason for the manual scrape request (for audit purposes)
     /// </summary>
     public string? Reason { get; set; }
+    
+    /// <summary>
+    /// Whether to use high priority for the ADR request (processed before normal priority)
+    /// </summary>
+    public bool IsHighPriority { get; set; }
 }
 
 /// <summary>
