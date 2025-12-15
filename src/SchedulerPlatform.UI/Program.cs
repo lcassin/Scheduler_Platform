@@ -64,6 +64,7 @@ builder.Services.AddHttpClient("SchedulerAPI", client =>
 })
 .AddHttpMessageHandler<AuthTokenHandler>();
 
+builder.Services.AddScoped<SessionStateService>();
 builder.Services.AddScoped<AuthTokenHandler>();
 builder.Services.AddScoped<IScheduleService, ScheduleService>();
 builder.Services.AddScoped<IJobExecutionService, JobExecutionService>();
