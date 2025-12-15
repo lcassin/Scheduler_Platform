@@ -347,47 +347,8 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                     request.RequestId, credResult.CredentialsVerified, credResult.CredentialsFailed);
             }
 
-            // Step 4: Process scraping
-            if (request.RunScraping)
-            {
-                _queue.UpdateStatus(request.RequestId, s => 
-                {
-                    s.CurrentStep = "Processing scraping";
-                    s.CurrentStepPhase = "Preparing";
-                    s.CurrentStepProgress = 0;
-                    s.CurrentStepTotal = 0;
-                });
-                _logger.LogInformation("Request {RequestId}: Starting scraping", request.RequestId);
-                
-                var scrapeResult = await orchestratorService.ProcessScrapingAsync(
-                    (progress, total) => _queue.UpdateStatus(request.RequestId, s => 
-                    {
-                        // Negative progress indicates setup/preparing phase
-                        if (progress < 0)
-                        {
-                            s.CurrentStepPhase = "Preparing";
-                            s.CurrentStepProgress = Math.Abs(progress);
-                        }
-                        else
-                        {
-                            s.CurrentStepPhase = "Calling API";
-                            s.CurrentStepProgress = progress;
-                        }
-                        s.CurrentStepTotal = total;
-                    }),
-                    stoppingToken);
-                _queue.UpdateStatus(request.RequestId, s => 
-                {
-                    s.CurrentStepPhase = null;
-                    s.ScrapeResult = scrapeResult;
-                });
-                
-                _logger.LogInformation(
-                    "Request {RequestId}: Scraping completed. Requested: {Requested}, Completed: {Completed}",
-                    request.RequestId, scrapeResult.ScrapesRequested, scrapeResult.ScrapesCompleted);
-            }
-
-            // Step 5: Check statuses
+            // Step 4: Check statuses of yesterday's ScrapeRequested jobs BEFORE sending new scrapes
+            // This prevents duplicate scrape requests for jobs that already completed
             if (request.RunStatusCheck)
             {
                 _queue.UpdateStatus(request.RequestId, s => 
@@ -425,6 +386,46 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                 _logger.LogInformation(
                     "Request {RequestId}: Status check completed. Completed: {Completed}, NeedsReview: {NeedsReview}",
                     request.RequestId, statusResult.JobsCompleted, statusResult.JobsNeedingReview);
+            }
+
+            // Step 5: Process scraping for jobs that are ready (CredentialVerified status)
+            if (request.RunScraping)
+            {
+                _queue.UpdateStatus(request.RequestId, s => 
+                {
+                    s.CurrentStep = "Processing scraping";
+                    s.CurrentStepPhase = "Preparing";
+                    s.CurrentStepProgress = 0;
+                    s.CurrentStepTotal = 0;
+                });
+                _logger.LogInformation("Request {RequestId}: Starting scraping", request.RequestId);
+                
+                var scrapeResult = await orchestratorService.ProcessScrapingAsync(
+                    (progress, total) => _queue.UpdateStatus(request.RequestId, s => 
+                    {
+                        // Negative progress indicates setup/preparing phase
+                        if (progress < 0)
+                        {
+                            s.CurrentStepPhase = "Preparing";
+                            s.CurrentStepProgress = Math.Abs(progress);
+                        }
+                        else
+                        {
+                            s.CurrentStepPhase = "Calling API";
+                            s.CurrentStepProgress = progress;
+                        }
+                        s.CurrentStepTotal = total;
+                    }),
+                    stoppingToken);
+                _queue.UpdateStatus(request.RequestId, s => 
+                {
+                    s.CurrentStepPhase = null;
+                    s.ScrapeResult = scrapeResult;
+                });
+                
+                _logger.LogInformation(
+                    "Request {RequestId}: Scraping completed. Requested: {Requested}, Completed: {Completed}",
+                    request.RequestId, scrapeResult.ScrapesRequested, scrapeResult.ScrapesCompleted);
             }
 
             _queue.UpdateStatus(request.RequestId, s =>
