@@ -65,6 +65,62 @@
                 </div>
             </div>
 
+            @* Manual Status Check Progress Panel *@
+            @if (_isCheckingStatuses || _statusCheckResult != null)
+            {
+                <MudCard Outlined="true" Class="mb-4">
+                    <MudCardContent>
+                        <div class="d-flex align-center justify-space-between mb-3">
+                            <MudText Typo="Typo.subtitle1">
+                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Class="mr-2" />
+                                Manual Status Check
+                            </MudText>
+                            @if (!_isCheckingStatuses && _statusCheckResult != null)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Close" 
+                                               Size="Size.Small" 
+                                               OnClick="ClearStatusCheckResult" />
+                            }
+                        </div>
+                        
+                        @if (_isCheckingStatuses)
+                        {
+                            <MudProgressLinear Color="Color.Info" Indeterminate="true" Class="mb-3" />
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                Checking status for all scraped jobs... This may take several minutes for large datasets.
+                            </MudText>
+                        }
+                        else if (_statusCheckResult != null)
+                        {
+                            <MudGrid>
+                                <MudItem xs="6" sm="3">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Jobs Checked</MudText>
+                                    <MudText Typo="Typo.h6">@_statusCheckResult.JobsChecked.ToString("N0")</MudText>
+                                </MudItem>
+                                <MudItem xs="6" sm="3">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Completed</MudText>
+                                    <MudText Typo="Typo.h6" Color="Color.Success">@_statusCheckResult.JobsCompleted.ToString("N0")</MudText>
+                                </MudItem>
+                                <MudItem xs="6" sm="3">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Need Review</MudText>
+                                    <MudText Typo="Typo.h6" Color="Color.Warning">@_statusCheckResult.JobsNeedingReview.ToString("N0")</MudText>
+                                </MudItem>
+                                <MudItem xs="6" sm="3">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">Still Processing</MudText>
+                                    <MudText Typo="Typo.h6" Color="Color.Info">@_statusCheckResult.JobsStillProcessing.ToString("N0")</MudText>
+                                </MudItem>
+                            </MudGrid>
+                            @if (_statusCheckResult.Errors > 0)
+                            {
+                                <MudAlert Severity="Severity.Warning" Class="mt-3" Dense="true">
+                                    @_statusCheckResult.Errors errors occurred during status check. Check logs for details.
+                                </MudAlert>
+                            }
+                        }
+                    </MudCardContent>
+                </MudCard>
+            }
+
             @if (_loading)
             {
                 <div class="d-flex justify-center pa-8">
@@ -764,6 +820,7 @@
     private bool _isRefreshing = false;
     private bool _isStarting = false;
     private bool _isCheckingStatuses = false;
+    private StatusCheckResult? _statusCheckResult = null;
     private bool _autoRefreshEnabled = true;
     private bool _showAllHistory = false;
     private DateTime? _lastRefresh;
@@ -1062,11 +1119,13 @@
     private async Task CheckStatusesOnly()
     {
         _isCheckingStatuses = true;
+        _statusCheckResult = null; // Clear previous result
         StateHasChanged();
 
         try
         {
             var result = await AdrService.CheckStatusesAsync();
+            _statusCheckResult = result; // Store result for display in the panel
             
             // Build message with job counts
             var message = $"Status check complete! Checked: {result.JobsChecked}, Completed: {result.JobsCompleted}, Need Review: {result.JobsNeedingReview}";
@@ -1078,7 +1137,7 @@
             }
             else if (result.JobsChecked == 0)
             {
-                Snackbar.Add("No jobs found needing status check", Severity.Info);
+                Snackbar.Add("No jobs found in ScrapeRequested status to check", Severity.Info);
             }
             else
             {
@@ -1102,6 +1161,12 @@
             _isCheckingStatuses = false;
             StateHasChanged();
         }
+    }
+    
+    private void ClearStatusCheckResult()
+    {
+        _statusCheckResult = null;
+        StateHasChanged();
     }
 
     private void StartAutoRefresh()
