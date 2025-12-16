@@ -949,11 +949,13 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             result.JobsCompleted++;
                             
                             // Update account's LastSuccessfulDownloadDate to help calculate next billing cycle
-                            // Use the job's NextRunDateTime (scrape request date) to avoid scheduling creep
-                            // since status check runs the day AFTER the scrape was sent
+                            // Uses anti-creep logic: allows earlier dates but prevents late vendors from causing schedule drift
                             if (job.AdrAccount != null)
                             {
-                                job.AdrAccount.LastSuccessfulDownloadDate = job.NextRunDateTime?.Date ?? DateTime.UtcNow.Date;
+                                job.AdrAccount.LastSuccessfulDownloadDate = CalculateLastSuccessfulDownloadDate(
+                                    job.AdrAccount.LastSuccessfulDownloadDate,
+                                    job.NextRunDateTime,
+                                    job.AdrAccount.PeriodDays);
                                 job.AdrAccount.ModifiedDateTime = DateTime.UtcNow;
                                 job.AdrAccount.ModifiedBy = "System Created";
                             }
@@ -1221,11 +1223,13 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             result.JobsCompleted++;
                             
                             // Update account's LastSuccessfulDownloadDate to help calculate next billing cycle
-                            // Use the job's NextRunDateTime (scrape request date) to avoid scheduling creep
-                            // since status check runs the day AFTER the scrape was sent
+                            // Uses anti-creep logic: allows earlier dates but prevents late vendors from causing schedule drift
                             if (job.AdrAccount != null)
                             {
-                                job.AdrAccount.LastSuccessfulDownloadDate = job.NextRunDateTime?.Date ?? DateTime.UtcNow.Date;
+                                job.AdrAccount.LastSuccessfulDownloadDate = CalculateLastSuccessfulDownloadDate(
+                                    job.AdrAccount.LastSuccessfulDownloadDate,
+                                    job.NextRunDateTime,
+                                    job.AdrAccount.PeriodDays);
                                 job.AdrAccount.ModifiedDateTime = DateTime.UtcNow;
                                 job.AdrAccount.ModifiedBy = "System Created";
                             }
@@ -1636,6 +1640,41 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             _ => false   // 1 (Inserted), 2 (Inserted With Priority), 6 (Sent To AI), 10 (Received From AI),
                          // 12 (Login Attempt Succeeded), 13 (No Documents Found - retry next day), 15 (No Documents Processed - TBD)
         };
+    }
+
+    /// <summary>
+    /// Calculates the LastSuccessfulDownloadDate with anti-creep logic.
+    /// - If no previous date exists, use the job's scheduled date (establish baseline)
+    /// - If job date is earlier or equal to expected, use job date (allow earlier)
+    /// - If job date is later than expected (vendor posted late), use expected date (prevent creep)
+    /// </summary>
+    private static DateTime CalculateLastSuccessfulDownloadDate(
+        DateTime? currentLastSuccessfulDownloadDate,
+        DateTime? jobNextRunDateTime,
+        int? periodDays)
+    {
+        var jobDate = jobNextRunDateTime?.Date ?? DateTime.UtcNow.Date;
+        
+        // First successful download - establish baseline
+        if (!currentLastSuccessfulDownloadDate.HasValue)
+        {
+            return jobDate;
+        }
+        
+        // Calculate expected date based on previous anchor + period
+        var previousAnchor = currentLastSuccessfulDownloadDate.Value;
+        var period = periodDays ?? 30; // Default to monthly if not specified
+        var expectedDate = previousAnchor.AddDays(period);
+        
+        // Allow earlier or same, but don't let late vendors cause creep
+        if (jobDate <= expectedDate)
+        {
+            return jobDate; // OK to move earlier or keep same
+        }
+        else
+        {
+            return expectedDate; // Vendor late - use expected date to prevent creep
+        }
     }
 
     #endregion
