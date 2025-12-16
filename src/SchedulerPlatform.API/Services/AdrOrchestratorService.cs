@@ -284,6 +284,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         progressCallback?.Invoke(-markedCount, jobsNeedingVerification.Count);
                     }
                 }
+                catch (OperationCanceledException)
+                {
+                    // Re-throw cancellation to stop the loop
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error marking job {JobId} as in-progress", job.Id);
@@ -348,6 +353,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             "Credential verification API calls: {Completed}/{Total} completed ({Percent:F1}%)",
                             count, totalApiCalls, (double)count / totalApiCalls * 100);
                     }
+                }
+                catch (OperationCanceledException)
+                {
+                    // Re-throw cancellation to stop the parallel tasks
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -461,6 +471,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         batchNumber++;
                     }
                 }
+                catch (OperationCanceledException)
+                {
+                    // Re-throw cancellation to stop the loop
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error updating job {JobId} after API call", jobInfo.JobId);
@@ -553,6 +568,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         progressCallback?.Invoke(-markedCount, jobsReadyForScraping.Count);
                     }
                 }
+                catch (OperationCanceledException)
+                {
+                    // Re-throw cancellation to stop the loop
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error marking job {JobId} as in-progress for scraping", job.Id);
@@ -617,6 +637,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             "Invoice scraping API calls: {Completed}/{Total} completed ({Percent:F1}%)",
                             count, totalApiCalls, (double)count / totalApiCalls * 100);
                     }
+                }
+                catch (OperationCanceledException)
+                {
+                    // Re-throw cancellation to stop the parallel tasks
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -736,6 +761,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         batchNumber++;
                     }
                 }
+                catch (OperationCanceledException)
+                {
+                    // Re-throw cancellation to stop the loop
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error updating job {JobId} after scraping API call", jobInfo.JobId);
@@ -841,6 +871,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         progressCallback?.Invoke(-markedCount, jobsNeedingStatusCheck.Count);
                     }
                 }
+                catch (OperationCanceledException)
+                {
+                    // Re-throw cancellation to stop the loop
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error marking job {JobId} as in-progress for status check", job.Id);
@@ -887,6 +922,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             "Status check API calls: {Completed}/{Total} completed ({Percent:F1}%)",
                             count, totalStatusChecks, (double)count / totalStatusChecks * 100);
                     }
+                }
+                catch (OperationCanceledException)
+                {
+                    // Re-throw cancellation to stop the parallel tasks
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -989,6 +1029,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         batchNumber++;
                     }
                 }
+                catch (OperationCanceledException)
+                {
+                    // Re-throw cancellation to stop the loop
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error updating job {JobId} after status check", jobId);
@@ -1082,6 +1127,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         progressCallback?.Invoke(-markedCount, jobsNeedingStatusCheck.Count);
                     }
                 }
+                catch (OperationCanceledException)
+                {
+                    // Re-throw cancellation to stop the loop
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error marking job {JobId} as in-progress for manual status check", job.Id);
@@ -1128,6 +1178,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             "Manual status check API calls: {Completed}/{Total} completed ({Percent:F1}%)",
                             count, totalStatusChecks, (double)count / totalStatusChecks * 100);
                     }
+                }
+                catch (OperationCanceledException)
+                {
+                    // Re-throw cancellation to stop the parallel tasks
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -1289,6 +1344,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         processedSinceLastSave = 0;
                         batchNumber++;
                     }
+                }
+                catch (OperationCanceledException)
+                {
+                    // Re-throw cancellation to stop the loop
+                    throw;
                 }
                 catch (Exception ex)
                 {
