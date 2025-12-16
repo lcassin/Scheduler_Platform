@@ -947,6 +947,14 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             job.Status = "Completed";
                             job.ScrapingCompletedDateTime = DateTime.UtcNow;
                             result.JobsCompleted++;
+                            
+                            // Update account's LastSuccessfulDownloadDate to help calculate next billing cycle
+                            if (job.AdrAccount != null)
+                            {
+                                job.AdrAccount.LastSuccessfulDownloadDate = DateTime.UtcNow.Date;
+                                job.AdrAccount.ModifiedDateTime = DateTime.UtcNow;
+                                job.AdrAccount.ModifiedBy = "System Created";
+                            }
                         }
                         else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
                         {
@@ -1209,6 +1217,14 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             job.Status = "Completed";
                             job.ScrapingCompletedDateTime = DateTime.UtcNow;
                             result.JobsCompleted++;
+                            
+                            // Update account's LastSuccessfulDownloadDate to help calculate next billing cycle
+                            if (job.AdrAccount != null)
+                            {
+                                job.AdrAccount.LastSuccessfulDownloadDate = DateTime.UtcNow.Date;
+                                job.AdrAccount.ModifiedDateTime = DateTime.UtcNow;
+                                job.AdrAccount.ModifiedBy = "System Created";
+                            }
                         }
                         else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
                         {
