@@ -298,8 +298,8 @@
             
                         // Check if user has permission to update ADR accounts (for editing billing data)
                         _canEditBilling = await PermissionService.CanUpdateAsync("adr");
-                        // Check if user has permission to execute manual scrape (Admin/Super Admin only)
-                        _canExecuteManualScrape = await PermissionService.CanExecuteAsync("adr");
+                        // Check if user has permission to execute manual ADR requests (Editors, Admins, Super Admins)
+                        _canExecuteManualScrape = await PermissionService.CanUpdateAsync("adr");
         }
         catch (Exception ex)
         {
