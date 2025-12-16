@@ -230,6 +230,10 @@
                                         @if (_canExecuteManualScrape)
                                         {
                                             <MudMenuItem Icon="@Icons.Material.Filled.CloudDownload" OnClick="() => OpenManualScrapeDialog(context)">Manual ADR Request (Admin)</MudMenuItem>
+                                            @if (CanCheckStatus(context.CurrentJobStatus))
+                                            {
+                                                <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="() => CheckAccountJobStatus(context)">Check Status (Admin)</MudMenuItem>
+                                            }
                                         }
                                     </MudMenu>
                                 </MudTd>
@@ -537,6 +541,56 @@
         if (result != null && !result.Canceled)
         {
             Snackbar.Add("Manual ADR request submitted successfully", Severity.Success);
+        }
+    }
+
+    private bool CanCheckStatus(string? jobStatus)
+    {
+        if (string.IsNullOrEmpty(jobStatus)) return false;
+        
+        // Allow status check for jobs that are in progress or waiting for status
+        return jobStatus is "ScrapeRequested" or "CredentialCheckRequested" or "CredentialCheckInProgress" 
+            or "ScrapeInProgress" or "StatusCheckInProgress";
+    }
+
+    private async Task CheckAccountJobStatus(AdrAccount account)
+    {
+        try
+        {
+            // First, get the latest job for this account
+            var jobs = await AdrService.GetJobsByAccountAsync(account.Id);
+            var latestJob = jobs.OrderByDescending(j => j.CreatedDateTime).FirstOrDefault();
+            
+            if (latestJob == null)
+            {
+                Snackbar.Add("No job found for this account", Severity.Warning);
+                return;
+            }
+
+            Snackbar.Add($"Checking status for job {latestJob.Id}...", Severity.Info);
+            
+            var result = await AdrService.CheckJobStatusAsync(latestJob.Id);
+            
+            if (result.IsSuccess)
+            {
+                var statusMessage = $"Status: {result.StatusDescription ?? "Unknown"}";
+                if (result.IsFinal)
+                {
+                    statusMessage += " (Final)";
+                }
+                Snackbar.Add(statusMessage, result.IsFinal && result.StatusId == 11 ? Severity.Success : Severity.Info);
+            }
+            else
+            {
+                Snackbar.Add($"Status check failed: {result.ErrorMessage}", Severity.Error);
+            }
+            
+            // Refresh the table to show updated status
+            await _table.ReloadServerData();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error checking status: {ex.Message}", Severity.Error);
         }
     }
 }

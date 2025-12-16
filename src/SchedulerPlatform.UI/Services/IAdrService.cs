@@ -21,7 +21,7 @@ public interface IAdrService
     Task<AdrAccountStats> GetAccountStatsAsync();
     Task<AdrAccount> UpdateAccountBillingAsync(int accountId, DateTime? expectedBillingDate, string? periodType, string? historicalBillingStatus);
         Task<AdrAccount> ClearAccountOverrideAsync(int accountId);
-        Task<ManualScrapeResult> ManualScrapeRequestAsync(int accountId, DateTime targetDate, DateTime? rangeStartDate = null, DateTime? rangeEndDate = null, string? reason = null, bool isHighPriority = false);
+        Task<ManualScrapeResult> ManualScrapeRequestAsync(int accountId, DateTime targetDate, DateTime? rangeStartDate = null, DateTime? rangeEndDate = null, string? reason = null, bool isHighPriority = false, int requestType = 2);
         Task<byte[]> DownloadAccountsExportAsync(
         int? clientId = null,
         string? searchTerm = null,
