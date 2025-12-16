@@ -11,9 +11,9 @@
 
 <MudText Typo="Typo.h4" Class="mb-4">ADR Job Monitor</MudText>
 
-<MudGrid>
-    <MudItem xs="12" md="8">
-        <MudPaper Class="pa-4 mb-4">
+<MudGrid Style="align-items: stretch;">
+    <MudItem xs="12" md="8" Class="d-flex">
+        <MudPaper Class="pa-4 mb-4 flex-grow-1">
             <div class="d-flex justify-space-between align-center mb-4">
                 <MudText Typo="Typo.h6">Current Orchestration Status</MudText>
                 <div class="d-flex gap-2">
@@ -493,7 +493,7 @@
         </MudPaper>
     </MudItem>
 
-    <MudItem xs="12" md="4">
+    <MudItem xs="12" md="4" Class="d-flex flex-column">
         <MudPaper Class="pa-4 mb-4">
             <MudText Typo="Typo.h6" Class="mb-4">Quick Links</MudText>
             <MudList T="string" Dense="true">
@@ -509,7 +509,7 @@
             </MudList>
         </MudPaper>
         
-        <MudPaper Class="pa-4">
+        <MudPaper Class="pa-4 flex-grow-1">
             <MudText Typo="Typo.h6" Class="mb-3">Job Pipeline Status</MudText>
             @if (_jobStats != null)
             {
