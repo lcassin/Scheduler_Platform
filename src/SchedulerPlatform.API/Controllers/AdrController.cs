@@ -498,18 +498,20 @@ public class AdrController : ControllerBase
         /// The job is excluded from normal orchestration but visible in the Jobs UI.
         /// </summary>
         [HttpPost("accounts/{id}/manual-scrape")]
-        [Authorize(Policy = "AdrAccounts.Execute")]
+        [Authorize(Policy = "AdrAccounts.Update")]
         public async Task<ActionResult<object>> ManualScrapeRequest(int id, [FromBody] ManualScrapeRequest request)
         {
             try
             {
-                // Check if user is admin or super admin
-                var isSystemAdmin = User.Claims.Any(c => c.Type == "is_system_admin" && c.Value == "True");
+                // Check if user has permission (Editors, Admins, Super Admins)
+                var isSystemAdmin = User.Claims.Any(c => c.Type == "is_system_admin" && string.Equals(c.Value, "True", StringComparison.OrdinalIgnoreCase));
                 var isAdmin = User.Claims.Any(c => c.Type == "role" && c.Value == "Admin");
+                var isEditor = User.Claims.Any(c => c.Type == "role" && c.Value == "Editor");
+                var hasAdrUpdatePermission = User.Claims.Any(c => c.Type == "permission" && c.Value == "adr:update");
             
-                if (!isSystemAdmin && !isAdmin)
+                if (!isSystemAdmin && !isAdmin && !isEditor && !hasAdrUpdatePermission)
                 {
-                    return Forbid("Only administrators can perform manual ADR requests");
+                    return Forbid("You do not have permission to perform manual ADR requests");
                 }
 
                 var account = await _unitOfWork.AdrAccounts.GetByIdAsync(id);
@@ -821,9 +823,10 @@ public class AdrController : ControllerBase
 
         /// <summary>
         /// Check the status of a manual ADR job using the same API as orchestrated jobs.
+        /// Available to Editors, Admins, and Super Admins.
         /// </summary>
         [HttpPost("jobs/{jobId}/check-status")]
-        [Authorize(Policy = "AdrAccounts.Execute")]
+        [Authorize(Policy = "AdrAccounts.Update")]
         public async Task<ActionResult<object>> CheckManualJobStatus(int jobId)
         {
             try
