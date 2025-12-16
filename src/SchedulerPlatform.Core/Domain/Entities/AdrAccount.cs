@@ -119,6 +119,13 @@ public class AdrAccount : BaseEntity
     public DateTime? LastSyncedDateTime { get; set; }
     
     /// <summary>
+    /// Date when a document was last successfully downloaded for this account.
+    /// Used to calculate the next expected download date based on billing period.
+    /// If set, this date + PeriodDays determines when to start scraping next cycle.
+    /// </summary>
+    public DateTime? LastSuccessfulDownloadDate { get; set; }
+    
+    /// <summary>
     /// Flag indicating if billing dates/frequency have been manually overridden.
     /// When true, account sync will skip updating: LastInvoiceDateTime, PeriodType, 
     /// PeriodDays, MedianDays, ExpectedNextDateTime, ExpectedRangeStartDateTime, ExpectedRangeEndDateTime

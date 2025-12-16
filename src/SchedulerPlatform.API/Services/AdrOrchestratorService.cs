@@ -947,6 +947,18 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             job.Status = "Completed";
                             job.ScrapingCompletedDateTime = DateTime.UtcNow;
                             result.JobsCompleted++;
+                            
+                            // Update account's LastSuccessfulDownloadDate to help calculate next billing cycle
+                            // Uses anti-creep logic: allows earlier dates but prevents late vendors from causing schedule drift
+                            if (job.AdrAccount != null)
+                            {
+                                job.AdrAccount.LastSuccessfulDownloadDate = CalculateLastSuccessfulDownloadDate(
+                                    job.AdrAccount.LastSuccessfulDownloadDate,
+                                    job.NextRunDateTime,
+                                    job.AdrAccount.PeriodDays);
+                                job.AdrAccount.ModifiedDateTime = DateTime.UtcNow;
+                                job.AdrAccount.ModifiedBy = "System Created";
+                            }
                         }
                         else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
                         {
@@ -1209,6 +1221,18 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             job.Status = "Completed";
                             job.ScrapingCompletedDateTime = DateTime.UtcNow;
                             result.JobsCompleted++;
+                            
+                            // Update account's LastSuccessfulDownloadDate to help calculate next billing cycle
+                            // Uses anti-creep logic: allows earlier dates but prevents late vendors from causing schedule drift
+                            if (job.AdrAccount != null)
+                            {
+                                job.AdrAccount.LastSuccessfulDownloadDate = CalculateLastSuccessfulDownloadDate(
+                                    job.AdrAccount.LastSuccessfulDownloadDate,
+                                    job.NextRunDateTime,
+                                    job.AdrAccount.PeriodDays);
+                                job.AdrAccount.ModifiedDateTime = DateTime.UtcNow;
+                                job.AdrAccount.ModifiedBy = "System Created";
+                            }
                         }
                         else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
                         {
@@ -1217,12 +1241,16 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             job.ScrapingCompletedDateTime = DateTime.UtcNow;
                             result.JobsNeedingReview++;
                         }
-                        else if (statusResult.StatusId == 3 || statusResult.StatusId == 4 || statusResult.StatusId == 5)
+                        else if (statusResult.StatusId == 3 || statusResult.StatusId == 4 || statusResult.StatusId == 5 ||
+                                 statusResult.StatusId == 7 || statusResult.StatusId == 8 || statusResult.StatusId == 14)
                         {
                             // Error statuses:
                             // StatusId 3: Invalid CredentialID
                             // StatusId 4: Cannot Connect To VCM
                             // StatusId 5: Cannot Insert Into Queue
+                            // StatusId 7: Cannot Connect To AI
+                            // StatusId 8: Cannot Save Result
+                            // StatusId 14: Failed To Process All Documents
                             job.Status = "Failed";
                             job.ScrapingCompletedDateTime = DateTime.UtcNow;
                             result.Errors++;
@@ -1590,22 +1618,63 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// <summary>
     /// Determines if a StatusId represents a final state (job is done processing).
     /// Based on ADR API status codes:
-    /// - Final success: 11 (Document Retrieval Complete)
+    /// - Final success: 11 (Complete/Document Retrieval Complete)
     /// - Final needs review: 9 (Needs Human Review)
-    /// - Final errors: 3 (Invalid CredentialID), 4 (Cannot Connect To VCM), 5 (Cannot Insert Into Queue)
-    /// - Still processing: 1 (Inserted), 6 (Sent To AI), 10 (Received From AI)
+    /// - Final errors: 3 (Invalid CredentialID), 4 (Cannot Connect To VCM), 5 (Cannot Insert Into Queue),
+    ///                 7 (Cannot Connect To AI), 8 (Cannot Save Result), 14 (Failed To Process All Documents)
+    /// - Still processing: 1 (Inserted), 2 (Inserted With Priority), 6 (Sent To AI), 10 (Received From AI),
+    ///                     12 (Login Attempt Succeeded), 13 (No Documents Found), 15 (No Documents Processed - TBD)
     /// </summary>
     private static bool IsFinalStatus(int statusId)
     {
         return statusId switch
         {
-            11 => true,  // Document Retrieval Complete
+            11 => true,  // Complete (Document Retrieval Complete)
             9 => true,   // Needs Human Review
             3 => true,   // Invalid CredentialID (error - final)
             4 => true,   // Cannot Connect To VCM (error - final)
             5 => true,   // Cannot Insert Into Queue (error - final)
-            _ => false   // 1 (Inserted), 6 (Sent To AI), 10 (Received From AI) - still processing
+            7 => true,   // Cannot Connect To AI (error - final)
+            8 => true,   // Cannot Save Result (error - final)
+            14 => true,  // Failed To Process All Documents (error - final)
+            _ => false   // 1 (Inserted), 2 (Inserted With Priority), 6 (Sent To AI), 10 (Received From AI),
+                         // 12 (Login Attempt Succeeded), 13 (No Documents Found - retry next day), 15 (No Documents Processed - TBD)
         };
+    }
+
+    /// <summary>
+    /// Calculates the LastSuccessfulDownloadDate with anti-creep logic.
+    /// - If no previous date exists, use the job's scheduled date (establish baseline)
+    /// - If job date is earlier or equal to expected, use job date (allow earlier)
+    /// - If job date is later than expected (vendor posted late), use expected date (prevent creep)
+    /// </summary>
+    private static DateTime CalculateLastSuccessfulDownloadDate(
+        DateTime? currentLastSuccessfulDownloadDate,
+        DateTime? jobNextRunDateTime,
+        int? periodDays)
+    {
+        var jobDate = jobNextRunDateTime?.Date ?? DateTime.UtcNow.Date;
+        
+        // First successful download - establish baseline
+        if (!currentLastSuccessfulDownloadDate.HasValue)
+        {
+            return jobDate;
+        }
+        
+        // Calculate expected date based on previous anchor + period
+        var previousAnchor = currentLastSuccessfulDownloadDate.Value;
+        var period = periodDays ?? 30; // Default to monthly if not specified
+        var expectedDate = previousAnchor.AddDays(period);
+        
+        // Allow earlier or same, but don't let late vendors cause creep
+        if (jobDate <= expectedDate)
+        {
+            return jobDate; // OK to move earlier or keep same
+        }
+        else
+        {
+            return expectedDate; // Vendor late - use expected date to prevent creep
+        }
     }
 
     #endregion

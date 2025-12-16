@@ -11,9 +11,9 @@
 
 <MudText Typo="Typo.h4" Class="mb-4">ADR Job Monitor</MudText>
 
-<MudGrid>
-    <MudItem xs="12" md="8">
-        <MudPaper Class="pa-4 mb-4">
+<MudGrid Style="align-items: stretch;">
+    <MudItem xs="12" md="8" Class="d-flex">
+        <MudPaper Class="pa-4 mb-4 flex-grow-1">
             <div class="d-flex justify-space-between align-center mb-4">
                 <MudText Typo="Typo.h6">Current Orchestration Status</MudText>
                 <div class="d-flex gap-2">
@@ -493,7 +493,7 @@
         </MudPaper>
     </MudItem>
 
-    <MudItem xs="12" md="4">
+    <MudItem xs="12" md="4" Class="d-flex flex-column">
         <MudPaper Class="pa-4 mb-4">
             <MudText Typo="Typo.h6" Class="mb-4">Quick Links</MudText>
             <MudList T="string" Dense="true">
@@ -509,7 +509,7 @@
             </MudList>
         </MudPaper>
         
-        <MudPaper Class="pa-4">
+        <MudPaper Class="pa-4 flex-grow-1">
             <MudText Typo="Typo.h6" Class="mb-3">Job Pipeline Status</MudText>
             @if (_jobStats != null)
             {
@@ -550,6 +550,19 @@
                     </tbody>
                 </MudSimpleTable>
                 <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">Current status of all jobs in database</MudText>
+                
+                @if (_jobPipelineChartData.Length > 0)
+                {
+                    <div class="mt-4">
+                        <MudChart ChartType="ChartType.Pie" 
+                                 InputData="@_jobPipelineChartData" 
+                                 InputLabels="@_jobPipelineChartLabels"
+                                 ChartOptions="@_jobPipelineChartOptions"
+                                 Width="100%" 
+                                 Height="200px">
+                        </MudChart>
+                    </div>
+                }
             }
             else
             {
@@ -872,6 +885,23 @@
     
     // Job pipeline stats
     private AdrJobStats? _jobStats;
+    
+    // Job pipeline chart data
+    private double[] _jobPipelineChartData = Array.Empty<double>();
+    private string[] _jobPipelineChartLabels = Array.Empty<string>();
+    private ChartOptions _jobPipelineChartOptions = new ChartOptions
+    {
+        ChartPalette = new[]
+        {
+            "#9e9e9e", // Pending (Gray)
+            "#42a5f5", // Credential Verified (Blue/Info)
+            "#ff9800", // Credential Failed (Orange/Warning)
+            "#7e57c2", // ADR Request Sent (Purple/Primary)
+            "#66bb6a", // Completed (Green/Success)
+            "#f44336", // Failed (Red/Error)
+            "#ffa726"  // Needs Review (Orange/Warning - slightly different shade)
+        }
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -914,6 +944,7 @@
             UpdateChartData();
             // Show all jobs in the pipeline, not just last 20 runs
             _jobStats = await AdrService.GetJobStatsAsync();
+            UpdateJobPipelineChartData();
             
             // Start/stop fast progress polling based on orchestration state
             if (_currentStatus?.IsRunning == true && !_isProgressPolling)
@@ -973,6 +1004,60 @@
         
         _orchestrationChartData = dataList.ToArray();
         _orchestrationChartLabels = labelList.ToArray();
+    }
+    
+    private void UpdateJobPipelineChartData()
+    {
+        if (_jobStats == null)
+        {
+            _jobPipelineChartData = Array.Empty<double>();
+            _jobPipelineChartLabels = Array.Empty<string>();
+            return;
+        }
+        
+        // Build chart data - order matches the color palette
+        // Only include non-zero values to avoid empty slices
+        var dataList = new List<double>();
+        var labelList = new List<string>();
+        
+        if (_jobStats.PendingCount > 0)
+        {
+            dataList.Add(_jobStats.PendingCount);
+            labelList.Add("Pending");
+        }
+        if (_jobStats.CredentialVerifiedCount > 0)
+        {
+            dataList.Add(_jobStats.CredentialVerifiedCount);
+            labelList.Add("Credential Verified");
+        }
+        if (_jobStats.CredentialFailedCount > 0)
+        {
+            dataList.Add(_jobStats.CredentialFailedCount);
+            labelList.Add("Credential Failed");
+        }
+        if (_jobStats.ScrapeRequestedCount > 0)
+        {
+            dataList.Add(_jobStats.ScrapeRequestedCount);
+            labelList.Add("ADR Request Sent");
+        }
+        if (_jobStats.CompletedCount > 0)
+        {
+            dataList.Add(_jobStats.CompletedCount);
+            labelList.Add("Completed");
+        }
+        if (_jobStats.FailedCount > 0)
+        {
+            dataList.Add(_jobStats.FailedCount);
+            labelList.Add("Failed");
+        }
+        if (_jobStats.NeedsReviewCount > 0)
+        {
+            dataList.Add(_jobStats.NeedsReviewCount);
+            labelList.Add("Needs Review");
+        }
+        
+        _jobPipelineChartData = dataList.ToArray();
+        _jobPipelineChartLabels = labelList.ToArray();
     }
     
     private async Task LoadCurrentStatusAsync()
