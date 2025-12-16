@@ -19,6 +19,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SchedulerPlatform.UI", "src
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SchedulerPlatform.LogCleanup", "src\SchedulerPlatform.LogCleanup\SchedulerPlatform.LogCleanup.csproj", "{A2AD3CC8-0E11-4E9B-A40F-2C2F2FC6B9F9}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{E27A2B02-6623-4BA4-902E-66B4EDEE24B9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SchedulerPlatform.Tests", "tests\SchedulerPlatform.Tests\SchedulerPlatform.Tests.csproj", "{1D9BBF27-52A6-459E-ACFE-1DF3FAE7A1F4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -53,6 +57,10 @@ Global
 		{A2AD3CC8-0E11-4E9B-A40F-2C2F2FC6B9F9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A2AD3CC8-0E11-4E9B-A40F-2C2F2FC6B9F9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A2AD3CC8-0E11-4E9B-A40F-2C2F2FC6B9F9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1D9BBF27-52A6-459E-ACFE-1DF3FAE7A1F4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1D9BBF27-52A6-459E-ACFE-1DF3FAE7A1F4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1D9BBF27-52A6-459E-ACFE-1DF3FAE7A1F4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1D9BBF27-52A6-459E-ACFE-1DF3FAE7A1F4}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -65,6 +73,7 @@ Global
 		{2AE14DEF-C115-4C3B-9C55-19D47785CB48} = {60069ED4-B8DC-4B65-A4A8-FDC9BC3EF1EE}
 		{AE322209-1399-69FE-75C4-DC9057F639DF} = {60069ED4-B8DC-4B65-A4A8-FDC9BC3EF1EE}
 		{A2AD3CC8-0E11-4E9B-A40F-2C2F2FC6B9F9} = {60069ED4-B8DC-4B65-A4A8-FDC9BC3EF1EE}
+		{1D9BBF27-52A6-459E-ACFE-1DF3FAE7A1F4} = {E27A2B02-6623-4BA4-902E-66B4EDEE24B9}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {A1488D61-D2FD-4356-A482-E5E2D7D25656}
