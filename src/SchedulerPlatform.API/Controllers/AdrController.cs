@@ -540,6 +540,11 @@ public class AdrController : ControllerBase
                 var rangeStart = request.RangeStartDate ?? request.TargetDate.AddDays(-windowDays);
                 var rangeEnd = request.RangeEndDate ?? request.TargetDate.AddDays(windowDays);
 
+                // Determine the request type (1 = Vendor Credential Check, 2 = ADR Download Request)
+                var requestType = request.RequestType == 1 ? 1 : 2;
+                var isCredentialCheck = requestType == 1;
+                var initialStatus = isCredentialCheck ? "CredentialCheckInProgress" : "ScrapeInProgress";
+
                 // Step 1: Create a real AdrJob record with IsManualRequest = true
                 // This job is excluded from orchestration but visible in Jobs UI
                 var job = new AdrJob
@@ -555,7 +560,7 @@ public class AdrController : ControllerBase
                     NextRunDateTime = DateTime.UtcNow,
                     NextRangeStartDateTime = rangeStart,
                     NextRangeEndDateTime = rangeEnd,
-                    Status = "ScrapeInProgress",
+                    Status = initialStatus,
                     IsMissing = false,
                     IsManualRequest = true,
                     ManualRequestReason = request.Reason,
@@ -576,7 +581,7 @@ public class AdrController : ControllerBase
                 var execution = new AdrJobExecution
                 {
                     AdrJobId = job.Id,
-                    AdrRequestTypeId = 2, // Download Invoice
+                    AdrRequestTypeId = requestType, // 1 = Vendor Credential Check, 2 = Download Invoice
                     StartDateTime = DateTime.UtcNow,
                     IsSuccess = false,
                     RequestPayload = System.Text.Json.JsonSerializer.Serialize(new
@@ -616,7 +621,7 @@ public class AdrController : ControllerBase
 
                 var apiRequest = new
                 {
-                    ADRRequestTypeId = 2, // Download Invoice
+                    ADRRequestTypeId = requestType, // 1 = Vendor Credential Check, 2 = Download Invoice
                     CredentialId = account.CredentialId,
                     StartDate = rangeStart.ToString("yyyy-MM-dd"),
                     EndDate = rangeEnd.ToString("yyyy-MM-dd"),
@@ -752,17 +757,25 @@ public class AdrController : ControllerBase
 
                 await _unitOfWork.AdrJobExecutions.UpdateAsync(execution);
 
-                // Update job status based on API response
+                // Update job status based on API response and request type
                 if (isSuccess && !isError)
                 {
-                    job.Status = "ScrapeRequested";
+                    if (isCredentialCheck)
+                    {
+                        job.Status = "CredentialCheckRequested";
+                        job.CredentialVerifiedDateTime = DateTime.UtcNow;
+                    }
+                    else
+                    {
+                        job.Status = "ScrapeRequested";
+                    }
                     job.AdrStatusId = statusId;
                     job.AdrStatusDescription = statusDescription;
                     job.AdrIndexId = indexId;
                 }
                 else
                 {
-                    job.Status = "ScrapeFailed";
+                    job.Status = isCredentialCheck ? "CredentialFailed" : "ScrapeFailed";
                     job.ErrorMessage = errorMessage;
                 }
                 job.ModifiedDateTime = DateTime.UtcNow;
@@ -2269,7 +2282,7 @@ public class OrchestrationHistoryPagedResponse
 }
 
 /// <summary>
-/// Request for admin-only manual scrape operation
+/// Request for admin-only manual ADR operation
 /// </summary>
 public class ManualScrapeRequest
 {
@@ -2289,7 +2302,7 @@ public class ManualScrapeRequest
     public DateTime? RangeEndDate { get; set; }
     
     /// <summary>
-    /// Reason for the manual scrape request (for audit purposes)
+    /// Reason for the manual ADR request (for audit purposes)
     /// </summary>
     public string? Reason { get; set; }
     
@@ -2297,6 +2310,11 @@ public class ManualScrapeRequest
     /// Whether to use high priority for the ADR request (processed before normal priority)
     /// </summary>
     public bool IsHighPriority { get; set; }
+    
+    /// <summary>
+    /// ADR Request Type: 1 = Vendor Credential Check, 2 = ADR Download Request (default)
+    /// </summary>
+    public int RequestType { get; set; } = 2;
 }
 
 /// <summary>

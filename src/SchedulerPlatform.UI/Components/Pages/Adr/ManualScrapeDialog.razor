@@ -23,6 +23,16 @@
 
             <MudGrid>
                 <MudItem xs="12">
+                    <MudSelect @bind-Value="_requestType" 
+                               Label="Request Type" 
+                               Variant="Variant.Outlined"
+                               Required="true"
+                               HelperText="Select the type of ADR request to send">
+                        <MudSelectItem Value="2">ADR Download Request</MudSelectItem>
+                        <MudSelectItem Value="1">Vendor Credential Check</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12">
                     <MudDatePicker @bind-Date="_targetDate" 
                                    Label="Target Date" 
                                    Placeholder="Select the target invoice date"
@@ -90,7 +100,7 @@
             }
             else
             {
-                <span>Submit ADR Request</span>
+                <span>@(_requestType == 1 ? "Submit Credential Check" : "Submit ADR Request")</span>
             }
         </MudButton>
     </DialogActions>
@@ -110,6 +120,7 @@
     private bool _useCustomRange = false;
     private bool _isHighPriority = false;
     private bool _submitting = false;
+    private int _requestType = 2; // Default to ADR Download Request
 
     protected override void OnParametersSet()
     {
@@ -135,9 +146,11 @@
                 _useCustomRange ? _rangeStartDate : null,
                 _useCustomRange ? _rangeEndDate : null,
                 _reason,
-                _isHighPriority);
+                _isHighPriority,
+                _requestType);
             
-            Snackbar.Add($"Manual ADR request submitted. Execution ID: {result.ExecutionId}, Range: {result.RangeStartDate:MM/dd/yyyy} - {result.RangeEndDate:MM/dd/yyyy}", Severity.Success);
+            var requestTypeName = _requestType == 1 ? "Vendor Credential Check" : "ADR Download Request";
+            Snackbar.Add($"{requestTypeName} submitted. Execution ID: {result.ExecutionId}, Range: {result.RangeStartDate:MM/dd/yyyy} - {result.RangeEndDate:MM/dd/yyyy}", Severity.Success);
             MudDialog.Close(DialogResult.Ok(result));
         }
         catch (Exception ex)
