@@ -2061,6 +2061,62 @@ public class AdrController : ControllerBase
     }
 
     /// <summary>
+    /// Cancels a running or queued orchestration request.
+    /// Available to Editors, Admins, and Super Admins.
+    /// </summary>
+    [HttpPost("orchestrate/{requestId}/cancel")]
+    [Authorize(Policy = "AdrAccounts.Update")]
+    public ActionResult<object> CancelOrchestration(string requestId)
+    {
+        try
+        {
+            var status = _orchestrationQueue.GetStatus(requestId);
+            if (status == null)
+            {
+                return NotFound(new { error = "Request not found", requestId });
+            }
+
+            // Can only cancel Running or Queued requests
+            if (status.Status != "Running" && status.Status != "Queued" && status.Status != "Cancelling")
+            {
+                return BadRequest(new { 
+                    error = "Cannot cancel request", 
+                    requestId, 
+                    currentStatus = status.Status,
+                    message = $"Request is already {status.Status} and cannot be cancelled"
+                });
+            }
+
+            var cancelled = _orchestrationQueue.CancelRequest(requestId);
+            if (cancelled)
+            {
+                _logger.LogInformation("Orchestration request {RequestId} cancellation initiated by {User}", 
+                    requestId, User.Identity?.Name ?? "Unknown");
+                
+                return Ok(new { 
+                    success = true, 
+                    message = "Cancellation initiated. The orchestration will stop after the current operation completes.",
+                    requestId,
+                    status = _orchestrationQueue.GetStatus(requestId)
+                });
+            }
+            else
+            {
+                return BadRequest(new { 
+                    error = "Failed to cancel request", 
+                    requestId,
+                    message = "The request may have already been cancelled or completed"
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error cancelling orchestration request {RequestId}", requestId);
+            return StatusCode(500, new { error = "An error occurred while cancelling the orchestration", message = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Gets the recent orchestration run history from database.
     /// Falls back to in-memory if database is unavailable.
     /// Supports pagination with pageNumber and pageSize parameters.

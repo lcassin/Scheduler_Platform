@@ -82,4 +82,9 @@ public interface IAdrService
     Task<AdrOrchestrationStatus?> GetOrchestrationStatusAsync(string requestId);
     Task<List<AdrOrchestrationStatus>> GetOrchestrationHistoryAsync(int? count = 10);
     Task<OrchestrationHistoryPagedResponse> GetOrchestrationHistoryPagedAsync(int pageNumber = 1, int pageSize = 20);
+    
+    /// <summary>
+    /// Cancels a running or queued orchestration request.
+    /// </summary>
+    Task<CancelOrchestrationResult> CancelOrchestrationAsync(string requestId);
 }

@@ -62,6 +62,25 @@
                             <text>Check Statuses Only</text>
                         }
                     </MudButton>
+                    @if (_currentStatus?.IsRunning == true && _currentStatus?.Status != null && 
+                         (_currentStatus.Status.Status == "Running" || _currentStatus.Status.Status == "Queued"))
+                    {
+                        <MudButton Variant="Variant.Outlined" 
+                                   Color="Color.Error" 
+                                   StartIcon="@Icons.Material.Filled.Cancel"
+                                   OnClick="CancelOrchestration"
+                                   Disabled="_isCancelling">
+                            @if (_isCancelling)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                <text>Cancelling...</text>
+                            }
+                            else
+                            {
+                                <text>Cancel</text>
+                            }
+                        </MudButton>
+                    }
                 </div>
             </div>
 
@@ -836,6 +855,7 @@
     private bool _isRefreshing = false;
     private bool _isStarting = false;
     private bool _isCheckingStatuses = false;
+    private bool _isCancelling = false;
     private StatusCheckResult? _statusCheckResult = null;
     private bool _autoRefreshEnabled = true;
     private bool _showAllHistory = false;
@@ -1201,6 +1221,46 @@
         finally
         {
             _isStarting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CancelOrchestration()
+    {
+        if (_currentStatus?.Status?.RequestId == null) return;
+        
+        _isCancelling = true;
+        StateHasChanged();
+
+        try
+        {
+            var result = await AdrService.CancelOrchestrationAsync(_currentStatus.Status.RequestId);
+            
+            if (result.Success)
+            {
+                Snackbar.Add("Cancellation initiated. The orchestration will stop after the current operation completes.", Severity.Info);
+                
+                // Refresh to show the updated status
+                await Task.Delay(500);
+                await LoadDataAsync();
+            }
+            else
+            {
+                Snackbar.Add($"Failed to cancel: {result.Error ?? result.Message ?? "Unknown error"}", Severity.Error);
+            }
+        }
+        catch (SessionExpiredException)
+        {
+            Snackbar.Add("Your session has expired. Redirecting to login...", Severity.Warning);
+            Navigation.NavigateTo("/Account/Login", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to cancel orchestration: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isCancelling = false;
             StateHasChanged();
         }
     }

@@ -465,7 +465,67 @@ public class AdrService : IAdrService
         return result ?? new OrchestrationHistoryPagedResponse();
     }
 
+    public async Task<CancelOrchestrationResult> CancelOrchestrationAsync(string requestId)
+    {
+        var client = CreateClient();
+        try
+        {
+            var response = await client.PostAsync($"adr/orchestrate/{requestId}/cancel", null);
+            var content = await response.Content.ReadAsStringAsync();
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var successResult = System.Text.Json.JsonSerializer.Deserialize<CancelOrchestrationSuccessResponse>(
+                    content, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                return new CancelOrchestrationResult
+                {
+                    Success = successResult?.Success ?? true,
+                    Message = successResult?.Message,
+                    RequestId = requestId,
+                    Status = successResult?.Status
+                };
+            }
+            else
+            {
+                var errorResult = System.Text.Json.JsonSerializer.Deserialize<CancelOrchestrationErrorResponse>(
+                    content, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                return new CancelOrchestrationResult
+                {
+                    Success = false,
+                    Error = errorResult?.Error ?? errorResult?.Message ?? "Failed to cancel orchestration",
+                    Message = errorResult?.Message,
+                    RequestId = requestId
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            return new CancelOrchestrationResult
+            {
+                Success = false,
+                Error = ex.Message,
+                RequestId = requestId
+            };
+        }
+    }
+
     #endregion
+}
+
+internal class CancelOrchestrationSuccessResponse
+{
+    public bool Success { get; set; }
+    public string? Message { get; set; }
+    public string? RequestId { get; set; }
+    public AdrOrchestrationStatus? Status { get; set; }
+}
+
+internal class CancelOrchestrationErrorResponse
+{
+    public string? Error { get; set; }
+    public string? Message { get; set; }
+    public string? RequestId { get; set; }
+    public string? CurrentStatus { get; set; }
 }
 
 public class OrchestrationHistoryPagedResponse
