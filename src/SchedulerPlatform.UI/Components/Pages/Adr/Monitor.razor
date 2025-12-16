@@ -532,38 +532,56 @@
             <MudText Typo="Typo.h6" Class="mb-3">Job Pipeline Status</MudText>
             @if (_jobStats != null)
             {
+                <!-- Phase Breakdown Summary -->
+                <div class="d-flex gap-4 mb-4">
+                    <MudPaper Class="pa-3 flex-grow-1" Elevation="0" Style="background-color: var(--mud-palette-info-lighten); border-radius: 8px;">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Credential Requests</MudText>
+                        <MudText Typo="Typo.h5" Style="color: var(--mud-palette-info);">@_jobStats.CredentialPhaseCount</MudText>
+                    </MudPaper>
+                    <MudPaper Class="pa-3 flex-grow-1" Elevation="0" Style="background-color: var(--mud-palette-primary-lighten); border-radius: 8px;">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">ADR Document Requests</MudText>
+                        <MudText Typo="Typo.h5" Style="color: var(--mud-palette-primary);">@_jobStats.AdrDocumentPhaseCount</MudText>
+                    </MudPaper>
+                </div>
+                
                 <MudSimpleTable Dense="true" Hover="true" Style="overflow-x: auto;">
                     <tbody>
                         <tr>
                             <td><MudIcon Icon="@Icons.Material.Filled.Work" Size="Size.Small" Class="mr-2" />Total Jobs</td>
                             <td class="text-right"><strong>@_jobStats.TotalCount</strong></td>
                         </tr>
+                        <tr style="background-color: rgba(var(--mud-palette-info-rgb), 0.05);">
+                            <td colspan="2"><MudText Typo="Typo.caption" Color="Color.Info"><strong>Credential Phase</strong></MudText></td>
+                        </tr>
                         <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.HourglassEmpty" Size="Size.Small" Color="Color.Default" Class="mr-2" />Pending</td>
+                            <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.HourglassEmpty" Size="Size.Small" Color="Color.Default" Class="mr-2" />Pending</td>
                             <td class="text-right">@_jobStats.PendingCount</td>
                         </tr>
                         <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Size="Size.Small" Color="Color.Info" Class="mr-2" />Credential Verified</td>
+                            <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Size="Size.Small" Color="Color.Info" Class="mr-2" />Credential Verified</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-info);">@_jobStats.CredentialVerifiedCount</strong></td>
                         </tr>
                         <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.GppBad" Size="Size.Small" Color="Color.Warning" Class="mr-2" />Credential Failed</td>
+                            <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.GppBad" Size="Size.Small" Color="Color.Warning" Class="mr-2" />Credential Failed</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-warning);">@_jobStats.CredentialFailedCount</strong></td>
                         </tr>
+                        <tr style="background-color: rgba(var(--mud-palette-primary-rgb), 0.05);">
+                            <td colspan="2"><MudText Typo="Typo.caption" Color="Color.Primary"><strong>ADR Document Phase</strong></MudText></td>
+                        </tr>
                         <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.CloudDownload" Size="Size.Small" Color="Color.Primary" Class="mr-2" />ADR Request Sent</td>
+                            <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.CloudDownload" Size="Size.Small" Color="Color.Primary" Class="mr-2" />ADR Request Sent</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-primary);">@_jobStats.ScrapeRequestedCount</strong></td>
                         </tr>
                         <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" Class="mr-2" />Completed</td>
+                            <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" Class="mr-2" />Completed</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-success);">@_jobStats.CompletedCount</strong></td>
                         </tr>
                         <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error" Class="mr-2" />Failed</td>
+                            <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error" Class="mr-2" />Failed</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-error);">@_jobStats.FailedCount</strong></td>
                         </tr>
                         <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.RateReview" Size="Size.Small" Color="Color.Warning" Class="mr-2" />Needs Review</td>
+                            <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.RateReview" Size="Size.Small" Color="Color.Warning" Class="mr-2" />Needs Review</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-warning);">@_jobStats.NeedsReviewCount</strong></td>
                         </tr>
                     </tbody>

@@ -1294,7 +1294,8 @@ public class AdrController : ControllerBase
         try
         {
             int totalCount, pendingCount, credentialVerifiedCount, scrapeRequestedCount, 
-                completedCount, failedCount, needsReviewCount, credentialFailedCount;
+                completedCount, failedCount, needsReviewCount, credentialFailedCount,
+                credentialCheckRequestedCount, credentialCheckInProgressCount;
 
             if (lastOrchestrationRuns.HasValue && lastOrchestrationRuns.Value > 0)
             {
@@ -1315,6 +1316,8 @@ public class AdrController : ControllerBase
                     var statusCounts = await _unitOfWork.AdrJobs.GetCountsByStatusAndIdsAsync(jobIdSet);
                     
                     pendingCount = statusCounts.TryGetValue("Pending", out var p) ? p : 0;
+                    credentialCheckRequestedCount = statusCounts.TryGetValue("CredentialCheckRequested", out var ccr) ? ccr : 0;
+                    credentialCheckInProgressCount = statusCounts.TryGetValue("CredentialCheckInProgress", out var ccip) ? ccip : 0;
                     credentialVerifiedCount = statusCounts.TryGetValue("CredentialVerified", out var cv) ? cv : 0;
                     credentialFailedCount = statusCounts.TryGetValue("CredentialFailed", out var cf) ? cf : 0;
                     // Include StatusCheckInProgress in ScrapeRequested count - these are jobs mid-status-check
@@ -1329,7 +1332,8 @@ public class AdrController : ControllerBase
                 {
                     // No recent runs, return zeros
                     totalCount = pendingCount = credentialVerifiedCount = credentialFailedCount = 
-                        scrapeRequestedCount = completedCount = failedCount = needsReviewCount = 0;
+                        scrapeRequestedCount = completedCount = failedCount = needsReviewCount = 
+                        credentialCheckRequestedCount = credentialCheckInProgressCount = 0;
                 }
             }
             else
@@ -1337,6 +1341,8 @@ public class AdrController : ControllerBase
                 // Original behavior: count all jobs
                 totalCount = await _unitOfWork.AdrJobs.GetTotalCountAsync(adrAccountId);
                 pendingCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("Pending");
+                credentialCheckRequestedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("CredentialCheckRequested");
+                credentialCheckInProgressCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("CredentialCheckInProgress");
                 credentialVerifiedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("CredentialVerified");
                 credentialFailedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("CredentialFailed");
                 // Include StatusCheckInProgress in ScrapeRequested count - these are jobs mid-status-check
@@ -1348,16 +1354,28 @@ public class AdrController : ControllerBase
                 needsReviewCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("NeedsReview");
             }
 
+            // Calculate phase breakdown counts
+            // Credential Phase: Pending + CredentialCheckRequested + CredentialCheckInProgress + CredentialVerified + CredentialFailed
+            var credentialPhaseCount = pendingCount + credentialCheckRequestedCount + credentialCheckInProgressCount + credentialVerifiedCount + credentialFailedCount;
+            
+            // ADR Document Phase: ScrapeRequested (includes StatusCheckInProgress) + Completed + Failed + NeedsReview
+            var adrDocumentPhaseCount = scrapeRequestedCount + completedCount + failedCount + needsReviewCount;
+
             return Ok(new
             {
                 totalCount,
                 pendingCount,
+                credentialCheckRequestedCount,
+                credentialCheckInProgressCount,
                 credentialVerifiedCount,
                 credentialFailedCount,
                 scrapeRequestedCount,
                 completedCount,
                 failedCount,
-                needsReviewCount
+                needsReviewCount,
+                // Phase breakdown
+                credentialPhaseCount,
+                adrDocumentPhaseCount
             });
         }
         catch (Exception ex)
