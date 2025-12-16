@@ -16,9 +16,10 @@
                 Request a manual ADR invoice retrieval for account <strong>@Account.VMAccountNumber</strong>
             </MudText>
             
-            <MudAlert Severity="Severity.Warning" Class="mb-4">
+            <MudAlert Severity="Severity.Info" Class="mb-4">
                 This will fire an ADR request directly to the API for the specified date range.
-                This does not create a job and bypasses the normal orchestration workflow.
+                A job record is created for tracking purposes (visible in Jobs with "Manual Request" flag).
+                This does not affect the account's scheduled orchestration runs.
             </MudAlert>
 
             <MudGrid>
