@@ -7,6 +7,7 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject IJSRuntime JSRuntime
+@inject IPermissionService PermissionService
 
 <PageTitle>Missing Accounts Report</PageTitle>
 
@@ -149,6 +150,14 @@
                     <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
                         <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewAccountDetails(context)">View Details</MudMenuItem>
                         <MudMenuItem Icon="@Icons.Material.Filled.Work" OnClick="() => ViewJobs(context.Id)">View Jobs</MudMenuItem>
+                        @if (_canExecuteManualRequest)
+                        {
+                            <MudMenuItem Icon="@Icons.Material.Filled.CloudDownload" OnClick="() => OpenManualRequestDialog(context)">Manual ADR Request</MudMenuItem>
+                            @if (CanCheckStatus(context.CurrentJobStatus))
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="() => CheckAccountJobStatus(context)">Check Status</MudMenuItem>
+                            }
+                        }
                     </MudMenu>
                 </MudTd>
             </RowTemplate>
@@ -173,6 +182,7 @@
     private List<Client> _clients = new();
     private bool _loading = true;
     private bool _isExporting = false;
+    private bool _canExecuteManualRequest = false;
     private string? _searchTerm;
     private Client? _selectedClient;
     private int? _filterClientId;
@@ -182,6 +192,8 @@
         try
         {
             _clients = await ClientService.GetClientsAsync();
+            // Check if user has permission to execute manual ADR requests (Editors, Admins, Super Admins)
+            _canExecuteManualRequest = await PermissionService.CanUpdateAsync("adr");
         }
         catch (Exception ex)
         {
@@ -325,5 +337,73 @@
     private void ViewJobs(int accountId)
     {
         Navigation.NavigateTo($"/adr/jobs?accountId={accountId}");
+    }
+
+    private async Task OpenManualRequestDialog(AdrAccount account)
+    {
+        var parameters = new DialogParameters<ManualScrapeDialog>
+        {
+            { x => x.Account, account }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<ManualScrapeDialog>("Manual ADR Request", parameters, options);
+        var result = await dialog.Result;
+        
+        if (result != null && !result.Canceled)
+        {
+            Snackbar.Add("Manual ADR request submitted successfully", Severity.Success);
+            // Refresh the table to show updated status
+            await _table.ReloadServerData();
+        }
+    }
+
+    private bool CanCheckStatus(string? jobStatus)
+    {
+        if (string.IsNullOrEmpty(jobStatus)) return false;
+        
+        // Allow status check for jobs that are in progress or waiting for status
+        return jobStatus is "ScrapeRequested" or "CredentialCheckRequested" or "CredentialCheckInProgress" 
+            or "ScrapeInProgress" or "StatusCheckInProgress";
+    }
+
+    private async Task CheckAccountJobStatus(AdrAccount account)
+    {
+        try
+        {
+            // First, get the latest job for this account
+            var jobs = await AdrService.GetJobsByAccountAsync(account.Id);
+            var latestJob = jobs.OrderByDescending(j => j.CreatedDateTime).FirstOrDefault();
+            
+            if (latestJob == null)
+            {
+                Snackbar.Add("No job found for this account", Severity.Warning);
+                return;
+            }
+
+            Snackbar.Add($"Checking status for job {latestJob.Id}...", Severity.Info);
+            
+            var result = await AdrService.CheckJobStatusAsync(latestJob.Id);
+            
+            if (result.IsSuccess)
+            {
+                var statusMessage = $"Status: {result.StatusDescription ?? "Unknown"}";
+                if (result.IsFinal)
+                {
+                    statusMessage += " (Final)";
+                }
+                Snackbar.Add(statusMessage, result.IsFinal && result.StatusId == 11 ? Severity.Success : Severity.Info);
+            }
+            else
+            {
+                Snackbar.Add($"Status check failed: {result.ErrorMessage}", Severity.Error);
+            }
+            
+            // Refresh the table to show updated status
+            await _table.ReloadServerData();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error checking status: {ex.Message}", Severity.Error);
+        }
     }
 }
