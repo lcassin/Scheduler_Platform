@@ -534,13 +534,13 @@
             {
                 <!-- Phase Breakdown Summary -->
                 <div class="d-flex gap-4 mb-4">
-                    <MudPaper Class="pa-3 flex-grow-1" Elevation="0" Style="background-color: var(--mud-palette-info-lighten); border-radius: 8px;">
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">Credential Requests</MudText>
-                        <MudText Typo="Typo.h5" Style="color: var(--mud-palette-info);">@_jobStats.CredentialPhaseCount</MudText>
+                    <MudPaper Class="pa-3 d-flex flex-column align-center flex-grow-1" Elevation="0" Style="background-color: rgba(66, 165, 245, 0.1); border-left: 4px solid #42a5f5; border-radius: 8px;">
+                        <MudText Typo="Typo.h5" Style="color: #42a5f5;">@_jobStats.CredentialPhaseCount.ToString("N0")</MudText>
+                        <MudText Typo="Typo.caption">Credential Requests</MudText>
                     </MudPaper>
-                    <MudPaper Class="pa-3 flex-grow-1" Elevation="0" Style="background-color: var(--mud-palette-primary-lighten); border-radius: 8px;">
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">ADR Document Requests</MudText>
-                        <MudText Typo="Typo.h5" Style="color: var(--mud-palette-primary);">@_jobStats.AdrDocumentPhaseCount</MudText>
+                    <MudPaper Class="pa-3 d-flex flex-column align-center flex-grow-1" Elevation="0" Style="background-color: rgba(38, 198, 218, 0.1); border-left: 4px solid #26c6da; border-radius: 8px;">
+                        <MudText Typo="Typo.h5" Style="color: #26c6da;">@_jobStats.AdrDocumentPhaseCount.ToString("N0")</MudText>
+                        <MudText Typo="Typo.caption">ADR Document Requests</MudText>
                     </MudPaper>
                 </div>
                 
