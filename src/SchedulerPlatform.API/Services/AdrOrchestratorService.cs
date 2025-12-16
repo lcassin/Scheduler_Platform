@@ -949,9 +949,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             result.JobsCompleted++;
                             
                             // Update account's LastSuccessfulDownloadDate to help calculate next billing cycle
+                            // Use the job's NextRunDateTime (scrape request date) to avoid scheduling creep
+                            // since status check runs the day AFTER the scrape was sent
                             if (job.AdrAccount != null)
                             {
-                                job.AdrAccount.LastSuccessfulDownloadDate = DateTime.UtcNow.Date;
+                                job.AdrAccount.LastSuccessfulDownloadDate = job.NextRunDateTime?.Date ?? DateTime.UtcNow.Date;
                                 job.AdrAccount.ModifiedDateTime = DateTime.UtcNow;
                                 job.AdrAccount.ModifiedBy = "System Created";
                             }
@@ -1219,9 +1221,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             result.JobsCompleted++;
                             
                             // Update account's LastSuccessfulDownloadDate to help calculate next billing cycle
+                            // Use the job's NextRunDateTime (scrape request date) to avoid scheduling creep
+                            // since status check runs the day AFTER the scrape was sent
                             if (job.AdrAccount != null)
                             {
-                                job.AdrAccount.LastSuccessfulDownloadDate = DateTime.UtcNow.Date;
+                                job.AdrAccount.LastSuccessfulDownloadDate = job.NextRunDateTime?.Date ?? DateTime.UtcNow.Date;
                                 job.AdrAccount.ModifiedDateTime = DateTime.UtcNow;
                                 job.AdrAccount.ModifiedBy = "System Created";
                             }
