@@ -1094,6 +1094,8 @@
                 StopProgressPolling();
                 // Refresh history to show completed run
                 _history = await AdrService.GetOrchestrationHistoryAsync(10);
+                _recentHistory = _history; // Update chart data source
+                UpdateChartData();
                 StateHasChanged();
             }
         }

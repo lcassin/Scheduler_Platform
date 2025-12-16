@@ -158,6 +158,11 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                         batchNumber++;
                     }
                 }
+                catch (OperationCanceledException)
+                {
+                    // Re-throw cancellation to stop the sync loop
+                    throw;
+                }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error processing account VMAccountId={VMAccountId}", externalAccount.VMAccountId);
