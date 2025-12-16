@@ -19,12 +19,31 @@
 <MudText Typo="Typo.h4" Class="mb-4">Schedules</MudText>
 
 <MudPaper Class="pa-4">
-    @if (_canCreate)
-    {
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateSchedule" Class="mb-4">
-            Add New Schedule
+    <div class="d-flex justify-space-between align-center mb-4">
+        <div class="d-flex gap-2">
+            @if (_canCreate)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateSchedule">
+                    Add New Schedule
+                </MudButton>
+            }
+        </div>
+        <MudButton Variant="Variant.Outlined" 
+                   Color="Color.Primary" 
+                   StartIcon="@Icons.Material.Filled.Refresh"
+                   OnClick="RefreshData"
+                   Disabled="_isRefreshing">
+            @if (_isRefreshing)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <text>Refreshing...</text>
+            }
+            else
+            {
+                <text>Refresh</text>
+            }
         </MudButton>
-    }
+    </div>
 
     <MudGrid Class="mb-4" Spacing="2">
         <MudItem xs="12" md="2">
@@ -292,6 +311,7 @@
 	private bool _selectAll = false;
 	private bool _isBulkTriggering = false;
 	private bool _isExporting = false;
+	private bool _isRefreshing = false;
 	private int _delayMs = 1000;
 	private List<Schedule> _currentPageItems = new();
 	
@@ -531,6 +551,26 @@
 		_selectedIds.Clear();
 		_selectAll = false;
 		await _table.ReloadServerData();
+	}
+
+	private async Task RefreshData()
+	{
+		_isRefreshing = true;
+		StateHasChanged();
+		
+		try
+		{
+			await _table.ReloadServerData();
+		}
+		catch (Exception ex)
+		{
+			Snackbar.Add($"Error refreshing data: {ex.Message}", Severity.Error);
+		}
+		finally
+		{
+			_isRefreshing = false;
+			StateHasChanged();
+		}
 	}
 
 	private void SelectAllVisible(bool selected)
