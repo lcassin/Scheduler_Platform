@@ -17,16 +17,16 @@ namespace SchedulerPlatform.Tests.Repositories;
 /// </summary>
 public class AdrJobRepositoryQueryTests : IDisposable
 {
-    private readonly ApplicationDbContext _context;
+    private readonly SchedulerDbContext _context;
     private readonly AdrJobRepository _repository;
 
     public AdrJobRepositoryQueryTests()
     {
-        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+        var options = new DbContextOptionsBuilder<SchedulerDbContext>()
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .Options;
 
-        _context = new ApplicationDbContext(options);
+        _context = new SchedulerDbContext(options);
         _repository = new AdrJobRepository(_context);
     }
 
