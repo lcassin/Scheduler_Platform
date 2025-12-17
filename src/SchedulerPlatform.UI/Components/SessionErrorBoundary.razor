@@ -1,0 +1,92 @@
+@using System.Net.Http
+@inherits ErrorBoundary
+@inject SchedulerPlatform.UI.Services.SessionStateService SessionStateService
+@inject NavigationManager Navigation
+@inject ILogger<SessionErrorBoundary> Logger
+
+@if (CurrentException is not null && IsSessionExpiredException(CurrentException))
+{
+    <MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+        <MudAlert Severity="Severity.Warning" Class="mb-4">
+            Your session has expired or an authentication error occurred. Redirecting to login...
+        </MudAlert>
+        <MudProgressLinear Color="Color.Primary" Indeterminate="true" />
+    </MudContainer>
+}
+else if (CurrentException is not null)
+{
+    @* For non-session errors, show the default error UI *@
+    <MudContainer MaxWidth="MaxWidth.Medium" Class="mt-8">
+        <MudAlert Severity="Severity.Error" Class="mb-4">
+            An unexpected error occurred. Please try refreshing the page.
+        </MudAlert>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Recover">
+            Try Again
+        </MudButton>
+    </MudContainer>
+}
+else
+{
+    @ChildContent
+}
+
+@code {
+    protected override Task OnErrorAsync(Exception exception)
+    {
+        // Check if this is a session expiration related error
+        if (IsSessionExpiredException(exception))
+        {
+            Logger.LogWarning(exception, "Session expiration error caught by error boundary");
+            
+            // Trigger the session expired notification to ensure redirect happens
+            SessionStateService.NotifySessionExpired();
+            
+            // Force redirect after a brief delay to show the message
+            _ = Task.Run(async () =>
+            {
+                await Task.Delay(1500);
+                await InvokeAsync(() => Navigation.NavigateTo("/Account/Logout?sessionExpired=true", forceLoad: true));
+            });
+        }
+        else
+        {
+            Logger.LogError(exception, "Unhandled error caught by error boundary");
+        }
+
+        return base.OnErrorAsync(exception);
+    }
+
+    private bool IsSessionExpiredException(Exception exception)
+    {
+        // Check for our custom SessionExpiredException
+        if (exception is SchedulerPlatform.UI.Services.SessionExpiredException)
+            return true;
+
+        // Check for HttpRequestException with 401 status
+        if (exception is HttpRequestException httpEx)
+        {
+            // HttpRequestException.StatusCode is available in .NET 5+
+            if (httpEx.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+                return true;
+            
+            // Also check the message for 401 indicators
+            if (httpEx.Message.Contains("401") || httpEx.Message.Contains("Unauthorized"))
+                return true;
+        }
+
+        // Check for JSON parsing errors that might occur when trying to parse a 401 response body
+        if (exception is System.Text.Json.JsonException && 
+            exception.Message.Contains("'<' is an invalid start"))
+        {
+            // This often happens when the API returns an HTML error page instead of JSON
+            // which can occur on authentication failures
+            return true;
+        }
+
+        // Check inner exceptions
+        if (exception.InnerException != null)
+            return IsSessionExpiredException(exception.InnerException);
+
+        return false;
+    }
+}
