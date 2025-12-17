@@ -35,6 +35,7 @@ public class SchedulerDbContext : DbContext
         public DbSet<AdrJobArchive> AdrJobArchives { get; set; }
         public DbSet<AdrJobExecutionArchive> AdrJobExecutionArchives { get; set; }
         public DbSet<AuditLogArchive> AuditLogArchives { get; set; }
+        public DbSet<JobExecutionArchive> JobExecutionArchives { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -516,6 +517,27 @@ public class SchedulerDbContext : DbContext
             entity.HasIndex(e => e.ArchivedDateTime);
             entity.HasIndex(e => e.TimestampDateTime);
             entity.HasIndex(e => new { e.EntityType, e.EntityId });
+        });
+
+        modelBuilder.Entity<JobExecutionArchive>(entity =>
+        {
+            entity.ToTable("JobExecutionArchive");
+            entity.HasKey(e => e.JobExecutionArchiveId);
+            
+            entity.Property(e => e.Output).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.ErrorMessage).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.StackTrace).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.TriggeredBy).HasMaxLength(100);
+            entity.Property(e => e.CancelledBy).HasMaxLength(100);
+            entity.Property(e => e.CreatedBy).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.ModifiedBy).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.ArchivedBy).IsRequired().HasMaxLength(200);
+            
+            entity.HasIndex(e => e.OriginalJobExecutionId);
+            entity.HasIndex(e => e.ScheduleId);
+            entity.HasIndex(e => e.ArchivedDateTime);
+            entity.HasIndex(e => e.StartDateTime);
+            entity.HasIndex(e => e.Status);
         });
     }
 }

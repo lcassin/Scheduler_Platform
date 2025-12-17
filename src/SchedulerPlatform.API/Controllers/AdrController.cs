@@ -2750,13 +2750,16 @@ public class AdrController : ControllerBase
         #region AdrAccountRule Endpoints
 
         /// <summary>
-        /// Retrieves a paginated list of account rules with optional filtering.
+        /// Retrieves a paginated list of account rules with optional filtering and sorting.
         /// </summary>
         /// <param name="page">Page number (default: 1).</param>
         /// <param name="pageSize">Number of items per page (default: 20).</param>
         /// <param name="vendorCode">Filter by vendor code.</param>
         /// <param name="accountNumber">Filter by account number.</param>
         /// <param name="isEnabled">Filter by enabled status.</param>
+        /// <param name="isOverridden">Filter by override status.</param>
+        /// <param name="sortColumn">Column to sort by (default: VendorCode).</param>
+        /// <param name="sortDescending">Sort in descending order (default: false).</param>
         /// <returns>A paginated list of account rules.</returns>
         /// <response code="200">Returns the paginated list of account rules.</response>
         /// <response code="500">An error occurred while retrieving account rules.</response>
@@ -2768,7 +2771,10 @@ public class AdrController : ControllerBase
             [FromQuery] int pageSize = 20,
             [FromQuery] string? vendorCode = null,
             [FromQuery] string? accountNumber = null,
-            [FromQuery] bool? isEnabled = null)
+            [FromQuery] bool? isEnabled = null,
+            [FromQuery] bool? isOverridden = null,
+            [FromQuery] string? sortColumn = null,
+            [FromQuery] bool sortDescending = false)
         {
             try
             {
@@ -2792,12 +2798,62 @@ public class AdrController : ControllerBase
                 {
                     query = query.Where(r => r.IsEnabled == isEnabled.Value);
                 }
+
+                if (isOverridden.HasValue)
+                {
+                    query = query.Where(r => r.IsManuallyOverridden == isOverridden.Value);
+                }
             
                 var totalCount = await query.CountAsync();
+
+                // Apply sorting
+                IOrderedQueryable<SchedulerPlatform.Core.Domain.Entities.AdrAccountRule> orderedQuery;
+                switch (sortColumn?.ToLowerInvariant())
+                {
+                    case "vmaccountnumber":
+                    case "accountnumber":
+                        orderedQuery = sortDescending 
+                            ? query.OrderByDescending(r => r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : "")
+                            : query.OrderBy(r => r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : "");
+                        break;
+                    case "periodtype":
+                        orderedQuery = sortDescending 
+                            ? query.OrderByDescending(r => r.PeriodType)
+                            : query.OrderBy(r => r.PeriodType);
+                        break;
+                    case "nextrundatetime":
+                    case "nextrun":
+                        orderedQuery = sortDescending 
+                            ? query.OrderByDescending(r => r.NextRunDateTime)
+                            : query.OrderBy(r => r.NextRunDateTime);
+                        break;
+                    case "isenabled":
+                    case "status":
+                        orderedQuery = sortDescending 
+                            ? query.OrderByDescending(r => r.IsEnabled)
+                            : query.OrderBy(r => r.IsEnabled);
+                        break;
+                    case "ismanuallyoverridden":
+                    case "override":
+                        orderedQuery = sortDescending 
+                            ? query.OrderByDescending(r => r.IsManuallyOverridden)
+                            : query.OrderBy(r => r.IsManuallyOverridden);
+                        break;
+                    case "jobtypeid":
+                    case "jobtype":
+                        orderedQuery = sortDescending 
+                            ? query.OrderByDescending(r => r.JobTypeId)
+                            : query.OrderBy(r => r.JobTypeId);
+                        break;
+                    case "vendorcode":
+                    default:
+                        orderedQuery = sortDescending 
+                            ? query.OrderByDescending(r => r.AdrAccount != null ? r.AdrAccount.VendorCode : "")
+                            : query.OrderBy(r => r.AdrAccount != null ? r.AdrAccount.VendorCode : "");
+                        break;
+                }
             
-                var rules = await query
-                    .OrderBy(r => r.AdrAccount != null ? r.AdrAccount.VendorCode : "")
-                    .ThenBy(r => r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : "")
+                var rules = await orderedQuery
                     .Skip((page - 1) * pageSize)
                     .Take(pageSize)
                     .Select(r => new AccountRuleDto
