@@ -62,6 +62,11 @@ builder.Services.AddSwaggerGen(c =>
 		Description = "API for managing scheduled jobs and processes"
 	});
 
+	// Include XML comments for API documentation in Swagger
+	var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+	var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+	c.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
+
 	var authority = builder.Configuration["Authentication:Authority"] ?? "https://localhost:5001";
 
 	c.AddSecurityDefinition("oauth2", new OpenApiSecurityScheme
