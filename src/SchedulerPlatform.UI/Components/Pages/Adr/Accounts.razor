@@ -138,9 +138,9 @@
                             <MudText Typo="Typo.body2"><strong>@context.VMAccountNumber</strong></MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @context.VMAccountId</MudText>
                         </div>
-                        @if (context.IsManuallyOverridden)
+                        @if (context.RuleIsManuallyOverridden)
                         {
-                            <MudTooltip Text="@($"Manually overridden by {context.OverriddenBy} on {context.OverriddenDateTime?.ToString("MM/dd/yyyy")}")">
+                            <MudTooltip Text="@($"Rule manually overridden by {context.RuleOverriddenBy} on {context.RuleOverriddenDateTime?.ToString("MM/dd/yyyy")}")">
                                 <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Warning" />
                             </MudTooltip>
                         }
@@ -222,7 +222,7 @@
                                         @if (_canEditBilling)
                                         {
                                             <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => EditBilling(context)">Edit Account Rules</MudMenuItem>
-                                            @if (context.IsManuallyOverridden)
+                                            @if (context.RuleIsManuallyOverridden)
                                             {
                                                 <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="() => ClearOverride(context)">Clear Override</MudMenuItem>
                                             }
