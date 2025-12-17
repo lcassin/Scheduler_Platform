@@ -20,14 +20,15 @@ BEGIN
 END
 GO
 
--- Add foreign key constraint (with SET NULL on delete)
+-- Add foreign key constraint (NO ACTION to avoid cascade path conflicts)
+-- Using NO ACTION preserves audit trail - prevents accidental deletion of rules that have jobs
 IF NOT EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'FK_AdrJob_AdrAccountRule')
 BEGIN
     ALTER TABLE [dbo].[AdrJob]
     ADD CONSTRAINT [FK_AdrJob_AdrAccountRule] 
     FOREIGN KEY ([AdrAccountRuleId])
     REFERENCES [dbo].[AdrAccountRule] ([AdrAccountRuleId])
-    ON DELETE SET NULL;
+    ON DELETE NO ACTION;
     
     PRINT 'Added foreign key FK_AdrJob_AdrAccountRule';
 END
