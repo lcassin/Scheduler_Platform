@@ -89,7 +89,11 @@ public class AuditLogInterceptor : SaveChangesInterceptor
                entity is NotificationSetting ||
                entity is User ||
                entity is UserPermission ||
-               entity is Client;
+               entity is Client ||
+               entity is AdrConfiguration ||
+               entity is AdrAccountBlacklist ||
+               entity is AdrJobType ||
+               entity is AdrAccountRule;
     }
 
     private int? GetEntityId(object entity)
