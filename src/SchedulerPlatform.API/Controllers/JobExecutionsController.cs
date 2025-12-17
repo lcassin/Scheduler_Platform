@@ -10,6 +10,10 @@ using SchedulerPlatform.Core.Domain.Interfaces;
 
 namespace SchedulerPlatform.API.Controllers;
 
+/// <summary>
+/// Controller for managing job execution history and operations.
+/// Provides endpoints for retrieving, exporting, and cancelling job executions.
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
@@ -26,7 +30,17 @@ public class JobExecutionsController : ControllerBase
         _scheduler = scheduler;
     }
 
+    /// <summary>
+    /// Retrieves a list of job executions with optional filtering.
+    /// </summary>
+    /// <param name="scheduleId">Optional schedule ID to filter executions.</param>
+    /// <param name="status">Optional job status to filter executions.</param>
+    /// <returns>A list of job executions matching the filter criteria.</returns>
+    /// <response code="200">Returns the list of job executions.</response>
+    /// <response code="500">An error occurred while retrieving job executions.</response>
     [HttpGet]
+    [ProducesResponseType(typeof(IEnumerable<JobExecution>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<IEnumerable<JobExecution>>> GetJobExecutions(
         [FromQuery] int? scheduleId = null,
         [FromQuery] JobStatus? status = null)
@@ -57,7 +71,18 @@ public class JobExecutionsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves a specific job execution by its ID.
+    /// </summary>
+    /// <param name="id">The unique identifier of the job execution.</param>
+    /// <returns>The job execution with the specified ID.</returns>
+    /// <response code="200">Returns the requested job execution.</response>
+    /// <response code="404">Job execution with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while retrieving the job execution.</response>
     [HttpGet("{id}")]
+    [ProducesResponseType(typeof(JobExecution), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<JobExecution>> GetJobExecution(int id)
     {
         try
@@ -77,7 +102,18 @@ public class JobExecutionsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves the most recent job execution for a specific schedule.
+    /// </summary>
+    /// <param name="scheduleId">The unique identifier of the schedule.</param>
+    /// <returns>The latest job execution for the specified schedule.</returns>
+    /// <response code="200">Returns the latest job execution.</response>
+    /// <response code="404">No executions found for the specified schedule.</response>
+    /// <response code="500">An error occurred while retrieving the latest execution.</response>
     [HttpGet("schedule/{scheduleId}/latest")]
+    [ProducesResponseType(typeof(JobExecution), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<JobExecution>> GetLatestExecution(int scheduleId)
     {
         try
@@ -97,7 +133,16 @@ public class JobExecutionsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves all failed job executions for a specific schedule.
+    /// </summary>
+    /// <param name="scheduleId">The unique identifier of the schedule.</param>
+    /// <returns>A list of failed job executions for the specified schedule.</returns>
+    /// <response code="200">Returns the list of failed executions.</response>
+    /// <response code="500">An error occurred while retrieving failed executions.</response>
     [HttpGet("schedule/{scheduleId}/failed")]
+    [ProducesResponseType(typeof(IEnumerable<JobExecution>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<IEnumerable<JobExecution>>> GetFailedExecutions(int scheduleId)
     {
         try
@@ -112,7 +157,20 @@ public class JobExecutionsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Exports job executions to Excel or CSV format.
+    /// </summary>
+    /// <param name="scheduleId">Optional schedule ID to filter executions.</param>
+    /// <param name="status">Optional job status to filter executions.</param>
+    /// <param name="startDate">Optional start date filter.</param>
+    /// <param name="endDate">Optional end date filter.</param>
+    /// <param name="format">Export format: 'excel' (default) or 'csv'.</param>
+    /// <returns>A file download containing the exported job executions.</returns>
+    /// <response code="200">Returns the exported file.</response>
+    /// <response code="500">An error occurred while exporting job executions.</response>
     [HttpGet("export")]
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> ExportJobExecutions(
         [FromQuery] int? scheduleId = null,
         [FromQuery] JobStatus? status = null,
@@ -219,7 +277,21 @@ public class JobExecutionsController : ControllerBase
         return value;
     }
 
+    /// <summary>
+    /// Cancels a running job execution.
+    /// Only jobs with a 'Running' status can be cancelled.
+    /// </summary>
+    /// <param name="id">The unique identifier of the job execution to cancel.</param>
+    /// <returns>A success message if the job was cancelled.</returns>
+    /// <response code="200">Job execution was cancelled successfully.</response>
+    /// <response code="400">Job is not in a running state and cannot be cancelled.</response>
+    /// <response code="404">Job execution or associated schedule was not found.</response>
+    /// <response code="500">An error occurred while cancelling the job execution.</response>
     [HttpPost("{id}/cancel")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> CancelJobExecution(int id)
     {
         try
