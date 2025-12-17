@@ -132,11 +132,23 @@
                     }
                 </MudTd>
                 <MudTd DataLabel="Actions">
-                    <MudIconButton Icon="@Icons.Material.Filled.Visibility" 
-                                   Size="Size.Small" 
-                                   Color="Color.Primary"
-                                   OnClick="@(() => ViewAccount(context.AdrAccountId))"
-                                   Title="View Account" />
+                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small" Dense="true">
+                        <MudMenuItem Icon="@Icons.Material.Filled.Edit" 
+                                     OnClick="@(() => EditRule(context))">
+                            Edit Rule
+                        </MudMenuItem>
+                        @if (context.IsManuallyOverridden)
+                        {
+                            <MudMenuItem Icon="@Icons.Material.Filled.Refresh" 
+                                         OnClick="@(() => ClearOverride(context))">
+                                Clear Override
+                            </MudMenuItem>
+                        }
+                        <MudMenuItem Icon="@Icons.Material.Filled.Visibility" 
+                                     OnClick="@(() => ViewAccount(context.AdrAccountId))">
+                            View Account
+                        </MudMenuItem>
+                    </MudMenu>
                 </MudTd>
             </RowTemplate>
             <NoRecordsContent>
@@ -227,6 +239,52 @@
     private void ViewAccount(int accountId)
     {
         NavigationManager.NavigateTo($"/adr/accounts?accountId={accountId}");
+    }
+
+    private async Task EditRule(AccountRuleModel rule)
+    {
+        var parameters = new DialogParameters<EditRuleDialog>
+        {
+            { x => x.RuleId, rule.Id }
+        };
+        var options = new DialogOptions 
+        { 
+            MaxWidth = MaxWidth.Medium, 
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+        var dialog = await DialogService.ShowAsync<EditRuleDialog>("Edit Rule", parameters, options);
+        var result = await dialog.Result;
+        
+        if (result != null && !result.Canceled)
+        {
+            await LoadRules();
+        }
+    }
+
+    private async Task ClearOverride(AccountRuleModel rule)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Clear Override",
+            $"Are you sure you want to clear the manual override for this rule? The rule will be updated by the next account sync.",
+            yesText: "Clear Override",
+            cancelText: "Cancel");
+        
+        if (confirmed == true)
+        {
+            try
+            {
+                var client = CreateClient();
+                var response = await client.PostAsync($"adr/rules/{rule.Id}/clear-override", null);
+                response.EnsureSuccessStatusCode();
+                Snackbar.Add("Override cleared successfully", Severity.Success);
+                await LoadRules();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error clearing override: {ex.Message}", Severity.Error);
+            }
+        }
     }
 
     private string GetJobTypeName(int jobTypeId)

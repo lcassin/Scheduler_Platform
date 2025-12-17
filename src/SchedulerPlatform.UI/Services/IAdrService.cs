@@ -83,6 +83,11 @@ public interface IAdrService
     Task<List<AdrOrchestrationStatus>> GetOrchestrationHistoryAsync(int? count = 10);
     Task<OrchestrationHistoryPagedResponse> GetOrchestrationHistoryPagedAsync(int pageNumber = 1, int pageSize = 20);
     
+    // Rule operations
+    Task<AccountRuleDto?> GetRuleAsync(int ruleId);
+    Task<AccountRuleDto> UpdateRuleAsync(int ruleId, UpdateRuleRequest request);
+    Task<AccountRuleDto> ClearRuleOverrideAsync(int ruleId);
+    
     /// <summary>
     /// Cancels a running or queued orchestration request.
     /// </summary>

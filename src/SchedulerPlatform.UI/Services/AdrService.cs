@@ -510,6 +510,41 @@ public class AdrService : IAdrService
     }
 
     #endregion
+
+    #region Rule Operations
+
+    public async Task<AccountRuleDto?> GetRuleAsync(int ruleId)
+    {
+        var client = CreateClient();
+        try
+        {
+            return await client.GetFromJsonAsync<AccountRuleDto>($"adr/rules/{ruleId}");
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+    }
+
+    public async Task<AccountRuleDto> UpdateRuleAsync(int ruleId, UpdateRuleRequest request)
+    {
+        var client = CreateClient();
+        var response = await client.PutAsJsonAsync($"adr/rules/{ruleId}", request);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<AccountRuleDto>();
+        return result ?? throw new InvalidOperationException("Failed to update rule");
+    }
+
+    public async Task<AccountRuleDto> ClearRuleOverrideAsync(int ruleId)
+    {
+        var client = CreateClient();
+        var response = await client.PostAsync($"adr/rules/{ruleId}/clear-override", null);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<AccountRuleDto>();
+        return result ?? throw new InvalidOperationException("Failed to clear rule override");
+    }
+
+    #endregion
 }
 
 internal class CancelOrchestrationSuccessResponse

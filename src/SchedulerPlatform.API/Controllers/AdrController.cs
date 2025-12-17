@@ -2791,6 +2791,207 @@ public class AdrController : ControllerBase
             }
         }
 
+        /// <summary>
+        /// Retrieves a single account rule by ID.
+        /// </summary>
+        /// <param name="id">The rule ID.</param>
+        /// <returns>The account rule.</returns>
+        /// <response code="200">Returns the account rule.</response>
+        /// <response code="404">Rule not found.</response>
+        /// <response code="500">An error occurred while retrieving the rule.</response>
+        [HttpGet("rules/{id}")]
+        [ProducesResponseType(typeof(AccountRuleDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<AccountRuleDto>> GetRule(int id)
+        {
+            try
+            {
+                var rule = await _dbContext.AdrAccountRules
+                    .Include(r => r.AdrAccount)
+                    .Where(r => r.Id == id && !r.IsDeleted)
+                    .Select(r => new AccountRuleDto
+                    {
+                        Id = r.Id,
+                        AdrAccountId = r.AdrAccountId,
+                        VendorCode = r.AdrAccount != null ? r.AdrAccount.VendorCode : null,
+                        VMAccountNumber = r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : null,
+                        JobTypeId = r.JobTypeId,
+                        PeriodType = r.PeriodType,
+                        PeriodDays = r.PeriodDays,
+                        NextRunDateTime = r.NextRunDateTime,
+                        NextRangeStartDateTime = r.NextRangeStartDateTime,
+                        NextRangeEndDateTime = r.NextRangeEndDateTime,
+                        IsEnabled = r.IsEnabled,
+                        IsManuallyOverridden = r.IsManuallyOverridden,
+                        OverriddenBy = r.OverriddenBy,
+                        OverriddenDateTime = r.OverriddenDateTime
+                    })
+                    .FirstOrDefaultAsync();
+
+                if (rule == null)
+                {
+                    return NotFound($"Rule with ID {id} not found");
+                }
+
+                return Ok(rule);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving ADR account rule {RuleId}", id);
+                return StatusCode(500, "An error occurred while retrieving the account rule");
+            }
+        }
+
+        /// <summary>
+        /// Updates an account rule's scheduling configuration.
+        /// </summary>
+        /// <param name="id">The rule ID.</param>
+        /// <param name="request">The update request containing new values.</param>
+        /// <returns>The updated account rule.</returns>
+        /// <response code="200">Returns the updated account rule.</response>
+        /// <response code="400">Invalid request data.</response>
+        /// <response code="404">Rule not found.</response>
+        /// <response code="500">An error occurred while updating the rule.</response>
+        [HttpPut("rules/{id}")]
+        [Authorize(Policy = "AdrAccounts.Update")]
+        [ProducesResponseType(typeof(AccountRuleDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<AccountRuleDto>> UpdateRule(int id, [FromBody] UpdateRuleRequest request)
+        {
+            try
+            {
+                var rule = await _dbContext.AdrAccountRules
+                    .Include(r => r.AdrAccount)
+                    .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+
+                if (rule == null)
+                {
+                    return NotFound($"Rule with ID {id} not found");
+                }
+
+                // Update fields
+                if (request.NextRunDateTime.HasValue)
+                    rule.NextRunDateTime = request.NextRunDateTime.Value;
+                
+                if (request.NextRangeStartDateTime.HasValue)
+                    rule.NextRangeStartDateTime = request.NextRangeStartDateTime.Value;
+                
+                if (request.NextRangeEndDateTime.HasValue)
+                    rule.NextRangeEndDateTime = request.NextRangeEndDateTime.Value;
+                
+                if (!string.IsNullOrEmpty(request.PeriodType))
+                    rule.PeriodType = request.PeriodType;
+                
+                if (request.PeriodDays.HasValue)
+                    rule.PeriodDays = request.PeriodDays.Value;
+                
+                if (request.JobTypeId.HasValue)
+                    rule.JobTypeId = request.JobTypeId.Value;
+                
+                if (request.IsEnabled.HasValue)
+                    rule.IsEnabled = request.IsEnabled.Value;
+
+                // Mark as manually overridden
+                rule.IsManuallyOverridden = true;
+                rule.OverriddenBy = User.Identity?.Name ?? "Unknown";
+                rule.OverriddenDateTime = DateTime.UtcNow;
+                rule.ModifiedDateTime = DateTime.UtcNow;
+                rule.ModifiedBy = User.Identity?.Name ?? "Unknown";
+
+                await _dbContext.SaveChangesAsync();
+
+                // Return updated rule
+                var updatedRule = new AccountRuleDto
+                {
+                    Id = rule.Id,
+                    AdrAccountId = rule.AdrAccountId,
+                    VendorCode = rule.AdrAccount?.VendorCode,
+                    VMAccountNumber = rule.AdrAccount?.VMAccountNumber,
+                    JobTypeId = rule.JobTypeId,
+                    PeriodType = rule.PeriodType,
+                    PeriodDays = rule.PeriodDays,
+                    NextRunDateTime = rule.NextRunDateTime,
+                    NextRangeStartDateTime = rule.NextRangeStartDateTime,
+                    NextRangeEndDateTime = rule.NextRangeEndDateTime,
+                    IsEnabled = rule.IsEnabled,
+                    IsManuallyOverridden = rule.IsManuallyOverridden,
+                    OverriddenBy = rule.OverriddenBy,
+                    OverriddenDateTime = rule.OverriddenDateTime
+                };
+
+                return Ok(updatedRule);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating ADR account rule {RuleId}", id);
+                return StatusCode(500, "An error occurred while updating the account rule");
+            }
+        }
+
+        /// <summary>
+        /// Clears the manual override on an account rule, allowing it to be updated by sync.
+        /// </summary>
+        /// <param name="id">The rule ID.</param>
+        /// <returns>The updated account rule.</returns>
+        /// <response code="200">Returns the updated account rule.</response>
+        /// <response code="404">Rule not found.</response>
+        /// <response code="500">An error occurred while clearing the override.</response>
+        [HttpPost("rules/{id}/clear-override")]
+        [Authorize(Policy = "AdrAccounts.Update")]
+        [ProducesResponseType(typeof(AccountRuleDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<AccountRuleDto>> ClearRuleOverride(int id)
+        {
+            try
+            {
+                var rule = await _dbContext.AdrAccountRules
+                    .Include(r => r.AdrAccount)
+                    .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+
+                if (rule == null)
+                {
+                    return NotFound($"Rule with ID {id} not found");
+                }
+
+                rule.IsManuallyOverridden = false;
+                rule.OverriddenBy = null;
+                rule.OverriddenDateTime = null;
+                rule.ModifiedDateTime = DateTime.UtcNow;
+                rule.ModifiedBy = User.Identity?.Name ?? "Unknown";
+
+                await _dbContext.SaveChangesAsync();
+
+                var updatedRule = new AccountRuleDto
+                {
+                    Id = rule.Id,
+                    AdrAccountId = rule.AdrAccountId,
+                    VendorCode = rule.AdrAccount?.VendorCode,
+                    VMAccountNumber = rule.AdrAccount?.VMAccountNumber,
+                    JobTypeId = rule.JobTypeId,
+                    PeriodType = rule.PeriodType,
+                    PeriodDays = rule.PeriodDays,
+                    NextRunDateTime = rule.NextRunDateTime,
+                    NextRangeStartDateTime = rule.NextRangeStartDateTime,
+                    NextRangeEndDateTime = rule.NextRangeEndDateTime,
+                    IsEnabled = rule.IsEnabled,
+                    IsManuallyOverridden = rule.IsManuallyOverridden,
+                    OverriddenBy = rule.OverriddenBy,
+                    OverriddenDateTime = rule.OverriddenDateTime
+                };
+
+                return Ok(updatedRule);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error clearing override on ADR account rule {RuleId}", id);
+                return StatusCode(500, "An error occurred while clearing the override");
+            }
+        }
+
         #endregion
 
         #region AdrConfiguration Endpoints (Admin/Super Admin only)
@@ -2803,7 +3004,7 @@ public class AdrController : ControllerBase
     /// <response code="200">Returns the ADR configuration.</response>
     /// <response code="500">An error occurred while retrieving the configuration.</response>
     [HttpGet("configuration")]
-    [Authorize(Policy = "AdminOnly")]
+    [Authorize(Policy = "Users.Manage.Read")]
     [ProducesResponseType(typeof(AdrConfiguration), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<AdrConfiguration>> GetConfiguration()
@@ -2852,7 +3053,7 @@ public class AdrController : ControllerBase
     /// <response code="400">Invalid configuration values provided.</response>
     /// <response code="500">An error occurred while updating the configuration.</response>
     [HttpPut("configuration")]
-    [Authorize(Policy = "AdminOnly")]
+    [Authorize(Policy = "Users.Manage.Read")]
     [ProducesResponseType(typeof(AdrConfiguration), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -2923,7 +3124,7 @@ public class AdrController : ControllerBase
     /// <response code="200">Returns the list of blacklist entries.</response>
     /// <response code="500">An error occurred while retrieving blacklist entries.</response>
     [HttpGet("blacklist")]
-    [Authorize(Policy = "AdminOnly")]
+    [Authorize(Policy = "Users.Manage.Read")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<object>> GetBlacklist(
@@ -2973,7 +3174,7 @@ public class AdrController : ControllerBase
     /// <response code="404">Blacklist entry with the specified ID was not found.</response>
     /// <response code="500">An error occurred while retrieving the blacklist entry.</response>
     [HttpGet("blacklist/{id}")]
-    [Authorize(Policy = "AdminOnly")]
+    [Authorize(Policy = "Users.Manage.Read")]
     [ProducesResponseType(typeof(AdrAccountBlacklist), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -3006,7 +3207,7 @@ public class AdrController : ControllerBase
     /// <response code="400">Invalid blacklist entry data provided.</response>
     /// <response code="500">An error occurred while creating the blacklist entry.</response>
     [HttpPost("blacklist")]
-    [Authorize(Policy = "AdminOnly")]
+    [Authorize(Policy = "Users.Manage.Read")]
     [ProducesResponseType(typeof(AdrAccountBlacklist), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -3077,7 +3278,7 @@ public class AdrController : ControllerBase
     /// <response code="404">Blacklist entry with the specified ID was not found.</response>
     /// <response code="500">An error occurred while updating the blacklist entry.</response>
     [HttpPut("blacklist/{id}")]
-    [Authorize(Policy = "AdminOnly")]
+    [Authorize(Policy = "Users.Manage.Read")]
     [ProducesResponseType(typeof(AdrAccountBlacklist), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -3132,7 +3333,7 @@ public class AdrController : ControllerBase
     /// <response code="404">Blacklist entry with the specified ID was not found.</response>
     /// <response code="500">An error occurred while deleting the blacklist entry.</response>
     [HttpDelete("blacklist/{id}")]
-    [Authorize(Policy = "AdminOnly")]
+    [Authorize(Policy = "Users.Manage.Read")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -3180,7 +3381,7 @@ public class AdrController : ControllerBase
         /// <response code="200">Returns the list of job types.</response>
         /// <response code="500">An error occurred while retrieving job types.</response>
         [HttpGet("job-types")]
-        [Authorize(Policy = "AdminOnly")]
+        [Authorize(Policy = "Users.Manage.Read")]
         [ProducesResponseType(typeof(IEnumerable<AdrJobType>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<IEnumerable<AdrJobType>>> GetJobTypes([FromQuery] bool includeInactive = false)
@@ -3218,7 +3419,7 @@ public class AdrController : ControllerBase
         /// <response code="404">Job type with the specified ID was not found.</response>
         /// <response code="500">An error occurred while retrieving the job type.</response>
         [HttpGet("job-types/{id}")]
-        [Authorize(Policy = "AdminOnly")]
+        [Authorize(Policy = "Users.Manage.Read")]
         [ProducesResponseType(typeof(AdrJobType), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -3253,7 +3454,7 @@ public class AdrController : ControllerBase
         /// <response code="400">Invalid job type data provided or code already exists.</response>
         /// <response code="500">An error occurred while creating the job type.</response>
         [HttpPost("job-types")]
-        [Authorize(Policy = "AdminOnly")]
+        [Authorize(Policy = "Users.Manage.Read")]
         [ProducesResponseType(typeof(AdrJobType), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -3324,7 +3525,7 @@ public class AdrController : ControllerBase
         /// <response code="404">Job type with the specified ID was not found.</response>
         /// <response code="500">An error occurred while updating the job type.</response>
         [HttpPut("job-types/{id}")]
-        [Authorize(Policy = "AdminOnly")]
+        [Authorize(Policy = "Users.Manage.Read")]
         [ProducesResponseType(typeof(AdrJobType), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -3420,7 +3621,7 @@ public class AdrController : ControllerBase
         /// <response code="404">Job type with the specified ID was not found.</response>
         /// <response code="500">An error occurred while deleting the job type.</response>
         [HttpDelete("job-types/{id}")]
-        [Authorize(Policy = "AdminOnly")]
+        [Authorize(Policy = "Users.Manage.Read")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -3791,6 +3992,20 @@ public class AccountRuleDto
     public bool IsManuallyOverridden { get; set; }
     public string? OverriddenBy { get; set; }
     public DateTime? OverriddenDateTime { get; set; }
+}
+
+/// <summary>
+/// Request model for updating an account rule
+/// </summary>
+public class UpdateRuleRequest
+{
+    public DateTime? NextRunDateTime { get; set; }
+    public DateTime? NextRangeStartDateTime { get; set; }
+    public DateTime? NextRangeEndDateTime { get; set; }
+    public string? PeriodType { get; set; }
+    public int? PeriodDays { get; set; }
+    public int? JobTypeId { get; set; }
+    public bool? IsEnabled { get; set; }
 }
 
 #endregion
