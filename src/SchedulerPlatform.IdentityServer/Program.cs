@@ -69,7 +69,7 @@ builder.Services.AddIdentityServer(options =>
     .AddInMemoryApiResources(Config.ApiResources)
     .AddInMemoryIdentityResources(Config.IdentityResources)
     .AddInMemoryApiScopes(Config.ApiScopes)
-    .AddInMemoryClients(Config.Clients)
+    .AddInMemoryClients(Config.GetClients(builder.Configuration))
     .AddProfileService<SchedulerProfileService>();
 
 var azureTenantId = builder.Configuration["AzureAd:TenantId"];
