@@ -269,12 +269,6 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             {
                 try
                 {
-                    if (!account.NextRangeStartDateTime.HasValue || !account.NextRangeEndDateTime.HasValue)
-                    {
-                        result.JobsSkipped++;
-                        continue;
-                    }
-
                     // Check if account is blacklisted before creating job
                     if (await IsAccountBlacklistedAsync(account, "Download"))
                     {
@@ -283,10 +277,25 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         continue;
                     }
 
+                    // Get the active rule for this account (JobTypeId = 2 for DownloadInvoice/ADR Request)
+                    // Rules now drive the orchestrator per BRD requirements
+                    var accountRule = account.AdrAccountRules?
+                        .FirstOrDefault(r => !r.IsDeleted && r.IsEnabled && r.JobTypeId == 2 &&
+                            r.NextRunDateTime.HasValue && r.NextRangeStartDateTime.HasValue && r.NextRangeEndDateTime.HasValue);
+
+                    if (accountRule == null)
+                    {
+                        // No valid rule found - skip this account
+                        result.JobsSkipped++;
+                        _logger.LogDebug("Skipping account {AccountId} - no valid enabled rule found", account.Id);
+                        continue;
+                    }
+
+                    // Use scheduling data from the RULE, not the account
                     var existingJob = await _unitOfWork.AdrJobs.ExistsForBillingPeriodAsync(
                         account.Id,
-                        account.NextRangeStartDateTime.Value,
-                        account.NextRangeEndDateTime.Value);
+                        accountRule.NextRangeStartDateTime!.Value,
+                        accountRule.NextRangeEndDateTime!.Value);
 
                     if (existingJob)
                     {
@@ -294,25 +303,21 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         continue;
                     }
 
-                    // Look up the active rule for this account (JobTypeId = 2 for DownloadInvoice/ADR Request)
-                    // If a rule exists, stamp its ID on the job for tracking per BRD requirements
-                    var accountRule = account.AdrAccountRules?
-                        .FirstOrDefault(r => !r.IsDeleted && r.IsEnabled && r.JobTypeId == 2);
-
+                    // Create job using scheduling data from the RULE
                     var job = new AdrJob
                     {
                         AdrAccountId = account.Id,
-                        AdrAccountRuleId = accountRule?.Id,  // Track which rule created this job (null for legacy/manual jobs)
+                        AdrAccountRuleId = accountRule.Id,  // Track which rule created this job
                         VMAccountId = account.VMAccountId,
                         VMAccountNumber = account.VMAccountNumber,
                         VendorCode = account.VendorCode,
                         CredentialId = account.CredentialId,
-                        PeriodType = account.PeriodType,
-                        BillingPeriodStartDateTime = account.NextRangeStartDateTime.Value,
-                        BillingPeriodEndDateTime = account.NextRangeEndDateTime.Value,
-                        NextRunDateTime = account.NextRunDateTime,
-                        NextRangeStartDateTime = account.NextRangeStartDateTime,
-                        NextRangeEndDateTime = account.NextRangeEndDateTime,
+                        PeriodType = accountRule.PeriodType,  // From rule
+                        BillingPeriodStartDateTime = accountRule.NextRangeStartDateTime!.Value,  // From rule
+                        BillingPeriodEndDateTime = accountRule.NextRangeEndDateTime!.Value,  // From rule
+                        NextRunDateTime = accountRule.NextRunDateTime,  // From rule
+                        NextRangeStartDateTime = accountRule.NextRangeStartDateTime,  // From rule
+                        NextRangeEndDateTime = accountRule.NextRangeEndDateTime,  // From rule
                         Status = "Pending",
                         IsMissing = account.HistoricalBillingStatus == "Missing",
                         RetryCount = 0,
@@ -1151,10 +1156,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             // Uses anti-creep logic: allows earlier dates but prevents late vendors from causing schedule drift
                             if (job.AdrAccount != null)
                             {
+                                // Derive periodDays from job's PeriodType (not account's PeriodDays)
+                                var periodDays = GetPeriodDaysFromType(job.PeriodType);
                                 job.AdrAccount.LastSuccessfulDownloadDate = CalculateLastSuccessfulDownloadDate(
                                     job.AdrAccount.LastSuccessfulDownloadDate,
                                     job.NextRunDateTime,
-                                    job.AdrAccount.PeriodDays);
+                                    periodDays);
                                 job.AdrAccount.ModifiedDateTime = DateTime.UtcNow;
                                 job.AdrAccount.ModifiedBy = "System Created";
                             }
@@ -1440,10 +1447,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             // Uses anti-creep logic: allows earlier dates but prevents late vendors from causing schedule drift
                             if (job.AdrAccount != null)
                             {
+                                // Derive periodDays from job's PeriodType (not account's PeriodDays)
+                                var periodDays = GetPeriodDaysFromType(job.PeriodType);
                                 job.AdrAccount.LastSuccessfulDownloadDate = CalculateLastSuccessfulDownloadDate(
                                     job.AdrAccount.LastSuccessfulDownloadDate,
                                     job.NextRunDateTime,
-                                    job.AdrAccount.PeriodDays);
+                                    periodDays);
                                 job.AdrAccount.ModifiedDateTime = DateTime.UtcNow;
                                 job.AdrAccount.ModifiedBy = "System Created";
                             }
@@ -1858,6 +1867,24 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             14 => true,  // Failed To Process All Documents (error - final)
             _ => false   // 1 (Inserted), 2 (Inserted With Priority), 6 (Sent To AI), 10 (Received From AI),
                          // 12 (Login Attempt Succeeded), 13 (No Documents Found - retry next day), 15 (No Documents Processed - TBD)
+        };
+    }
+
+    /// <summary>
+    /// Derives period days from period type string.
+    /// Used to calculate billing cycle intervals from the job's PeriodType.
+    /// </summary>
+    private static int GetPeriodDaysFromType(string? periodType)
+    {
+        return periodType?.ToLowerInvariant() switch
+        {
+            "weekly" => 7,
+            "biweekly" or "bi-weekly" => 14,
+            "monthly" => 30,
+            "quarterly" => 90,
+            "semiannually" or "semi-annually" => 180,
+            "annually" => 365,
+            _ => 30  // Default to monthly if not specified or unrecognized
         };
     }
 

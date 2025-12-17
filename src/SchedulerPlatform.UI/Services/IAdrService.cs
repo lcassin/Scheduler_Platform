@@ -93,4 +93,10 @@ public interface IAdrService
     /// Cancels a running or queued orchestration request.
     /// </summary>
     Task<CancelOrchestrationResult> CancelOrchestrationAsync(string requestId);
+    Task<byte[]> DownloadRulesExportAsync(
+        string? vendorCode = null,
+        string? accountNumber = null,
+        bool? isEnabled = null,
+        bool? isOverridden = null,
+        string format = "excel");
 }

@@ -1154,18 +1154,34 @@ public class AdrController : ControllerBase
             
             var jobStatusLookup = jobStatuses.ToDictionary(x => x.AdrAccountId);
 
+            // Get rule override status for each account (single query)
+            var ruleOverrideStatuses = await _dbContext.AdrAccountRules
+                .Where(r => !r.IsDeleted && accountIds.Contains(r.AdrAccountId))
+                .GroupBy(r => r.AdrAccountId)
+                .Select(g => new
+                {
+                    AdrAccountId = g.Key,
+                    RuleIsManuallyOverridden = g.OrderBy(r => r.Id).Select(r => r.IsManuallyOverridden).FirstOrDefault(),
+                    RuleOverriddenBy = g.OrderBy(r => r.Id).Select(r => r.OverriddenBy).FirstOrDefault(),
+                    RuleOverriddenDateTime = g.OrderBy(r => r.Id).Select(r => r.OverriddenDateTime).FirstOrDefault()
+                })
+                .ToListAsync();
+            
+            var ruleOverrideLookup = ruleOverrideStatuses.ToDictionary(x => x.AdrAccountId);
+
             if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
             {
                 var csv = new System.Text.StringBuilder();
-                csv.AppendLine("Account #,VM Account ID,Interface Account ID,Client,Vendor Code,Period Type,Next Run,Run Status,Job Status,Last Completed,Historical Status,Last Invoice,Expected Next,Is Overridden,Overridden By,Overridden Date");
+                csv.AppendLine("Account #,VM Account ID,Interface Account ID,Client,Vendor Code,Period Type,Next Run,Run Status,Job Status,Last Completed,Historical Status,Last Invoice,Expected Next,Account Overridden,Account Overridden By,Account Overridden Date,Rule Overridden,Rule Overridden By,Rule Overridden Date");
 
                 foreach (var a in accounts)
                 {
                     var hasJobStatus = jobStatusLookup.TryGetValue(a.Id, out var js);
                     var currentJobStatus = hasJobStatus ? js?.CurrentJobStatus : null;
                     var lastCompleted = hasJobStatus ? js?.LastCompletedDateTime : null;
+                    var hasRuleOverride = ruleOverrideLookup.TryGetValue(a.Id, out var ro);
                     
-                    csv.AppendLine($"{CsvEscape(a.VMAccountNumber)},{a.VMAccountId},{CsvEscape(a.InterfaceAccountId)},{CsvEscape(a.ClientName)},{CsvEscape(a.VendorCode)},{CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.NextRunStatus)},{CsvEscape(currentJobStatus)},{lastCompleted?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.IsManuallyOverridden},{CsvEscape(a.OverriddenBy)},{a.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""}");
+                    csv.AppendLine($"{CsvEscape(a.VMAccountNumber)},{a.VMAccountId},{CsvEscape(a.InterfaceAccountId)},{CsvEscape(a.ClientName)},{CsvEscape(a.VendorCode)},{CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.NextRunStatus)},{CsvEscape(currentJobStatus)},{lastCompleted?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.IsManuallyOverridden},{CsvEscape(a.OverriddenBy)},{a.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""},{(hasRuleOverride && ro!.RuleIsManuallyOverridden ? "Yes" : "No")},{CsvEscape(hasRuleOverride ? ro!.RuleOverriddenBy : null)},{(hasRuleOverride ? ro!.RuleOverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") : "") ?? ""}");
                 }
 
                 return File(System.Text.Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", $"adr_accounts_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
@@ -1189,9 +1205,12 @@ public class AdrController : ControllerBase
             worksheet.Cell(1, 11).Value = "Historical Status";
             worksheet.Cell(1, 12).Value = "Last Invoice";
             worksheet.Cell(1, 13).Value = "Expected Next";
-            worksheet.Cell(1, 14).Value = "Is Overridden";
-            worksheet.Cell(1, 15).Value = "Overridden By";
-            worksheet.Cell(1, 16).Value = "Overridden Date";
+            worksheet.Cell(1, 14).Value = "Account Overridden";
+            worksheet.Cell(1, 15).Value = "Account Overridden By";
+            worksheet.Cell(1, 16).Value = "Account Overridden Date";
+            worksheet.Cell(1, 17).Value = "Rule Overridden";
+            worksheet.Cell(1, 18).Value = "Rule Overridden By";
+            worksheet.Cell(1, 19).Value = "Rule Overridden Date";
 
             var headerRow = worksheet.Row(1);
             headerRow.Style.Font.Bold = true;
@@ -1202,6 +1221,7 @@ public class AdrController : ControllerBase
                 var hasJobStatus = jobStatusLookup.TryGetValue(a.Id, out var js);
                 var currentJobStatus = hasJobStatus ? js?.CurrentJobStatus : null;
                 var lastCompleted = hasJobStatus ? js?.LastCompletedDateTime : null;
+                var hasRuleOverride = ruleOverrideLookup.TryGetValue(a.Id, out var ro);
                 
                 worksheet.Cell(row, 1).Value = a.VMAccountNumber;
                 worksheet.Cell(row, 2).Value = a.VMAccountId;
@@ -1219,6 +1239,9 @@ public class AdrController : ControllerBase
                 worksheet.Cell(row, 14).Value = a.IsManuallyOverridden ? "Yes" : "No";
                 worksheet.Cell(row, 15).Value = a.OverriddenBy ?? "";
                 if (a.OverriddenDateTime.HasValue) worksheet.Cell(row, 16).Value = a.OverriddenDateTime.Value;
+                worksheet.Cell(row, 17).Value = hasRuleOverride && ro!.RuleIsManuallyOverridden ? "Yes" : "No";
+                worksheet.Cell(row, 18).Value = hasRuleOverride ? ro!.RuleOverriddenBy ?? "" : "";
+                if (hasRuleOverride && ro!.RuleOverriddenDateTime.HasValue) worksheet.Cell(row, 19).Value = ro.RuleOverriddenDateTime.Value;
                 row++;
             }
 
@@ -2808,6 +2831,141 @@ public class AdrController : ControllerBase
             {
                 _logger.LogError(ex, "Error retrieving ADR account rules");
                 return StatusCode(500, "An error occurred while retrieving ADR account rules");
+            }
+        }
+
+        /// <summary>
+        /// Exports account rules to Excel or CSV format.
+        /// </summary>
+        /// <param name="vendorCode">Filter by vendor code.</param>
+        /// <param name="accountNumber">Filter by account number.</param>
+        /// <param name="isEnabled">Filter by enabled status.</param>
+        /// <param name="isOverridden">Filter by override status.</param>
+        /// <param name="format">Export format: 'excel' or 'csv' (default: excel).</param>
+        /// <returns>File download with the exported rules.</returns>
+        /// <response code="200">Returns the exported file.</response>
+        /// <response code="500">An error occurred while exporting rules.</response>
+        [HttpGet("rules/export")]
+        [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> ExportRules(
+            [FromQuery] string? vendorCode = null,
+            [FromQuery] string? accountNumber = null,
+            [FromQuery] bool? isEnabled = null,
+            [FromQuery] bool? isOverridden = null,
+            [FromQuery] string format = "excel")
+        {
+            try
+            {
+                var query = _dbContext.AdrAccountRules
+                    .Include(r => r.AdrAccount)
+                    .Where(r => !r.IsDeleted);
+            
+                if (!string.IsNullOrWhiteSpace(vendorCode))
+                {
+                    query = query.Where(r => r.AdrAccount != null && r.AdrAccount.VendorCode != null && 
+                        r.AdrAccount.VendorCode.Contains(vendorCode));
+                }
+            
+                if (!string.IsNullOrWhiteSpace(accountNumber))
+                {
+                    query = query.Where(r => r.AdrAccount != null && r.AdrAccount.VMAccountNumber != null && 
+                        r.AdrAccount.VMAccountNumber.Contains(accountNumber));
+                }
+            
+                if (isEnabled.HasValue)
+                {
+                    query = query.Where(r => r.IsEnabled == isEnabled.Value);
+                }
+
+                if (isOverridden.HasValue)
+                {
+                    query = query.Where(r => r.IsManuallyOverridden == isOverridden.Value);
+                }
+            
+                var rules = await query
+                    .OrderBy(r => r.AdrAccount != null ? r.AdrAccount.VendorCode : "")
+                    .ThenBy(r => r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : "")
+                    .Select(r => new
+                    {
+                        VendorCode = r.AdrAccount != null ? r.AdrAccount.VendorCode : null,
+                        VMAccountNumber = r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : null,
+                        r.JobTypeId,
+                        r.PeriodType,
+                        r.PeriodDays,
+                        r.NextRunDateTime,
+                        r.NextRangeStartDateTime,
+                        r.NextRangeEndDateTime,
+                        r.IsEnabled,
+                        r.IsManuallyOverridden,
+                        r.OverriddenBy,
+                        r.OverriddenDateTime
+                    })
+                    .ToListAsync();
+
+                if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
+                {
+                    var csv = new System.Text.StringBuilder();
+                    csv.AppendLine("Vendor Code,Account Number,Job Type,Period Type,Period Days,Next Run,Search Window Start,Search Window End,Enabled,Overridden,Overridden By,Overridden Date");
+
+                    foreach (var r in rules)
+                    {
+                        csv.AppendLine($"{CsvEscape(r.VendorCode)},{CsvEscape(r.VMAccountNumber)},{r.JobTypeId},{CsvEscape(r.PeriodType)},{r.PeriodDays},{r.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeStartDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? ""},{(r.IsEnabled ? "Yes" : "No")},{(r.IsManuallyOverridden ? "Yes" : "No")},{CsvEscape(r.OverriddenBy)},{r.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""}");
+                    }
+
+                    return File(System.Text.Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", $"adr_rules_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
+                }
+
+                // Excel format
+                using var workbook = new XLWorkbook();
+                var worksheet = workbook.Worksheets.Add("ADR Rules");
+
+                // Headers
+                worksheet.Cell(1, 1).Value = "Vendor Code";
+                worksheet.Cell(1, 2).Value = "Account Number";
+                worksheet.Cell(1, 3).Value = "Job Type";
+                worksheet.Cell(1, 4).Value = "Period Type";
+                worksheet.Cell(1, 5).Value = "Period Days";
+                worksheet.Cell(1, 6).Value = "Next Run";
+                worksheet.Cell(1, 7).Value = "Search Window Start";
+                worksheet.Cell(1, 8).Value = "Search Window End";
+                worksheet.Cell(1, 9).Value = "Enabled";
+                worksheet.Cell(1, 10).Value = "Overridden";
+                worksheet.Cell(1, 11).Value = "Overridden By";
+                worksheet.Cell(1, 12).Value = "Overridden Date";
+
+                var headerRow = worksheet.Row(1);
+                headerRow.Style.Font.Bold = true;
+
+                int row = 2;
+                foreach (var r in rules)
+                {
+                    worksheet.Cell(row, 1).Value = r.VendorCode ?? "";
+                    worksheet.Cell(row, 2).Value = r.VMAccountNumber ?? "";
+                    worksheet.Cell(row, 3).Value = r.JobTypeId;
+                    worksheet.Cell(row, 4).Value = r.PeriodType ?? "";
+                    worksheet.Cell(row, 5).Value = r.PeriodDays ?? 0;
+                    if (r.NextRunDateTime.HasValue) worksheet.Cell(row, 6).Value = r.NextRunDateTime.Value;
+                    if (r.NextRangeStartDateTime.HasValue) worksheet.Cell(row, 7).Value = r.NextRangeStartDateTime.Value;
+                    if (r.NextRangeEndDateTime.HasValue) worksheet.Cell(row, 8).Value = r.NextRangeEndDateTime.Value;
+                    worksheet.Cell(row, 9).Value = r.IsEnabled ? "Yes" : "No";
+                    worksheet.Cell(row, 10).Value = r.IsManuallyOverridden ? "Yes" : "No";
+                    worksheet.Cell(row, 11).Value = r.OverriddenBy ?? "";
+                    if (r.OverriddenDateTime.HasValue) worksheet.Cell(row, 12).Value = r.OverriddenDateTime.Value;
+                    row++;
+                }
+
+                worksheet.Columns().AdjustToContents();
+
+                using var stream = new MemoryStream();
+                workbook.SaveAs(stream);
+                return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    $"adr_rules_{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error exporting ADR rules");
+                return StatusCode(500, "An error occurred while exporting ADR rules");
             }
         }
 

@@ -7,6 +7,7 @@
 @inject IDialogService DialogService
 @inject IPermissionService PermissionService
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
 
 <PageTitle>ADR Account Rules</PageTitle>
 
@@ -16,8 +17,8 @@
     </div>
 
     <MudPaper Class="pa-4 mb-4">
-        <MudGrid Class="mb-4" Spacing="2">
-            <MudItem xs="12" md="3">
+        <MudGrid Spacing="2">
+            <MudItem xs="12" md="2">
                 <MudTextField @bind-Value="_searchVendorCode" 
                               Label="Vendor Code" 
                               Variant="Variant.Outlined"
@@ -26,7 +27,7 @@
                               Adornment="Adornment.End"
                               AdornmentIcon="@Icons.Material.Filled.Search" />
             </MudItem>
-            <MudItem xs="12" md="3">
+            <MudItem xs="12" md="2">
                 <MudTextField @bind-Value="_searchAccountNumber" 
                               Label="Account Number" 
                               Variant="Variant.Outlined"
@@ -55,14 +56,12 @@
                     <MudSelectItem Value="@((bool?)false)">Not Overridden</MudSelectItem>
                 </MudSelect>
             </MudItem>
-        </MudGrid>
-        <MudGrid Class="mb-4" Spacing="2">
-            <MudItem xs="12" Class="d-flex align-center justify-end gap-2">
+            <MudItem xs="12" md="4" Class="d-flex align-center justify-end gap-2">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadRules" StartIcon="@Icons.Material.Filled.FilterAlt">
                     Apply
                 </MudButton>
-                <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ClearFilters" StartIcon="@Icons.Material.Filled.Clear">
-                    Clear
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="@(() => ExportRules("excel"))" StartIcon="@Icons.Material.Filled.Download" Disabled="@_isExporting">
+                    Export
                 </MudButton>
             </MudItem>
         </MudGrid>
@@ -178,6 +177,7 @@
 @code {
     private List<AccountRuleModel> _rules = new();
     private bool _loading = true;
+    private bool _isExporting = false;
     
     private string? _searchVendorCode;
     private string? _searchAccountNumber;
@@ -299,6 +299,50 @@
             {
                 Snackbar.Add($"Error clearing override: {ex.Message}", Severity.Error);
             }
+        }
+    }
+
+    private async Task ExportRules(string format)
+    {
+        _isExporting = true;
+        StateHasChanged();
+        try
+        {
+            var client = CreateClient();
+            var queryParams = new List<string> { $"format={format}" };
+            
+            if (!string.IsNullOrWhiteSpace(_searchVendorCode))
+                queryParams.Add($"vendorCode={Uri.EscapeDataString(_searchVendorCode)}");
+            if (!string.IsNullOrWhiteSpace(_searchAccountNumber))
+                queryParams.Add($"accountNumber={Uri.EscapeDataString(_searchAccountNumber)}");
+            if (_filterEnabled.HasValue)
+                queryParams.Add($"isEnabled={_filterEnabled.Value}");
+            if (_filterOverridden.HasValue)
+                queryParams.Add($"isOverridden={_filterOverridden.Value}");
+            
+            var url = $"adr/rules/export?{string.Join("&", queryParams)}";
+            var response = await client.GetAsync(url);
+            response.EnsureSuccessStatusCode();
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+
+            var contentType = format.Equals("excel", StringComparison.OrdinalIgnoreCase)
+                ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                : "text/csv";
+
+            var filename = $"adr_rules_{DateTime.UtcNow:yyyyMMddHHmmss}.{(format.Equals("excel", StringComparison.OrdinalIgnoreCase) ? "xlsx" : "csv")}";
+
+            var base64 = Convert.ToBase64String(bytes);
+            await JSRuntime.InvokeVoidAsync("downloadFile", filename, contentType, base64);
+
+            Snackbar.Add($"Export downloaded: {filename}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Export failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isExporting = false;
         }
     }
 
