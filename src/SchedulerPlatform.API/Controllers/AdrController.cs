@@ -137,6 +137,23 @@ public class AdrController : ControllerBase
             // Get account IDs from the current page
             var accountIds = items.Select(a => a.Id).ToList();
             
+            // Get rule override status for each account (single query)
+            var ruleOverrideStatuses = await _dbContext.AdrAccountRules
+                .Where(r => !r.IsDeleted && accountIds.Contains(r.AdrAccountId))
+                .GroupBy(r => r.AdrAccountId)
+                .Select(g => new
+                {
+                    AdrAccountId = g.Key,
+                    // Get the primary rule's override status (first rule per account)
+                    RuleIsManuallyOverridden = g.OrderBy(r => r.Id).Select(r => r.IsManuallyOverridden).FirstOrDefault(),
+                    RuleOverriddenBy = g.OrderBy(r => r.Id).Select(r => r.OverriddenBy).FirstOrDefault(),
+                    RuleOverriddenDateTime = g.OrderBy(r => r.Id).Select(r => r.OverriddenDateTime).FirstOrDefault()
+                })
+                .ToListAsync();
+            
+            // Create a lookup dictionary for rule override status
+            var ruleOverrideLookup = ruleOverrideStatuses.ToDictionary(x => x.AdrAccountId);
+            
             // Get current billing period job status for each account (single query)
             var currentJobStatuses = await _dbContext.AdrJobs
                 .Where(j => !j.IsDeleted && accountIds.Contains(j.AdrAccountId))
@@ -194,7 +211,10 @@ public class AdrController : ControllerBase
                 a.CreatedDateTime,
                 a.ModifiedDateTime,
                 CurrentJobStatus = jobStatusLookup.TryGetValue(a.Id, out var js) ? js.CurrentJobStatus : null,
-                LastCompletedDateTime = jobStatusLookup.TryGetValue(a.Id, out var js2) ? js2.LastCompletedDateTime : null
+                LastCompletedDateTime = jobStatusLookup.TryGetValue(a.Id, out var js2) ? js2.LastCompletedDateTime : null,
+                RuleIsManuallyOverridden = ruleOverrideLookup.TryGetValue(a.Id, out var ro) && ro.RuleIsManuallyOverridden,
+                RuleOverriddenBy = ruleOverrideLookup.TryGetValue(a.Id, out var ro2) ? ro2.RuleOverriddenBy : null,
+                RuleOverriddenDateTime = ruleOverrideLookup.TryGetValue(a.Id, out var ro3) ? ro3.RuleOverriddenDateTime : null
             }).ToList();
 
             return Ok(new
