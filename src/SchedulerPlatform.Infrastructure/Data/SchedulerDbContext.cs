@@ -321,10 +321,10 @@ public class SchedulerDbContext : DbContext
                 .HasForeignKey(e => e.AdrAccountId)
                 .OnDelete(DeleteBehavior.Cascade);
             
-            entity.HasOne(e => e.AdrAccountRule)
-                .WithMany(r => r.AdrJobs)
-                .HasForeignKey(e => e.AdrAccountRuleId)
-                .OnDelete(DeleteBehavior.SetNull);
+                        entity.HasOne(e => e.AdrAccountRule)
+                            .WithMany(r => r.AdrJobs)
+                            .HasForeignKey(e => e.AdrAccountRuleId)
+                            .OnDelete(DeleteBehavior.NoAction);
             
             entity.HasIndex(e => e.AdrAccountId);
             entity.HasIndex(e => e.AdrAccountRuleId);
