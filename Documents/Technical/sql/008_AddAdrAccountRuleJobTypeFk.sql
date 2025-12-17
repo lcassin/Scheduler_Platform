@@ -37,5 +37,5 @@ SELECT
 FROM [dbo].[AdrJobType] jt
 LEFT JOIN [dbo].[AdrAccountRule] r ON r.JobTypeId = jt.AdrJobTypeId AND r.IsDeleted = 0
 GROUP BY jt.AdrJobTypeId, jt.Code, jt.Name
-ORDER BY jt.DisplayOrder;
+ORDER BY jt.AdrJobTypeId;
 GO
