@@ -10,20 +10,22 @@
     <MudNavLink Href="/calendar" Icon="@Icons.Material.Filled.CalendarMonth">Calendar</MudNavLink>
     <MudNavLink Href="/executions" Icon="@Icons.Material.Filled.History">Schedule Executions</MudNavLink>
     
-        <MudNavGroup Title="ADR" Icon="@Icons.Material.Filled.CloudDownload" Expanded="false">
-            <MudNavLink Href="/adr/monitor" Icon="@Icons.Material.Filled.Monitor">Job Monitor</MudNavLink>
-            <MudNavLink Href="/adr/accounts" Icon="@Icons.Material.Filled.AccountBalance">Accounts</MudNavLink>
-            <MudNavLink Href="/adr/jobs" Icon="@Icons.Material.Filled.Work">Jobs</MudNavLink>
-            <MudNavLink Href="/adr/missing-accounts" Icon="@Icons.Material.Filled.Warning">Missing Accounts</MudNavLink>
-        </MudNavGroup>
+                <MudNavGroup Title="ADR" Icon="@Icons.Material.Filled.CloudDownload" Expanded="false">
+                    <MudNavLink Href="/adr/monitor" Icon="@Icons.Material.Filled.Monitor">Job Monitor</MudNavLink>
+                    <MudNavLink Href="/adr/accounts" Icon="@Icons.Material.Filled.AccountBalance">Accounts</MudNavLink>
+                    <MudNavLink Href="/adr/rules" Icon="@Icons.Material.Filled.Rule">Account Rules</MudNavLink>
+                    <MudNavLink Href="/adr/jobs" Icon="@Icons.Material.Filled.Work">Jobs</MudNavLink>
+                    <MudNavLink Href="/adr/missing-accounts" Icon="@Icons.Material.Filled.Warning">Missing Accounts</MudNavLink>
+                </MudNavGroup>
     
         @if (_canManageUsers)
         {
-            <MudNavGroup Title="Admin" Icon="@Icons.Material.Filled.AdminPanelSettings" Expanded="false">
-                <MudNavLink Href="/admin/users" Icon="@Icons.Material.Filled.People">User Management</MudNavLink>
-                <MudNavLink Href="/admin/adr-configuration" Icon="@Icons.Material.Filled.Settings">ADR Configuration</MudNavLink>
-                <MudNavLink Href="/admin/adr-blacklist" Icon="@Icons.Material.Filled.Block">ADR Blacklist</MudNavLink>
-            </MudNavGroup>
+                        <MudNavGroup Title="Admin" Icon="@Icons.Material.Filled.AdminPanelSettings" Expanded="false">
+                            <MudNavLink Href="/admin/users" Icon="@Icons.Material.Filled.People">User Management</MudNavLink>
+                            <MudNavLink Href="/admin/adr-configuration" Icon="@Icons.Material.Filled.Settings">ADR Configuration</MudNavLink>
+                            <MudNavLink Href="/admin/adr-blacklist" Icon="@Icons.Material.Filled.Block">ADR Blacklist</MudNavLink>
+                            <MudNavLink Href="/admin/adr-job-types" Icon="@Icons.Material.Filled.Category">ADR Job Types</MudNavLink>
+                        </MudNavGroup>
         }
 </MudNavMenu>
 

@@ -2702,9 +2702,98 @@ public class AdrController : ControllerBase
         return Ok(statuses);
     }
 
-    #endregion
+        #endregion
 
-    #region AdrConfiguration Endpoints (Admin/Super Admin only)
+        #region AdrAccountRule Endpoints
+
+        /// <summary>
+        /// Retrieves a paginated list of account rules with optional filtering.
+        /// </summary>
+        /// <param name="page">Page number (default: 1).</param>
+        /// <param name="pageSize">Number of items per page (default: 20).</param>
+        /// <param name="vendorCode">Filter by vendor code.</param>
+        /// <param name="accountNumber">Filter by account number.</param>
+        /// <param name="isEnabled">Filter by enabled status.</param>
+        /// <returns>A paginated list of account rules.</returns>
+        /// <response code="200">Returns the paginated list of account rules.</response>
+        /// <response code="500">An error occurred while retrieving account rules.</response>
+        [HttpGet("rules")]
+        [ProducesResponseType(typeof(RulesPagedResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<RulesPagedResponse>> GetRules(
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20,
+            [FromQuery] string? vendorCode = null,
+            [FromQuery] string? accountNumber = null,
+            [FromQuery] bool? isEnabled = null)
+        {
+            try
+            {
+                var query = _dbContext.AdrAccountRules
+                    .Include(r => r.AdrAccount)
+                    .Where(r => !r.IsDeleted);
+            
+                if (!string.IsNullOrWhiteSpace(vendorCode))
+                {
+                    query = query.Where(r => r.AdrAccount != null && r.AdrAccount.VendorCode != null && 
+                        r.AdrAccount.VendorCode.Contains(vendorCode));
+                }
+            
+                if (!string.IsNullOrWhiteSpace(accountNumber))
+                {
+                    query = query.Where(r => r.AdrAccount != null && r.AdrAccount.VMAccountNumber != null && 
+                        r.AdrAccount.VMAccountNumber.Contains(accountNumber));
+                }
+            
+                if (isEnabled.HasValue)
+                {
+                    query = query.Where(r => r.IsEnabled == isEnabled.Value);
+                }
+            
+                var totalCount = await query.CountAsync();
+            
+                var rules = await query
+                    .OrderBy(r => r.AdrAccount != null ? r.AdrAccount.VendorCode : "")
+                    .ThenBy(r => r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : "")
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .Select(r => new AccountRuleDto
+                    {
+                        Id = r.Id,
+                        AdrAccountId = r.AdrAccountId,
+                        VendorCode = r.AdrAccount != null ? r.AdrAccount.VendorCode : null,
+                        VMAccountNumber = r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : null,
+                        JobTypeId = r.JobTypeId,
+                        PeriodType = r.PeriodType,
+                        PeriodDays = r.PeriodDays,
+                        NextRunDateTime = r.NextRunDateTime,
+                        NextRangeStartDateTime = r.NextRangeStartDateTime,
+                        NextRangeEndDateTime = r.NextRangeEndDateTime,
+                        IsEnabled = r.IsEnabled,
+                        IsManuallyOverridden = r.IsManuallyOverridden,
+                        OverriddenBy = r.OverriddenBy,
+                        OverriddenDateTime = r.OverriddenDateTime
+                    })
+                    .ToListAsync();
+            
+                return Ok(new RulesPagedResponse
+                {
+                    Items = rules,
+                    TotalCount = totalCount,
+                    Page = page,
+                    PageSize = pageSize
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving ADR account rules");
+                return StatusCode(500, "An error occurred while retrieving ADR account rules");
+            }
+        }
+
+        #endregion
+
+        #region AdrConfiguration Endpoints (Admin/Super Admin only)
 
     /// <summary>
     /// Retrieves the current ADR configuration settings.
@@ -3078,9 +3167,309 @@ public class AdrController : ControllerBase
         }
     }
 
-    #endregion
+        #endregion
 
-    private static string CsvEscape(string? value)
+        #region AdrJobType Endpoints (Admin/Super Admin only)
+
+        /// <summary>
+        /// Retrieves all active job types.
+        /// Only Admin and Super Admin users can access this endpoint.
+        /// </summary>
+        /// <param name="includeInactive">Whether to include inactive job types (default: false).</param>
+        /// <returns>A list of job types.</returns>
+        /// <response code="200">Returns the list of job types.</response>
+        /// <response code="500">An error occurred while retrieving job types.</response>
+        [HttpGet("job-types")]
+        [Authorize(Policy = "Admin")]
+        [ProducesResponseType(typeof(IEnumerable<AdrJobType>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<IEnumerable<AdrJobType>>> GetJobTypes([FromQuery] bool includeInactive = false)
+        {
+            try
+            {
+                var query = _dbContext.AdrJobTypes
+                    .Where(jt => !jt.IsDeleted);
+            
+                if (!includeInactive)
+                {
+                    query = query.Where(jt => jt.IsActive);
+                }
+            
+                var jobTypes = await query
+                    .OrderBy(jt => jt.DisplayOrder)
+                    .ToListAsync();
+            
+                return Ok(jobTypes);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving ADR job types");
+                return StatusCode(500, "An error occurred while retrieving ADR job types");
+            }
+        }
+
+        /// <summary>
+        /// Retrieves a specific job type by ID.
+        /// Only Admin and Super Admin users can access this endpoint.
+        /// </summary>
+        /// <param name="id">The unique identifier of the job type.</param>
+        /// <returns>The job type with the specified ID.</returns>
+        /// <response code="200">Returns the requested job type.</response>
+        /// <response code="404">Job type with the specified ID was not found.</response>
+        /// <response code="500">An error occurred while retrieving the job type.</response>
+        [HttpGet("job-types/{id}")]
+        [Authorize(Policy = "Admin")]
+        [ProducesResponseType(typeof(AdrJobType), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<AdrJobType>> GetJobType(int id)
+        {
+            try
+            {
+                var jobType = await _dbContext.AdrJobTypes
+                    .FirstOrDefaultAsync(jt => jt.Id == id && !jt.IsDeleted);
+            
+                if (jobType == null)
+                {
+                    return NotFound($"Job type with ID {id} was not found.");
+                }
+            
+                return Ok(jobType);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving ADR job type {Id}", id);
+                return StatusCode(500, "An error occurred while retrieving the ADR job type");
+            }
+        }
+
+        /// <summary>
+        /// Creates a new job type.
+        /// Only Admin and Super Admin users can access this endpoint.
+        /// </summary>
+        /// <param name="request">The job type creation request.</param>
+        /// <returns>The created job type.</returns>
+        /// <response code="201">Returns the created job type.</response>
+        /// <response code="400">Invalid job type data provided or code already exists.</response>
+        /// <response code="500">An error occurred while creating the job type.</response>
+        [HttpPost("job-types")]
+        [Authorize(Policy = "Admin")]
+        [ProducesResponseType(typeof(AdrJobType), StatusCodes.Status201Created)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<AdrJobType>> CreateJobType([FromBody] CreateJobTypeRequest request)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(request.Code))
+                {
+                    return BadRequest("Job type code is required.");
+                }
+            
+                if (string.IsNullOrWhiteSpace(request.Name))
+                {
+                    return BadRequest("Job type name is required.");
+                }
+            
+                // Check if code already exists
+                var existingJobType = await _dbContext.AdrJobTypes
+                    .FirstOrDefaultAsync(jt => jt.Code == request.Code && !jt.IsDeleted);
+            
+                if (existingJobType != null)
+                {
+                    return BadRequest($"A job type with code '{request.Code}' already exists.");
+                }
+            
+                var username = User.Identity?.Name ?? "System";
+            
+                var jobType = new AdrJobType
+                {
+                    Code = request.Code.ToUpperInvariant(),
+                    Name = request.Name,
+                    Description = request.Description,
+                    EndpointUrl = request.EndpointUrl,
+                    AdrRequestTypeId = request.AdrRequestTypeId,
+                    IsActive = request.IsActive ?? true,
+                    DisplayOrder = request.DisplayOrder ?? 0,
+                    Notes = request.Notes,
+                    CreatedDateTime = DateTime.UtcNow,
+                    CreatedBy = username,
+                    ModifiedDateTime = DateTime.UtcNow,
+                    ModifiedBy = username
+                };
+            
+                _dbContext.AdrJobTypes.Add(jobType);
+                await _dbContext.SaveChangesAsync();
+            
+                _logger.LogInformation("Job type {Code} created by {User}", jobType.Code, username);
+            
+                return CreatedAtAction(nameof(GetJobType), new { id = jobType.Id }, jobType);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating ADR job type");
+                return StatusCode(500, "An error occurred while creating the ADR job type");
+            }
+        }
+
+        /// <summary>
+        /// Updates an existing job type.
+        /// Only Admin and Super Admin users can access this endpoint.
+        /// </summary>
+        /// <param name="id">The unique identifier of the job type to update.</param>
+        /// <param name="request">The job type update request.</param>
+        /// <returns>The updated job type.</returns>
+        /// <response code="200">Returns the updated job type.</response>
+        /// <response code="400">Invalid job type data provided or code already exists.</response>
+        /// <response code="404">Job type with the specified ID was not found.</response>
+        /// <response code="500">An error occurred while updating the job type.</response>
+        [HttpPut("job-types/{id}")]
+        [Authorize(Policy = "Admin")]
+        [ProducesResponseType(typeof(AdrJobType), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<AdrJobType>> UpdateJobType(int id, [FromBody] UpdateJobTypeRequest request)
+        {
+            try
+            {
+                var jobType = await _dbContext.AdrJobTypes
+                    .FirstOrDefaultAsync(jt => jt.Id == id && !jt.IsDeleted);
+            
+                if (jobType == null)
+                {
+                    return NotFound($"Job type with ID {id} was not found.");
+                }
+            
+                // Check if code is being changed and if new code already exists
+                if (!string.IsNullOrWhiteSpace(request.Code) && request.Code != jobType.Code)
+                {
+                    var existingJobType = await _dbContext.AdrJobTypes
+                        .FirstOrDefaultAsync(jt => jt.Code == request.Code && !jt.IsDeleted && jt.Id != id);
+                
+                    if (existingJobType != null)
+                    {
+                        return BadRequest($"A job type with code '{request.Code}' already exists.");
+                    }
+                
+                    jobType.Code = request.Code.ToUpperInvariant();
+                }
+            
+                var username = User.Identity?.Name ?? "System";
+            
+                if (!string.IsNullOrWhiteSpace(request.Name))
+                {
+                    jobType.Name = request.Name;
+                }
+            
+                if (request.Description != null)
+                {
+                    jobType.Description = request.Description;
+                }
+            
+                if (request.EndpointUrl != null)
+                {
+                    jobType.EndpointUrl = request.EndpointUrl;
+                }
+            
+                if (request.AdrRequestTypeId.HasValue)
+                {
+                    jobType.AdrRequestTypeId = request.AdrRequestTypeId.Value;
+                }
+            
+                if (request.IsActive.HasValue)
+                {
+                    jobType.IsActive = request.IsActive.Value;
+                }
+            
+                if (request.DisplayOrder.HasValue)
+                {
+                    jobType.DisplayOrder = request.DisplayOrder.Value;
+                }
+            
+                if (request.Notes != null)
+                {
+                    jobType.Notes = request.Notes;
+                }
+            
+                jobType.ModifiedDateTime = DateTime.UtcNow;
+                jobType.ModifiedBy = username;
+            
+                await _dbContext.SaveChangesAsync();
+            
+                _logger.LogInformation("Job type {Id} ({Code}) updated by {User}", id, jobType.Code, username);
+            
+                return Ok(jobType);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating ADR job type {Id}", id);
+                return StatusCode(500, "An error occurred while updating the ADR job type");
+            }
+        }
+
+        /// <summary>
+        /// Soft deletes a job type.
+        /// Only Admin and Super Admin users can access this endpoint.
+        /// Note: Job types that are referenced by existing rules cannot be deleted.
+        /// </summary>
+        /// <param name="id">The unique identifier of the job type to delete.</param>
+        /// <returns>No content on success.</returns>
+        /// <response code="204">Job type was successfully deleted.</response>
+        /// <response code="400">Job type is referenced by existing rules and cannot be deleted.</response>
+        /// <response code="404">Job type with the specified ID was not found.</response>
+        /// <response code="500">An error occurred while deleting the job type.</response>
+        [HttpDelete("job-types/{id}")]
+        [Authorize(Policy = "Admin")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult> DeleteJobType(int id)
+        {
+            try
+            {
+                var jobType = await _dbContext.AdrJobTypes
+                    .FirstOrDefaultAsync(jt => jt.Id == id && !jt.IsDeleted);
+            
+                if (jobType == null)
+                {
+                    return NotFound($"Job type with ID {id} was not found.");
+                }
+            
+                // Check if job type is referenced by any rules
+                var ruleCount = await _dbContext.AdrAccountRules
+                    .CountAsync(r => r.JobTypeId == id && !r.IsDeleted);
+            
+                if (ruleCount > 0)
+                {
+                    return BadRequest($"Cannot delete job type '{jobType.Code}' because it is referenced by {ruleCount} rule(s). Deactivate the job type instead.");
+                }
+            
+                var username = User.Identity?.Name ?? "System";
+            
+                // Soft delete
+                jobType.IsDeleted = true;
+                jobType.IsActive = false;
+                jobType.ModifiedDateTime = DateTime.UtcNow;
+                jobType.ModifiedBy = username;
+            
+                await _dbContext.SaveChangesAsync();
+            
+                _logger.LogInformation("Job type {Id} ({Code}) deleted by {User}", id, jobType.Code, username);
+            
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting ADR job type {Id}", id);
+                return StatusCode(500, "An error occurred while deleting the ADR job type");
+            }
+        }
+
+        #endregion
+
+        private static string CsvEscape(string? value)
     {
         if (value == null) return "";
         if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
@@ -3278,6 +3667,130 @@ public class UpdateBlacklistEntryRequest
     public DateTime? EffectiveStartDate { get; set; }
     public DateTime? EffectiveEndDate { get; set; }
     public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Request to create a new job type
+/// </summary>
+public class CreateJobTypeRequest
+{
+    /// <summary>
+    /// Short code for the job type (e.g., "CREDENTIAL_CHECK", "DOWNLOAD_INVOICE")
+    /// </summary>
+    public string Code { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Display name for the job type
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Detailed description of what this job type does
+    /// </summary>
+    public string? Description { get; set; }
+    
+    /// <summary>
+    /// The URL endpoint to call when executing jobs of this type
+    /// </summary>
+    public string? EndpointUrl { get; set; }
+    
+    /// <summary>
+    /// The AdrRequestTypeId to send to the downstream ADR API (1 = AttemptLogin, 2 = DownloadInvoice)
+    /// </summary>
+    public int AdrRequestTypeId { get; set; }
+    
+    /// <summary>
+    /// Whether this job type is currently active (default: true)
+    /// </summary>
+    public bool? IsActive { get; set; }
+    
+    /// <summary>
+    /// Display order for UI sorting
+    /// </summary>
+    public int? DisplayOrder { get; set; }
+    
+    /// <summary>
+    /// Optional notes about this job type
+    /// </summary>
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Request to update an existing job type
+/// </summary>
+public class UpdateJobTypeRequest
+{
+    /// <summary>
+    /// Short code for the job type (e.g., "CREDENTIAL_CHECK", "DOWNLOAD_INVOICE")
+    /// </summary>
+    public string? Code { get; set; }
+    
+    /// <summary>
+    /// Display name for the job type
+    /// </summary>
+    public string? Name { get; set; }
+    
+    /// <summary>
+    /// Detailed description of what this job type does
+    /// </summary>
+    public string? Description { get; set; }
+    
+    /// <summary>
+    /// The URL endpoint to call when executing jobs of this type
+    /// </summary>
+    public string? EndpointUrl { get; set; }
+    
+    /// <summary>
+    /// The AdrRequestTypeId to send to the downstream ADR API (1 = AttemptLogin, 2 = DownloadInvoice)
+    /// </summary>
+    public int? AdrRequestTypeId { get; set; }
+    
+    /// <summary>
+    /// Whether this job type is currently active
+    /// </summary>
+    public bool? IsActive { get; set; }
+    
+    /// <summary>
+    /// Display order for UI sorting
+    /// </summary>
+    public int? DisplayOrder { get; set; }
+    
+    /// <summary>
+    /// Optional notes about this job type
+    /// </summary>
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Paginated response for account rules
+/// </summary>
+public class RulesPagedResponse
+{
+    public List<AccountRuleDto>? Items { get; set; }
+    public int TotalCount { get; set; }
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+}
+
+/// <summary>
+/// DTO for account rule data
+/// </summary>
+public class AccountRuleDto
+{
+    public int Id { get; set; }
+    public int AdrAccountId { get; set; }
+    public string? VendorCode { get; set; }
+    public string? VMAccountNumber { get; set; }
+    public int JobTypeId { get; set; }
+    public string? PeriodType { get; set; }
+    public int? PeriodDays { get; set; }
+    public DateTime? NextRunDateTime { get; set; }
+    public DateTime? NextRangeStartDateTime { get; set; }
+    public DateTime? NextRangeEndDateTime { get; set; }
+    public bool IsEnabled { get; set; }
+    public bool IsManuallyOverridden { get; set; }
+    public string? OverriddenBy { get; set; }
+    public DateTime? OverriddenDateTime { get; set; }
 }
 
 #endregion
