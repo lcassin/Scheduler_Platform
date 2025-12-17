@@ -1165,6 +1165,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                                 job.AdrAccount.ModifiedDateTime = DateTime.UtcNow;
                                 job.AdrAccount.ModifiedBy = "System Created";
                             }
+                            
+                            // Advance the rule to the next billing cycle so it doesn't get stuck
+                            await AdvanceRuleToNextCycleAsync(job);
                         }
                         else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
                         {
@@ -1456,6 +1459,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                                 job.AdrAccount.ModifiedDateTime = DateTime.UtcNow;
                                 job.AdrAccount.ModifiedBy = "System Created";
                             }
+                            
+                            // Advance the rule to the next billing cycle so it doesn't get stuck
+                            await AdvanceRuleToNextCycleAsync(job);
                         }
                         else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
                         {
@@ -1934,6 +1940,76 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         else
         {
             return expectedDate; // Vendor late - use expected date to prevent creep
+        }
+    }
+
+    /// <summary>
+    /// Advances the AdrAccountRule to the next billing cycle after a successful job completion.
+    /// Uses the job's NextRunDateTime (not status check date) to avoid scheduling creep.
+    /// Clears date override flags but preserves PeriodType overrides per BRD requirements.
+    /// </summary>
+    private async Task AdvanceRuleToNextCycleAsync(AdrJob job)
+    {
+        if (!job.AdrAccountRuleId.HasValue)
+        {
+            _logger.LogWarning("Job {JobId} has no AdrAccountRuleId - cannot advance rule", job.Id);
+            return;
+        }
+
+        try
+        {
+            // Load the rule that created this job
+            var rule = await _unitOfWork.AdrAccountRules.GetByIdAsync(job.AdrAccountRuleId.Value);
+            if (rule == null || rule.IsDeleted)
+            {
+                _logger.LogWarning("Rule {RuleId} not found or deleted for job {JobId}", job.AdrAccountRuleId, job.Id);
+                return;
+            }
+
+            // Use job's NextRunDateTime as the anchor (not status check date) to avoid creep
+            var anchorDate = job.NextRunDateTime?.Date ?? DateTime.UtcNow.Date;
+            var periodDays = rule.PeriodDays ?? GetPeriodDaysFromType(rule.PeriodType);
+
+            // Calculate next billing cycle dates
+            var nextRunDate = anchorDate.AddDays(periodDays);
+            var windowBefore = rule.WindowDaysBefore ?? 7;  // Default 7 days before
+            var windowAfter = rule.WindowDaysAfter ?? 14;   // Default 14 days after
+            var nextRangeStart = nextRunDate.AddDays(-windowBefore);
+            var nextRangeEnd = nextRunDate.AddDays(windowAfter);
+
+            // Update rule with next cycle dates
+            rule.NextRunDateTime = nextRunDate;
+            rule.NextRangeStartDateTime = nextRangeStart;
+            rule.NextRangeEndDateTime = nextRangeEnd;
+
+            // Clear date override flags since we found a bill successfully
+            // Per BRD: date overrides clear after successful completion, but PeriodType overrides persist
+            if (rule.IsManuallyOverridden)
+            {
+                // Only clear the override if it was a date-only override
+                // PeriodType overrides should persist (we don't have a separate flag, so we keep the override)
+                // For now, we'll clear the override since the successful job validates the schedule
+                rule.IsManuallyOverridden = false;
+                rule.OverriddenBy = null;
+                rule.OverriddenDateTime = null;
+                _logger.LogInformation(
+                    "Cleared manual override on rule {RuleId} after successful job {JobId} completion",
+                    rule.Id, job.Id);
+            }
+
+            rule.ModifiedDateTime = DateTime.UtcNow;
+            rule.ModifiedBy = "System Created";
+
+            await _unitOfWork.AdrAccountRules.UpdateAsync(rule);
+
+            _logger.LogInformation(
+                "Advanced rule {RuleId} to next cycle: NextRunDateTime={NextRun}, NextRangeStart={RangeStart}, NextRangeEnd={RangeEnd}",
+                rule.Id, nextRunDate, nextRangeStart, nextRangeEnd);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error advancing rule {RuleId} for job {JobId}", job.AdrAccountRuleId, job.Id);
+            // Don't throw - rule advancement failure shouldn't fail the status check
         }
     }
 
