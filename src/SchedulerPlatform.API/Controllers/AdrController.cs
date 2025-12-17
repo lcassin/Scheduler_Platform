@@ -2704,6 +2704,382 @@ public class AdrController : ControllerBase
 
     #endregion
 
+    #region AdrConfiguration Endpoints (Admin/Super Admin only)
+
+    /// <summary>
+    /// Retrieves the current ADR configuration settings.
+    /// Only Admin and Super Admin users can access this endpoint.
+    /// </summary>
+    /// <returns>The current ADR configuration or default values if not configured.</returns>
+    /// <response code="200">Returns the ADR configuration.</response>
+    /// <response code="500">An error occurred while retrieving the configuration.</response>
+    [HttpGet("configuration")]
+    [Authorize(Policy = "Admin")]
+    [ProducesResponseType(typeof(AdrConfiguration), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<AdrConfiguration>> GetConfiguration()
+    {
+        try
+        {
+            var configs = await _unitOfWork.AdrConfigurations.FindAsync(c => !c.IsDeleted);
+            var config = configs.FirstOrDefault();
+            
+            if (config == null)
+            {
+                // Return default configuration if none exists
+                config = new AdrConfiguration
+                {
+                    CredentialCheckLeadDays = 7,
+                    ScrapeRetryDays = 5,
+                    MaxRetries = 5,
+                    FinalStatusCheckDelayDays = 5,
+                    DailyStatusCheckDelayDays = 1,
+                    MaxParallelRequests = 8,
+                    BatchSize = 1000,
+                    DefaultWindowDaysBefore = 5,
+                    DefaultWindowDaysAfter = 5,
+                    AutoCreateTestLoginRules = true,
+                    AutoCreateMissingInvoiceAlerts = true,
+                    IsOrchestrationEnabled = true
+                };
+            }
+            
+            return Ok(config);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving ADR configuration");
+            return StatusCode(500, "An error occurred while retrieving ADR configuration");
+        }
+    }
+
+    /// <summary>
+    /// Updates the ADR configuration settings.
+    /// Only Admin and Super Admin users can access this endpoint.
+    /// </summary>
+    /// <param name="request">The configuration update request.</param>
+    /// <returns>The updated ADR configuration.</returns>
+    /// <response code="200">Returns the updated ADR configuration.</response>
+    /// <response code="400">Invalid configuration values provided.</response>
+    /// <response code="500">An error occurred while updating the configuration.</response>
+    [HttpPut("configuration")]
+    [Authorize(Policy = "Admin")]
+    [ProducesResponseType(typeof(AdrConfiguration), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<AdrConfiguration>> UpdateConfiguration([FromBody] UpdateAdrConfigurationRequest request)
+    {
+        try
+        {
+            var username = User.Identity?.Name ?? "System Created";
+            var configs = await _unitOfWork.AdrConfigurations.FindAsync(c => !c.IsDeleted);
+            var config = configs.FirstOrDefault();
+            
+            if (config == null)
+            {
+                // Create new configuration
+                config = new AdrConfiguration
+                {
+                    CreatedDateTime = DateTime.UtcNow,
+                    CreatedBy = username,
+                    ModifiedDateTime = DateTime.UtcNow,
+                    ModifiedBy = username
+                };
+                await _unitOfWork.AdrConfigurations.AddAsync(config);
+            }
+            
+            // Update configuration values
+            config.CredentialCheckLeadDays = request.CredentialCheckLeadDays ?? config.CredentialCheckLeadDays;
+            config.ScrapeRetryDays = request.ScrapeRetryDays ?? config.ScrapeRetryDays;
+            config.MaxRetries = request.MaxRetries ?? config.MaxRetries;
+            config.FinalStatusCheckDelayDays = request.FinalStatusCheckDelayDays ?? config.FinalStatusCheckDelayDays;
+            config.DailyStatusCheckDelayDays = request.DailyStatusCheckDelayDays ?? config.DailyStatusCheckDelayDays;
+            config.MaxParallelRequests = request.MaxParallelRequests ?? config.MaxParallelRequests;
+            config.BatchSize = request.BatchSize ?? config.BatchSize;
+            config.DefaultWindowDaysBefore = request.DefaultWindowDaysBefore ?? config.DefaultWindowDaysBefore;
+            config.DefaultWindowDaysAfter = request.DefaultWindowDaysAfter ?? config.DefaultWindowDaysAfter;
+            config.AutoCreateTestLoginRules = request.AutoCreateTestLoginRules ?? config.AutoCreateTestLoginRules;
+            config.AutoCreateMissingInvoiceAlerts = request.AutoCreateMissingInvoiceAlerts ?? config.AutoCreateMissingInvoiceAlerts;
+            config.MissingInvoiceAlertEmail = request.MissingInvoiceAlertEmail ?? config.MissingInvoiceAlertEmail;
+            config.IsOrchestrationEnabled = request.IsOrchestrationEnabled ?? config.IsOrchestrationEnabled;
+            config.Notes = request.Notes ?? config.Notes;
+            config.ModifiedDateTime = DateTime.UtcNow;
+            config.ModifiedBy = username;
+            
+            await _unitOfWork.SaveChangesAsync();
+            
+            _logger.LogInformation("ADR configuration updated by {User}", username);
+            
+            return Ok(config);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating ADR configuration");
+            return StatusCode(500, "An error occurred while updating ADR configuration");
+        }
+    }
+
+    #endregion
+
+    #region AdrAccountBlacklist Endpoints (Admin/Super Admin only)
+
+    /// <summary>
+    /// Retrieves a paginated list of blacklist entries.
+    /// Only Admin and Super Admin users can access this endpoint.
+    /// </summary>
+    /// <param name="pageNumber">Page number for pagination (default: 1).</param>
+    /// <param name="pageSize">Number of items per page (default: 20).</param>
+    /// <param name="includeInactive">Whether to include inactive entries (default: false).</param>
+    /// <returns>A paginated list of blacklist entries.</returns>
+    /// <response code="200">Returns the list of blacklist entries.</response>
+    /// <response code="500">An error occurred while retrieving blacklist entries.</response>
+    [HttpGet("blacklist")]
+    [Authorize(Policy = "Admin")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<object>> GetBlacklist(
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] bool includeInactive = false)
+    {
+        try
+        {
+            var query = _dbContext.AdrAccountBlacklists
+                .Where(b => !b.IsDeleted);
+            
+            if (!includeInactive)
+            {
+                query = query.Where(b => b.IsActive);
+            }
+            
+            var totalCount = await query.CountAsync();
+            var items = await query
+                .OrderByDescending(b => b.CreatedDateTime)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+            
+            return Ok(new
+            {
+                items,
+                totalCount,
+                pageNumber,
+                pageSize
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving ADR blacklist entries");
+            return StatusCode(500, "An error occurred while retrieving ADR blacklist entries");
+        }
+    }
+
+    /// <summary>
+    /// Retrieves a specific blacklist entry by ID.
+    /// Only Admin and Super Admin users can access this endpoint.
+    /// </summary>
+    /// <param name="id">The unique identifier of the blacklist entry.</param>
+    /// <returns>The blacklist entry with the specified ID.</returns>
+    /// <response code="200">Returns the requested blacklist entry.</response>
+    /// <response code="404">Blacklist entry with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while retrieving the blacklist entry.</response>
+    [HttpGet("blacklist/{id}")]
+    [Authorize(Policy = "Admin")]
+    [ProducesResponseType(typeof(AdrAccountBlacklist), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<AdrAccountBlacklist>> GetBlacklistEntry(int id)
+    {
+        try
+        {
+            var entry = await _unitOfWork.AdrAccountBlacklists.GetByIdAsync(id);
+            if (entry == null || entry.IsDeleted)
+            {
+                return NotFound();
+            }
+            
+            return Ok(entry);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving ADR blacklist entry {Id}", id);
+            return StatusCode(500, "An error occurred while retrieving the ADR blacklist entry");
+        }
+    }
+
+    /// <summary>
+    /// Creates a new blacklist entry.
+    /// Only Admin and Super Admin users can access this endpoint.
+    /// </summary>
+    /// <param name="request">The blacklist entry creation request.</param>
+    /// <returns>The created blacklist entry.</returns>
+    /// <response code="201">Returns the created blacklist entry.</response>
+    /// <response code="400">Invalid blacklist entry data provided.</response>
+    /// <response code="500">An error occurred while creating the blacklist entry.</response>
+    [HttpPost("blacklist")]
+    [Authorize(Policy = "Admin")]
+    [ProducesResponseType(typeof(AdrAccountBlacklist), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<AdrAccountBlacklist>> CreateBlacklistEntry([FromBody] CreateBlacklistEntryRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(request.Reason))
+            {
+                return BadRequest("Reason is required for blacklist entries");
+            }
+            
+            // At least one exclusion criteria must be provided
+            if (string.IsNullOrWhiteSpace(request.VendorCode) && 
+                !request.VMAccountId.HasValue && 
+                string.IsNullOrWhiteSpace(request.VMAccountNumber) && 
+                !request.CredentialId.HasValue)
+            {
+                return BadRequest("At least one exclusion criteria (VendorCode, VMAccountId, VMAccountNumber, or CredentialId) must be provided");
+            }
+            
+            var username = User.Identity?.Name ?? "System Created";
+            
+            var entry = new AdrAccountBlacklist
+            {
+                VendorCode = request.VendorCode,
+                VMAccountId = request.VMAccountId,
+                VMAccountNumber = request.VMAccountNumber,
+                CredentialId = request.CredentialId,
+                ExclusionType = request.ExclusionType ?? "All",
+                Reason = request.Reason,
+                IsActive = true,
+                EffectiveStartDate = request.EffectiveStartDate,
+                EffectiveEndDate = request.EffectiveEndDate,
+                BlacklistedBy = username,
+                BlacklistedDateTime = DateTime.UtcNow,
+                Notes = request.Notes,
+                CreatedDateTime = DateTime.UtcNow,
+                CreatedBy = username,
+                ModifiedDateTime = DateTime.UtcNow,
+                ModifiedBy = username
+            };
+            
+            await _unitOfWork.AdrAccountBlacklists.AddAsync(entry);
+            await _unitOfWork.SaveChangesAsync();
+            
+            _logger.LogInformation("Blacklist entry {Id} created by {User}. VendorCode: {VendorCode}, VMAccountId: {VMAccountId}, Reason: {Reason}",
+                entry.Id, username, request.VendorCode, request.VMAccountId, request.Reason);
+            
+            return CreatedAtAction(nameof(GetBlacklistEntry), new { id = entry.Id }, entry);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating ADR blacklist entry");
+            return StatusCode(500, "An error occurred while creating the ADR blacklist entry");
+        }
+    }
+
+    /// <summary>
+    /// Updates an existing blacklist entry.
+    /// Only Admin and Super Admin users can access this endpoint.
+    /// </summary>
+    /// <param name="id">The unique identifier of the blacklist entry.</param>
+    /// <param name="request">The blacklist entry update request.</param>
+    /// <returns>The updated blacklist entry.</returns>
+    /// <response code="200">Returns the updated blacklist entry.</response>
+    /// <response code="400">Invalid blacklist entry data provided.</response>
+    /// <response code="404">Blacklist entry with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while updating the blacklist entry.</response>
+    [HttpPut("blacklist/{id}")]
+    [Authorize(Policy = "Admin")]
+    [ProducesResponseType(typeof(AdrAccountBlacklist), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<AdrAccountBlacklist>> UpdateBlacklistEntry(int id, [FromBody] UpdateBlacklistEntryRequest request)
+    {
+        try
+        {
+            var entry = await _unitOfWork.AdrAccountBlacklists.GetByIdAsync(id);
+            if (entry == null || entry.IsDeleted)
+            {
+                return NotFound();
+            }
+            
+            var username = User.Identity?.Name ?? "System Created";
+            
+            // Update fields if provided
+            if (request.VendorCode != null) entry.VendorCode = request.VendorCode;
+            if (request.VMAccountId.HasValue) entry.VMAccountId = request.VMAccountId;
+            if (request.VMAccountNumber != null) entry.VMAccountNumber = request.VMAccountNumber;
+            if (request.CredentialId.HasValue) entry.CredentialId = request.CredentialId;
+            if (request.ExclusionType != null) entry.ExclusionType = request.ExclusionType;
+            if (request.Reason != null) entry.Reason = request.Reason;
+            if (request.IsActive.HasValue) entry.IsActive = request.IsActive.Value;
+            if (request.EffectiveStartDate.HasValue) entry.EffectiveStartDate = request.EffectiveStartDate;
+            if (request.EffectiveEndDate.HasValue) entry.EffectiveEndDate = request.EffectiveEndDate;
+            if (request.Notes != null) entry.Notes = request.Notes;
+            
+            entry.ModifiedDateTime = DateTime.UtcNow;
+            entry.ModifiedBy = username;
+            
+            await _unitOfWork.SaveChangesAsync();
+            
+            _logger.LogInformation("Blacklist entry {Id} updated by {User}", id, username);
+            
+            return Ok(entry);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating ADR blacklist entry {Id}", id);
+            return StatusCode(500, "An error occurred while updating the ADR blacklist entry");
+        }
+    }
+
+    /// <summary>
+    /// Soft deletes a blacklist entry.
+    /// Only Admin and Super Admin users can access this endpoint.
+    /// </summary>
+    /// <param name="id">The unique identifier of the blacklist entry.</param>
+    /// <returns>No content on success.</returns>
+    /// <response code="204">Blacklist entry was successfully deleted.</response>
+    /// <response code="404">Blacklist entry with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while deleting the blacklist entry.</response>
+    [HttpDelete("blacklist/{id}")]
+    [Authorize(Policy = "Admin")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult> DeleteBlacklistEntry(int id)
+    {
+        try
+        {
+            var entry = await _unitOfWork.AdrAccountBlacklists.GetByIdAsync(id);
+            if (entry == null || entry.IsDeleted)
+            {
+                return NotFound();
+            }
+            
+            var username = User.Identity?.Name ?? "System Created";
+            
+            // Soft delete
+            entry.IsDeleted = true;
+            entry.IsActive = false;
+            entry.ModifiedDateTime = DateTime.UtcNow;
+            entry.ModifiedBy = username;
+            
+            await _unitOfWork.SaveChangesAsync();
+            
+            _logger.LogInformation("Blacklist entry {Id} deleted by {User}", id, username);
+            
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting ADR blacklist entry {Id}", id);
+            return StatusCode(500, "An error occurred while deleting the ADR blacklist entry");
+        }
+    }
+
+    #endregion
+
     private static string CsvEscape(string? value)
     {
         if (value == null) return "";
@@ -2848,6 +3224,60 @@ public class ManualAdrApiResponse
     public long? IndexId { get; set; }
     public bool IsError { get; set; }
     public bool IsFinal { get; set; }
+}
+
+/// <summary>
+/// Request to update ADR configuration settings
+/// </summary>
+public class UpdateAdrConfigurationRequest
+{
+    public int? CredentialCheckLeadDays { get; set; }
+    public int? ScrapeRetryDays { get; set; }
+    public int? MaxRetries { get; set; }
+    public int? FinalStatusCheckDelayDays { get; set; }
+    public int? DailyStatusCheckDelayDays { get; set; }
+    public int? MaxParallelRequests { get; set; }
+    public int? BatchSize { get; set; }
+    public int? DefaultWindowDaysBefore { get; set; }
+    public int? DefaultWindowDaysAfter { get; set; }
+    public bool? AutoCreateTestLoginRules { get; set; }
+    public bool? AutoCreateMissingInvoiceAlerts { get; set; }
+    public string? MissingInvoiceAlertEmail { get; set; }
+    public bool? IsOrchestrationEnabled { get; set; }
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Request to create a new blacklist entry
+/// </summary>
+public class CreateBlacklistEntryRequest
+{
+    public string? VendorCode { get; set; }
+    public long? VMAccountId { get; set; }
+    public string? VMAccountNumber { get; set; }
+    public int? CredentialId { get; set; }
+    public string? ExclusionType { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public DateTime? EffectiveStartDate { get; set; }
+    public DateTime? EffectiveEndDate { get; set; }
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Request to update an existing blacklist entry
+/// </summary>
+public class UpdateBlacklistEntryRequest
+{
+    public string? VendorCode { get; set; }
+    public long? VMAccountId { get; set; }
+    public string? VMAccountNumber { get; set; }
+    public int? CredentialId { get; set; }
+    public string? ExclusionType { get; set; }
+    public string? Reason { get; set; }
+    public bool? IsActive { get; set; }
+    public DateTime? EffectiveStartDate { get; set; }
+    public DateTime? EffectiveEndDate { get; set; }
+    public string? Notes { get; set; }
 }
 
 #endregion

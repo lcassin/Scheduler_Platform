@@ -65,14 +65,18 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     private readonly IConfiguration _configuration;
     private readonly ILogger<AdrOrchestratorService> _logger;
 
+    // Default values used when database configuration is not available
     private const int DefaultCredentialCheckLeadDays = 7;
     private const int DefaultScrapeRetryDays = 5;
     private const int DefaultFollowUpDelayDays = 5;
-    private const int DailyStatusCheckDelayDays = 1;  // Check status the day after scraping
-    private const int FinalStatusCheckDelayDays = 5;  // Final check 5 days after billing window ends
+    private const int DefaultDailyStatusCheckDelayDays = 1;  // Check status the day after scraping
+    private const int DefaultFinalStatusCheckDelayDays = 5;  // Final check 5 days after billing window ends
     private const int DefaultMaxRetries = 5;
-    private const int BatchSize = 1000; // Process and save in batches to avoid large transactions
+    private const int DefaultBatchSize = 1000; // Process and save in batches to avoid large transactions
     private const int DefaultMaxParallelRequests = 8; // Default parallel API requests
+
+    // Cached configuration from database (loaded once per orchestration run)
+    private AdrConfiguration? _cachedConfig;
 
     public AdrOrchestratorService(
         IUnitOfWork unitOfWork,
@@ -88,14 +92,147 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         _logger = logger;
     }
 
+    /// <summary>
+    /// Gets the ADR configuration from the database, falling back to appsettings.json defaults.
+    /// Configuration is cached for the lifetime of this service instance.
+    /// </summary>
+    private async Task<AdrConfiguration> GetConfigurationAsync()
+    {
+        if (_cachedConfig != null)
+            return _cachedConfig;
+
+        try
+        {
+            // Try to load configuration from database
+            var configs = await _unitOfWork.AdrConfigurations.FindAsync(c => !c.IsDeleted);
+            _cachedConfig = configs.FirstOrDefault();
+            
+            if (_cachedConfig != null)
+            {
+                _logger.LogInformation("Loaded ADR configuration from database (ConfigId: {ConfigId})", _cachedConfig.Id);
+                return _cachedConfig;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load ADR configuration from database, using defaults");
+        }
+
+        // Return default configuration if database config not available
+        _cachedConfig = new AdrConfiguration
+        {
+            CredentialCheckLeadDays = _configuration.GetValue<int>("AdrOrchestration:CredentialCheckLeadDays", DefaultCredentialCheckLeadDays),
+            ScrapeRetryDays = _configuration.GetValue<int>("AdrOrchestration:ScrapeRetryDays", DefaultScrapeRetryDays),
+            MaxRetries = _configuration.GetValue<int>("AdrOrchestration:MaxRetries", DefaultMaxRetries),
+            FinalStatusCheckDelayDays = _configuration.GetValue<int>("AdrOrchestration:FinalStatusCheckDelayDays", DefaultFinalStatusCheckDelayDays),
+            DailyStatusCheckDelayDays = _configuration.GetValue<int>("AdrOrchestration:DailyStatusCheckDelayDays", DefaultDailyStatusCheckDelayDays),
+            MaxParallelRequests = _configuration.GetValue<int>("AdrOrchestration:MaxParallelRequests", DefaultMaxParallelRequests),
+            BatchSize = _configuration.GetValue<int>("AdrOrchestration:BatchSize", DefaultBatchSize),
+            IsOrchestrationEnabled = true
+        };
+        
+        _logger.LogInformation("Using default ADR configuration (database config not found)");
+        return _cachedConfig;
+    }
+
+    /// <summary>
+    /// Checks if an account is blacklisted from job creation.
+    /// </summary>
+    private async Task<bool> IsAccountBlacklistedAsync(AdrAccount account, string exclusionType = "All")
+    {
+        try
+        {
+            var today = DateTime.UtcNow.Date;
+            var blacklistEntries = await _unitOfWork.AdrAccountBlacklists.FindAsync(b =>
+                !b.IsDeleted &&
+                b.IsActive &&
+                (b.EffectiveStartDate == null || b.EffectiveStartDate <= today) &&
+                (b.EffectiveEndDate == null || b.EffectiveEndDate >= today) &&
+                (b.ExclusionType == "All" || b.ExclusionType == exclusionType));
+
+            foreach (var entry in blacklistEntries)
+            {
+                // Check if this blacklist entry matches the account
+                bool matches = false;
+
+                // Match by VendorCode (if specified)
+                if (!string.IsNullOrEmpty(entry.VendorCode) && entry.VendorCode == account.VendorCode)
+                    matches = true;
+
+                // Match by VMAccountId (if specified)
+                if (entry.VMAccountId.HasValue && entry.VMAccountId == account.VMAccountId)
+                    matches = true;
+
+                // Match by VMAccountNumber (if specified)
+                if (!string.IsNullOrEmpty(entry.VMAccountNumber) && entry.VMAccountNumber == account.VMAccountNumber)
+                    matches = true;
+
+                // Match by CredentialId (if specified)
+                if (entry.CredentialId.HasValue && entry.CredentialId == account.CredentialId)
+                    matches = true;
+
+                if (matches)
+                {
+                    _logger.LogInformation(
+                        "Account {AccountId} (VMAccountId: {VMAccountId}, VendorCode: {VendorCode}) is blacklisted. Reason: {Reason}",
+                        account.Id, account.VMAccountId, account.VendorCode, entry.Reason);
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to check blacklist for account {AccountId}, allowing job creation", account.Id);
+            return false; // Allow job creation if blacklist check fails
+        }
+    }
+
+    private async Task<int> GetMaxParallelRequestsAsync()
+    {
+        var config = await GetConfigurationAsync();
+        return config.MaxParallelRequests;
+    }
+
+    private async Task<int> GetCredentialCheckLeadDaysAsync()
+    {
+        var config = await GetConfigurationAsync();
+        return config.CredentialCheckLeadDays;
+    }
+
+    private async Task<int> GetBatchSizeAsync()
+    {
+        var config = await GetConfigurationAsync();
+        return config.BatchSize;
+    }
+
+    // Legacy synchronous methods for backward compatibility (use async versions when possible)
     private int GetMaxParallelRequests()
     {
-        return _configuration.GetValue<int>("AdrOrchestration:MaxParallelRequests", DefaultMaxParallelRequests);
+        return _cachedConfig?.MaxParallelRequests ?? 
+            _configuration.GetValue<int>("AdrOrchestration:MaxParallelRequests", DefaultMaxParallelRequests);
     }
 
     private int GetCredentialCheckLeadDays()
     {
-        return _configuration.GetValue<int>("AdrOrchestration:CredentialCheckLeadDays", DefaultCredentialCheckLeadDays);
+        return _cachedConfig?.CredentialCheckLeadDays ?? 
+            _configuration.GetValue<int>("AdrOrchestration:CredentialCheckLeadDays", DefaultCredentialCheckLeadDays);
+    }
+
+    private int GetBatchSize()
+    {
+        return _cachedConfig?.BatchSize ?? DefaultBatchSize;
+    }
+
+    private int GetDailyStatusCheckDelayDays()
+    {
+        return _cachedConfig?.DailyStatusCheckDelayDays ?? DefaultDailyStatusCheckDelayDays;
+    }
+
+    private int GetFinalStatusCheckDelayDays()
+    {
+        return _cachedConfig?.FinalStatusCheckDelayDays ?? DefaultFinalStatusCheckDelayDays;
     }
 
     #region Step 2: Job Creation
@@ -108,13 +245,25 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         {
             _logger.LogInformation("Starting job creation for due accounts");
 
+            // Load configuration from database (cached for this orchestration run)
+            var config = await GetConfigurationAsync();
+            
+            // Check if orchestration is enabled
+            if (!config.IsOrchestrationEnabled)
+            {
+                _logger.LogWarning("ADR orchestration is disabled in configuration. Skipping job creation.");
+                return result;
+            }
+
             // Use the new method that includes AdrAccountRules for rule tracking per BRD requirements
             var dueAccounts = await _unitOfWork.AdrAccounts.GetDueAccountsWithRulesAsync();
 
             int processedSinceLastSave = 0;
             int batchNumber = 1;
+            int blacklistedCount = 0;
             var dueAccountsList = dueAccounts.ToList();
-            _logger.LogInformation("Processing {Count} due accounts in batches of {BatchSize}", dueAccountsList.Count, BatchSize);
+            var batchSize = config.BatchSize;
+            _logger.LogInformation("Processing {Count} due accounts in batches of {BatchSize}", dueAccountsList.Count, batchSize);
 
             foreach (var account in dueAccountsList)
             {
@@ -123,6 +272,14 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     if (!account.NextRangeStartDateTime.HasValue || !account.NextRangeEndDateTime.HasValue)
                     {
                         result.JobsSkipped++;
+                        continue;
+                    }
+
+                    // Check if account is blacklisted before creating job
+                    if (await IsAccountBlacklistedAsync(account, "Download"))
+                    {
+                        result.JobsSkipped++;
+                        blacklistedCount++;
                         continue;
                     }
 
@@ -170,7 +327,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     processedSinceLastSave++;
 
                     // Save in batches to reduce transaction size
-                    if (processedSinceLastSave >= BatchSize)
+                    if (processedSinceLastSave >= batchSize)
                     {
                         await _unitOfWork.SaveChangesAsync();
                         _logger.LogInformation("Job creation batch {BatchNumber} saved: {Count} jobs created so far", 
@@ -194,8 +351,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             }
 
             _logger.LogInformation(
-                "Job creation completed. Created: {Created}, Skipped: {Skipped}, Errors: {Errors}",
-                result.JobsCreated, result.JobsSkipped, result.Errors);
+                "Job creation completed. Created: {Created}, Skipped: {Skipped} (Blacklisted: {Blacklisted}), Errors: {Errors}",
+                result.JobsCreated, result.JobsSkipped, blacklistedCount, result.Errors);
 
             return result;
         }
@@ -464,7 +621,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.ModifiedBy = "System Created";
                     processedSinceLastSave++;
 
-                    if (processedSinceLastSave >= BatchSize)
+                    if (processedSinceLastSave >= GetBatchSize())
                     {
                         await _unitOfWork.SaveChangesAsync();
                         _logger.LogInformation("Credential verification batch {BatchNumber} saved: {Count} jobs processed so far", 
@@ -754,7 +911,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.ModifiedBy = "System Created";
                     processedSinceLastSave++;
 
-                    if (processedSinceLastSave >= BatchSize)
+                    if (processedSinceLastSave >= GetBatchSize())
                     {
                         await _unitOfWork.SaveChangesAsync();
                         _logger.LogInformation("Scraping batch {BatchNumber} saved: {Count} jobs processed so far", 
@@ -814,8 +971,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             // 2. Final status checks (5-day delay after NextRangeEndDate): Jobs past their billing window
             var now = DateTime.UtcNow;
             
-            var dailyJobs = (await _unitOfWork.AdrJobs.GetJobsNeedingDailyStatusCheckAsync(now, DailyStatusCheckDelayDays)).ToList();
-            var finalJobs = (await _unitOfWork.AdrJobs.GetJobsNeedingFinalStatusCheckAsync(now, FinalStatusCheckDelayDays)).ToList();
+            var dailyJobs = (await _unitOfWork.AdrJobs.GetJobsNeedingDailyStatusCheckAsync(now, GetDailyStatusCheckDelayDays())).ToList();
+            var finalJobs = (await _unitOfWork.AdrJobs.GetJobsNeedingFinalStatusCheckAsync(now, GetFinalStatusCheckDelayDays())).ToList();
             
             // Merge and deduplicate by job ID
             var jobsNeedingStatusCheck = dailyJobs
@@ -1022,7 +1179,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.ModifiedBy = "System Created";
                     processedSinceLastSave++;
 
-                    if (processedSinceLastSave >= BatchSize)
+                    if (processedSinceLastSave >= GetBatchSize())
                     {
                         await _unitOfWork.SaveChangesAsync();
                         _logger.LogInformation("Status check batch {BatchNumber} saved: {Count} jobs checked so far", 
@@ -1338,7 +1495,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.ModifiedBy = "System Created";
                     processedSinceLastSave++;
 
-                    if (processedSinceLastSave >= BatchSize)
+                    if (processedSinceLastSave >= GetBatchSize())
                     {
                         await _unitOfWork.SaveChangesAsync();
                         _logger.LogInformation("Manual status check batch {BatchNumber} saved: {Count} jobs checked so far", 
