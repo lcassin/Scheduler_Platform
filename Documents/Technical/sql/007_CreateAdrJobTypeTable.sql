@@ -119,5 +119,5 @@ GO
 
 -- Verification queries
 SELECT 'AdrJobType Records' AS [Check], COUNT(*) AS [Count] FROM [dbo].[AdrJobType];
-SELECT * FROM [dbo].[AdrJobType] ORDER BY [DisplayOrder];
+SELECT * FROM [dbo].[AdrJobType] ORDER BY [AdrJobTypeId];
 GO
