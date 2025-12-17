@@ -25,9 +25,16 @@ public class AdrAccount
     public string? NextRunStatus { get; set; }
     public string? HistoricalBillingStatus { get; set; }
     public DateTime? LastSyncedDateTime { get; set; }
+    public bool IsManuallyOverridden { get; set; }
+    public string? OverriddenBy { get; set; }
+    public DateTime? OverriddenDateTime { get; set; }
     public bool IsDeleted { get; set; }
     public DateTime CreatedDateTime { get; set; }
     public DateTime? ModifiedDateTime { get; set; }
+    
+    // Job status fields - populated from current billing period's job
+    public string? CurrentJobStatus { get; set; }
+    public DateTime? LastCompletedDateTime { get; set; }
 }
 
 public class AdrAccountStats

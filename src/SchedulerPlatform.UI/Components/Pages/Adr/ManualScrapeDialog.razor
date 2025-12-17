@@ -1,0 +1,165 @@
+@using SchedulerPlatform.UI.Models
+@inject IAdrService AdrService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.CloudDownload" Class="mr-2" />
+            Manual ADR Request
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (Account != null)
+        {
+            <MudText Typo="Typo.body2" Class="mb-4">
+                Request a manual ADR invoice retrieval for account <strong>@Account.VMAccountNumber</strong>
+            </MudText>
+            
+            <MudAlert Severity="Severity.Warning" Class="mb-4">
+                This will fire an ADR request directly to the API for the specified date range.
+                This does not create a job and bypasses the normal orchestration workflow.
+            </MudAlert>
+
+            <MudGrid>
+                <MudItem xs="12">
+                    <MudSelect @bind-Value="_requestType" 
+                               Label="Request Type" 
+                               Variant="Variant.Outlined"
+                               Required="true"
+                               HelperText="Select the type of ADR request to send">
+                        <MudSelectItem Value="2">ADR Download Request</MudSelectItem>
+                        <MudSelectItem Value="1">Vendor Credential Check</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12">
+                    <MudDatePicker @bind-Date="_targetDate" 
+                                   Label="Target Date" 
+                                   Placeholder="Select the target invoice date"
+                                   Variant="Variant.Outlined"
+                                   Required="true"
+                                   HelperText="The expected date of the invoice to search for" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudSwitch @bind-Value="_useCustomRange" Color="Color.Primary" Label="Use Custom Date Range" />
+                </MudItem>
+                @if (_useCustomRange)
+                {
+                    <MudItem xs="6">
+                        <MudDatePicker @bind-Date="_rangeStartDate" 
+                                       Label="Range Start Date" 
+                                       Variant="Variant.Outlined"
+                                       HelperText="Start of search range" />
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudDatePicker @bind-Date="_rangeEndDate" 
+                                       Label="Range End Date" 
+                                       Variant="Variant.Outlined"
+                                       HelperText="End of search range" />
+                    </MudItem>
+                }
+                else
+                {
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            Date range will be calculated automatically based on the account's billing period type (@(Account.PeriodType ?? "Monthly")).
+                        </MudText>
+                    </MudItem>
+                }
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_reason" 
+                                  Label="Reason (Optional)" 
+                                  Placeholder="Enter reason for manual ADR request"
+                                  Variant="Variant.Outlined"
+                                  Lines="2"
+                                  HelperText="For audit purposes - why is this manual ADR request needed?" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudSwitch @bind-Value="_isHighPriority" Color="Color.Warning" Label="High Priority" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        High priority requests are processed before normal priority requests in the ADR queue.
+                    </MudText>
+                </MudItem>
+            </MudGrid>
+
+            <MudAlert Severity="Severity.Info" Class="mt-4">
+                <strong>Account Details:</strong><br />
+                Vendor: @(Account.VendorCode ?? "N/A") | 
+                Credential ID: @(Account.CredentialId > 0 ? Account.CredentialId.ToString() : "N/A") | 
+                Period Type: @(Account.PeriodType ?? "N/A")
+            </MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="_submitting">Cancel</MudButton>
+        <MudButton Color="Color.Warning" Variant="Variant.Filled" OnClick="Submit" Disabled="_submitting || !_targetDate.HasValue">
+            @if (_submitting)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Submitting...</span>
+            }
+            else
+            {
+                <span>@(_requestType == 1 ? "Submit Credential Check" : "Submit ADR Request")</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] 
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public AdrAccount? Account { get; set; }
+
+    private DateTime? _targetDate;
+    private DateTime? _rangeStartDate;
+    private DateTime? _rangeEndDate;
+    private string? _reason;
+    private bool _useCustomRange = false;
+    private bool _isHighPriority = false;
+    private bool _submitting = false;
+    private int _requestType = 2; // Default to ADR Download Request
+
+    protected override void OnParametersSet()
+    {
+        if (Account != null)
+        {
+            // Default to the account's next run date or today
+            _targetDate = Account.NextRunDateTime ?? DateTime.Today;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Submit()
+    {
+        if (Account == null || !_targetDate.HasValue) return;
+
+        _submitting = true;
+        try
+        {
+            var result = await AdrService.ManualScrapeRequestAsync(
+                Account.Id,
+                _targetDate.Value,
+                _useCustomRange ? _rangeStartDate : null,
+                _useCustomRange ? _rangeEndDate : null,
+                _reason,
+                _isHighPriority,
+                _requestType);
+            
+            var requestTypeName = _requestType == 1 ? "Vendor Credential Check" : "ADR Download Request";
+            Snackbar.Add($"{requestTypeName} submitted. Execution ID: {result.ExecutionId}, Range: {result.RangeStartDate:MM/dd/yyyy} - {result.RangeEndDate:MM/dd/yyyy}", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(result));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error submitting ADR request: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+}

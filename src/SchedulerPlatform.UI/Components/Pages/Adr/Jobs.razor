@@ -5,6 +5,7 @@
 @inject NavigationManager Navigation
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
 
 <PageTitle>ADR Jobs</PageTitle>
 
@@ -20,7 +21,8 @@
                               Margin="Margin.Dense" 
                               Clearable="true"
                               Adornment="Adornment.Start"
-                              AdornmentIcon="@Icons.Material.Filled.Business" />
+                              AdornmentIcon="@Icons.Material.Filled.Business"
+                              OnKeyDown="@OnSearchKeyDown" />
             </MudItem>
             <MudItem xs="12" md="2">
                 <MudTextField @bind-Value="_searchAccountNumber" 
@@ -30,7 +32,8 @@
                               Margin="Margin.Dense" 
                               Clearable="true"
                               Adornment="Adornment.Start"
-                              AdornmentIcon="@Icons.Material.Filled.Search" />
+                              AdornmentIcon="@Icons.Material.Filled.Search"
+                              OnKeyDown="@OnSearchKeyDown" />
             </MudItem>
             <MudItem xs="12" md="2">
                 <MudSelect T="string" @bind-Value="_selectedStatus" Label="Status" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
@@ -38,40 +41,93 @@
                     <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
                     <MudSelectItem Value="@("CredentialVerified")">Credential Verified</MudSelectItem>
                     <MudSelectItem Value="@("CredentialFailed")">Credential Failed</MudSelectItem>
-                    <MudSelectItem Value="@("ScrapeRequested")">Scrape Requested</MudSelectItem>
-                    <MudSelectItem Value="@("ScrapeFailed")">Scrape Failed</MudSelectItem>
+                    <MudSelectItem Value="@("ScrapeRequested")">ADR Request Sent</MudSelectItem>
+                    <MudSelectItem Value="@("Failed")">ADR Request Failed</MudSelectItem>
                     <MudSelectItem Value="@("Completed")">Completed</MudSelectItem>
                     <MudSelectItem Value="@("NeedsReview")">Needs Review</MudSelectItem>
                 </MudSelect>
             </MudItem>
-            <MudItem xs="12" md="3" Class="d-flex align-center justify-end gap-2">
+            <MudItem xs="12" md="2">
+                <MudTextField @bind-Value="_searchInterfaceAccountId" 
+                              Label="Interface Account ID" 
+                              Placeholder="Enter interface acct"
+                              Variant="Variant.Outlined" 
+                              Margin="Margin.Dense" 
+                              Clearable="true"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Link"
+                              OnKeyDown="@OnSearchKeyDown" />
+            </MudItem>
+            <MudItem xs="12" md="2" Class="d-flex flex-column justify-center">
+                <MudSwitch @bind-Value="_showLatestPerAccount" Color="Color.Primary" Label="Latest per Account" />
+                <MudSwitch @bind-Value="_showManualJobs" Color="Color.Secondary" Label="Show Manual Jobs" />
+            </MudItem>
+        </MudGrid>
+        <MudGrid Class="mb-4" Spacing="2">
+            <MudItem xs="12" Class="d-flex align-center justify-end gap-2">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters" StartIcon="@Icons.Material.Filled.FilterAlt">
                     Apply
                 </MudButton>
                 <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ClearFilters" StartIcon="@Icons.Material.Filled.Clear">
                     Clear
                 </MudButton>
+                <MudCheckBox @bind-Value="_forceRefire" Label="Force Refire" Color="Color.Warning" Dense="true"
+                             Title="Clear execution history to bypass idempotency check (use when downstream issues require re-processing)" />
+                @if (_selectedJobs.Any())
+                {
+                    @if (_isRefiring)
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Warning" Disabled="true">
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            Refiring...
+                        </MudButton>
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Filled" Color="@(_forceRefire ? Color.Error : Color.Warning)" OnClick="RefireSelectedJobs" StartIcon="@Icons.Material.Filled.Replay">
+                            @(_forceRefire ? "Force " : "")Refire Selected (@_selectedJobs.Count)
+                        </MudButton>
+                    }
+                }
+                @if (_isExporting)
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="true">
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        Exporting...
+                    </MudButton>
+                }
+                else
+                {
+                    <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+                        <ActivatorContent>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download">
+                                Export
+                            </MudButton>
+                        </ActivatorContent>
+                        <ChildContent>
+                            <MudMenuItem OnClick="@(() => ExportJobs("excel"))">Excel</MudMenuItem>
+                            <MudMenuItem OnClick="@(() => ExportJobs("csv"))">CSV</MudMenuItem>
+                        </ChildContent>
+                    </MudMenu>
+                }
             </MudItem>
         </MudGrid>
 
-    @if (_loading)
-    {
-        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
-    }
-    else
-    {
         <MudTable T="AdrJob" ServerData="@ServerReload" 
-                  @ref="_table" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
+                  @ref="_table" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true"
+                  Loading="@_loading" LoadingProgressColor="Color.Primary"
+                  MultiSelection="true" @bind-SelectedItems="_selectedJobs">
                         <HeaderContent>
-                            <MudTh>Job ID</MudTh>
-                            <MudTh>Vendor</MudTh>
-                            <MudTh>Account #</MudTh>
-                            <MudTh>Billing Period</MudTh>
-                            <MudTh>Period Type</MudTh>
-                            <MudTh>Next Run</MudTh>
-                            <MudTh>Status</MudTh>
-                            <MudTh>ADR Status</MudTh>
-                            <MudTh>Retry Count</MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="Id" T="AdrJob" InitialDirection="SortDirection.Descending">Job ID</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="VendorCode" T="AdrJob">Vendor</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="VMAccountNumber" T="AdrJob">Account #</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="BillingPeriodStartDateTime" T="AdrJob">Billing Period</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="PeriodType" T="AdrJob">Period Type</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="NextRunDateTime" T="AdrJob">Next Run</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="Status" T="AdrJob">Status</MudTableSortLabel></MudTh>
+                            <MudTh>Next Action</MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="AdrStatusId" T="AdrJob">ADR Status</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="RetryCount" T="AdrJob">Retry Count</MudTableSortLabel></MudTh>
                             <MudTh>Actions</MudTh>
                         </HeaderContent>
                         <RowTemplate>
@@ -112,17 +168,55 @@
                         <MudText Typo="Typo.body2" Color="Color.Secondary">N/A</MudText>
                     }
                 </MudTd>
-                <MudTd DataLabel="Status">
-                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
-                        @context.Status
-                    </MudChip>
+                                <MudTd DataLabel="Status">
+                                    <div class="d-flex align-center gap-1">
+                                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
+                                            @context.Status
+                                        </MudChip>
+                                        @if (context.IsManualRequest)
+                                        {
+                                            <MudTooltip Text="@($"Manual request: {context.ManualRequestReason ?? "No reason provided"}")">
+                                                <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
+                                                    Manual
+                                                </MudChip>
+                                            </MudTooltip>
+                                        }
+                                    </div>
+                                </MudTd>
+                <MudTd DataLabel="Next Action">
+                    @{
+                        var (action, actionDate, actionColor) = GetNextAction(context);
+                    }
+                    <MudTooltip Text="@GetNextActionTooltip(context)">
+                        <MudText Typo="Typo.body2" Color="@actionColor">
+                            @action
+                            @if (actionDate.HasValue)
+                            {
+                                <br /><small>@actionDate.Value.ToString("MM/dd/yy")</small>
+                            }
+                        </MudText>
+                    </MudTooltip>
                 </MudTd>
                 <MudTd DataLabel="ADR Status">
-                    @if (context.AdrStatusId.HasValue)
+                    @{
+                        string? adrLabel = null;
+                        int? statusId = context.AdrStatusId;
+                        
+                        if (statusId.HasValue)
+                        {
+                            adrLabel = context.AdrStatusDescription ?? statusId.Value.ToString();
+                        }
+                        else if (context.Status == "ScrapeRequested")
+                        {
+                            adrLabel = "Awaiting insert";
+                        }
+                    }
+                    @if (!string.IsNullOrEmpty(adrLabel))
                     {
-                        <MudTooltip Text="@(context.AdrStatusDescription ?? "")">
-                            <MudChip T="string" Size="Size.Small" Color="@GetAdrStatusColor(context.AdrStatusId.Value)">
-                                @context.AdrStatusId
+                        var color = statusId.HasValue ? GetAdrStatusColor(statusId.Value) : Color.Info;
+                        <MudTooltip Text="@(context.AdrStatusDescription ?? (statusId.HasValue ? $"StatusId {statusId}" : "Request sent, awaiting ADR queue insertion"))">
+                            <MudChip T="string" Size="Size.Small" Color="@color">
+                                @adrLabel
                             </MudChip>
                         </MudTooltip>
                     }
@@ -132,14 +226,21 @@
                     }
                 </MudTd>
                 <MudTd DataLabel="Retry Count">@context.RetryCount</MudTd>
-                                <MudTd DataLabel="Actions">
-                                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
-                                        <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewJobDetails(context)">View Details</MudMenuItem>
-                                        <MudMenuItem Icon="@Icons.Material.Filled.History" OnClick="() => ViewExecutions(context.Id)">View Executions</MudMenuItem>
-                                        <MudMenuItem Icon="@Icons.Material.Filled.AccountBalance" OnClick="() => ViewAccount(context.AdrAccountId)">View Account</MudMenuItem>
-                                        <MudMenuItem Icon="@Icons.Material.Filled.Schedule" OnClick="() => ViewSchedule(context)">View Schedule</MudMenuItem>
-                                    </MudMenu>
-                                </MudTd>
+                                                                <MudTd DataLabel="Actions">
+                                                                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
+                                                                        <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewJobDetails(context)">View Details</MudMenuItem>
+                                                                        @if (_showLatestPerAccount)
+                                                                        {
+                                                                            <MudMenuItem Icon="@Icons.Material.Filled.List" OnClick="() => ViewJobHistory(context)">View Job History</MudMenuItem>
+                                                                        }
+                                                                        <MudMenuItem Icon="@Icons.Material.Filled.AccountBalance" OnClick="() => ViewAccount(context)">View Account</MudMenuItem>
+                                                                        <MudMenuItem Icon="@Icons.Material.Filled.Replay" OnClick="() => RefireJob(context)">Refire Job</MudMenuItem>
+                                                                        @if (context.IsManualRequest && (context.Status == "ScrapeRequested" || context.Status == "ScrapeInProgress"))
+                                                                        {
+                                                                            <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="() => CheckJobStatus(context)">Check Status</MudMenuItem>
+                                                                        }
+                                                                    </MudMenu>
+                                                                </MudTd>
             </RowTemplate>
                         <NoRecordsContent>
                             <MudText Align="Align.Center" Class="my-8">
@@ -161,18 +262,25 @@
                 <MudTablePager PageSizeOptions="new int[] { 20, 50, 100 }" />
             </PagerContent>
         </MudTable>
-    }
 </MudPaper>
 
 @code {
     private MudTable<AdrJob> _table = null!;
     private bool _loading = true;
+    private bool _isExporting = false;
+    private bool _isRefiring = false;
+    private bool _forceRefire = false;
     private string? _searchVendorCode;
     private string? _searchAccountNumber;
     private string _selectedStatus = "";
+    private string? _searchInterfaceAccountId;
     private string? _filterVendorCode;
     private string? _filterAccountNumber;
     private string? _filterStatus;
+    private string? _filterInterfaceAccountId;
+    private bool _showLatestPerAccount = true;
+    private bool _showManualJobs = false;
+    private HashSet<AdrJob> _selectedJobs = new();
 
     [Parameter]
     [SupplyParameterFromQuery(Name = "vendorCode")]
@@ -205,19 +313,37 @@
             var pageNumber = state.Page + 1;
             var pageSize = state.PageSize;
 
+            // Determine sort direction (default to descending for Id)
+            var sortDescending = state.SortDirection == SortDirection.Descending || 
+                                 (state.SortDirection == SortDirection.None && string.IsNullOrEmpty(state.SortLabel));
+            var sortColumn = string.IsNullOrEmpty(state.SortLabel) ? "Id" : state.SortLabel;
+
             var result = await AdrService.GetJobsPagedAsync(
                 pageNumber,
                 pageSize,
                 null, // adrAccountId - no longer used for filtering
                 _filterStatus,
                 _filterVendorCode,
-                _filterAccountNumber);
+                _filterAccountNumber,
+                _showLatestPerAccount,
+                null, // vmAccountId - not used for filtering
+                _filterInterfaceAccountId,
+                null, // credentialId - removed from UI
+                _showManualJobs ? true : false, // false = hide manual jobs (default), true = show only manual jobs
+                sortColumn,
+                sortDescending);
 
             return new TableData<AdrJob>
             {
                 Items = result.Items,
                 TotalItems = result.TotalCount
             };
+        }
+        catch (SessionExpiredException)
+        {
+            Snackbar.Add("Your session has expired. Redirecting to login...", Severity.Warning);
+            Navigation.NavigateTo("/Account/Login", forceLoad: true);
+            return new TableData<AdrJob> { Items = new List<AdrJob>(), TotalItems = 0 };
         }
         catch (Exception ex)
         {
@@ -230,11 +356,20 @@
         }
     }
 
+    private async Task OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await ApplyFilters();
+        }
+    }
+
     private async Task ApplyFilters()
     {
         _filterVendorCode = string.IsNullOrWhiteSpace(_searchVendorCode) ? null : _searchVendorCode;
         _filterAccountNumber = string.IsNullOrWhiteSpace(_searchAccountNumber) ? null : _searchAccountNumber;
         _filterStatus = string.IsNullOrEmpty(_selectedStatus) ? null : _selectedStatus;
+        _filterInterfaceAccountId = string.IsNullOrWhiteSpace(_searchInterfaceAccountId) ? null : _searchInterfaceAccountId;
         await _table.ReloadServerData();
     }
 
@@ -243,9 +378,12 @@
         _searchVendorCode = null;
         _searchAccountNumber = null;
         _selectedStatus = "";
+        _searchInterfaceAccountId = null;
+        _showManualJobs = false;
         _filterVendorCode = null;
         _filterAccountNumber = null;
         _filterStatus = null;
+        _filterInterfaceAccountId = null;
         Navigation.NavigateTo("/adr/jobs");
         await _table.ReloadServerData();
     }
@@ -256,7 +394,7 @@
         "CredentialVerified" => Color.Info,
         "CredentialFailed" => Color.Error,
         "ScrapeRequested" => Color.Warning,
-        "ScrapeFailed" => Color.Error,
+        "Failed" => Color.Error,
         "Completed" => Color.Success,
         "NeedsReview" => Color.Warning,
         _ => Color.Default
@@ -270,6 +408,119 @@
         _ => Color.Info
     };
 
+    private (string Action, DateTime? ActionDate, Color ActionColor) GetNextAction(AdrJob job)
+    {
+        var today = DateTime.UtcNow.Date;
+        
+        return job.Status switch
+        {
+            "Pending" => GetPendingNextAction(job, today),
+            "CredentialCheckInProgress" => ("Checking credentials...", null, Color.Info),
+            "CredentialVerified" => GetCredentialVerifiedNextAction(job, today),
+            "CredentialFailed" => GetCredentialFailedNextAction(job, today),
+            "ScrapeInProgress" => ("ADR request in progress...", null, Color.Info),
+            "ScrapeRequested" => ("Awaiting ADR result", null, Color.Warning),
+            "StatusCheckInProgress" => ("Checking status...", null, Color.Info),
+            "Failed" => job.RetryCount < 5 
+                ? ("Retry scheduled", job.NextRunDateTime, Color.Warning)
+                : ("Max retries reached", null, Color.Error),
+            "Completed" => ("Complete", job.ScrapingCompletedDateTime, Color.Success),
+            "NeedsReview" => ("Manual review required", null, Color.Warning),
+            _ => ("Unknown", null, Color.Default)
+        };
+    }
+
+    private (string Action, DateTime? ActionDate, Color ActionColor) GetPendingNextAction(AdrJob job, DateTime today)
+    {
+        if (!job.NextRunDateTime.HasValue)
+            return ("Awaiting schedule", null, Color.Default);
+        
+        var nextRunDate = job.NextRunDateTime.Value.Date;
+        var daysUntilNextRun = (nextRunDate - today).Days;
+        
+        // Credential check window: 7 days before NextRunDate up to (but not including) NextRunDate
+        // Example: If NextRunDate = Dec 17, credential check window is Dec 10-16
+        var credentialCheckDate = nextRunDate.AddDays(-7);
+        var daysUntilCredCheck = (credentialCheckDate - today).Days;
+        
+        // If NextRunDate is today or past, job missed credential window but will still have ADR request sent
+        // (as long as it has a CredentialId and isn't a Missing account)
+        if (daysUntilNextRun <= 0)
+            return ("ADR request due (no cred check)", nextRunDate, Color.Warning);
+        // In credential check window (today is between credentialCheckDate and NextRunDate-1)
+        else if (daysUntilCredCheck <= 0)
+            return ("Credential check due", credentialCheckDate, Color.Info);
+        // Credential check coming up within 7 days
+        else if (daysUntilCredCheck <= 7)
+            return ($"Cred check in {daysUntilCredCheck}d", credentialCheckDate, Color.Default);
+        // More than 7 days until credential check
+        else
+            return ($"Scheduled", credentialCheckDate, Color.Default);
+    }
+
+    private (string Action, DateTime? ActionDate, Color ActionColor) GetCredentialVerifiedNextAction(AdrJob job, DateTime today)
+    {
+        if (!job.NextRunDateTime.HasValue)
+            return ("Awaiting ADR request date", null, Color.Info);
+        
+        var nextRunDate = job.NextRunDateTime.Value.Date;
+        var daysUntilRequest = (nextRunDate - today).Days;
+        
+        if (daysUntilRequest <= 0)
+            return ("ADR request due now", nextRunDate, Color.Warning);
+        else if (daysUntilRequest == 1)
+            return ("ADR request tomorrow", nextRunDate, Color.Info);
+        else
+            return ($"ADR request in {daysUntilRequest}d", nextRunDate, Color.Info);
+    }
+
+    private (string Action, DateTime? ActionDate, Color ActionColor) GetCredentialFailedNextAction(AdrJob job, DateTime today)
+    {
+        // Even though credentials failed, we still attempt ADR request daily
+        // Helpdesk may have fixed the credential since the last attempt
+        // Each failure sends another reminder to helpdesk to fix or inactivate
+        if (!job.NextRunDateTime.HasValue)
+            return ("Awaiting ADR request date", null, Color.Warning);
+        
+        var nextRunDate = job.NextRunDateTime.Value.Date;
+        var daysUntilRequest = (nextRunDate - today).Days;
+        
+        if (daysUntilRequest <= 0)
+            return ("ADR retry due", nextRunDate, Color.Warning);
+        else if (daysUntilRequest == 1)
+            return ("ADR retry tomorrow", nextRunDate, Color.Warning);
+        else
+            return ($"ADR retry in {daysUntilRequest}d", nextRunDate, Color.Warning);
+    }
+
+    private string GetNextActionTooltip(AdrJob job)
+    {
+        var today = DateTime.UtcNow.Date;
+        
+        return job.Status switch
+        {
+            "Pending" when job.NextRunDateTime.HasValue && job.NextRunDateTime.Value.Date <= today => 
+                $"Missed credential check window. Will attempt ADR request directly.\nDownstream API will handle any credential issues.",
+            "Pending" when job.NextRunDateTime.HasValue => 
+                $"Credential check window: {job.NextRunDateTime.Value.AddDays(-7):MM/dd/yyyy} - {job.NextRunDateTime.Value.AddDays(-1):MM/dd/yyyy}\nADR request starts: {job.NextRunDateTime.Value:MM/dd/yyyy}",
+            "CredentialVerified" when job.NextRunDateTime.HasValue =>
+                $"Credentials verified: {job.CredentialVerifiedDateTime?.ToString("MM/dd/yyyy") ?? "N/A"}\nADR request starts: {job.NextRunDateTime.Value:MM/dd/yyyy}",
+            "CredentialFailed" =>
+                $"Credential verification failed. ADR requests will still be attempted daily until {job.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? "range end"}.\nEach failure sends a reminder to helpdesk to fix credentials or inactivate the account.",
+            "ScrapeRequested" =>
+                $"ADR request sent. Checking status daily until {job.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? "range end"}.",
+            "Completed" =>
+                $"Invoice retrieved successfully on {job.ScrapingCompletedDateTime?.ToString("MM/dd/yyyy") ?? "N/A"}.",
+            "Failed" when job.RetryCount < 5 =>
+                $"ADR request failed. Retry {job.RetryCount + 1} of 5 scheduled.",
+            "Failed" =>
+                "Maximum retries reached. Manual intervention required.",
+            "NeedsReview" =>
+                "ADR API returned a status requiring human review.",
+            _ => ""
+        };
+    }
+
     private async Task ViewJobDetails(AdrJob job)
     {
         var parameters = new DialogParameters<JobDetailsDialog>
@@ -280,20 +531,147 @@
         await DialogService.ShowAsync<JobDetailsDialog>("Job Details", parameters, options);
     }
 
-    private void ViewExecutions(int jobId)
+    private void ViewAccount(AdrJob job)
     {
-        Navigation.NavigateTo($"/adr/executions?jobId={jobId}");
+        // Navigate to Accounts page with account number filter (searchTerm searches by account number)
+        Navigation.NavigateTo($"/adr/accounts?accountNumber={Uri.EscapeDataString(job.VMAccountNumber ?? "")}");
     }
 
-    private void ViewAccount(int accountId)
+    private void ViewJobHistory(AdrJob job)
     {
-        Navigation.NavigateTo($"/adr/accounts?accountId={accountId}");
+        // Turn off "Latest per Account" mode and filter by the specific account's account number
+        // VendorCode filter is only applied if it's not null/empty to avoid filtering issues
+        _showLatestPerAccount = false;
+        _searchAccountNumber = job.VMAccountNumber;
+        _filterAccountNumber = job.VMAccountNumber;
+        
+        if (!string.IsNullOrWhiteSpace(job.VendorCode))
+        {
+            _searchVendorCode = job.VendorCode;
+            _filterVendorCode = job.VendorCode;
+        }
+        else
+        {
+            _searchVendorCode = null;
+            _filterVendorCode = null;
+        }
+        
+        _table.ReloadServerData();
     }
 
-    private void ViewSchedule(AdrJob job)
+    private async Task ExportJobs(string format)
     {
-        // Navigate to Schedules page with search filter using VendorCode_VMAccountNumber_ naming convention
-        var schedulePrefix = $"{job.VendorCode}_{job.VMAccountNumber}_";
-        Navigation.NavigateTo($"/schedules?search={Uri.EscapeDataString(schedulePrefix)}");
+        _isExporting = true;
+        StateHasChanged();
+        try
+        {
+            var bytes = await AdrService.DownloadJobsExportAsync(
+                _filterStatus,
+                _filterVendorCode,
+                _filterAccountNumber,
+                _showLatestPerAccount,
+                format);
+
+            var contentType = format.Equals("excel", StringComparison.OrdinalIgnoreCase)
+                ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                : "text/csv";
+
+            var filename = $"adr_jobs_{DateTime.UtcNow:yyyyMMddHHmmss}.{(format.Equals("excel", StringComparison.OrdinalIgnoreCase) ? "xlsx" : "csv")}";
+
+            var base64 = Convert.ToBase64String(bytes);
+            await JSRuntime.InvokeVoidAsync("downloadFile", filename, contentType, base64);
+
+            Snackbar.Add($"Export downloaded: {filename}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Export failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isExporting = false;
+        }
+    }
+
+    private async Task RefireJob(AdrJob job)
+    {
+        try
+        {
+            var result = await AdrService.RefireJobAsync(job.Id, _forceRefire);
+            var message = _forceRefire 
+                ? $"Job {job.Id} force refired successfully (execution history cleared). It will be picked up by the next orchestration run."
+                : $"Job {job.Id} refired successfully. It will be picked up by the next orchestration run.";
+            Snackbar.Add(message, Severity.Success);
+            await _table.ReloadServerData();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to refire job: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task RefireSelectedJobs()
+    {
+        if (!_selectedJobs.Any())
+        {
+            Snackbar.Add("No jobs selected", Severity.Warning);
+            return;
+        }
+
+        _isRefiring = true;
+        StateHasChanged();
+        try
+        {
+            var jobIds = _selectedJobs.Select(j => j.Id).ToList();
+            var result = await AdrService.RefireJobsBulkAsync(jobIds, _forceRefire);
+            
+            var message = _forceRefire 
+                ? $"{result.RefiredCount} job(s) force refired successfully (execution history cleared). They will be picked up by the next orchestration run."
+                : $"{result.RefiredCount} job(s) refired successfully. They will be picked up by the next orchestration run.";
+            Snackbar.Add(message, Severity.Success);
+            
+            if (result.Errors != null && result.Errors.Any())
+            {
+                foreach (var error in result.Errors)
+                {
+                    Snackbar.Add(error, Severity.Warning);
+                }
+            }
+            
+            _selectedJobs.Clear();
+            await _table.ReloadServerData();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to refire jobs: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isRefiring = false;
+        }
+    }
+
+    private async Task CheckJobStatus(AdrJob job)
+    {
+        try
+        {
+            var result = await AdrService.CheckJobStatusAsync(job.Id);
+            if (result.IsSuccess)
+            {
+                var message = result.IsFinal 
+                    ? $"Job {job.Id} status: {result.StatusDescription ?? "Unknown"} (Final). Job status: {result.JobStatus}"
+                    : $"Job {job.Id} status: {result.StatusDescription ?? "Unknown"}. IndexId: {result.IndexId}";
+                Snackbar.Add(message, result.IsError ? Severity.Warning : Severity.Success);
+            }
+            else
+            {
+                Snackbar.Add($"Status check failed: {result.ErrorMessage}", Severity.Error);
+            }
+            await _table.ReloadServerData();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to check job status: {ex.Message}", Severity.Error);
+        }
     }
 }

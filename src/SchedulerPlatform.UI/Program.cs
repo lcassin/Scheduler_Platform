@@ -64,6 +64,7 @@ builder.Services.AddHttpClient("SchedulerAPI", client =>
 })
 .AddHttpMessageHandler<AuthTokenHandler>();
 
+builder.Services.AddScoped<SessionStateService>();
 builder.Services.AddScoped<AuthTokenHandler>();
 builder.Services.AddScoped<IScheduleService, ScheduleService>();
 builder.Services.AddScoped<IJobExecutionService, JobExecutionService>();
@@ -72,6 +73,7 @@ builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<IAdrService, AdrService>();
+builder.Services.AddScoped<IUserTimeZoneService, UserTimeZoneService>();
 
 builder.Services.AddAuthorization();
 builder.Services.AddCascadingAuthenticationState();
@@ -93,11 +95,15 @@ app.UseAuthorization();
 
 app.MapGet("/logout", async (HttpContext context) =>
 {
+    // Check if this is a session expiration logout
+    var sessionExpired = context.Request.Query["sessionExpired"].ToString() == "true";
+    var redirectUri = sessionExpired ? "/Account/Login?sessionExpired=true" : "/";
+    
     await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
     await context.SignOutAsync(OpenIdConnectDefaults.AuthenticationScheme, 
         new Microsoft.AspNetCore.Authentication.AuthenticationProperties 
         { 
-            RedirectUri = "/" 
+            RedirectUri = redirectUri 
         });
 });
 

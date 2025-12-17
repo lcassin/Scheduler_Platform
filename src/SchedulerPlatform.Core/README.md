@@ -214,6 +214,138 @@ All entities inherit from `BaseEntity` which provides common tracking fields:
 - `TimestampDateTime` (DateTime): When the event occurred
 - `AdditionalData` (string?): Extra context data in JSON
 
+### ADR Domain Model
+
+The ADR (Automated Data Retrieval) domain model supports automated invoice scraping from vendor portals. These entities track accounts, jobs, executions, and orchestration runs for the ADR process.
+
+For the complete ER diagram, see [ADR ER Diagram](../../../Documents/Technical/diagrams/adr-er-diagram.png).
+
+#### AdrAccount
+**Purpose**: Represents a vendor account synced from the external VendorCredNewUAT database. Tracks billing patterns and scraping schedules.
+
+**Properties:**
+- `VMAccountId` (long): External account ID from VendorCred database (can have duplicates as account numbers change over time)
+- `VMAccountNumber` (string): Vendor account number string
+- `InterfaceAccountId` (string?): Bank payment/tracking ID for invoices
+- `ClientId` (int?): FK to Client table
+- `ClientName` (string?): Client name (denormalized for display)
+- `CredentialId` (int): Current active credential ID used by ADR
+- `VendorCode` (string?): Vendor identifier code
+- `PeriodType` (string?): Billing frequency type (Bi-Weekly, Monthly, Bi-Monthly, Quarterly, Semi-Annually, Annually)
+- `PeriodDays` (int?): Standard days between invoices for this period type
+- `MedianDays` (double?): Calculated median interval between invoices
+- `InvoiceCount` (int): Number of historical invoices found
+- `LastInvoiceDateTime` (DateTime?): Most recent invoice date found
+- `ExpectedNextDateTime` (DateTime?): Expected next invoice date based on billing pattern
+- `ExpectedRangeStartDateTime` (DateTime?): Search window start for expected invoice
+- `ExpectedRangeEndDateTime` (DateTime?): Search window end for expected invoice
+- `NextRunDateTime` (DateTime?): Scheduled scrape date
+- `NextRangeStartDateTime` (DateTime?): Scrape window start date
+- `NextRangeEndDateTime` (DateTime?): Scrape window end date
+- `DaysUntilNextRun` (int?): Days until NextRunDateTime
+- `NextRunStatus` (string?): Status for next run (Run Now, Due Soon, Upcoming, Future)
+- `HistoricalBillingStatus` (string?): Historical billing status (Missing, Overdue, Due Now, Due Soon, Upcoming, Future)
+- `LastSyncedDateTime` (DateTime?): Last time this account was synced from external database
+- `IsManuallyOverridden` (bool): Flag indicating if billing dates/frequency have been manually overridden
+- `OverriddenBy` (string?): User who manually overrode the billing data
+- `OverriddenDateTime` (DateTime?): Date/time when billing data was manually overridden
+
+**Navigation Properties:**
+- `Client`: The client who owns this account
+- `AdrJobs`: Collection of scraping jobs for this account
+
+**Business Rules:**
+- VMAccountId can have duplicates because account numbers can change over time
+- When `IsManuallyOverridden` is true, account sync skips updating: LastInvoiceDateTime, PeriodType, PeriodDays, MedianDays, ExpectedNextDateTime, ExpectedRangeStartDateTime, ExpectedRangeEndDateTime
+- Manual overrides preserve operator corrections when historical data is incorrect
+
+#### AdrJob
+**Purpose**: Represents a single ADR scraping job for one account/billing period. Each billing period for an account gets its own Job record.
+
+**Properties:**
+- `AdrAccountId` (int): FK to AdrAccount table
+- `VMAccountId` (long): External account ID (denormalized for queries)
+- `VMAccountNumber` (string): Vendor account number (denormalized for queries)
+- `VendorCode` (string?): Vendor code (denormalized for queries and schedule linking)
+- `CredentialId` (int): Credential ID used for this job
+- `PeriodType` (string?): Billing period type (e.g., Monthly, Quarterly)
+- `BillingPeriodStartDateTime` (DateTime): Start of the billing period this Job targets
+- `BillingPeriodEndDateTime` (DateTime): End of the billing period this Job targets
+- `NextRunDateTime` (DateTime?): Expected scrape date
+- `NextRangeStartDateTime` (DateTime?): Search window start for scraping
+- `NextRangeEndDateTime` (DateTime?): Search window end for scraping
+- `Status` (string): Current job status (Pending, CredentialVerified, CredentialFailed, Scraping, Completed, Failed, NeedsReview)
+- `IsMissing` (bool): Flag for missing accounts
+- `AdrStatusId` (int?): Latest ADR status ID from the API
+- `AdrStatusDescription` (string?): Latest ADR status description
+- `AdrIndexId` (long?): Index ID returned from ADR API
+- `CredentialVerifiedDateTime` (DateTime?): Date/time credential verification was completed
+- `ScrapingCompletedDateTime` (DateTime?): Date/time scraping was completed
+- `ErrorMessage` (string?): Error message if job failed
+- `RetryCount` (int): Number of scrape retry attempts
+
+**Navigation Properties:**
+- `AdrAccount`: The account this job belongs to
+- `AdrJobExecutions`: Collection of execution attempts for this job
+
+**Business Rules:**
+- Unique constraint on (AdrAccountId, BillingPeriodStartDateTime, BillingPeriodEndDateTime) WHERE IsDeleted = 0 prevents duplicate jobs for the same billing period
+- Credential verification runs within 7 days BEFORE NextRunDateTime
+- Scraping begins ON NextRunDateTime, not before
+- Jobs with CredentialFailed status still proceed to scraping (ADR API creates helpdesk tickets for credential issues)
+
+#### AdrJobExecution
+**Purpose**: Represents an individual execution attempt for an ADR job. Records login checks, scrape requests, and status polls.
+
+**Properties:**
+- `AdrJobId` (int): FK to AdrJob table
+- `AdrRequestTypeId` (int): Type of ADR request (1 = Attempt Login, 2 = Download Invoice)
+- `StartDateTime` (DateTime): Execution start time
+- `EndDateTime` (DateTime?): Execution end time
+- `AdrStatusId` (int?): ADR status ID returned from API
+- `AdrStatusDescription` (string?): ADR status description
+- `IsError` (bool): Whether this status indicates an error
+- `IsFinal` (bool): Whether this status is final (complete or needs review)
+- `AdrIndexId` (long?): Index ID returned from ADR API
+- `HttpStatusCode` (int?): HTTP status code from API response
+- `IsSuccess` (bool): Success or failure
+- `ErrorMessage` (string?): Error message if execution failed
+- `ApiResponse` (string?): Full API response (JSON)
+- `RequestPayload` (string?): Request payload sent to API (JSON)
+
+**Navigation Properties:**
+- `AdrJob`: The job this execution belongs to
+
+**Business Rules:**
+- Used for idempotency checking - prevents duplicate API calls for paid external services
+- Execution history is checked before making credential verification or scraping API calls
+
+#### AdrOrchestrationRun
+**Purpose**: Represents a single ADR orchestration run with step-by-step progress tracking. Persisted to database to survive application restarts.
+
+**Properties:**
+- `RequestId` (string): Unique identifier for this orchestration run (GUID)
+- `RequestedBy` (string): User who requested the orchestration run
+- `RequestedDateTime` (DateTime): When the orchestration was requested/queued
+- `StartedDateTime` (DateTime?): When the orchestration actually started processing
+- `CompletedDateTime` (DateTime?): When the orchestration completed (success or failure)
+- `Status` (string): Current status (Queued, Running, Completed, Failed, Cancelled)
+- `CurrentStep` (string?): Current step being executed (for running orchestrations)
+- `CurrentProgress` (string?): Current progress within the step (e.g., "150/500")
+- `TotalItems` (int?): Total items to process in current step
+- `ProcessedItems` (int?): Items processed so far in current step
+- `ErrorMessage` (string?): Error message if the run failed
+- Step 1 Results: `SyncAccountsInserted`, `SyncAccountsUpdated`, `SyncAccountsTotal`
+- Step 2 Results: `JobsCreated`, `JobsSkipped`
+- Step 3 Results: `CredentialsVerified`, `CredentialsFailed`
+- Step 4 Results: `ScrapingRequested`, `ScrapingFailed`
+- Step 5 Results: `StatusesChecked`, `StatusesFailed`
+
+**Business Rules:**
+- Only one orchestration can run at a time
+- Progress is updated in real-time and persisted to database
+- History is preserved for auditing and troubleshooting
+
 ### Enumerations
 
 #### JobType

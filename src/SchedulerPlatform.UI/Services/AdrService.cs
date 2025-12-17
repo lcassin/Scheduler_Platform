@@ -22,7 +22,11 @@ public class AdrService : IAdrService
         int? clientId = null,
         string? searchTerm = null,
         string? nextRunStatus = null,
-        string? historicalBillingStatus = null)
+        string? historicalBillingStatus = null,
+        bool? isOverridden = null,
+        string? jobStatus = null,
+        string? sortColumn = null,
+        bool sortDescending = false)
     {
         var client = CreateClient();
         var queryParams = new List<string>
@@ -42,6 +46,17 @@ public class AdrService : IAdrService
 
         if (!string.IsNullOrWhiteSpace(historicalBillingStatus))
             queryParams.Add($"historicalBillingStatus={Uri.EscapeDataString(historicalBillingStatus)}");
+
+        if (isOverridden.HasValue)
+            queryParams.Add($"isOverridden={isOverridden.Value.ToString().ToLowerInvariant()}");
+
+        if (!string.IsNullOrWhiteSpace(jobStatus))
+            queryParams.Add($"jobStatus={Uri.EscapeDataString(jobStatus)}");
+
+        if (!string.IsNullOrWhiteSpace(sortColumn))
+            queryParams.Add($"sortColumn={Uri.EscapeDataString(sortColumn)}");
+
+        queryParams.Add($"sortDescending={sortDescending.ToString().ToLower()}");
 
         var query = "?" + string.Join("&", queryParams);
         var result = await client.GetFromJsonAsync<PagedResult<AdrAccount>>($"adr/accounts{query}");
@@ -74,6 +89,76 @@ public class AdrService : IAdrService
         return result ?? new AdrAccountStats();
     }
 
+    public async Task<AdrAccount> UpdateAccountBillingAsync(int accountId, DateTime? expectedBillingDate, string? periodType, string? historicalBillingStatus)
+    {
+        var client = CreateClient();
+        var request = new
+        {
+            ExpectedBillingDate = expectedBillingDate,
+            PeriodType = periodType,
+            HistoricalBillingStatus = historicalBillingStatus
+        };
+        var response = await client.PutAsJsonAsync($"adr/accounts/{accountId}/billing", request);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<AdrAccount>();
+        return result ?? throw new InvalidOperationException("Failed to update account billing");
+    }
+
+        public async Task<AdrAccount> ClearAccountOverrideAsync(int accountId)
+        {
+            var client = CreateClient();
+            var response = await client.PostAsync($"adr/accounts/{accountId}/clear-override", null);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<AdrAccount>();
+            return result ?? throw new InvalidOperationException("Failed to clear account override");
+        }
+
+        public async Task<ManualScrapeResult> ManualScrapeRequestAsync(int accountId, DateTime targetDate, DateTime? rangeStartDate = null, DateTime? rangeEndDate = null, string? reason = null, bool isHighPriority = false, int requestType = 2)
+        {
+            var client = CreateClient();
+            var request = new
+            {
+                TargetDate = targetDate,
+                RangeStartDate = rangeStartDate,
+                RangeEndDate = rangeEndDate,
+                Reason = reason,
+                IsHighPriority = isHighPriority,
+                RequestType = requestType
+            };
+            var response = await client.PostAsJsonAsync($"adr/accounts/{accountId}/manual-scrape", request);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<ManualScrapeResult>();
+            return result ?? throw new InvalidOperationException("Failed to create manual ADR request");
+        }
+
+        public async Task<byte[]> DownloadAccountsExportAsync(
+        int? clientId = null,
+        string? searchTerm = null,
+        string? nextRunStatus = null,
+        string? historicalBillingStatus = null,
+        string format = "excel")
+    {
+        var client = CreateClient();
+        var queryParams = new List<string> { $"format={format}" };
+
+        if (clientId.HasValue)
+            queryParams.Add($"clientId={clientId.Value}");
+
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+            queryParams.Add($"searchTerm={Uri.EscapeDataString(searchTerm)}");
+
+        if (!string.IsNullOrWhiteSpace(nextRunStatus))
+            queryParams.Add($"nextRunStatus={Uri.EscapeDataString(nextRunStatus)}");
+
+        if (!string.IsNullOrWhiteSpace(historicalBillingStatus))
+            queryParams.Add($"historicalBillingStatus={Uri.EscapeDataString(historicalBillingStatus)}");
+
+        var query = "?" + string.Join("&", queryParams);
+        var response = await client.GetAsync($"adr/accounts/export{query}");
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsByteArrayAsync();
+    }
+
     #endregion
 
     #region Job Operations
@@ -84,7 +169,14 @@ public class AdrService : IAdrService
             int? adrAccountId = null,
             string? status = null,
             string? vendorCode = null,
-            string? vmAccountNumber = null)
+            string? vmAccountNumber = null,
+            bool latestPerAccount = false,
+            long? vmAccountId = null,
+            string? interfaceAccountId = null,
+            int? credentialId = null,
+            bool? isManualRequest = null,
+            string? sortColumn = null,
+            bool sortDescending = true)
         {
             var client = CreateClient();
             var queryParams = new List<string>
@@ -104,6 +196,26 @@ public class AdrService : IAdrService
 
             if (!string.IsNullOrWhiteSpace(vmAccountNumber))
                 queryParams.Add($"vmAccountNumber={Uri.EscapeDataString(vmAccountNumber)}");
+
+            if (latestPerAccount)
+                queryParams.Add("latestPerAccount=true");
+
+            if (vmAccountId.HasValue)
+                queryParams.Add($"vmAccountId={vmAccountId.Value}");
+
+            if (!string.IsNullOrWhiteSpace(interfaceAccountId))
+                queryParams.Add($"interfaceAccountId={Uri.EscapeDataString(interfaceAccountId)}");
+
+            if (credentialId.HasValue)
+                queryParams.Add($"credentialId={credentialId.Value}");
+
+            if (isManualRequest.HasValue)
+                queryParams.Add($"isManualRequest={isManualRequest.Value.ToString().ToLower()}");
+
+            if (!string.IsNullOrWhiteSpace(sortColumn))
+                queryParams.Add($"sortColumn={Uri.EscapeDataString(sortColumn)}");
+
+            queryParams.Add($"sortDescending={sortDescending.ToString().ToLower()}");
 
             var query = "?" + string.Join("&", queryParams);
             var result = await client.GetFromJsonAsync<PagedResult<AdrJob>>($"adr/jobs{query}");
@@ -130,11 +242,42 @@ public class AdrService : IAdrService
         return result ?? new List<AdrJob>();
     }
 
-    public async Task<AdrJobStats> GetJobStatsAsync()
+    public async Task<AdrJobStats> GetJobStatsAsync(int? lastOrchestrationRuns = null)
     {
         var client = CreateClient();
-        var result = await client.GetFromJsonAsync<AdrJobStats>($"adr/jobs/stats");
+        var url = lastOrchestrationRuns.HasValue 
+            ? $"adr/jobs/stats?lastOrchestrationRuns={lastOrchestrationRuns.Value}"
+            : "adr/jobs/stats";
+        var result = await client.GetFromJsonAsync<AdrJobStats>(url);
         return result ?? new AdrJobStats();
+    }
+
+    public async Task<byte[]> DownloadJobsExportAsync(
+        string? status = null,
+        string? vendorCode = null,
+        string? vmAccountNumber = null,
+        bool latestPerAccount = false,
+        string format = "excel")
+    {
+        var client = CreateClient();
+        var queryParams = new List<string> { $"format={format}" };
+
+        if (!string.IsNullOrWhiteSpace(status))
+            queryParams.Add($"status={Uri.EscapeDataString(status)}");
+
+        if (!string.IsNullOrWhiteSpace(vendorCode))
+            queryParams.Add($"vendorCode={Uri.EscapeDataString(vendorCode)}");
+
+        if (!string.IsNullOrWhiteSpace(vmAccountNumber))
+            queryParams.Add($"vmAccountNumber={Uri.EscapeDataString(vmAccountNumber)}");
+
+        if (latestPerAccount)
+            queryParams.Add("latestPerAccount=true");
+
+        var query = "?" + string.Join("&", queryParams);
+        var response = await client.GetAsync($"adr/jobs/export{query}");
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsByteArrayAsync();
     }
 
     #endregion
@@ -176,6 +319,38 @@ public class AdrService : IAdrService
     }
 
     #endregion
+
+    #region Job Refire Operations
+
+    public async Task<RefireJobResult> RefireJobAsync(int jobId, bool forceRefire = false)
+    {
+        var client = CreateClient();
+        var url = forceRefire ? $"adr/jobs/{jobId}/refire?forceRefire=true" : $"adr/jobs/{jobId}/refire";
+        var response = await client.PostAsync(url, null);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<RefireJobResult>();
+        return result ?? new RefireJobResult { Message = "Job refired", JobId = jobId };
+    }
+
+        public async Task<RefireJobsBulkResult> RefireJobsBulkAsync(List<int> jobIds, bool forceRefire = false)
+        {
+            var client = CreateClient();
+            var response = await client.PostAsJsonAsync("adr/jobs/refire-bulk", new { JobIds = jobIds, ForceRefire = forceRefire });
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<RefireJobsBulkResult>();
+            return result ?? new RefireJobsBulkResult { Message = "Jobs refired", RefiredCount = jobIds.Count, TotalRequested = jobIds.Count };
+        }
+
+        public async Task<CheckJobStatusResult> CheckJobStatusAsync(int jobId)
+        {
+            var client = CreateClient();
+            var response = await client.PostAsync($"adr/jobs/{jobId}/check-status", null);
+            response.EnsureSuccessStatusCode();
+            var result = await response.Content.ReadFromJsonAsync<CheckJobStatusResult>();
+            return result ?? new CheckJobStatusResult { JobId = jobId, IsSuccess = false, ErrorMessage = "Failed to parse response" };
+        }
+
+        #endregion
 
     #region Orchestration Operations
 
@@ -234,4 +409,70 @@ public class AdrService : IAdrService
     }
 
     #endregion
+
+    #region Background Orchestration Monitoring
+
+    public async Task<BackgroundOrchestrationResponse> StartBackgroundOrchestrationAsync(BackgroundOrchestrationRequest? request = null)
+    {
+        var client = CreateClient();
+        HttpResponseMessage response;
+        if (request != null)
+        {
+            response = await client.PostAsJsonAsync("adr/orchestrate/run-background", request);
+        }
+        else
+        {
+            response = await client.PostAsync("adr/orchestrate/run-background", null);
+        }
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<BackgroundOrchestrationResponse>();
+        return result ?? new BackgroundOrchestrationResponse();
+    }
+
+    public async Task<OrchestrationCurrentResponse> GetCurrentOrchestrationAsync()
+    {
+        var client = CreateClient();
+        var result = await client.GetFromJsonAsync<OrchestrationCurrentResponse>("adr/orchestrate/current");
+        return result ?? new OrchestrationCurrentResponse { IsRunning = false, Message = "Unable to get status" };
+    }
+
+    public async Task<AdrOrchestrationStatus?> GetOrchestrationStatusAsync(string requestId)
+    {
+        var client = CreateClient();
+        try
+        {
+            return await client.GetFromJsonAsync<AdrOrchestrationStatus>($"adr/orchestrate/status/{requestId}");
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+    }
+
+    public async Task<List<AdrOrchestrationStatus>> GetOrchestrationHistoryAsync(int? count = 10)
+    {
+        var client = CreateClient();
+        var url = count.HasValue ? $"adr/orchestrate/history?count={count}" : "adr/orchestrate/history";
+        var result = await client.GetFromJsonAsync<List<AdrOrchestrationStatus>>(url);
+        return result ?? new List<AdrOrchestrationStatus>();
+    }
+
+    public async Task<OrchestrationHistoryPagedResponse> GetOrchestrationHistoryPagedAsync(int pageNumber = 1, int pageSize = 20)
+    {
+        var client = CreateClient();
+        var result = await client.GetFromJsonAsync<OrchestrationHistoryPagedResponse>(
+            $"adr/orchestrate/history?pageNumber={pageNumber}&pageSize={pageSize}");
+        return result ?? new OrchestrationHistoryPagedResponse();
+    }
+
+    #endregion
+}
+
+public class OrchestrationHistoryPagedResponse
+{
+    public List<AdrOrchestrationStatus> Items { get; set; } = new();
+    public int TotalCount { get; set; }
+    public int PageNumber { get; set; }
+    public int PageSize { get; set; }
+    public int TotalPages { get; set; }
 }

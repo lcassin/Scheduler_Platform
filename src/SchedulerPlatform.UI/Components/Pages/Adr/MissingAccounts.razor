@@ -6,6 +6,7 @@
 @inject NavigationManager Navigation
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Missing Accounts Report</PageTitle>
 
@@ -18,6 +19,16 @@
 <MudPaper Class="pa-4">
     <MudGrid Class="mb-4" Spacing="2">
         <MudItem xs="12" md="3">
+            <MudTextField @bind-Value="_searchTerm" 
+                          Label="Search by Account # or Interface Account ID" 
+                          Placeholder="Enter account number or interface ID"
+                          Variant="Variant.Outlined" 
+                          Margin="Margin.Dense" 
+                          Clearable="true"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" />
+        </MudItem>
+        <MudItem xs="12" md="3">
             <MudAutocomplete T="Client" 
                              Label="Filter by Client" 
                              @bind-Value="_selectedClient"
@@ -28,28 +39,37 @@
                              Clearable="true"
                              ResetValueOnEmptyText="true"
                              CoerceText="false"
-                             AdornmentIcon="@Icons.Material.Filled.Search"
+                             AdornmentIcon="@Icons.Material.Filled.Business"
                              AdornmentColor="Color.Primary" />
         </MudItem>
-        <MudItem xs="12" md="2">
-            <MudSelect T="string" @bind-Value="_selectedNextRunStatus" Label="Next Run Status" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
-                <MudSelectItem Value="@("")">All</MudSelectItem>
-                <MudSelectItem Value="@("Run Now")">Run Now</MudSelectItem>
-                <MudSelectItem Value="@("Due Soon")">Due Soon</MudSelectItem>
-                <MudSelectItem Value="@("Upcoming")">Upcoming</MudSelectItem>
-                <MudSelectItem Value="@("Future")">Future</MudSelectItem>
-            </MudSelect>
-        </MudItem>
-        <MudItem xs="12" md="4" Class="d-flex align-center justify-end gap-2">
+        <MudItem xs="12" md="6" Class="d-flex align-center justify-end gap-2">
             <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters" StartIcon="@Icons.Material.Filled.FilterAlt">
                 Apply
             </MudButton>
             <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ClearFilters" StartIcon="@Icons.Material.Filled.Clear">
                 Clear
             </MudButton>
-            <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="ExportReport" StartIcon="@Icons.Material.Filled.Download">
-                Export
-            </MudButton>
+            @if (_isExporting)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="true">
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    Exporting...
+                </MudButton>
+            }
+            else
+            {
+                <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+                    <ActivatorContent>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download">
+                            Export
+                        </MudButton>
+                    </ActivatorContent>
+                    <ChildContent>
+                        <MudMenuItem OnClick="@(() => ExportReport("excel"))">Excel</MudMenuItem>
+                        <MudMenuItem OnClick="@(() => ExportReport("csv"))">CSV</MudMenuItem>
+                    </ChildContent>
+                </MudMenu>
+            }
         </MudItem>
     </MudGrid>
 
@@ -62,15 +82,14 @@
         <MudTable T="AdrAccount" ServerData="@ServerReload" 
                   @ref="_table" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
             <HeaderContent>
-                <MudTh>Account #</MudTh>
-                <MudTh>Interface Account ID</MudTh>
-                <MudTh>Client</MudTh>
-                <MudTh>Vendor</MudTh>
-                <MudTh>Period Type</MudTh>
-                <MudTh>Last Invoice</MudTh>
-                <MudTh>Expected Next</MudTh>
+                <MudTh><MudTableSortLabel SortLabel="VMAccountNumber" T="AdrAccount">Account #</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="InterfaceAccountId" T="AdrAccount">Interface Account ID</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="ClientName" T="AdrAccount">Client</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="VendorCode" T="AdrAccount">Vendor Code</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="PeriodType" T="AdrAccount">Period Type</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="LastInvoiceDateTime" T="AdrAccount">Last Invoice</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="ExpectedNextDateTime" T="AdrAccount">Expected Next</MudTableSortLabel></MudTh>
                 <MudTh>Days Overdue</MudTh>
-                <MudTh>Next Run Status</MudTh>
                 <MudTh>Actions</MudTh>
             </HeaderContent>
             <RowTemplate>
@@ -80,7 +99,7 @@
                 </MudTd>
                 <MudTd DataLabel="Interface Account ID">@(context.InterfaceAccountId ?? "N/A")</MudTd>
                 <MudTd DataLabel="Client">@(context.ClientName ?? "N/A")</MudTd>
-                <MudTd DataLabel="Vendor">@(context.VendorCode ?? "N/A")</MudTd>
+                <MudTd DataLabel="Vendor Code">@(context.VendorCode ?? "N/A")</MudTd>
                 <MudTd DataLabel="Period Type">
                     @if (!string.IsNullOrEmpty(context.PeriodType))
                     {
@@ -126,18 +145,6 @@
                         }
                     }
                 </MudTd>
-                <MudTd DataLabel="Next Run Status">
-                    @if (!string.IsNullOrEmpty(context.NextRunStatus))
-                    {
-                        <MudChip T="string" Size="Size.Small" Color="@GetNextRunStatusColor(context.NextRunStatus)">
-                            @context.NextRunStatus
-                        </MudChip>
-                    }
-                    else
-                    {
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">N/A</MudText>
-                    }
-                </MudTd>
                 <MudTd DataLabel="Actions">
                     <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
                         <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewAccountDetails(context)">View Details</MudMenuItem>
@@ -165,10 +172,10 @@
     private MudTable<AdrAccount> _table = null!;
     private List<Client> _clients = new();
     private bool _loading = true;
+    private bool _isExporting = false;
+    private string? _searchTerm;
     private Client? _selectedClient;
     private int? _filterClientId;
-    private string _selectedNextRunStatus = "";
-    private string? _filterNextRunStatus;
 
     protected override async Task OnInitializedAsync()
     {
@@ -194,19 +201,33 @@
             var pageNumber = state.Page + 1;
             var pageSize = state.PageSize;
 
+            // Determine sort direction (default to ascending for ExpectedNextDateTime)
+            var sortDescending = state.SortDirection == SortDirection.Descending;
+            var sortColumn = string.IsNullOrEmpty(state.SortLabel) ? "ExpectedNextDateTime" : state.SortLabel;
+
             var result = await AdrService.GetAccountsPagedAsync(
                 pageNumber,
                 pageSize,
                 _filterClientId,
+                _searchTerm,
                 null,
-                _filterNextRunStatus,
-                "Missing");
+                "Missing",
+                null,
+                null,
+                sortColumn,
+                sortDescending);
 
             return new TableData<AdrAccount>
             {
                 Items = result.Items,
                 TotalItems = result.TotalCount
             };
+        }
+        catch (SessionExpiredException)
+        {
+            Snackbar.Add("Your session has expired. Redirecting to login...", Severity.Warning);
+            Navigation.NavigateTo("/Account/Login", forceLoad: true);
+            return new TableData<AdrAccount> { Items = new List<AdrAccount>(), TotalItems = 0 };
         }
         catch (Exception ex)
         {
@@ -230,22 +251,49 @@
     private async Task ApplyFilters()
     {
         _filterClientId = _selectedClient?.Id;
-        _filterNextRunStatus = string.IsNullOrEmpty(_selectedNextRunStatus) ? null : _selectedNextRunStatus;
         await _table.ReloadServerData();
     }
 
     private async Task ClearFilters()
     {
+        _searchTerm = null;
         _selectedClient = null;
-        _selectedNextRunStatus = "";
         _filterClientId = null;
-        _filterNextRunStatus = null;
         await _table.ReloadServerData();
     }
 
-    private async Task ExportReport()
+    private async Task ExportReport(string format)
     {
-        Snackbar.Add("Export functionality coming soon", Severity.Info);
+        _isExporting = true;
+        StateHasChanged();
+        try
+        {
+            var bytes = await AdrService.DownloadAccountsExportAsync(
+                _filterClientId,
+                _searchTerm,
+                null,
+                "Missing",
+                format);
+
+            var contentType = format.Equals("excel", StringComparison.OrdinalIgnoreCase)
+                ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                : "text/csv";
+
+            var filename = $"missing_accounts_{DateTime.UtcNow:yyyyMMddHHmmss}.{(format.Equals("excel", StringComparison.OrdinalIgnoreCase) ? "xlsx" : "csv")}";
+
+            var base64 = Convert.ToBase64String(bytes);
+            await JSRuntime.InvokeVoidAsync("downloadFile", filename, contentType, base64);
+
+            Snackbar.Add($"Export downloaded: {filename}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Export failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isExporting = false;
+        }
     }
 
     private int CalculateDaysOverdue(AdrAccount account)
@@ -262,15 +310,6 @@
         > 60 => Color.Error,
         > 30 => Color.Warning,
         _ => Color.Info
-    };
-
-    private Color GetNextRunStatusColor(string status) => status switch
-    {
-        "Run Now" => Color.Error,
-        "Due Soon" => Color.Warning,
-        "Upcoming" => Color.Info,
-        "Future" => Color.Default,
-        _ => Color.Default
     };
 
     private async Task ViewAccountDetails(AdrAccount account)

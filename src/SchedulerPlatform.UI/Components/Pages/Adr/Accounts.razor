@@ -6,6 +6,7 @@
 @inject NavigationManager Navigation
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
 @inject IPermissionService PermissionService
 
 <PageTitle>ADR Accounts</PageTitle>
@@ -22,7 +23,8 @@
                           Margin="Margin.Dense" 
                           Clearable="true"
                           Adornment="Adornment.Start"
-                          AdornmentIcon="@Icons.Material.Filled.Search" />
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          OnKeyDown="@OnSearchKeyDown" />
         </MudItem>
         <MudItem xs="12" md="2">
             <MudAutocomplete T="Client" 
@@ -55,13 +57,56 @@
                 <MudSelectItem Value="@("Due Now")">Due Now</MudSelectItem>
             </MudSelect>
         </MudItem>
-        <MudItem xs="12" md="3" Class="d-flex align-center justify-end gap-2">
+        <MudItem xs="12" md="1">
+            <MudSelect T="string" @bind-Value="_selectedOverrideFilter" Label="Override" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                <MudSelectItem Value="@("")">All</MudSelectItem>
+                <MudSelectItem Value="@("true")">Overridden</MudSelectItem>
+                <MudSelectItem Value="@("false")">Not Overridden</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="2">
+            <MudSelect T="string" @bind-Value="_selectedJobStatus" Label="Job Status" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                <MudSelectItem Value="@("")">All</MudSelectItem>
+                <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
+                <MudSelectItem Value="@("CredentialVerified")">Credential Verified</MudSelectItem>
+                <MudSelectItem Value="@("CredentialFailed")">Credential Failed</MudSelectItem>
+                <MudSelectItem Value="@("ScrapeRequested")">Request Sent</MudSelectItem>
+                <MudSelectItem Value="@("Completed")">Completed</MudSelectItem>
+                <MudSelectItem Value="@("Failed")">ADR Request Failed</MudSelectItem>
+                <MudSelectItem Value="@("NeedsReview")">Needs Review</MudSelectItem>
+                <MudSelectItem Value="@("NoJob")">No Job</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+    </MudGrid>
+    <MudGrid Class="mb-4" Spacing="2">
+        <MudItem xs="12" Class="d-flex align-center justify-end gap-2">
             <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters" StartIcon="@Icons.Material.Filled.FilterAlt">
                 Apply
             </MudButton>
             <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ClearFilters" StartIcon="@Icons.Material.Filled.Clear">
                 Clear
             </MudButton>
+            @if (_isExporting)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="true">
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    Exporting...
+                </MudButton>
+            }
+            else
+            {
+                <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+                    <ActivatorContent>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download">
+                            Export
+                        </MudButton>
+                    </ActivatorContent>
+                    <ChildContent>
+                        <MudMenuItem OnClick="@(() => ExportAccounts("excel"))">Excel</MudMenuItem>
+                        <MudMenuItem OnClick="@(() => ExportAccounts("csv"))">CSV</MudMenuItem>
+                    </ChildContent>
+                </MudMenu>
+            }
         </MudItem>
     </MudGrid>
 
@@ -74,24 +119,36 @@
         <MudTable T="AdrAccount" ServerData="@ServerReload" 
                   @ref="_table" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
             <HeaderContent>
-                <MudTh>Account #</MudTh>
-                <MudTh>Interface Account ID</MudTh>
-                <MudTh>Client</MudTh>
-                <MudTh>Vendor</MudTh>
-                <MudTh>Period Type</MudTh>
-                <MudTh>Next Run</MudTh>
-                <MudTh>Run Status</MudTh>
-                <MudTh>Historical Status</MudTh>
+                <MudTh><MudTableSortLabel SortLabel="VMAccountNumber" T="AdrAccount">Account #</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="InterfaceAccountId" T="AdrAccount">Interface Account ID</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="ClientName" T="AdrAccount">Client</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="VendorCode" T="AdrAccount">Vendor Code</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="PeriodType" T="AdrAccount">Period Type</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="NextRunDateTime" T="AdrAccount" InitialDirection="SortDirection.Ascending">Next Run</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="NextRunStatus" T="AdrAccount">Run Status</MudTableSortLabel></MudTh>
+                <MudTh>Job Status</MudTh>
+                <MudTh>Last Completed</MudTh>
+                <MudTh><MudTableSortLabel SortLabel="HistoricalBillingStatus" T="AdrAccount">Historical Status</MudTableSortLabel></MudTh>
                 <MudTh>Actions</MudTh>
             </HeaderContent>
             <RowTemplate>
                 <MudTd DataLabel="Account #">
-                    <MudText Typo="Typo.body2"><strong>@context.VMAccountNumber</strong></MudText>
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @context.VMAccountId</MudText>
+                    <div class="d-flex align-center gap-1">
+                        <div>
+                            <MudText Typo="Typo.body2"><strong>@context.VMAccountNumber</strong></MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">ID: @context.VMAccountId</MudText>
+                        </div>
+                        @if (context.IsManuallyOverridden)
+                        {
+                            <MudTooltip Text="@($"Manually overridden by {context.OverriddenBy} on {context.OverriddenDateTime?.ToString("MM/dd/yyyy")}")">
+                                <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Warning" />
+                            </MudTooltip>
+                        }
+                    </div>
                 </MudTd>
                 <MudTd DataLabel="Interface Account ID">@(context.InterfaceAccountId ?? "N/A")</MudTd>
                 <MudTd DataLabel="Client">@(context.ClientName ?? "N/A")</MudTd>
-                <MudTd DataLabel="Vendor">@(context.VendorCode ?? "N/A")</MudTd>
+                <MudTd DataLabel="Vendor Code">@(context.VendorCode ?? "N/A")</MudTd>
                 <MudTd DataLabel="Period Type">
                     @if (!string.IsNullOrEmpty(context.PeriodType))
                     {
@@ -105,7 +162,15 @@
                 <MudTd DataLabel="Next Run">
                     @if (context.NextRunDateTime.HasValue)
                     {
-                        <text>@context.NextRunDateTime.Value.ToString("MM/dd/yyyy")</text>
+                        <div class="d-flex align-center gap-1">
+                            <text>@context.NextRunDateTime.Value.ToString("MM/dd/yyyy")</text>
+                            @if (context.LastInvoiceDateTime.HasValue && context.LastInvoiceDateTime.Value > DateTime.Today)
+                            {
+                                <MudTooltip Text="@($"Data Issue: Last Invoice Date ({context.LastInvoiceDateTime.Value:MM/dd/yyyy}) is in the future")">
+                                    <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" Color="Color.Warning" />
+                                </MudTooltip>
+                            }
+                        </div>
                     }
                     else
                     {
@@ -120,6 +185,28 @@
                         </MudChip>
                     }
                 </MudTd>
+                <MudTd DataLabel="Job Status">
+                    @if (!string.IsNullOrEmpty(context.CurrentJobStatus))
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="@GetJobStatusColor(context.CurrentJobStatus)">
+                            @GetJobStatusDisplayName(context.CurrentJobStatus)
+                        </MudChip>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">No Job</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Last Completed">
+                    @if (context.LastCompletedDateTime.HasValue)
+                    {
+                        <text>@context.LastCompletedDateTime.Value.ToString("MM/dd/yyyy")</text>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">N/A</MudText>
+                    }
+                </MudTd>
                 <MudTd DataLabel="Historical Status">
                     @if (!string.IsNullOrEmpty(context.HistoricalBillingStatus))
                     {
@@ -128,12 +215,28 @@
                         </MudChip>
                     }
                 </MudTd>
-                <MudTd DataLabel="Actions">
-                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
-                        <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewAccountDetails(context)">View Details</MudMenuItem>
-                        <MudMenuItem Icon="@Icons.Material.Filled.Work" OnClick="() => ViewJobs(context.Id)">View Jobs</MudMenuItem>
-                    </MudMenu>
-                </MudTd>
+                                <MudTd DataLabel="Actions">
+                                    <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
+                                        <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewAccountDetails(context)">View Details</MudMenuItem>
+                                        <MudMenuItem Icon="@Icons.Material.Filled.Work" OnClick="() => ViewJobs(context.Id)">View Jobs</MudMenuItem>
+                                        @if (_canEditBilling)
+                                        {
+                                            <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => EditBilling(context)">Edit Billing</MudMenuItem>
+                                            @if (context.IsManuallyOverridden)
+                                            {
+                                                <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="() => ClearOverride(context)">Clear Override</MudMenuItem>
+                                            }
+                                        }
+                                        @if (_canExecuteManualScrape)
+                                        {
+                                            <MudMenuItem Icon="@Icons.Material.Filled.CloudDownload" OnClick="() => OpenManualScrapeDialog(context)">Manual ADR Request (Admin)</MudMenuItem>
+                                            @if (CanCheckStatus(context.CurrentJobStatus))
+                                            {
+                                                <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="() => CheckAccountJobStatus(context)">Check Status (Admin)</MudMenuItem>
+                                            }
+                                        }
+                                    </MudMenu>
+                                </MudTd>
             </RowTemplate>
             <NoRecordsContent>
                 <MudText Align="Align.Center" Class="my-8">
@@ -159,22 +262,44 @@
 </MudPaper>
 
 @code {
-    private MudTable<AdrAccount> _table = null!;
-    private List<Client> _clients = new();
-    private bool _loading = true;
-    private string? _searchTerm;
+        private MudTable<AdrAccount> _table = null!;
+        private List<Client> _clients = new();
+        private bool _loading = true;
+        private bool _isExporting = false;
+        private bool _canEditBilling = false;
+        private bool _canExecuteManualScrape = false;
+        private string? _searchTerm;
     private Client? _selectedClient;
     private int? _selectedClientId => _selectedClient?.Id;
     private string _selectedNextRunStatus = "";
     private string _selectedHistoricalStatus = "";
+    private string _selectedOverrideFilter = "";
+    private string _selectedJobStatus = "";
     private string? _filterNextRunStatus;
     private string? _filterHistoricalStatus;
+    private bool? _filterIsOverridden;
+    private string? _filterJobStatus;
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "accountNumber")]
+    public string? AccountNumberParam { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
+            // Apply query parameters if provided (e.g., from "View Account" action on Jobs page)
+            if (!string.IsNullOrEmpty(AccountNumberParam))
+            {
+                _searchTerm = AccountNumberParam;
+            }
+            
             _clients = await ClientService.GetClientsAsync();
+            
+                        // Check if user has permission to update ADR accounts (for editing billing data)
+                        _canEditBilling = await PermissionService.CanUpdateAsync("adr");
+                        // Check if user has permission to execute manual ADR requests (Editors, Admins, Super Admins)
+                        _canExecuteManualScrape = await PermissionService.CanUpdateAsync("adr");
         }
         catch (Exception ex)
         {
@@ -194,19 +319,33 @@
             var pageNumber = state.Page + 1;
             var pageSize = state.PageSize;
 
+            // Determine sort direction (default to ascending for NextRunDateTime)
+            var sortDescending = state.SortDirection == SortDirection.Descending;
+            var sortColumn = string.IsNullOrEmpty(state.SortLabel) ? "NextRunDateTime" : state.SortLabel;
+
             var result = await AdrService.GetAccountsPagedAsync(
                 pageNumber,
                 pageSize,
                 _selectedClientId,
                 _searchTerm,
                 _filterNextRunStatus,
-                _filterHistoricalStatus);
+                _filterHistoricalStatus,
+                _filterIsOverridden,
+                _filterJobStatus,
+                sortColumn,
+                sortDescending);
 
             return new TableData<AdrAccount>
             {
                 Items = result.Items,
                 TotalItems = result.TotalCount
             };
+        }
+        catch (SessionExpiredException)
+        {
+            Snackbar.Add("Your session has expired. Redirecting to login...", Severity.Warning);
+            Navigation.NavigateTo("/Account/Login", forceLoad: true);
+            return new TableData<AdrAccount> { Items = new List<AdrAccount>(), TotalItems = 0 };
         }
         catch (Exception ex)
         {
@@ -227,10 +366,20 @@
         return _clients.Where(c => c.ClientName.Contains(value, StringComparison.OrdinalIgnoreCase));
     }
 
+    private async Task OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await ApplyFilters();
+        }
+    }
+
     private async Task ApplyFilters()
     {
         _filterNextRunStatus = string.IsNullOrEmpty(_selectedNextRunStatus) ? null : _selectedNextRunStatus;
         _filterHistoricalStatus = string.IsNullOrEmpty(_selectedHistoricalStatus) ? null : _selectedHistoricalStatus;
+        _filterIsOverridden = string.IsNullOrEmpty(_selectedOverrideFilter) ? null : bool.Parse(_selectedOverrideFilter);
+        _filterJobStatus = string.IsNullOrEmpty(_selectedJobStatus) ? null : _selectedJobStatus;
         await _table.ReloadServerData();
     }
 
@@ -240,8 +389,12 @@
         _selectedClient = null;
         _selectedNextRunStatus = "";
         _selectedHistoricalStatus = "";
+        _selectedOverrideFilter = "";
+        _selectedJobStatus = "";
         _filterNextRunStatus = null;
         _filterHistoricalStatus = null;
+        _filterIsOverridden = null;
+        _filterJobStatus = null;
         await _table.ReloadServerData();
     }
 
@@ -252,6 +405,30 @@
         "Upcoming" => Color.Info,
         "Future" => Color.Default,
         _ => Color.Default
+    };
+
+    private Color GetJobStatusColor(string status) => status switch
+    {
+        "Pending" => Color.Default,
+        "CredentialCheckInProgress" => Color.Info,
+        "CredentialVerified" => Color.Info,
+        "CredentialFailed" => Color.Warning,
+        "ScrapeInProgress" => Color.Info,
+        "ScrapeRequested" => Color.Primary,
+        "StatusCheckInProgress" => Color.Info,
+        "Completed" => Color.Success,
+        "Failed" => Color.Error,
+        "NeedsReview" => Color.Warning,
+        _ => Color.Default
+    };
+
+    private string GetJobStatusDisplayName(string status) => status switch
+    {
+        "ScrapeRequested" => "Request Sent",
+        "CredentialVerified" => "Credential Verified",
+        "CredentialFailed" => "Credential Failed",
+        "NeedsReview" => "Needs Review",
+        _ => status
     };
 
     private Color GetHistoricalStatusColor(string status) => status switch
@@ -275,5 +452,145 @@
     private void ViewJobs(int accountId)
     {
         Navigation.NavigateTo($"/adr/jobs?accountId={accountId}");
+    }
+
+    private async Task ExportAccounts(string format)
+    {
+        _isExporting = true;
+        StateHasChanged();
+        try
+        {
+            var bytes = await AdrService.DownloadAccountsExportAsync(
+                _selectedClientId,
+                _searchTerm,
+                _filterNextRunStatus,
+                _filterHistoricalStatus,
+                format);
+
+            var contentType = format.Equals("excel", StringComparison.OrdinalIgnoreCase)
+                ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                : "text/csv";
+
+            var filename = $"adr_accounts_{DateTime.UtcNow:yyyyMMddHHmmss}.{(format.Equals("excel", StringComparison.OrdinalIgnoreCase) ? "xlsx" : "csv")}";
+
+            var base64 = Convert.ToBase64String(bytes);
+            await JSRuntime.InvokeVoidAsync("downloadFile", filename, contentType, base64);
+
+            Snackbar.Add($"Export downloaded: {filename}", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Export failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isExporting = false;
+        }
+    }
+
+    private async Task EditBilling(AdrAccount account)
+    {
+        var parameters = new DialogParameters<EditBillingDialog>
+        {
+            { x => x.Account, account }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<EditBillingDialog>("Edit Billing Data", parameters, options);
+        var result = await dialog.Result;
+        
+        if (result != null && !result.Canceled)
+        {
+            await _table.ReloadServerData();
+            Snackbar.Add("Account billing data updated successfully", Severity.Success);
+        }
+    }
+
+    private async Task ClearOverride(AdrAccount account)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Clear Override",
+            $"Are you sure you want to clear the manual override for account {account.VMAccountNumber}? The next sync will update billing data from the external source.",
+            yesText: "Clear Override",
+            cancelText: "Cancel");
+        
+        if (confirmed == true)
+        {
+            try
+            {
+                await AdrService.ClearAccountOverrideAsync(account.Id);
+                await _table.ReloadServerData();
+                Snackbar.Add("Override cleared successfully", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error clearing override: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task OpenManualScrapeDialog(AdrAccount account)
+    {
+        var parameters = new DialogParameters<ManualScrapeDialog>
+        {
+            { x => x.Account, account }
+        };
+        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
+        var dialog = await DialogService.ShowAsync<ManualScrapeDialog>("Manual ADR Request", parameters, options);
+        var result = await dialog.Result;
+        
+        if (result != null && !result.Canceled)
+        {
+            Snackbar.Add("Manual ADR request submitted successfully", Severity.Success);
+        }
+    }
+
+    private bool CanCheckStatus(string? jobStatus)
+    {
+        if (string.IsNullOrEmpty(jobStatus)) return false;
+        
+        // Allow status check for jobs that are in progress or waiting for status
+        return jobStatus is "ScrapeRequested" or "CredentialCheckRequested" or "CredentialCheckInProgress" 
+            or "ScrapeInProgress" or "StatusCheckInProgress";
+    }
+
+    private async Task CheckAccountJobStatus(AdrAccount account)
+    {
+        try
+        {
+            // First, get the latest job for this account
+            var jobs = await AdrService.GetJobsByAccountAsync(account.Id);
+            var latestJob = jobs.OrderByDescending(j => j.CreatedDateTime).FirstOrDefault();
+            
+            if (latestJob == null)
+            {
+                Snackbar.Add("No job found for this account", Severity.Warning);
+                return;
+            }
+
+            Snackbar.Add($"Checking status for job {latestJob.Id}...", Severity.Info);
+            
+            var result = await AdrService.CheckJobStatusAsync(latestJob.Id);
+            
+            if (result.IsSuccess)
+            {
+                var statusMessage = $"Status: {result.StatusDescription ?? "Unknown"}";
+                if (result.IsFinal)
+                {
+                    statusMessage += " (Final)";
+                }
+                Snackbar.Add(statusMessage, result.IsFinal && result.StatusId == 11 ? Severity.Success : Severity.Info);
+            }
+            else
+            {
+                Snackbar.Add($"Status check failed: {result.ErrorMessage}", Severity.Error);
+            }
+            
+            // Refresh the table to show updated status
+            await _table.ReloadServerData();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error checking status: {ex.Message}", Severity.Error);
+        }
     }
 }

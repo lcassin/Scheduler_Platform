@@ -57,25 +57,38 @@ public class CurrentActorService : ICurrentActor
     public bool IsManualAction()
     {
         var httpContext = _httpContextAccessor.HttpContext;
+        var user = httpContext?.User;
+        var identity = user?.Identity;
         
-        if (httpContext?.User?.Identity?.IsAuthenticated != true)
+        if (identity?.IsAuthenticated != true)
         {
-            return false;
+            return false; // Not authenticated = automated
         }
         
-        var clientId = httpContext.User.FindFirst("client_id")?.Value;
+        // Check for ADR service account by client_id
+        var clientId = user!.FindFirst("client_id")?.Value;
         if (clientId == ServiceAccountClientId)
         {
-            return false; // Service account = automated
+            return false; // ADR service account = automated
         }
         
-        var email = httpContext.User.FindFirst(ClaimTypes.Email)?.Value;
+        // Check for SchedulerService API key authentication
+        var authType = identity.AuthenticationType;
+        if (string.Equals(authType, "SchedulerApiKey", StringComparison.OrdinalIgnoreCase))
+        {
+            return false; // Internal scheduler service = automated
+        }
+        
+        // Normal users with email = manual
+        var email = user.FindFirst(ClaimTypes.Email)?.Value;
         if (!string.IsNullOrEmpty(email))
         {
             return true; // User with email = manual
         }
         
-        return true;
+        // Fallback: authenticated but no email and not a known service
+        // Treat as automated rather than manual (safer default for unknown service accounts)
+        return false;
     }
 
     public string? GetIpAddress()

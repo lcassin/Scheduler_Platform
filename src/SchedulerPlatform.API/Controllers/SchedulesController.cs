@@ -205,6 +205,12 @@ public class SchedulesController : ControllerBase
                 return NotFound();
             }
 
+            if (existingSchedule.IsSystemSchedule)
+            {
+                _logger.LogWarning("Attempted to modify system schedule {ScheduleId} ({ScheduleName})", id, existingSchedule.Name);
+                return StatusCode(403, "System schedules cannot be modified. This schedule is required for core system operations.");
+            }
+
             var notificationSetting = schedule.NotificationSetting;
             schedule.NotificationSetting = null;
 
@@ -290,6 +296,12 @@ public class SchedulesController : ControllerBase
             if (schedule == null)
             {
                 return NotFound();
+            }
+
+            if (schedule.IsSystemSchedule)
+            {
+                _logger.LogWarning("Attempted to delete system schedule {ScheduleId} ({ScheduleName})", id, schedule.Name);
+                return StatusCode(403, "System schedules cannot be deleted. This schedule is required for core system operations.");
             }
 
             var userClientId = User.FindFirst("client_id")?.Value;
@@ -398,6 +410,14 @@ public class SchedulesController : ControllerBase
                 return Forbid();
             }
 
+            // Persist the IsEnabled = false to the database
+            schedule.IsEnabled = false;
+            schedule.ModifiedDateTime = DateTime.UtcNow;
+            schedule.ModifiedBy = User.Identity?.Name ?? "System";
+            
+            await _unitOfWork.Schedules.UpdateAsync(schedule);
+            await _unitOfWork.SaveChangesAsync();
+
             await _schedulerService.PauseJob(schedule.Id, schedule.ClientId);
             
             return Ok(new { message = "Job paused successfully" });
@@ -431,6 +451,30 @@ public class SchedulesController : ControllerBase
                     userClientId, id, schedule.ClientId);
                 return Forbid();
             }
+
+            // Persist the IsEnabled = true to the database
+            schedule.IsEnabled = true;
+            schedule.ModifiedDateTime = DateTime.UtcNow;
+            schedule.ModifiedBy = User.Identity?.Name ?? "System";
+            
+            // Recalculate NextRunDateTime if we have a cron expression
+            if (!string.IsNullOrWhiteSpace(schedule.CronExpression))
+            {
+                try
+                {
+                    var trigger = TriggerBuilder.Create()
+                        .WithCronSchedule(schedule.CronExpression)
+                        .Build();
+                    schedule.NextRunDateTime = trigger.GetNextFireTimeUtc()?.DateTime;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Could not calculate NextRunDateTime for schedule {ScheduleId}", schedule.Id);
+                }
+            }
+            
+            await _unitOfWork.Schedules.UpdateAsync(schedule);
+            await _unitOfWork.SaveChangesAsync();
 
             await _schedulerService.ResumeJob(schedule.Id, schedule.ClientId);
             

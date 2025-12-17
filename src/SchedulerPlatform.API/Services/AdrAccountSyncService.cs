@@ -9,7 +9,7 @@ namespace SchedulerPlatform.API.Services;
 
 public interface IAdrAccountSyncService
 {
-    Task<AdrAccountSyncResult> SyncAccountsAsync(CancellationToken cancellationToken = default);
+    Task<AdrAccountSyncResult> SyncAccountsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
 }
 
 public class AdrAccountSyncResult
@@ -18,6 +18,8 @@ public class AdrAccountSyncResult
     public int AccountsInserted { get; set; }
     public int AccountsUpdated { get; set; }
     public int AccountsMarkedDeleted { get; set; }
+    public int ClientsCreated { get; set; }
+    public int ClientsUpdated { get; set; }
     public int Errors { get; set; }
     public List<string> ErrorMessages { get; set; } = new();
     public DateTime SyncStartDateTime { get; set; }
@@ -44,7 +46,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
         _logger = logger;
     }
 
-    public async Task<AdrAccountSyncResult> SyncAccountsAsync(CancellationToken cancellationToken = default)
+    public async Task<AdrAccountSyncResult> SyncAccountsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
     {
         var result = new AdrAccountSyncResult
         {
@@ -61,34 +63,100 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                 throw new InvalidOperationException("VendorCredential connection string not configured");
             }
 
+            // Step 1: Fetch external accounts from VendorCred
             var externalAccounts = await FetchExternalAccountsAsync(externalConnectionString, cancellationToken);
             _logger.LogInformation("Fetched {Count} accounts from external database", externalAccounts.Count);
+            
+            // Report initial progress (0 of total)
+            progressCallback?.Invoke(0, externalAccounts.Count);
 
-            var existingAccounts = await _dbContext.AdrAccounts
+            // Step 2: Sync Clients - create/update Client records based on ExternalClientId
+            var externalClientIdToInternalClientId = await SyncClientsAsync(externalAccounts, result, cancellationToken);
+            _logger.LogInformation("Client sync complete. Created: {Created}, Updated: {Updated}", 
+                result.ClientsCreated, result.ClientsUpdated);
+
+            // Step 3: Sync AdrAccounts using the ExternalClientId -> internal ClientId mapping
+            // Process in batches to avoid large transactions and memory pressure
+            const int batchSize = 5000;
+            
+            // Use VMAccountId + VMAccountNumber as composite key since VMAccountId can have multiple account numbers
+            // (historical account number changes in source system)
+            var existingAccountList = await _dbContext.AdrAccounts
                 .Where(a => !a.IsDeleted)
-                .ToDictionaryAsync(a => a.VMAccountId, cancellationToken);
+                .ToListAsync(cancellationToken);
 
-            var processedVMAccountIds = new HashSet<long>();
+            var existingAccounts = existingAccountList
+                .GroupBy(a => (a.VMAccountId, a.VMAccountNumber))
+                .ToDictionary(
+                    g => g.Key,
+                    g =>
+                    {
+                        if (g.Count() > 1)
+                        {
+                            _logger.LogWarning(
+                                "Found {Count} AdrAccount rows with VMAccountId {VMAccountId} and VMAccountNumber {VMAccountNumber}. " +
+                                "Using the most recently modified one.",
+                                g.Count(),
+                                g.Key.VMAccountId,
+                                g.Key.VMAccountNumber);
+                        }
+                        // Use most recently modified
+                        return g
+                            .OrderByDescending(a => a.ModifiedDateTime)
+                            .First();
+                    });
+
+            // Track processed accounts by composite key (VMAccountId + VMAccountNumber)
+            var processedAccountKeys = new HashSet<(long VMAccountId, string VMAccountNumber)>();
+            int processedSinceLastSave = 0;
+            int batchNumber = 1;
+
+            _logger.LogInformation("Processing {Count} accounts in batches of {BatchSize}", externalAccounts.Count, batchSize);
 
             foreach (var externalAccount in externalAccounts)
             {
                 try
                 {
-                    processedVMAccountIds.Add(externalAccount.VMAccountId);
+                    var accountKey = (externalAccount.VMAccountId, externalAccount.VMAccountNumber);
+                    processedAccountKeys.Add(accountKey);
 
-                    if (existingAccounts.TryGetValue(externalAccount.VMAccountId, out var existingAccount))
+                    // Look up the internal ClientId using the ExternalClientId mapping
+                    int? internalClientId = null;
+                    if (externalAccount.ClientId.HasValue && 
+                        externalClientIdToInternalClientId.TryGetValue(externalAccount.ClientId.Value, out var mappedClientId))
                     {
-                        UpdateExistingAccount(existingAccount, externalAccount);
+                        internalClientId = mappedClientId;
+                    }
+
+                    if (existingAccounts.TryGetValue(accountKey, out var existingAccount))
+                    {
+                        UpdateExistingAccount(existingAccount, externalAccount, internalClientId);
                         result.AccountsUpdated++;
                     }
                     else
                     {
-                        var newAccount = CreateNewAccount(externalAccount);
+                        var newAccount = CreateNewAccount(externalAccount, internalClientId);
                         await _dbContext.AdrAccounts.AddAsync(newAccount, cancellationToken);
+                        existingAccounts[accountKey] = newAccount; // Track for future lookups
                         result.AccountsInserted++;
                     }
 
                     result.TotalAccountsProcessed++;
+                    processedSinceLastSave++;
+
+                    // Save in batches to reduce transaction size and memory pressure
+                    if (processedSinceLastSave >= batchSize)
+                    {
+                        await _dbContext.SaveChangesAsync(cancellationToken);
+                        _logger.LogInformation("Batch {BatchNumber} saved: {Count} accounts processed so far", 
+                            batchNumber, result.TotalAccountsProcessed);
+                        
+                        // Report progress after each batch
+                        progressCallback?.Invoke(result.TotalAccountsProcessed, externalAccounts.Count);
+                        
+                        processedSinceLastSave = 0;
+                        batchNumber++;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -98,24 +166,44 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                 }
             }
 
-            foreach (var existingAccount in existingAccounts.Values)
+            // Mark accounts not in external data as deleted
+            int deletedSinceLastSave = 0;
+            foreach (var kvp in existingAccounts)
             {
-                if (!processedVMAccountIds.Contains(existingAccount.VMAccountId))
+                var accountKey = kvp.Key;
+                var existingAccount = kvp.Value;
+                
+                if (!processedAccountKeys.Contains(accountKey))
                 {
                     existingAccount.IsDeleted = true;
                     existingAccount.ModifiedDateTime = DateTime.UtcNow;
                     existingAccount.ModifiedBy = "System Created";
                     result.AccountsMarkedDeleted++;
+                    deletedSinceLastSave++;
+
+                    // Also batch the deletion updates
+                    if (deletedSinceLastSave >= batchSize)
+                    {
+                        await _dbContext.SaveChangesAsync(cancellationToken);
+                        _logger.LogInformation("Deletion batch saved: {Count} accounts marked deleted so far", 
+                            result.AccountsMarkedDeleted);
+                        deletedSinceLastSave = 0;
+                    }
                 }
             }
 
+            // Final save for any remaining changes
             await _dbContext.SaveChangesAsync(cancellationToken);
+            _logger.LogInformation("Final batch saved. Total batches: {BatchCount}", batchNumber);
+            
+            // Report final progress (100%)
+            progressCallback?.Invoke(externalAccounts.Count, externalAccounts.Count);
 
             result.SyncEndDateTime = DateTime.UtcNow;
             _logger.LogInformation(
-                "ADR account sync completed. Processed: {Processed}, Inserted: {Inserted}, Updated: {Updated}, Deleted: {Deleted}, Errors: {Errors}, Duration: {Duration}",
-                result.TotalAccountsProcessed, result.AccountsInserted, result.AccountsUpdated, 
-                result.AccountsMarkedDeleted, result.Errors, result.Duration);
+                "ADR account sync completed. Clients: {ClientsCreated} created/{ClientsUpdated} updated. Accounts: {Processed} processed, {Inserted} inserted, {Updated} updated, {Deleted} deleted, {Errors} errors. Duration: {Duration}",
+                result.ClientsCreated, result.ClientsUpdated, result.TotalAccountsProcessed, result.AccountsInserted, 
+                result.AccountsUpdated, result.AccountsMarkedDeleted, result.Errors, result.Duration);
 
             return result;
         }
@@ -127,6 +215,113 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             result.ErrorMessages.Add($"Sync failed: {ex.Message}");
             throw;
         }
+    }
+
+    /// <summary>
+    /// Syncs Client records from external account data.
+    /// Creates new Clients for unknown ExternalClientIds, updates existing ones.
+    /// Returns a mapping from ExternalClientId to internal ClientId.
+    /// </summary>
+    private async Task<Dictionary<int, int>> SyncClientsAsync(
+        List<ExternalAccountData> externalAccounts, 
+        AdrAccountSyncResult result,
+        CancellationToken cancellationToken)
+    {
+        // Extract unique ExternalClientId -> ClientName pairs from external data
+        var uniqueClients = externalAccounts
+            .Where(a => a.ClientId.HasValue)
+            .GroupBy(a => a.ClientId!.Value)
+            .Select(g => new { ExternalClientId = g.Key, ClientName = g.First().ClientName ?? $"Client {g.Key}" })
+            .ToList();
+
+        _logger.LogInformation("Found {Count} unique clients in external data", uniqueClients.Count);
+
+        // Load existing clients by ExternalClientId
+        // Use ToListAsync + GroupBy to handle potential duplicates gracefully
+        var externalClientIds = uniqueClients.Select(c => c.ExternalClientId).ToList();
+        var clientList = await _dbContext.Clients
+            .Where(c => externalClientIds.Contains(c.ExternalClientId))
+            .ToListAsync(cancellationToken);
+
+        var existingClients = clientList
+            .GroupBy(c => c.ExternalClientId)
+            .ToDictionary(
+                g => g.Key,
+                g =>
+                {
+                    if (g.Count() > 1)
+                    {
+                        _logger.LogWarning(
+                            "Found {Count} Client rows with ExternalClientId {ExternalClientId}. " +
+                            "Using the most recently modified one. Please clean up duplicate records.",
+                            g.Count(),
+                            g.Key);
+                    }
+                    // Prefer non-deleted, then most recently modified
+                    return g
+                        .OrderBy(c => c.IsDeleted)
+                        .ThenByDescending(c => c.ModifiedDateTime)
+                        .First();
+                });
+
+        _logger.LogInformation("Found {Count} existing clients by ExternalClientId", existingClients.Count);
+
+        var now = DateTime.UtcNow;
+
+        foreach (var clientData in uniqueClients)
+        {
+            if (existingClients.TryGetValue(clientData.ExternalClientId, out var existingClient))
+            {
+                // Update existing client if name changed
+                if (existingClient.ClientName != clientData.ClientName)
+                {
+                    existingClient.ClientName = clientData.ClientName;
+                    existingClient.ModifiedDateTime = now;
+                    existingClient.ModifiedBy = "System Created";
+                    existingClient.LastSyncedDateTime = now;
+                    result.ClientsUpdated++;
+                }
+                else
+                {
+                    existingClient.LastSyncedDateTime = now;
+                }
+            }
+            else
+            {
+                // Create new client
+                var newClient = new Client
+                {
+                    ExternalClientId = clientData.ExternalClientId,
+                    ClientName = clientData.ClientName,
+                    ClientCode = clientData.ClientName.Length > 50 
+                        ? clientData.ClientName.Substring(0, 50) 
+                        : clientData.ClientName,
+                    IsActive = true,
+                    CreatedDateTime = now,
+                    CreatedBy = "System Created",
+                    ModifiedDateTime = now,
+                    ModifiedBy = "System Created",
+                    LastSyncedDateTime = now,
+                    IsDeleted = false
+                };
+
+                await _dbContext.Clients.AddAsync(newClient, cancellationToken);
+                existingClients[clientData.ExternalClientId] = newClient;
+                result.ClientsCreated++;
+            }
+        }
+
+        // Save client changes so we have ClientIds for the new records
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // Build the ExternalClientId -> internal ClientId mapping
+        // Note: Client.Id is the internal ClientId (from BaseEntity)
+        var mapping = existingClients.ToDictionary(
+            kvp => kvp.Key,  // ExternalClientId
+            kvp => kvp.Value.Id  // Internal ClientId (from BaseEntity.Id)
+        );
+
+        return mapping;
     }
 
     private async Task<List<ExternalAccountData>> FetchExternalAccountsAsync(
@@ -284,12 +479,7 @@ Combined AS (
         nr.NextRunDate,
         DATEADD(DAY, nr.WindowDays, nr.NextRunDate) AS NextRangeEnd,
         DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) AS DaysUntilNextRun,
-        CASE 
-            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) <= 0 THEN 'Run Now'
-            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) <= nr.WindowDays THEN 'Due Soon'
-            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) <= 30 THEN 'Upcoming'
-            ELSE 'Future'
-        END AS NextRunStatus,
+        -- Calculate HistoricalBillingStatus first (based on ExpectedNextDate)
         CASE 
             WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) < -(nr.PeriodDays * 2) THEN 'Missing'
             WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) < -nr.WindowDays THEN 'Overdue'
@@ -297,7 +487,16 @@ Combined AS (
             WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) <= nr.WindowDays THEN 'Due Soon'
             WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) <= 30 THEN 'Upcoming'
             ELSE 'Future'
-        END AS HistoricalBillingStatus
+        END AS HistoricalBillingStatus,
+        -- NextRunStatus: If HistoricalBillingStatus is Missing, NextRunStatus should also be Missing
+        -- Otherwise calculate based on NextRunDate
+        CASE 
+            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) < -(nr.PeriodDays * 2) THEN 'Missing'
+            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) <= 0 THEN 'Run Now'
+            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) <= nr.WindowDays THEN 'Due Soon'
+            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) <= 30 THEN 'Upcoming'
+            ELSE 'Future'
+        END AS NextRunStatus
     FROM #tmpCredentialAccountBilling cab
     INNER JOIN NextRunCalc nr ON nr.AccountId = cab.AccountId
 ),
@@ -343,41 +542,49 @@ DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
 ";
     }
 
-    private void UpdateExistingAccount(AdrAccount existing, ExternalAccountData external)
+    private void UpdateExistingAccount(AdrAccount existing, ExternalAccountData external, int? internalClientId)
     {
+        // Always update these fields (not affected by manual override)
         existing.VMAccountNumber = external.VMAccountNumber;
         existing.InterfaceAccountId = external.InterfaceAccountId;
-        existing.ClientId = external.ClientId;
+        existing.ClientId = internalClientId;
         existing.ClientName = external.ClientName;
         existing.CredentialId = external.CredentialId;
         existing.VendorCode = external.VendorCode;
-        existing.PeriodType = external.PeriodType;
-        existing.PeriodDays = external.PeriodDays;
-        existing.MedianDays = external.MedianDays;
-        existing.InvoiceCount = external.InvoiceCount;
-        existing.LastInvoiceDateTime = external.LastInvoiceDateTime;
-        existing.ExpectedNextDateTime = external.ExpectedNextDateTime;
-        existing.ExpectedRangeStartDateTime = external.ExpectedRangeStartDateTime;
-        existing.ExpectedRangeEndDateTime = external.ExpectedRangeEndDateTime;
-        existing.NextRunDateTime = external.NextRunDateTime;
-        existing.NextRangeStartDateTime = external.NextRangeStartDateTime;
-        existing.NextRangeEndDateTime = external.NextRangeEndDateTime;
-        existing.DaysUntilNextRun = external.DaysUntilNextRun;
-        existing.NextRunStatus = external.NextRunStatus;
-        existing.HistoricalBillingStatus = external.HistoricalBillingStatus;
+        
+        // Only update billing-related fields if NOT manually overridden
+        // When IsManuallyOverridden = true, preserve the manually set values
+        if (!existing.IsManuallyOverridden)
+        {
+            existing.PeriodType = external.PeriodType;
+            existing.PeriodDays = external.PeriodDays;
+            existing.MedianDays = external.MedianDays;
+            existing.InvoiceCount = external.InvoiceCount;
+            existing.LastInvoiceDateTime = external.LastInvoiceDateTime;
+            existing.ExpectedNextDateTime = external.ExpectedNextDateTime;
+            existing.ExpectedRangeStartDateTime = external.ExpectedRangeStartDateTime;
+            existing.ExpectedRangeEndDateTime = external.ExpectedRangeEndDateTime;
+            existing.NextRunDateTime = external.NextRunDateTime;
+            existing.NextRangeStartDateTime = external.NextRangeStartDateTime;
+            existing.NextRangeEndDateTime = external.NextRangeEndDateTime;
+            existing.DaysUntilNextRun = external.DaysUntilNextRun;
+            existing.NextRunStatus = external.NextRunStatus;
+            existing.HistoricalBillingStatus = external.HistoricalBillingStatus;
+        }
+        
         existing.LastSyncedDateTime = DateTime.UtcNow;
         existing.ModifiedDateTime = DateTime.UtcNow;
         existing.ModifiedBy = "System Created";
     }
 
-    private AdrAccount CreateNewAccount(ExternalAccountData external)
+    private AdrAccount CreateNewAccount(ExternalAccountData external, int? internalClientId)
     {
         return new AdrAccount
         {
             VMAccountId = external.VMAccountId,
             VMAccountNumber = external.VMAccountNumber,
             InterfaceAccountId = external.InterfaceAccountId,
-            ClientId = external.ClientId,
+            ClientId = internalClientId,
             ClientName = external.ClientName,
             CredentialId = external.CredentialId,
             VendorCode = external.VendorCode,

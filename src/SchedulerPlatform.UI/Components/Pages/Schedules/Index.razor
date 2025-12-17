@@ -2,8 +2,10 @@
 @rendermode InteractiveServer
 @attribute [Authorize]
 @using SchedulerPlatform.Core.Domain.Enums
+@using SchedulerPlatform.UI.Services
 @inject IScheduleService ScheduleService
 @inject IClientService ClientService
+@inject IUserTimeZoneService TimeZoneService
 @inject NavigationManager Navigation
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -17,12 +19,31 @@
 <MudText Typo="Typo.h4" Class="mb-4">Schedules</MudText>
 
 <MudPaper Class="pa-4">
-    @if (_canCreate)
-    {
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateSchedule" Class="mb-4">
-            Add New Schedule
+    <div class="d-flex justify-space-between align-center mb-4">
+        <div class="d-flex gap-2">
+            @if (_canCreate)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Add" OnClick="CreateSchedule">
+                    Add New Schedule
+                </MudButton>
+            }
+        </div>
+        <MudButton Variant="Variant.Outlined" 
+                   Color="Color.Primary" 
+                   StartIcon="@Icons.Material.Filled.Refresh"
+                   OnClick="RefreshData"
+                   Disabled="_isRefreshing">
+            @if (_isRefreshing)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <text>Refreshing...</text>
+            }
+            else
+            {
+                <text>Refresh</text>
+            }
         </MudButton>
-    }
+    </div>
 
     <MudGrid Class="mb-4" Spacing="2">
         <MudItem xs="12" md="2">
@@ -73,17 +94,27 @@
                         <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters" StartIcon="@Icons.Material.Filled.FilterAlt">
                             Apply
                         </MudButton>
-            <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
-                <ActivatorContent>
-                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download">
-                        Export
-                    </MudButton>
-                </ActivatorContent>
-                <ChildContent>
-                    <MudMenuItem OnClick="@(() => ExportSchedules("excel"))">Excel</MudMenuItem>
-                    <MudMenuItem OnClick="@(() => ExportSchedules("csv"))">CSV</MudMenuItem>
-                </ChildContent>
-            </MudMenu>
+            @if (_isExporting)
+            {
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="true">
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    Exporting...
+                </MudButton>
+            }
+            else
+            {
+                <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+                    <ActivatorContent>
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download">
+                            Export
+                        </MudButton>
+                    </ActivatorContent>
+                    <ChildContent>
+                        <MudMenuItem OnClick="@(() => ExportSchedules("excel"))">Excel</MudMenuItem>
+                        <MudMenuItem OnClick="@(() => ExportSchedules("csv"))">CSV</MudMenuItem>
+                    </ChildContent>
+                </MudMenu>
+            }
         </MudItem>
     </MudGrid>
     
@@ -126,12 +157,12 @@
                 <MudTh Style="width: 50px;">
                     <MudCheckBox T="bool" Value="@_selectAll" ValueChanged="@((bool value) => SelectAllVisible(value))" />
                 </MudTh>
-                <MudTh>Name</MudTh>
-                <MudTh>Type</MudTh>
-                <MudTh>Frequency</MudTh>
-                <MudTh>Next Run</MudTh>
-                <MudTh>Last Run Status</MudTh>
-                <MudTh>Status</MudTh>
+                <MudTh><MudTableSortLabel SortLabel="Name" T="Schedule">Name</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="JobType" T="Schedule">Type</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="Frequency" T="Schedule">Frequency</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="NextRunDateTime" T="Schedule" InitialDirection="SortDirection.Ascending">Next Run</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="LastRunDateTime" T="Schedule">Last Run Status</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="IsEnabled" T="Schedule">Status</MudTableSortLabel></MudTh>
                 <MudTh>Actions</MudTh>
             </HeaderContent>
             <RowTemplate>
@@ -147,52 +178,54 @@
                     <MudChip T="string" Size="Size.Small">@context.JobType.ToString()</MudChip>
                 </MudTd>
                 <MudTd DataLabel="Frequency">@context.Frequency.ToString()</MudTd>
-                                <MudTd DataLabel="Next Run">
-                                    @if (context.NextRunDateTime.HasValue)
+                                                <MudTd DataLabel="Next Run">
+                                                    @if (context.NextRunDateTime.HasValue)
+                                                    {
+                                                        var localTime = ConvertToUserTime(context.NextRunDateTime.Value);
+                                                        var hoursLate = (DateTime.UtcNow - context.NextRunDateTime.Value).TotalHours;
+                                                        @if (context.IsEnabled && hoursLate > 24)
+                                                        {
+                                                            <MudTooltip Text="@($"Missed by {Math.Floor(hoursLate / 24)} day(s) - requires manual trigger")">
+                                                                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Size="Size.Small" Class="mr-1" />
+                                                            </MudTooltip>
+                                                        }
+                                                        <text>@localTime.ToString("g") @(!string.IsNullOrEmpty(_userTimeZoneAbbr) ? $"({_userTimeZoneAbbr})" : "")</text>
+                                                    }
+                                                    else
+                                                    {
+                                                        <text>N/A</text>
+                                                    }
+                                                </MudTd>
+                                <MudTd DataLabel="Last Run Status">
+                                    @if (context.LastRunStatus.HasValue)
                                     {
-                                        var tz = GetTimeZoneAbbreviation(context.TimeZone);
-                                        var localTime = ConvertUtcToScheduleTime(context.NextRunDateTime.Value, context.TimeZone);
-                                        var hoursLate = (DateTime.UtcNow - context.NextRunDateTime.Value).TotalHours;
-                                        @if (context.IsEnabled && hoursLate > 24)
-                                        {
-                                            <MudTooltip Text="@($"Missed by {Math.Floor(hoursLate / 24)} day(s) - requires manual trigger")">
-                                                <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Size="Size.Small" Class="mr-1" />
-                                            </MudTooltip>
-                                        }
-                                        <text>@localTime.ToString("g") @(!string.IsNullOrEmpty(tz) ? $"({tz})" : "")</text>
+                                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.LastRunStatus.Value)">
+                                            @context.LastRunStatus.Value.ToString()
+                                        </MudChip>
                                     }
                                     else
                                     {
-                                        <text>N/A</text>
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">N/A</MudText>
+                                    }
+                                    @if (context.LastRunDateTime.HasValue)
+                                    {
+                                        var localTime = ConvertToUserTime(context.LastRunDateTime.Value);
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            @localTime.ToString("g") @(!string.IsNullOrEmpty(_userTimeZoneAbbr) ? $"({_userTimeZoneAbbr})" : "")
+                                        </MudText>
                                     }
                                 </MudTd>
-                <MudTd DataLabel="Last Run Status">
-                    @if (context.LastRunStatus.HasValue)
-                    {
-                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.LastRunStatus.Value)">
-                            @context.LastRunStatus.Value.ToString()
-                        </MudChip>
-                    }
-                    else
-                    {
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">N/A</MudText>
-                    }
-                    @if (context.LastRunDateTime.HasValue)
-                    {
-                        var tz = GetTimeZoneAbbreviation(context.TimeZone);
-                        var localTime = ConvertUtcToScheduleTime(context.LastRunDateTime.Value, context.TimeZone);
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">
-                            @localTime.ToString("g") @(!string.IsNullOrEmpty(tz) ? $"({tz})" : "")
-                        </MudText>
-                    }
-                </MudTd>
                 <MudTd DataLabel="Status">
-                    <MudSwitch T="bool" Value="context.IsEnabled" ValueChanged="@((bool value) => HandleToggleSchedule(context, value))" Color="Color.Primary" Disabled="@(!_canUpdate)" />
+                    @if (!context.IsEnabled)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="mr-2">Paused</MudChip>
+                    }
+                    <MudSwitch T="bool" Value="context.IsEnabled" ValueChanged="@((bool value) => HandleToggleSchedule(context, value))" Color="Color.Primary" Disabled="@(!_canUpdate || (context.IsSystemSchedule && !_isSystemAdmin))" />
                 </MudTd>
                 <MudTd DataLabel="Actions">
                     <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
                         <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewScheduleDetails(context)">View Details</MudMenuItem>
-                        @if (_canUpdate)
+                        @if (_canUpdate && !context.IsSystemSchedule)
                         {
                             <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => EditSchedule(context.Id)">Edit</MudMenuItem>
                         }
@@ -201,9 +234,24 @@
                         {
                             <MudMenuItem Icon="@Icons.Material.Filled.PlayArrow" OnClick="() => TriggerSchedule(context)">Trigger Now</MudMenuItem>
                         }
-                        @if (_canDelete)
+                        @if (_canUpdate && (!context.IsSystemSchedule || _isSystemAdmin))
+                        {
+                            @if (context.IsEnabled)
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.Pause" OnClick="() => HandleToggleSchedule(context, false)">Pause Schedule</MudMenuItem>
+                            }
+                            else
+                            {
+                                <MudMenuItem Icon="@Icons.Material.Filled.PlayCircle" OnClick="() => HandleToggleSchedule(context, true)">Resume Schedule</MudMenuItem>
+                            }
+                        }
+                        @if (_canDelete && !context.IsSystemSchedule)
                         {
                             <MudMenuItem Icon="@Icons.Material.Filled.Delete" OnClick="() => DeleteSchedule(context)">Delete</MudMenuItem>
+                        }
+                        @if (context.IsSystemSchedule && !_isSystemAdmin)
+                        {
+                            <MudMenuItem Icon="@Icons.Material.Filled.Lock" Disabled="true">System Schedule (Protected)</MudMenuItem>
                         }
                     </MudMenu>
                 </MudTd>
@@ -256,11 +304,14 @@
 	private bool _canUpdate = false;
 	private bool _canDelete = false;
 	private bool _canExecute = false;
+	private bool _isSystemAdmin = false;
 	
 	// Bulk selection state
 	private HashSet<int> _selectedIds = new();
 	private bool _selectAll = false;
 	private bool _isBulkTriggering = false;
+	private bool _isExporting = false;
+	private bool _isRefreshing = false;
 	private int _delayMs = 1000;
 	private List<Schedule> _currentPageItems = new();
 	
@@ -268,6 +319,10 @@
 	private int _refreshInterval = 60;
 	private PeriodicTimer? _timer;
 	private CancellationTokenSource? _timerCts;
+	
+	// Cached timezone info for display
+	private string _userTimeZoneAbbr = "";
+	private string _userTimeZoneId = "";
 
 	[Parameter]
 	[SupplyParameterFromQuery(Name = "date")]
@@ -275,6 +330,10 @@
 
 	protected override async Task OnInitializedAsync()
 	{
+		// Initialize timezone info
+		_userTimeZoneId = await TimeZoneService.GetUserTimeZoneIdAsync();
+		_userTimeZoneAbbr = await TimeZoneService.GetUserTimeZoneAbbreviationAsync();
+		
 		if (!string.IsNullOrWhiteSpace(DateParam) && DateTime.TryParse(DateParam, out var parsedDate))
 		{
 			_selectedDate = parsedDate;
@@ -314,30 +373,43 @@
 		}
 	
 		private void StartAutoRefresh()
-		{
-			_timerCts = new CancellationTokenSource();
-			_timer = new PeriodicTimer(TimeSpan.FromSeconds(_refreshInterval));
-			_ = Task.Run(async () =>
 			{
-				try
+				_timerCts = new CancellationTokenSource();
+				_timer = new PeriodicTimer(TimeSpan.FromSeconds(_refreshInterval));
+				_ = Task.Run(async () =>
 				{
-					while (await _timer.WaitForNextTickAsync(_timerCts.Token))
+					try
 					{
-						await InvokeAsync(async () =>
+						while (await _timer.WaitForNextTickAsync(_timerCts.Token))
 						{
-							if (_table != null && !_loading)
+							await InvokeAsync(async () =>
 							{
-								await _table.ReloadServerData();
-							}
+								if (_table != null && !_loading)
+								{
+									await _table.ReloadServerData();
+								}
+							});
+						}
+					}
+					catch (SessionExpiredException)
+					{
+						await InvokeAsync(() =>
+						{
+							Snackbar.Add("Your session has expired. Redirecting to login...", Severity.Warning);
+							Navigation.NavigateTo("/Account/Login", forceLoad: true);
+							return Task.CompletedTask;
 						});
 					}
-				}
-				catch (OperationCanceledException)
-				{
-					// Timer was cancelled, this is expected on dispose
-				}
-			});
-		}
+					catch (OperationCanceledException)
+					{
+						// Timer was cancelled, this is expected on dispose
+					}
+					catch
+					{
+						// Ignore other errors during auto-refresh
+					}
+				});
+			}
 
 	private async Task LoadPermissionsAsync()
 	{
@@ -345,6 +417,7 @@
 		_canUpdate = await PermissionService.CanUpdateAsync("schedules");
 		_canDelete = await PermissionService.CanDeleteAsync("schedules");
 		_canExecute = await PermissionService.CanExecuteAsync("schedules");
+		_isSystemAdmin = await PermissionService.IsSystemAdminAsync();
 	}
 
 	private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
@@ -399,6 +472,9 @@
 				};
 			}
 
+			// Apply sorting
+			items = ApplySorting(items, state.SortLabel, state.SortDirection);
+
 			// Store current page items for select all functionality
 			_currentPageItems = items.ToList();
 			_selectAll = _currentPageItems.Any() && _currentPageItems.All(s => _selectedIds.Contains(s.Id));
@@ -418,6 +494,40 @@
 		{
 			_loading = false;
 		}
+	}
+
+	private List<Schedule> ApplySorting(IList<Schedule> items, string? sortLabel, SortDirection sortDirection)
+	{
+		if (string.IsNullOrEmpty(sortLabel))
+		{
+			// Default sort: Next Run ascending (soonest first)
+			return items.OrderBy(s => s.NextRunDateTime ?? DateTime.MaxValue).ToList();
+		}
+
+		var isDescending = sortDirection == SortDirection.Descending;
+
+		return sortLabel switch
+		{
+			"Name" => isDescending 
+				? items.OrderByDescending(s => s.Name).ToList() 
+				: items.OrderBy(s => s.Name).ToList(),
+			"JobType" => isDescending 
+				? items.OrderByDescending(s => s.JobType).ToList() 
+				: items.OrderBy(s => s.JobType).ToList(),
+			"Frequency" => isDescending 
+				? items.OrderByDescending(s => s.Frequency).ToList() 
+				: items.OrderBy(s => s.Frequency).ToList(),
+			"NextRunDateTime" => isDescending 
+				? items.OrderByDescending(s => s.NextRunDateTime ?? DateTime.MaxValue).ToList() 
+				: items.OrderBy(s => s.NextRunDateTime ?? DateTime.MaxValue).ToList(),
+			"LastRunDateTime" => isDescending 
+				? items.OrderByDescending(s => s.LastRunDateTime ?? DateTime.MinValue).ToList() 
+				: items.OrderBy(s => s.LastRunDateTime ?? DateTime.MinValue).ToList(),
+			"IsEnabled" => isDescending 
+				? items.OrderByDescending(s => s.IsEnabled).ToList() 
+				: items.OrderBy(s => s.IsEnabled).ToList(),
+			_ => items.OrderBy(s => s.NextRunDateTime ?? DateTime.MaxValue).ToList()
+		};
 	}
 
 	private async Task<IEnumerable<Client>> SearchClients(string value, CancellationToken cancellationToken)
@@ -441,6 +551,26 @@
 		_selectedIds.Clear();
 		_selectAll = false;
 		await _table.ReloadServerData();
+	}
+
+	private async Task RefreshData()
+	{
+		_isRefreshing = true;
+		StateHasChanged();
+		
+		try
+		{
+			await _table.ReloadServerData();
+		}
+		catch (Exception ex)
+		{
+			Snackbar.Add($"Error refreshing data: {ex.Message}", Severity.Error);
+		}
+		finally
+		{
+			_isRefreshing = false;
+			StateHasChanged();
+		}
 	}
 
 	private void SelectAllVisible(bool selected)
@@ -518,6 +648,8 @@
 
 	private async Task ExportSchedules(string format)
 	{
+		_isExporting = true;
+		StateHasChanged();
 		try
 		{
 			var startDate = _filterDate?.Date;
@@ -544,6 +676,10 @@
 		catch (Exception ex)
 		{
 			Snackbar.Add($"Export failed: {ex.Message}", Severity.Error);
+		}
+		finally
+		{
+			_isExporting = false;
 		}
 	}
 
@@ -658,55 +794,27 @@
 		};
 	}
 
-	private string GetTimeZoneAbbreviation(string? timeZoneId)
+	/// <summary>
+	/// Converts a UTC DateTime to the user's preferred timezone.
+	/// Uses the cached timezone ID from initialization.
+	/// </summary>
+	private DateTime ConvertToUserTime(DateTime utcDateTime)
 	{
-		if (string.IsNullOrEmpty(timeZoneId))
-			return "";
-
-		var tzMap = new Dictionary<string, string>
-		{
-			{ "Eastern Standard Time", "ET" },
-			{ "Central Standard Time", "CT" },
-			{ "Mountain Standard Time", "MT" },
-			{ "Pacific Standard Time", "PT" },
-			{ "US Mountain Standard Time", "MST" },
-			{ "Alaskan Standard Time", "AKT" },
-			{ "Hawaiian Standard Time", "HST" },
-			{ "US Eastern Standard Time", "ET" }
-		};
-
-		if (tzMap.TryGetValue(timeZoneId, out var abbr))
-			return abbr;
-
+		if (string.IsNullOrEmpty(_userTimeZoneId))
+			return utcDateTime;
+		
 		try
 		{
-			var tz = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
-			return tz.IsDaylightSavingTime(DateTime.Now) ? tz.DaylightName : tz.StandardName;
-		}
-		catch
-		{
-			return timeZoneId;
-		}
-	}
-
-	private DateTime ConvertUtcToScheduleTime(DateTime utc, string? timeZoneId)
-	{
-		if (string.IsNullOrWhiteSpace(timeZoneId))
-			return utc;
-
-		try
-		{
-			var tz = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
-			
 			// Handle Unspecified kind by treating it as UTC
-			if (utc.Kind == DateTimeKind.Unspecified)
-				utc = DateTime.SpecifyKind(utc, DateTimeKind.Utc);
-
-			return TimeZoneInfo.ConvertTimeFromUtc(utc, tz);
+			if (utcDateTime.Kind == DateTimeKind.Unspecified)
+				utcDateTime = DateTime.SpecifyKind(utcDateTime, DateTimeKind.Utc);
+			
+			var tz = TimeZoneInfo.FindSystemTimeZoneById(_userTimeZoneId);
+			return TimeZoneInfo.ConvertTimeFromUtc(utcDateTime, tz);
 		}
 		catch
 		{
-			return utc;
+			return utcDateTime;
 		}
 	}
 }
