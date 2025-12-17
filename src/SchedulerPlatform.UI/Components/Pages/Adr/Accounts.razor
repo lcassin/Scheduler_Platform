@@ -221,7 +221,7 @@
                                         <MudMenuItem Icon="@Icons.Material.Filled.Work" OnClick="() => ViewJobs(context.Id)">View Jobs</MudMenuItem>
                                         @if (_canEditBilling)
                                         {
-                                            <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => EditBilling(context)">Edit Billing</MudMenuItem>
+                                            <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => EditBilling(context)">Edit Account Rules</MudMenuItem>
                                             @if (context.IsManuallyOverridden)
                                             {
                                                 <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="() => ClearOverride(context)">Clear Override</MudMenuItem>
@@ -495,7 +495,7 @@
             { x => x.Account, account }
         };
         var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
-        var dialog = await DialogService.ShowAsync<EditBillingDialog>("Edit Billing Data", parameters, options);
+        var dialog = await DialogService.ShowAsync<EditBillingDialog>("Edit Account Rules", parameters, options);
         var result = await dialog.Result;
         
         if (result != null && !result.Canceled)
