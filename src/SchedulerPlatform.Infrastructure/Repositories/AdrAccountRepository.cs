@@ -178,14 +178,24 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
 
     public async Task<IEnumerable<AdrAccount>> GetDueAccountsWithRulesAsync()
     {
+        // Now query based on RULE scheduling data, not account data
+        // Rules drive the orchestrator per BRD requirements
+        var today = DateTime.UtcNow.Date;
+        
         return await _dbSet
-            .Include(a => a.AdrAccountRules.Where(r => !r.IsDeleted))
+            .Include(a => a.AdrAccountRules.Where(r => !r.IsDeleted && r.IsEnabled))
             .Where(a =>
                 !a.IsDeleted &&
-                (a.NextRunStatus == "Run Now" || a.NextRunStatus == "Due Soon") &&
                 a.HistoricalBillingStatus != "Missing" &&
-                a.NextRangeStartDateTime.HasValue &&
-                a.NextRangeEndDateTime.HasValue)
+                // Account must have at least one enabled rule that is due
+                a.AdrAccountRules.Any(r => 
+                    !r.IsDeleted && 
+                    r.IsEnabled &&
+                    r.JobTypeId == 2 && // DownloadInvoice
+                    r.NextRunDateTime.HasValue &&
+                    r.NextRunDateTime.Value.Date <= today &&
+                    r.NextRangeStartDateTime.HasValue &&
+                    r.NextRangeEndDateTime.HasValue))
             .ToListAsync();
     }
 }

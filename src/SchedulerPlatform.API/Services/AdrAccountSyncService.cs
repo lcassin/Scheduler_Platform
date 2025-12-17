@@ -20,6 +20,9 @@ public class AdrAccountSyncResult
     public int AccountsMarkedDeleted { get; set; }
     public int ClientsCreated { get; set; }
     public int ClientsUpdated { get; set; }
+    public int RulesCreated { get; set; }
+    public int RulesUpdated { get; set; }
+    public int RulesSkippedOverridden { get; set; }
     public int Errors { get; set; }
     public List<string> ErrorMessages { get; set; } = new();
     public DateTime SyncStartDateTime { get; set; }
@@ -199,11 +202,16 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             // Report final progress (100%)
             progressCallback?.Invoke(externalAccounts.Count, externalAccounts.Count);
 
+            // Step 4: Sync AdrAccountRules - create/update rules for each account
+            // Rules drive the orchestrator, so we need to keep them in sync with account scheduling data
+            await SyncAccountRulesAsync(existingAccounts.Values.ToList(), externalAccounts, result, cancellationToken);
+
             result.SyncEndDateTime = DateTime.UtcNow;
             _logger.LogInformation(
-                "ADR account sync completed. Clients: {ClientsCreated} created/{ClientsUpdated} updated. Accounts: {Processed} processed, {Inserted} inserted, {Updated} updated, {Deleted} deleted, {Errors} errors. Duration: {Duration}",
+                "ADR account sync completed. Clients: {ClientsCreated} created/{ClientsUpdated} updated. Accounts: {Processed} processed, {Inserted} inserted, {Updated} updated, {Deleted} deleted. Rules: {RulesCreated} created, {RulesUpdated} updated, {RulesSkipped} skipped (overridden). Errors: {Errors}. Duration: {Duration}",
                 result.ClientsCreated, result.ClientsUpdated, result.TotalAccountsProcessed, result.AccountsInserted, 
-                result.AccountsUpdated, result.AccountsMarkedDeleted, result.Errors, result.Duration);
+                result.AccountsUpdated, result.AccountsMarkedDeleted, result.RulesCreated, result.RulesUpdated, 
+                result.RulesSkippedOverridden, result.Errors, result.Duration);
 
             return result;
         }
@@ -540,6 +548,129 @@ ORDER BY VMAccountId;
 
 DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
 ";
+    }
+
+    /// <summary>
+    /// Syncs AdrAccountRule records for each account.
+    /// Creates new rules for accounts without them, updates existing rules (respecting override status).
+    /// Rules drive the orchestrator's job creation, so they must be kept in sync with account scheduling data.
+    /// </summary>
+    private async Task SyncAccountRulesAsync(
+        List<AdrAccount> accounts,
+        List<ExternalAccountData> externalAccounts,
+        AdrAccountSyncResult result,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Starting rule sync for {Count} accounts", accounts.Count);
+
+        // Build lookup from VMAccountId+VMAccountNumber to external data for scheduling fields
+        var externalDataLookup = externalAccounts
+            .GroupBy(e => (e.VMAccountId, e.VMAccountNumber))
+            .ToDictionary(
+                g => g.Key,
+                g => g.First());
+
+        // Get all account IDs that need rules
+        var accountIds = accounts.Where(a => !a.IsDeleted).Select(a => a.Id).ToList();
+
+        // Load existing rules for these accounts (JobTypeId = 2 for DownloadInvoice)
+        var existingRules = await _dbContext.AdrAccountRules
+            .Where(r => accountIds.Contains(r.AdrAccountId) && !r.IsDeleted && r.JobTypeId == 2)
+            .ToListAsync(cancellationToken);
+
+        var existingRulesByAccountId = existingRules
+            .GroupBy(r => r.AdrAccountId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        const int batchSize = 5000;
+        int processedSinceLastSave = 0;
+        int batchNumber = 1;
+
+        foreach (var account in accounts.Where(a => !a.IsDeleted))
+        {
+            try
+            {
+                // Get external data for this account's scheduling fields
+                var accountKey = (account.VMAccountId, account.VMAccountNumber ?? string.Empty);
+                if (!externalDataLookup.TryGetValue(accountKey, out var externalData))
+                {
+                    // No external data found - skip this account
+                    continue;
+                }
+
+                if (existingRulesByAccountId.TryGetValue(account.Id, out var existingRule))
+                {
+                    // Rule exists - update it if NOT manually overridden
+                    if (existingRule.IsManuallyOverridden)
+                    {
+                        result.RulesSkippedOverridden++;
+                        _logger.LogDebug("Skipping rule update for account {AccountId} - rule is manually overridden", account.Id);
+                    }
+                    else
+                    {
+                        // Update rule scheduling fields from external data
+                        existingRule.PeriodType = externalData.PeriodType;
+                        existingRule.PeriodDays = externalData.PeriodDays;
+                        existingRule.NextRunDateTime = externalData.NextRunDateTime;
+                        existingRule.NextRangeStartDateTime = externalData.NextRangeStartDateTime;
+                        existingRule.NextRangeEndDateTime = externalData.NextRangeEndDateTime;
+                        existingRule.ModifiedDateTime = DateTime.UtcNow;
+                        existingRule.ModifiedBy = "System Created";
+                        result.RulesUpdated++;
+                    }
+                }
+                else
+                {
+                    // No rule exists - create one
+                    var newRule = new AdrAccountRule
+                    {
+                        AdrAccountId = account.Id,
+                        JobTypeId = 2, // DownloadInvoice
+                        PeriodType = externalData.PeriodType,
+                        PeriodDays = externalData.PeriodDays,
+                        NextRunDateTime = externalData.NextRunDateTime,
+                        NextRangeStartDateTime = externalData.NextRangeStartDateTime,
+                        NextRangeEndDateTime = externalData.NextRangeEndDateTime,
+                        IsEnabled = true,
+                        IsManuallyOverridden = false,
+                        CreatedDateTime = DateTime.UtcNow,
+                        CreatedBy = "System Created",
+                        ModifiedDateTime = DateTime.UtcNow,
+                        ModifiedBy = "System Created",
+                        IsDeleted = false
+                    };
+                    await _dbContext.AdrAccountRules.AddAsync(newRule, cancellationToken);
+                    result.RulesCreated++;
+                }
+
+                processedSinceLastSave++;
+
+                // Save in batches
+                if (processedSinceLastSave >= batchSize)
+                {
+                    await _dbContext.SaveChangesAsync(cancellationToken);
+                    _logger.LogInformation("Rule sync batch {BatchNumber} saved: {Created} created, {Updated} updated, {Skipped} skipped so far",
+                        batchNumber, result.RulesCreated, result.RulesUpdated, result.RulesSkippedOverridden);
+                    processedSinceLastSave = 0;
+                    batchNumber++;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error syncing rule for account {AccountId}", account.Id);
+                result.Errors++;
+                result.ErrorMessages.Add($"Rule sync for AccountId {account.Id}: {ex.Message}");
+            }
+        }
+
+        // Final save for remaining rules
+        if (processedSinceLastSave > 0)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        _logger.LogInformation("Rule sync completed. Created: {Created}, Updated: {Updated}, Skipped (overridden): {Skipped}",
+            result.RulesCreated, result.RulesUpdated, result.RulesSkippedOverridden);
     }
 
     private void UpdateExistingAccount(AdrAccount existing, ExternalAccountData external, int? internalClientId)

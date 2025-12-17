@@ -269,12 +269,6 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             {
                 try
                 {
-                    if (!account.NextRangeStartDateTime.HasValue || !account.NextRangeEndDateTime.HasValue)
-                    {
-                        result.JobsSkipped++;
-                        continue;
-                    }
-
                     // Check if account is blacklisted before creating job
                     if (await IsAccountBlacklistedAsync(account, "Download"))
                     {
@@ -283,10 +277,25 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         continue;
                     }
 
+                    // Get the active rule for this account (JobTypeId = 2 for DownloadInvoice/ADR Request)
+                    // Rules now drive the orchestrator per BRD requirements
+                    var accountRule = account.AdrAccountRules?
+                        .FirstOrDefault(r => !r.IsDeleted && r.IsEnabled && r.JobTypeId == 2 &&
+                            r.NextRunDateTime.HasValue && r.NextRangeStartDateTime.HasValue && r.NextRangeEndDateTime.HasValue);
+
+                    if (accountRule == null)
+                    {
+                        // No valid rule found - skip this account
+                        result.JobsSkipped++;
+                        _logger.LogDebug("Skipping account {AccountId} - no valid enabled rule found", account.Id);
+                        continue;
+                    }
+
+                    // Use scheduling data from the RULE, not the account
                     var existingJob = await _unitOfWork.AdrJobs.ExistsForBillingPeriodAsync(
                         account.Id,
-                        account.NextRangeStartDateTime.Value,
-                        account.NextRangeEndDateTime.Value);
+                        accountRule.NextRangeStartDateTime!.Value,
+                        accountRule.NextRangeEndDateTime!.Value);
 
                     if (existingJob)
                     {
@@ -294,25 +303,21 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         continue;
                     }
 
-                    // Look up the active rule for this account (JobTypeId = 2 for DownloadInvoice/ADR Request)
-                    // If a rule exists, stamp its ID on the job for tracking per BRD requirements
-                    var accountRule = account.AdrAccountRules?
-                        .FirstOrDefault(r => !r.IsDeleted && r.IsEnabled && r.JobTypeId == 2);
-
+                    // Create job using scheduling data from the RULE
                     var job = new AdrJob
                     {
                         AdrAccountId = account.Id,
-                        AdrAccountRuleId = accountRule?.Id,  // Track which rule created this job (null for legacy/manual jobs)
+                        AdrAccountRuleId = accountRule.Id,  // Track which rule created this job
                         VMAccountId = account.VMAccountId,
                         VMAccountNumber = account.VMAccountNumber,
                         VendorCode = account.VendorCode,
                         CredentialId = account.CredentialId,
-                        PeriodType = account.PeriodType,
-                        BillingPeriodStartDateTime = account.NextRangeStartDateTime.Value,
-                        BillingPeriodEndDateTime = account.NextRangeEndDateTime.Value,
-                        NextRunDateTime = account.NextRunDateTime,
-                        NextRangeStartDateTime = account.NextRangeStartDateTime,
-                        NextRangeEndDateTime = account.NextRangeEndDateTime,
+                        PeriodType = accountRule.PeriodType,  // From rule
+                        BillingPeriodStartDateTime = accountRule.NextRangeStartDateTime!.Value,  // From rule
+                        BillingPeriodEndDateTime = accountRule.NextRangeEndDateTime!.Value,  // From rule
+                        NextRunDateTime = accountRule.NextRunDateTime,  // From rule
+                        NextRangeStartDateTime = accountRule.NextRangeStartDateTime,  // From rule
+                        NextRangeEndDateTime = accountRule.NextRangeEndDateTime,  // From rule
                         Status = "Pending",
                         IsMissing = account.HistoricalBillingStatus == "Missing",
                         RetryCount = 0,
