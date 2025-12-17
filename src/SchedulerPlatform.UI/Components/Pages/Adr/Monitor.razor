@@ -62,6 +62,25 @@
                             <text>Check Statuses Only</text>
                         }
                     </MudButton>
+                    @if (_currentStatus?.IsRunning == true && _currentStatus?.Status != null && 
+                         (_currentStatus.Status.Status == "Running" || _currentStatus.Status.Status == "Queued" || _currentStatus.Status.Status == "Cancelling"))
+                    {
+                        <MudButton Variant="Variant.Outlined" 
+                                   Color="Color.Error" 
+                                   StartIcon="@Icons.Material.Filled.Cancel"
+                                   OnClick="CancelOrchestration"
+                                   Disabled="@(_isCancelling || _currentStatus.Status.Status == "Cancelling")">
+                            @if (_isCancelling || _currentStatus.Status.Status == "Cancelling")
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                <text>Cancelling...</text>
+                            }
+                            else
+                            {
+                                <text>Cancel</text>
+                            }
+                        </MudButton>
+                    }
                 </div>
             </div>
 
@@ -334,10 +353,10 @@
                             </MudItem>
                         </MudGrid>
 
-                        @if (_currentStatus.Status.Status == "Running")
+                        @if (_currentStatus.Status.Status == "Running" || _currentStatus.Status.Status == "Cancelling")
                         {
                             <MudDivider Class="my-4" />
-                            <MudText Typo="Typo.subtitle1" Class="mb-2">Step Progress</MudText>
+                            <MudText Typo="Typo.subtitle1" Class="mb-2">Step Progress @(_currentStatus.Status.Status == "Cancelling" ? "(Cancelling...)" : "")</MudText>
                             <MudTimeline TimelinePosition="TimelinePosition.Start">
                                 <MudTimelineItem Color="@GetStepColor("Syncing accounts", _currentStatus.Status)" Icon="@GetStepIcon("Syncing accounts", _currentStatus.Status)">
                                     <ItemContent>
@@ -513,38 +532,56 @@
             <MudText Typo="Typo.h6" Class="mb-3">Job Pipeline Status</MudText>
             @if (_jobStats != null)
             {
+                <!-- Phase Breakdown Summary -->
+                <div class="d-flex gap-4 mb-4">
+                    <MudPaper Class="pa-3 d-flex flex-column align-center flex-grow-1" Elevation="0" Style="background-color: rgba(66, 165, 245, 0.1); border-left: 4px solid #42a5f5; border-radius: 8px;">
+                        <MudText Typo="Typo.h5" Style="color: #42a5f5;">@_jobStats.CredentialPhaseCount.ToString("N0")</MudText>
+                        <MudText Typo="Typo.caption">Credential Requests</MudText>
+                    </MudPaper>
+                    <MudPaper Class="pa-3 d-flex flex-column align-center flex-grow-1" Elevation="0" Style="background-color: rgba(38, 198, 218, 0.1); border-left: 4px solid #26c6da; border-radius: 8px;">
+                        <MudText Typo="Typo.h5" Style="color: #26c6da;">@_jobStats.AdrDocumentPhaseCount.ToString("N0")</MudText>
+                        <MudText Typo="Typo.caption">ADR Document Requests</MudText>
+                    </MudPaper>
+                </div>
+                
                 <MudSimpleTable Dense="true" Hover="true" Style="overflow-x: auto;">
                     <tbody>
                         <tr>
                             <td><MudIcon Icon="@Icons.Material.Filled.Work" Size="Size.Small" Class="mr-2" />Total Jobs</td>
                             <td class="text-right"><strong>@_jobStats.TotalCount</strong></td>
                         </tr>
+                        <tr style="background-color: rgba(var(--mud-palette-info-rgb), 0.05);">
+                            <td colspan="2"><MudText Typo="Typo.caption" Color="Color.Info"><strong>Credential Phase</strong></MudText></td>
+                        </tr>
                         <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.HourglassEmpty" Size="Size.Small" Color="Color.Default" Class="mr-2" />Pending</td>
+                            <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.HourglassEmpty" Size="Size.Small" Color="Color.Default" Class="mr-2" />Pending</td>
                             <td class="text-right">@_jobStats.PendingCount</td>
                         </tr>
                         <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Size="Size.Small" Color="Color.Info" Class="mr-2" />Credential Verified</td>
+                            <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Size="Size.Small" Color="Color.Info" Class="mr-2" />Credential Verified</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-info);">@_jobStats.CredentialVerifiedCount</strong></td>
                         </tr>
                         <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.GppBad" Size="Size.Small" Color="Color.Warning" Class="mr-2" />Credential Failed</td>
+                            <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.GppBad" Size="Size.Small" Color="Color.Warning" Class="mr-2" />Credential Failed</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-warning);">@_jobStats.CredentialFailedCount</strong></td>
                         </tr>
+                        <tr style="background-color: rgba(var(--mud-palette-primary-rgb), 0.05);">
+                            <td colspan="2"><MudText Typo="Typo.caption" Color="Color.Primary"><strong>ADR Document Phase</strong></MudText></td>
+                        </tr>
                         <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.CloudDownload" Size="Size.Small" Color="Color.Primary" Class="mr-2" />ADR Request Sent</td>
+                            <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.CloudDownload" Size="Size.Small" Color="Color.Primary" Class="mr-2" />ADR Request Sent</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-primary);">@_jobStats.ScrapeRequestedCount</strong></td>
                         </tr>
                         <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" Class="mr-2" />Completed</td>
+                            <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" Class="mr-2" />Completed</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-success);">@_jobStats.CompletedCount</strong></td>
                         </tr>
                         <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error" Class="mr-2" />Failed</td>
+                            <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error" Class="mr-2" />Failed</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-error);">@_jobStats.FailedCount</strong></td>
                         </tr>
                         <tr>
-                            <td><MudIcon Icon="@Icons.Material.Filled.RateReview" Size="Size.Small" Color="Color.Warning" Class="mr-2" />Needs Review</td>
+                            <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.RateReview" Size="Size.Small" Color="Color.Warning" Class="mr-2" />Needs Review</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-warning);">@_jobStats.NeedsReviewCount</strong></td>
                         </tr>
                     </tbody>
@@ -836,6 +873,7 @@
     private bool _isRefreshing = false;
     private bool _isStarting = false;
     private bool _isCheckingStatuses = false;
+    private bool _isCancelling = false;
     private StatusCheckResult? _statusCheckResult = null;
     private bool _autoRefreshEnabled = true;
     private bool _showAllHistory = false;
@@ -1074,6 +1112,8 @@
                 StopProgressPolling();
                 // Refresh history to show completed run
                 _history = await AdrService.GetOrchestrationHistoryAsync(10);
+                _recentHistory = _history; // Update chart data source
+                UpdateChartData();
                 StateHasChanged();
             }
         }
@@ -1201,6 +1241,46 @@
         finally
         {
             _isStarting = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CancelOrchestration()
+    {
+        if (_currentStatus?.Status?.RequestId == null) return;
+        
+        _isCancelling = true;
+        StateHasChanged();
+
+        try
+        {
+            var result = await AdrService.CancelOrchestrationAsync(_currentStatus.Status.RequestId);
+            
+            if (result.Success)
+            {
+                Snackbar.Add("Cancellation initiated. The orchestration will stop after the current operation completes.", Severity.Info);
+                
+                // Refresh to show the updated status
+                await Task.Delay(500);
+                await LoadDataAsync();
+            }
+            else
+            {
+                Snackbar.Add($"Failed to cancel: {result.Error ?? result.Message ?? "Unknown error"}", Severity.Error);
+            }
+        }
+        catch (SessionExpiredException)
+        {
+            Snackbar.Add("Your session has expired. Redirecting to login...", Severity.Warning);
+            Navigation.NavigateTo("/Account/Login", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Failed to cancel orchestration: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _isCancelling = false;
             StateHasChanged();
         }
     }
@@ -1364,6 +1444,17 @@
         var currentIndex = Array.IndexOf(steps, normalizedCurrentStep);
         var stepIndex = Array.IndexOf(steps, stepName);
 
+        // Handle cancelling/cancelled states
+        if (status.Status == "Cancelling" || status.Status == "Cancelled")
+        {
+            if (normalizedCurrentStep == stepName)
+                return Color.Warning; // Current step being cancelled
+            else if (stepIndex < currentIndex)
+                return Color.Success; // Completed before cancellation
+            else
+                return Color.Default; // Will not run (cancelled)
+        }
+
         if (normalizedCurrentStep == stepName)
             return Color.Info; // Current step
         else if (stepIndex < currentIndex || (status.Status == "Completed" && stepIndex <= steps.Length))
@@ -1380,6 +1471,17 @@
         var normalizedCurrentStep = status.CurrentStep == "Checking all scraped statuses" ? "Checking statuses" : status.CurrentStep;
         var currentIndex = Array.IndexOf(steps, normalizedCurrentStep);
         var stepIndex = Array.IndexOf(steps, stepName);
+
+        // Handle cancelling/cancelled states
+        if (status.Status == "Cancelling" || status.Status == "Cancelled")
+        {
+            if (normalizedCurrentStep == stepName)
+                return Icons.Material.Filled.Cancel; // Current step being cancelled
+            else if (stepIndex < currentIndex)
+                return Icons.Material.Filled.CheckCircle; // Completed before cancellation
+            else
+                return Icons.Material.Filled.Block; // Will not run (cancelled)
+        }
 
         if (normalizedCurrentStep == stepName)
             return Icons.Material.Filled.PlayCircle;

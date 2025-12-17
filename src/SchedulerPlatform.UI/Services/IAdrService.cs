@@ -88,6 +88,11 @@ public interface IAdrService
     Task<List<AccountRuleDto>> GetRulesByAccountAsync(int accountId);
     Task<AccountRuleDto> UpdateRuleAsync(int ruleId, UpdateRuleRequest request);
     Task<AccountRuleDto> ClearRuleOverrideAsync(int ruleId);
+    
+    /// <summary>
+    /// Cancels a running or queued orchestration request.
+    /// </summary>
+    Task<CancelOrchestrationResult> CancelOrchestrationAsync(string requestId);
     Task<byte[]> DownloadRulesExportAsync(
         string? vendorCode = null,
         string? accountNumber = null,

@@ -143,6 +143,15 @@ public class OrchestrationCurrentResponse
     public AdrOrchestrationStatus? Status { get; set; }
 }
 
+public class CancelOrchestrationResult
+{
+    public bool Success { get; set; }
+    public string? Message { get; set; }
+    public string RequestId { get; set; } = string.Empty;
+    public string? Error { get; set; }
+    public AdrOrchestrationStatus? Status { get; set; }
+}
+
 public class AdrOrchestrationStatus
 {
     public string RequestId { get; set; } = string.Empty;

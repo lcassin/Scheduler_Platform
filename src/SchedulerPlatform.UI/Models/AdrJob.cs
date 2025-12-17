@@ -36,10 +36,15 @@ public class AdrJobStats
 {
     public int TotalCount { get; set; }
     public int PendingCount { get; set; }
+    public int CredentialCheckRequestedCount { get; set; }
+    public int CredentialCheckInProgressCount { get; set; }
     public int CredentialVerifiedCount { get; set; }
     public int CredentialFailedCount { get; set; }
     public int ScrapeRequestedCount { get; set; }
     public int CompletedCount { get; set; }
     public int FailedCount { get; set; }
     public int NeedsReviewCount { get; set; }
+    // Phase breakdown
+    public int CredentialPhaseCount { get; set; }
+    public int AdrDocumentPhaseCount { get; set; }
 }
