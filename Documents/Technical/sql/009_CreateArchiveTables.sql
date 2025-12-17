@@ -213,7 +213,7 @@ PRINT '';
 PRINT '=== Archive Tables Created ===';
 SELECT 
     t.name AS TableName,
-    SUM(p.rows) AS RowCount
+    SUM(p.rows) AS [RecordCount]
 FROM sys.tables t
 INNER JOIN sys.partitions p ON t.object_id = p.object_id
 WHERE t.name IN ('AdrJobArchive', 'AdrJobExecutionArchive', 'AuditLogArchive')
