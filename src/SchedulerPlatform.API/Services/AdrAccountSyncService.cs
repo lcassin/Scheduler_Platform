@@ -675,7 +675,7 @@ DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
 
     private void UpdateExistingAccount(AdrAccount existing, ExternalAccountData external, int? internalClientId)
     {
-        // Always update these fields (not affected by manual override)
+        // Always update identity fields (not affected by manual override)
         existing.VMAccountNumber = external.VMAccountNumber;
         existing.InterfaceAccountId = external.InterfaceAccountId;
         existing.ClientId = internalClientId;
@@ -683,25 +683,21 @@ DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
         existing.CredentialId = external.CredentialId;
         existing.VendorCode = external.VendorCode;
         
-        // Only update billing-related fields if NOT manually overridden
-        // When IsManuallyOverridden = true, preserve the manually set values
-        if (!existing.IsManuallyOverridden)
-        {
-            existing.PeriodType = external.PeriodType;
-            existing.PeriodDays = external.PeriodDays;
-            existing.MedianDays = external.MedianDays;
-            existing.InvoiceCount = external.InvoiceCount;
-            existing.LastInvoiceDateTime = external.LastInvoiceDateTime;
-            existing.ExpectedNextDateTime = external.ExpectedNextDateTime;
-            existing.ExpectedRangeStartDateTime = external.ExpectedRangeStartDateTime;
-            existing.ExpectedRangeEndDateTime = external.ExpectedRangeEndDateTime;
-            existing.NextRunDateTime = external.NextRunDateTime;
-            existing.NextRangeStartDateTime = external.NextRangeStartDateTime;
-            existing.NextRangeEndDateTime = external.NextRangeEndDateTime;
-            existing.DaysUntilNextRun = external.DaysUntilNextRun;
-            existing.NextRunStatus = external.NextRunStatus;
-            existing.HistoricalBillingStatus = external.HistoricalBillingStatus;
-        }
+        // Always update historical/calculated fields (these are derived from invoice history, not scheduling config)
+        // These fields stay on Account per the data model: Account = identity + historical/calculated data
+        existing.MedianDays = external.MedianDays;
+        existing.InvoiceCount = external.InvoiceCount;
+        existing.LastInvoiceDateTime = external.LastInvoiceDateTime;
+        existing.ExpectedNextDateTime = external.ExpectedNextDateTime;
+        existing.ExpectedRangeStartDateTime = external.ExpectedRangeStartDateTime;
+        existing.ExpectedRangeEndDateTime = external.ExpectedRangeEndDateTime;
+        existing.DaysUntilNextRun = external.DaysUntilNextRun;
+        existing.NextRunStatus = external.NextRunStatus;
+        existing.HistoricalBillingStatus = external.HistoricalBillingStatus;
+        
+        // NOTE: Scheduling configuration fields (PeriodType, PeriodDays, NextRunDateTime, NextRangeStartDateTime, 
+        // NextRangeEndDateTime) are now managed on AdrAccountRule, not AdrAccount.
+        // The SyncAccountRulesAsync method handles syncing these fields to rules.
         
         existing.LastSyncedDateTime = DateTime.UtcNow;
         existing.ModifiedDateTime = DateTime.UtcNow;
@@ -710,8 +706,12 @@ DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
 
     private AdrAccount CreateNewAccount(ExternalAccountData external, int? internalClientId)
     {
+        // NOTE: Scheduling configuration fields (PeriodType, PeriodDays, NextRunDateTime, NextRangeStartDateTime, 
+        // NextRangeEndDateTime) are now managed on AdrAccountRule, not AdrAccount.
+        // The SyncAccountRulesAsync method handles creating rules with these fields.
         return new AdrAccount
         {
+            // Identity fields
             VMAccountId = external.VMAccountId,
             VMAccountNumber = external.VMAccountNumber,
             InterfaceAccountId = external.InterfaceAccountId,
@@ -719,20 +719,17 @@ DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
             ClientName = external.ClientName,
             CredentialId = external.CredentialId,
             VendorCode = external.VendorCode,
-            PeriodType = external.PeriodType,
-            PeriodDays = external.PeriodDays,
+            // Historical/calculated fields (derived from invoice history)
             MedianDays = external.MedianDays,
             InvoiceCount = external.InvoiceCount,
             LastInvoiceDateTime = external.LastInvoiceDateTime,
             ExpectedNextDateTime = external.ExpectedNextDateTime,
             ExpectedRangeStartDateTime = external.ExpectedRangeStartDateTime,
             ExpectedRangeEndDateTime = external.ExpectedRangeEndDateTime,
-            NextRunDateTime = external.NextRunDateTime,
-            NextRangeStartDateTime = external.NextRangeStartDateTime,
-            NextRangeEndDateTime = external.NextRangeEndDateTime,
             DaysUntilNextRun = external.DaysUntilNextRun,
             NextRunStatus = external.NextRunStatus,
             HistoricalBillingStatus = external.HistoricalBillingStatus,
+            // Audit fields
             LastSyncedDateTime = DateTime.UtcNow,
             CreatedDateTime = DateTime.UtcNow,
             CreatedBy = "System Created",

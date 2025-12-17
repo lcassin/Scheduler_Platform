@@ -1116,10 +1116,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             // Uses anti-creep logic: allows earlier dates but prevents late vendors from causing schedule drift
                             if (job.AdrAccount != null)
                             {
+                                // Derive periodDays from job's PeriodType (not account's PeriodDays)
+                                var periodDays = GetPeriodDaysFromType(job.PeriodType);
                                 job.AdrAccount.LastSuccessfulDownloadDate = CalculateLastSuccessfulDownloadDate(
                                     job.AdrAccount.LastSuccessfulDownloadDate,
                                     job.NextRunDateTime,
-                                    job.AdrAccount.PeriodDays);
+                                    periodDays);
                                 job.AdrAccount.ModifiedDateTime = DateTime.UtcNow;
                                 job.AdrAccount.ModifiedBy = "System Created";
                             }
@@ -1390,10 +1392,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             // Uses anti-creep logic: allows earlier dates but prevents late vendors from causing schedule drift
                             if (job.AdrAccount != null)
                             {
+                                // Derive periodDays from job's PeriodType (not account's PeriodDays)
+                                var periodDays = GetPeriodDaysFromType(job.PeriodType);
                                 job.AdrAccount.LastSuccessfulDownloadDate = CalculateLastSuccessfulDownloadDate(
                                     job.AdrAccount.LastSuccessfulDownloadDate,
                                     job.NextRunDateTime,
-                                    job.AdrAccount.PeriodDays);
+                                    periodDays);
                                 job.AdrAccount.ModifiedDateTime = DateTime.UtcNow;
                                 job.AdrAccount.ModifiedBy = "System Created";
                             }
@@ -1803,6 +1807,24 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             14 => true,  // Failed To Process All Documents (error - final)
             _ => false   // 1 (Inserted), 2 (Inserted With Priority), 6 (Sent To AI), 10 (Received From AI),
                          // 12 (Login Attempt Succeeded), 13 (No Documents Found - retry next day), 15 (No Documents Processed - TBD)
+        };
+    }
+
+    /// <summary>
+    /// Derives period days from period type string.
+    /// Used to calculate billing cycle intervals from the job's PeriodType.
+    /// </summary>
+    private static int GetPeriodDaysFromType(string? periodType)
+    {
+        return periodType?.ToLowerInvariant() switch
+        {
+            "weekly" => 7,
+            "biweekly" or "bi-weekly" => 14,
+            "monthly" => 30,
+            "quarterly" => 90,
+            "semiannually" or "semi-annually" => 180,
+            "annually" => 365,
+            _ => 30  // Default to monthly if not specified or unrecognized
         };
     }
 
