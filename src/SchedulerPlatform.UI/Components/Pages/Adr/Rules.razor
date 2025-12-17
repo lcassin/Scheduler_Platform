@@ -199,6 +199,11 @@
 
     private HttpClient CreateClient() => HttpClientFactory.CreateClient("SchedulerAPI");
 
+    protected override void OnInitialized()
+    {
+        _loading = false;
+    }
+
     private async Task<TableData<AccountRuleModel>> ServerReload(TableState state, CancellationToken cancellationToken)
     {
         _loading = true;
