@@ -82,4 +82,21 @@ public interface IAdrService
     Task<AdrOrchestrationStatus?> GetOrchestrationStatusAsync(string requestId);
     Task<List<AdrOrchestrationStatus>> GetOrchestrationHistoryAsync(int? count = 10);
     Task<OrchestrationHistoryPagedResponse> GetOrchestrationHistoryPagedAsync(int pageNumber = 1, int pageSize = 20);
+    
+    // Rule operations
+    Task<AccountRuleDto?> GetRuleAsync(int ruleId);
+    Task<List<AccountRuleDto>> GetRulesByAccountAsync(int accountId);
+    Task<AccountRuleDto> UpdateRuleAsync(int ruleId, UpdateRuleRequest request);
+    Task<AccountRuleDto> ClearRuleOverrideAsync(int ruleId);
+    
+    /// <summary>
+    /// Cancels a running or queued orchestration request.
+    /// </summary>
+    Task<CancelOrchestrationResult> CancelOrchestrationAsync(string requestId);
+    Task<byte[]> DownloadRulesExportAsync(
+        string? vendorCode = null,
+        string? accountNumber = null,
+        bool? isEnabled = null,
+        bool? isOverridden = null,
+        string format = "excel");
 }

@@ -24,6 +24,8 @@ public class UnitOfWork : IUnitOfWork
     public IAdrJobRepository AdrJobs { get; }
     public IAdrJobExecutionRepository AdrJobExecutions { get; }
     public IAdrOrchestrationRunRepository AdrOrchestrationRuns { get; }
+    public IRepository<AdrConfiguration> AdrConfigurations { get; }
+    public IRepository<AdrAccountBlacklist> AdrAccountBlacklists { get; }
 
     public UnitOfWork(SchedulerDbContext context)
     {
@@ -42,6 +44,8 @@ public class UnitOfWork : IUnitOfWork
         AdrJobs = new AdrJobRepository(_context);
         AdrJobExecutions = new AdrJobExecutionRepository(_context);
         AdrOrchestrationRuns = new AdrOrchestrationRunRepository(_context);
+        AdrConfigurations = new Repository<AdrConfiguration>(_context);
+        AdrAccountBlacklists = new Repository<AdrAccountBlacklist>(_context);
     }
 
     public Task<int> SaveChangesAsync()

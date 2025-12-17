@@ -22,4 +22,5 @@ public interface IAdrAccountRepository : IRepository<AdrAccount>
     Task<int> GetTotalCountAsync(int? clientId = null);
     Task<int> GetCountByNextRunStatusAsync(string status, int? clientId = null);
     Task<int> GetCountByHistoricalStatusAsync(string status, int? clientId = null);
+    Task<IEnumerable<AdrAccount>> GetDueAccountsWithRulesAsync();
 }

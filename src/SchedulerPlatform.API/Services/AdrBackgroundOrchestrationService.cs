@@ -65,6 +65,16 @@ public interface IAdrOrchestrationQueue
     AdrOrchestrationStatus? GetStatus(string requestId);
     IEnumerable<AdrOrchestrationStatus> GetRecentStatuses(int count = 10);
     AdrOrchestrationStatus? GetCurrentRun();
+    
+    /// <summary>
+    /// Cancel a running or queued orchestration request.
+    /// </summary>
+    bool CancelRequest(string requestId);
+    
+    /// <summary>
+    /// Get the cancellation token for a specific request.
+    /// </summary>
+    CancellationToken GetRequestToken(string requestId);
 }
 
 /// <summary>
@@ -74,6 +84,7 @@ public class AdrOrchestrationQueue : IAdrOrchestrationQueue
 {
     private readonly Channel<AdrOrchestrationRequest> _queue;
     private readonly Dictionary<string, AdrOrchestrationStatus> _statuses = new();
+    private readonly Dictionary<string, CancellationTokenSource> _requestTokens = new();
     private readonly object _lock = new();
     private string? _currentRunId;
 
@@ -97,9 +108,52 @@ public class AdrOrchestrationQueue : IAdrOrchestrationQueue
                 RequestedAt = request.RequestedAt,
                 Status = "Queued"
             };
+            _requestTokens[request.RequestId] = new CancellationTokenSource();
         }
 
         await _queue.Writer.WriteAsync(request, cancellationToken);
+    }
+    
+    public CancellationToken GetRequestToken(string requestId)
+    {
+        lock (_lock)
+        {
+            return _requestTokens.TryGetValue(requestId, out var cts)
+                ? cts.Token
+                : CancellationToken.None;
+        }
+    }
+    
+    public bool CancelRequest(string requestId)
+    {
+        lock (_lock)
+        {
+            if (_requestTokens.TryGetValue(requestId, out var cts))
+            {
+                if (!cts.IsCancellationRequested)
+                {
+                    cts.Cancel();
+                    // Update status to show cancellation is pending
+                    if (_statuses.TryGetValue(requestId, out var status) && status.Status == "Running")
+                    {
+                        status.Status = "Cancelling";
+                    }
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+    
+    internal void CompleteRequest(string requestId)
+    {
+        lock (_lock)
+        {
+            if (_requestTokens.Remove(requestId, out var cts))
+            {
+                cts.Dispose();
+            }
+        }
     }
 
     public async ValueTask<AdrOrchestrationRequest> DequeueAsync(CancellationToken cancellationToken)
@@ -233,6 +287,25 @@ public class AdrBackgroundOrchestrationService : BackgroundService
 
     private async Task ProcessRequestAsync(AdrOrchestrationRequest request, CancellationToken stoppingToken)
     {
+        // Create a linked cancellation token that combines host shutdown with request-specific cancellation
+        var requestToken = _queue.GetRequestToken(request.RequestId);
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken, requestToken);
+        var token = linkedCts.Token;
+        
+        // Check if already cancelled before starting
+        if (token.IsCancellationRequested)
+        {
+            _queue.UpdateStatus(request.RequestId, s =>
+            {
+                s.Status = "Cancelled";
+                s.ErrorMessage = "Cancelled before start";
+                s.CompletedAt = DateTime.UtcNow;
+            });
+            _queue.CompleteRequest(request.RequestId);
+            _logger.LogInformation("Request {RequestId}: Cancelled before start", request.RequestId);
+            return;
+        }
+        
         _queue.SetCurrentRun(request.RequestId);
         _queue.UpdateStatus(request.RequestId, s =>
         {
@@ -259,7 +332,7 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                 ModifiedDateTime = DateTime.UtcNow
             };
             initDb.AdrOrchestrationRuns.Add(dbRun);
-            await initDb.SaveChangesAsync(stoppingToken);
+            await initDb.SaveChangesAsync(token);
             dbRunId = dbRun.Id;
             _logger.LogInformation("Request {RequestId}: Created database record with ID {DbRunId}", request.RequestId, dbRunId);
         }
@@ -292,7 +365,7 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                         s.CurrentStepProgress = progress;
                         s.CurrentStepTotal = total;
                     }),
-                    stoppingToken);
+                    token);
                 _queue.UpdateStatus(request.RequestId, s => s.SyncResult = syncResult);
                 
                 _logger.LogInformation(
@@ -306,7 +379,7 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                 _queue.UpdateStatus(request.RequestId, s => s.CurrentStep = "Creating jobs");
                 _logger.LogInformation("Request {RequestId}: Starting job creation", request.RequestId);
                 
-                var jobResult = await orchestratorService.CreateJobsForDueAccountsAsync(stoppingToken);
+                var jobResult = await orchestratorService.CreateJobsForDueAccountsAsync(token);
                 _queue.UpdateStatus(request.RequestId, s => s.JobCreationResult = jobResult);
                 
                 _logger.LogInformation(
@@ -342,7 +415,7 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                         }
                         s.CurrentStepTotal = total;
                     }),
-                    stoppingToken);
+                    token);
                 _queue.UpdateStatus(request.RequestId, s => 
                 {
                     s.CurrentStepPhase = null;
@@ -390,7 +463,7 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                             }
                             s.CurrentStepTotal = total;
                         }),
-                        stoppingToken);
+                        token);
                 }
                 else
                 {
@@ -409,7 +482,7 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                             }
                             s.CurrentStepTotal = total;
                         }),
-                        stoppingToken);
+                        token);
                 }
                 _queue.UpdateStatus(request.RequestId, s => 
                 {
@@ -450,7 +523,7 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                         }
                         s.CurrentStepTotal = total;
                     }),
-                    stoppingToken);
+                    token);
                 _queue.UpdateStatus(request.RequestId, s => 
                 {
                     s.CurrentStepPhase = null;
@@ -472,18 +545,29 @@ public class AdrBackgroundOrchestrationService : BackgroundService
             _logger.LogInformation("Request {RequestId}: ADR orchestration completed successfully", request.RequestId);
             
             // Save final results to database
-            await SaveOrchestrationResultAsync(request.RequestId, dbRunId, "Completed", null, stoppingToken);
+            await SaveOrchestrationResultAsync(request.RequestId, dbRunId, "Completed", null, CancellationToken.None);
         }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        catch (OperationCanceledException)
         {
+            // Determine if this was a host shutdown or user-initiated cancellation
+            var isHostShutdown = stoppingToken.IsCancellationRequested;
+            var reason = isHostShutdown ? "Host is shutting down" : "Operation was cancelled by user";
+            
+            _logger.LogInformation("Request {RequestId}: ADR orchestration cancelled - {Reason}", request.RequestId, reason);
+            
             _queue.UpdateStatus(request.RequestId, s =>
             {
                 s.Status = "Cancelled";
-                s.ErrorMessage = "Operation was cancelled";
+                s.ErrorMessage = reason;
                 s.CompletedAt = DateTime.UtcNow;
             });
-            await SaveOrchestrationResultAsync(request.RequestId, dbRunId, "Cancelled", "Operation was cancelled", CancellationToken.None);
-            throw;
+            await SaveOrchestrationResultAsync(request.RequestId, dbRunId, "Cancelled", reason, CancellationToken.None);
+            
+            // Only rethrow if host is shutting down (to allow graceful shutdown)
+            if (isHostShutdown)
+            {
+                throw;
+            }
         }
         catch (Exception ex)
         {
@@ -500,6 +584,7 @@ public class AdrBackgroundOrchestrationService : BackgroundService
         finally
         {
             _queue.SetCurrentRun(null);
+            _queue.CompleteRequest(request.RequestId);
         }
     }
     

@@ -125,6 +125,56 @@
 
                 <MudItem xs="12">
                     <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.subtitle1" Class="mb-2"><strong>Account Rules</strong></MudText>
+                </MudItem>
+                @if (_loadingRules)
+                {
+                    <MudItem xs="12">
+                        <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                        <MudText Typo="Typo.body2" Style="display: inline;">Loading rules...</MudText>
+                    </MudItem>
+                }
+                else if (_rules != null && _rules.Any())
+                {
+                    @foreach (var rule in _rules)
+                    {
+                        <MudItem xs="6">
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Next Run Date</MudText>
+                            <MudText Typo="Typo.body1">@(rule.NextRunDateTime?.ToString("MM/dd/yyyy") ?? "N/A")</MudText>
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Period Type / Days</MudText>
+                            <MudText Typo="Typo.body1">@(rule.PeriodType ?? "N/A") / @(rule.PeriodDays?.ToString() ?? "N/A")</MudText>
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Search Window</MudText>
+                            <MudText Typo="Typo.body1">@(rule.NextRangeStartDateTime?.ToString("MM/dd/yyyy") ?? "N/A") - @(rule.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? "N/A")</MudText>
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Enabled</MudText>
+                            <MudChip T="string" Size="Size.Small" Color="@(rule.IsEnabled ? Color.Success : Color.Default)">
+                                @(rule.IsEnabled ? "Yes" : "No")
+                            </MudChip>
+                        </MudItem>
+                        @if (rule.IsManuallyOverridden)
+                        {
+                            <MudItem xs="12">
+                                <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-1">
+                                    Rule manually overridden by @rule.OverriddenBy on @(rule.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? "N/A")
+                                </MudAlert>
+                            </MudItem>
+                        }
+                    }
+                }
+                else
+                {
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">No rules found for this account</MudText>
+                    </MudItem>
+                }
+
+                <MudItem xs="12">
+                    <MudDivider Class="my-2" />
                     <MudText Typo="Typo.subtitle1" Class="mb-2"><strong>Current Job Status</strong></MudText>
                 </MudItem>
                 @if (_loadingJob)
@@ -207,22 +257,45 @@
 
     private AdrJob? _latestJob;
     private bool _loadingJob = true;
+    private List<AccountRuleDto>? _rules;
+    private bool _loadingRules = true;
 
     protected override async Task OnInitializedAsync()
     {
         if (Account != null)
         {
-            try
-            {
-                var jobs = await AdrService.GetJobsByAccountAsync(Account.Id);
-                _latestJob = jobs.OrderByDescending(j => j.BillingPeriodStartDateTime).FirstOrDefault();
-            }
-            catch
-            {
-                _latestJob = null;
-            }
+            // Load jobs and rules in parallel
+            var jobsTask = LoadJobsAsync();
+            var rulesTask = LoadRulesAsync();
+            await Task.WhenAll(jobsTask, rulesTask);
         }
         _loadingJob = false;
+        _loadingRules = false;
+    }
+
+    private async Task LoadJobsAsync()
+    {
+        try
+        {
+            var jobs = await AdrService.GetJobsByAccountAsync(Account!.Id);
+            _latestJob = jobs.OrderByDescending(j => j.BillingPeriodStartDateTime).FirstOrDefault();
+        }
+        catch
+        {
+            _latestJob = null;
+        }
+    }
+
+    private async Task LoadRulesAsync()
+    {
+        try
+        {
+            _rules = await AdrService.GetRulesByAccountAsync(Account!.Id);
+        }
+        catch
+        {
+            _rules = null;
+        }
     }
 
     private void Cancel() => MudDialog.Cancel();

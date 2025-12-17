@@ -16,6 +16,8 @@ public interface IUnitOfWork : IDisposable
     IAdrJobRepository AdrJobs { get; }
     IAdrJobExecutionRepository AdrJobExecutions { get; }
     IAdrOrchestrationRunRepository AdrOrchestrationRuns { get; }
+    IRepository<Entities.AdrConfiguration> AdrConfigurations { get; }
+    IRepository<Entities.AdrAccountBlacklist> AdrAccountBlacklists { get; }
     
     Task<int> SaveChangesAsync();
     Task BeginTransactionAsync();

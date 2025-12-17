@@ -14,6 +14,12 @@ public class AdrJob : BaseEntity
     public int AdrAccountId { get; set; }
     
     /// <summary>
+    /// FK to AdrAccountRule table. Tracks which rule created this job.
+    /// Null for legacy jobs created before rules were implemented, or for manual jobs.
+    /// </summary>
+    public int? AdrAccountRuleId { get; set; }
+    
+    /// <summary>
     /// External account ID from VendorCred (denormalized for queries)
     /// </summary>
     public long VMAccountId { get; set; }
@@ -134,6 +140,9 @@ public class AdrJob : BaseEntity
         // Navigation properties
     [JsonIgnore]
     public AdrAccount AdrAccount { get; set; } = null!;
+    
+    [JsonIgnore]
+    public AdrAccountRule? AdrAccountRule { get; set; }
     
     [JsonIgnore]
     public ICollection<AdrJobExecution> AdrJobExecutions { get; set; } = new List<AdrJobExecution>();

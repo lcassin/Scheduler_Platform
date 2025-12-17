@@ -70,8 +70,8 @@ public class AuthTokenHandler : DelegatingHandler
             // This allows centralized handling of session expiration with automatic redirect
             _sessionStateService.NotifySessionExpired();
             
-            // Also throw the exception for any code that wants to handle it explicitly
-            throw new SessionExpiredException();
+            // Return the response without throwing - let the redirect happen gracefully
+            // instead of causing exceptions to propagate through the component tree
         }
 
         return response;

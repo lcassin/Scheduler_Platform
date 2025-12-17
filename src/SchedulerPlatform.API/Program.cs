@@ -14,10 +14,21 @@ using SchedulerPlatform.Jobs.Quartz;
 using SchedulerPlatform.Jobs.Services;
 using Serilog;
 using Azure.Identity;
+using Azure.Extensions.AspNetCore.Configuration.Secrets;
 using Microsoft.Extensions.Azure;
 using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add Azure Key Vault configuration for non-Development environments
+// Set KeyVault:VaultUri in appsettings.json or environment variable to enable
+var keyVaultUri = builder.Configuration["KeyVault:VaultUri"];
+if (!string.IsNullOrEmpty(keyVaultUri) && !builder.Environment.IsDevelopment())
+{
+    builder.Configuration.AddAzureKeyVault(
+        new Uri(keyVaultUri),
+        new DefaultAzureCredential());
+}
 
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
@@ -25,6 +36,17 @@ Log.Logger = new LoggerConfiguration()
     .CreateLogger();
 
 builder.Host.UseSerilog();
+
+// Add Application Insights telemetry for non-Development environments
+// Set ApplicationInsights:ConnectionString in appsettings.json or APPLICATIONINSIGHTS_CONNECTION_STRING env var
+var appInsightsConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"];
+if (!string.IsNullOrEmpty(appInsightsConnectionString))
+{
+    builder.Services.AddApplicationInsightsTelemetry(options =>
+    {
+        options.ConnectionString = appInsightsConnectionString;
+    });
+}
 
 builder.Services.AddControllers()
     .ConfigureApiBehaviorOptions(options =>
@@ -61,6 +83,11 @@ builder.Services.AddSwaggerGen(c =>
 		Version = "v1",
 		Description = "API for managing scheduled jobs and processes"
 	});
+
+	// Include XML comments for API documentation in Swagger
+	var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+	var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+	c.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
 
 	var authority = builder.Configuration["Authentication:Authority"] ?? "https://localhost:5001";
 
@@ -210,6 +237,7 @@ builder.Services.AddHostedService<SchedulerPlatform.API.Services.AdrBackgroundOr
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.StartupRecoveryService>();
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.ScheduleHydrationService>();
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.MissedSchedulesProcessor>();
+builder.Services.AddHostedService<SchedulerPlatform.API.Services.DataArchivalService>();
 
 builder.Services.AddHttpClient("ApiCallJob");
 builder.Services.AddHttpClient("AdrApi");

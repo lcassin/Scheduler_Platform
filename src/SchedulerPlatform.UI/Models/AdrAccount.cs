@@ -35,6 +35,11 @@ public class AdrAccount
     // Job status fields - populated from current billing period's job
     public string? CurrentJobStatus { get; set; }
     public DateTime? LastCompletedDateTime { get; set; }
+    
+    // Rule override fields - populated from the account's primary rule
+    public bool RuleIsManuallyOverridden { get; set; }
+    public string? RuleOverriddenBy { get; set; }
+    public DateTime? RuleOverriddenDateTime { get; set; }
 }
 
 public class AdrAccountStats

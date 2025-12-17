@@ -465,7 +465,141 @@ public class AdrService : IAdrService
         return result ?? new OrchestrationHistoryPagedResponse();
     }
 
+    public async Task<CancelOrchestrationResult> CancelOrchestrationAsync(string requestId)
+    {
+        var client = CreateClient();
+        try
+        {
+            var response = await client.PostAsync($"adr/orchestrate/{requestId}/cancel", null);
+            var content = await response.Content.ReadAsStringAsync();
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var successResult = System.Text.Json.JsonSerializer.Deserialize<CancelOrchestrationSuccessResponse>(
+                    content, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                return new CancelOrchestrationResult
+                {
+                    Success = successResult?.Success ?? true,
+                    Message = successResult?.Message,
+                    RequestId = requestId,
+                    Status = successResult?.Status
+                };
+            }
+            else
+            {
+                var errorResult = System.Text.Json.JsonSerializer.Deserialize<CancelOrchestrationErrorResponse>(
+                    content, new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                return new CancelOrchestrationResult
+                {
+                    Success = false,
+                    Error = errorResult?.Error ?? errorResult?.Message ?? "Failed to cancel orchestration",
+                    Message = errorResult?.Message,
+                    RequestId = requestId
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            return new CancelOrchestrationResult
+            {
+                Success = false,
+                Error = ex.Message,
+                RequestId = requestId
+            };
+        }
+    }
+
     #endregion
+
+    #region Rule Operations
+
+    public async Task<AccountRuleDto?> GetRuleAsync(int ruleId)
+    {
+        var client = CreateClient();
+        try
+        {
+            return await client.GetFromJsonAsync<AccountRuleDto>($"adr/rules/{ruleId}");
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+    }
+
+    public async Task<List<AccountRuleDto>> GetRulesByAccountAsync(int accountId)
+    {
+        var client = CreateClient();
+        try
+        {
+            var result = await client.GetFromJsonAsync<List<AccountRuleDto>>($"adr/rules/by-account/{accountId}");
+            return result ?? new List<AccountRuleDto>();
+        }
+        catch (HttpRequestException)
+        {
+            return new List<AccountRuleDto>();
+        }
+    }
+
+    public async Task<AccountRuleDto> UpdateRuleAsync(int ruleId, UpdateRuleRequest request)
+    {
+        var client = CreateClient();
+        var response = await client.PutAsJsonAsync($"adr/rules/{ruleId}", request);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<AccountRuleDto>();
+        return result ?? throw new InvalidOperationException("Failed to update rule");
+    }
+
+    public async Task<AccountRuleDto> ClearRuleOverrideAsync(int ruleId)
+    {
+        var client = CreateClient();
+        var response = await client.PostAsync($"adr/rules/{ruleId}/clear-override", null);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<AccountRuleDto>();
+        return result ?? throw new InvalidOperationException("Failed to clear rule override");
+    }
+
+    public async Task<byte[]> DownloadRulesExportAsync(
+        string? vendorCode = null,
+        string? accountNumber = null,
+        bool? isEnabled = null,
+        bool? isOverridden = null,
+        string format = "excel")
+    {
+        var client = CreateClient();
+        var queryParams = new List<string> { $"format={format}" };
+        
+        if (!string.IsNullOrWhiteSpace(vendorCode))
+            queryParams.Add($"vendorCode={Uri.EscapeDataString(vendorCode)}");
+        if (!string.IsNullOrWhiteSpace(accountNumber))
+            queryParams.Add($"accountNumber={Uri.EscapeDataString(accountNumber)}");
+        if (isEnabled.HasValue)
+            queryParams.Add($"isEnabled={isEnabled.Value}");
+        if (isOverridden.HasValue)
+            queryParams.Add($"isOverridden={isOverridden.Value}");
+        
+        var url = $"adr/rules/export?{string.Join("&", queryParams)}";
+        var response = await client.GetAsync(url);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsByteArrayAsync();
+    }
+
+    #endregion
+}
+
+internal class CancelOrchestrationSuccessResponse
+{
+    public bool Success { get; set; }
+    public string? Message { get; set; }
+    public string? RequestId { get; set; }
+    public AdrOrchestrationStatus? Status { get; set; }
+}
+
+internal class CancelOrchestrationErrorResponse
+{
+    public string? Error { get; set; }
+    public string? Message { get; set; }
+    public string? RequestId { get; set; }
+    public string? CurrentStatus { get; set; }
 }
 
 public class OrchestrationHistoryPagedResponse

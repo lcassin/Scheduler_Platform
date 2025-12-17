@@ -4,8 +4,30 @@ using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using MudBlazor.Services;
 using SchedulerPlatform.UI.Components;
 using SchedulerPlatform.UI.Services;
+using Azure.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add Azure Key Vault configuration for non-Development environments
+// Set KeyVault:VaultUri in appsettings.json or environment variable to enable
+var keyVaultUri = builder.Configuration["KeyVault:VaultUri"];
+if (!string.IsNullOrEmpty(keyVaultUri) && !builder.Environment.IsDevelopment())
+{
+    builder.Configuration.AddAzureKeyVault(
+        new Uri(keyVaultUri),
+        new DefaultAzureCredential());
+}
+
+// Add Application Insights telemetry for non-Development environments
+// Set ApplicationInsights:ConnectionString in appsettings.json or APPLICATIONINSIGHTS_CONNECTION_STRING env var
+var appInsightsConnectionString = builder.Configuration["ApplicationInsights:ConnectionString"];
+if (!string.IsNullOrEmpty(appInsightsConnectionString))
+{
+    builder.Services.AddApplicationInsightsTelemetry(options =>
+    {
+        options.ConnectionString = appInsightsConnectionString;
+    });
+}
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();

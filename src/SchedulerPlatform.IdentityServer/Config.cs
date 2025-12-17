@@ -1,5 +1,6 @@
 using Duende.IdentityServer;
 using Duende.IdentityServer.Models;
+using Microsoft.Extensions.Configuration;
 
 namespace SchedulerPlatform.IdentityServer;
 
@@ -47,8 +48,51 @@ public static class Config
             }
         };
 
-    public static IEnumerable<Client> Clients =>
-        new List<Client>
+    /// <summary>
+    /// Gets the configured clients for IdentityServer.
+    /// URLs are read from configuration to support multiple deployment environments.
+    /// </summary>
+    /// <param name="configuration">The application configuration</param>
+    /// <returns>List of configured clients</returns>
+    public static IEnumerable<Client> GetClients(IConfiguration configuration)
+    {
+        // Read URLs from configuration with localhost defaults for development
+        var uiBaseUrl = configuration["Clients:UI:BaseUrl"] ?? "https://localhost:7299";
+        var apiBaseUrl = configuration["Clients:API:BaseUrl"] ?? "https://localhost:7008";
+        var blazorClientSecret = configuration["Clients:Blazor:ClientSecret"] ?? "secret";
+        var serviceAccountSecret = configuration["Clients:ServiceAccount:ClientSecret"] ?? "dev-secret-change-in-production";
+        
+        // Parse additional redirect URIs from configuration (comma-separated)
+        var additionalUiRedirectUris = configuration["Clients:UI:AdditionalRedirectUris"]?
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? Array.Empty<string>();
+        var additionalApiSwaggerUris = configuration["Clients:API:AdditionalSwaggerRedirectUris"]?
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? Array.Empty<string>();
+        var additionalApiCorsOrigins = configuration["Clients:API:AdditionalCorsOrigins"]?
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) ?? Array.Empty<string>();
+
+        // Build redirect URIs for Blazor client
+        var blazorRedirectUris = new List<string> { $"{uiBaseUrl}/signin-oidc" };
+        blazorRedirectUris.AddRange(additionalUiRedirectUris.Select(u => $"{u}/signin-oidc"));
+        
+        var blazorPostLogoutUris = new List<string> { $"{uiBaseUrl}/signout-callback-oidc" };
+        blazorPostLogoutUris.AddRange(additionalUiRedirectUris.Select(u => $"{u}/signout-callback-oidc"));
+
+        // Build redirect URIs and CORS origins for Swagger UI
+        var swaggerRedirectUris = new List<string>
+        {
+            $"{apiBaseUrl}/swagger/oauth2-redirect.html",
+            apiBaseUrl.Replace("https://", "http://") + "/swagger/oauth2-redirect.html"
+        };
+        swaggerRedirectUris.AddRange(additionalApiSwaggerUris);
+
+        var swaggerCorsOrigins = new List<string>
+        {
+            apiBaseUrl,
+            apiBaseUrl.Replace("https://", "http://")
+        };
+        swaggerCorsOrigins.AddRange(additionalApiCorsOrigins);
+
+        return new List<Client>
         {
             new Client
             {
@@ -57,9 +101,9 @@ public static class Config
                 AllowedGrantTypes = GrantTypes.Code,
                 RequirePkce = true,
                 RequireClientSecret = true,
-                ClientSecrets = { new Secret("secret".Sha256()) },
-                RedirectUris = { "https://localhost:7299/signin-oidc" },
-                PostLogoutRedirectUris = { "https://localhost:7299/signout-callback-oidc" },
+                ClientSecrets = { new Secret(blazorClientSecret.Sha256()) },
+                RedirectUris = blazorRedirectUris,
+                PostLogoutRedirectUris = blazorPostLogoutUris,
                 AllowOfflineAccess = true,
                 AllowedScopes =
                 {
@@ -80,7 +124,7 @@ public static class Config
                 ClientId = "svc-adrscheduler",
                 ClientName = "ADR Scheduler Service Account",
                 AllowedGrantTypes = GrantTypes.ClientCredentials,
-                ClientSecrets = { new Secret("dev-secret-change-in-production".Sha256()) },
+                ClientSecrets = { new Secret(serviceAccountSecret.Sha256()) },
                 AllowedScopes = { "scheduler-api" },
                 Claims = new List<ClientClaim>
                 {
@@ -103,18 +147,8 @@ public static class Config
                 AllowedGrantTypes = GrantTypes.Code,
                 RequirePkce = true,
                 RequireClientSecret = false,
-                RedirectUris = { 
-                    "https://localhost:5033/swagger/oauth2-redirect.html",
-                    "http://localhost:5033/swagger/oauth2-redirect.html",
-                    "https://localhost:7008/swagger/oauth2-redirect.html",
-                    "http://localhost:7008/swagger/oauth2-redirect.html"
-                },
-                AllowedCorsOrigins = { 
-                    "https://localhost:5033",
-                    "http://localhost:5033",
-                    "https://localhost:7008",
-                    "http://localhost:7008"
-                },
+                RedirectUris = swaggerRedirectUris,
+                AllowedCorsOrigins = swaggerCorsOrigins,
                 AllowedScopes =
                 {
                     IdentityServerConstants.StandardScopes.OpenId,
@@ -128,5 +162,9 @@ public static class Config
                 RequireConsent = false
             }
         };
+    }
 
+    // Keep the static property for backward compatibility during migration
+    [Obsolete("Use GetClients(IConfiguration) instead for environment-specific configuration")]
+    public static IEnumerable<Client> Clients => GetClients(new ConfigurationBuilder().Build());
 }
