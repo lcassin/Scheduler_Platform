@@ -24,6 +24,8 @@ public class SchedulerDbContext : DbContext
     // ADR Process entities
     public DbSet<AdrAccount> AdrAccounts { get; set; }
     public DbSet<AdrAccountRule> AdrAccountRules { get; set; }
+    public DbSet<AdrConfiguration> AdrConfigurations { get; set; }
+    public DbSet<AdrAccountBlacklist> AdrAccountBlacklists { get; set; }
     public DbSet<AdrJob> AdrJobs { get; set; }
     public DbSet<AdrJobExecution> AdrJobExecutions { get; set; }
     public DbSet<AdrOrchestrationRun> AdrOrchestrationRuns { get; set; }
@@ -383,6 +385,40 @@ public class SchedulerDbContext : DbContext
             entity.HasIndex(e => e.RequestedDateTime);
             entity.HasIndex(e => e.Status);
             entity.HasIndex(e => new { e.Status, e.RequestedDateTime });
+        });
+
+        // ADR Configuration entity configuration (single-row table for global settings)
+        modelBuilder.Entity<AdrConfiguration>(entity =>
+        {
+            entity.ToTable("AdrConfiguration");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("AdrConfigurationId");
+            
+            entity.Property(e => e.MissingInvoiceAlertEmail).HasMaxLength(255);
+            entity.Property(e => e.Notes).HasColumnType("nvarchar(max)");
+        });
+
+        // ADR Account Blacklist entity configuration
+        modelBuilder.Entity<AdrAccountBlacklist>(entity =>
+        {
+            entity.ToTable("AdrAccountBlacklist");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("AdrAccountBlacklistId");
+            
+            entity.Property(e => e.VendorCode).HasMaxLength(128);
+            entity.Property(e => e.VMAccountNumber).HasMaxLength(128);
+            entity.Property(e => e.ExclusionType).IsRequired().HasMaxLength(20);
+            entity.Property(e => e.Reason).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.BlacklistedBy).HasMaxLength(200);
+            entity.Property(e => e.Notes).HasColumnType("nvarchar(max)");
+            
+            entity.HasIndex(e => e.VendorCode);
+            entity.HasIndex(e => e.VMAccountId);
+            entity.HasIndex(e => e.VMAccountNumber);
+            entity.HasIndex(e => e.CredentialId);
+            entity.HasIndex(e => e.IsActive);
+            entity.HasIndex(e => new { e.IsDeleted, e.IsActive });
+            entity.HasIndex(e => new { e.VendorCode, e.VMAccountId, e.CredentialId });
         });
     }
 }

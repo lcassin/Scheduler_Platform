@@ -17,12 +17,14 @@
             <MudNavLink Href="/adr/missing-accounts" Icon="@Icons.Material.Filled.Warning">Missing Accounts</MudNavLink>
         </MudNavGroup>
     
-    @if (_canManageUsers)
-    {
-        <MudNavGroup Title="Admin" Icon="@Icons.Material.Filled.AdminPanelSettings" Expanded="false">
-            <MudNavLink Href="/admin/users" Icon="@Icons.Material.Filled.People">User Management</MudNavLink>
-        </MudNavGroup>
-    }
+        @if (_canManageUsers)
+        {
+            <MudNavGroup Title="Admin" Icon="@Icons.Material.Filled.AdminPanelSettings" Expanded="false">
+                <MudNavLink Href="/admin/users" Icon="@Icons.Material.Filled.People">User Management</MudNavLink>
+                <MudNavLink Href="/admin/adr-configuration" Icon="@Icons.Material.Filled.Settings">ADR Configuration</MudNavLink>
+                <MudNavLink Href="/admin/adr-blacklist" Icon="@Icons.Material.Filled.Block">ADR Blacklist</MudNavLink>
+            </MudNavGroup>
+        }
 </MudNavMenu>
 
 @code {
