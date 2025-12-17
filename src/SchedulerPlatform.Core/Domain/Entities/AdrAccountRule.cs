@@ -100,5 +100,8 @@ public class AdrAccountRule : BaseEntity
     public AdrAccount AdrAccount { get; set; } = null!;
     
     [JsonIgnore]
+    public AdrJobType? AdrJobType { get; set; }
+    
+    [JsonIgnore]
     public ICollection<AdrJob> AdrJobs { get; set; } = new List<AdrJob>();
 }

@@ -2,7 +2,7 @@
 @using SchedulerPlatform.UI.Services
 @using Microsoft.AspNetCore.Authorization
 @attribute [Authorize]
-@inject HttpClient Http
+@inject IHttpClientFactory HttpClientFactory
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IPermissionService PermissionService
@@ -290,42 +290,45 @@
             }
         }
 
-    private async Task LoadBlacklist()
-    {
-        _loading = true;
-        try
+        private HttpClient CreateClient() => HttpClientFactory.CreateClient("SchedulerAPI");
+
+        private async Task LoadBlacklist()
         {
-            var queryParams = new List<string>
+            _loading = true;
+            try
             {
-                $"page={_currentPage}",
-                $"pageSize={_pageSize}"
-            };
+                var queryParams = new List<string>
+                {
+                    $"page={_currentPage}",
+                    $"pageSize={_pageSize}"
+                };
             
-            if (!string.IsNullOrWhiteSpace(_searchVendorCode))
-                queryParams.Add($"vendorCode={Uri.EscapeDataString(_searchVendorCode)}");
-            if (!string.IsNullOrWhiteSpace(_searchAccountNumber))
-                queryParams.Add($"accountNumber={Uri.EscapeDataString(_searchAccountNumber)}");
-            if (_filterActive.HasValue)
-                queryParams.Add($"isActive={_filterActive.Value}");
+                if (!string.IsNullOrWhiteSpace(_searchVendorCode))
+                    queryParams.Add($"vendorCode={Uri.EscapeDataString(_searchVendorCode)}");
+                if (!string.IsNullOrWhiteSpace(_searchAccountNumber))
+                    queryParams.Add($"accountNumber={Uri.EscapeDataString(_searchAccountNumber)}");
+                if (_filterActive.HasValue)
+                    queryParams.Add($"isActive={_filterActive.Value}");
             
-            var url = $"api/adr/blacklist?{string.Join("&", queryParams)}";
-            var response = await Http.GetFromJsonAsync<BlacklistPagedResponse>(url);
+                var url = $"adr/blacklist?{string.Join("&", queryParams)}";
+                var client = CreateClient();
+                var response = await client.GetFromJsonAsync<BlacklistPagedResponse>(url);
             
-            if (response != null)
+                if (response != null)
+                {
+                    _blacklistEntries = response.Items ?? new List<BlacklistEntryModel>();
+                    _totalPages = (int)Math.Ceiling((double)response.TotalCount / _pageSize);
+                }
+            }
+            catch (Exception ex)
             {
-                _blacklistEntries = response.Items ?? new List<BlacklistEntryModel>();
-                _totalPages = (int)Math.Ceiling((double)response.TotalCount / _pageSize);
+                Snackbar.Add($"Error loading blacklist: {ex.Message}", Severity.Error);
+            }
+            finally
+            {
+                _loading = false;
             }
         }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error loading blacklist: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _loading = false;
-        }
-    }
 
     private void ClearFilters()
     {
@@ -376,80 +379,82 @@
         _editingEntry = null;
     }
 
-    private async Task SaveEntry()
-    {
-        if (_editingEntry == null) return;
-        if (string.IsNullOrWhiteSpace(_editingEntry.Reason))
+        private async Task SaveEntry()
         {
-            Snackbar.Add("Reason is required", Severity.Warning);
-            return;
-        }
+            if (_editingEntry == null) return;
+            if (string.IsNullOrWhiteSpace(_editingEntry.Reason))
+            {
+                Snackbar.Add("Reason is required", Severity.Warning);
+                return;
+            }
         
-        _saving = true;
-        try
-        {
-            HttpResponseMessage response;
-            if (_editingEntry.Id > 0)
-            {
-                response = await Http.PutAsJsonAsync($"api/adr/blacklist/{_editingEntry.Id}", _editingEntry);
-            }
-            else
-            {
-                response = await Http.PostAsJsonAsync("api/adr/blacklist", _editingEntry);
-            }
-            
-            if (response.IsSuccessStatusCode)
-            {
-                Snackbar.Add(_editingEntry.Id > 0 ? "Entry updated successfully" : "Entry created successfully", Severity.Success);
-                CloseDialog();
-                await LoadBlacklist();
-            }
-            else
-            {
-                var error = await response.Content.ReadAsStringAsync();
-                Snackbar.Add($"Error saving entry: {error}", Severity.Error);
-            }
-        }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error saving entry: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _saving = false;
-        }
-    }
-
-    private async Task DeleteEntry(BlacklistEntryModel entry)
-    {
-        var result = await DialogService.ShowMessageBox(
-            "Confirm Delete",
-            $"Are you sure you want to delete this blacklist entry?",
-            yesText: "Delete",
-            cancelText: "Cancel");
-        
-        if (result == true)
-        {
+            _saving = true;
             try
             {
-                var response = await Http.DeleteAsync($"api/adr/blacklist/{entry.Id}");
+                var client = CreateClient();
+                HttpResponseMessage response;
+                if (_editingEntry.Id > 0)
+                {
+                    response = await client.PutAsJsonAsync($"adr/blacklist/{_editingEntry.Id}", _editingEntry);
+                }
+                else
+                {
+                    response = await client.PostAsJsonAsync("adr/blacklist", _editingEntry);
+                }
+            
                 if (response.IsSuccessStatusCode)
                 {
-                    Snackbar.Add("Entry deleted successfully", Severity.Success);
+                    Snackbar.Add(_editingEntry.Id > 0 ? "Entry updated successfully" : "Entry created successfully", Severity.Success);
+                    CloseDialog();
                     await LoadBlacklist();
                 }
                 else
                 {
                     var error = await response.Content.ReadAsStringAsync();
-                    Snackbar.Add($"Error deleting entry: {error}", Severity.Error);
+                    Snackbar.Add($"Error saving entry: {error}", Severity.Error);
                 }
             }
             catch (Exception ex)
             {
-                Snackbar.Add($"Error deleting entry: {ex.Message}", Severity.Error);
+                Snackbar.Add($"Error saving entry: {ex.Message}", Severity.Error);
+            }
+            finally
+            {
+                _saving = false;
             }
         }
-    }
+
+        private async Task DeleteEntry(BlacklistEntryModel entry)
+        {
+            var result = await DialogService.ShowMessageBox(
+                "Confirm Delete",
+                $"Are you sure you want to delete this blacklist entry?",
+                yesText: "Delete",
+                cancelText: "Cancel");
+        
+            if (result == true)
+            {
+                try
+                {
+                    var client = CreateClient();
+                    var response = await client.DeleteAsync($"adr/blacklist/{entry.Id}");
+                    if (response.IsSuccessStatusCode)
+                    {
+                        Snackbar.Add("Entry deleted successfully", Severity.Success);
+                        await LoadBlacklist();
+                    }
+                    else
+                    {
+                        var error = await response.Content.ReadAsStringAsync();
+                        Snackbar.Add($"Error deleting entry: {error}", Severity.Error);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Snackbar.Add($"Error deleting entry: {ex.Message}", Severity.Error);
+                }
+            }
+        }
 
     private Color GetExclusionTypeColor(string? exclusionType)
     {

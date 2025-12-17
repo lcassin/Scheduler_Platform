@@ -21,14 +21,15 @@ public class SchedulerDbContext : DbContext
     public DbSet<NotificationSetting> NotificationSettings { get; set; }
     public DbSet<ScheduleSyncSource> ScheduleSyncSources { get; set; }
     
-    // ADR Process entities
-    public DbSet<AdrAccount> AdrAccounts { get; set; }
-    public DbSet<AdrAccountRule> AdrAccountRules { get; set; }
-    public DbSet<AdrConfiguration> AdrConfigurations { get; set; }
-    public DbSet<AdrAccountBlacklist> AdrAccountBlacklists { get; set; }
-    public DbSet<AdrJob> AdrJobs { get; set; }
-    public DbSet<AdrJobExecution> AdrJobExecutions { get; set; }
-    public DbSet<AdrOrchestrationRun> AdrOrchestrationRuns { get; set; }
+        // ADR Process entities
+        public DbSet<AdrAccount> AdrAccounts { get; set; }
+        public DbSet<AdrAccountRule> AdrAccountRules { get; set; }
+        public DbSet<AdrJobType> AdrJobTypes { get; set; }
+        public DbSet<AdrConfiguration> AdrConfigurations { get; set; }
+        public DbSet<AdrAccountBlacklist> AdrAccountBlacklists { get; set; }
+        public DbSet<AdrJob> AdrJobs { get; set; }
+        public DbSet<AdrJobExecution> AdrJobExecutions { get; set; }
+        public DbSet<AdrOrchestrationRun> AdrOrchestrationRuns { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -246,12 +247,17 @@ public class SchedulerDbContext : DbContext
             entity.Property(e => e.OverriddenBy).HasMaxLength(200);
             entity.Property(e => e.Notes).HasColumnType("nvarchar(max)");
             
-            entity.HasOne(e => e.AdrAccount)
-                .WithMany(a => a.AdrAccountRules)
-                .HasForeignKey(e => e.AdrAccountId)
-                .OnDelete(DeleteBehavior.Cascade);
+                        entity.HasOne(e => e.AdrAccount)
+                            .WithMany(a => a.AdrAccountRules)
+                            .HasForeignKey(e => e.AdrAccountId)
+                            .OnDelete(DeleteBehavior.Cascade);
             
-            entity.HasIndex(e => e.AdrAccountId);
+                        entity.HasOne(e => e.AdrJobType)
+                            .WithMany(jt => jt.AdrAccountRules)
+                            .HasForeignKey(e => e.JobTypeId)
+                            .OnDelete(DeleteBehavior.NoAction);
+            
+                        entity.HasIndex(e => e.AdrAccountId);
             entity.HasIndex(e => e.JobTypeId);
             entity.HasIndex(e => e.IsEnabled);
             entity.HasIndex(e => e.NextRunDateTime);
@@ -419,6 +425,24 @@ public class SchedulerDbContext : DbContext
             entity.HasIndex(e => e.IsActive);
             entity.HasIndex(e => new { e.IsDeleted, e.IsActive });
             entity.HasIndex(e => new { e.VendorCode, e.VMAccountId, e.CredentialId });
+        });
+
+        // ADR Job Type entity configuration (replaces hardcoded AdrRequestType enum)
+        modelBuilder.Entity<AdrJobType>(entity =>
+        {
+            entity.ToTable("AdrJobType");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("AdrJobTypeId");
+            
+            entity.Property(e => e.Code).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.EndpointUrl).HasMaxLength(500);
+            entity.Property(e => e.Notes).HasColumnType("nvarchar(max)");
+            
+            entity.HasIndex(e => e.Code).IsUnique();
+            entity.HasIndex(e => e.IsActive);
+            entity.HasIndex(e => e.AdrRequestTypeId);
         });
     }
 }
