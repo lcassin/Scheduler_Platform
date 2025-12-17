@@ -1793,30 +1793,41 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
             if (response.IsSuccessStatusCode)
             {
-                var apiResponse = JsonSerializer.Deserialize<AdrApiResponse>(responseContent, new JsonSerializerOptions
+                try
                 {
-                    PropertyNameCaseInsensitive = true
-                });
+                    var apiResponse = JsonSerializer.Deserialize<AdrApiResponse>(responseContent, new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
 
-                if (apiResponse != null)
-                {
-                    result.StatusId = apiResponse.StatusId;
-                    // Use Status field if StatusDescription is not provided
-                    result.StatusDescription = apiResponse.StatusDescription ?? apiResponse.Status;
-                    result.IndexId = apiResponse.IndexId;
-                    result.IsSuccess = true;
-                    result.IsError = apiResponse.IsError;
-                    
-                    // Determine IsFinal based on StatusId since the API may not return IsFinal field
-                    // Final statuses: Complete (11), NeedsHumanReview (9), and error states like "Cannot Insert Into Queue" (5)
-                    result.IsFinal = apiResponse.IsFinal || IsFinalStatus(apiResponse.StatusId);
+                    if (apiResponse != null)
+                    {
+                        result.StatusId = apiResponse.StatusId;
+                        // Use Status field if StatusDescription is not provided
+                        result.StatusDescription = apiResponse.StatusDescription ?? apiResponse.Status;
+                        result.IndexId = apiResponse.IndexId;
+                        result.IsSuccess = true;
+                        result.IsError = apiResponse.IsError;
+                        
+                        // Determine IsFinal based on StatusId since the API may not return IsFinal field
+                        // Final statuses: Complete (11), NeedsHumanReview (9), and error states like "Cannot Insert Into Queue" (5)
+                        result.IsFinal = apiResponse.IsFinal || IsFinalStatus(apiResponse.StatusId);
+                    }
+                    else
+                    {
+                        // Log when deserialization returns null - may indicate API format change
+                        _logger.LogWarning(
+                            "Status check for job {JobId}: Deserialization returned null. Raw response: {RawResponse}",
+                            jobId, TruncateResponse(responseContent, 500));
+                    }
                 }
-                else
+                catch (JsonException jsonEx)
                 {
-                    // Log when deserialization returns null - may indicate API format change
-                    _logger.LogWarning(
-                        "Status check for job {JobId}: Deserialization returned null. Raw response: {RawResponse}",
+                    _logger.LogError(jsonEx, "Error deserializing status check response for job {JobId}: {Response}", 
                         jobId, TruncateResponse(responseContent, 500));
+                    result.IsSuccess = false;
+                    result.IsError = true;
+                    result.ErrorMessage = $"Failed to parse status check response: {TruncateResponse(responseContent, 200)}";
                 }
             }
             else
@@ -1825,6 +1836,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 _logger.LogWarning(
                     "Status check for job {JobId}: HTTP {StatusCode}. Raw response: {RawResponse}",
                     jobId, (int)response.StatusCode, TruncateResponse(responseContent, 500));
+                result.IsSuccess = false;
+                result.IsError = true;
+                result.ErrorMessage = $"Status check returned HTTP {(int)response.StatusCode}: {TruncateResponse(responseContent, 200)}";
             }
 
             return result;
