@@ -9,6 +9,10 @@ using SchedulerPlatform.Core.Security;
 
 namespace SchedulerPlatform.API.Controllers;
 
+/// <summary>
+/// Controller for managing users and their permissions.
+/// Provides endpoints for user CRUD operations, permission management, and password resets.
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
@@ -27,8 +31,20 @@ public class UsersController : ControllerBase
         _passwordHasher = new PasswordHasher<User>();
     }
 
+    /// <summary>
+    /// Retrieves a paginated list of users with optional filtering. Requires Users.Manage.Read policy.
+    /// </summary>
+    /// <param name="searchTerm">Optional search term to filter by email, first name, last name, or username.</param>
+    /// <param name="pageNumber">Page number for pagination (default: 1).</param>
+    /// <param name="pageSize">Number of items per page (default: 20).</param>
+    /// <param name="showInactive">Whether to include inactive users (default: false).</param>
+    /// <returns>A paginated list of users with their permission counts and roles.</returns>
+    /// <response code="200">Returns the paginated list of users.</response>
+    /// <response code="500">An error occurred while retrieving users.</response>
     [HttpGet]
     [Authorize(Policy = "Users.Manage.Read")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<object>> GetUsers(
         [FromQuery] string? searchTerm = null,
         [FromQuery] int pageNumber = 1,
@@ -104,8 +120,19 @@ public class UsersController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves a specific user by ID with their permissions. Requires Users.Manage.Read policy.
+    /// </summary>
+    /// <param name="id">The user ID.</param>
+    /// <returns>The user details including their permissions.</returns>
+    /// <response code="200">Returns the user details.</response>
+    /// <response code="404">The user was not found.</response>
+    /// <response code="500">An error occurred while retrieving the user.</response>
     [HttpGet("{id}")]
     [Authorize(Policy = "Users.Manage.Read")]
+    [ProducesResponseType(typeof(UserDetailResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<UserDetailResponse>> GetUser(int id)
     {
         try
@@ -154,8 +181,22 @@ public class UsersController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Updates the permissions for a specific user. Requires Users.Manage.Update policy.
+    /// </summary>
+    /// <param name="id">The user ID.</param>
+    /// <param name="request">The updated permissions.</param>
+    /// <returns>No content on success.</returns>
+    /// <response code="204">The permissions were successfully updated.</response>
+    /// <response code="400">Cannot modify permissions for system administrators.</response>
+    /// <response code="404">The user was not found.</response>
+    /// <response code="500">An error occurred while updating permissions.</response>
     [HttpPut("{id}/permissions")]
     [Authorize(Policy = "Users.Manage.Update")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> UpdateUserPermissions(int id, [FromBody] UpdateUserPermissionsRequest request)
     {
         try
@@ -217,8 +258,22 @@ public class UsersController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Applies a predefined permission template to a user. Requires Users.Manage.Update policy.
+    /// </summary>
+    /// <param name="id">The user ID.</param>
+    /// <param name="templateName">The template name (Viewer, Editor, or Admin).</param>
+    /// <returns>No content on success.</returns>
+    /// <response code="204">The template was successfully applied.</response>
+    /// <response code="400">Cannot modify permissions for system administrators or unknown template.</response>
+    /// <response code="404">The user was not found.</response>
+    /// <response code="500">An error occurred while applying the template.</response>
     [HttpPost("{id}/templates/{templateName}")]
     [Authorize(Policy = "Users.Manage.Update")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> ApplyPermissionTemplate(int id, string templateName)
     {
         try
@@ -286,8 +341,20 @@ public class UsersController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Creates a new user with optional permissions. Requires Users.Manage.Create policy.
+    /// Sends a temporary password email to the new user.
+    /// </summary>
+    /// <param name="request">The user creation request including email, name, and optional permissions.</param>
+    /// <returns>The created user details.</returns>
+    /// <response code="201">Returns the newly created user.</response>
+    /// <response code="400">A user with this email already exists.</response>
+    /// <response code="500">An error occurred while creating the user.</response>
     [HttpPost]
     [Authorize(Policy = "Users.Manage.Create")]
+    [ProducesResponseType(typeof(UserDetailResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<UserDetailResponse>> CreateUser([FromBody] CreateUserRequest request)
     {
         try
@@ -473,8 +540,22 @@ public class UsersController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Updates the active status of a user. Requires Users.Manage.Update policy.
+    /// </summary>
+    /// <param name="id">The user ID.</param>
+    /// <param name="request">The status update request.</param>
+    /// <returns>No content on success.</returns>
+    /// <response code="204">The user status was successfully updated.</response>
+    /// <response code="400">Cannot modify status for system administrators.</response>
+    /// <response code="404">The user was not found.</response>
+    /// <response code="500">An error occurred while updating user status.</response>
     [HttpPut("{id}/status")]
     [Authorize(Policy = "Users.Manage.Update")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> UpdateUserStatus(int id, [FromBody] UpdateUserStatusRequest request)
     {
         try
@@ -509,8 +590,21 @@ public class UsersController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Resets a user's password and sends them a new temporary password via email. Requires Users.Manage.Update policy.
+    /// </summary>
+    /// <param name="id">The user ID.</param>
+    /// <returns>A success message indicating the password was reset.</returns>
+    /// <response code="200">The password was successfully reset and emailed to the user.</response>
+    /// <response code="400">Cannot reset password for external authentication users.</response>
+    /// <response code="404">The user was not found.</response>
+    /// <response code="500">An error occurred while resetting the password.</response>
     [HttpPost("{id}/reset-password")]
     [Authorize(Policy = "Users.Manage.Update")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> ResetPassword(int id)
     {
         try
@@ -588,8 +682,16 @@ public class UsersController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves all available permission templates. Requires Users.Manage.Read policy.
+    /// </summary>
+    /// <returns>A list of permission templates (Viewer, Editor, Admin).</returns>
+    /// <response code="200">Returns the list of permission templates.</response>
+    /// <response code="500">An error occurred while retrieving permission templates.</response>
     [HttpGet("templates")]
     [Authorize(Policy = "Users.Manage.Read")]
+    [ProducesResponseType(typeof(List<PermissionTemplateResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public ActionResult<List<PermissionTemplateResponse>> GetPermissionTemplates()
     {
         try

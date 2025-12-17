@@ -5,6 +5,10 @@ using SchedulerPlatform.Core.Domain.Interfaces;
 
 namespace SchedulerPlatform.API.Controllers;
 
+/// <summary>
+/// Controller for managing notification settings for schedules.
+/// Provides endpoints for CRUD operations on notification configurations.
+/// </summary>
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
@@ -27,7 +31,16 @@ public class NotificationSettingsController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// Retrieves notification settings for a specific schedule.
+    /// </summary>
+    /// <param name="scheduleId">The schedule ID.</param>
+    /// <returns>The notification settings for the schedule.</returns>
+    /// <response code="200">Returns the notification settings.</response>
+    /// <response code="404">The schedule or notification settings were not found.</response>
     [HttpGet("schedule/{scheduleId}")]
+    [ProducesResponseType(typeof(NotificationSetting), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<NotificationSetting>> GetByScheduleId(int scheduleId)
     {
         var schedule = await _scheduleRepository.GetByIdWithNotificationSettingsAsync(scheduleId);
@@ -40,7 +53,16 @@ public class NotificationSettingsController : ControllerBase
         return Ok(schedule.NotificationSetting);
     }
 
+    /// <summary>
+    /// Creates notification settings for a schedule.
+    /// </summary>
+    /// <param name="notificationSetting">The notification settings to create.</param>
+    /// <returns>The created notification settings.</returns>
+    /// <response code="201">Returns the newly created notification settings.</response>
+    /// <response code="400">The associated schedule was not found.</response>
     [HttpPost]
+    [ProducesResponseType(typeof(NotificationSetting), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<NotificationSetting>> Create([FromBody] NotificationSetting notificationSetting)
     {
         var schedule = await _scheduleRepository.GetByIdAsync(notificationSetting.ScheduleId);
@@ -63,7 +85,19 @@ public class NotificationSettingsController : ControllerBase
         return CreatedAtAction(nameof(GetByScheduleId), new { scheduleId = notificationSetting.ScheduleId }, notificationSetting);
     }
 
+    /// <summary>
+    /// Updates existing notification settings.
+    /// </summary>
+    /// <param name="id">The notification settings ID.</param>
+    /// <param name="notificationSetting">The updated notification settings.</param>
+    /// <returns>No content on success.</returns>
+    /// <response code="204">The notification settings were successfully updated.</response>
+    /// <response code="400">The ID in the URL does not match the ID in the body.</response>
+    /// <response code="404">The notification settings were not found.</response>
     [HttpPut("{id}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Update(int id, [FromBody] NotificationSetting notificationSetting)
     {
         if (id != notificationSetting.Id)
@@ -93,7 +127,16 @@ public class NotificationSettingsController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>
+    /// Deletes notification settings.
+    /// </summary>
+    /// <param name="id">The notification settings ID.</param>
+    /// <returns>No content on success.</returns>
+    /// <response code="204">The notification settings were successfully deleted.</response>
+    /// <response code="404">The notification settings were not found.</response>
     [HttpDelete("{id}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete(int id)
     {
         var notificationSetting = await _repository.GetByIdAsync(id);

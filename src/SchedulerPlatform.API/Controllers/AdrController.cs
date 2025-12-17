@@ -10,6 +10,10 @@ using SchedulerPlatform.Infrastructure.Data;
 
 namespace SchedulerPlatform.API.Controllers;
 
+/// <summary>
+/// Controller for managing Automated Data Retrieval (ADR) accounts, jobs, and executions.
+/// Provides endpoints for ADR account management, job orchestration, and data scraping operations.
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
@@ -46,7 +50,26 @@ public class AdrController : ControllerBase
 
     #region AdrAccount Endpoints
 
+    /// <summary>
+    /// Retrieves a paginated list of ADR accounts with optional filtering and sorting.
+    /// </summary>
+    /// <param name="clientId">Optional client ID to filter accounts.</param>
+    /// <param name="credentialId">Optional credential ID to filter accounts.</param>
+    /// <param name="nextRunStatus">Optional next run status filter.</param>
+    /// <param name="searchTerm">Optional search term to filter by account number or vendor code.</param>
+    /// <param name="historicalBillingStatus">Optional historical billing status filter.</param>
+    /// <param name="isOverridden">Optional filter for manually overridden accounts.</param>
+    /// <param name="jobStatus">Optional filter by current job status.</param>
+    /// <param name="pageNumber">Page number for pagination (default: 1).</param>
+    /// <param name="pageSize">Number of items per page (default: 20).</param>
+    /// <param name="sortColumn">Column name to sort by.</param>
+    /// <param name="sortDescending">Whether to sort in descending order.</param>
+    /// <returns>A paginated list of ADR accounts with job status information.</returns>
+    /// <response code="200">Returns the list of ADR accounts.</response>
+    /// <response code="500">An error occurred while retrieving ADR accounts.</response>
     [HttpGet("accounts")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<object>> GetAccounts(
         [FromQuery] int? clientId = null,
         [FromQuery] int? credentialId = null,
@@ -189,7 +212,18 @@ public class AdrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves a specific ADR account by its ID.
+    /// </summary>
+    /// <param name="id">The unique identifier of the ADR account.</param>
+    /// <returns>The ADR account with the specified ID.</returns>
+    /// <response code="200">Returns the requested ADR account.</response>
+    /// <response code="404">ADR account with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while retrieving the ADR account.</response>
     [HttpGet("accounts/{id}")]
+    [ProducesResponseType(typeof(AdrAccount), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<AdrAccount>> GetAccount(int id)
     {
         try
@@ -209,7 +243,18 @@ public class AdrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves an ADR account by its VM Account ID.
+    /// </summary>
+    /// <param name="vmAccountId">The VM Account ID to search for.</param>
+    /// <returns>The ADR account with the specified VM Account ID.</returns>
+    /// <response code="200">Returns the requested ADR account.</response>
+    /// <response code="404">ADR account with the specified VM Account ID was not found.</response>
+    /// <response code="500">An error occurred while retrieving the ADR account.</response>
     [HttpGet("accounts/by-vm-account/{vmAccountId}")]
+    [ProducesResponseType(typeof(AdrAccount), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<AdrAccount>> GetAccountByVMAccountId(long vmAccountId)
     {
         try
@@ -229,7 +274,16 @@ public class AdrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves ADR accounts that are due for a run on the specified date.
+    /// </summary>
+    /// <param name="date">The target date to check (defaults to current UTC date).</param>
+    /// <returns>A list of ADR accounts due for a run.</returns>
+    /// <response code="200">Returns the list of ADR accounts due for run.</response>
+    /// <response code="500">An error occurred while retrieving ADR accounts.</response>
     [HttpGet("accounts/due-for-run")]
+    [ProducesResponseType(typeof(IEnumerable<AdrAccount>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<IEnumerable<AdrAccount>>> GetAccountsDueForRun([FromQuery] DateTime? date = null)
     {
         try
@@ -245,7 +299,17 @@ public class AdrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves ADR accounts that need credential verification within the lead time window.
+    /// </summary>
+    /// <param name="date">The target date to check (defaults to current UTC date).</param>
+    /// <param name="leadTimeDays">Number of days ahead to look for accounts needing credential check (default: 7).</param>
+    /// <returns>A list of ADR accounts needing credential verification.</returns>
+    /// <response code="200">Returns the list of ADR accounts needing credential check.</response>
+    /// <response code="500">An error occurred while retrieving ADR accounts.</response>
     [HttpGet("accounts/needing-credential-check")]
+    [ProducesResponseType(typeof(IEnumerable<AdrAccount>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<IEnumerable<AdrAccount>>> GetAccountsNeedingCredentialCheck(
         [FromQuery] DateTime? date = null,
         [FromQuery] int leadTimeDays = 7)
@@ -263,7 +327,16 @@ public class AdrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves statistics about ADR accounts including counts by status.
+    /// </summary>
+    /// <param name="clientId">Optional client ID to filter statistics.</param>
+    /// <returns>Account statistics including total, run now, due soon, upcoming, future, missing, and active jobs counts.</returns>
+    /// <response code="200">Returns the ADR account statistics.</response>
+    /// <response code="500">An error occurred while retrieving ADR account stats.</response>
     [HttpGet("accounts/stats")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<object>> GetAccountStats([FromQuery] int? clientId = null)
     {
         try
@@ -295,8 +368,21 @@ public class AdrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Updates the billing information for an ADR account including expected billing date and period type.
+    /// This creates a manual override that will be preserved during account sync.
+    /// </summary>
+    /// <param name="id">The unique identifier of the ADR account.</param>
+    /// <param name="request">The billing update request containing new billing information.</param>
+    /// <returns>The updated ADR account.</returns>
+    /// <response code="200">Returns the updated ADR account.</response>
+    /// <response code="404">ADR account with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while updating the ADR account billing.</response>
     [HttpPut("accounts/{id}/billing")]
     [Authorize(Policy = "AdrAccounts.Update")]
+    [ProducesResponseType(typeof(AdrAccount), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<AdrAccount>> UpdateAccountBilling(int id, [FromBody] UpdateAccountBillingRequest request)
     {
         try
@@ -457,8 +543,19 @@ public class AdrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Clears the manual override on an ADR account, allowing it to be updated by the next sync.
+    /// </summary>
+    /// <param name="id">The unique identifier of the ADR account.</param>
+    /// <returns>The updated ADR account with override cleared.</returns>
+    /// <response code="200">Returns the updated ADR account.</response>
+    /// <response code="404">ADR account with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while clearing the override.</response>
     [HttpPost("accounts/{id}/clear-override")]
     [Authorize(Policy = "AdrAccounts.Update")]
+    [ProducesResponseType(typeof(AdrAccount), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<AdrAccount>> ClearAccountOverride(int id)
     {
         try
@@ -492,14 +589,27 @@ public class AdrController : ControllerBase
         }
     }
 
-        /// <summary>
-        /// Admin-only endpoint to manually fire an ADR request for any date range.
-        /// This creates a real AdrJob with IsManualRequest=true and makes the actual API call.
-        /// The job is excluded from normal orchestration but visible in the Jobs UI.
-        /// </summary>
-        [HttpPost("accounts/{id}/manual-scrape")]
-        [Authorize(Policy = "AdrAccounts.Update")]
-        public async Task<ActionResult<object>> ManualScrapeRequest(int id, [FromBody] ManualScrapeRequest request)
+    /// <summary>
+    /// Admin-only endpoint to manually fire an ADR request for any date range.
+    /// This creates a real AdrJob with IsManualRequest=true and makes the actual API call.
+    /// The job is excluded from normal orchestration but visible in the Jobs UI.
+    /// </summary>
+    /// <param name="id">The unique identifier of the ADR account.</param>
+    /// <param name="request">The manual ADR request containing target date, date range, and request type.</param>
+    /// <returns>The created job details and API response.</returns>
+    /// <response code="200">Returns the created job and API response details.</response>
+    /// <response code="400">Account does not have a credential ID or invalid request.</response>
+    /// <response code="403">User does not have permission to perform manual ADR requests.</response>
+    /// <response code="404">ADR account with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while processing the manual ADR request.</response>
+    [HttpPost("accounts/{id}/manual-scrape")]
+    [Authorize(Policy = "AdrAccounts.Update")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<object>> ManualScrapeRequest(int id, [FromBody] ManualScrapeRequest request)
         {
             try
             {
@@ -821,13 +931,21 @@ public class AdrController : ControllerBase
             }
         }
 
-        /// <summary>
-        /// Check the status of a manual ADR job using the same API as orchestrated jobs.
-        /// Available to Editors, Admins, and Super Admins.
-        /// </summary>
-        [HttpPost("jobs/{jobId}/check-status")]
-        [Authorize(Policy = "AdrAccounts.Update")]
-        public async Task<ActionResult<object>> CheckManualJobStatus(int jobId)
+    /// <summary>
+    /// Check the status of an ADR job using the external status check API.
+    /// Available to Editors, Admins, and Super Admins.
+    /// </summary>
+    /// <param name="jobId">The unique identifier of the ADR job to check.</param>
+    /// <returns>The current status of the job from the external API.</returns>
+    /// <response code="200">Returns the job status details.</response>
+    /// <response code="404">Job with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while checking job status.</response>
+    [HttpPost("jobs/{jobId}/check-status")]
+    [Authorize(Policy = "AdrAccounts.Update")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<object>> CheckManualJobStatus(int jobId)
         {
             try
             {
@@ -958,7 +1076,23 @@ public class AdrController : ControllerBase
             }
         }
 
+    /// <summary>
+    /// Exports ADR accounts to Excel format with optional filtering.
+    /// </summary>
+    /// <param name="clientId">Optional client ID to filter accounts.</param>
+    /// <param name="searchTerm">Optional search term to filter accounts.</param>
+    /// <param name="nextRunStatus">Optional next run status filter.</param>
+    /// <param name="historicalBillingStatus">Optional historical billing status filter.</param>
+    /// <param name="isOverridden">Optional filter for manually overridden accounts.</param>
+    /// <param name="sortColumn">Column name to sort by.</param>
+    /// <param name="sortDescending">Whether to sort in descending order.</param>
+    /// <param name="format">Export format (default: excel).</param>
+    /// <returns>A file download containing the exported ADR accounts.</returns>
+    /// <response code="200">Returns the exported file.</response>
+    /// <response code="500">An error occurred while exporting ADR accounts.</response>
     [HttpGet("accounts/export")]
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> ExportAccounts(
         [FromQuery] int? clientId = null,
         [FromQuery] string? searchTerm = null,
@@ -1086,24 +1220,47 @@ public class AdrController : ControllerBase
 
     #region AdrJob Endpoints
 
-        [HttpGet("jobs")]
-        public async Task<ActionResult<object>> GetJobs(
-            [FromQuery] int? adrAccountId = null,
-            [FromQuery] string? status = null,
-            [FromQuery] DateTime? billingPeriodStart = null,
-            [FromQuery] DateTime? billingPeriodEnd = null,
-            [FromQuery] string? vendorCode = null,
-            [FromQuery] string? vmAccountNumber = null,
-            [FromQuery] bool latestPerAccount = false,
-            [FromQuery] int pageNumber = 1,
-            [FromQuery] int pageSize = 20,
-            [FromQuery] long? vmAccountId = null,
-            [FromQuery] string? interfaceAccountId = null,
-            [FromQuery] int? credentialId = null,
-            [FromQuery] bool? isManualRequest = null,
-            [FromQuery] string? sortColumn = null,
-            [FromQuery] bool sortDescending = true)
-        {
+    /// <summary>
+    /// Retrieves a paginated list of ADR jobs with optional filtering and sorting.
+    /// </summary>
+    /// <param name="adrAccountId">Optional ADR account ID to filter jobs.</param>
+    /// <param name="status">Optional status to filter jobs.</param>
+    /// <param name="billingPeriodStart">Optional billing period start date filter.</param>
+    /// <param name="billingPeriodEnd">Optional billing period end date filter.</param>
+    /// <param name="vendorCode">Optional vendor code to filter jobs.</param>
+    /// <param name="vmAccountNumber">Optional VM account number to filter jobs.</param>
+    /// <param name="latestPerAccount">If true, returns only the latest job per account.</param>
+    /// <param name="pageNumber">Page number for pagination (default: 1).</param>
+    /// <param name="pageSize">Number of items per page (default: 20).</param>
+    /// <param name="vmAccountId">Optional VM account ID to filter jobs.</param>
+    /// <param name="interfaceAccountId">Optional interface account ID to filter jobs.</param>
+    /// <param name="credentialId">Optional credential ID to filter jobs.</param>
+    /// <param name="isManualRequest">Optional filter for manual vs automated requests.</param>
+    /// <param name="sortColumn">Column name to sort by.</param>
+    /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
+    /// <returns>A paginated list of ADR jobs.</returns>
+    /// <response code="200">Returns the paginated list of ADR jobs.</response>
+    /// <response code="500">An error occurred while retrieving ADR jobs.</response>
+    [HttpGet("jobs")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<object>> GetJobs(
+        [FromQuery] int? adrAccountId = null,
+        [FromQuery] string? status = null,
+        [FromQuery] DateTime? billingPeriodStart = null,
+        [FromQuery] DateTime? billingPeriodEnd = null,
+        [FromQuery] string? vendorCode = null,
+        [FromQuery] string? vmAccountNumber = null,
+        [FromQuery] bool latestPerAccount = false,
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] long? vmAccountId = null,
+        [FromQuery] string? interfaceAccountId = null,
+        [FromQuery] int? credentialId = null,
+        [FromQuery] bool? isManualRequest = null,
+        [FromQuery] string? sortColumn = null,
+        [FromQuery] bool sortDescending = true)
+    {
             try
             {
                 var (items, totalCount) = await _unitOfWork.AdrJobs.GetPagedAsync(
@@ -1168,7 +1325,18 @@ public class AdrController : ControllerBase
             }
         }
 
+    /// <summary>
+    /// Retrieves a specific ADR job by its unique identifier.
+    /// </summary>
+    /// <param name="id">The unique identifier of the ADR job.</param>
+    /// <returns>The ADR job with the specified ID.</returns>
+    /// <response code="200">Returns the ADR job.</response>
+    /// <response code="404">ADR job with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while retrieving the ADR job.</response>
     [HttpGet("jobs/{id}")]
+    [ProducesResponseType(typeof(AdrJob), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<AdrJob>> GetJob(int id)
     {
         try
@@ -1188,7 +1356,16 @@ public class AdrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves all ADR jobs for a specific account.
+    /// </summary>
+    /// <param name="adrAccountId">The unique identifier of the ADR account.</param>
+    /// <returns>A list of ADR jobs for the specified account.</returns>
+    /// <response code="200">Returns the list of ADR jobs.</response>
+    /// <response code="500">An error occurred while retrieving ADR jobs.</response>
     [HttpGet("jobs/by-account/{adrAccountId}")]
+    [ProducesResponseType(typeof(IEnumerable<AdrJob>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<IEnumerable<AdrJob>>> GetJobsByAccount(int adrAccountId)
     {
         try
@@ -1203,7 +1380,16 @@ public class AdrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves all ADR jobs with a specific status.
+    /// </summary>
+    /// <param name="status">The status to filter jobs by.</param>
+    /// <returns>A list of ADR jobs with the specified status.</returns>
+    /// <response code="200">Returns the list of ADR jobs.</response>
+    /// <response code="500">An error occurred while retrieving ADR jobs.</response>
     [HttpGet("jobs/by-status/{status}")]
+    [ProducesResponseType(typeof(IEnumerable<AdrJob>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<IEnumerable<AdrJob>>> GetJobsByStatus(string status)
     {
         try
@@ -1218,7 +1404,16 @@ public class AdrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves ADR jobs that need credential verification.
+    /// </summary>
+    /// <param name="date">Optional target date for filtering (defaults to current UTC time).</param>
+    /// <returns>A list of ADR jobs needing credential verification.</returns>
+    /// <response code="200">Returns the list of ADR jobs needing credential verification.</response>
+    /// <response code="500">An error occurred while retrieving ADR jobs.</response>
     [HttpGet("jobs/needing-credential-verification")]
+    [ProducesResponseType(typeof(IEnumerable<AdrJob>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<IEnumerable<AdrJob>>> GetJobsNeedingCredentialVerification([FromQuery] DateTime? date = null)
     {
         try
@@ -1234,7 +1429,16 @@ public class AdrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves ADR jobs that are ready for scraping (credential verified and at or past NextRunDateTime).
+    /// </summary>
+    /// <param name="date">Optional target date for filtering (defaults to current UTC time).</param>
+    /// <returns>A list of ADR jobs ready for scraping.</returns>
+    /// <response code="200">Returns the list of ADR jobs ready for scraping.</response>
+    /// <response code="500">An error occurred while retrieving ADR jobs.</response>
     [HttpGet("jobs/ready-for-scraping")]
+    [ProducesResponseType(typeof(IEnumerable<AdrJob>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<IEnumerable<AdrJob>>> GetJobsReadyForScraping([FromQuery] DateTime? date = null)
     {
         try
@@ -1250,7 +1454,17 @@ public class AdrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves ADR jobs that need a status check from the external API.
+    /// </summary>
+    /// <param name="date">Optional target date for filtering (defaults to current UTC time).</param>
+    /// <param name="followUpDelayDays">Number of days to wait before following up on a job (default: 5).</param>
+    /// <returns>A list of ADR jobs needing status check.</returns>
+    /// <response code="200">Returns the list of ADR jobs needing status check.</response>
+    /// <response code="500">An error occurred while retrieving ADR jobs.</response>
     [HttpGet("jobs/needing-status-check")]
+    [ProducesResponseType(typeof(IEnumerable<AdrJob>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<IEnumerable<AdrJob>>> GetJobsNeedingStatusCheck(
         [FromQuery] DateTime? date = null,
         [FromQuery] int followUpDelayDays = 5)
@@ -1268,7 +1482,17 @@ public class AdrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves ADR jobs that are eligible for retry after previous failures.
+    /// </summary>
+    /// <param name="date">Optional target date for filtering (defaults to current UTC time).</param>
+    /// <param name="maxRetries">Maximum number of retries allowed before giving up (default: 5).</param>
+    /// <returns>A list of ADR jobs eligible for retry.</returns>
+    /// <response code="200">Returns the list of ADR jobs eligible for retry.</response>
+    /// <response code="500">An error occurred while retrieving ADR jobs.</response>
     [HttpGet("jobs/for-retry")]
+    [ProducesResponseType(typeof(IEnumerable<AdrJob>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<IEnumerable<AdrJob>>> GetJobsForRetry(
         [FromQuery] DateTime? date = null,
         [FromQuery] int maxRetries = 5)
@@ -1286,7 +1510,17 @@ public class AdrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves statistics about ADR jobs including counts by status.
+    /// </summary>
+    /// <param name="adrAccountId">Optional ADR account ID to filter statistics.</param>
+    /// <param name="lastOrchestrationRuns">Optional number of recent orchestration runs to include in statistics.</param>
+    /// <returns>Job statistics including counts by status (pending, credential verified, scrape requested, completed, failed, needs review, credential failed).</returns>
+    /// <response code="200">Returns the ADR job statistics.</response>
+    /// <response code="500">An error occurred while retrieving ADR job stats.</response>
     [HttpGet("jobs/stats")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<object>> GetJobStats(
         [FromQuery] int? adrAccountId = null,
         [FromQuery] int? lastOrchestrationRuns = null)
@@ -1385,7 +1619,23 @@ public class AdrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Exports ADR jobs to Excel or CSV format with optional filtering.
+    /// </summary>
+    /// <param name="status">Optional status to filter jobs.</param>
+    /// <param name="vendorCode">Optional vendor code to filter jobs.</param>
+    /// <param name="vmAccountNumber">Optional VM account number to filter jobs.</param>
+    /// <param name="latestPerAccount">If true, returns only the latest job per account.</param>
+    /// <param name="isManualRequest">Optional filter for manual vs automated requests.</param>
+    /// <param name="sortColumn">Column name to sort by.</param>
+    /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
+    /// <param name="format">Export format: 'excel' or 'csv' (default: excel).</param>
+    /// <returns>A file download containing the exported ADR jobs.</returns>
+    /// <response code="200">Returns the exported file.</response>
+    /// <response code="500">An error occurred while exporting ADR jobs.</response>
     [HttpGet("jobs/export")]
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> ExportJobs(
         [FromQuery] string? status = null,
         [FromQuery] string? vendorCode = null,
@@ -1476,7 +1726,20 @@ public class AdrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Creates a new ADR job for a specific account and billing period.
+    /// </summary>
+    /// <param name="request">The job creation request containing account ID and billing period dates.</param>
+    /// <returns>The newly created ADR job.</returns>
+    /// <response code="201">Returns the newly created ADR job.</response>
+    /// <response code="400">ADR account not found.</response>
+    /// <response code="409">A job already exists for this account and billing period.</response>
+    /// <response code="500">An error occurred while creating the ADR job.</response>
     [HttpPost("jobs")]
+    [ProducesResponseType(typeof(AdrJob), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<AdrJob>> CreateJob([FromBody] CreateAdrJobRequest request)
     {
         try
@@ -1530,7 +1793,19 @@ public class AdrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Updates the status of an ADR job.
+    /// </summary>
+    /// <param name="id">The unique identifier of the ADR job.</param>
+    /// <param name="request">The status update request containing new status and optional ADR status details.</param>
+    /// <returns>No content on success.</returns>
+    /// <response code="204">Job status was successfully updated.</response>
+    /// <response code="404">ADR job with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while updating the ADR job status.</response>
     [HttpPut("jobs/{id}/status")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> UpdateJobStatus(int id, [FromBody] UpdateJobStatusRequest request)
     {
         try
@@ -1570,7 +1845,19 @@ public class AdrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Resets an ADR job to Pending status so it can be reprocessed by the orchestrator.
+    /// </summary>
+    /// <param name="id">The unique identifier of the ADR job.</param>
+    /// <param name="forceRefire">If true, deletes execution history to bypass idempotency check.</param>
+    /// <returns>Details about the refired job including any deleted execution records.</returns>
+    /// <response code="200">Returns the refired job details.</response>
+    /// <response code="404">ADR job with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while refiring the ADR job.</response>
     [HttpPost("jobs/{id}/refire")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<object>> RefireJob(int id, [FromQuery] bool forceRefire = false)
     {
         try
@@ -1615,7 +1902,18 @@ public class AdrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Resets multiple ADR jobs to Pending status so they can be reprocessed by the orchestrator.
+    /// </summary>
+    /// <param name="request">The bulk refire request containing job IDs and force refire option.</param>
+    /// <returns>Summary of the bulk refire operation including success count and any errors.</returns>
+    /// <response code="200">Returns the bulk refire operation summary.</response>
+    /// <response code="400">No job IDs were provided in the request.</response>
+    /// <response code="500">An error occurred while refiring the ADR jobs.</response>
     [HttpPost("jobs/refire-bulk")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<object>> RefireJobsBulk([FromBody] RefireJobsRequest request)
     {
         try
@@ -1698,7 +1996,20 @@ public class AdrController : ControllerBase
 
     #region AdrJobExecution Endpoints
 
+    /// <summary>
+    /// Retrieves a paginated list of ADR job executions with optional filtering.
+    /// </summary>
+    /// <param name="adrJobId">Optional ADR job ID to filter executions.</param>
+    /// <param name="adrRequestTypeId">Optional request type ID to filter executions.</param>
+    /// <param name="isSuccess">Optional filter for successful/failed executions.</param>
+    /// <param name="pageNumber">Page number for pagination (default: 1).</param>
+    /// <param name="pageSize">Number of items per page (default: 20).</param>
+    /// <returns>A paginated list of ADR job executions.</returns>
+    /// <response code="200">Returns the paginated list of ADR job executions.</response>
+    /// <response code="500">An error occurred while retrieving ADR job executions.</response>
     [HttpGet("executions")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<object>> GetExecutions(
         [FromQuery] int? adrJobId = null,
         [FromQuery] int? adrRequestTypeId = null,
@@ -1730,7 +2041,18 @@ public class AdrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves a specific ADR job execution by its unique identifier.
+    /// </summary>
+    /// <param name="id">The unique identifier of the ADR job execution.</param>
+    /// <returns>The ADR job execution with the specified ID.</returns>
+    /// <response code="200">Returns the ADR job execution.</response>
+    /// <response code="404">ADR job execution with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while retrieving the ADR job execution.</response>
     [HttpGet("executions/{id}")]
+    [ProducesResponseType(typeof(AdrJobExecution), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<AdrJobExecution>> GetExecution(int id)
     {
         try
@@ -1750,7 +2072,16 @@ public class AdrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves all ADR job executions for a specific job.
+    /// </summary>
+    /// <param name="adrJobId">The unique identifier of the ADR job.</param>
+    /// <returns>A list of ADR job executions for the specified job.</returns>
+    /// <response code="200">Returns the list of ADR job executions.</response>
+    /// <response code="500">An error occurred while retrieving ADR job executions.</response>
     [HttpGet("executions/by-job/{adrJobId}")]
+    [ProducesResponseType(typeof(IEnumerable<AdrJobExecution>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<IEnumerable<AdrJobExecution>>> GetExecutionsByJob(int adrJobId)
     {
         try
@@ -1765,7 +2096,18 @@ public class AdrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Creates a new ADR job execution record for tracking API calls.
+    /// </summary>
+    /// <param name="request">The execution creation request containing job ID and request type.</param>
+    /// <returns>The newly created ADR job execution.</returns>
+    /// <response code="201">Returns the newly created ADR job execution.</response>
+    /// <response code="400">ADR job not found.</response>
+    /// <response code="500">An error occurred while creating the ADR job execution.</response>
     [HttpPost("executions")]
+    [ProducesResponseType(typeof(AdrJobExecution), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<AdrJobExecution>> CreateExecution([FromBody] CreateAdrJobExecutionRequest request)
     {
         try
@@ -1799,7 +2141,19 @@ public class AdrController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Completes an ADR job execution with the API response details.
+    /// </summary>
+    /// <param name="id">The unique identifier of the ADR job execution.</param>
+    /// <param name="request">The completion request containing status, response details, and error information.</param>
+    /// <returns>No content on success.</returns>
+    /// <response code="204">Execution was successfully completed.</response>
+    /// <response code="404">ADR job execution with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while completing the ADR job execution.</response>
     [HttpPut("executions/{id}/complete")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> CompleteExecution(int id, [FromBody] CompleteExecutionRequest request)
     {
         try
@@ -1839,7 +2193,13 @@ public class AdrController : ControllerBase
 
     #region ADR Status Reference
 
+    /// <summary>
+    /// Retrieves all ADR status codes with their descriptions and metadata.
+    /// </summary>
+    /// <returns>A list of ADR status codes with ID, name, description, and flags for error/final states.</returns>
+    /// <response code="200">Returns the list of ADR status codes.</response>
     [HttpGet("statuses")]
+    [ProducesResponseType(typeof(IEnumerable<object>), StatusCodes.Status200OK)]
     public ActionResult<IEnumerable<object>> GetAdrStatuses()
     {
         var statuses = Enum.GetValues<AdrStatus>()
@@ -1855,7 +2215,13 @@ public class AdrController : ControllerBase
         return Ok(statuses);
     }
 
+    /// <summary>
+    /// Retrieves all ADR request types (credential check, download invoice, status check).
+    /// </summary>
+    /// <returns>A list of ADR request types with ID and name.</returns>
+    /// <response code="200">Returns the list of ADR request types.</response>
     [HttpGet("request-types")]
+    [ProducesResponseType(typeof(IEnumerable<object>), StatusCodes.Status200OK)]
     public ActionResult<IEnumerable<object>> GetAdrRequestTypes()
     {
         var types = Enum.GetValues<AdrRequestType>()
@@ -1872,9 +2238,18 @@ public class AdrController : ControllerBase
 
         #region Orchestration Endpoints
 
-        [HttpPost("sync/accounts")]
-        [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
-        public async Task<ActionResult<AdrAccountSyncResult>> SyncAccounts(CancellationToken cancellationToken)
+    /// <summary>
+    /// Triggers a manual sync of ADR accounts from the external VendorCred system.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token for the operation.</param>
+    /// <returns>The sync result including counts of added, updated, and unchanged accounts.</returns>
+    /// <response code="200">Returns the account sync result.</response>
+    /// <response code="500">An error occurred during account sync.</response>
+    [HttpPost("sync/accounts")]
+    [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    [ProducesResponseType(typeof(AdrAccountSyncResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<AdrAccountSyncResult>> SyncAccounts(CancellationToken cancellationToken)
     {
         try
         {
@@ -1889,9 +2264,18 @@ public class AdrController : ControllerBase
         }
     }
 
-        [HttpPost("orchestrate/create-jobs")]
-        [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
-        public async Task<ActionResult<JobCreationResult>> CreateJobs(CancellationToken cancellationToken)
+    /// <summary>
+    /// Triggers manual job creation for ADR accounts that are due for processing.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token for the operation.</param>
+    /// <returns>The job creation result including counts of jobs created and skipped.</returns>
+    /// <response code="200">Returns the job creation result.</response>
+    /// <response code="500">An error occurred during job creation.</response>
+    [HttpPost("orchestrate/create-jobs")]
+    [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    [ProducesResponseType(typeof(JobCreationResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<JobCreationResult>> CreateJobs(CancellationToken cancellationToken)
     {
         try
         {
@@ -1906,9 +2290,18 @@ public class AdrController : ControllerBase
         }
     }
 
-        [HttpPost("orchestrate/verify-credentials")]
-        [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
-        public async Task<ActionResult<CredentialVerificationResult>> VerifyCredentials(CancellationToken cancellationToken)
+    /// <summary>
+    /// Triggers manual credential verification for ADR jobs approaching their NextRunDate.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token for the operation.</param>
+    /// <returns>The credential verification result including counts of verified and failed credentials.</returns>
+    /// <response code="200">Returns the credential verification result.</response>
+    /// <response code="500">An error occurred during credential verification.</response>
+    [HttpPost("orchestrate/verify-credentials")]
+    [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    [ProducesResponseType(typeof(CredentialVerificationResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<CredentialVerificationResult>> VerifyCredentials(CancellationToken cancellationToken)
     {
         try
         {
@@ -1923,9 +2316,18 @@ public class AdrController : ControllerBase
         }
     }
 
-        [HttpPost("orchestrate/process-scraping")]
-        [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
-        public async Task<ActionResult<ScrapeResult>> ProcessScraping(CancellationToken cancellationToken)
+    /// <summary>
+    /// Triggers manual ADR request processing for jobs that are ready (credential verified and at NextRunDate).
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token for the operation.</param>
+    /// <returns>The ADR request result including counts of requests sent and failed.</returns>
+    /// <response code="200">Returns the ADR request processing result.</response>
+    /// <response code="500">An error occurred during ADR request processing.</response>
+    [HttpPost("orchestrate/process-scraping")]
+    [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    [ProducesResponseType(typeof(ScrapeResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<ScrapeResult>> ProcessScraping(CancellationToken cancellationToken)
     {
         try
         {
@@ -1940,9 +2342,19 @@ public class AdrController : ControllerBase
         }
     }
 
-        [HttpPost("orchestrate/check-statuses")]
-        [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
-        public async Task<ActionResult<StatusCheckResult>> CheckStatuses(CancellationToken cancellationToken)
+    /// <summary>
+    /// Triggers manual status check for all ADR jobs that have been sent for processing.
+    /// This checks ALL scraped jobs regardless of timing criteria since status checks have no cost.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token for the operation.</param>
+    /// <returns>The status check result including counts of completed, failed, and still processing jobs.</returns>
+    /// <response code="200">Returns the status check result.</response>
+    /// <response code="500">An error occurred during status check.</response>
+    [HttpPost("orchestrate/check-statuses")]
+    [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    [ProducesResponseType(typeof(StatusCheckResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<StatusCheckResult>> CheckStatuses(CancellationToken cancellationToken)
     {
         try
         {
@@ -1959,9 +2371,18 @@ public class AdrController : ControllerBase
         }
     }
 
-        [HttpPost("orchestrate/run-full-cycle")]
-        [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
-        public async Task<ActionResult<object>> RunFullCycle(CancellationToken cancellationToken)
+    /// <summary>
+    /// Runs the complete ADR orchestration cycle: sync accounts, create jobs, verify credentials, check statuses, and process ADR requests.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token for the operation.</param>
+    /// <returns>Combined results from all orchestration steps.</returns>
+    /// <response code="200">Returns the combined orchestration results.</response>
+    /// <response code="500">An error occurred during the full ADR cycle.</response>
+    [HttpPost("orchestrate/run-full-cycle")]
+    [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<object>> RunFullCycle(CancellationToken cancellationToken)
     {
         try
         {
@@ -2008,8 +2429,14 @@ public class AdrController : ControllerBase
     /// that can be used to check status. This endpoint does NOT depend on user session - the
     /// background job will continue running even if the user logs out.
     /// </summary>
+    /// <param name="request">Optional request specifying which orchestration steps to run.</param>
+    /// <returns>The queued request details including request ID for status tracking.</returns>
+    /// <response code="200">Returns the queued orchestration request details.</response>
+    /// <response code="500">An error occurred while queuing the orchestration.</response>
     [HttpPost("orchestrate/run-background")]
     [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<object>> RunBackgroundOrchestration([FromBody] BackgroundOrchestrationRequest? request = null)
     {
         try
@@ -2049,8 +2476,14 @@ public class AdrController : ControllerBase
     /// <summary>
     /// Gets the status of a specific background orchestration request.
     /// </summary>
+    /// <param name="requestId">The unique request ID returned when the orchestration was queued.</param>
+    /// <returns>The orchestration status including progress and results.</returns>
+    /// <response code="200">Returns the orchestration status.</response>
+    /// <response code="404">The specified request ID was not found.</response>
     [HttpGet("orchestrate/status/{requestId}")]
     [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    [ProducesResponseType(typeof(AdrOrchestrationStatus), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public ActionResult<AdrOrchestrationStatus> GetOrchestrationStatus(string requestId)
     {
         var status = _orchestrationQueue.GetStatus(requestId);
@@ -2065,8 +2498,11 @@ public class AdrController : ControllerBase
     /// <summary>
     /// Gets the status of the currently running orchestration, if any.
     /// </summary>
+    /// <returns>The current orchestration status or a message indicating no orchestration is running.</returns>
+    /// <response code="200">Returns the current orchestration status or indicates no orchestration is running.</response>
     [HttpGet("orchestrate/current")]
     [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     public ActionResult<object> GetCurrentOrchestration()
     {
         var current = _orchestrationQueue.GetCurrentRun();
@@ -2139,8 +2575,16 @@ public class AdrController : ControllerBase
     /// Falls back to in-memory if database is unavailable.
     /// Supports pagination with pageNumber and pageSize parameters.
     /// </summary>
+    /// <param name="count">Optional legacy parameter for limiting results (deprecated, use pageSize instead).</param>
+    /// <param name="pageNumber">Page number for pagination (default: 1).</param>
+    /// <param name="pageSize">Number of items per page (default: 20).</param>
+    /// <returns>A paginated list of orchestration run history.</returns>
+    /// <response code="200">Returns the orchestration history.</response>
+    /// <response code="500">An error occurred while retrieving orchestration history.</response>
     [HttpGet("orchestrate/history")]
     [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    [ProducesResponseType(typeof(OrchestrationHistoryPagedResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<object>> GetOrchestrationHistory(
         [FromQuery] int? count = null,
         [FromQuery] int pageNumber = 1,

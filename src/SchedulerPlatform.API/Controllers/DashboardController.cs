@@ -7,6 +7,10 @@ using SchedulerPlatform.Core.Domain.Interfaces;
 
 namespace SchedulerPlatform.API.Controllers;
 
+/// <summary>
+/// Controller for dashboard analytics and statistics.
+/// Provides endpoints for retrieving schedule and execution metrics.
+/// </summary>
 [Authorize]
 [ApiController]
 [Route("api/[controller]")]
@@ -21,15 +25,26 @@ public class DashboardController : ControllerBase
         _logger = logger;
     }
 
-        [HttpGet("overview")]
-        public async Task<ActionResult<DashboardOverviewResponse>> GetOverview(
-            [FromQuery] int? clientId = null,
-            [FromQuery] int hours = 24,
-            [FromQuery] string? timezone = null)
+    /// <summary>
+    /// Retrieves an overview of dashboard statistics including schedule counts and execution metrics.
+    /// </summary>
+    /// <param name="clientId">Optional client ID to filter statistics.</param>
+    /// <param name="hours">Number of hours to look back for execution data (default: 24).</param>
+    /// <param name="timezone">Optional timezone for calculating "today" metrics.</param>
+    /// <returns>Dashboard overview with schedule and execution statistics.</returns>
+    /// <response code="200">Returns the dashboard overview.</response>
+    /// <response code="500">An error occurred while retrieving dashboard overview.</response>
+    [HttpGet("overview")]
+    [ProducesResponseType(typeof(DashboardOverviewResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<DashboardOverviewResponse>> GetOverview(
+        [FromQuery] int? clientId = null,
+        [FromQuery] int hours = 24,
+        [FromQuery] string? timezone = null)
+    {
+        try
         {
-            try
-            {
-                var startDate = DateTime.UtcNow.AddHours(-hours);
+            var startDate = DateTime.UtcNow.AddHours(-hours);
             
                 // Calculate "today" based on the user's timezone
                 // If no timezone provided, default to UTC
@@ -90,7 +105,17 @@ public class DashboardController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves a breakdown of job execution statuses within a time window.
+    /// </summary>
+    /// <param name="hours">Number of hours to look back (default: 24).</param>
+    /// <param name="clientId">Optional client ID to filter results.</param>
+    /// <returns>A list of status counts with percentages.</returns>
+    /// <response code="200">Returns the status breakdown.</response>
+    /// <response code="500">An error occurred while retrieving status breakdown.</response>
     [HttpGet("status-breakdown")]
+    [ProducesResponseType(typeof(List<StatusBreakdownItem>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<List<StatusBreakdownItem>>> GetStatusBreakdown(
         [FromQuery] int hours = 24,
         [FromQuery] int? clientId = null)
@@ -121,7 +146,18 @@ public class DashboardController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves execution trends data aggregated by hour for charting.
+    /// </summary>
+    /// <param name="hours">Number of hours to look back (default: 24).</param>
+    /// <param name="clientId">Optional client ID to filter results.</param>
+    /// <param name="statuses">Optional array of job statuses to filter by.</param>
+    /// <returns>A list of hourly execution trend data points.</returns>
+    /// <response code="200">Returns the execution trends.</response>
+    /// <response code="500">An error occurred while retrieving execution trends.</response>
     [HttpGet("execution-trends")]
+    [ProducesResponseType(typeof(List<ExecutionTrendItem>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<List<ExecutionTrendItem>>> GetExecutionTrends(
         [FromQuery] int hours = 24,
         [FromQuery] int? clientId = null,
@@ -150,7 +186,19 @@ public class DashboardController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves the top longest-running job executions within a time window.
+    /// </summary>
+    /// <param name="limit">Maximum number of results to return (default: 10).</param>
+    /// <param name="hours">Number of hours to look back (default: 24).</param>
+    /// <param name="clientId">Optional client ID to filter results.</param>
+    /// <param name="statuses">Optional array of job statuses to filter by.</param>
+    /// <returns>A list of the longest-running executions with duration details.</returns>
+    /// <response code="200">Returns the top longest executions.</response>
+    /// <response code="500">An error occurred while retrieving top longest executions.</response>
     [HttpGet("top-longest")]
+    [ProducesResponseType(typeof(List<TopLongestExecutionItem>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<List<TopLongestExecutionItem>>> GetTopLongestExecutions(
         [FromQuery] int limit = 10,
         [FromQuery] int hours = 24,
@@ -180,7 +228,17 @@ public class DashboardController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves schedules with validation errors such as invalid CRON expressions or missing configuration.
+    /// </summary>
+    /// <param name="clientId">Optional client ID to filter results.</param>
+    /// <param name="limit">Maximum number of schedules to check (default: 100).</param>
+    /// <returns>A list of schedules with their validation errors.</returns>
+    /// <response code="200">Returns the list of invalid schedules.</response>
+    /// <response code="500">An error occurred while retrieving invalid schedules.</response>
     [HttpGet("invalid-schedules")]
+    [ProducesResponseType(typeof(List<InvalidScheduleInfo>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<List<InvalidScheduleInfo>>> GetInvalidSchedules(
         [FromQuery] int? clientId = null,
         [FromQuery] int limit = 100)

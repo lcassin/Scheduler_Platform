@@ -13,6 +13,10 @@ using SchedulerPlatform.Jobs.Services;
 
 namespace SchedulerPlatform.API.Controllers;
 
+/// <summary>
+/// Controller for managing job schedules in the Scheduler Platform.
+/// Provides endpoints for CRUD operations, triggering jobs, and managing schedule execution.
+/// </summary>
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
@@ -35,7 +39,23 @@ public class SchedulesController : ControllerBase
         _scheduler = scheduler;
     }
 
+    /// <summary>
+    /// Retrieves a list of schedules with optional filtering and pagination.
+    /// </summary>
+    /// <param name="clientId">Optional client ID to filter schedules by client.</param>
+    /// <param name="searchTerm">Optional search term to filter schedules by name or description.</param>
+    /// <param name="pageNumber">Page number for pagination (default: 1).</param>
+    /// <param name="pageSize">Number of items per page (default: 20).</param>
+    /// <param name="paginated">Whether to return paginated results (default: true).</param>
+    /// <param name="startDate">Optional start date for filtering schedules by next run date.</param>
+    /// <param name="endDate">Optional end date for filtering schedules by next run date.</param>
+    /// <param name="isEnabled">Optional filter for enabled/disabled schedules.</param>
+    /// <returns>A paginated list of schedules or all schedules matching the criteria.</returns>
+    /// <response code="200">Returns the list of schedules.</response>
+    /// <response code="500">An error occurred while retrieving schedules.</response>
     [HttpGet]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<object>> GetSchedules(
         [FromQuery] int? clientId = null,
         [FromQuery] string? searchTerm = null,
@@ -94,7 +114,20 @@ public class SchedulesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves a specific schedule by its ID.
+    /// </summary>
+    /// <param name="id">The unique identifier of the schedule.</param>
+    /// <returns>The schedule with the specified ID.</returns>
+    /// <response code="200">Returns the requested schedule.</response>
+    /// <response code="403">User is not authorized to access this schedule.</response>
+    /// <response code="404">Schedule with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while retrieving the schedule.</response>
     [HttpGet("{id}")]
+    [ProducesResponseType(typeof(Schedule), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<Schedule>> GetSchedule(int id)
     {
         try
@@ -126,8 +159,19 @@ public class SchedulesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Creates a new schedule with the specified configuration.
+    /// </summary>
+    /// <param name="schedule">The schedule object containing the configuration details.</param>
+    /// <returns>The newly created schedule.</returns>
+    /// <response code="201">Schedule was created successfully.</response>
+    /// <response code="400">Invalid schedule data provided.</response>
+    /// <response code="500">An error occurred while creating the schedule.</response>
     [HttpPost]
     [Authorize(Policy = "Schedules.Create")]
+    [ProducesResponseType(typeof(Schedule), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<Schedule>> CreateSchedule([FromBody] Schedule schedule)
     {
         try
@@ -188,8 +232,25 @@ public class SchedulesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Updates an existing schedule with the specified configuration.
+    /// System schedules cannot be modified.
+    /// </summary>
+    /// <param name="id">The unique identifier of the schedule to update.</param>
+    /// <param name="schedule">The updated schedule object.</param>
+    /// <returns>No content on success.</returns>
+    /// <response code="204">Schedule was updated successfully.</response>
+    /// <response code="400">Schedule ID mismatch or invalid data provided.</response>
+    /// <response code="403">Cannot modify system schedules.</response>
+    /// <response code="404">Schedule with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while updating the schedule.</response>
     [HttpPut("{id}")]
     [Authorize(Policy = "Schedules.Update")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> UpdateSchedule(int id, [FromBody] Schedule schedule)
     {
         try
@@ -286,8 +347,22 @@ public class SchedulesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Soft deletes a schedule by marking it as deleted.
+    /// System schedules cannot be deleted.
+    /// </summary>
+    /// <param name="id">The unique identifier of the schedule to delete.</param>
+    /// <returns>No content on success.</returns>
+    /// <response code="204">Schedule was deleted successfully.</response>
+    /// <response code="403">Cannot delete system schedules or unauthorized access.</response>
+    /// <response code="404">Schedule with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while deleting the schedule.</response>
     [HttpDelete("{id}")]
     [Authorize(Policy = "Schedules.Delete")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> DeleteSchedule(int id)
     {
         try
@@ -333,8 +408,21 @@ public class SchedulesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Manually triggers immediate execution of a schedule.
+    /// </summary>
+    /// <param name="id">The unique identifier of the schedule to trigger.</param>
+    /// <returns>A success message if the job was triggered.</returns>
+    /// <response code="200">Job was triggered successfully.</response>
+    /// <response code="403">User is not authorized to trigger this schedule.</response>
+    /// <response code="404">Schedule with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while triggering the schedule.</response>
     [HttpPost("{id}/trigger")]
     [Authorize(Policy = "Schedules.Execute")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> TriggerSchedule(int id)
     {
         try
@@ -387,8 +475,21 @@ public class SchedulesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Pauses a schedule, disabling its automatic execution.
+    /// </summary>
+    /// <param name="id">The unique identifier of the schedule to pause.</param>
+    /// <returns>A success message if the job was paused.</returns>
+    /// <response code="200">Job was paused successfully.</response>
+    /// <response code="403">User is not authorized to pause this schedule.</response>
+    /// <response code="404">Schedule with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while pausing the schedule.</response>
     [HttpPost("{id}/pause")]
     [Authorize(Policy = "Schedules.Update")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> PauseSchedule(int id)
     {
         try
@@ -429,8 +530,21 @@ public class SchedulesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Resumes a paused schedule, enabling its automatic execution.
+    /// </summary>
+    /// <param name="id">The unique identifier of the schedule to resume.</param>
+    /// <returns>A success message if the job was resumed.</returns>
+    /// <response code="200">Job was resumed successfully.</response>
+    /// <response code="403">User is not authorized to resume this schedule.</response>
+    /// <response code="404">Schedule with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while resuming the schedule.</response>
     [HttpPost("{id}/resume")]
     [Authorize(Policy = "Schedules.Update")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> ResumeSchedule(int id)
     {
         try
@@ -487,7 +601,16 @@ public class SchedulesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Creates multiple schedules in bulk from a list of date/time specifications.
+    /// </summary>
+    /// <param name="request">The bulk schedule request containing schedule dates and configuration.</param>
+    /// <returns>A response containing the results of each schedule creation attempt.</returns>
+    /// <response code="200">Returns the bulk creation results with success/failure counts.</response>
+    /// <response code="500">An error occurred while processing bulk schedule creation.</response>
     [HttpPost("bulk")]
+    [ProducesResponseType(typeof(BulkScheduleResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<BulkScheduleResponse>> CreateBulkSchedules([FromBody] BulkScheduleRequest request)
     {
         var response = new BulkScheduleResponse();
@@ -563,8 +686,18 @@ public class SchedulesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Generates CRON expressions from a list of date/time values.
+    /// This endpoint is publicly accessible without authentication.
+    /// </summary>
+    /// <param name="request">The request containing date/time values to convert to CRON expressions.</param>
+    /// <returns>A list of CRON expressions with their descriptions and next fire times.</returns>
+    /// <response code="200">Returns the generated CRON expressions.</response>
+    /// <response code="500">An error occurred while generating CRON expressions.</response>
     [HttpPost("generate-cron")]
     [AllowAnonymous]
+    [ProducesResponseType(typeof(GenerateCronResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public ActionResult<GenerateCronResponse> GenerateCronExpressions([FromBody] GenerateCronRequest request)
     {
         try
@@ -631,7 +764,20 @@ public class SchedulesController : ControllerBase
         return $"Run once on {dateTime:MMMM dd, yyyy} at {dateTime:h:mm tt}";
     }
 
+    /// <summary>
+    /// Exports schedules to Excel or CSV format.
+    /// </summary>
+    /// <param name="clientId">Optional client ID to filter schedules.</param>
+    /// <param name="searchTerm">Optional search term to filter schedules.</param>
+    /// <param name="startDate">Optional start date filter.</param>
+    /// <param name="endDate">Optional end date filter.</param>
+    /// <param name="format">Export format: 'excel' (default) or 'csv'.</param>
+    /// <returns>A file download containing the exported schedules.</returns>
+    /// <response code="200">Returns the exported file.</response>
+    /// <response code="500">An error occurred while exporting schedules.</response>
     [HttpGet("export")]
+    [ProducesResponseType(typeof(FileResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> ExportSchedules(
         [FromQuery] int? clientId = null,
         [FromQuery] string? searchTerm = null,
@@ -769,7 +915,16 @@ public class SchedulesController : ControllerBase
         return value;
     }
 
+    /// <summary>
+    /// Tests a database connection string to verify connectivity.
+    /// </summary>
+    /// <param name="request">The request containing the connection string to test.</param>
+    /// <returns>A response indicating whether the connection was successful.</returns>
+    /// <response code="200">Returns the connection test result (success or failure with details).</response>
+    /// <response code="400">Connection string is required but was not provided.</response>
     [HttpPost("test-connection")]
+    [ProducesResponseType(typeof(TestConnectionResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<TestConnectionResponse>> TestConnection([FromBody] TestConnectionRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.ConnectionString))
@@ -820,7 +975,16 @@ public class SchedulesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Gets the count of schedules that have missed their expected execution time.
+    /// </summary>
+    /// <param name="windowDays">Optional number of days to look back for missed schedules. If not specified, checks all time.</param>
+    /// <returns>The count of missed schedules with metadata.</returns>
+    /// <response code="200">Returns the count of missed schedules.</response>
+    /// <response code="500">An error occurred while retrieving missed schedules count.</response>
     [HttpGet("missed/count")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<object>> GetMissedSchedulesCount([FromQuery] int? windowDays = null)
     {
         try
@@ -853,7 +1017,18 @@ public class SchedulesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves a paginated list of schedules that have missed their expected execution time.
+    /// </summary>
+    /// <param name="windowDays">Number of days to look back for missed schedules (default: 2).</param>
+    /// <param name="pageNumber">Page number for pagination (default: 1).</param>
+    /// <param name="pageSize">Number of items per page (default: 100).</param>
+    /// <returns>A paginated list of missed schedules with details.</returns>
+    /// <response code="200">Returns the list of missed schedules.</response>
+    /// <response code="500">An error occurred while retrieving missed schedules.</response>
     [HttpGet("missed")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<object>> GetMissedSchedules(
         [FromQuery] int? windowDays = 2,
         [FromQuery] int pageNumber = 1,
@@ -909,15 +1084,40 @@ public class SchedulesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Manually triggers a missed schedule for immediate execution.
+    /// </summary>
+    /// <param name="id">The unique identifier of the missed schedule to trigger.</param>
+    /// <returns>A success message if the job was triggered.</returns>
+    /// <response code="200">Job was triggered successfully.</response>
+    /// <response code="403">User is not authorized to trigger this schedule.</response>
+    /// <response code="404">Schedule with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while triggering the schedule.</response>
     [HttpPost("missed/{id}/trigger")]
     [Authorize(Policy = "Schedules.Execute")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> TriggerMissedSchedule(int id)
     {
         return await TriggerSchedule(id);
     }
 
+    /// <summary>
+    /// Triggers multiple missed schedules in bulk for recovery purposes.
+    /// All authenticated users can trigger missed schedules.
+    /// </summary>
+    /// <param name="request">The request containing schedule IDs to trigger and optional delay between triggers.</param>
+    /// <returns>A summary of the bulk trigger operation with success/failure counts and details.</returns>
+    /// <response code="200">Returns the bulk trigger results.</response>
+    /// <response code="400">No schedule IDs were provided in the request.</response>
+    /// <response code="500">An error occurred while bulk triggering missed schedules.</response>
     [HttpPost("missed/bulk-trigger")]
-    [Authorize] // All authenticated users can trigger missed schedules for recovery purposes
+    [Authorize]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<object>> BulkTriggerMissedSchedules([FromBody] BulkTriggerRequest request)
     {
         try
@@ -997,7 +1197,21 @@ public class SchedulesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Retrieves schedules formatted for calendar display within a date range.
+    /// </summary>
+    /// <param name="startDate">The start date of the calendar view (required).</param>
+    /// <param name="endDate">The end date of the calendar view (required).</param>
+    /// <param name="clientId">Optional client ID to filter schedules.</param>
+    /// <param name="maxPerDay">Maximum number of schedules to return per day (default: 10).</param>
+    /// <returns>A list of schedules with calendar-relevant properties.</returns>
+    /// <response code="200">Returns the schedules for the calendar view.</response>
+    /// <response code="400">Start date and end date are required but were not provided.</response>
+    /// <response code="500">An error occurred while retrieving schedules for calendar.</response>
     [HttpGet("calendar")]
+    [ProducesResponseType(typeof(IEnumerable<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<IEnumerable<object>>> GetSchedulesForCalendar(
         [FromQuery] DateTime? startDate = null,
         [FromQuery] DateTime? endDate = null,
