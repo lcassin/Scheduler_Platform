@@ -490,26 +490,46 @@
 
     private async Task EditBilling(AdrAccount account)
     {
-        var parameters = new DialogParameters<EditBillingDialog>
+        // Get the rules for this account
+        var rules = await AdrService.GetRulesByAccountAsync(account.Id);
+        if (rules.Count == 0)
         {
-            { x => x.Account, account }
+            Snackbar.Add("No rules found for this account", Severity.Warning);
+            return;
+        }
+        
+        // Use the first (primary) rule - typically there's one rule per account
+        var rule = rules.First();
+        
+        var parameters = new DialogParameters<EditRuleDialog>
+        {
+            { x => x.RuleId, rule.Id }
         };
-        var options = new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true };
-        var dialog = await DialogService.ShowAsync<EditBillingDialog>("Edit Account Rules", parameters, options);
+        var options = new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseOnEscapeKey = true };
+        var dialog = await DialogService.ShowAsync<EditRuleDialog>("Edit Account Rules", parameters, options);
         var result = await dialog.Result;
         
         if (result != null && !result.Canceled)
         {
             await _table.ReloadServerData();
-            Snackbar.Add("Account billing data updated successfully", Severity.Success);
         }
     }
 
     private async Task ClearOverride(AdrAccount account)
     {
+        // Get the rules for this account to clear rule override
+        var rules = await AdrService.GetRulesByAccountAsync(account.Id);
+        if (rules.Count == 0)
+        {
+            Snackbar.Add("No rules found for this account", Severity.Warning);
+            return;
+        }
+        
+        var rule = rules.First();
+        
         var confirmed = await DialogService.ShowMessageBox(
             "Clear Override",
-            $"Are you sure you want to clear the manual override for account {account.VMAccountNumber}? The next sync will update billing data from the external source.",
+            $"Are you sure you want to clear the manual override for account {account.VMAccountNumber}? The next sync will update rule data from the external source.",
             yesText: "Clear Override",
             cancelText: "Cancel");
         
@@ -517,7 +537,7 @@
         {
             try
             {
-                await AdrService.ClearAccountOverrideAsync(account.Id);
+                await AdrService.ClearRuleOverrideAsync(rule.Id);
                 await _table.ReloadServerData();
                 Snackbar.Add("Override cleared successfully", Severity.Success);
             }
