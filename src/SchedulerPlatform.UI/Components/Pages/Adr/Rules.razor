@@ -16,42 +16,52 @@
     </div>
 
     <MudPaper Class="pa-4 mb-4">
-        <MudGrid>
-            <MudItem xs="12" sm="6" md="3">
+        <MudGrid Class="mb-4" Spacing="2">
+            <MudItem xs="12" md="3">
                 <MudTextField @bind-Value="_searchVendorCode" 
                               Label="Vendor Code" 
                               Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
                               Immediate="true"
                               Adornment="Adornment.End"
                               AdornmentIcon="@Icons.Material.Filled.Search" />
             </MudItem>
-            <MudItem xs="12" sm="6" md="3">
+            <MudItem xs="12" md="3">
                 <MudTextField @bind-Value="_searchAccountNumber" 
                               Label="Account Number" 
                               Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
                               Immediate="true"
                               Adornment="Adornment.End"
                               AdornmentIcon="@Icons.Material.Filled.Search" />
             </MudItem>
-            <MudItem xs="12" sm="6" md="3">
+            <MudItem xs="12" md="2">
                 <MudSelect @bind-Value="_filterEnabled" 
                            Label="Status" 
-                           Variant="Variant.Outlined">
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense">
                     <MudSelectItem Value="@((bool?)null)">All</MudSelectItem>
                     <MudSelectItem Value="@((bool?)true)">Enabled</MudSelectItem>
                     <MudSelectItem Value="@((bool?)false)">Disabled</MudSelectItem>
                 </MudSelect>
             </MudItem>
-            <MudItem xs="12" sm="6" md="3" Class="d-flex align-end">
-                <MudButton Variant="Variant.Outlined" 
-                           Color="Color.Primary" 
-                           OnClick="LoadRules"
-                           Class="mr-2">
-                    Search
+            <MudItem xs="12" md="2">
+                <MudSelect @bind-Value="_filterOverridden" 
+                           Label="Override" 
+                           Variant="Variant.Outlined"
+                           Margin="Margin.Dense">
+                    <MudSelectItem Value="@((bool?)null)">All</MudSelectItem>
+                    <MudSelectItem Value="@((bool?)true)">Overridden</MudSelectItem>
+                    <MudSelectItem Value="@((bool?)false)">Not Overridden</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+        <MudGrid Class="mb-4" Spacing="2">
+            <MudItem xs="12" Class="d-flex align-center justify-end gap-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadRules" StartIcon="@Icons.Material.Filled.FilterAlt">
+                    Apply
                 </MudButton>
-                <MudButton Variant="Variant.Text" 
-                           Color="Color.Default" 
-                           OnClick="ClearFilters">
+                <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ClearFilters" StartIcon="@Icons.Material.Filled.Clear">
                     Clear
                 </MudButton>
             </MudItem>
@@ -172,6 +182,7 @@
     private string? _searchVendorCode;
     private string? _searchAccountNumber;
     private bool? _filterEnabled = true;
+    private bool? _filterOverridden;
     
     private int _currentPage = 1;
     private int _totalPages = 1;
@@ -201,6 +212,8 @@
                 queryParams.Add($"accountNumber={Uri.EscapeDataString(_searchAccountNumber)}");
             if (_filterEnabled.HasValue)
                 queryParams.Add($"isEnabled={_filterEnabled.Value}");
+            if (_filterOverridden.HasValue)
+                queryParams.Add($"isOverridden={_filterOverridden.Value}");
             
             var url = $"adr/rules?{string.Join("&", queryParams)}";
             var client = CreateClient();
@@ -222,12 +235,14 @@
         }
     }
 
-    private void ClearFilters()
+    private async Task ClearFilters()
     {
         _searchVendorCode = null;
         _searchAccountNumber = null;
         _filterEnabled = true;
+        _filterOverridden = null;
         _currentPage = 1;
+        await LoadRules();
     }
 
     private async Task OnPageChanged(int page)
