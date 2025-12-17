@@ -2803,7 +2803,7 @@ public class AdrController : ControllerBase
     /// <response code="200">Returns the ADR configuration.</response>
     /// <response code="500">An error occurred while retrieving the configuration.</response>
     [HttpGet("configuration")]
-    [Authorize(Policy = "Admin")]
+    [Authorize(Policy = "AdminOnly")]
     [ProducesResponseType(typeof(AdrConfiguration), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<AdrConfiguration>> GetConfiguration()
@@ -2852,7 +2852,7 @@ public class AdrController : ControllerBase
     /// <response code="400">Invalid configuration values provided.</response>
     /// <response code="500">An error occurred while updating the configuration.</response>
     [HttpPut("configuration")]
-    [Authorize(Policy = "Admin")]
+    [Authorize(Policy = "AdminOnly")]
     [ProducesResponseType(typeof(AdrConfiguration), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -2923,7 +2923,7 @@ public class AdrController : ControllerBase
     /// <response code="200">Returns the list of blacklist entries.</response>
     /// <response code="500">An error occurred while retrieving blacklist entries.</response>
     [HttpGet("blacklist")]
-    [Authorize(Policy = "Admin")]
+    [Authorize(Policy = "AdminOnly")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<object>> GetBlacklist(
@@ -2973,7 +2973,7 @@ public class AdrController : ControllerBase
     /// <response code="404">Blacklist entry with the specified ID was not found.</response>
     /// <response code="500">An error occurred while retrieving the blacklist entry.</response>
     [HttpGet("blacklist/{id}")]
-    [Authorize(Policy = "Admin")]
+    [Authorize(Policy = "AdminOnly")]
     [ProducesResponseType(typeof(AdrAccountBlacklist), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -3006,7 +3006,7 @@ public class AdrController : ControllerBase
     /// <response code="400">Invalid blacklist entry data provided.</response>
     /// <response code="500">An error occurred while creating the blacklist entry.</response>
     [HttpPost("blacklist")]
-    [Authorize(Policy = "Admin")]
+    [Authorize(Policy = "AdminOnly")]
     [ProducesResponseType(typeof(AdrAccountBlacklist), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -3077,7 +3077,7 @@ public class AdrController : ControllerBase
     /// <response code="404">Blacklist entry with the specified ID was not found.</response>
     /// <response code="500">An error occurred while updating the blacklist entry.</response>
     [HttpPut("blacklist/{id}")]
-    [Authorize(Policy = "Admin")]
+    [Authorize(Policy = "AdminOnly")]
     [ProducesResponseType(typeof(AdrAccountBlacklist), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -3132,7 +3132,7 @@ public class AdrController : ControllerBase
     /// <response code="404">Blacklist entry with the specified ID was not found.</response>
     /// <response code="500">An error occurred while deleting the blacklist entry.</response>
     [HttpDelete("blacklist/{id}")]
-    [Authorize(Policy = "Admin")]
+    [Authorize(Policy = "AdminOnly")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -3180,7 +3180,7 @@ public class AdrController : ControllerBase
         /// <response code="200">Returns the list of job types.</response>
         /// <response code="500">An error occurred while retrieving job types.</response>
         [HttpGet("job-types")]
-        [Authorize(Policy = "Admin")]
+        [Authorize(Policy = "AdminOnly")]
         [ProducesResponseType(typeof(IEnumerable<AdrJobType>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
         public async Task<ActionResult<IEnumerable<AdrJobType>>> GetJobTypes([FromQuery] bool includeInactive = false)
@@ -3218,7 +3218,7 @@ public class AdrController : ControllerBase
         /// <response code="404">Job type with the specified ID was not found.</response>
         /// <response code="500">An error occurred while retrieving the job type.</response>
         [HttpGet("job-types/{id}")]
-        [Authorize(Policy = "Admin")]
+        [Authorize(Policy = "AdminOnly")]
         [ProducesResponseType(typeof(AdrJobType), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -3253,7 +3253,7 @@ public class AdrController : ControllerBase
         /// <response code="400">Invalid job type data provided or code already exists.</response>
         /// <response code="500">An error occurred while creating the job type.</response>
         [HttpPost("job-types")]
-        [Authorize(Policy = "Admin")]
+        [Authorize(Policy = "AdminOnly")]
         [ProducesResponseType(typeof(AdrJobType), StatusCodes.Status201Created)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -3324,7 +3324,7 @@ public class AdrController : ControllerBase
         /// <response code="404">Job type with the specified ID was not found.</response>
         /// <response code="500">An error occurred while updating the job type.</response>
         [HttpPut("job-types/{id}")]
-        [Authorize(Policy = "Admin")]
+        [Authorize(Policy = "AdminOnly")]
         [ProducesResponseType(typeof(AdrJobType), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -3420,7 +3420,7 @@ public class AdrController : ControllerBase
         /// <response code="404">Job type with the specified ID was not found.</response>
         /// <response code="500">An error occurred while deleting the job type.</response>
         [HttpDelete("job-types/{id}")]
-        [Authorize(Policy = "Admin")]
+        [Authorize(Policy = "AdminOnly")]
         [ProducesResponseType(StatusCodes.Status204NoContent)]
         [ProducesResponseType(StatusCodes.Status400BadRequest)]
         [ProducesResponseType(StatusCodes.Status404NotFound)]
