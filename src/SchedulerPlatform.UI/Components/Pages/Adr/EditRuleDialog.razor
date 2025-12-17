@@ -1,0 +1,189 @@
+@using SchedulerPlatform.UI.Models
+@using SchedulerPlatform.UI.Services
+@inject IAdrService AdrService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Edit" Class="mr-2" />
+            Edit Account Rule
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressCircular Indeterminate="true" />
+        }
+        else if (_rule != null)
+        {
+            <MudText Typo="Typo.body2" Class="mb-4">
+                Editing rule for account <strong>@_rule.VMAccountNumber</strong> (@_rule.VendorCode)
+            </MudText>
+            
+            @if (_rule.IsManuallyOverridden)
+            {
+                <MudAlert Severity="Severity.Info" Class="mb-4">
+                    This rule was previously overridden by @_rule.OverriddenBy on @_rule.OverriddenDateTime?.ToLocalTime().ToString("MM/dd/yyyy HH:mm")
+                </MudAlert>
+            }
+
+            <MudGrid>
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker @bind-Date="_nextRunDate" 
+                                   Label="Next Run Date" 
+                                   Placeholder="Select the next run date"
+                                   Variant="Variant.Outlined"
+                                   HelperText="When the next ADR request should be sent" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="string" @bind-Value="_periodType" 
+                               Label="Billing Frequency" 
+                               Variant="Variant.Outlined"
+                               HelperText="How often invoices are generated">
+                        <MudSelectItem Value="@("Bi-Weekly")">Bi-Weekly (14 days)</MudSelectItem>
+                        <MudSelectItem Value="@("Monthly")">Monthly (30 days)</MudSelectItem>
+                        <MudSelectItem Value="@("Bi-Monthly")">Bi-Monthly (60 days)</MudSelectItem>
+                        <MudSelectItem Value="@("Quarterly")">Quarterly (90 days)</MudSelectItem>
+                        <MudSelectItem Value="@("Semi-Annually")">Semi-Annually (180 days)</MudSelectItem>
+                        <MudSelectItem Value="@("Annually")">Annually (365 days)</MudSelectItem>
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker @bind-Date="_rangeStartDate" 
+                                   Label="Search Window Start" 
+                                   Placeholder="Select start date"
+                                   Variant="Variant.Outlined"
+                                   HelperText="Start of the invoice search window" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker @bind-Date="_rangeEndDate" 
+                                   Label="Search Window End" 
+                                   Placeholder="Select end date"
+                                   Variant="Variant.Outlined"
+                                   HelperText="End of the invoice search window" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudNumericField @bind-Value="_periodDays" 
+                                     Label="Period Days" 
+                                     Variant="Variant.Outlined"
+                                     Min="1"
+                                     HelperText="Number of days between runs" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSwitch @bind-Value="_isEnabled" 
+                               Label="Rule Enabled" 
+                               Color="Color.Primary" />
+                </MudItem>
+            </MudGrid>
+
+            <MudAlert Severity="Severity.Warning" Class="mt-4">
+                <strong>Note:</strong> Saving these changes will mark this rule as manually overridden. 
+                The next account sync will preserve these values instead of updating them from the external source.
+            </MudAlert>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Error">
+                Rule not found.
+            </MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Disabled="_saving">Cancel</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Save" Disabled="_saving || _rule == null">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                <span>Saving...</span>
+            }
+            else
+            {
+                <span>Save Changes</span>
+            }
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] 
+    private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public int RuleId { get; set; }
+
+    private AccountRuleDto? _rule;
+    private bool _loading = true;
+    private bool _saving = false;
+
+    private DateTime? _nextRunDate;
+    private DateTime? _rangeStartDate;
+    private DateTime? _rangeEndDate;
+    private string? _periodType;
+    private int? _periodDays;
+    private bool _isEnabled;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRule();
+    }
+
+    private async Task LoadRule()
+    {
+        _loading = true;
+        try
+        {
+            _rule = await AdrService.GetRuleAsync(RuleId);
+            if (_rule != null)
+            {
+                _nextRunDate = _rule.NextRunDateTime?.ToLocalTime();
+                _rangeStartDate = _rule.NextRangeStartDateTime?.ToLocalTime();
+                _rangeEndDate = _rule.NextRangeEndDateTime?.ToLocalTime();
+                _periodType = _rule.PeriodType;
+                _periodDays = _rule.PeriodDays;
+                _isEnabled = _rule.IsEnabled;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading rule: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task Save()
+    {
+        if (_rule == null) return;
+
+        _saving = true;
+        try
+        {
+            var request = new UpdateRuleRequest
+            {
+                NextRunDateTime = _nextRunDate?.ToUniversalTime(),
+                NextRangeStartDateTime = _rangeStartDate?.ToUniversalTime(),
+                NextRangeEndDateTime = _rangeEndDate?.ToUniversalTime(),
+                PeriodType = _periodType,
+                PeriodDays = _periodDays,
+                IsEnabled = _isEnabled
+            };
+            
+            await AdrService.UpdateRuleAsync(RuleId, request);
+            Snackbar.Add("Rule updated successfully", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving rule: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

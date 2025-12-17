@@ -237,6 +237,7 @@ builder.Services.AddHostedService<SchedulerPlatform.API.Services.AdrBackgroundOr
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.StartupRecoveryService>();
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.ScheduleHydrationService>();
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.MissedSchedulesProcessor>();
+builder.Services.AddHostedService<SchedulerPlatform.API.Services.DataArchivalService>();
 
 builder.Services.AddHttpClient("ApiCallJob");
 builder.Services.AddHttpClient("AdrApi");

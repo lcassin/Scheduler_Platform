@@ -137,6 +137,23 @@ public class AdrController : ControllerBase
             // Get account IDs from the current page
             var accountIds = items.Select(a => a.Id).ToList();
             
+            // Get rule override status for each account (single query)
+            var ruleOverrideStatuses = await _dbContext.AdrAccountRules
+                .Where(r => !r.IsDeleted && accountIds.Contains(r.AdrAccountId))
+                .GroupBy(r => r.AdrAccountId)
+                .Select(g => new
+                {
+                    AdrAccountId = g.Key,
+                    // Get the primary rule's override status (first rule per account)
+                    RuleIsManuallyOverridden = g.OrderBy(r => r.Id).Select(r => r.IsManuallyOverridden).FirstOrDefault(),
+                    RuleOverriddenBy = g.OrderBy(r => r.Id).Select(r => r.OverriddenBy).FirstOrDefault(),
+                    RuleOverriddenDateTime = g.OrderBy(r => r.Id).Select(r => r.OverriddenDateTime).FirstOrDefault()
+                })
+                .ToListAsync();
+            
+            // Create a lookup dictionary for rule override status
+            var ruleOverrideLookup = ruleOverrideStatuses.ToDictionary(x => x.AdrAccountId);
+            
             // Get current billing period job status for each account (single query)
             var currentJobStatuses = await _dbContext.AdrJobs
                 .Where(j => !j.IsDeleted && accountIds.Contains(j.AdrAccountId))
@@ -194,7 +211,10 @@ public class AdrController : ControllerBase
                 a.CreatedDateTime,
                 a.ModifiedDateTime,
                 CurrentJobStatus = jobStatusLookup.TryGetValue(a.Id, out var js) ? js.CurrentJobStatus : null,
-                LastCompletedDateTime = jobStatusLookup.TryGetValue(a.Id, out var js2) ? js2.LastCompletedDateTime : null
+                LastCompletedDateTime = jobStatusLookup.TryGetValue(a.Id, out var js2) ? js2.LastCompletedDateTime : null,
+                RuleIsManuallyOverridden = ruleOverrideLookup.TryGetValue(a.Id, out var ro) && ro.RuleIsManuallyOverridden,
+                RuleOverriddenBy = ruleOverrideLookup.TryGetValue(a.Id, out var ro2) ? ro2.RuleOverriddenBy : null,
+                RuleOverriddenDateTime = ruleOverrideLookup.TryGetValue(a.Id, out var ro3) ? ro3.RuleOverriddenDateTime : null
             }).ToList();
 
             return Ok(new
@@ -1134,18 +1154,34 @@ public class AdrController : ControllerBase
             
             var jobStatusLookup = jobStatuses.ToDictionary(x => x.AdrAccountId);
 
+            // Get rule override status for each account (single query)
+            var ruleOverrideStatuses = await _dbContext.AdrAccountRules
+                .Where(r => !r.IsDeleted && accountIds.Contains(r.AdrAccountId))
+                .GroupBy(r => r.AdrAccountId)
+                .Select(g => new
+                {
+                    AdrAccountId = g.Key,
+                    RuleIsManuallyOverridden = g.OrderBy(r => r.Id).Select(r => r.IsManuallyOverridden).FirstOrDefault(),
+                    RuleOverriddenBy = g.OrderBy(r => r.Id).Select(r => r.OverriddenBy).FirstOrDefault(),
+                    RuleOverriddenDateTime = g.OrderBy(r => r.Id).Select(r => r.OverriddenDateTime).FirstOrDefault()
+                })
+                .ToListAsync();
+            
+            var ruleOverrideLookup = ruleOverrideStatuses.ToDictionary(x => x.AdrAccountId);
+
             if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
             {
                 var csv = new System.Text.StringBuilder();
-                csv.AppendLine("Account #,VM Account ID,Interface Account ID,Client,Vendor Code,Period Type,Next Run,Run Status,Job Status,Last Completed,Historical Status,Last Invoice,Expected Next,Is Overridden,Overridden By,Overridden Date");
+                csv.AppendLine("Account #,VM Account ID,Interface Account ID,Client,Vendor Code,Period Type,Next Run,Run Status,Job Status,Last Completed,Historical Status,Last Invoice,Expected Next,Account Overridden,Account Overridden By,Account Overridden Date,Rule Overridden,Rule Overridden By,Rule Overridden Date");
 
                 foreach (var a in accounts)
                 {
                     var hasJobStatus = jobStatusLookup.TryGetValue(a.Id, out var js);
                     var currentJobStatus = hasJobStatus ? js?.CurrentJobStatus : null;
                     var lastCompleted = hasJobStatus ? js?.LastCompletedDateTime : null;
+                    var hasRuleOverride = ruleOverrideLookup.TryGetValue(a.Id, out var ro);
                     
-                    csv.AppendLine($"{CsvEscape(a.VMAccountNumber)},{a.VMAccountId},{CsvEscape(a.InterfaceAccountId)},{CsvEscape(a.ClientName)},{CsvEscape(a.VendorCode)},{CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.NextRunStatus)},{CsvEscape(currentJobStatus)},{lastCompleted?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.IsManuallyOverridden},{CsvEscape(a.OverriddenBy)},{a.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""}");
+                    csv.AppendLine($"{CsvEscape(a.VMAccountNumber)},{a.VMAccountId},{CsvEscape(a.InterfaceAccountId)},{CsvEscape(a.ClientName)},{CsvEscape(a.VendorCode)},{CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.NextRunStatus)},{CsvEscape(currentJobStatus)},{lastCompleted?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.IsManuallyOverridden},{CsvEscape(a.OverriddenBy)},{a.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""},{(hasRuleOverride && ro!.RuleIsManuallyOverridden ? "Yes" : "No")},{CsvEscape(hasRuleOverride ? ro!.RuleOverriddenBy : null)},{(hasRuleOverride ? ro!.RuleOverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") : "") ?? ""}");
                 }
 
                 return File(System.Text.Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", $"adr_accounts_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
@@ -1169,9 +1205,12 @@ public class AdrController : ControllerBase
             worksheet.Cell(1, 11).Value = "Historical Status";
             worksheet.Cell(1, 12).Value = "Last Invoice";
             worksheet.Cell(1, 13).Value = "Expected Next";
-            worksheet.Cell(1, 14).Value = "Is Overridden";
-            worksheet.Cell(1, 15).Value = "Overridden By";
-            worksheet.Cell(1, 16).Value = "Overridden Date";
+            worksheet.Cell(1, 14).Value = "Account Overridden";
+            worksheet.Cell(1, 15).Value = "Account Overridden By";
+            worksheet.Cell(1, 16).Value = "Account Overridden Date";
+            worksheet.Cell(1, 17).Value = "Rule Overridden";
+            worksheet.Cell(1, 18).Value = "Rule Overridden By";
+            worksheet.Cell(1, 19).Value = "Rule Overridden Date";
 
             var headerRow = worksheet.Row(1);
             headerRow.Style.Font.Bold = true;
@@ -1182,6 +1221,7 @@ public class AdrController : ControllerBase
                 var hasJobStatus = jobStatusLookup.TryGetValue(a.Id, out var js);
                 var currentJobStatus = hasJobStatus ? js?.CurrentJobStatus : null;
                 var lastCompleted = hasJobStatus ? js?.LastCompletedDateTime : null;
+                var hasRuleOverride = ruleOverrideLookup.TryGetValue(a.Id, out var ro);
                 
                 worksheet.Cell(row, 1).Value = a.VMAccountNumber;
                 worksheet.Cell(row, 2).Value = a.VMAccountId;
@@ -1199,6 +1239,9 @@ public class AdrController : ControllerBase
                 worksheet.Cell(row, 14).Value = a.IsManuallyOverridden ? "Yes" : "No";
                 worksheet.Cell(row, 15).Value = a.OverriddenBy ?? "";
                 if (a.OverriddenDateTime.HasValue) worksheet.Cell(row, 16).Value = a.OverriddenDateTime.Value;
+                worksheet.Cell(row, 17).Value = hasRuleOverride && ro!.RuleIsManuallyOverridden ? "Yes" : "No";
+                worksheet.Cell(row, 18).Value = hasRuleOverride ? ro!.RuleOverriddenBy ?? "" : "";
+                if (hasRuleOverride && ro!.RuleOverriddenDateTime.HasValue) worksheet.Cell(row, 19).Value = ro.RuleOverriddenDateTime.Value;
                 row++;
             }
 
@@ -2628,9 +2671,1155 @@ public class AdrController : ControllerBase
         return Ok(statuses);
     }
 
+        #endregion
+
+        #region AdrAccountRule Endpoints
+
+        /// <summary>
+        /// Retrieves a paginated list of account rules with optional filtering.
+        /// </summary>
+        /// <param name="page">Page number (default: 1).</param>
+        /// <param name="pageSize">Number of items per page (default: 20).</param>
+        /// <param name="vendorCode">Filter by vendor code.</param>
+        /// <param name="accountNumber">Filter by account number.</param>
+        /// <param name="isEnabled">Filter by enabled status.</param>
+        /// <returns>A paginated list of account rules.</returns>
+        /// <response code="200">Returns the paginated list of account rules.</response>
+        /// <response code="500">An error occurred while retrieving account rules.</response>
+        [HttpGet("rules")]
+        [ProducesResponseType(typeof(RulesPagedResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<RulesPagedResponse>> GetRules(
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20,
+            [FromQuery] string? vendorCode = null,
+            [FromQuery] string? accountNumber = null,
+            [FromQuery] bool? isEnabled = null)
+        {
+            try
+            {
+                var query = _dbContext.AdrAccountRules
+                    .Include(r => r.AdrAccount)
+                    .Where(r => !r.IsDeleted);
+            
+                if (!string.IsNullOrWhiteSpace(vendorCode))
+                {
+                    query = query.Where(r => r.AdrAccount != null && r.AdrAccount.VendorCode != null && 
+                        r.AdrAccount.VendorCode.Contains(vendorCode));
+                }
+            
+                if (!string.IsNullOrWhiteSpace(accountNumber))
+                {
+                    query = query.Where(r => r.AdrAccount != null && r.AdrAccount.VMAccountNumber != null && 
+                        r.AdrAccount.VMAccountNumber.Contains(accountNumber));
+                }
+            
+                if (isEnabled.HasValue)
+                {
+                    query = query.Where(r => r.IsEnabled == isEnabled.Value);
+                }
+            
+                var totalCount = await query.CountAsync();
+            
+                var rules = await query
+                    .OrderBy(r => r.AdrAccount != null ? r.AdrAccount.VendorCode : "")
+                    .ThenBy(r => r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : "")
+                    .Skip((page - 1) * pageSize)
+                    .Take(pageSize)
+                    .Select(r => new AccountRuleDto
+                    {
+                        Id = r.Id,
+                        AdrAccountId = r.AdrAccountId,
+                        VendorCode = r.AdrAccount != null ? r.AdrAccount.VendorCode : null,
+                        VMAccountNumber = r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : null,
+                        JobTypeId = r.JobTypeId,
+                        PeriodType = r.PeriodType,
+                        PeriodDays = r.PeriodDays,
+                        NextRunDateTime = r.NextRunDateTime,
+                        NextRangeStartDateTime = r.NextRangeStartDateTime,
+                        NextRangeEndDateTime = r.NextRangeEndDateTime,
+                        IsEnabled = r.IsEnabled,
+                        IsManuallyOverridden = r.IsManuallyOverridden,
+                        OverriddenBy = r.OverriddenBy,
+                        OverriddenDateTime = r.OverriddenDateTime
+                    })
+                    .ToListAsync();
+            
+                return Ok(new RulesPagedResponse
+                {
+                    Items = rules,
+                    TotalCount = totalCount,
+                    Page = page,
+                    PageSize = pageSize
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving ADR account rules");
+                return StatusCode(500, "An error occurred while retrieving ADR account rules");
+            }
+        }
+
+        /// <summary>
+        /// Exports account rules to Excel or CSV format.
+        /// </summary>
+        /// <param name="vendorCode">Filter by vendor code.</param>
+        /// <param name="accountNumber">Filter by account number.</param>
+        /// <param name="isEnabled">Filter by enabled status.</param>
+        /// <param name="isOverridden">Filter by override status.</param>
+        /// <param name="format">Export format: 'excel' or 'csv' (default: excel).</param>
+        /// <returns>File download with the exported rules.</returns>
+        /// <response code="200">Returns the exported file.</response>
+        /// <response code="500">An error occurred while exporting rules.</response>
+        [HttpGet("rules/export")]
+        [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<IActionResult> ExportRules(
+            [FromQuery] string? vendorCode = null,
+            [FromQuery] string? accountNumber = null,
+            [FromQuery] bool? isEnabled = null,
+            [FromQuery] bool? isOverridden = null,
+            [FromQuery] string format = "excel")
+        {
+            try
+            {
+                var query = _dbContext.AdrAccountRules
+                    .Include(r => r.AdrAccount)
+                    .Where(r => !r.IsDeleted);
+            
+                if (!string.IsNullOrWhiteSpace(vendorCode))
+                {
+                    query = query.Where(r => r.AdrAccount != null && r.AdrAccount.VendorCode != null && 
+                        r.AdrAccount.VendorCode.Contains(vendorCode));
+                }
+            
+                if (!string.IsNullOrWhiteSpace(accountNumber))
+                {
+                    query = query.Where(r => r.AdrAccount != null && r.AdrAccount.VMAccountNumber != null && 
+                        r.AdrAccount.VMAccountNumber.Contains(accountNumber));
+                }
+            
+                if (isEnabled.HasValue)
+                {
+                    query = query.Where(r => r.IsEnabled == isEnabled.Value);
+                }
+
+                if (isOverridden.HasValue)
+                {
+                    query = query.Where(r => r.IsManuallyOverridden == isOverridden.Value);
+                }
+            
+                var rules = await query
+                    .OrderBy(r => r.AdrAccount != null ? r.AdrAccount.VendorCode : "")
+                    .ThenBy(r => r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : "")
+                    .Select(r => new
+                    {
+                        VendorCode = r.AdrAccount != null ? r.AdrAccount.VendorCode : null,
+                        VMAccountNumber = r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : null,
+                        r.JobTypeId,
+                        r.PeriodType,
+                        r.PeriodDays,
+                        r.NextRunDateTime,
+                        r.NextRangeStartDateTime,
+                        r.NextRangeEndDateTime,
+                        r.IsEnabled,
+                        r.IsManuallyOverridden,
+                        r.OverriddenBy,
+                        r.OverriddenDateTime
+                    })
+                    .ToListAsync();
+
+                if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
+                {
+                    var csv = new System.Text.StringBuilder();
+                    csv.AppendLine("Vendor Code,Account Number,Job Type,Period Type,Period Days,Next Run,Search Window Start,Search Window End,Enabled,Overridden,Overridden By,Overridden Date");
+
+                    foreach (var r in rules)
+                    {
+                        csv.AppendLine($"{CsvEscape(r.VendorCode)},{CsvEscape(r.VMAccountNumber)},{r.JobTypeId},{CsvEscape(r.PeriodType)},{r.PeriodDays},{r.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeStartDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? ""},{(r.IsEnabled ? "Yes" : "No")},{(r.IsManuallyOverridden ? "Yes" : "No")},{CsvEscape(r.OverriddenBy)},{r.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""}");
+                    }
+
+                    return File(System.Text.Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", $"adr_rules_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
+                }
+
+                // Excel format
+                using var workbook = new XLWorkbook();
+                var worksheet = workbook.Worksheets.Add("ADR Rules");
+
+                // Headers
+                worksheet.Cell(1, 1).Value = "Vendor Code";
+                worksheet.Cell(1, 2).Value = "Account Number";
+                worksheet.Cell(1, 3).Value = "Job Type";
+                worksheet.Cell(1, 4).Value = "Period Type";
+                worksheet.Cell(1, 5).Value = "Period Days";
+                worksheet.Cell(1, 6).Value = "Next Run";
+                worksheet.Cell(1, 7).Value = "Search Window Start";
+                worksheet.Cell(1, 8).Value = "Search Window End";
+                worksheet.Cell(1, 9).Value = "Enabled";
+                worksheet.Cell(1, 10).Value = "Overridden";
+                worksheet.Cell(1, 11).Value = "Overridden By";
+                worksheet.Cell(1, 12).Value = "Overridden Date";
+
+                var headerRow = worksheet.Row(1);
+                headerRow.Style.Font.Bold = true;
+
+                int row = 2;
+                foreach (var r in rules)
+                {
+                    worksheet.Cell(row, 1).Value = r.VendorCode ?? "";
+                    worksheet.Cell(row, 2).Value = r.VMAccountNumber ?? "";
+                    worksheet.Cell(row, 3).Value = r.JobTypeId;
+                    worksheet.Cell(row, 4).Value = r.PeriodType ?? "";
+                    worksheet.Cell(row, 5).Value = r.PeriodDays ?? 0;
+                    if (r.NextRunDateTime.HasValue) worksheet.Cell(row, 6).Value = r.NextRunDateTime.Value;
+                    if (r.NextRangeStartDateTime.HasValue) worksheet.Cell(row, 7).Value = r.NextRangeStartDateTime.Value;
+                    if (r.NextRangeEndDateTime.HasValue) worksheet.Cell(row, 8).Value = r.NextRangeEndDateTime.Value;
+                    worksheet.Cell(row, 9).Value = r.IsEnabled ? "Yes" : "No";
+                    worksheet.Cell(row, 10).Value = r.IsManuallyOverridden ? "Yes" : "No";
+                    worksheet.Cell(row, 11).Value = r.OverriddenBy ?? "";
+                    if (r.OverriddenDateTime.HasValue) worksheet.Cell(row, 12).Value = r.OverriddenDateTime.Value;
+                    row++;
+                }
+
+                worksheet.Columns().AdjustToContents();
+
+                using var stream = new MemoryStream();
+                workbook.SaveAs(stream);
+                return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    $"adr_rules_{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error exporting ADR rules");
+                return StatusCode(500, "An error occurred while exporting ADR rules");
+            }
+        }
+
+        /// <summary>
+        /// Retrieves account rules by account ID.
+        /// </summary>
+        /// <param name="accountId">The account ID.</param>
+        /// <returns>List of account rules for the specified account.</returns>
+        /// <response code="200">Returns the list of account rules.</response>
+        /// <response code="500">An error occurred while retrieving the rules.</response>
+        [HttpGet("rules/by-account/{accountId}")]
+        [ProducesResponseType(typeof(List<AccountRuleDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<List<AccountRuleDto>>> GetRulesByAccount(int accountId)
+        {
+            try
+            {
+                var rules = await _dbContext.AdrAccountRules
+                    .Include(r => r.AdrAccount)
+                    .Where(r => r.AdrAccountId == accountId && !r.IsDeleted)
+                    .Select(r => new AccountRuleDto
+                    {
+                        Id = r.Id,
+                        AdrAccountId = r.AdrAccountId,
+                        VendorCode = r.AdrAccount != null ? r.AdrAccount.VendorCode : null,
+                        VMAccountNumber = r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : null,
+                        JobTypeId = r.JobTypeId,
+                        PeriodType = r.PeriodType,
+                        PeriodDays = r.PeriodDays,
+                        NextRunDateTime = r.NextRunDateTime,
+                        NextRangeStartDateTime = r.NextRangeStartDateTime,
+                        NextRangeEndDateTime = r.NextRangeEndDateTime,
+                        IsEnabled = r.IsEnabled,
+                        IsManuallyOverridden = r.IsManuallyOverridden,
+                        OverriddenBy = r.OverriddenBy,
+                        OverriddenDateTime = r.OverriddenDateTime
+                    })
+                    .ToListAsync();
+
+                return Ok(rules);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving ADR account rules for account {AccountId}", accountId);
+                return StatusCode(500, "An error occurred while retrieving account rules");
+            }
+        }
+
+        /// <summary>
+        /// Retrieves a single account rule by ID.
+        /// </summary>
+        /// <param name="id">The rule ID.</param>
+        /// <returns>The account rule.</returns>
+        /// <response code="200">Returns the account rule.</response>
+        /// <response code="404">Rule not found.</response>
+        /// <response code="500">An error occurred while retrieving the rule.</response>
+        [HttpGet("rules/{id}")]
+        [ProducesResponseType(typeof(AccountRuleDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<AccountRuleDto>> GetRule(int id)
+        {
+            try
+            {
+                var rule = await _dbContext.AdrAccountRules
+                    .Include(r => r.AdrAccount)
+                    .Where(r => r.Id == id && !r.IsDeleted)
+                    .Select(r => new AccountRuleDto
+                    {
+                        Id = r.Id,
+                        AdrAccountId = r.AdrAccountId,
+                        VendorCode = r.AdrAccount != null ? r.AdrAccount.VendorCode : null,
+                        VMAccountNumber = r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : null,
+                        JobTypeId = r.JobTypeId,
+                        PeriodType = r.PeriodType,
+                        PeriodDays = r.PeriodDays,
+                        NextRunDateTime = r.NextRunDateTime,
+                        NextRangeStartDateTime = r.NextRangeStartDateTime,
+                        NextRangeEndDateTime = r.NextRangeEndDateTime,
+                        IsEnabled = r.IsEnabled,
+                        IsManuallyOverridden = r.IsManuallyOverridden,
+                        OverriddenBy = r.OverriddenBy,
+                        OverriddenDateTime = r.OverriddenDateTime
+                    })
+                    .FirstOrDefaultAsync();
+
+                if (rule == null)
+                {
+                    return NotFound($"Rule with ID {id} not found");
+                }
+
+                return Ok(rule);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving ADR account rule {RuleId}", id);
+                return StatusCode(500, "An error occurred while retrieving the account rule");
+            }
+        }
+
+        /// <summary>
+        /// Updates an account rule's scheduling configuration.
+        /// </summary>
+        /// <param name="id">The rule ID.</param>
+        /// <param name="request">The update request containing new values.</param>
+        /// <returns>The updated account rule.</returns>
+        /// <response code="200">Returns the updated account rule.</response>
+        /// <response code="400">Invalid request data.</response>
+        /// <response code="404">Rule not found.</response>
+        /// <response code="500">An error occurred while updating the rule.</response>
+        [HttpPut("rules/{id}")]
+        [Authorize(Policy = "AdrAccounts.Update")]
+        [ProducesResponseType(typeof(AccountRuleDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<AccountRuleDto>> UpdateRule(int id, [FromBody] UpdateRuleRequest request)
+        {
+            try
+            {
+                var rule = await _dbContext.AdrAccountRules
+                    .Include(r => r.AdrAccount)
+                    .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+
+                if (rule == null)
+                {
+                    return NotFound($"Rule with ID {id} not found");
+                }
+
+                // Update fields
+                if (request.NextRunDateTime.HasValue)
+                    rule.NextRunDateTime = request.NextRunDateTime.Value;
+                
+                if (request.NextRangeStartDateTime.HasValue)
+                    rule.NextRangeStartDateTime = request.NextRangeStartDateTime.Value;
+                
+                if (request.NextRangeEndDateTime.HasValue)
+                    rule.NextRangeEndDateTime = request.NextRangeEndDateTime.Value;
+                
+                if (!string.IsNullOrEmpty(request.PeriodType))
+                    rule.PeriodType = request.PeriodType;
+                
+                if (request.PeriodDays.HasValue)
+                    rule.PeriodDays = request.PeriodDays.Value;
+                
+                if (request.JobTypeId.HasValue)
+                    rule.JobTypeId = request.JobTypeId.Value;
+                
+                if (request.IsEnabled.HasValue)
+                    rule.IsEnabled = request.IsEnabled.Value;
+
+                // Mark as manually overridden
+                rule.IsManuallyOverridden = true;
+                rule.OverriddenBy = User.Identity?.Name ?? "Unknown";
+                rule.OverriddenDateTime = DateTime.UtcNow;
+                rule.ModifiedDateTime = DateTime.UtcNow;
+                rule.ModifiedBy = User.Identity?.Name ?? "Unknown";
+
+                await _dbContext.SaveChangesAsync();
+
+                // Return updated rule
+                var updatedRule = new AccountRuleDto
+                {
+                    Id = rule.Id,
+                    AdrAccountId = rule.AdrAccountId,
+                    VendorCode = rule.AdrAccount?.VendorCode,
+                    VMAccountNumber = rule.AdrAccount?.VMAccountNumber,
+                    JobTypeId = rule.JobTypeId,
+                    PeriodType = rule.PeriodType,
+                    PeriodDays = rule.PeriodDays,
+                    NextRunDateTime = rule.NextRunDateTime,
+                    NextRangeStartDateTime = rule.NextRangeStartDateTime,
+                    NextRangeEndDateTime = rule.NextRangeEndDateTime,
+                    IsEnabled = rule.IsEnabled,
+                    IsManuallyOverridden = rule.IsManuallyOverridden,
+                    OverriddenBy = rule.OverriddenBy,
+                    OverriddenDateTime = rule.OverriddenDateTime
+                };
+
+                return Ok(updatedRule);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating ADR account rule {RuleId}", id);
+                return StatusCode(500, "An error occurred while updating the account rule");
+            }
+        }
+
+        /// <summary>
+        /// Clears the manual override on an account rule, allowing it to be updated by sync.
+        /// </summary>
+        /// <param name="id">The rule ID.</param>
+        /// <returns>The updated account rule.</returns>
+        /// <response code="200">Returns the updated account rule.</response>
+        /// <response code="404">Rule not found.</response>
+        /// <response code="500">An error occurred while clearing the override.</response>
+        [HttpPost("rules/{id}/clear-override")]
+        [Authorize(Policy = "AdrAccounts.Update")]
+        [ProducesResponseType(typeof(AccountRuleDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<AccountRuleDto>> ClearRuleOverride(int id)
+        {
+            try
+            {
+                var rule = await _dbContext.AdrAccountRules
+                    .Include(r => r.AdrAccount)
+                    .FirstOrDefaultAsync(r => r.Id == id && !r.IsDeleted);
+
+                if (rule == null)
+                {
+                    return NotFound($"Rule with ID {id} not found");
+                }
+
+                rule.IsManuallyOverridden = false;
+                rule.OverriddenBy = null;
+                rule.OverriddenDateTime = null;
+                rule.ModifiedDateTime = DateTime.UtcNow;
+                rule.ModifiedBy = User.Identity?.Name ?? "Unknown";
+
+                await _dbContext.SaveChangesAsync();
+
+                var updatedRule = new AccountRuleDto
+                {
+                    Id = rule.Id,
+                    AdrAccountId = rule.AdrAccountId,
+                    VendorCode = rule.AdrAccount?.VendorCode,
+                    VMAccountNumber = rule.AdrAccount?.VMAccountNumber,
+                    JobTypeId = rule.JobTypeId,
+                    PeriodType = rule.PeriodType,
+                    PeriodDays = rule.PeriodDays,
+                    NextRunDateTime = rule.NextRunDateTime,
+                    NextRangeStartDateTime = rule.NextRangeStartDateTime,
+                    NextRangeEndDateTime = rule.NextRangeEndDateTime,
+                    IsEnabled = rule.IsEnabled,
+                    IsManuallyOverridden = rule.IsManuallyOverridden,
+                    OverriddenBy = rule.OverriddenBy,
+                    OverriddenDateTime = rule.OverriddenDateTime
+                };
+
+                return Ok(updatedRule);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error clearing override on ADR account rule {RuleId}", id);
+                return StatusCode(500, "An error occurred while clearing the override");
+            }
+        }
+
+        #endregion
+
+        #region AdrConfiguration Endpoints (Admin/Super Admin only)
+
+    /// <summary>
+    /// Retrieves the current ADR configuration settings.
+    /// Only Admin and Super Admin users can access this endpoint.
+    /// </summary>
+    /// <returns>The current ADR configuration or default values if not configured.</returns>
+    /// <response code="200">Returns the ADR configuration.</response>
+    /// <response code="500">An error occurred while retrieving the configuration.</response>
+    [HttpGet("configuration")]
+    [Authorize(Policy = "Users.Manage.Read")]
+    [ProducesResponseType(typeof(AdrConfiguration), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<AdrConfiguration>> GetConfiguration()
+    {
+        try
+        {
+            var configs = await _unitOfWork.AdrConfigurations.FindAsync(c => !c.IsDeleted);
+            var config = configs.FirstOrDefault();
+            
+            if (config == null)
+            {
+                // Return default configuration if none exists
+                config = new AdrConfiguration
+                {
+                    CredentialCheckLeadDays = 7,
+                    ScrapeRetryDays = 5,
+                    MaxRetries = 5,
+                    FinalStatusCheckDelayDays = 5,
+                    DailyStatusCheckDelayDays = 1,
+                    MaxParallelRequests = 8,
+                    BatchSize = 1000,
+                    DefaultWindowDaysBefore = 5,
+                    DefaultWindowDaysAfter = 5,
+                    AutoCreateTestLoginRules = true,
+                    AutoCreateMissingInvoiceAlerts = true,
+                    IsOrchestrationEnabled = true
+                };
+            }
+            
+            return Ok(config);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving ADR configuration");
+            return StatusCode(500, "An error occurred while retrieving ADR configuration");
+        }
+    }
+
+    /// <summary>
+    /// Updates the ADR configuration settings.
+    /// Only Admin and Super Admin users can access this endpoint.
+    /// </summary>
+    /// <param name="request">The configuration update request.</param>
+    /// <returns>The updated ADR configuration.</returns>
+    /// <response code="200">Returns the updated ADR configuration.</response>
+    /// <response code="400">Invalid configuration values provided.</response>
+    /// <response code="500">An error occurred while updating the configuration.</response>
+    [HttpPut("configuration")]
+    [Authorize(Policy = "Users.Manage.Read")]
+    [ProducesResponseType(typeof(AdrConfiguration), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<AdrConfiguration>> UpdateConfiguration([FromBody] UpdateAdrConfigurationRequest request)
+    {
+        try
+        {
+            var username = User.Identity?.Name ?? "System Created";
+            var configs = await _unitOfWork.AdrConfigurations.FindAsync(c => !c.IsDeleted);
+            var config = configs.FirstOrDefault();
+            
+            if (config == null)
+            {
+                // Create new configuration
+                config = new AdrConfiguration
+                {
+                    CreatedDateTime = DateTime.UtcNow,
+                    CreatedBy = username,
+                    ModifiedDateTime = DateTime.UtcNow,
+                    ModifiedBy = username
+                };
+                await _unitOfWork.AdrConfigurations.AddAsync(config);
+            }
+            
+            // Update configuration values
+            config.CredentialCheckLeadDays = request.CredentialCheckLeadDays ?? config.CredentialCheckLeadDays;
+            config.ScrapeRetryDays = request.ScrapeRetryDays ?? config.ScrapeRetryDays;
+            config.MaxRetries = request.MaxRetries ?? config.MaxRetries;
+            config.FinalStatusCheckDelayDays = request.FinalStatusCheckDelayDays ?? config.FinalStatusCheckDelayDays;
+            config.DailyStatusCheckDelayDays = request.DailyStatusCheckDelayDays ?? config.DailyStatusCheckDelayDays;
+            config.MaxParallelRequests = request.MaxParallelRequests ?? config.MaxParallelRequests;
+            config.BatchSize = request.BatchSize ?? config.BatchSize;
+            config.DefaultWindowDaysBefore = request.DefaultWindowDaysBefore ?? config.DefaultWindowDaysBefore;
+            config.DefaultWindowDaysAfter = request.DefaultWindowDaysAfter ?? config.DefaultWindowDaysAfter;
+            config.AutoCreateTestLoginRules = request.AutoCreateTestLoginRules ?? config.AutoCreateTestLoginRules;
+            config.AutoCreateMissingInvoiceAlerts = request.AutoCreateMissingInvoiceAlerts ?? config.AutoCreateMissingInvoiceAlerts;
+            config.MissingInvoiceAlertEmail = request.MissingInvoiceAlertEmail ?? config.MissingInvoiceAlertEmail;
+            config.IsOrchestrationEnabled = request.IsOrchestrationEnabled ?? config.IsOrchestrationEnabled;
+            config.Notes = request.Notes ?? config.Notes;
+            config.ModifiedDateTime = DateTime.UtcNow;
+            config.ModifiedBy = username;
+            
+            await _unitOfWork.SaveChangesAsync();
+            
+            _logger.LogInformation("ADR configuration updated by {User}", username);
+            
+            return Ok(config);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating ADR configuration");
+            return StatusCode(500, "An error occurred while updating ADR configuration");
+        }
+    }
+
     #endregion
 
-    private static string CsvEscape(string? value)
+    #region AdrAccountBlacklist Endpoints (Admin/Super Admin only)
+
+    /// <summary>
+    /// Retrieves a paginated list of blacklist entries.
+    /// Only Admin and Super Admin users can access this endpoint.
+    /// </summary>
+    /// <param name="pageNumber">Page number for pagination (default: 1).</param>
+    /// <param name="pageSize">Number of items per page (default: 20).</param>
+    /// <param name="includeInactive">Whether to include inactive entries (default: false).</param>
+    /// <returns>A paginated list of blacklist entries.</returns>
+    /// <response code="200">Returns the list of blacklist entries.</response>
+    /// <response code="500">An error occurred while retrieving blacklist entries.</response>
+    [HttpGet("blacklist")]
+    [Authorize(Policy = "Users.Manage.Read")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<object>> GetBlacklist(
+        [FromQuery] int pageNumber = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] bool includeInactive = false)
+    {
+        try
+        {
+            var query = _dbContext.AdrAccountBlacklists
+                .Where(b => !b.IsDeleted);
+            
+            if (!includeInactive)
+            {
+                query = query.Where(b => b.IsActive);
+            }
+            
+            var totalCount = await query.CountAsync();
+            var items = await query
+                .OrderByDescending(b => b.CreatedDateTime)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+            
+            return Ok(new
+            {
+                items,
+                totalCount,
+                pageNumber,
+                pageSize
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving ADR blacklist entries");
+            return StatusCode(500, "An error occurred while retrieving ADR blacklist entries");
+        }
+    }
+
+    /// <summary>
+    /// Retrieves a specific blacklist entry by ID.
+    /// Only Admin and Super Admin users can access this endpoint.
+    /// </summary>
+    /// <param name="id">The unique identifier of the blacklist entry.</param>
+    /// <returns>The blacklist entry with the specified ID.</returns>
+    /// <response code="200">Returns the requested blacklist entry.</response>
+    /// <response code="404">Blacklist entry with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while retrieving the blacklist entry.</response>
+    [HttpGet("blacklist/{id}")]
+    [Authorize(Policy = "Users.Manage.Read")]
+    [ProducesResponseType(typeof(AdrAccountBlacklist), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<AdrAccountBlacklist>> GetBlacklistEntry(int id)
+    {
+        try
+        {
+            var entry = await _unitOfWork.AdrAccountBlacklists.GetByIdAsync(id);
+            if (entry == null || entry.IsDeleted)
+            {
+                return NotFound();
+            }
+            
+            return Ok(entry);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving ADR blacklist entry {Id}", id);
+            return StatusCode(500, "An error occurred while retrieving the ADR blacklist entry");
+        }
+    }
+
+    /// <summary>
+    /// Creates a new blacklist entry.
+    /// Only Admin and Super Admin users can access this endpoint.
+    /// </summary>
+    /// <param name="request">The blacklist entry creation request.</param>
+    /// <returns>The created blacklist entry.</returns>
+    /// <response code="201">Returns the created blacklist entry.</response>
+    /// <response code="400">Invalid blacklist entry data provided.</response>
+    /// <response code="500">An error occurred while creating the blacklist entry.</response>
+    [HttpPost("blacklist")]
+    [Authorize(Policy = "Users.Manage.Read")]
+    [ProducesResponseType(typeof(AdrAccountBlacklist), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<AdrAccountBlacklist>> CreateBlacklistEntry([FromBody] CreateBlacklistEntryRequest request)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(request.Reason))
+            {
+                return BadRequest("Reason is required for blacklist entries");
+            }
+            
+            // At least one exclusion criteria must be provided
+            if (string.IsNullOrWhiteSpace(request.VendorCode) && 
+                !request.VMAccountId.HasValue && 
+                string.IsNullOrWhiteSpace(request.VMAccountNumber) && 
+                !request.CredentialId.HasValue)
+            {
+                return BadRequest("At least one exclusion criteria (VendorCode, VMAccountId, VMAccountNumber, or CredentialId) must be provided");
+            }
+            
+            var username = User.Identity?.Name ?? "System Created";
+            
+            var entry = new AdrAccountBlacklist
+            {
+                VendorCode = request.VendorCode,
+                VMAccountId = request.VMAccountId,
+                VMAccountNumber = request.VMAccountNumber,
+                CredentialId = request.CredentialId,
+                ExclusionType = request.ExclusionType ?? "All",
+                Reason = request.Reason,
+                IsActive = true,
+                EffectiveStartDate = request.EffectiveStartDate,
+                EffectiveEndDate = request.EffectiveEndDate,
+                BlacklistedBy = username,
+                BlacklistedDateTime = DateTime.UtcNow,
+                Notes = request.Notes,
+                CreatedDateTime = DateTime.UtcNow,
+                CreatedBy = username,
+                ModifiedDateTime = DateTime.UtcNow,
+                ModifiedBy = username
+            };
+            
+            await _unitOfWork.AdrAccountBlacklists.AddAsync(entry);
+            await _unitOfWork.SaveChangesAsync();
+            
+            _logger.LogInformation("Blacklist entry {Id} created by {User}. VendorCode: {VendorCode}, VMAccountId: {VMAccountId}, Reason: {Reason}",
+                entry.Id, username, request.VendorCode, request.VMAccountId, request.Reason);
+            
+            return CreatedAtAction(nameof(GetBlacklistEntry), new { id = entry.Id }, entry);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating ADR blacklist entry");
+            return StatusCode(500, "An error occurred while creating the ADR blacklist entry");
+        }
+    }
+
+    /// <summary>
+    /// Updates an existing blacklist entry.
+    /// Only Admin and Super Admin users can access this endpoint.
+    /// </summary>
+    /// <param name="id">The unique identifier of the blacklist entry.</param>
+    /// <param name="request">The blacklist entry update request.</param>
+    /// <returns>The updated blacklist entry.</returns>
+    /// <response code="200">Returns the updated blacklist entry.</response>
+    /// <response code="400">Invalid blacklist entry data provided.</response>
+    /// <response code="404">Blacklist entry with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while updating the blacklist entry.</response>
+    [HttpPut("blacklist/{id}")]
+    [Authorize(Policy = "Users.Manage.Read")]
+    [ProducesResponseType(typeof(AdrAccountBlacklist), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<AdrAccountBlacklist>> UpdateBlacklistEntry(int id, [FromBody] UpdateBlacklistEntryRequest request)
+    {
+        try
+        {
+            var entry = await _unitOfWork.AdrAccountBlacklists.GetByIdAsync(id);
+            if (entry == null || entry.IsDeleted)
+            {
+                return NotFound();
+            }
+            
+            var username = User.Identity?.Name ?? "System Created";
+            
+            // Update fields if provided
+            if (request.VendorCode != null) entry.VendorCode = request.VendorCode;
+            if (request.VMAccountId.HasValue) entry.VMAccountId = request.VMAccountId;
+            if (request.VMAccountNumber != null) entry.VMAccountNumber = request.VMAccountNumber;
+            if (request.CredentialId.HasValue) entry.CredentialId = request.CredentialId;
+            if (request.ExclusionType != null) entry.ExclusionType = request.ExclusionType;
+            if (request.Reason != null) entry.Reason = request.Reason;
+            if (request.IsActive.HasValue) entry.IsActive = request.IsActive.Value;
+            if (request.EffectiveStartDate.HasValue) entry.EffectiveStartDate = request.EffectiveStartDate;
+            if (request.EffectiveEndDate.HasValue) entry.EffectiveEndDate = request.EffectiveEndDate;
+            if (request.Notes != null) entry.Notes = request.Notes;
+            
+            entry.ModifiedDateTime = DateTime.UtcNow;
+            entry.ModifiedBy = username;
+            
+            await _unitOfWork.SaveChangesAsync();
+            
+            _logger.LogInformation("Blacklist entry {Id} updated by {User}", id, username);
+            
+            return Ok(entry);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating ADR blacklist entry {Id}", id);
+            return StatusCode(500, "An error occurred while updating the ADR blacklist entry");
+        }
+    }
+
+    /// <summary>
+    /// Soft deletes a blacklist entry.
+    /// Only Admin and Super Admin users can access this endpoint.
+    /// </summary>
+    /// <param name="id">The unique identifier of the blacklist entry.</param>
+    /// <returns>No content on success.</returns>
+    /// <response code="204">Blacklist entry was successfully deleted.</response>
+    /// <response code="404">Blacklist entry with the specified ID was not found.</response>
+    /// <response code="500">An error occurred while deleting the blacklist entry.</response>
+    [HttpDelete("blacklist/{id}")]
+    [Authorize(Policy = "Users.Manage.Read")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult> DeleteBlacklistEntry(int id)
+    {
+        try
+        {
+            var entry = await _unitOfWork.AdrAccountBlacklists.GetByIdAsync(id);
+            if (entry == null || entry.IsDeleted)
+            {
+                return NotFound();
+            }
+            
+            var username = User.Identity?.Name ?? "System Created";
+            
+            // Soft delete
+            entry.IsDeleted = true;
+            entry.IsActive = false;
+            entry.ModifiedDateTime = DateTime.UtcNow;
+            entry.ModifiedBy = username;
+            
+            await _unitOfWork.SaveChangesAsync();
+            
+            _logger.LogInformation("Blacklist entry {Id} deleted by {User}", id, username);
+            
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting ADR blacklist entry {Id}", id);
+            return StatusCode(500, "An error occurred while deleting the ADR blacklist entry");
+        }
+    }
+
+        #endregion
+
+        #region AdrJobType Endpoints (Admin/Super Admin only)
+
+        /// <summary>
+        /// Retrieves all active job types.
+        /// Only Admin and Super Admin users can access this endpoint.
+        /// </summary>
+        /// <param name="includeInactive">Whether to include inactive job types (default: false).</param>
+        /// <returns>A list of job types.</returns>
+        /// <response code="200">Returns the list of job types.</response>
+        /// <response code="500">An error occurred while retrieving job types.</response>
+        [HttpGet("job-types")]
+        [Authorize(Policy = "Users.Manage.Read")]
+        [ProducesResponseType(typeof(IEnumerable<AdrJobType>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<IEnumerable<AdrJobType>>> GetJobTypes([FromQuery] bool includeInactive = false)
+        {
+            try
+            {
+                var query = _dbContext.AdrJobTypes
+                    .Where(jt => !jt.IsDeleted);
+            
+                if (!includeInactive)
+                {
+                    query = query.Where(jt => jt.IsActive);
+                }
+            
+                var jobTypes = await query
+                    .OrderBy(jt => jt.DisplayOrder)
+                    .ToListAsync();
+            
+                return Ok(jobTypes);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving ADR job types");
+                return StatusCode(500, "An error occurred while retrieving ADR job types");
+            }
+        }
+
+        /// <summary>
+        /// Retrieves a specific job type by ID.
+        /// Only Admin and Super Admin users can access this endpoint.
+        /// </summary>
+        /// <param name="id">The unique identifier of the job type.</param>
+        /// <returns>The job type with the specified ID.</returns>
+        /// <response code="200">Returns the requested job type.</response>
+        /// <response code="404">Job type with the specified ID was not found.</response>
+        /// <response code="500">An error occurred while retrieving the job type.</response>
+        [HttpGet("job-types/{id}")]
+        [Authorize(Policy = "Users.Manage.Read")]
+        [ProducesResponseType(typeof(AdrJobType), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<AdrJobType>> GetJobType(int id)
+        {
+            try
+            {
+                var jobType = await _dbContext.AdrJobTypes
+                    .FirstOrDefaultAsync(jt => jt.Id == id && !jt.IsDeleted);
+            
+                if (jobType == null)
+                {
+                    return NotFound($"Job type with ID {id} was not found.");
+                }
+            
+                return Ok(jobType);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving ADR job type {Id}", id);
+                return StatusCode(500, "An error occurred while retrieving the ADR job type");
+            }
+        }
+
+        /// <summary>
+        /// Creates a new job type.
+        /// Only Admin and Super Admin users can access this endpoint.
+        /// </summary>
+        /// <param name="request">The job type creation request.</param>
+        /// <returns>The created job type.</returns>
+        /// <response code="201">Returns the created job type.</response>
+        /// <response code="400">Invalid job type data provided or code already exists.</response>
+        /// <response code="500">An error occurred while creating the job type.</response>
+        [HttpPost("job-types")]
+        [Authorize(Policy = "Users.Manage.Read")]
+        [ProducesResponseType(typeof(AdrJobType), StatusCodes.Status201Created)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<AdrJobType>> CreateJobType([FromBody] CreateJobTypeRequest request)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(request.Code))
+                {
+                    return BadRequest("Job type code is required.");
+                }
+            
+                if (string.IsNullOrWhiteSpace(request.Name))
+                {
+                    return BadRequest("Job type name is required.");
+                }
+            
+                // Check if code already exists
+                var existingJobType = await _dbContext.AdrJobTypes
+                    .FirstOrDefaultAsync(jt => jt.Code == request.Code && !jt.IsDeleted);
+            
+                if (existingJobType != null)
+                {
+                    return BadRequest($"A job type with code '{request.Code}' already exists.");
+                }
+            
+                var username = User.Identity?.Name ?? "System";
+            
+                var jobType = new AdrJobType
+                {
+                    Code = request.Code.ToUpperInvariant(),
+                    Name = request.Name,
+                    Description = request.Description,
+                    EndpointUrl = request.EndpointUrl,
+                    AdrRequestTypeId = request.AdrRequestTypeId,
+                    IsActive = request.IsActive ?? true,
+                    DisplayOrder = request.DisplayOrder ?? 0,
+                    Notes = request.Notes,
+                    CreatedDateTime = DateTime.UtcNow,
+                    CreatedBy = username,
+                    ModifiedDateTime = DateTime.UtcNow,
+                    ModifiedBy = username
+                };
+            
+                _dbContext.AdrJobTypes.Add(jobType);
+                await _dbContext.SaveChangesAsync();
+            
+                _logger.LogInformation("Job type {Code} created by {User}", jobType.Code, username);
+            
+                return CreatedAtAction(nameof(GetJobType), new { id = jobType.Id }, jobType);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating ADR job type");
+                return StatusCode(500, "An error occurred while creating the ADR job type");
+            }
+        }
+
+        /// <summary>
+        /// Updates an existing job type.
+        /// Only Admin and Super Admin users can access this endpoint.
+        /// </summary>
+        /// <param name="id">The unique identifier of the job type to update.</param>
+        /// <param name="request">The job type update request.</param>
+        /// <returns>The updated job type.</returns>
+        /// <response code="200">Returns the updated job type.</response>
+        /// <response code="400">Invalid job type data provided or code already exists.</response>
+        /// <response code="404">Job type with the specified ID was not found.</response>
+        /// <response code="500">An error occurred while updating the job type.</response>
+        [HttpPut("job-types/{id}")]
+        [Authorize(Policy = "Users.Manage.Read")]
+        [ProducesResponseType(typeof(AdrJobType), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<AdrJobType>> UpdateJobType(int id, [FromBody] UpdateJobTypeRequest request)
+        {
+            try
+            {
+                var jobType = await _dbContext.AdrJobTypes
+                    .FirstOrDefaultAsync(jt => jt.Id == id && !jt.IsDeleted);
+            
+                if (jobType == null)
+                {
+                    return NotFound($"Job type with ID {id} was not found.");
+                }
+            
+                // Check if code is being changed and if new code already exists
+                if (!string.IsNullOrWhiteSpace(request.Code) && request.Code != jobType.Code)
+                {
+                    var existingJobType = await _dbContext.AdrJobTypes
+                        .FirstOrDefaultAsync(jt => jt.Code == request.Code && !jt.IsDeleted && jt.Id != id);
+                
+                    if (existingJobType != null)
+                    {
+                        return BadRequest($"A job type with code '{request.Code}' already exists.");
+                    }
+                
+                    jobType.Code = request.Code.ToUpperInvariant();
+                }
+            
+                var username = User.Identity?.Name ?? "System";
+            
+                if (!string.IsNullOrWhiteSpace(request.Name))
+                {
+                    jobType.Name = request.Name;
+                }
+            
+                if (request.Description != null)
+                {
+                    jobType.Description = request.Description;
+                }
+            
+                if (request.EndpointUrl != null)
+                {
+                    jobType.EndpointUrl = request.EndpointUrl;
+                }
+            
+                if (request.AdrRequestTypeId.HasValue)
+                {
+                    jobType.AdrRequestTypeId = request.AdrRequestTypeId.Value;
+                }
+            
+                if (request.IsActive.HasValue)
+                {
+                    jobType.IsActive = request.IsActive.Value;
+                }
+            
+                if (request.DisplayOrder.HasValue)
+                {
+                    jobType.DisplayOrder = request.DisplayOrder.Value;
+                }
+            
+                if (request.Notes != null)
+                {
+                    jobType.Notes = request.Notes;
+                }
+            
+                jobType.ModifiedDateTime = DateTime.UtcNow;
+                jobType.ModifiedBy = username;
+            
+                await _dbContext.SaveChangesAsync();
+            
+                _logger.LogInformation("Job type {Id} ({Code}) updated by {User}", id, jobType.Code, username);
+            
+                return Ok(jobType);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error updating ADR job type {Id}", id);
+                return StatusCode(500, "An error occurred while updating the ADR job type");
+            }
+        }
+
+        /// <summary>
+        /// Soft deletes a job type.
+        /// Only Admin and Super Admin users can access this endpoint.
+        /// Note: Job types that are referenced by existing rules cannot be deleted.
+        /// </summary>
+        /// <param name="id">The unique identifier of the job type to delete.</param>
+        /// <returns>No content on success.</returns>
+        /// <response code="204">Job type was successfully deleted.</response>
+        /// <response code="400">Job type is referenced by existing rules and cannot be deleted.</response>
+        /// <response code="404">Job type with the specified ID was not found.</response>
+        /// <response code="500">An error occurred while deleting the job type.</response>
+        [HttpDelete("job-types/{id}")]
+        [Authorize(Policy = "Users.Manage.Read")]
+        [ProducesResponseType(StatusCodes.Status204NoContent)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult> DeleteJobType(int id)
+        {
+            try
+            {
+                var jobType = await _dbContext.AdrJobTypes
+                    .FirstOrDefaultAsync(jt => jt.Id == id && !jt.IsDeleted);
+            
+                if (jobType == null)
+                {
+                    return NotFound($"Job type with ID {id} was not found.");
+                }
+            
+                // Check if job type is referenced by any rules
+                var ruleCount = await _dbContext.AdrAccountRules
+                    .CountAsync(r => r.JobTypeId == id && !r.IsDeleted);
+            
+                if (ruleCount > 0)
+                {
+                    return BadRequest($"Cannot delete job type '{jobType.Code}' because it is referenced by {ruleCount} rule(s). Deactivate the job type instead.");
+                }
+            
+                var username = User.Identity?.Name ?? "System";
+            
+                // Soft delete
+                jobType.IsDeleted = true;
+                jobType.IsActive = false;
+                jobType.ModifiedDateTime = DateTime.UtcNow;
+                jobType.ModifiedBy = username;
+            
+                await _dbContext.SaveChangesAsync();
+            
+                _logger.LogInformation("Job type {Id} ({Code}) deleted by {User}", id, jobType.Code, username);
+            
+                return NoContent();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting ADR job type {Id}", id);
+                return StatusCode(500, "An error occurred while deleting the ADR job type");
+            }
+        }
+
+        #endregion
+
+        private static string CsvEscape(string? value)
     {
         if (value == null) return "";
         if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
@@ -2774,6 +3963,198 @@ public class ManualAdrApiResponse
     public long? IndexId { get; set; }
     public bool IsError { get; set; }
     public bool IsFinal { get; set; }
+}
+
+/// <summary>
+/// Request to update ADR configuration settings
+/// </summary>
+public class UpdateAdrConfigurationRequest
+{
+    public int? CredentialCheckLeadDays { get; set; }
+    public int? ScrapeRetryDays { get; set; }
+    public int? MaxRetries { get; set; }
+    public int? FinalStatusCheckDelayDays { get; set; }
+    public int? DailyStatusCheckDelayDays { get; set; }
+    public int? MaxParallelRequests { get; set; }
+    public int? BatchSize { get; set; }
+    public int? DefaultWindowDaysBefore { get; set; }
+    public int? DefaultWindowDaysAfter { get; set; }
+    public bool? AutoCreateTestLoginRules { get; set; }
+    public bool? AutoCreateMissingInvoiceAlerts { get; set; }
+    public string? MissingInvoiceAlertEmail { get; set; }
+    public bool? IsOrchestrationEnabled { get; set; }
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Request to create a new blacklist entry
+/// </summary>
+public class CreateBlacklistEntryRequest
+{
+    public string? VendorCode { get; set; }
+    public long? VMAccountId { get; set; }
+    public string? VMAccountNumber { get; set; }
+    public int? CredentialId { get; set; }
+    public string? ExclusionType { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public DateTime? EffectiveStartDate { get; set; }
+    public DateTime? EffectiveEndDate { get; set; }
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Request to update an existing blacklist entry
+/// </summary>
+public class UpdateBlacklistEntryRequest
+{
+    public string? VendorCode { get; set; }
+    public long? VMAccountId { get; set; }
+    public string? VMAccountNumber { get; set; }
+    public int? CredentialId { get; set; }
+    public string? ExclusionType { get; set; }
+    public string? Reason { get; set; }
+    public bool? IsActive { get; set; }
+    public DateTime? EffectiveStartDate { get; set; }
+    public DateTime? EffectiveEndDate { get; set; }
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Request to create a new job type
+/// </summary>
+public class CreateJobTypeRequest
+{
+    /// <summary>
+    /// Short code for the job type (e.g., "CREDENTIAL_CHECK", "DOWNLOAD_INVOICE")
+    /// </summary>
+    public string Code { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Display name for the job type
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// Detailed description of what this job type does
+    /// </summary>
+    public string? Description { get; set; }
+    
+    /// <summary>
+    /// The URL endpoint to call when executing jobs of this type
+    /// </summary>
+    public string? EndpointUrl { get; set; }
+    
+    /// <summary>
+    /// The AdrRequestTypeId to send to the downstream ADR API (1 = AttemptLogin, 2 = DownloadInvoice)
+    /// </summary>
+    public int AdrRequestTypeId { get; set; }
+    
+    /// <summary>
+    /// Whether this job type is currently active (default: true)
+    /// </summary>
+    public bool? IsActive { get; set; }
+    
+    /// <summary>
+    /// Display order for UI sorting
+    /// </summary>
+    public int? DisplayOrder { get; set; }
+    
+    /// <summary>
+    /// Optional notes about this job type
+    /// </summary>
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Request to update an existing job type
+/// </summary>
+public class UpdateJobTypeRequest
+{
+    /// <summary>
+    /// Short code for the job type (e.g., "CREDENTIAL_CHECK", "DOWNLOAD_INVOICE")
+    /// </summary>
+    public string? Code { get; set; }
+    
+    /// <summary>
+    /// Display name for the job type
+    /// </summary>
+    public string? Name { get; set; }
+    
+    /// <summary>
+    /// Detailed description of what this job type does
+    /// </summary>
+    public string? Description { get; set; }
+    
+    /// <summary>
+    /// The URL endpoint to call when executing jobs of this type
+    /// </summary>
+    public string? EndpointUrl { get; set; }
+    
+    /// <summary>
+    /// The AdrRequestTypeId to send to the downstream ADR API (1 = AttemptLogin, 2 = DownloadInvoice)
+    /// </summary>
+    public int? AdrRequestTypeId { get; set; }
+    
+    /// <summary>
+    /// Whether this job type is currently active
+    /// </summary>
+    public bool? IsActive { get; set; }
+    
+    /// <summary>
+    /// Display order for UI sorting
+    /// </summary>
+    public int? DisplayOrder { get; set; }
+    
+    /// <summary>
+    /// Optional notes about this job type
+    /// </summary>
+    public string? Notes { get; set; }
+}
+
+/// <summary>
+/// Paginated response for account rules
+/// </summary>
+public class RulesPagedResponse
+{
+    public List<AccountRuleDto>? Items { get; set; }
+    public int TotalCount { get; set; }
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+}
+
+/// <summary>
+/// DTO for account rule data
+/// </summary>
+public class AccountRuleDto
+{
+    public int Id { get; set; }
+    public int AdrAccountId { get; set; }
+    public string? VendorCode { get; set; }
+    public string? VMAccountNumber { get; set; }
+    public int JobTypeId { get; set; }
+    public string? PeriodType { get; set; }
+    public int? PeriodDays { get; set; }
+    public DateTime? NextRunDateTime { get; set; }
+    public DateTime? NextRangeStartDateTime { get; set; }
+    public DateTime? NextRangeEndDateTime { get; set; }
+    public bool IsEnabled { get; set; }
+    public bool IsManuallyOverridden { get; set; }
+    public string? OverriddenBy { get; set; }
+    public DateTime? OverriddenDateTime { get; set; }
+}
+
+/// <summary>
+/// Request model for updating an account rule
+/// </summary>
+public class UpdateRuleRequest
+{
+    public DateTime? NextRunDateTime { get; set; }
+    public DateTime? NextRangeStartDateTime { get; set; }
+    public DateTime? NextRangeEndDateTime { get; set; }
+    public string? PeriodType { get; set; }
+    public int? PeriodDays { get; set; }
+    public int? JobTypeId { get; set; }
+    public bool? IsEnabled { get; set; }
 }
 
 #endregion
