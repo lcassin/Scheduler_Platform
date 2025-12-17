@@ -32,42 +32,42 @@
     else
     {
         <MudPaper Class="pa-4 mb-4">
-            <MudGrid>
-                <MudItem xs="12" sm="6" md="3">
+            <MudGrid Class="mb-4" Spacing="2">
+                <MudItem xs="12" md="3">
                     <MudTextField @bind-Value="_searchVendorCode" 
                                   Label="Vendor Code" 
                                   Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
                                   Immediate="true"
                                   Adornment="Adornment.End"
                                   AdornmentIcon="@Icons.Material.Filled.Search" />
                 </MudItem>
-                <MudItem xs="12" sm="6" md="3">
+                <MudItem xs="12" md="3">
                     <MudTextField @bind-Value="_searchAccountNumber" 
                                   Label="Account Number" 
                                   Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
                                   Immediate="true"
                                   Adornment="Adornment.End"
                                   AdornmentIcon="@Icons.Material.Filled.Search" />
                 </MudItem>
-                <MudItem xs="12" sm="6" md="3">
+                <MudItem xs="12" md="3">
                     <MudSelect @bind-Value="_filterActive" 
                                Label="Status" 
-                               Variant="Variant.Outlined">
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense">
                         <MudSelectItem Value="@((bool?)null)">All</MudSelectItem>
                         <MudSelectItem Value="@((bool?)true)">Active</MudSelectItem>
                         <MudSelectItem Value="@((bool?)false)">Inactive</MudSelectItem>
                     </MudSelect>
                 </MudItem>
-                <MudItem xs="12" sm="6" md="3" Class="d-flex align-end">
-                    <MudButton Variant="Variant.Outlined" 
-                               Color="Color.Primary" 
-                               OnClick="LoadBlacklist"
-                               Class="mr-2">
-                        Search
+            </MudGrid>
+            <MudGrid Class="mb-4" Spacing="2">
+                <MudItem xs="12" Class="d-flex align-center justify-end gap-2">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadBlacklist" StartIcon="@Icons.Material.Filled.FilterAlt">
+                        Apply
                     </MudButton>
-                    <MudButton Variant="Variant.Text" 
-                               Color="Color.Default" 
-                               OnClick="ClearFilters">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ClearFilters" StartIcon="@Icons.Material.Filled.Clear">
                         Clear
                     </MudButton>
                 </MudItem>
@@ -330,12 +330,13 @@
             }
         }
 
-    private void ClearFilters()
+    private async Task ClearFilters()
     {
         _searchVendorCode = null;
         _searchAccountNumber = null;
         _filterActive = true;
         _currentPage = 1;
+        await LoadBlacklist();
     }
 
     private async Task OnPageChanged(int page)
