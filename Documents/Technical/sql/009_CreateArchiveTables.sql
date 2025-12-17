@@ -4,6 +4,7 @@
 --              - AdrJobArchive: Archives AdrJob records older than retention period
 --              - AdrJobExecutionArchive: Archives AdrJobExecution records
 --              - AuditLogArchive: Archives AuditLog records
+--              - JobExecutionArchive: Archives Schedule JobExecution records
 -- Run Order: After 008_AddAdrAccountRuleJobTypeFk.sql
 -- =============================================
 
@@ -153,6 +154,48 @@ END
 GO
 
 -- =============================================
+-- Create JobExecutionArchive table (Schedule Job Executions)
+-- =============================================
+IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'[dbo].[JobExecutionArchive]') AND type in (N'U'))
+BEGIN
+    CREATE TABLE [dbo].[JobExecutionArchive](
+        [JobExecutionArchiveId] INT IDENTITY(1,1) NOT NULL,
+        [OriginalJobExecutionId] INT NOT NULL,
+        [ScheduleId] INT NOT NULL,
+        [StartDateTime] DATETIME2(7) NOT NULL,
+        [EndDateTime] DATETIME2(7) NULL,
+        [Status] INT NOT NULL,
+        [Output] NVARCHAR(MAX) NULL,
+        [ErrorMessage] NVARCHAR(MAX) NULL,
+        [StackTrace] NVARCHAR(MAX) NULL,
+        [RetryCount] INT NOT NULL DEFAULT 0,
+        [DurationSeconds] INT NULL,
+        [TriggeredBy] NVARCHAR(100) NULL,
+        [CancelledBy] NVARCHAR(100) NULL,
+        [CreatedDateTime] DATETIME2(7) NOT NULL,
+        [CreatedBy] NVARCHAR(200) NOT NULL,
+        [ModifiedDateTime] DATETIME2(7) NOT NULL,
+        [ModifiedBy] NVARCHAR(200) NOT NULL,
+        [ArchivedDateTime] DATETIME2(7) NOT NULL,
+        [ArchivedBy] NVARCHAR(200) NOT NULL,
+        CONSTRAINT [PK_JobExecutionArchive] PRIMARY KEY CLUSTERED ([JobExecutionArchiveId] ASC)
+    );
+
+    CREATE NONCLUSTERED INDEX [IX_JobExecutionArchive_OriginalJobExecutionId] ON [dbo].[JobExecutionArchive]([OriginalJobExecutionId]);
+    CREATE NONCLUSTERED INDEX [IX_JobExecutionArchive_ScheduleId] ON [dbo].[JobExecutionArchive]([ScheduleId]);
+    CREATE NONCLUSTERED INDEX [IX_JobExecutionArchive_ArchivedDateTime] ON [dbo].[JobExecutionArchive]([ArchivedDateTime]);
+    CREATE NONCLUSTERED INDEX [IX_JobExecutionArchive_StartDateTime] ON [dbo].[JobExecutionArchive]([StartDateTime]);
+    CREATE NONCLUSTERED INDEX [IX_JobExecutionArchive_Status] ON [dbo].[JobExecutionArchive]([Status]);
+
+    PRINT 'Created JobExecutionArchive table with indexes';
+END
+ELSE
+BEGIN
+    PRINT 'JobExecutionArchive table already exists';
+END
+GO
+
+-- =============================================
 -- Add retention configuration columns to AdrConfiguration
 -- =============================================
 IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[dbo].[AdrConfiguration]') AND name = 'JobRetentionMonths')
@@ -216,7 +259,7 @@ SELECT
     SUM(p.rows) AS [RecordCount]
 FROM sys.tables t
 INNER JOIN sys.partitions p ON t.object_id = p.object_id
-WHERE t.name IN ('AdrJobArchive', 'AdrJobExecutionArchive', 'AuditLogArchive')
+WHERE t.name IN ('AdrJobArchive', 'AdrJobExecutionArchive', 'AuditLogArchive', 'JobExecutionArchive')
     AND p.index_id IN (0, 1)
 GROUP BY t.name
 ORDER BY t.name;
