@@ -514,6 +514,31 @@ public class AdrService : IAdrService
         return result ?? throw new InvalidOperationException("Failed to clear rule override");
     }
 
+    public async Task<byte[]> DownloadRulesExportAsync(
+        string? vendorCode = null,
+        string? accountNumber = null,
+        bool? isEnabled = null,
+        bool? isOverridden = null,
+        string format = "excel")
+    {
+        var client = CreateClient();
+        var queryParams = new List<string> { $"format={format}" };
+        
+        if (!string.IsNullOrWhiteSpace(vendorCode))
+            queryParams.Add($"vendorCode={Uri.EscapeDataString(vendorCode)}");
+        if (!string.IsNullOrWhiteSpace(accountNumber))
+            queryParams.Add($"accountNumber={Uri.EscapeDataString(accountNumber)}");
+        if (isEnabled.HasValue)
+            queryParams.Add($"isEnabled={isEnabled.Value}");
+        if (isOverridden.HasValue)
+            queryParams.Add($"isOverridden={isOverridden.Value}");
+        
+        var url = $"adr/rules/export?{string.Join("&", queryParams)}";
+        var response = await client.GetAsync(url);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsByteArrayAsync();
+    }
+
     #endregion
 }
 

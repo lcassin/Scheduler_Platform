@@ -88,4 +88,10 @@ public interface IAdrService
     Task<List<AccountRuleDto>> GetRulesByAccountAsync(int accountId);
     Task<AccountRuleDto> UpdateRuleAsync(int ruleId, UpdateRuleRequest request);
     Task<AccountRuleDto> ClearRuleOverrideAsync(int ruleId);
+    Task<byte[]> DownloadRulesExportAsync(
+        string? vendorCode = null,
+        string? accountNumber = null,
+        bool? isEnabled = null,
+        bool? isOverridden = null,
+        string format = "excel");
 }
