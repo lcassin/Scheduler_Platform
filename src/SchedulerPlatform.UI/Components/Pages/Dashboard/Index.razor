@@ -296,7 +296,7 @@
                         <MudTh>Accounts Synced</MudTh>
                         <MudTh>Jobs Created</MudTh>
                         <MudTh>Credentials</MudTh>
-                        <MudTh>Scrapes</MudTh>
+                        <MudTh>ADR Requests</MudTh>
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd DataLabel="Date">@context.RequestedAt.ToString("MM/dd hh:mm tt")</MudTd>
@@ -319,6 +319,10 @@
                             {
                                 <text>@FormatNumber(context.SyncResult.AccountsInserted + context.SyncResult.AccountsUpdated)</text>
                             }
+                            else if (context.Status == "Completed" || context.Status == "Failed")
+                            {
+                                <text>0</text>
+                            }
                             else
                             {
                                 <text>-</text>
@@ -328,6 +332,10 @@
                             @if (context.JobCreationResult != null)
                             {
                                 <text>@FormatNumber(context.JobCreationResult.JobsCreated)</text>
+                            }
+                            else if (context.Status == "Completed" || context.Status == "Failed")
+                            {
+                                <text>0</text>
                             }
                             else
                             {
@@ -343,15 +351,23 @@
                                     <span style="color: var(--mud-palette-error);">@context.CredentialVerificationResult.CredentialsFailed</span>
                                 </MudText>
                             }
+                            else if (context.Status == "Completed" || context.Status == "Failed")
+                            {
+                                <MudText Typo="Typo.body2">0/0</MudText>
+                            }
                             else
                             {
                                 <text>-</text>
                             }
                         </MudTd>
-                        <MudTd DataLabel="Scrapes">
+                        <MudTd DataLabel="ADR Requests">
                             @if (context.ScrapeResult != null)
                             {
                                 <text>@FormatNumber(context.ScrapeResult.ScrapesRequested)</text>
+                            }
+                            else if (context.Status == "Completed" || context.Status == "Failed")
+                            {
+                                <text>0</text>
                             }
                             else
                             {

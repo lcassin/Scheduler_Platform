@@ -85,10 +85,11 @@ public class DataArchivalService : BackgroundService
         var totalJobsArchived = await ArchiveAdrJobsAsync(dbContext, jobCutoffDate, archivalDateTime, archivedBy, config.ArchivalBatchSize, cancellationToken);
         var totalExecutionsArchived = await ArchiveAdrJobExecutionsAsync(dbContext, executionCutoffDate, archivalDateTime, archivedBy, config.ArchivalBatchSize, cancellationToken);
         var totalAuditLogsArchived = await ArchiveAuditLogsAsync(dbContext, auditLogCutoffDate, archivalDateTime, archivedBy, config.ArchivalBatchSize, cancellationToken);
+        var totalScheduleExecutionsArchived = await ArchiveJobExecutionsAsync(dbContext, executionCutoffDate, archivalDateTime, archivedBy, config.ArchivalBatchSize, cancellationToken);
 
         _logger.LogInformation(
-            "Data archival completed. Jobs: {Jobs}, Executions: {Executions}, AuditLogs: {AuditLogs}",
-            totalJobsArchived, totalExecutionsArchived, totalAuditLogsArchived);
+            "Data archival completed. AdrJobs: {Jobs}, AdrExecutions: {Executions}, AuditLogs: {AuditLogs}, ScheduleExecutions: {ScheduleExecs}",
+            totalJobsArchived, totalExecutionsArchived, totalAuditLogsArchived, totalScheduleExecutionsArchived);
     }
 
     private async Task<AdrConfiguration> GetConfigurationAsync(SchedulerDbContext dbContext)
@@ -311,6 +312,73 @@ public class DataArchivalService : BackgroundService
             _logger.LogInformation("Archived {Count} AuditLog records (total: {Total})", logsToArchive.Count, totalArchived);
 
             if (logsToArchive.Count < batchSize)
+            {
+                hasMore = false;
+            }
+        }
+
+        return totalArchived;
+    }
+
+    private async Task<int> ArchiveJobExecutionsAsync(
+        SchedulerDbContext dbContext,
+        DateTime cutoffDate,
+        DateTime archivalDateTime,
+        string archivedBy,
+        int batchSize,
+        CancellationToken cancellationToken)
+    {
+        var totalArchived = 0;
+        var hasMore = true;
+
+        while (hasMore && !cancellationToken.IsCancellationRequested)
+        {
+            var executionsToArchive = await dbContext.JobExecutions
+                .Where(e => !e.IsDeleted && e.CreatedDateTime < cutoffDate)
+                .OrderBy(e => e.Id)
+                .Take(batchSize)
+                .ToListAsync(cancellationToken);
+
+            if (executionsToArchive.Count == 0)
+            {
+                hasMore = false;
+                continue;
+            }
+
+            foreach (var execution in executionsToArchive)
+            {
+                var archive = new JobExecutionArchive
+                {
+                    OriginalJobExecutionId = execution.Id,
+                    ScheduleId = execution.ScheduleId,
+                    StartDateTime = execution.StartDateTime,
+                    EndDateTime = execution.EndDateTime,
+                    Status = (int)execution.Status,
+                    Output = execution.Output,
+                    ErrorMessage = execution.ErrorMessage,
+                    StackTrace = execution.StackTrace,
+                    RetryCount = execution.RetryCount,
+                    DurationSeconds = execution.DurationSeconds,
+                    TriggeredBy = execution.TriggeredBy,
+                    CancelledBy = execution.CancelledBy,
+                    CreatedDateTime = execution.CreatedDateTime,
+                    CreatedBy = execution.CreatedBy,
+                    ModifiedDateTime = execution.ModifiedDateTime,
+                    ModifiedBy = execution.ModifiedBy,
+                    ArchivedDateTime = archivalDateTime,
+                    ArchivedBy = archivedBy
+                };
+
+                dbContext.JobExecutionArchives.Add(archive);
+                dbContext.JobExecutions.Remove(execution);
+            }
+
+            await dbContext.SaveChangesAsync(cancellationToken);
+            totalArchived += executionsToArchive.Count;
+
+            _logger.LogInformation("Archived {Count} JobExecution (Schedule) records (total: {Total})", executionsToArchive.Count, totalArchived);
+
+            if (executionsToArchive.Count < batchSize)
             {
                 hasMore = false;
             }
