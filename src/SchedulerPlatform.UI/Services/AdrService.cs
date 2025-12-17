@@ -526,6 +526,20 @@ public class AdrService : IAdrService
         }
     }
 
+    public async Task<List<AccountRuleDto>> GetRulesByAccountAsync(int accountId)
+    {
+        var client = CreateClient();
+        try
+        {
+            var result = await client.GetFromJsonAsync<List<AccountRuleDto>>($"adr/rules/by-account/{accountId}");
+            return result ?? new List<AccountRuleDto>();
+        }
+        catch (HttpRequestException)
+        {
+            return new List<AccountRuleDto>();
+        }
+    }
+
     public async Task<AccountRuleDto> UpdateRuleAsync(int ruleId, UpdateRuleRequest request)
     {
         var client = CreateClient();

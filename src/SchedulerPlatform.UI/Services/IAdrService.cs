@@ -85,6 +85,7 @@ public interface IAdrService
     
     // Rule operations
     Task<AccountRuleDto?> GetRuleAsync(int ruleId);
+    Task<List<AccountRuleDto>> GetRulesByAccountAsync(int accountId);
     Task<AccountRuleDto> UpdateRuleAsync(int ruleId, UpdateRuleRequest request);
     Task<AccountRuleDto> ClearRuleOverrideAsync(int ruleId);
     

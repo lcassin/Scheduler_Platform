@@ -2792,6 +2792,51 @@ public class AdrController : ControllerBase
         }
 
         /// <summary>
+        /// Retrieves account rules by account ID.
+        /// </summary>
+        /// <param name="accountId">The account ID.</param>
+        /// <returns>List of account rules for the specified account.</returns>
+        /// <response code="200">Returns the list of account rules.</response>
+        /// <response code="500">An error occurred while retrieving the rules.</response>
+        [HttpGet("rules/by-account/{accountId}")]
+        [ProducesResponseType(typeof(List<AccountRuleDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+        public async Task<ActionResult<List<AccountRuleDto>>> GetRulesByAccount(int accountId)
+        {
+            try
+            {
+                var rules = await _dbContext.AdrAccountRules
+                    .Include(r => r.AdrAccount)
+                    .Where(r => r.AdrAccountId == accountId && !r.IsDeleted)
+                    .Select(r => new AccountRuleDto
+                    {
+                        Id = r.Id,
+                        AdrAccountId = r.AdrAccountId,
+                        VendorCode = r.AdrAccount != null ? r.AdrAccount.VendorCode : null,
+                        VMAccountNumber = r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : null,
+                        JobTypeId = r.JobTypeId,
+                        PeriodType = r.PeriodType,
+                        PeriodDays = r.PeriodDays,
+                        NextRunDateTime = r.NextRunDateTime,
+                        NextRangeStartDateTime = r.NextRangeStartDateTime,
+                        NextRangeEndDateTime = r.NextRangeEndDateTime,
+                        IsEnabled = r.IsEnabled,
+                        IsManuallyOverridden = r.IsManuallyOverridden,
+                        OverriddenBy = r.OverriddenBy,
+                        OverriddenDateTime = r.OverriddenDateTime
+                    })
+                    .ToListAsync();
+
+                return Ok(rules);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error retrieving ADR account rules for account {AccountId}", accountId);
+                return StatusCode(500, "An error occurred while retrieving account rules");
+            }
+        }
+
+        /// <summary>
         /// Retrieves a single account rule by ID.
         /// </summary>
         /// <param name="id">The rule ID.</param>
