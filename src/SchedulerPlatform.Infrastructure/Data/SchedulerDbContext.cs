@@ -30,6 +30,11 @@ public class SchedulerDbContext : DbContext
         public DbSet<AdrJob> AdrJobs { get; set; }
         public DbSet<AdrJobExecution> AdrJobExecutions { get; set; }
         public DbSet<AdrOrchestrationRun> AdrOrchestrationRuns { get; set; }
+        
+        // Archive tables for data retention
+        public DbSet<AdrJobArchive> AdrJobArchives { get; set; }
+        public DbSet<AdrJobExecutionArchive> AdrJobExecutionArchives { get; set; }
+        public DbSet<AuditLogArchive> AuditLogArchives { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -443,6 +448,74 @@ public class SchedulerDbContext : DbContext
             entity.HasIndex(e => e.Code).IsUnique();
             entity.HasIndex(e => e.IsActive);
             entity.HasIndex(e => e.AdrRequestTypeId);
+        });
+
+        // Archive table configurations
+        modelBuilder.Entity<AdrJobArchive>(entity =>
+        {
+            entity.ToTable("AdrJobArchive");
+            entity.HasKey(e => e.AdrJobArchiveId);
+            
+            entity.Property(e => e.VMAccountNumber).IsRequired().HasMaxLength(128);
+            entity.Property(e => e.VendorCode).HasMaxLength(128);
+            entity.Property(e => e.PeriodType).HasMaxLength(13);
+            entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.AdrStatusDescription).HasMaxLength(100);
+            entity.Property(e => e.ErrorMessage).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.ManualRequestReason).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.LastStatusCheckResponse).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.CreatedBy).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.ModifiedBy).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.ArchivedBy).IsRequired().HasMaxLength(200);
+            
+            entity.HasIndex(e => e.OriginalAdrJobId);
+            entity.HasIndex(e => e.AdrAccountId);
+            entity.HasIndex(e => e.VMAccountId);
+            entity.HasIndex(e => e.ArchivedDateTime);
+            entity.HasIndex(e => e.BillingPeriodStartDateTime);
+        });
+
+        modelBuilder.Entity<AdrJobExecutionArchive>(entity =>
+        {
+            entity.ToTable("AdrJobExecutionArchive");
+            entity.HasKey(e => e.AdrJobExecutionArchiveId);
+            
+            entity.Property(e => e.AdrStatusDescription).HasMaxLength(100);
+            entity.Property(e => e.ErrorMessage).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.ApiResponse).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.RequestPayload).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.CreatedBy).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.ModifiedBy).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.ArchivedBy).IsRequired().HasMaxLength(200);
+            
+            entity.HasIndex(e => e.OriginalAdrJobExecutionId);
+            entity.HasIndex(e => e.AdrJobId);
+            entity.HasIndex(e => e.ArchivedDateTime);
+            entity.HasIndex(e => e.StartDateTime);
+        });
+
+        modelBuilder.Entity<AuditLogArchive>(entity =>
+        {
+            entity.ToTable("AuditLogArchive");
+            entity.HasKey(e => e.AuditLogArchiveId);
+            
+            entity.Property(e => e.EventType).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.EntityType).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Action).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.UserName).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.IpAddress).HasMaxLength(50);
+            entity.Property(e => e.UserAgent).HasMaxLength(500);
+            entity.Property(e => e.OldValues).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.NewValues).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.AdditionalData).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.CreatedBy).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.ModifiedBy).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.ArchivedBy).IsRequired().HasMaxLength(200);
+            
+            entity.HasIndex(e => e.OriginalAuditLogId);
+            entity.HasIndex(e => e.ArchivedDateTime);
+            entity.HasIndex(e => e.TimestampDateTime);
+            entity.HasIndex(e => new { e.EntityType, e.EntityId });
         });
     }
 }

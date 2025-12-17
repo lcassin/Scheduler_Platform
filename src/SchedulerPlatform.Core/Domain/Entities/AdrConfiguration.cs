@@ -93,4 +93,39 @@ public class AdrConfiguration : BaseEntity
     /// Optional notes about configuration changes.
     /// </summary>
     public string? Notes { get; set; }
+    
+    // Data Retention Settings
+    
+    /// <summary>
+    /// Number of months to keep AdrJob records before archiving.
+    /// Jobs older than this will be moved to the archive table.
+    /// Default: 12 months
+    /// </summary>
+    public int JobRetentionMonths { get; set; } = 12;
+    
+    /// <summary>
+    /// Number of months to keep AdrJobExecution records before archiving.
+    /// Executions older than this will be moved to the archive table.
+    /// Default: 12 months
+    /// </summary>
+    public int JobExecutionRetentionMonths { get; set; } = 12;
+    
+    /// <summary>
+    /// Number of days to keep AuditLog records before archiving.
+    /// Audit logs older than this will be moved to the archive table.
+    /// Default: 90 days (per BRD requirement)
+    /// </summary>
+    public int AuditLogRetentionDays { get; set; } = 90;
+    
+    /// <summary>
+    /// Whether the data archival process is enabled.
+    /// Default: true
+    /// </summary>
+    public bool IsArchivalEnabled { get; set; } = true;
+    
+    /// <summary>
+    /// Batch size for archival operations.
+    /// Default: 5000 records per batch
+    /// </summary>
+    public int ArchivalBatchSize { get; set; } = 5000;
 }
