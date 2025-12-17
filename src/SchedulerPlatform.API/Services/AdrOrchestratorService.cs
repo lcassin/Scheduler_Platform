@@ -108,12 +108,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         {
             _logger.LogInformation("Starting job creation for due accounts");
 
-            var dueAccounts = await _unitOfWork.AdrAccounts.FindAsync(a =>
-                !a.IsDeleted &&
-                (a.NextRunStatus == "Run Now" || a.NextRunStatus == "Due Soon") &&
-                a.HistoricalBillingStatus != "Missing" &&
-                a.NextRangeStartDateTime.HasValue &&
-                a.NextRangeEndDateTime.HasValue);
+            // Use the new method that includes AdrAccountRules for rule tracking per BRD requirements
+            var dueAccounts = await _unitOfWork.AdrAccounts.GetDueAccountsWithRulesAsync();
 
             int processedSinceLastSave = 0;
             int batchNumber = 1;
@@ -141,9 +137,15 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         continue;
                     }
 
+                    // Look up the active rule for this account (JobTypeId = 2 for DownloadInvoice/ADR Request)
+                    // If a rule exists, stamp its ID on the job for tracking per BRD requirements
+                    var accountRule = account.AdrAccountRules?
+                        .FirstOrDefault(r => !r.IsDeleted && r.IsEnabled && r.JobTypeId == 2);
+
                     var job = new AdrJob
                     {
                         AdrAccountId = account.Id,
+                        AdrAccountRuleId = accountRule?.Id,  // Track which rule created this job (null for legacy/manual jobs)
                         VMAccountId = account.VMAccountId,
                         VMAccountNumber = account.VMAccountNumber,
                         VendorCode = account.VendorCode,

@@ -175,4 +175,17 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
 
         return await query.CountAsync();
     }
+
+    public async Task<IEnumerable<AdrAccount>> GetDueAccountsWithRulesAsync()
+    {
+        return await _dbSet
+            .Include(a => a.AdrAccountRules.Where(r => !r.IsDeleted))
+            .Where(a =>
+                !a.IsDeleted &&
+                (a.NextRunStatus == "Run Now" || a.NextRunStatus == "Due Soon") &&
+                a.HistoricalBillingStatus != "Missing" &&
+                a.NextRangeStartDateTime.HasValue &&
+                a.NextRangeEndDateTime.HasValue)
+            .ToListAsync();
+    }
 }

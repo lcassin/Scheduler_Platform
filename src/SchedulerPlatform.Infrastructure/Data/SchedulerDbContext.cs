@@ -23,6 +23,7 @@ public class SchedulerDbContext : DbContext
     
     // ADR Process entities
     public DbSet<AdrAccount> AdrAccounts { get; set; }
+    public DbSet<AdrAccountRule> AdrAccountRules { get; set; }
     public DbSet<AdrJob> AdrJobs { get; set; }
     public DbSet<AdrJobExecution> AdrJobExecutions { get; set; }
     public DbSet<AdrOrchestrationRun> AdrOrchestrationRuns { get; set; }
@@ -231,6 +232,31 @@ public class SchedulerDbContext : DbContext
             entity.HasIndex(e => new { e.ExternalClientId, e.ExternalVendorId, e.AccountNumber });
         });
 
+        // ADR Account Rule entity configuration
+        modelBuilder.Entity<AdrAccountRule>(entity =>
+        {
+            entity.ToTable("AdrAccountRule");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("AdrAccountRuleId");
+            
+            entity.Property(e => e.RuleName).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.PeriodType).HasMaxLength(13);
+            entity.Property(e => e.OverriddenBy).HasMaxLength(200);
+            entity.Property(e => e.Notes).HasColumnType("nvarchar(max)");
+            
+            entity.HasOne(e => e.AdrAccount)
+                .WithMany(a => a.AdrAccountRules)
+                .HasForeignKey(e => e.AdrAccountId)
+                .OnDelete(DeleteBehavior.Cascade);
+            
+            entity.HasIndex(e => e.AdrAccountId);
+            entity.HasIndex(e => e.JobTypeId);
+            entity.HasIndex(e => e.IsEnabled);
+            entity.HasIndex(e => e.NextRunDateTime);
+            entity.HasIndex(e => new { e.AdrAccountId, e.JobTypeId });
+            entity.HasIndex(e => new { e.IsDeleted, e.IsEnabled, e.NextRunDateTime });
+        });
+
         // ADR Account entity configuration
         modelBuilder.Entity<AdrAccount>(entity =>
         {
@@ -293,7 +319,13 @@ public class SchedulerDbContext : DbContext
                 .HasForeignKey(e => e.AdrAccountId)
                 .OnDelete(DeleteBehavior.Cascade);
             
+            entity.HasOne(e => e.AdrAccountRule)
+                .WithMany(r => r.AdrJobs)
+                .HasForeignKey(e => e.AdrAccountRuleId)
+                .OnDelete(DeleteBehavior.SetNull);
+            
             entity.HasIndex(e => e.AdrAccountId);
+            entity.HasIndex(e => e.AdrAccountRuleId);
             entity.HasIndex(e => e.VMAccountId);
             entity.HasIndex(e => e.CredentialId);
             entity.HasIndex(e => e.Status);
