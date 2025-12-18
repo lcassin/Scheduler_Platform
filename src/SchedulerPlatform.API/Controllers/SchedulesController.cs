@@ -890,6 +890,11 @@ public class SchedulesController : ControllerBase
                     row++;
                 }
                 
+                // Create table with auto-filter and alternating row colors
+                var dataRange = worksheet.Range(1, 1, row - 1, 19);
+                var table = dataRange.CreateTable("SchedulesTable");
+                table.Theme = XLTableTheme.TableStyleLight9; // Light blue alternating rows
+                
                 worksheet.Columns().AdjustToContents();
                 
                 using var stream = new MemoryStream();

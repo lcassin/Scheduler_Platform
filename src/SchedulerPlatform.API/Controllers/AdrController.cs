@@ -1254,6 +1254,11 @@ public class AdrController : ControllerBase
                 row++;
             }
 
+            // Create table with auto-filter and alternating row colors
+            var dataRange = worksheet.Range(1, 1, row - 1, 19);
+            var table = dataRange.CreateTable("AdrAccountsTable");
+            table.Theme = XLTableTheme.TableStyleLight9; // Light blue alternating rows
+            
             worksheet.Columns().AdjustToContents();
 
             using var stream = new MemoryStream();
@@ -1764,6 +1769,11 @@ public class AdrController : ControllerBase
                 row++;
             }
 
+            // Create table with auto-filter and alternating row colors
+            var dataRange = worksheet.Range(1, 1, row - 1, 15);
+            var table = dataRange.CreateTable("AdrJobsTable");
+            table.Theme = XLTableTheme.TableStyleLight9; // Light blue alternating rows
+            
             worksheet.Columns().AdjustToContents();
 
             using var stream = new MemoryStream();
@@ -3020,6 +3030,11 @@ public class AdrController : ControllerBase
                     row++;
                 }
 
+                // Create table with auto-filter and alternating row colors
+                var dataRange = worksheet.Range(1, 1, row - 1, 12);
+                var table = dataRange.CreateTable("AdrRulesTable");
+                table.Theme = XLTableTheme.TableStyleLight9; // Light blue alternating rows
+                
                 worksheet.Columns().AdjustToContents();
 
                 using var stream = new MemoryStream();

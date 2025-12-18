@@ -252,6 +252,11 @@ public class JobExecutionsController : ControllerBase
                     row++;
                 }
                 
+                // Create table with auto-filter and alternating row colors
+                var dataRange = worksheet.Range(1, 1, row - 1, 9);
+                var table = dataRange.CreateTable("JobExecutionsTable");
+                table.Theme = XLTableTheme.TableStyleLight9; // Light blue alternating rows
+                
                 worksheet.Columns().AdjustToContents();
                 
                 using var stream = new MemoryStream();
