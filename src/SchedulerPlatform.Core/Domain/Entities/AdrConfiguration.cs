@@ -16,9 +16,11 @@ public class AdrConfiguration : BaseEntity
     public int CredentialCheckLeadDays { get; set; } = 7;
     
     /// <summary>
-    /// Number of days to retry scraping after initial attempt fails.
-    /// Default: 5 days
+    /// DEPRECATED: This field is no longer used by the orchestration logic.
+    /// Retry behavior is now controlled by the date range (NextRunDate through NextRangeEndDate)
+    /// and MaxRetries. Kept for backward compatibility - can be removed in a future cleanup.
     /// </summary>
+    [Obsolete("This field is deprecated and not used by orchestration. Retry behavior is controlled by date range and MaxRetries.")]
     public int ScrapeRetryDays { get; set; } = 5;
     
     /// <summary>

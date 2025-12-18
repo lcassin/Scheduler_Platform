@@ -3091,10 +3091,12 @@ public class AdrController : ControllerBase
                     rule.NextRangeEndDateTime = request.NextRangeEndDateTime.Value;
                 
                 if (!string.IsNullOrEmpty(request.PeriodType))
+                {
                     rule.PeriodType = request.PeriodType;
-                
-                if (request.PeriodDays.HasValue)
-                    rule.PeriodDays = request.PeriodDays.Value;
+                    // Auto-calculate PeriodDays from PeriodType for backward compatibility
+                    // This ensures PeriodDays stays in sync even though the UI no longer edits it directly
+                    rule.PeriodDays = BillingPeriodCalculator.GetApproximatePeriodDays(request.PeriodType);
+                }
                 
                 if (request.JobTypeId.HasValue)
                     rule.JobTypeId = request.JobTypeId.Value;
