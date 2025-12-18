@@ -207,26 +207,26 @@
             {
                 <MudGrid Spacing="2" Class="mb-4">
                     <MudItem xs="4">
-                        <MudPaper Class="pa-3 d-flex flex-column align-center" Style="background-color: rgba(66, 165, 245, 0.1); border-left: 4px solid #42a5f5;">
-                            <MudText Typo="Typo.h5" Style="color: #42a5f5;">@FormatNumber(_adrJobStats.PendingCount)</MudText>
+                        <MudPaper Class="pa-3 d-flex flex-column align-center" Style="background-color: rgba(158, 158, 158, 0.1); border-left: 4px solid #9e9e9e;">
+                            <MudText Typo="Typo.h5" Style="color: #9e9e9e;">@FormatNumber(_adrJobStats.PendingCount)</MudText>
                             <MudText Typo="Typo.caption">Pending</MudText>
                         </MudPaper>
                     </MudItem>
                     <MudItem xs="4">
+                        <MudPaper Class="pa-3 d-flex flex-column align-center" Style="background-color: rgba(66, 165, 245, 0.1); border-left: 4px solid #42a5f5;">
+                            <MudText Typo="Typo.h5" Style="color: #42a5f5;">@FormatNumber(_adrJobStats.CredentialVerifiedCount)</MudText>
+                            <MudText Typo="Typo.caption">Credential Verified</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudPaper Class="pa-3 d-flex flex-column align-center" Style="background-color: rgba(126, 87, 194, 0.1); border-left: 4px solid #7e57c2;">
+                            <MudText Typo="Typo.h5" Style="color: #7e57c2;">@FormatNumber(_adrJobStats.ScrapeRequestedCount)</MudText>
+                            <MudText Typo="Typo.caption">ADR Request Sent</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="4">
                         <MudPaper Class="pa-3 d-flex flex-column align-center" Style="background-color: rgba(102, 187, 106, 0.1); border-left: 4px solid #66bb6a;">
-                            <MudText Typo="Typo.h5" Style="color: #66bb6a;">@FormatNumber(_adrJobStats.CredentialVerifiedCount)</MudText>
-                            <MudText Typo="Typo.caption">Verified</MudText>
-                        </MudPaper>
-                    </MudItem>
-                    <MudItem xs="4">
-                        <MudPaper Class="pa-3 d-flex flex-column align-center" Style="background-color: rgba(255, 202, 40, 0.1); border-left: 4px solid #ffca28;">
-                            <MudText Typo="Typo.h5" Style="color: #ffca28;">@FormatNumber(_adrJobStats.ScrapeRequestedCount)</MudText>
-                            <MudText Typo="Typo.caption">Requested</MudText>
-                        </MudPaper>
-                    </MudItem>
-                    <MudItem xs="4">
-                        <MudPaper Class="pa-3 d-flex flex-column align-center" Style="background-color: rgba(38, 198, 218, 0.1); border-left: 4px solid #26c6da;">
-                            <MudText Typo="Typo.h5" Style="color: #26c6da;">@FormatNumber(_adrJobStats.CompletedCount)</MudText>
+                            <MudText Typo="Typo.h5" Style="color: #66bb6a;">@FormatNumber(_adrJobStats.CompletedCount)</MudText>
                             <MudText Typo="Typo.caption">Completed</MudText>
                         </MudPaper>
                     </MudItem>
@@ -237,17 +237,17 @@
                         </MudPaper>
                     </MudItem>
                     <MudItem xs="4">
-                        <MudPaper Class="pa-3 d-flex flex-column align-center" Style="background-color: rgba(255, 152, 0, 0.1); border-left: 4px solid #ff9800;">
-                            <MudText Typo="Typo.h5" Style="color: #ff9800;">@FormatNumber(_adrJobStats.NeedsReviewCount)</MudText>
-                            <MudText Typo="Typo.caption">Review</MudText>
+                        <MudPaper Class="pa-3 d-flex flex-column align-center" Style="background-color: rgba(255, 167, 38, 0.1); border-left: 4px solid #ffa726;">
+                            <MudText Typo="Typo.h5" Style="color: #ffa726;">@FormatNumber(_adrJobStats.NeedsReviewCount)</MudText>
+                            <MudText Typo="Typo.caption">Needs Review</MudText>
                         </MudPaper>
                     </MudItem>
                 </MudGrid>
                 @if (_adrJobChartData.Any(d => d > 0))
                 {
-                    <MudChart ChartType="ChartType.Bar" 
-                              ChartSeries="@_adrJobChartSeries" 
-                              XAxisLabels="@_adrJobChartLabels"
+                    <MudChart ChartType="ChartType.Pie" 
+                              InputData="@_adrJobChartData"
+                              InputLabels="@_adrJobChartLabels"
                               ChartOptions="@_adrJobChartOptions"
                               Width="100%" 
                               Height="200px">
@@ -692,7 +692,6 @@
                 private string[] _adrAccountChartLabels = Array.Empty<string>();
                 private double[] _adrJobChartData = Array.Empty<double>();
                 private string[] _adrJobChartLabels = Array.Empty<string>();
-                private List<ChartSeries> _adrJobChartSeries = new();
     
         private IEnumerable<JobStatus>? SelectedStatuses
     {
@@ -742,19 +741,19 @@
         }
     };
 
-    // Custom color palette for ADR Job Status chart
-    // Order matches: Pending, Verified, Requested, Completed, Failed, Review
+    // Custom color palette for ADR Job Status pie chart
+    // Order matches: Pending, Credential Verified, ADR Request Sent, Completed, Failed, Needs Review
+    // Colors aligned with Monitor page for consistency
     private ChartOptions _adrJobChartOptions = new ChartOptions
     {
-        YAxisTicks = 10,
         ChartPalette = new[]
         {
-            "#42a5f5", // Pending (Blue)
-            "#66bb6a", // Verified (Green)
-            "#ffca28", // Requested (Yellow)
-            "#26c6da", // Completed (Teal)
-            "#f44336", // Failed (Red)
-            "#ff9800"  // Review (Orange)
+            "#9e9e9e", // Pending (Gray)
+            "#42a5f5", // Credential Verified (Blue/Info)
+            "#7e57c2", // ADR Request Sent (Purple/Primary)
+            "#66bb6a", // Completed (Green/Success)
+            "#f44336", // Failed (Red/Error)
+            "#ffa726"  // Needs Review (Orange/Warning)
         }
     };
 
@@ -1035,32 +1034,44 @@
                 
                 if (_adrJobStats != null)
                 {
-                    _adrJobChartData = new double[]
+                    // Build chart data - only include non-zero values to avoid empty pie slices
+                    // Order matches the color palette
+                    var dataList = new List<double>();
+                    var labelList = new List<string>();
+                    
+                    if (_adrJobStats.PendingCount > 0)
                     {
-                        _adrJobStats.PendingCount,
-                        _adrJobStats.CredentialVerifiedCount,
-                        _adrJobStats.ScrapeRequestedCount,
-                        _adrJobStats.CompletedCount,
-                        _adrJobStats.FailedCount,
-                        _adrJobStats.NeedsReviewCount
-                    };
-                    _adrJobChartLabels = new string[]
+                        dataList.Add(_adrJobStats.PendingCount);
+                        labelList.Add("Pending");
+                    }
+                    if (_adrJobStats.CredentialVerifiedCount > 0)
                     {
-                        "Pending",
-                        "Verified",
-                        "Requested",
-                        "Completed",
-                        "Failed",
-                        "Review"
-                    };
-                    _adrJobChartSeries = new List<ChartSeries>
+                        dataList.Add(_adrJobStats.CredentialVerifiedCount);
+                        labelList.Add("Credential Verified");
+                    }
+                    if (_adrJobStats.ScrapeRequestedCount > 0)
                     {
-                        new ChartSeries
-                        {
-                            Name = "Jobs",
-                            Data = _adrJobChartData
-                        }
-                    };
+                        dataList.Add(_adrJobStats.ScrapeRequestedCount);
+                        labelList.Add("ADR Request Sent");
+                    }
+                    if (_adrJobStats.CompletedCount > 0)
+                    {
+                        dataList.Add(_adrJobStats.CompletedCount);
+                        labelList.Add("Completed");
+                    }
+                    if (_adrJobStats.FailedCount > 0)
+                    {
+                        dataList.Add(_adrJobStats.FailedCount);
+                        labelList.Add("Failed");
+                    }
+                    if (_adrJobStats.NeedsReviewCount > 0)
+                    {
+                        dataList.Add(_adrJobStats.NeedsReviewCount);
+                        labelList.Add("Needs Review");
+                    }
+                    
+                    _adrJobChartData = dataList.ToArray();
+                    _adrJobChartLabels = labelList.ToArray();
                 }
             }
             catch (Exception ex)
