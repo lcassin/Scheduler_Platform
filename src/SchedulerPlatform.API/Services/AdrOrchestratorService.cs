@@ -1890,24 +1890,6 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     }
 
     /// <summary>
-    /// Derives period days from period type string.
-    /// Used to calculate billing cycle intervals from the job's PeriodType.
-    /// </summary>
-    private static int GetPeriodDaysFromType(string? periodType)
-    {
-        return periodType?.ToLowerInvariant() switch
-        {
-            "weekly" => 7,
-            "biweekly" or "bi-weekly" => 14,
-            "monthly" => 30,
-            "quarterly" => 90,
-            "semiannually" or "semi-annually" => 180,
-            "annually" => 365,
-            _ => 30  // Default to monthly if not specified or unrecognized
-        };
-    }
-
-    /// <summary>
     /// Calculates the LastSuccessfulDownloadDate with anti-creep logic.
     /// - If no previous date exists, use the job's scheduled date (establish baseline)
     /// - If job date is earlier or equal to expected, use job date (allow earlier)
