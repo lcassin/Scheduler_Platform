@@ -163,7 +163,7 @@ ALTER ROLE db_ddladmin ADD MEMBER [nuscetsadrschdevmi];  -- For migrations
 |---------|-------|
 | `ASPNETCORE_ENVIRONMENT` | `Development` or `AzureDev` |
 | `KeyVault__VaultUri` | `https://nuscetsadrschdevkv.vault.azure.net/` |
-| `Authentication__Authority` | `https://[your-duende-url]` |
+| `Authentication__Authority` | `https://oidc.uat.expensesmart.com` |
 | `Authentication__Audience` | `scheduler-api` |
 | `Authentication__RequireHttpsMetadata` | `true` |
 | `Cors__AllowedOrigins__0` | `https://nuscetsadrschdevwebuiai.azurewebsites.net` |
@@ -177,7 +177,7 @@ ALTER ROLE db_ddladmin ADD MEMBER [nuscetsadrschdevmi];  -- For migrations
 | `ASPNETCORE_ENVIRONMENT` | `Development` or `AzureDev` |
 | `KeyVault__VaultUri` | `https://nuscetsadrschdevkv.vault.azure.net/` |
 | `API__BaseUrl` | `https://nuscetsadrschdevwebapi.azurewebsites.net/api/` |
-| `IdentityServer__Authority` | `https://[your-duende-url]` |
+| `IdentityServer__Authority` | `https://oidc.uat.expensesmart.com` |
 | `IdentityServer__ClientId` | `adr-scheduler-ui` |
 
 **Note:** `IdentityServer__ClientSecret` should come from Key Vault, not App Settings.
