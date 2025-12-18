@@ -1094,17 +1094,12 @@
                     // Keep for backward compatibility with other MudCharts
                     _adrJobChartSeries = new List<ChartSeries>
                     {
-                        dataList.Add(_adrJobStats.FailedCount);
-                        labelList.Add("Failed");
-                    }
-                    if (_adrJobStats.NeedsReviewCount > 0)
-                    {
-                        dataList.Add(_adrJobStats.NeedsReviewCount);
-                        labelList.Add("Needs Review");
-                    }
-                    
-                    _adrJobChartData = dataList.ToArray();
-                    _adrJobChartLabels = labelList.ToArray();
+                        new ChartSeries
+                        {
+                            Name = "Jobs",
+                            Data = _adrJobChartData
+                        }
+                    };
                 }
             }
             catch (Exception ex)
