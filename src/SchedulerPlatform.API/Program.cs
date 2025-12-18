@@ -264,6 +264,7 @@ builder.Services.AddCors(options =>
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment() || 
+    app.Environment.IsEnvironment("AzureDev") ||
     app.Environment.IsEnvironment("UAT") || 
     app.Environment.IsEnvironment("Staging"))
 {
