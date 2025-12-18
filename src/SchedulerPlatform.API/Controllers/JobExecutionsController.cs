@@ -4,6 +4,7 @@ using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Quartz;
+using SchedulerPlatform.API.Services;
 using SchedulerPlatform.Core.Domain.Entities;
 using SchedulerPlatform.Core.Domain.Enums;
 using SchedulerPlatform.Core.Domain.Interfaces;
@@ -191,79 +192,62 @@ public class JobExecutionsController : ControllerBase
                 executions = await _unitOfWork.JobExecutions.GetAllAsync();
             }
 
+            var headers = new[] {
+                "Id", "ScheduleId", "ScheduleName", "StartDateTime", "EndDateTime",
+                "Duration", "Status", "RetryCount", "ErrorMessage"
+            };
+
             if (string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
             {
-                var csv = new StringBuilder();
-                csv.AppendLine("Id,ScheduleId,ScheduleName,StartDateTime,EndDateTime,DurationSeconds,Status,RetryCount,ErrorMessage");
-                
-                foreach (var e in executions)
+                var csvBytes = ExcelExportHelper.CreateCsvExport(
+                    string.Join(",", headers),
+                    executions,
+                    e =>
+                    {
+                        var duration = e.EndDateTime.HasValue
+                            ? (e.EndDateTime.Value - e.StartDateTime).TotalSeconds
+                            : (double?)null;
+                        return string.Join(",",
+                            e.Id,
+                            e.ScheduleId,
+                            ExcelExportHelper.CsvEscape(e.Schedule.Name),
+                            e.StartDateTime.ToString("o"),
+                            e.EndDateTime?.ToString("o") ?? "",
+                            duration?.ToString(CultureInfo.InvariantCulture) ?? "",
+                            e.Status,
+                            e.RetryCount,
+                            ExcelExportHelper.CsvEscape(e.ErrorMessage)
+                        );
+                    });
+                return File(csvBytes, "text/csv", $"executions_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
+            }
+
+            // Excel format using centralized helper
+            var excelBytes = ExcelExportHelper.CreateExcelExport(
+                "JobExecutions",
+                "JobExecutionsTable",
+                headers,
+                executions,
+                e =>
                 {
-                    var duration = e.EndDateTime.HasValue 
-                        ? (e.EndDateTime.Value - e.StartDateTime).TotalSeconds 
-                        : (double?)null;
-                    
-                    csv.AppendLine(string.Join(",",
+                    var duration = e.EndDateTime.HasValue
+                        ? (e.EndDateTime.Value - e.StartDateTime).ToString()
+                        : null;
+                    return new object?[]
+                    {
                         e.Id,
                         e.ScheduleId,
-                        CsvEscape(e.Schedule.Name),
-                        e.StartDateTime.ToString("o"),
-                        e.EndDateTime?.ToString("o") ?? "",
-                        duration?.ToString(CultureInfo.InvariantCulture) ?? "",
-                        e.Status,
+                        e.Schedule.Name,
+                        e.StartDateTime,
+                        e.EndDateTime,
+                        duration,
+                        e.Status.ToString(),
                         e.RetryCount,
-                        CsvEscape(e.ErrorMessage)
-                    ));
-                }
-                
-                var bytes = Encoding.UTF8.GetBytes(csv.ToString());
-                return File(bytes, "text/csv", $"executions_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
-            }
-            else
-            {
-                using var workbook = new XLWorkbook();
-                var worksheet = workbook.Worksheets.Add("JobExecutions");
-                
-                var headers = new[] {
-                    "Id", "ScheduleId", "ScheduleName", "StartDateTime", "EndDateTime", 
-                    "Duration", "Status", "RetryCount", "ErrorMessage"
-                };
-                
-                for (int i = 0; i < headers.Length; i++)
-                {
-                    worksheet.Cell(1, i + 1).Value = headers[i];
-                }
-
-                int row = 2;
-                foreach (var e in executions)
-                {
-                    worksheet.Cell(row, 1).Value = e.Id;
-                    worksheet.Cell(row, 2).Value = e.ScheduleId;
-                    worksheet.Cell(row, 3).Value = e.Schedule.Name;
-                    worksheet.Cell(row, 4).Value = e.StartDateTime;
-                    if (e.EndDateTime.HasValue) worksheet.Cell(row, 5).Value = e.EndDateTime.Value;
-                    if (e.EndDateTime.HasValue)
-                    {
-                        var duration = e.EndDateTime.Value - e.StartDateTime;
-                        worksheet.Cell(row, 6).Value = duration.ToString();
-                    }
-                    worksheet.Cell(row, 7).Value = e.Status.ToString();
-                    worksheet.Cell(row, 8).Value = e.RetryCount;
-                    worksheet.Cell(row, 9).Value = e.ErrorMessage;
-                    row++;
-                }
-                
-                // Create table with auto-filter and alternating row colors
-                var dataRange = worksheet.Range(1, 1, row - 1, 9);
-                var table = dataRange.CreateTable("JobExecutionsTable");
-                table.Theme = XLTableTheme.TableStyleLight9; // Light blue alternating rows
-                
-                worksheet.Columns().AdjustToContents();
-                
-                using var stream = new MemoryStream();
-                workbook.SaveAs(stream);
-                return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
-                    $"executions_{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx");
-            }
+                        e.ErrorMessage
+                    };
+                });
+            return File(excelBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"executions_{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx");
         }
         catch (Exception ex)
         {

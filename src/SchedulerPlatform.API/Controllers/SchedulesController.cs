@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using Quartz;
 using SchedulerPlatform.API.Models;
+using SchedulerPlatform.API.Services;
 using SchedulerPlatform.Core.Domain.Entities;
 using SchedulerPlatform.Core.Domain.Enums;
 using SchedulerPlatform.Core.Domain.Interfaces;
@@ -813,95 +814,80 @@ public class SchedulesController : ControllerBase
                 }
             }
 
+            var headers = new[] {
+                "Id", "Name", "Description", "ClientId", "JobType", "Frequency", "CronExpression",
+                "NextRunDateTime", "LastRunDateTime", "IsEnabled", "MaxRetries", "RetryDelayMinutes", "TimeZone",
+                "EnableSuccessNotifications", "EnableFailureNotifications", "FailureEmailRecipients",
+                "FailureEmailSubject", "IncludeExecutionDetails", "IncludeOutput"
+            };
+
             if (string.Equals(format, "csv", StringComparison.OrdinalIgnoreCase))
             {
-                var csv = new StringBuilder();
-                csv.AppendLine("Id,Name,Description,ClientId,JobType,Frequency,CronExpression,NextRunDateTime,LastRunDateTime,IsEnabled,MaxRetries,RetryDelayMinutes,TimeZone,EnableSuccessNotifications,EnableFailureNotifications,FailureEmailRecipients,FailureEmailSubject,IncludeExecutionDetails,IncludeOutput");
-                
-                foreach (var s in schedules)
+                var csvBytes = ExcelExportHelper.CreateCsvExport(
+                    string.Join(",", headers),
+                    schedules,
+                    s =>
+                    {
+                        var n = s.NotificationSetting;
+                        return string.Join(",",
+                            s.Id,
+                            ExcelExportHelper.CsvEscape(s.Name),
+                            ExcelExportHelper.CsvEscape(s.Description),
+                            s.ClientId,
+                            s.JobType,
+                            s.Frequency,
+                            ExcelExportHelper.CsvEscape(s.CronExpression),
+                            s.NextRunDateTime?.ToString("o") ?? "",
+                            s.LastRunDateTime?.ToString("o") ?? "",
+                            s.IsEnabled,
+                            s.MaxRetries,
+                            s.RetryDelayMinutes,
+                            ExcelExportHelper.CsvEscape(s.TimeZone),
+                            n?.EnableSuccessNotifications ?? false,
+                            n?.EnableFailureNotifications ?? false,
+                            ExcelExportHelper.CsvEscape(n?.FailureEmailRecipients),
+                            ExcelExportHelper.CsvEscape(n?.FailureEmailSubject),
+                            n?.IncludeExecutionDetails ?? false,
+                            n?.IncludeOutput ?? false
+                        );
+                    });
+                return File(csvBytes, "text/csv", $"schedules_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
+            }
+
+            // Excel format using centralized helper
+            var excelBytes = ExcelExportHelper.CreateExcelExport(
+                "Schedules",
+                "SchedulesTable",
+                headers,
+                schedules,
+                s =>
                 {
                     var n = s.NotificationSetting;
-                    csv.AppendLine(string.Join(",",
+                    return new object?[]
+                    {
                         s.Id,
-                        CsvEscape(s.Name),
-                        CsvEscape(s.Description),
+                        s.Name,
+                        s.Description,
                         s.ClientId,
-                        s.JobType,
-                        s.Frequency,
-                        CsvEscape(s.CronExpression),
-                        s.NextRunDateTime?.ToString("o") ?? "",
-                        s.LastRunDateTime?.ToString("o") ?? "",
+                        s.JobType.ToString(),
+                        s.Frequency.ToString(),
+                        s.CronExpression,
+                        s.NextRunDateTime,
+                        s.LastRunDateTime,
                         s.IsEnabled,
                         s.MaxRetries,
                         s.RetryDelayMinutes,
-                        CsvEscape(s.TimeZone),
+                        s.TimeZone,
                         n?.EnableSuccessNotifications ?? false,
                         n?.EnableFailureNotifications ?? false,
-                        CsvEscape(n?.FailureEmailRecipients),
-                        CsvEscape(n?.FailureEmailSubject),
+                        n?.FailureEmailRecipients ?? "",
+                        n?.FailureEmailSubject ?? "",
                         n?.IncludeExecutionDetails ?? false,
                         n?.IncludeOutput ?? false
-                    ));
-                }
-                
-                var bytes = Encoding.UTF8.GetBytes(csv.ToString());
-                return File(bytes, "text/csv", $"schedules_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
-            }
-            else
-            {
-                using var workbook = new XLWorkbook();
-                var worksheet = workbook.Worksheets.Add("Schedules");
-                
-                var headers = new[] {
-                    "Id", "Name", "Description", "ClientId", "JobType", "Frequency", "CronExpression",
-                    "NextRunDateTime", "LastRunDateTime", "IsEnabled", "MaxRetries", "RetryDelayMinutes", "TimeZone",
-                    "EnableSuccessNotifications", "EnableFailureNotifications", "FailureEmailRecipients",
-                    "FailureEmailSubject", "IncludeExecutionDetails", "IncludeOutput"
-                };
-                
-                for (int i = 0; i < headers.Length; i++)
-                {
-                    worksheet.Cell(1, i + 1).Value = headers[i];
-                }
-
-                int row = 2;
-                foreach (var s in schedules)
-                {
-                    var n = s.NotificationSetting;
-                    worksheet.Cell(row, 1).Value = s.Id;
-                    worksheet.Cell(row, 2).Value = s.Name;
-                    worksheet.Cell(row, 3).Value = s.Description;
-                    worksheet.Cell(row, 4).Value = s.ClientId;
-                    worksheet.Cell(row, 5).Value = s.JobType.ToString();
-                    worksheet.Cell(row, 6).Value = s.Frequency.ToString();
-                    worksheet.Cell(row, 7).Value = s.CronExpression;
-                    if (s.NextRunDateTime.HasValue) worksheet.Cell(row, 8).Value = s.NextRunDateTime.Value;
-                    if (s.LastRunDateTime.HasValue) worksheet.Cell(row, 9).Value = s.LastRunDateTime.Value;
-                    worksheet.Cell(row, 10).Value = s.IsEnabled;
-                    worksheet.Cell(row, 11).Value = s.MaxRetries;
-                    worksheet.Cell(row, 12).Value = s.RetryDelayMinutes;
-                    worksheet.Cell(row, 13).Value = s.TimeZone;
-                    worksheet.Cell(row, 14).Value = n?.EnableSuccessNotifications ?? false;
-                    worksheet.Cell(row, 15).Value = n?.EnableFailureNotifications ?? false;
-                    worksheet.Cell(row, 16).Value = n?.FailureEmailRecipients;
-                    worksheet.Cell(row, 17).Value = n?.FailureEmailSubject;
-                    worksheet.Cell(row, 18).Value = n?.IncludeExecutionDetails ?? false;
-                    worksheet.Cell(row, 19).Value = n?.IncludeOutput ?? false;
-                    row++;
-                }
-                
-                // Create table with auto-filter and alternating row colors
-                var dataRange = worksheet.Range(1, 1, row - 1, 19);
-                var table = dataRange.CreateTable("SchedulesTable");
-                table.Theme = XLTableTheme.TableStyleLight9; // Light blue alternating rows
-                
-                worksheet.Columns().AdjustToContents();
-                
-                using var stream = new MemoryStream();
-                workbook.SaveAs(stream);
-                return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", 
-                    $"schedules_{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx");
-            }
+                    };
+                });
+            return File(excelBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"schedules_{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx");
         }
         catch (Exception ex)
         {

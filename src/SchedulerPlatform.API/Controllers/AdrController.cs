@@ -1186,84 +1186,54 @@ public class AdrController : ControllerBase
                 })
                 .ToListAsync();
 
+            var headers = new[] { "Account #", "VM Account ID", "Interface Account ID", "Client", "Vendor Code", "Period Type", "Next Run", "Run Status", "Job Status", "Last Completed", "Historical Status", "Last Invoice", "Expected Next", "Account Overridden", "Account Overridden By", "Account Overridden Date", "Rule Overridden", "Rule Overridden By", "Rule Overridden Date" };
+
             if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
             {
-                var csv = new System.Text.StringBuilder();
-                csv.AppendLine("Account #,VM Account ID,Interface Account ID,Client,Vendor Code,Period Type,Next Run,Run Status,Job Status,Last Completed,Historical Status,Last Invoice,Expected Next,Account Overridden,Account Overridden By,Account Overridden Date,Rule Overridden,Rule Overridden By,Rule Overridden Date");
+                var csvBytes = ExcelExportHelper.CreateCsvExport(
+                    string.Join(",", headers),
+                    exportData,
+                    item =>
+                    {
+                        var a = item.Account;
+                        return $"{ExcelExportHelper.CsvEscape(a.VMAccountNumber)},{a.VMAccountId},{ExcelExportHelper.CsvEscape(a.InterfaceAccountId)},{ExcelExportHelper.CsvEscape(a.ClientName)},{ExcelExportHelper.CsvEscape(a.VendorCode)},{ExcelExportHelper.CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{ExcelExportHelper.CsvEscape(a.NextRunStatus)},{ExcelExportHelper.CsvEscape(item.CurrentJobStatus)},{item.LastCompletedDateTime?.ToString("MM/dd/yyyy") ?? ""},{ExcelExportHelper.CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.IsManuallyOverridden},{ExcelExportHelper.CsvEscape(a.OverriddenBy)},{a.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""},{(item.RuleIsManuallyOverridden ? "Yes" : "No")},{ExcelExportHelper.CsvEscape(item.RuleOverriddenBy)},{item.RuleOverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""}";
+                    });
+                return File(csvBytes, "text/csv", $"adr_accounts_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
+            }
 
-                foreach (var item in exportData)
+            // Excel format using centralized helper
+            var excelBytes = ExcelExportHelper.CreateExcelExport(
+                "ADR Accounts",
+                "AdrAccountsTable",
+                headers,
+                exportData,
+                item =>
                 {
                     var a = item.Account;
-                    csv.AppendLine($"{CsvEscape(a.VMAccountNumber)},{a.VMAccountId},{CsvEscape(a.InterfaceAccountId)},{CsvEscape(a.ClientName)},{CsvEscape(a.VendorCode)},{CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.NextRunStatus)},{CsvEscape(item.CurrentJobStatus)},{item.LastCompletedDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.IsManuallyOverridden},{CsvEscape(a.OverriddenBy)},{a.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""},{(item.RuleIsManuallyOverridden ? "Yes" : "No")},{CsvEscape(item.RuleOverriddenBy)},{item.RuleOverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""}");
-                }
-
-                return File(System.Text.Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", $"adr_accounts_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
-            }
-
-            // Excel format
-            using var workbook = new XLWorkbook();
-            var worksheet = workbook.Worksheets.Add("ADR Accounts");
-
-            // Headers
-            worksheet.Cell(1, 1).Value = "Account #";
-            worksheet.Cell(1, 2).Value = "VM Account ID";
-            worksheet.Cell(1, 3).Value = "Interface Account ID";
-            worksheet.Cell(1, 4).Value = "Client";
-            worksheet.Cell(1, 5).Value = "Vendor Code";
-            worksheet.Cell(1, 6).Value = "Period Type";
-            worksheet.Cell(1, 7).Value = "Next Run";
-            worksheet.Cell(1, 8).Value = "Run Status";
-            worksheet.Cell(1, 9).Value = "Job Status";
-            worksheet.Cell(1, 10).Value = "Last Completed";
-            worksheet.Cell(1, 11).Value = "Historical Status";
-            worksheet.Cell(1, 12).Value = "Last Invoice";
-            worksheet.Cell(1, 13).Value = "Expected Next";
-            worksheet.Cell(1, 14).Value = "Account Overridden";
-            worksheet.Cell(1, 15).Value = "Account Overridden By";
-            worksheet.Cell(1, 16).Value = "Account Overridden Date";
-            worksheet.Cell(1, 17).Value = "Rule Overridden";
-            worksheet.Cell(1, 18).Value = "Rule Overridden By";
-            worksheet.Cell(1, 19).Value = "Rule Overridden Date";
-
-            var headerRow = worksheet.Row(1);
-            headerRow.Style.Font.Bold = true;
-
-            int row = 2;
-            foreach (var item in exportData)
-            {
-                var a = item.Account;
-                worksheet.Cell(row, 1).Value = a.VMAccountNumber;
-                worksheet.Cell(row, 2).Value = a.VMAccountId;
-                worksheet.Cell(row, 3).Value = a.InterfaceAccountId;
-                worksheet.Cell(row, 4).Value = a.ClientName;
-                worksheet.Cell(row, 5).Value = a.VendorCode;
-                worksheet.Cell(row, 6).Value = a.PeriodType;
-                if (a.NextRunDateTime.HasValue) worksheet.Cell(row, 7).Value = a.NextRunDateTime.Value;
-                worksheet.Cell(row, 8).Value = a.NextRunStatus;
-                worksheet.Cell(row, 9).Value = item.CurrentJobStatus ?? "";
-                if (item.LastCompletedDateTime.HasValue) worksheet.Cell(row, 10).Value = item.LastCompletedDateTime.Value;
-                worksheet.Cell(row, 11).Value = a.HistoricalBillingStatus;
-                if (a.LastInvoiceDateTime.HasValue) worksheet.Cell(row, 12).Value = a.LastInvoiceDateTime.Value;
-                if (a.ExpectedNextDateTime.HasValue) worksheet.Cell(row, 13).Value = a.ExpectedNextDateTime.Value;
-                worksheet.Cell(row, 14).Value = a.IsManuallyOverridden ? "Yes" : "No";
-                worksheet.Cell(row, 15).Value = a.OverriddenBy ?? "";
-                if (a.OverriddenDateTime.HasValue) worksheet.Cell(row, 16).Value = a.OverriddenDateTime.Value;
-                worksheet.Cell(row, 17).Value = item.RuleIsManuallyOverridden ? "Yes" : "No";
-                worksheet.Cell(row, 18).Value = item.RuleOverriddenBy ?? "";
-                if (item.RuleOverriddenDateTime.HasValue) worksheet.Cell(row, 19).Value = item.RuleOverriddenDateTime.Value;
-                row++;
-            }
-
-            // Create table with auto-filter and alternating row colors
-            var dataRange = worksheet.Range(1, 1, row - 1, 19);
-            var table = dataRange.CreateTable("AdrAccountsTable");
-            table.Theme = XLTableTheme.TableStyleLight9; // Light blue alternating rows
-            
-            worksheet.Columns().AdjustToContents();
-
-            using var stream = new MemoryStream();
-            workbook.SaveAs(stream);
-            return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    return new object?[]
+                    {
+                        a.VMAccountNumber,
+                        a.VMAccountId,
+                        a.InterfaceAccountId,
+                        a.ClientName,
+                        a.VendorCode,
+                        a.PeriodType,
+                        a.NextRunDateTime,
+                        a.NextRunStatus,
+                        item.CurrentJobStatus ?? "",
+                        item.LastCompletedDateTime,
+                        a.HistoricalBillingStatus,
+                        a.LastInvoiceDateTime,
+                        a.ExpectedNextDateTime,
+                        a.IsManuallyOverridden,
+                        a.OverriddenBy ?? "",
+                        a.OverriddenDateTime,
+                        item.RuleIsManuallyOverridden,
+                        item.RuleOverriddenBy ?? "",
+                        item.RuleOverriddenDateTime
+                    };
+                });
+            return File(excelBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 $"adr_accounts_{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx");
         }
         catch (Exception ex)
@@ -1710,75 +1680,42 @@ public class AdrController : ControllerBase
                 1, int.MaxValue, null, status, null, null, vendorCode, vmAccountNumber, latestPerAccount,
                 null, null, null, isManualRequest, sortColumn, sortDescending);
 
+            var headers = new[] { "Job ID", "Vendor Code", "Account #", "VM Account ID", "Interface Account ID", "Billing Period Start", "Billing Period End", "Period Type", "Next Run", "Status", "ADR Status", "ADR Status Description", "Retry Count", "Is Manual", "Created" };
+
             if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
             {
-                var csv = new System.Text.StringBuilder();
-                csv.AppendLine("Job ID,Vendor Code,Account #,VM Account ID,Interface Account ID,Billing Period Start,Billing Period End,Period Type,Next Run,Status,ADR Status,ADR Status Description,Retry Count,Is Manual,Created");
+                var csvBytes = ExcelExportHelper.CreateCsvExport(
+                    string.Join(",", headers),
+                    jobs,
+                    j => $"{j.Id},{ExcelExportHelper.CsvEscape(j.VendorCode)},{ExcelExportHelper.CsvEscape(j.VMAccountNumber)},{j.VMAccountId},{ExcelExportHelper.CsvEscape(j.AdrAccount?.InterfaceAccountId)},{j.BillingPeriodStartDateTime:MM/dd/yyyy},{j.BillingPeriodEndDateTime:MM/dd/yyyy},{ExcelExportHelper.CsvEscape(j.PeriodType)},{j.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{ExcelExportHelper.CsvEscape(j.Status)},{j.AdrStatusId?.ToString() ?? ""},{ExcelExportHelper.CsvEscape(j.AdrStatusDescription)},{j.RetryCount},{j.IsManualRequest},{j.CreatedDateTime:MM/dd/yyyy HH:mm}");
+                return File(csvBytes, "text/csv", $"adr_jobs_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
+            }
 
-                foreach (var j in jobs)
+            // Excel format using centralized helper
+            var excelBytes = ExcelExportHelper.CreateExcelExport(
+                "ADR Jobs",
+                "AdrJobsTable",
+                headers,
+                jobs,
+                j => new object?[]
                 {
-                    var interfaceAccountId = j.AdrAccount?.InterfaceAccountId ?? "";
-                    csv.AppendLine($"{j.Id},{CsvEscape(j.VendorCode)},{CsvEscape(j.VMAccountNumber)},{j.VMAccountId},{CsvEscape(interfaceAccountId)},{j.BillingPeriodStartDateTime:MM/dd/yyyy},{j.BillingPeriodEndDateTime:MM/dd/yyyy},{CsvEscape(j.PeriodType)},{j.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(j.Status)},{j.AdrStatusId?.ToString() ?? ""},{CsvEscape(j.AdrStatusDescription)},{j.RetryCount},{j.IsManualRequest},{j.CreatedDateTime:MM/dd/yyyy HH:mm}");
-                }
-
-                return File(System.Text.Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", $"adr_jobs_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
-            }
-
-            // Excel format
-            using var workbook = new XLWorkbook();
-            var worksheet = workbook.Worksheets.Add("ADR Jobs");
-
-            // Headers
-            worksheet.Cell(1, 1).Value = "Job ID";
-            worksheet.Cell(1, 2).Value = "Vendor Code";
-            worksheet.Cell(1, 3).Value = "Account #";
-            worksheet.Cell(1, 4).Value = "VM Account ID";
-            worksheet.Cell(1, 5).Value = "Interface Account ID";
-            worksheet.Cell(1, 6).Value = "Billing Period Start";
-            worksheet.Cell(1, 7).Value = "Billing Period End";
-            worksheet.Cell(1, 8).Value = "Period Type";
-            worksheet.Cell(1, 9).Value = "Next Run";
-            worksheet.Cell(1, 10).Value = "Status";
-            worksheet.Cell(1, 11).Value = "ADR Status";
-            worksheet.Cell(1, 12).Value = "ADR Status Description";
-            worksheet.Cell(1, 13).Value = "Retry Count";
-            worksheet.Cell(1, 14).Value = "Is Manual";
-            worksheet.Cell(1, 15).Value = "Created";
-
-            var headerRow = worksheet.Row(1);
-            headerRow.Style.Font.Bold = true;
-
-            int row = 2;
-            foreach (var j in jobs)
-            {
-                worksheet.Cell(row, 1).Value = j.Id;
-                worksheet.Cell(row, 2).Value = j.VendorCode;
-                worksheet.Cell(row, 3).Value = j.VMAccountNumber;
-                worksheet.Cell(row, 4).Value = j.VMAccountId;
-                worksheet.Cell(row, 5).Value = j.AdrAccount?.InterfaceAccountId ?? "";
-                worksheet.Cell(row, 6).Value = j.BillingPeriodStartDateTime;
-                worksheet.Cell(row, 7).Value = j.BillingPeriodEndDateTime;
-                worksheet.Cell(row, 8).Value = j.PeriodType;
-                if (j.NextRunDateTime.HasValue) worksheet.Cell(row, 9).Value = j.NextRunDateTime.Value;
-                worksheet.Cell(row, 10).Value = j.Status;
-                if (j.AdrStatusId.HasValue) worksheet.Cell(row, 11).Value = j.AdrStatusId.Value;
-                worksheet.Cell(row, 12).Value = j.AdrStatusDescription;
-                worksheet.Cell(row, 13).Value = j.RetryCount;
-                worksheet.Cell(row, 14).Value = j.IsManualRequest ? "Yes" : "No";
-                worksheet.Cell(row, 15).Value = j.CreatedDateTime;
-                row++;
-            }
-
-            // Create table with auto-filter and alternating row colors
-            var dataRange = worksheet.Range(1, 1, row - 1, 15);
-            var table = dataRange.CreateTable("AdrJobsTable");
-            table.Theme = XLTableTheme.TableStyleLight9; // Light blue alternating rows
-            
-            worksheet.Columns().AdjustToContents();
-
-            using var stream = new MemoryStream();
-            workbook.SaveAs(stream);
-            return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    j.Id,
+                    j.VendorCode,
+                    j.VMAccountNumber,
+                    j.VMAccountId,
+                    j.AdrAccount?.InterfaceAccountId ?? "",
+                    j.BillingPeriodStartDateTime,
+                    j.BillingPeriodEndDateTime,
+                    j.PeriodType,
+                    j.NextRunDateTime,
+                    j.Status,
+                    j.AdrStatusId,
+                    j.AdrStatusDescription,
+                    j.RetryCount,
+                    j.IsManualRequest,
+                    j.CreatedDateTime
+                });
+            return File(excelBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 $"adr_jobs_{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx");
         }
         catch (Exception ex)
@@ -2978,68 +2915,39 @@ public class AdrController : ControllerBase
                     })
                     .ToListAsync();
 
+                var headers = new[] { "Vendor Code", "Account Number", "Job Type", "Period Type", "Period Days", "Next Run", "Search Window Start", "Search Window End", "Enabled", "Overridden", "Overridden By", "Overridden Date" };
+
                 if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
                 {
-                    var csv = new System.Text.StringBuilder();
-                    csv.AppendLine("Vendor Code,Account Number,Job Type,Period Type,Period Days,Next Run,Search Window Start,Search Window End,Enabled,Overridden,Overridden By,Overridden Date");
+                    var csvBytes = ExcelExportHelper.CreateCsvExport(
+                        string.Join(",", headers),
+                        rules,
+                        r => $"{ExcelExportHelper.CsvEscape(r.VendorCode)},{ExcelExportHelper.CsvEscape(r.VMAccountNumber)},{r.JobTypeId},{ExcelExportHelper.CsvEscape(r.PeriodType)},{r.PeriodDays},{r.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeStartDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? ""},{(r.IsEnabled ? "Yes" : "No")},{(r.IsManuallyOverridden ? "Yes" : "No")},{ExcelExportHelper.CsvEscape(r.OverriddenBy)},{r.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""}");
+                    return File(csvBytes, "text/csv", $"adr_rules_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
+                }
 
-                    foreach (var r in rules)
+                // Excel format using centralized helper
+                var excelBytes = ExcelExportHelper.CreateExcelExport(
+                    "ADR Rules",
+                    "AdrRulesTable",
+                    headers,
+                    rules,
+                    r => new object?[]
                     {
-                        csv.AppendLine($"{CsvEscape(r.VendorCode)},{CsvEscape(r.VMAccountNumber)},{r.JobTypeId},{CsvEscape(r.PeriodType)},{r.PeriodDays},{r.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeStartDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? ""},{(r.IsEnabled ? "Yes" : "No")},{(r.IsManuallyOverridden ? "Yes" : "No")},{CsvEscape(r.OverriddenBy)},{r.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""}");
-                    }
-
-                    return File(System.Text.Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", $"adr_rules_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
-                }
-
-                // Excel format
-                using var workbook = new XLWorkbook();
-                var worksheet = workbook.Worksheets.Add("ADR Rules");
-
-                // Headers
-                worksheet.Cell(1, 1).Value = "Vendor Code";
-                worksheet.Cell(1, 2).Value = "Account Number";
-                worksheet.Cell(1, 3).Value = "Job Type";
-                worksheet.Cell(1, 4).Value = "Period Type";
-                worksheet.Cell(1, 5).Value = "Period Days";
-                worksheet.Cell(1, 6).Value = "Next Run";
-                worksheet.Cell(1, 7).Value = "Search Window Start";
-                worksheet.Cell(1, 8).Value = "Search Window End";
-                worksheet.Cell(1, 9).Value = "Enabled";
-                worksheet.Cell(1, 10).Value = "Overridden";
-                worksheet.Cell(1, 11).Value = "Overridden By";
-                worksheet.Cell(1, 12).Value = "Overridden Date";
-
-                var headerRow = worksheet.Row(1);
-                headerRow.Style.Font.Bold = true;
-
-                int row = 2;
-                foreach (var r in rules)
-                {
-                    worksheet.Cell(row, 1).Value = r.VendorCode ?? "";
-                    worksheet.Cell(row, 2).Value = r.VMAccountNumber ?? "";
-                    worksheet.Cell(row, 3).Value = r.JobTypeId;
-                    worksheet.Cell(row, 4).Value = r.PeriodType ?? "";
-                    worksheet.Cell(row, 5).Value = r.PeriodDays ?? 0;
-                    if (r.NextRunDateTime.HasValue) worksheet.Cell(row, 6).Value = r.NextRunDateTime.Value;
-                    if (r.NextRangeStartDateTime.HasValue) worksheet.Cell(row, 7).Value = r.NextRangeStartDateTime.Value;
-                    if (r.NextRangeEndDateTime.HasValue) worksheet.Cell(row, 8).Value = r.NextRangeEndDateTime.Value;
-                    worksheet.Cell(row, 9).Value = r.IsEnabled ? "Yes" : "No";
-                    worksheet.Cell(row, 10).Value = r.IsManuallyOverridden ? "Yes" : "No";
-                    worksheet.Cell(row, 11).Value = r.OverriddenBy ?? "";
-                    if (r.OverriddenDateTime.HasValue) worksheet.Cell(row, 12).Value = r.OverriddenDateTime.Value;
-                    row++;
-                }
-
-                // Create table with auto-filter and alternating row colors
-                var dataRange = worksheet.Range(1, 1, row - 1, 12);
-                var table = dataRange.CreateTable("AdrRulesTable");
-                table.Theme = XLTableTheme.TableStyleLight9; // Light blue alternating rows
-                
-                worksheet.Columns().AdjustToContents();
-
-                using var stream = new MemoryStream();
-                workbook.SaveAs(stream);
-                return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        r.VendorCode ?? "",
+                        r.VMAccountNumber ?? "",
+                        r.JobTypeId,
+                        r.PeriodType ?? "",
+                        r.PeriodDays ?? 0,
+                        r.NextRunDateTime,
+                        r.NextRangeStartDateTime,
+                        r.NextRangeEndDateTime,
+                        r.IsEnabled,
+                        r.IsManuallyOverridden,
+                        r.OverriddenBy ?? "",
+                        r.OverriddenDateTime
+                    });
+                return File(excelBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     $"adr_rules_{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx");
             }
             catch (Exception ex)
