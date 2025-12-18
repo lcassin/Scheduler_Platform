@@ -52,15 +52,7 @@
                     </MudItem>
                     
                     <MudItem xs="12" sm="6" md="4">
-                        <MudNumericField @bind-Value="_config.ScrapeRetryDays" 
-                                         Label="ADR Request Retry Days" 
-                                         Variant="Variant.Outlined"
-                                         Min="1" Max="30"
-                                         HelperText="Days to retry ADR requests" />
-                    </MudItem>
-                    
-                    <MudItem xs="12" sm="6" md="4">
-                        <MudNumericField @bind-Value="_config.MaxRetries" 
+                        <MudNumericField @bind-Value="_config.MaxRetries"
                                          Label="Max Retries" 
                                          Variant="Variant.Outlined"
                                          Min="1" Max="20"
