@@ -245,11 +245,11 @@
                 </MudGrid>
                 @if (_adrJobChartData.Any(d => d > 0))
                 {
-                    <PlotlyPieChart Values="@_adrJobChartData"
-                                    Labels="@_adrJobChartLabels"
-                                    Colors="@_adrJobChartColors"
-                                    Height="220px"
-                                    ShowLegend="true" />
+                        <PlotlyPieChart Values="@_adrJobChartData"
+                                        Labels="@_adrJobChartLabels"
+                                        Colors="@_adrJobChartColors"
+                                        Height="280px"
+                                        ShowLegend="true" />
                 }
             }
             else
