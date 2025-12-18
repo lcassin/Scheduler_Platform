@@ -9,8 +9,7 @@
 -- These indexes support the correlated subqueries in the export endpoint.
 -- =============================================
 
-USE [SchedulerPlatform]
-GO
+
 
 PRINT 'Adding performance indexes to AdrJob table for export queries...'
 GO

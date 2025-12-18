@@ -162,13 +162,11 @@
             }
             else if (_adrStats != null && _adrAccountChartData.Any())
             {
-                                <MudChart ChartType="ChartType.Donut" 
-                                         InputData="@_adrAccountChartData" 
-                                         InputLabels="@_adrAccountChartLabels"
-                                         ChartOptions="@_adrAccountChartOptions"
-                                         Width="100%" 
-                                         Height="300px">
-                                </MudChart>
+                <PlotlyDonutChart Values="@_adrAccountChartData"
+                                  Labels="@_adrAccountChartLabels"
+                                  Colors="@_adrAccountChartColors"
+                                  Height="300px"
+                                  ShowLegend="true" />
                 <MudGrid Class="mt-2">
                     <MudItem xs="6">
                         <MudText Typo="Typo.body2"><strong>Run Now:</strong> @FormatNumber(_adrStats.RunNowCount)</MudText>
@@ -245,13 +243,11 @@
                 </MudGrid>
                 @if (_adrJobChartData.Any(d => d > 0))
                 {
-                    <MudChart ChartType="ChartType.Pie" 
-                              InputData="@_adrJobChartData"
-                              InputLabels="@_adrJobChartLabels"
-                              ChartOptions="@_adrJobChartOptions"
-                              Width="100%" 
-                              Height="200px">
-                    </MudChart>
+                        <PlotlyPieChart Values="@_adrJobChartData"
+                                        Labels="@_adrJobChartLabels"
+                                        Colors="@_adrJobChartColors"
+                                        Height="280px"
+                                        ShowLegend="true" />
                 }
             }
             else
@@ -555,12 +551,11 @@
             }
             else if (_statusData.Any())
             {
-                <MudChart ChartType="ChartType.Donut" 
-                         InputData="@_statusData" 
-                         InputLabels="@_statusLabels"
-                         Width="100%" 
-                         Height="350px">
-                </MudChart>
+                <PlotlyDonutChart Values="@_statusData"
+                                  Labels="@_statusLabels"
+                                  Colors="@_statusColors"
+                                  Height="350px"
+                                  ShowLegend="true" />
                 <MudGrid Class="mt-2">
                     @foreach (var item in _statusSeries)
                     {
@@ -582,21 +577,18 @@
     <MudItem xs="12" md="6">
         <MudPaper Class="pa-4">
             <MudText Typo="Typo.h6" Class="mb-4">Execution Duration Trends</MudText>
-            @if (_trendsLoading && !_durationSeries.Any())
+            @if (_trendsLoading && !_durationSeriesPlotly.Any())
             {
                 <div class="d-flex justify-center py-8">
                     <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
                 </div>
             }
-            else if (_durationSeries.Any() && _durationLabels.Any())
+            else if (_durationSeriesPlotly.Any() && _durationLabels.Any())
             {
-                <MudChart ChartType="ChartType.Line" 
-                         ChartSeries="@_durationSeries" 
-                         XAxisLabels="@_durationLabels"
-                         ChartOptions="@_lineChartOptions"
-                         Width="100%" 
-                         Height="350px">
-                </MudChart>
+                <PlotlyLineChart Series="@_durationSeriesPlotly"
+                                 XAxisLabels="@_durationLabels"
+                                 Height="350px"
+                                 ShowLegend="true" />
             }
             else
             {
@@ -608,21 +600,18 @@
     <MudItem xs="12" md="6">
         <MudPaper Class="pa-4">
             <MudText Typo="Typo.h6" Class="mb-4">Concurrent Executions Over Time</MudText>
-            @if (_trendsLoading && !_concurrentSeries.Any())
+            @if (_trendsLoading && !_concurrentSeriesPlotly.Any())
             {
                 <div class="d-flex justify-center py-8">
                     <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
                 </div>
             }
-            else if (_concurrentSeries.Any() && _concurrentLabels.Any())
+            else if (_concurrentSeriesPlotly.Any() && _concurrentLabels.Any())
             {
-                <MudChart ChartType="ChartType.Line" 
-                         ChartSeries="@_concurrentSeries" 
-                         XAxisLabels="@_concurrentLabels"
-                         ChartOptions="@_lineChartOptions"
-                         Width="100%" 
-                         Height="350px">
-                </MudChart>
+                <PlotlyLineChart Series="@_concurrentSeriesPlotly"
+                                 XAxisLabels="@_concurrentLabels"
+                                 Height="350px"
+                                 ShowLegend="true" />
             }
             else
             {
@@ -634,21 +623,18 @@
     <MudItem xs="12" md="6">
         <MudPaper Class="pa-4">
             <MudText Typo="Typo.h6" Class="mb-4">Top 10 Longest Running Schedules</MudText>
-            @if (_longestLoading && !_longestSeries.Any())
+            @if (_longestLoading && !_longestSeriesPlotly.Any())
             {
                 <div class="d-flex justify-center py-8">
                     <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
                 </div>
             }
-            else if (_longestSeries.Any() && _longestLabels.Any())
+            else if (_longestSeriesPlotly.Any() && _longestLabels.Any())
             {
-                <MudChart ChartType="ChartType.Bar" 
-                         ChartSeries="@_longestSeries" 
-                         XAxisLabels="@_longestLabels"
-                         ChartOptions="@_barChartOptions"
-                         Width="100%" 
-                         Height="350px">
-                </MudChart>
+                <PlotlyBarChart Series="@_longestSeriesPlotly"
+                                XAxisLabels="@_longestLabels"
+                                Height="350px"
+                                ShowLegend="false" />
             }
             else
             {
@@ -692,6 +678,7 @@
                 private string[] _adrAccountChartLabels = Array.Empty<string>();
                 private double[] _adrJobChartData = Array.Empty<double>();
                 private string[] _adrJobChartLabels = Array.Empty<string>();
+                private string[] _adrJobChartColors = Array.Empty<string>();
     
         private IEnumerable<JobStatus>? SelectedStatuses
     {
@@ -705,57 +692,27 @@
 
     private double[] _statusData = Array.Empty<double>();
     private string[] _statusLabels = Array.Empty<string>();
+    private string[] _statusColors = Array.Empty<string>();
     private List<StatusBreakdownItem> _statusSeries = new();
 
-    private List<ChartSeries> _durationSeries = new();
+    private List<PlotlyLineChart.ChartSeriesData> _durationSeriesPlotly = new();
     private string[] _durationLabels = Array.Empty<string>();
 
-    private List<ChartSeries> _concurrentSeries = new();
+    private List<PlotlyLineChart.ChartSeriesData> _concurrentSeriesPlotly = new();
     private string[] _concurrentLabels = Array.Empty<string>();
 
-    private List<ChartSeries> _longestSeries = new();
+    private List<PlotlyBarChart.ChartSeriesData> _longestSeriesPlotly = new();
     private string[] _longestLabels = Array.Empty<string>();
 
-    private ChartOptions _lineChartOptions = new ChartOptions
+    private string[] _adrAccountChartColors = new[]
     {
-        YAxisTicks = 10,
-        LineStrokeWidth = 2
+        "#f44336", // Run Now (Error/Red)
+        "#ff9800", // Due Soon (Warning/Orange)
+        "#26c6da", // Upcoming (Info/Teal)
+        "#66bb6a", // Future (Success/Green)
+        "#f44336"  // Missing (Error/Red)
     };
 
-    private ChartOptions _barChartOptions = new ChartOptions
-    {
-        YAxisTicks = 10
-    };
-
-    // Custom color palette for ADR Account Status chart to match tile colors
-    // Order matches: Run Now, Due Soon, Upcoming, Future, Missing
-    private ChartOptions _adrAccountChartOptions = new ChartOptions
-    {
-        ChartPalette = new[]
-        {
-            "#f44336", // Run Now (Error/Red)
-            "#ff9800", // Due Soon (Warning/Orange)
-            "#26c6da", // Upcoming (Info/Teal)
-            "#66bb6a", // Future (Success/Green)
-            "#f44336"  // Missing (Error/Red)
-        }
-    };
-
-    // Custom color palette for ADR Job Status pie chart
-    // Order matches: Pending, Credential Verified, ADR Request Sent, Completed, Failed, Needs Review
-    // Colors aligned with Monitor page for consistency
-    private ChartOptions _adrJobChartOptions = new ChartOptions
-    {
-        ChartPalette = new[]
-        {
-            "#9e9e9e", // Pending (Gray)
-            "#42a5f5", // Credential Verified (Blue/Info)
-            "#7e57c2", // ADR Request Sent (Purple/Primary)
-            "#66bb6a", // Completed (Green/Success)
-            "#f44336", // Failed (Red/Error)
-            "#ffa726"  // Needs Review (Orange/Warning)
-        }
-    };
 
         protected override async Task OnInitializedAsync()
         {
@@ -879,6 +836,21 @@
             _statusSeries = statusData;
             _statusData = statusData.Select(x => (double)x.Count).ToArray();
             _statusLabels = statusData.Select(x => x.Status.ToString()).ToArray();
+            
+            // Map status to colors for Plotly - matching tile colors
+            var statusColorMap = new Dictionary<string, string>
+            {
+                { "Success", "#66bb6a" },      // Green (matches Completed Today tile)
+                { "Completed", "#66bb6a" },    // Green (matches Completed Today tile)
+                { "Failed", "#f44336" },       // Red (matches Failed Today tile)
+                { "Running", "#42a5f5" },      // Blue (matches Running Now tile)
+                { "Pending", "#7e57c2" },      // Purple
+                { "Cancelled", "#ff9800" },    // Orange
+                { "Queued", "#26c6da" }        // Teal
+            };
+            _statusColors = statusData.Select(x => 
+                statusColorMap.TryGetValue(x.Status.ToString(), out var color) ? color : "#9e9e9e"
+            ).ToArray();
         }
         catch (Exception ex)
         {
@@ -900,25 +872,25 @@
             var statusList = _selectedStatusesBackingField?.ToList();
             var trendsData = await DashboardService.GetExecutionTrendsAsync(_selectedTimeWindow, _selectedClientId, statusList);
             
-            _durationSeries = new List<ChartSeries>
+            _durationLabels = trendsData.Select(x => FormatDateLabel(x.Hour)).ToArray();
+            _durationSeriesPlotly = new List<PlotlyLineChart.ChartSeriesData>
             {
-                new ChartSeries
+                new PlotlyLineChart.ChartSeriesData
                 {
                     Name = "Avg Duration (seconds)",
                     Data = trendsData.Select(x => x.AverageDurationSeconds).ToArray()
                 }
             };
-            _durationLabels = trendsData.Select(x => FormatDateLabel(x.Hour)).ToArray();
 
-            _concurrentSeries = new List<ChartSeries>
+            _concurrentLabels = trendsData.Select(x => FormatDateLabel(x.Hour)).ToArray();
+            _concurrentSeriesPlotly = new List<PlotlyLineChart.ChartSeriesData>
             {
-                new ChartSeries
+                new PlotlyLineChart.ChartSeriesData
                 {
                     Name = "Concurrent Executions",
                     Data = trendsData.Select(x => (double)x.ConcurrentCount).ToArray()
                 }
             };
-            _concurrentLabels = trendsData.Select(x => FormatDateLabel(x.Hour)).ToArray();
         }
         catch (Exception ex)
         {
@@ -940,19 +912,19 @@
             var statusList = _selectedStatusesBackingField?.ToList();
             var longestData = await DashboardService.GetTopLongestExecutionsAsync(10, _selectedTimeWindow, _selectedClientId, statusList);
             
-            _longestSeries = new List<ChartSeries>
-            {
-                new ChartSeries
-                {
-                    Name = "Duration (seconds)",
-                    Data = longestData.Select(x => (double)x.DurationSeconds).ToArray()
-                }
-            };
             _longestLabels = longestData.Select(x => 
                 x.ScheduleName.Length > 30 
                     ? x.ScheduleName.Substring(0, 27) + "..." 
                     : x.ScheduleName
             ).ToArray();
+            _longestSeriesPlotly = new List<PlotlyBarChart.ChartSeriesData>
+            {
+                new PlotlyBarChart.ChartSeriesData
+                {
+                    Name = "Duration (seconds)",
+                    Data = longestData.Select(x => (double)x.DurationSeconds).ToArray()
+                }
+            };
         }
         catch (Exception ex)
         {
@@ -1035,43 +1007,61 @@
                 if (_adrJobStats != null)
                 {
                     // Build chart data - only include non-zero values to avoid empty pie slices
-                    // Order matches the color palette
                     var dataList = new List<double>();
                     var labelList = new List<string>();
+                    var colorList = new List<string>();
+                    
+                    // Color palette matching the status cards (from Net-10-Upgrade)
+                    var colorMap = new Dictionary<string, string>
+                    {
+                        { "Pending", "#9e9e9e" },           // Gray
+                        { "Credential Verified", "#42a5f5" }, // Blue
+                        { "ADR Request Sent", "#7e57c2" },  // Purple
+                        { "Completed", "#66bb6a" },         // Green
+                        { "Failed", "#f44336" },            // Red
+                        { "Needs Review", "#ffa726" }       // Orange
+                    };
                     
                     if (_adrJobStats.PendingCount > 0)
                     {
                         dataList.Add(_adrJobStats.PendingCount);
                         labelList.Add("Pending");
+                        colorList.Add(colorMap["Pending"]);
                     }
                     if (_adrJobStats.CredentialVerifiedCount > 0)
                     {
                         dataList.Add(_adrJobStats.CredentialVerifiedCount);
                         labelList.Add("Credential Verified");
+                        colorList.Add(colorMap["Credential Verified"]);
                     }
                     if (_adrJobStats.ScrapeRequestedCount > 0)
                     {
                         dataList.Add(_adrJobStats.ScrapeRequestedCount);
                         labelList.Add("ADR Request Sent");
+                        colorList.Add(colorMap["ADR Request Sent"]);
                     }
                     if (_adrJobStats.CompletedCount > 0)
                     {
                         dataList.Add(_adrJobStats.CompletedCount);
                         labelList.Add("Completed");
+                        colorList.Add(colorMap["Completed"]);
                     }
                     if (_adrJobStats.FailedCount > 0)
                     {
                         dataList.Add(_adrJobStats.FailedCount);
                         labelList.Add("Failed");
+                        colorList.Add(colorMap["Failed"]);
                     }
                     if (_adrJobStats.NeedsReviewCount > 0)
                     {
                         dataList.Add(_adrJobStats.NeedsReviewCount);
                         labelList.Add("Needs Review");
+                        colorList.Add(colorMap["Needs Review"]);
                     }
                     
                     _adrJobChartData = dataList.ToArray();
                     _adrJobChartLabels = labelList.ToArray();
+                    _adrJobChartColors = colorList.ToArray();
                 }
             }
             catch (Exception ex)
