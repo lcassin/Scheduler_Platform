@@ -13,6 +13,7 @@
     <PackageReference Include="Microsoft.ApplicationInsights.AspNetCore" Version="2.22.0" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.1" />
     <PackageReference Include="MudBlazor" Version="8.15.0" />
+    <PackageReference Include="Plotly.Blazor" Version="6.0.2" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\SchedulerPlatform.Core\SchedulerPlatform.Core.csproj" />
