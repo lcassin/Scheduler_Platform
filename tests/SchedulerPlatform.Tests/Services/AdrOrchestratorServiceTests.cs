@@ -81,7 +81,7 @@ public class AdrOrchestratorServiceTests
 
         _mockAdrJobRepo
             .Setup(r => r.AddAsync(It.IsAny<AdrJob>()))
-            .Returns(Task.CompletedTask);
+            .Returns((AdrJob job) => Task.FromResult(job));
 
         var service = CreateService();
 
@@ -258,7 +258,7 @@ public class AdrOrchestratorServiceTests
     {
         // Arrange
         _mockAdrJobRepo
-            .Setup(r => r.GetJobsNeedingStatusCheckAsync())
+            .Setup(r => r.GetJobsNeedingStatusCheckAsync(It.IsAny<DateTime>(), It.IsAny<int>()))
             .ReturnsAsync(new List<AdrJob>());
 
         var service = CreateService();

@@ -198,7 +198,7 @@ public class AdrJobRepositoryQueryTests : IDisposable
         // Arrange - Job scraped yesterday (1 day delay for status check)
         var currentDate = DateTime.UtcNow.Date;
         var job = CreateTestJob(1, "ScrapeRequested", currentDate.AddDays(-1));
-        job.ScrapingRequestedDateTime = currentDate.AddDays(-1);
+        job.ModifiedDateTime = currentDate.AddDays(-1); // ModifiedDateTime tracks when scrape was requested
         await _context.AdrJobs.AddAsync(job);
         await _context.SaveChangesAsync();
 
@@ -215,7 +215,7 @@ public class AdrJobRepositoryQueryTests : IDisposable
         // Arrange - Job scraped today (too soon for status check)
         var currentDate = DateTime.UtcNow.Date;
         var job = CreateTestJob(1, "ScrapeRequested", currentDate);
-        job.ScrapingRequestedDateTime = currentDate;
+        job.ModifiedDateTime = currentDate; // ModifiedDateTime tracks when scrape was requested
         await _context.AdrJobs.AddAsync(job);
         await _context.SaveChangesAsync();
 
