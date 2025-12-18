@@ -1165,6 +1165,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                                 job.AdrAccount.ModifiedDateTime = DateTime.UtcNow;
                                 job.AdrAccount.ModifiedBy = "System Created";
                             }
+                            
+                            // Advance the rule to the next billing cycle so it doesn't get stuck
+                            await AdvanceRuleToNextCycleAsync(job);
                         }
                         else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
                         {
@@ -1175,9 +1178,31 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     }
                     else
                     {
-                        // Job is still processing - revert to ScrapeRequested so it gets picked up again
-                        job.Status = "ScrapeRequested";
-                        result.JobsStillProcessing++;
+                        // Job is still processing - check if billing window has been exhausted
+                        var today = DateTime.UtcNow.Date;
+                        var windowEnd = job.NextRangeEndDateTime?.Date ?? today;
+                        
+                        if (today > windowEnd)
+                        {
+                            // Billing window exhausted without finding a bill
+                            // Mark job as NoInvoiceFound and advance rule to next cycle
+                            job.Status = "NoInvoiceFound";
+                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                            result.JobsNeedingReview++; // Count as needing review for reporting
+                            
+                            _logger.LogInformation(
+                                "Job {JobId}: Billing window exhausted (ended {WindowEnd}), marking as NoInvoiceFound and advancing rule",
+                                job.Id, windowEnd);
+                            
+                            // Advance the rule to the next billing cycle so it doesn't get stuck
+                            await AdvanceRuleToNextCycleAsync(job);
+                        }
+                        else
+                        {
+                            // Still within billing window - revert to ScrapeRequested so it gets picked up again
+                            job.Status = "ScrapeRequested";
+                            result.JobsStillProcessing++;
+                        }
                     }
 
                     // Update job properties directly - no need to call UpdateAsync since
@@ -1456,6 +1481,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                                 job.AdrAccount.ModifiedDateTime = DateTime.UtcNow;
                                 job.AdrAccount.ModifiedBy = "System Created";
                             }
+                            
+                            // Advance the rule to the next billing cycle so it doesn't get stuck
+                            await AdvanceRuleToNextCycleAsync(job);
                         }
                         else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
                         {
@@ -1493,9 +1521,31 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     }
                     else
                     {
-                        // Job is still processing - revert to ScrapeRequested so it gets picked up again
-                        job.Status = "ScrapeRequested";
-                        result.JobsStillProcessing++;
+                        // Job is still processing - check if billing window has been exhausted
+                        var today = DateTime.UtcNow.Date;
+                        var windowEnd = job.NextRangeEndDateTime?.Date ?? today;
+                        
+                        if (today > windowEnd)
+                        {
+                            // Billing window exhausted without finding a bill
+                            // Mark job as NoInvoiceFound and advance rule to next cycle
+                            job.Status = "NoInvoiceFound";
+                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                            result.JobsNeedingReview++; // Count as needing review for reporting
+                            
+                            _logger.LogInformation(
+                                "Job {JobId}: Billing window exhausted (ended {WindowEnd}), marking as NoInvoiceFound and advancing rule",
+                                job.Id, windowEnd);
+                            
+                            // Advance the rule to the next billing cycle so it doesn't get stuck
+                            await AdvanceRuleToNextCycleAsync(job);
+                        }
+                        else
+                        {
+                            // Still within billing window - revert to ScrapeRequested so it gets picked up again
+                            job.Status = "ScrapeRequested";
+                            result.JobsStillProcessing++;
+                        }
                     }
 
                     // Update job properties directly - no need to call UpdateAsync since
@@ -1934,6 +1984,95 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         else
         {
             return expectedDate; // Vendor late - use expected date to prevent creep
+        }
+    }
+
+    /// <summary>
+    /// Advances the AdrAccountRule to the next billing cycle after a successful job completion.
+    /// Uses the job's NextRunDateTime (not status check date) to avoid scheduling creep.
+    /// Preserves the current window offsets (days before/after NextRunDateTime) to maintain
+    /// any manual adjustments to the search window size.
+    /// </summary>
+    private async Task AdvanceRuleToNextCycleAsync(AdrJob job)
+    {
+        if (!job.AdrAccountRuleId.HasValue)
+        {
+            _logger.LogWarning("Job {JobId} has no AdrAccountRuleId - cannot advance rule", job.Id);
+            return;
+        }
+
+        try
+        {
+            // Load the rule that created this job
+            var rule = await _unitOfWork.AdrAccountRules.GetByIdAsync(job.AdrAccountRuleId.Value);
+            if (rule == null || rule.IsDeleted)
+            {
+                _logger.LogWarning("Rule {RuleId} not found or deleted for job {JobId}", job.AdrAccountRuleId, job.Id);
+                return;
+            }
+
+            // Use job's NextRunDateTime as the anchor (not status check date) to avoid creep
+            var anchorDate = job.NextRunDateTime?.Date ?? DateTime.UtcNow.Date;
+            var periodDays = rule.PeriodDays ?? GetPeriodDaysFromType(rule.PeriodType);
+
+            // Calculate next billing cycle run date
+            var nextRunDate = anchorDate.AddDays(periodDays);
+
+            // Preserve the current window offsets (days before/after NextRunDateTime)
+            // This maintains any manual adjustments to narrow or widen the search window
+            int windowBefore;
+            int windowAfter;
+            
+            if (rule.NextRunDateTime.HasValue && rule.NextRangeStartDateTime.HasValue && rule.NextRangeEndDateTime.HasValue)
+            {
+                // Calculate offsets from the current rule's dates to preserve manual adjustments
+                windowBefore = (int)(rule.NextRunDateTime.Value.Date - rule.NextRangeStartDateTime.Value.Date).TotalDays;
+                windowAfter = (int)(rule.NextRangeEndDateTime.Value.Date - rule.NextRunDateTime.Value.Date).TotalDays;
+                
+                // Sanity check - if offsets are negative or unreasonable, fall back to stored/default values
+                if (windowBefore < 0 || windowAfter < 0 || windowBefore > 365 || windowAfter > 365)
+                {
+                    windowBefore = rule.WindowDaysBefore ?? 7;
+                    windowAfter = rule.WindowDaysAfter ?? 14;
+                    _logger.LogWarning(
+                        "Rule {RuleId} had invalid window offsets, falling back to WindowDaysBefore={Before}/WindowDaysAfter={After}",
+                        rule.Id, windowBefore, windowAfter);
+                }
+            }
+            else
+            {
+                // No existing dates - use stored window values or defaults
+                windowBefore = rule.WindowDaysBefore ?? 7;
+                windowAfter = rule.WindowDaysAfter ?? 14;
+            }
+
+            var nextRangeStart = nextRunDate.AddDays(-windowBefore);
+            var nextRangeEnd = nextRunDate.AddDays(windowAfter);
+
+            // Update rule with next cycle dates
+            rule.NextRunDateTime = nextRunDate;
+            rule.NextRangeStartDateTime = nextRangeStart;
+            rule.NextRangeEndDateTime = nextRangeEnd;
+
+            // Note: We do NOT clear IsManuallyOverridden here because:
+            // 1. We can't distinguish between date-only overrides and PeriodType overrides
+            // 2. Per BRD, PeriodType overrides should persist
+            // 3. The window offsets we just preserved may have been manually set
+            // The override flag will remain set, preserving any manual adjustments
+
+            rule.ModifiedDateTime = DateTime.UtcNow;
+            rule.ModifiedBy = "System Created";
+
+            await _unitOfWork.AdrAccountRules.UpdateAsync(rule);
+
+            _logger.LogInformation(
+                "Advanced rule {RuleId} to next cycle: NextRunDateTime={NextRun}, NextRangeStart={RangeStart}, NextRangeEnd={RangeEnd} (window: -{Before}/+{After} days)",
+                rule.Id, nextRunDate, nextRangeStart, nextRangeEnd, windowBefore, windowAfter);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error advancing rule {RuleId} for job {JobId}", job.AdrAccountRuleId, job.Id);
+            // Don't throw - rule advancement failure shouldn't fail the status check
         }
     }
 

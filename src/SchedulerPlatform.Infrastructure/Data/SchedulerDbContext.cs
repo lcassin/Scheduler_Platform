@@ -354,6 +354,9 @@ public class SchedulerDbContext : DbContext
             entity.HasIndex(e => new { e.IsDeleted, e.Status });
             entity.HasIndex(e => new { e.IsDeleted, e.Status, e.BillingPeriodStartDateTime });
             entity.HasIndex(e => new { e.IsDeleted, e.AdrAccountId, e.BillingPeriodStartDateTime });
+            // Performance indexes for export queries that need latest job status per account
+            entity.HasIndex(e => e.ScrapingCompletedDateTime);
+            entity.HasIndex(e => new { e.IsDeleted, e.AdrAccountId, e.ScrapingCompletedDateTime });
         });
 
         // ADR Job Execution entity configuration
