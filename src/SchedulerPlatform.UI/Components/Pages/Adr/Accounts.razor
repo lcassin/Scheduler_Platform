@@ -218,7 +218,7 @@
                                 <MudTd DataLabel="Actions">
                                     <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
                                         <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewAccountDetails(context)">View Details</MudMenuItem>
-                                        <MudMenuItem Icon="@Icons.Material.Filled.Work" OnClick="() => ViewJobs(context.Id)">View Jobs</MudMenuItem>
+                                        <MudMenuItem Icon="@Icons.Material.Filled.Work" OnClick="() => ViewJobs(context)">View Jobs</MudMenuItem>
                                         @if (_canEditBilling)
                                         {
                                             <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => EditBilling(context)">Edit Account Rules</MudMenuItem>
@@ -449,9 +449,16 @@
         await DialogService.ShowAsync<AccountDetailsDialog>("Account Details", parameters, options);
     }
 
-    private void ViewJobs(int accountId)
+    private void ViewJobs(AdrAccount account)
     {
-        Navigation.NavigateTo($"/adr/jobs?accountId={accountId}");
+        // Navigate to Jobs page with account number filter and disable "Latest per Account" to show all jobs
+        var url = $"/adr/jobs?accountNumber={Uri.EscapeDataString(account.VMAccountNumber ?? "")}";
+        if (!string.IsNullOrWhiteSpace(account.VendorCode))
+        {
+            url += $"&vendorCode={Uri.EscapeDataString(account.VendorCode)}";
+        }
+        url += "&latestPerAccount=false";
+        Navigation.NavigateTo(url);
     }
 
     private async Task ExportAccounts(string format)
