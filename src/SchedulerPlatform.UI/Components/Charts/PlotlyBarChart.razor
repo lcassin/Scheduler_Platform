@@ -1,0 +1,133 @@
+@using Plotly.Blazor
+@using Plotly.Blazor.LayoutLib
+@using Plotly.Blazor.ConfigLib
+@using Plotly.Blazor.Traces
+
+<PlotlyChart @ref="_chart" Data="_data" Layout="_layout" Config="_config" style="@($"width: 100%; height: {Height};")" />
+
+@code {
+    [Parameter]
+    public List<ChartSeriesData> Series { get; set; } = new();
+    
+    [Parameter]
+    public string[] XAxisLabels { get; set; } = Array.Empty<string>();
+    
+    [Parameter]
+    public string Height { get; set; } = "350px";
+    
+    [Parameter]
+    public bool ShowLegend { get; set; } = true;
+    
+    [Parameter]
+    public string? Title { get; set; }
+    
+    [Parameter]
+    public bool Horizontal { get; set; } = false;
+
+    private PlotlyChart? _chart;
+    private IList<ITrace> _data = new List<ITrace>();
+    private Plotly.Blazor.Layout _layout = new Plotly.Blazor.Layout();
+    private Plotly.Blazor.Config _config = new Plotly.Blazor.Config();
+
+    private static readonly string[] DefaultColors = new[]
+    {
+        "#7e57c2", // Purple
+        "#42a5f5", // Blue
+        "#66bb6a", // Green
+        "#ffa726", // Orange
+        "#f44336", // Red
+        "#26c6da"  // Teal
+    };
+
+    protected override void OnParametersSet()
+    {
+        BuildChart();
+    }
+
+    private void BuildChart()
+    {
+        _data = new List<ITrace>();
+        
+        for (int i = 0; i < Series.Count; i++)
+        {
+            var series = Series[i];
+            var color = i < DefaultColors.Length ? DefaultColors[i] : DefaultColors[i % DefaultColors.Length];
+            
+            var bar = new Bar
+            {
+                Name = series.Name,
+                X = Horizontal ? series.Data.Cast<object>().ToList() : XAxisLabels.Cast<object>().ToList(),
+                Y = Horizontal ? XAxisLabels.Cast<object>().ToList() : series.Data.Cast<object>().ToList(),
+                Orientation = Horizontal ? Plotly.Blazor.Traces.BarLib.OrientationEnum.H : Plotly.Blazor.Traces.BarLib.OrientationEnum.V,
+                Marker = new Plotly.Blazor.Traces.BarLib.Marker
+                {
+                    Color = color
+                }
+            };
+            
+            _data.Add(bar);
+        }
+
+        _layout = new Plotly.Blazor.Layout
+        {
+            Title = !string.IsNullOrEmpty(Title) ? new Plotly.Blazor.LayoutLib.Title { Text = Title } : null,
+            ShowLegend = ShowLegend && Series.Count > 1,
+            Legend = new List<Legend>
+            {
+                new Legend
+                {
+                    Orientation = Plotly.Blazor.LayoutLib.LegendLib.OrientationEnum.H,
+                    X = 0.5m,
+                    XAnchor = Plotly.Blazor.LayoutLib.LegendLib.XAnchorEnum.Center,
+                    Y = -0.15m
+                }
+            },
+            Margin = new Plotly.Blazor.LayoutLib.Margin
+            {
+                L = Horizontal ? 150 : 50,
+                R = 20,
+                T = 20,
+                B = Horizontal ? 40 : 100
+            },
+            XAxis = new List<XAxis>
+            {
+                new XAxis
+                {
+                    ShowGrid = true,
+                    GridColor = "rgba(0,0,0,0.1)"
+                }
+            },
+            YAxis = new List<YAxis>
+            {
+                new YAxis
+                {
+                    ShowGrid = true,
+                    GridColor = "rgba(0,0,0,0.1)"
+                }
+            },
+            PaperBgColor = "transparent",
+            PlotBgColor = "transparent"
+        };
+
+        _config = new Plotly.Blazor.Config
+        {
+            Responsive = true,
+            DisplayModeBar = DisplayModeBarEnum.False
+        };
+    }
+
+    public async Task UpdateAsync()
+    {
+        if (_chart != null)
+        {
+            BuildChart();
+            await _chart.React();
+        }
+    }
+    
+    public class ChartSeriesData
+    {
+        public string Name { get; set; } = string.Empty;
+        public double[] Data { get; set; } = Array.Empty<double>();
+    }
+}

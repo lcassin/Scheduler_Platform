@@ -2,6 +2,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using SchedulerPlatform.Core.Domain.Entities;
 using SchedulerPlatform.Core.Domain.Interfaces;
+using SchedulerPlatform.Core.Services;
 using SchedulerPlatform.Infrastructure.Data;
 using System.Data;
 
@@ -354,7 +355,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {
-            accounts.Add(new ExternalAccountData
+            var account = new ExternalAccountData
             {
                 VMAccountId = reader.GetInt64(reader.GetOrdinal("VMAccountId")),
                 CredentialId = reader.GetInt32(reader.GetOrdinal("CredentialId")),
@@ -368,6 +369,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                 MedianDays = reader.IsDBNull(reader.GetOrdinal("MedianDays")) ? null : reader.GetDouble(reader.GetOrdinal("MedianDays")),
                 InvoiceCount = reader.GetInt32(reader.GetOrdinal("InvoiceCount")),
                 LastInvoiceDateTime = reader.IsDBNull(reader.GetOrdinal("LastInvoiceDate")) ? null : reader.GetDateTime(reader.GetOrdinal("LastInvoiceDate")),
+                // Read SQL-computed dates (we'll recalculate these below using calendar-based arithmetic)
                 ExpectedRangeStartDateTime = reader.IsDBNull(reader.GetOrdinal("ExpectedRangeStart")) ? null : reader.GetDateTime(reader.GetOrdinal("ExpectedRangeStart")),
                 ExpectedNextDateTime = reader.IsDBNull(reader.GetOrdinal("ExpectedNextDate")) ? null : reader.GetDateTime(reader.GetOrdinal("ExpectedNextDate")),
                 ExpectedRangeEndDateTime = reader.IsDBNull(reader.GetOrdinal("ExpectedRangeEnd")) ? null : reader.GetDateTime(reader.GetOrdinal("ExpectedRangeEnd")),
@@ -377,7 +379,78 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                 DaysUntilNextRun = reader.IsDBNull(reader.GetOrdinal("DaysUntilNextRun")) ? null : reader.GetInt32(reader.GetOrdinal("DaysUntilNextRun")),
                 NextRunStatus = reader.IsDBNull(reader.GetOrdinal("NextRunStatus")) ? null : reader.GetString(reader.GetOrdinal("NextRunStatus")),
                 HistoricalBillingStatus = reader.IsDBNull(reader.GetOrdinal("HistoricalBillingStatus")) ? null : reader.GetString(reader.GetOrdinal("HistoricalBillingStatus"))
-            });
+            };
+            
+            // Recalculate dates using BillingPeriodCalculator to prevent date creep
+            // The SQL query uses DATEADD(DAY, PeriodDays, ...) which causes drift for month-based periods
+            // We recalculate using calendar-based arithmetic (AddMonths/AddYears) with anchor day preservation
+            if (account.LastInvoiceDateTime.HasValue)
+            {
+                var today = DateTime.UtcNow.Date;
+                var anchorDayOfMonth = BillingPeriodCalculator.GetAnchorDayOfMonth(account.LastInvoiceDateTime.Value);
+                var (windowBefore, windowAfter) = BillingPeriodCalculator.GetDefaultWindowDays(account.PeriodType);
+                
+                // Calculate expected next date using calendar-based arithmetic
+                var expectedNext = BillingPeriodCalculator.CalculateNextRunDate(
+                    account.PeriodType,
+                    account.LastInvoiceDateTime.Value,
+                    anchorDayOfMonth);
+                
+                // Calculate next run date (on or after today) using calendar-based arithmetic
+                var nextRun = BillingPeriodCalculator.CalculateNextRunDateOnOrAfterToday(
+                    account.PeriodType,
+                    account.LastInvoiceDateTime.Value,
+                    today,
+                    anchorDayOfMonth);
+                
+                // Override SQL-computed dates with calendar-based calculations
+                account.ExpectedNextDateTime = expectedNext;
+                account.ExpectedRangeStartDateTime = expectedNext.AddDays(-windowBefore);
+                account.ExpectedRangeEndDateTime = expectedNext.AddDays(windowAfter);
+                account.NextRunDateTime = nextRun;
+                account.NextRangeStartDateTime = nextRun.AddDays(-windowBefore);
+                account.NextRangeEndDateTime = nextRun.AddDays(windowAfter);
+                account.DaysUntilNextRun = (int)(nextRun - today).TotalDays;
+                
+                // Recalculate status based on new dates
+                var periodDays = BillingPeriodCalculator.GetApproximatePeriodDays(account.PeriodType);
+                var daysUntilExpected = (int)(expectedNext - today).TotalDays;
+                
+                // Calculate HistoricalBillingStatus based on days until expected
+                var missingThreshold = -(periodDays * 2);
+                if (daysUntilExpected < missingThreshold)
+                    account.HistoricalBillingStatus = "Missing";
+                else if (daysUntilExpected < -windowBefore)
+                    account.HistoricalBillingStatus = "Overdue";
+                else if (daysUntilExpected < 0)
+                    account.HistoricalBillingStatus = "Due Now";
+                else if (daysUntilExpected <= windowBefore)
+                    account.HistoricalBillingStatus = "Due Soon";
+                else if (daysUntilExpected <= 30)
+                    account.HistoricalBillingStatus = "Upcoming";
+                else
+                    account.HistoricalBillingStatus = "Future";
+                
+                // NextRunStatus: If HistoricalBillingStatus is Missing, NextRunStatus should also be Missing
+                if (account.HistoricalBillingStatus == "Missing")
+                {
+                    account.NextRunStatus = "Missing";
+                }
+                else
+                {
+                    var daysUntilRun = account.DaysUntilNextRun ?? 0;
+                    if (daysUntilRun <= 0)
+                        account.NextRunStatus = "Run Now";
+                    else if (daysUntilRun <= windowBefore)
+                        account.NextRunStatus = "Due Soon";
+                    else if (daysUntilRun <= 30)
+                        account.NextRunStatus = "Upcoming";
+                    else
+                        account.NextRunStatus = "Future";
+                }
+            }
+            
+            accounts.Add(account);
         }
 
         return accounts;

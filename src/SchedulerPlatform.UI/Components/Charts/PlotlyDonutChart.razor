@@ -1,0 +1,98 @@
+@using Plotly.Blazor
+@using Plotly.Blazor.LayoutLib
+@using Plotly.Blazor.ConfigLib
+@using Plotly.Blazor.Traces
+
+<PlotlyChart @ref="_chart" Data="_data" Layout="_layout" Config="_config" style="@($"width: 100%; height: {Height};")" />
+
+@code {
+    [Parameter]
+    public double[] Values { get; set; } = Array.Empty<double>();
+    
+    [Parameter]
+    public string[] Labels { get; set; } = Array.Empty<string>();
+    
+    [Parameter]
+    public string[] Colors { get; set; } = Array.Empty<string>();
+    
+    [Parameter]
+    public string Height { get; set; } = "300px";
+    
+    [Parameter]
+    public bool ShowLegend { get; set; } = true;
+    
+    [Parameter]
+    public string? Title { get; set; }
+    
+    [Parameter]
+    public decimal HoleSize { get; set; } = 0.4m;
+
+    private PlotlyChart? _chart;
+    private IList<ITrace> _data = new List<ITrace>();
+    private Plotly.Blazor.Layout _layout = new Plotly.Blazor.Layout();
+    private Plotly.Blazor.Config _config = new Plotly.Blazor.Config();
+
+    protected override void OnParametersSet()
+    {
+        BuildChart();
+    }
+
+    private void BuildChart()
+    {
+        var pieTrace = new Pie
+        {
+            Values = Values.Cast<object>().ToList(),
+            Labels = Labels.Cast<object>().ToList(),
+            TextInfo = Plotly.Blazor.Traces.PieLib.TextInfoFlag.Percent,
+            HoverInfo = Plotly.Blazor.Traces.PieLib.HoverInfoFlag.Label | Plotly.Blazor.Traces.PieLib.HoverInfoFlag.Value | Plotly.Blazor.Traces.PieLib.HoverInfoFlag.Percent,
+            Hole = HoleSize,
+            Marker = new Plotly.Blazor.Traces.PieLib.Marker
+            {
+                Colors = Colors.Any() ? Colors.Cast<object>().ToList() : null
+            }
+        };
+
+        _data = new List<ITrace> { pieTrace };
+
+        _layout = new Plotly.Blazor.Layout
+        {
+            Title = !string.IsNullOrEmpty(Title) ? new Plotly.Blazor.LayoutLib.Title { Text = Title } : null,
+            ShowLegend = ShowLegend,
+            Legend = new List<Legend>
+            {
+                new Legend
+                {
+                    Orientation = Plotly.Blazor.LayoutLib.LegendLib.OrientationEnum.V,
+                    X = 1.02m,
+                    XAnchor = Plotly.Blazor.LayoutLib.LegendLib.XAnchorEnum.Left,
+                    Y = 0.5m,
+                    YAnchor = Plotly.Blazor.LayoutLib.LegendLib.YAnchorEnum.Middle
+                }
+            },
+            Margin = new Plotly.Blazor.LayoutLib.Margin
+            {
+                L = ShowLegend ? 10 : 20,
+                R = ShowLegend ? 120 : 20,
+                T = 10,
+                B = 10
+            },
+            PaperBgColor = "transparent",
+            PlotBgColor = "transparent"
+        };
+
+        _config = new Plotly.Blazor.Config
+        {
+            Responsive = true,
+            DisplayModeBar = DisplayModeBarEnum.False
+        };
+    }
+
+    public async Task UpdateAsync()
+    {
+        if (_chart != null)
+        {
+            BuildChart();
+            await _chart.React();
+        }
+    }
+}
