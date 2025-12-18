@@ -1125,63 +1125,76 @@ public class AdrController : ControllerBase
     {
         try
         {
-            // Get all accounts matching the filters (no pagination for export)
-            var (accounts, _) = await _unitOfWork.AdrAccounts.GetPagedAsync(
-                1, int.MaxValue, clientId, null, nextRunStatus, searchTerm, historicalBillingStatus,
-                isOverridden, sortColumn, sortDescending);
+            // Build the base query for accounts (don't materialize yet)
+            var accountsQuery = _dbContext.AdrAccounts.Where(a => !a.IsDeleted);
 
-            // Get account IDs for job status lookup
-            var accountIds = accounts.Select(a => a.Id).ToList();
-            
-            // Get current job status for each account (single query)
-            var jobStatuses = await _dbContext.AdrJobs
-                .Where(j => !j.IsDeleted && accountIds.Contains(j.AdrAccountId))
-                .GroupBy(j => j.AdrAccountId)
-                .Select(g => new 
+            if (clientId.HasValue)
+                accountsQuery = accountsQuery.Where(a => a.ClientId == clientId.Value);
+
+            if (!string.IsNullOrWhiteSpace(nextRunStatus))
+                accountsQuery = accountsQuery.Where(a => a.NextRunStatus == nextRunStatus);
+
+            if (!string.IsNullOrWhiteSpace(historicalBillingStatus))
+                accountsQuery = accountsQuery.Where(a => a.HistoricalBillingStatus == historicalBillingStatus);
+
+            if (isOverridden.HasValue)
+                accountsQuery = accountsQuery.Where(a => a.IsManuallyOverridden == isOverridden.Value);
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                accountsQuery = accountsQuery.Where(a =>
+                    a.VMAccountNumber.Contains(searchTerm) ||
+                    (a.InterfaceAccountId != null && a.InterfaceAccountId.Contains(searchTerm)) ||
+                    (a.ClientName != null && a.ClientName.Contains(searchTerm)) ||
+                    (a.VendorCode != null && a.VendorCode.Contains(searchTerm)));
+            }
+
+            // Project accounts with job status and rule override using correlated subqueries
+            // This generates efficient OUTER APPLY queries instead of massive IN clauses with GroupBy
+            var exportData = await accountsQuery
+                .Select(a => new
                 {
-                    AdrAccountId = g.Key,
-                    CurrentJobStatus = g
+                    Account = a,
+                    // Correlated subquery for current job status (latest by BillingPeriodStartDateTime)
+                    CurrentJobStatus = _dbContext.AdrJobs
+                        .Where(j => j.AdrAccountId == a.Id && !j.IsDeleted)
                         .OrderByDescending(j => j.BillingPeriodStartDateTime)
                         .Select(j => j.Status)
                         .FirstOrDefault(),
-                    LastCompletedDateTime = g
-                        .Where(j => j.ScrapingCompletedDateTime.HasValue)
+                    // Correlated subquery for last completed datetime
+                    LastCompletedDateTime = _dbContext.AdrJobs
+                        .Where(j => j.AdrAccountId == a.Id && !j.IsDeleted && j.ScrapingCompletedDateTime != null)
                         .OrderByDescending(j => j.ScrapingCompletedDateTime)
                         .Select(j => j.ScrapingCompletedDateTime)
+                        .FirstOrDefault(),
+                    // Correlated subquery for rule override status (first rule by Id)
+                    RuleIsManuallyOverridden = _dbContext.AdrAccountRules
+                        .Where(r => r.AdrAccountId == a.Id && !r.IsDeleted)
+                        .OrderBy(r => r.Id)
+                        .Select(r => r.IsManuallyOverridden)
+                        .FirstOrDefault(),
+                    RuleOverriddenBy = _dbContext.AdrAccountRules
+                        .Where(r => r.AdrAccountId == a.Id && !r.IsDeleted)
+                        .OrderBy(r => r.Id)
+                        .Select(r => r.OverriddenBy)
+                        .FirstOrDefault(),
+                    RuleOverriddenDateTime = _dbContext.AdrAccountRules
+                        .Where(r => r.AdrAccountId == a.Id && !r.IsDeleted)
+                        .OrderBy(r => r.Id)
+                        .Select(r => r.OverriddenDateTime)
                         .FirstOrDefault()
                 })
                 .ToListAsync();
-            
-            var jobStatusLookup = jobStatuses.ToDictionary(x => x.AdrAccountId);
-
-            // Get rule override status for each account (single query)
-            var ruleOverrideStatuses = await _dbContext.AdrAccountRules
-                .Where(r => !r.IsDeleted && accountIds.Contains(r.AdrAccountId))
-                .GroupBy(r => r.AdrAccountId)
-                .Select(g => new
-                {
-                    AdrAccountId = g.Key,
-                    RuleIsManuallyOverridden = g.OrderBy(r => r.Id).Select(r => r.IsManuallyOverridden).FirstOrDefault(),
-                    RuleOverriddenBy = g.OrderBy(r => r.Id).Select(r => r.OverriddenBy).FirstOrDefault(),
-                    RuleOverriddenDateTime = g.OrderBy(r => r.Id).Select(r => r.OverriddenDateTime).FirstOrDefault()
-                })
-                .ToListAsync();
-            
-            var ruleOverrideLookup = ruleOverrideStatuses.ToDictionary(x => x.AdrAccountId);
 
             if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
             {
                 var csv = new System.Text.StringBuilder();
                 csv.AppendLine("Account #,VM Account ID,Interface Account ID,Client,Vendor Code,Period Type,Next Run,Run Status,Job Status,Last Completed,Historical Status,Last Invoice,Expected Next,Account Overridden,Account Overridden By,Account Overridden Date,Rule Overridden,Rule Overridden By,Rule Overridden Date");
 
-                foreach (var a in accounts)
+                foreach (var item in exportData)
                 {
-                    var hasJobStatus = jobStatusLookup.TryGetValue(a.Id, out var js);
-                    var currentJobStatus = hasJobStatus ? js?.CurrentJobStatus : null;
-                    var lastCompleted = hasJobStatus ? js?.LastCompletedDateTime : null;
-                    var hasRuleOverride = ruleOverrideLookup.TryGetValue(a.Id, out var ro);
-                    
-                    csv.AppendLine($"{CsvEscape(a.VMAccountNumber)},{a.VMAccountId},{CsvEscape(a.InterfaceAccountId)},{CsvEscape(a.ClientName)},{CsvEscape(a.VendorCode)},{CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.NextRunStatus)},{CsvEscape(currentJobStatus)},{lastCompleted?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.IsManuallyOverridden},{CsvEscape(a.OverriddenBy)},{a.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""},{(hasRuleOverride && ro!.RuleIsManuallyOverridden ? "Yes" : "No")},{CsvEscape(hasRuleOverride ? ro!.RuleOverriddenBy : null)},{(hasRuleOverride ? ro!.RuleOverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") : "") ?? ""}");
+                    var a = item.Account;
+                    csv.AppendLine($"{CsvEscape(a.VMAccountNumber)},{a.VMAccountId},{CsvEscape(a.InterfaceAccountId)},{CsvEscape(a.ClientName)},{CsvEscape(a.VendorCode)},{CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.NextRunStatus)},{CsvEscape(item.CurrentJobStatus)},{item.LastCompletedDateTime?.ToString("MM/dd/yyyy") ?? ""},{CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.IsManuallyOverridden},{CsvEscape(a.OverriddenBy)},{a.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""},{(item.RuleIsManuallyOverridden ? "Yes" : "No")},{CsvEscape(item.RuleOverriddenBy)},{item.RuleOverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""}");
                 }
 
                 return File(System.Text.Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", $"adr_accounts_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
@@ -1216,13 +1229,9 @@ public class AdrController : ControllerBase
             headerRow.Style.Font.Bold = true;
 
             int row = 2;
-            foreach (var a in accounts)
+            foreach (var item in exportData)
             {
-                var hasJobStatus = jobStatusLookup.TryGetValue(a.Id, out var js);
-                var currentJobStatus = hasJobStatus ? js?.CurrentJobStatus : null;
-                var lastCompleted = hasJobStatus ? js?.LastCompletedDateTime : null;
-                var hasRuleOverride = ruleOverrideLookup.TryGetValue(a.Id, out var ro);
-                
+                var a = item.Account;
                 worksheet.Cell(row, 1).Value = a.VMAccountNumber;
                 worksheet.Cell(row, 2).Value = a.VMAccountId;
                 worksheet.Cell(row, 3).Value = a.InterfaceAccountId;
@@ -1231,17 +1240,17 @@ public class AdrController : ControllerBase
                 worksheet.Cell(row, 6).Value = a.PeriodType;
                 if (a.NextRunDateTime.HasValue) worksheet.Cell(row, 7).Value = a.NextRunDateTime.Value;
                 worksheet.Cell(row, 8).Value = a.NextRunStatus;
-                worksheet.Cell(row, 9).Value = currentJobStatus ?? "";
-                if (lastCompleted.HasValue) worksheet.Cell(row, 10).Value = lastCompleted.Value;
+                worksheet.Cell(row, 9).Value = item.CurrentJobStatus ?? "";
+                if (item.LastCompletedDateTime.HasValue) worksheet.Cell(row, 10).Value = item.LastCompletedDateTime.Value;
                 worksheet.Cell(row, 11).Value = a.HistoricalBillingStatus;
                 if (a.LastInvoiceDateTime.HasValue) worksheet.Cell(row, 12).Value = a.LastInvoiceDateTime.Value;
                 if (a.ExpectedNextDateTime.HasValue) worksheet.Cell(row, 13).Value = a.ExpectedNextDateTime.Value;
                 worksheet.Cell(row, 14).Value = a.IsManuallyOverridden ? "Yes" : "No";
                 worksheet.Cell(row, 15).Value = a.OverriddenBy ?? "";
                 if (a.OverriddenDateTime.HasValue) worksheet.Cell(row, 16).Value = a.OverriddenDateTime.Value;
-                worksheet.Cell(row, 17).Value = hasRuleOverride && ro!.RuleIsManuallyOverridden ? "Yes" : "No";
-                worksheet.Cell(row, 18).Value = hasRuleOverride ? ro!.RuleOverriddenBy ?? "" : "";
-                if (hasRuleOverride && ro!.RuleOverriddenDateTime.HasValue) worksheet.Cell(row, 19).Value = ro.RuleOverriddenDateTime.Value;
+                worksheet.Cell(row, 17).Value = item.RuleIsManuallyOverridden ? "Yes" : "No";
+                worksheet.Cell(row, 18).Value = item.RuleOverriddenBy ?? "";
+                if (item.RuleOverriddenDateTime.HasValue) worksheet.Cell(row, 19).Value = item.RuleOverriddenDateTime.Value;
                 row++;
             }
 
