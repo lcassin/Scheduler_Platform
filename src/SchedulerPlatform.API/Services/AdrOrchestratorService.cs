@@ -1990,7 +1990,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// <summary>
     /// Advances the AdrAccountRule to the next billing cycle after a successful job completion.
     /// Uses the job's NextRunDateTime (not status check date) to avoid scheduling creep.
-    /// Clears date override flags but preserves PeriodType overrides per BRD requirements.
+    /// Preserves the current window offsets (days before/after NextRunDateTime) to maintain
+    /// any manual adjustments to the search window size.
     /// </summary>
     private async Task AdvanceRuleToNextCycleAsync(AdrJob job)
     {
@@ -2014,10 +2015,37 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             var anchorDate = job.NextRunDateTime?.Date ?? DateTime.UtcNow.Date;
             var periodDays = rule.PeriodDays ?? GetPeriodDaysFromType(rule.PeriodType);
 
-            // Calculate next billing cycle dates
+            // Calculate next billing cycle run date
             var nextRunDate = anchorDate.AddDays(periodDays);
-            var windowBefore = rule.WindowDaysBefore ?? 7;  // Default 7 days before
-            var windowAfter = rule.WindowDaysAfter ?? 14;   // Default 14 days after
+
+            // Preserve the current window offsets (days before/after NextRunDateTime)
+            // This maintains any manual adjustments to narrow or widen the search window
+            int windowBefore;
+            int windowAfter;
+            
+            if (rule.NextRunDateTime.HasValue && rule.NextRangeStartDateTime.HasValue && rule.NextRangeEndDateTime.HasValue)
+            {
+                // Calculate offsets from the current rule's dates to preserve manual adjustments
+                windowBefore = (int)(rule.NextRunDateTime.Value.Date - rule.NextRangeStartDateTime.Value.Date).TotalDays;
+                windowAfter = (int)(rule.NextRangeEndDateTime.Value.Date - rule.NextRunDateTime.Value.Date).TotalDays;
+                
+                // Sanity check - if offsets are negative or unreasonable, fall back to stored/default values
+                if (windowBefore < 0 || windowAfter < 0 || windowBefore > 365 || windowAfter > 365)
+                {
+                    windowBefore = rule.WindowDaysBefore ?? 7;
+                    windowAfter = rule.WindowDaysAfter ?? 14;
+                    _logger.LogWarning(
+                        "Rule {RuleId} had invalid window offsets, falling back to WindowDaysBefore={Before}/WindowDaysAfter={After}",
+                        rule.Id, windowBefore, windowAfter);
+                }
+            }
+            else
+            {
+                // No existing dates - use stored window values or defaults
+                windowBefore = rule.WindowDaysBefore ?? 7;
+                windowAfter = rule.WindowDaysAfter ?? 14;
+            }
+
             var nextRangeStart = nextRunDate.AddDays(-windowBefore);
             var nextRangeEnd = nextRunDate.AddDays(windowAfter);
 
@@ -2026,20 +2054,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             rule.NextRangeStartDateTime = nextRangeStart;
             rule.NextRangeEndDateTime = nextRangeEnd;
 
-            // Clear date override flags since we found a bill successfully
-            // Per BRD: date overrides clear after successful completion, but PeriodType overrides persist
-            if (rule.IsManuallyOverridden)
-            {
-                // Only clear the override if it was a date-only override
-                // PeriodType overrides should persist (we don't have a separate flag, so we keep the override)
-                // For now, we'll clear the override since the successful job validates the schedule
-                rule.IsManuallyOverridden = false;
-                rule.OverriddenBy = null;
-                rule.OverriddenDateTime = null;
-                _logger.LogInformation(
-                    "Cleared manual override on rule {RuleId} after successful job {JobId} completion",
-                    rule.Id, job.Id);
-            }
+            // Note: We do NOT clear IsManuallyOverridden here because:
+            // 1. We can't distinguish between date-only overrides and PeriodType overrides
+            // 2. Per BRD, PeriodType overrides should persist
+            // 3. The window offsets we just preserved may have been manually set
+            // The override flag will remain set, preserving any manual adjustments
 
             rule.ModifiedDateTime = DateTime.UtcNow;
             rule.ModifiedBy = "System Created";
@@ -2047,8 +2066,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             await _unitOfWork.AdrAccountRules.UpdateAsync(rule);
 
             _logger.LogInformation(
-                "Advanced rule {RuleId} to next cycle: NextRunDateTime={NextRun}, NextRangeStart={RangeStart}, NextRangeEnd={RangeEnd}",
-                rule.Id, nextRunDate, nextRangeStart, nextRangeEnd);
+                "Advanced rule {RuleId} to next cycle: NextRunDateTime={NextRun}, NextRangeStart={RangeStart}, NextRangeEnd={RangeEnd} (window: -{Before}/+{After} days)",
+                rule.Id, nextRunDate, nextRangeStart, nextRangeEnd, windowBefore, windowAfter);
         }
         catch (Exception ex)
         {
