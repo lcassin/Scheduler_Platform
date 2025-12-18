@@ -79,6 +79,10 @@ public static class BillingPeriodCalculator
     /// Adds years to a date while preserving the anchor day of month.
     /// Handles leap year edge cases (Feb 29 -> Feb 28 in non-leap years).
     /// </summary>
+    /// <param name="date">The base date to add years to</param>
+    /// <param name="years">Number of years to add</param>
+    /// <param name="anchorDayOfMonth">Optional anchor day to preserve. If null, uses the day from the input date.</param>
+    /// <returns>The calculated date with anchor day preserved when possible</returns>
     public static DateTime AddYearsWithAnchor(DateTime date, int years, int? anchorDayOfMonth = null)
     {
         var anchor = anchorDayOfMonth ?? date.Day;
@@ -143,7 +147,10 @@ public static class BillingPeriodCalculator
 
     /// <summary>
     /// Gets the default window days for a given period type.
+    /// Returns the number of days before and after the next run date to use for the search window.
     /// </summary>
+    /// <param name="periodType">The billing period type (Monthly, Bi-Monthly, Quarterly, etc.)</param>
+    /// <returns>A tuple of (DaysBefore, DaysAfter) for the search window</returns>
     public static (int Before, int After) GetDefaultWindowDays(string? periodType)
     {
         return periodType?.ToLowerInvariant() switch
@@ -163,6 +170,8 @@ public static class BillingPeriodCalculator
     /// This is kept for backward compatibility and display purposes,
     /// but should NOT be used for date calculations (use CalculateNextRunDate instead).
     /// </summary>
+    /// <param name="periodType">The billing period type (Monthly, Bi-Monthly, Quarterly, etc.)</param>
+    /// <returns>The approximate number of days in the billing period</returns>
     public static int GetApproximatePeriodDays(string? periodType)
     {
         return periodType?.ToLowerInvariant() switch
@@ -230,6 +239,8 @@ public static class BillingPeriodCalculator
     /// Extracts the anchor day of month from a date.
     /// For end-of-month dates, returns the actual day (28, 29, 30, or 31).
     /// </summary>
+    /// <param name="date">The date to extract the anchor day from</param>
+    /// <returns>The day of month (1-31)</returns>
     public static int GetAnchorDayOfMonth(DateTime date)
     {
         return date.Day;
@@ -238,6 +249,8 @@ public static class BillingPeriodCalculator
     /// <summary>
     /// Determines if a date is at the end of its month.
     /// </summary>
+    /// <param name="date">The date to check</param>
+    /// <returns>True if the date is the last day of its month, false otherwise</returns>
     public static bool IsEndOfMonth(DateTime date)
     {
         return date.Day == DateTime.DaysInMonth(date.Year, date.Month);
