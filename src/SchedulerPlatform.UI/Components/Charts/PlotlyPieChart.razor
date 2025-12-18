@@ -1,0 +1,94 @@
+@using Plotly.Blazor
+@using Plotly.Blazor.LayoutLib
+@using Plotly.Blazor.ConfigLib
+@using Plotly.Blazor.Traces
+
+<PlotlyChart @ref="_chart" Data="_data" Layout="_layout" Config="_config" style="@($"width: 100%; height: {Height};")" />
+
+@code {
+    [Parameter]
+    public double[] Values { get; set; } = Array.Empty<double>();
+    
+    [Parameter]
+    public string[] Labels { get; set; } = Array.Empty<string>();
+    
+    [Parameter]
+    public string[] Colors { get; set; } = Array.Empty<string>();
+    
+    [Parameter]
+    public string Height { get; set; } = "200px";
+    
+    [Parameter]
+    public bool ShowLegend { get; set; } = true;
+    
+    [Parameter]
+    public string? Title { get; set; }
+
+    private PlotlyChart? _chart;
+    private IList<ITrace> _data = new List<ITrace>();
+    private Plotly.Blazor.Layout _layout = new Plotly.Blazor.Layout();
+    private Plotly.Blazor.Config _config = new Plotly.Blazor.Config();
+
+    protected override void OnParametersSet()
+    {
+        BuildChart();
+    }
+
+    private void BuildChart()
+    {
+        var pieTrace = new Pie
+        {
+            Values = Values.Cast<object>().ToList(),
+            Labels = Labels.Cast<object>().ToList(),
+            TextInfo = Plotly.Blazor.Traces.PieLib.TextInfoFlag.Percent,
+            HoverInfo = Plotly.Blazor.Traces.PieLib.HoverInfoFlag.Label | Plotly.Blazor.Traces.PieLib.HoverInfoFlag.Value | Plotly.Blazor.Traces.PieLib.HoverInfoFlag.Percent,
+            Hole = 0m,
+            Marker = new Plotly.Blazor.Traces.PieLib.Marker
+            {
+                Colors = Colors.Any() ? Colors.Cast<object>().ToList() : null
+            }
+        };
+
+        _data = new List<ITrace> { pieTrace };
+
+        _layout = new Plotly.Blazor.Layout
+        {
+            Title = !string.IsNullOrEmpty(Title) ? new Plotly.Blazor.LayoutLib.Title { Text = Title } : null,
+            ShowLegend = ShowLegend,
+            Legend = new List<Legend>
+            {
+                new Legend
+                {
+                    Orientation = Plotly.Blazor.LayoutLib.LegendLib.OrientationEnum.H,
+                    X = 0.5m,
+                    XAnchor = Plotly.Blazor.LayoutLib.LegendLib.XAnchorEnum.Center,
+                    Y = -0.1m
+                }
+            },
+            Margin = new Plotly.Blazor.LayoutLib.Margin
+            {
+                L = 10,
+                R = 10,
+                T = 30,
+                B = 60
+            },
+            PaperBgColor = "transparent",
+            PlotBgColor = "transparent"
+        };
+
+        _config = new Plotly.Blazor.Config
+        {
+            Responsive = true,
+            DisplayModeBar = DisplayModeBarEnum.False
+        };
+    }
+
+    public async Task UpdateAsync()
+    {
+        if (_chart != null)
+        {
+            BuildChart();
+            await _chart.React();
+        }
+    }
+}
