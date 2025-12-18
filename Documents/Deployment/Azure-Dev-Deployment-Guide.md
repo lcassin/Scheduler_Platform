@@ -161,7 +161,7 @@ ALTER ROLE db_ddladmin ADD MEMBER [nuscetsadrschdevmi];  -- For migrations
 
 | Setting | Value |
 |---------|-------|
-| `ASPNETCORE_ENVIRONMENT` | `Development` or `AzureDev` |
+| `ASPNETCORE_ENVIRONMENT` | `AzureDev` (recommended - uses appsettings.AzureDev.json) |
 | `KeyVault__VaultUri` | `https://nuscetsadrschdevkv.vault.azure.net/` |
 | `Authentication__Authority` | `https://oidc.uat.expensesmart.com` |
 | `Authentication__Audience` | `scheduler-api` |
@@ -174,7 +174,7 @@ ALTER ROLE db_ddladmin ADD MEMBER [nuscetsadrschdevmi];  -- For migrations
 
 | Setting | Value |
 |---------|-------|
-| `ASPNETCORE_ENVIRONMENT` | `Development` or `AzureDev` |
+| `ASPNETCORE_ENVIRONMENT` | `AzureDev` (recommended - uses appsettings.AzureDev.json) |
 | `KeyVault__VaultUri` | `https://nuscetsadrschdevkv.vault.azure.net/` |
 | `API__BaseUrl` | `https://nuscetsadrschdevwebapi.azurewebsites.net/api/` |
 | `IdentityServer__Authority` | `https://oidc.uat.expensesmart.com` |
