@@ -376,6 +376,7 @@ public class UsersController : ControllerBase
                 Username = request.Username ?? request.Email,
                 FirstName = request.FirstName,
                 LastName = request.LastName,
+                ClientId = 1, // All users are internal (Cass Information Systems)
                 IsActive = request.IsActive,
                 IsSystemAdmin = false,
                 PasswordHash = passwordHash,
