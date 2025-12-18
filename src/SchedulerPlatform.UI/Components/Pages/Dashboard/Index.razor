@@ -837,15 +837,16 @@
             _statusData = statusData.Select(x => (double)x.Count).ToArray();
             _statusLabels = statusData.Select(x => x.Status.ToString()).ToArray();
             
-            // Map status to colors for Plotly
+            // Map status to colors for Plotly - matching tile colors
             var statusColorMap = new Dictionary<string, string>
             {
-                { "Success", "#66bb6a" },    // Green
-                { "Failed", "#f44336" },     // Red
-                { "Running", "#42a5f5" },    // Blue
-                { "Pending", "#9e9e9e" },    // Gray
-                { "Cancelled", "#ff9800" },  // Orange
-                { "Queued", "#7e57c2" }      // Purple
+                { "Success", "#66bb6a" },      // Green (matches Completed Today tile)
+                { "Completed", "#66bb6a" },    // Green (matches Completed Today tile)
+                { "Failed", "#f44336" },       // Red (matches Failed Today tile)
+                { "Running", "#42a5f5" },      // Blue (matches Running Now tile)
+                { "Pending", "#7e57c2" },      // Purple
+                { "Cancelled", "#ff9800" },    // Orange
+                { "Queued", "#26c6da" }        // Teal
             };
             _statusColors = statusData.Select(x => 
                 statusColorMap.TryGetValue(x.Status.ToString(), out var color) ? color : "#9e9e9e"
