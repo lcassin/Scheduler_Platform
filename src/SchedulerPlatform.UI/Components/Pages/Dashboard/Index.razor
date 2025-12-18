@@ -1039,15 +1039,15 @@
                     var labelList = new List<string>();
                     var colorList = new List<string>();
                     
-                    // Color palette matching the status cards
+                    // Color palette matching the status cards (from Net-10-Upgrade)
                     var colorMap = new Dictionary<string, string>
                     {
-                        { "Pending", "#42a5f5" },           // Blue
-                        { "Credential Verified", "#66bb6a" }, // Green
-                        { "ADR Request Sent", "#ffca28" },  // Yellow
-                        { "Completed", "#26c6da" },         // Teal
+                        { "Pending", "#9e9e9e" },           // Gray
+                        { "Credential Verified", "#42a5f5" }, // Blue
+                        { "ADR Request Sent", "#7e57c2" },  // Purple
+                        { "Completed", "#66bb6a" },         // Green
                         { "Failed", "#f44336" },            // Red
-                        { "Needs Review", "#ff9800" }       // Orange
+                        { "Needs Review", "#ffa726" }       // Orange
                     };
                     
                     if (_adrJobStats.PendingCount > 0)
