@@ -4,6 +4,7 @@ using System.Text.Json;
 using SchedulerPlatform.Core.Domain.Entities;
 using SchedulerPlatform.Core.Domain.Enums;
 using SchedulerPlatform.Core.Domain.Interfaces;
+using SchedulerPlatform.Core.Services;
 
 namespace SchedulerPlatform.API.Services;
 
@@ -1156,17 +1157,16 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             // Uses anti-creep logic: allows earlier dates but prevents late vendors from causing schedule drift
                             if (job.AdrAccount != null)
                             {
-                                // Derive periodDays from job's PeriodType (not account's PeriodDays)
-                                var periodDays = GetPeriodDaysFromType(job.PeriodType);
+                                // Use PeriodType for calendar-based date calculation (prevents date creep)
                                 job.AdrAccount.LastSuccessfulDownloadDate = CalculateLastSuccessfulDownloadDate(
                                     job.AdrAccount.LastSuccessfulDownloadDate,
                                     job.NextRunDateTime,
-                                    periodDays);
+                                    job.PeriodType);
                                 job.AdrAccount.ModifiedDateTime = DateTime.UtcNow;
                                 job.AdrAccount.ModifiedBy = "System Created";
                             }
                             
-                            // Advance the rule to the next billing cycle so it doesn't get stuck
+                            // Advance the rule to the next billing cycle using calendar-based arithmetic
                             await AdvanceRuleToNextCycleAsync(job);
                         }
                         else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
@@ -1472,17 +1472,16 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             // Uses anti-creep logic: allows earlier dates but prevents late vendors from causing schedule drift
                             if (job.AdrAccount != null)
                             {
-                                // Derive periodDays from job's PeriodType (not account's PeriodDays)
-                                var periodDays = GetPeriodDaysFromType(job.PeriodType);
+                                // Use PeriodType for calendar-based date calculation (prevents date creep)
                                 job.AdrAccount.LastSuccessfulDownloadDate = CalculateLastSuccessfulDownloadDate(
                                     job.AdrAccount.LastSuccessfulDownloadDate,
                                     job.NextRunDateTime,
-                                    periodDays);
+                                    job.PeriodType);
                                 job.AdrAccount.ModifiedDateTime = DateTime.UtcNow;
                                 job.AdrAccount.ModifiedBy = "System Created";
                             }
                             
-                            // Advance the rule to the next billing cycle so it doesn't get stuck
+                            // Advance the rule to the next billing cycle using calendar-based arithmetic
                             await AdvanceRuleToNextCycleAsync(job);
                         }
                         else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
@@ -1935,33 +1934,16 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     }
 
     /// <summary>
-    /// Derives period days from period type string.
-    /// Used to calculate billing cycle intervals from the job's PeriodType.
-    /// </summary>
-    private static int GetPeriodDaysFromType(string? periodType)
-    {
-        return periodType?.ToLowerInvariant() switch
-        {
-            "weekly" => 7,
-            "biweekly" or "bi-weekly" => 14,
-            "monthly" => 30,
-            "quarterly" => 90,
-            "semiannually" or "semi-annually" => 180,
-            "annually" => 365,
-            _ => 30  // Default to monthly if not specified or unrecognized
-        };
-    }
-
-    /// <summary>
     /// Calculates the LastSuccessfulDownloadDate with anti-creep logic.
     /// - If no previous date exists, use the job's scheduled date (establish baseline)
     /// - If job date is earlier or equal to expected, use job date (allow earlier)
     /// - If job date is later than expected (vendor posted late), use expected date (prevent creep)
+    /// Uses BillingPeriodCalculator for calendar-based date arithmetic to prevent drift.
     /// </summary>
     private static DateTime CalculateLastSuccessfulDownloadDate(
         DateTime? currentLastSuccessfulDownloadDate,
         DateTime? jobNextRunDateTime,
-        int? periodDays)
+        string? periodType)
     {
         var jobDate = jobNextRunDateTime?.Date ?? DateTime.UtcNow.Date;
         
@@ -1971,10 +1953,10 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             return jobDate;
         }
         
-        // Calculate expected date based on previous anchor + period
+        // Calculate expected date based on previous anchor + period using calendar arithmetic
         var previousAnchor = currentLastSuccessfulDownloadDate.Value;
-        var period = periodDays ?? 30; // Default to monthly if not specified
-        var expectedDate = previousAnchor.AddDays(period);
+        var anchorDayOfMonth = BillingPeriodCalculator.GetAnchorDayOfMonth(previousAnchor);
+        var expectedDate = BillingPeriodCalculator.CalculateNextRunDate(periodType, previousAnchor, anchorDayOfMonth);
         
         // Allow earlier or same, but don't let late vendors cause creep
         if (jobDate <= expectedDate)
@@ -1990,6 +1972,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// <summary>
     /// Advances the AdrAccountRule to the next billing cycle after a successful job completion.
     /// Uses the job's NextRunDateTime (not status check date) to avoid scheduling creep.
+    /// Uses BillingPeriodCalculator for calendar-based date arithmetic (AddMonths/AddYears)
+    /// to prevent date drift over time.
     /// Preserves the current window offsets (days before/after NextRunDateTime) to maintain
     /// any manual adjustments to the search window size.
     /// </summary>
@@ -2013,10 +1997,16 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
             // Use job's NextRunDateTime as the anchor (not status check date) to avoid creep
             var anchorDate = job.NextRunDateTime?.Date ?? DateTime.UtcNow.Date;
-            var periodDays = rule.PeriodDays ?? GetPeriodDaysFromType(rule.PeriodType);
+            
+            // Get the anchor day of month to preserve across billing cycles
+            // This prevents "sticky" drift after short months (e.g., Jan 31 -> Feb 28 -> Mar 28)
+            var anchorDayOfMonth = BillingPeriodCalculator.GetAnchorDayOfMonth(anchorDate);
 
-            // Calculate next billing cycle run date
-            var nextRunDate = anchorDate.AddDays(periodDays);
+            // Calculate next billing cycle run date using calendar-based arithmetic
+            var nextRunDate = BillingPeriodCalculator.CalculateNextRunDate(
+                rule.PeriodType, 
+                anchorDate, 
+                anchorDayOfMonth);
 
             // Preserve the current window offsets (days before/after NextRunDateTime)
             // This maintains any manual adjustments to narrow or widen the search window
@@ -2032,8 +2022,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 // Sanity check - if offsets are negative or unreasonable, fall back to stored/default values
                 if (windowBefore < 0 || windowAfter < 0 || windowBefore > 365 || windowAfter > 365)
                 {
-                    windowBefore = rule.WindowDaysBefore ?? 7;
-                    windowAfter = rule.WindowDaysAfter ?? 14;
+                    var defaultWindow = BillingPeriodCalculator.GetDefaultWindowDays(rule.PeriodType);
+                    windowBefore = rule.WindowDaysBefore ?? defaultWindow.Before;
+                    windowAfter = rule.WindowDaysAfter ?? defaultWindow.After;
                     _logger.LogWarning(
                         "Rule {RuleId} had invalid window offsets, falling back to WindowDaysBefore={Before}/WindowDaysAfter={After}",
                         rule.Id, windowBefore, windowAfter);
@@ -2041,13 +2032,14 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             }
             else
             {
-                // No existing dates - use stored window values or defaults
-                windowBefore = rule.WindowDaysBefore ?? 7;
-                windowAfter = rule.WindowDaysAfter ?? 14;
+                // No existing dates - use stored window values or defaults based on period type
+                var defaultWindow = BillingPeriodCalculator.GetDefaultWindowDays(rule.PeriodType);
+                windowBefore = rule.WindowDaysBefore ?? defaultWindow.Before;
+                windowAfter = rule.WindowDaysAfter ?? defaultWindow.After;
             }
 
-            var nextRangeStart = nextRunDate.AddDays(-windowBefore);
-            var nextRangeEnd = nextRunDate.AddDays(windowAfter);
+            var (nextRangeStart, nextRangeEnd) = BillingPeriodCalculator.CalculateBillingWindow(
+                nextRunDate, windowBefore, windowAfter);
 
             // Update rule with next cycle dates
             rule.NextRunDateTime = nextRunDate;
@@ -2066,8 +2058,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             await _unitOfWork.AdrAccountRules.UpdateAsync(rule);
 
             _logger.LogInformation(
-                "Advanced rule {RuleId} to next cycle: NextRunDateTime={NextRun}, NextRangeStart={RangeStart}, NextRangeEnd={RangeEnd} (window: -{Before}/+{After} days)",
-                rule.Id, nextRunDate, nextRangeStart, nextRangeEnd, windowBefore, windowAfter);
+                "Advanced rule {RuleId} to next cycle using calendar arithmetic: PeriodType={PeriodType}, NextRunDateTime={NextRun}, NextRangeStart={RangeStart}, NextRangeEnd={RangeEnd} (window: -{Before}/+{After} days)",
+                rule.Id, rule.PeriodType, nextRunDate, nextRangeStart, nextRangeEnd, windowBefore, windowAfter);
         }
         catch (Exception ex)
         {

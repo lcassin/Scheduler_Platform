@@ -6,6 +6,7 @@ using SchedulerPlatform.API.Services;
 using SchedulerPlatform.Core.Domain.Entities;
 using SchedulerPlatform.Core.Domain.Enums;
 using SchedulerPlatform.Core.Domain.Interfaces;
+using SchedulerPlatform.Core.Services;
 using SchedulerPlatform.Infrastructure.Data;
 
 namespace SchedulerPlatform.API.Controllers;
@@ -438,35 +439,31 @@ public class AdrController : ControllerBase
                 account.MedianDays = account.PeriodDays;
             }
 
-            // Recalculate derived dates based on updated historical data
-            if (account.LastInvoiceDateTime.HasValue && account.PeriodDays.HasValue)
+            // Recalculate derived dates based on updated historical data using calendar-based arithmetic
+            if (account.LastInvoiceDateTime.HasValue)
             {
-                var windowDays = account.PeriodType switch
-                {
-                    "Bi-Weekly" => 3,
-                    "Monthly" => 5,
-                    "Bi-Monthly" => 7,
-                    "Quarterly" => 10,
-                    "Semi-Annually" => 14,
-                    "Annually" => 21,
-                    _ => 5
-                };
+                // Get window days from BillingPeriodCalculator for consistency
+                var (windowBefore, windowAfter) = BillingPeriodCalculator.GetDefaultWindowDays(account.PeriodType);
 
-                var expectedNext = account.LastInvoiceDateTime.Value.AddDays(account.PeriodDays.Value);
+                // Get anchor day of month to preserve across billing cycles (prevents drift after short months)
+                var anchorDayOfMonth = BillingPeriodCalculator.GetAnchorDayOfMonth(account.LastInvoiceDateTime.Value);
                 
-                // If expected date is in the past, calculate next future date
+                // Calculate next expected date using calendar-based arithmetic (AddMonths/AddYears, not AddDays)
+                // This prevents date creep over time
+                var expectedNext = BillingPeriodCalculator.CalculateNextRunDateOnOrAfterToday(
+                    account.PeriodType,
+                    account.LastInvoiceDateTime.Value,
+                    DateTime.UtcNow.Date,
+                    anchorDayOfMonth);
+
                 var today = DateTime.UtcNow.Date;
-                while (expectedNext < today)
-                {
-                    expectedNext = expectedNext.AddDays(account.PeriodDays.Value);
-                }
 
                 account.ExpectedNextDateTime = expectedNext;
-                account.ExpectedRangeStartDateTime = expectedNext.AddDays(-windowDays);
-                account.ExpectedRangeEndDateTime = expectedNext.AddDays(windowDays);
+                account.ExpectedRangeStartDateTime = expectedNext.AddDays(-windowBefore);
+                account.ExpectedRangeEndDateTime = expectedNext.AddDays(windowAfter);
                 account.NextRunDateTime = expectedNext;
-                account.NextRangeStartDateTime = expectedNext.AddDays(-windowDays);
-                account.NextRangeEndDateTime = expectedNext.AddDays(windowDays);
+                account.NextRangeStartDateTime = expectedNext.AddDays(-windowBefore);
+                account.NextRangeEndDateTime = expectedNext.AddDays(windowAfter);
                 account.DaysUntilNextRun = (int)(expectedNext - today).TotalDays;
 
                 // Update NextRunStatus based on days until next run
@@ -3094,10 +3091,12 @@ public class AdrController : ControllerBase
                     rule.NextRangeEndDateTime = request.NextRangeEndDateTime.Value;
                 
                 if (!string.IsNullOrEmpty(request.PeriodType))
+                {
                     rule.PeriodType = request.PeriodType;
-                
-                if (request.PeriodDays.HasValue)
-                    rule.PeriodDays = request.PeriodDays.Value;
+                    // Auto-calculate PeriodDays from PeriodType for backward compatibility
+                    // This ensures PeriodDays stays in sync even though the UI no longer edits it directly
+                    rule.PeriodDays = BillingPeriodCalculator.GetApproximatePeriodDays(request.PeriodType);
+                }
                 
                 if (request.JobTypeId.HasValue)
                     rule.JobTypeId = request.JobTypeId.Value;

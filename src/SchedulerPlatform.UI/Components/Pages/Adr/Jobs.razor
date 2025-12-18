@@ -290,6 +290,10 @@
     [SupplyParameterFromQuery(Name = "accountNumber")]
     public string? AccountNumberParam { get; set; }
 
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "latestPerAccount")]
+    public string? LatestPerAccountParam { get; set; }
+
     protected override void OnInitialized()
     {
         if (!string.IsNullOrEmpty(VendorCodeParam))
@@ -301,6 +305,11 @@
         {
             _searchAccountNumber = AccountNumberParam;
             _filterAccountNumber = AccountNumberParam;
+        }
+        // Handle latestPerAccount parameter - defaults to true if not specified
+        if (!string.IsNullOrEmpty(LatestPerAccountParam) && bool.TryParse(LatestPerAccountParam, out var latestPerAccount))
+        {
+            _showLatestPerAccount = latestPerAccount;
         }
         _loading = false;
     }

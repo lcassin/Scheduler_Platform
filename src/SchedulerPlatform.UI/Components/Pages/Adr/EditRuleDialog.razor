@@ -41,12 +41,12 @@
                                Label="Billing Frequency" 
                                Variant="Variant.Outlined"
                                HelperText="How often invoices are generated">
-                        <MudSelectItem Value="@("Bi-Weekly")">Bi-Weekly (14 days)</MudSelectItem>
-                        <MudSelectItem Value="@("Monthly")">Monthly (30 days)</MudSelectItem>
-                        <MudSelectItem Value="@("Bi-Monthly")">Bi-Monthly (60 days)</MudSelectItem>
-                        <MudSelectItem Value="@("Quarterly")">Quarterly (90 days)</MudSelectItem>
-                        <MudSelectItem Value="@("Semi-Annually")">Semi-Annually (180 days)</MudSelectItem>
-                        <MudSelectItem Value="@("Annually")">Annually (365 days)</MudSelectItem>
+                        <MudSelectItem Value="@("Bi-Weekly")">Bi-Weekly</MudSelectItem>
+                        <MudSelectItem Value="@("Monthly")">Monthly</MudSelectItem>
+                        <MudSelectItem Value="@("Bi-Monthly")">Bi-Monthly</MudSelectItem>
+                        <MudSelectItem Value="@("Quarterly")">Quarterly</MudSelectItem>
+                        <MudSelectItem Value="@("Semi-Annually")">Semi-Annually</MudSelectItem>
+                        <MudSelectItem Value="@("Annually")">Annually</MudSelectItem>
                     </MudSelect>
                 </MudItem>
                 <MudItem xs="12" sm="6">
@@ -62,13 +62,6 @@
                                    Placeholder="Select end date"
                                    Variant="Variant.Outlined"
                                    HelperText="End of the invoice search window" />
-                </MudItem>
-                <MudItem xs="12" sm="6">
-                    <MudNumericField @bind-Value="_periodDays" 
-                                     Label="Period Days" 
-                                     Variant="Variant.Outlined"
-                                     Min="1"
-                                     HelperText="Number of days between runs" />
                 </MudItem>
                 <MudItem xs="12" sm="6">
                     <MudSwitch @bind-Value="_isEnabled" 
@@ -120,7 +113,6 @@
     private DateTime? _rangeStartDate;
     private DateTime? _rangeEndDate;
     private string? _periodType;
-    private int? _periodDays;
     private bool _isEnabled;
 
     protected override async Task OnInitializedAsync()
@@ -140,7 +132,6 @@
                 _rangeStartDate = _rule.NextRangeStartDateTime?.ToLocalTime();
                 _rangeEndDate = _rule.NextRangeEndDateTime?.ToLocalTime();
                 _periodType = _rule.PeriodType;
-                _periodDays = _rule.PeriodDays;
                 _isEnabled = _rule.IsEnabled;
             }
         }
@@ -169,7 +160,6 @@
                 NextRangeStartDateTime = _rangeStartDate?.ToUniversalTime(),
                 NextRangeEndDateTime = _rangeEndDate?.ToUniversalTime(),
                 PeriodType = _periodType,
-                PeriodDays = _periodDays,
                 IsEnabled = _isEnabled
             };
             
