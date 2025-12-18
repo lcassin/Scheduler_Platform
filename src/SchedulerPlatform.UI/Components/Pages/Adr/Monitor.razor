@@ -282,13 +282,11 @@
                                 <MudText Typo="Typo.subtitle1" Class="mb-3">Recent Run Results</MudText>
                                 @if (_recentHistory != null && _recentHistory.Any())
                                 {
-                                    <MudChart ChartType="ChartType.Donut" 
-                                             InputData="@_orchestrationChartData" 
-                                             InputLabels="@_orchestrationChartLabels"
-                                             ChartOptions="@_orchestrationChartOptions"
-                                             Width="100%" 
-                                             Height="220px">
-                                    </MudChart>
+                                    <PlotlyDonutChart Values="@_orchestrationChartData"
+                                                      Labels="@_orchestrationChartLabels"
+                                                      Colors="@_orchestrationChartColors"
+                                                      Height="220px"
+                                                      ShowLegend="false" />
                                     <MudGrid Class="mt-3" Spacing="1">
                                         @foreach (var status in _orchestrationStatusCounts)
                                         {
@@ -591,13 +589,11 @@
                 @if (_jobPipelineChartData.Length > 0)
                 {
                     <div class="mt-4">
-                        <MudChart ChartType="ChartType.Pie" 
-                                 InputData="@_jobPipelineChartData" 
-                                 InputLabels="@_jobPipelineChartLabels"
-                                 ChartOptions="@_jobPipelineChartOptions"
-                                 Width="100%" 
-                                 Height="200px">
-                        </MudChart>
+                        <PlotlyPieChart Values="@_jobPipelineChartData"
+                                        Labels="@_jobPipelineChartLabels"
+                                        Colors="@_jobPipelineChartColors"
+                                        Height="280px"
+                                        ShowLegend="true" />
                     </div>
                 }
             }
@@ -908,18 +904,8 @@
     // Chart data for orchestration status distribution
     private double[] _orchestrationChartData = Array.Empty<double>();
     private string[] _orchestrationChartLabels = Array.Empty<string>();
+    private string[] _orchestrationChartColors = Array.Empty<string>();
     private Dictionary<string, int> _orchestrationStatusCounts = new();
-    private ChartOptions _orchestrationChartOptions = new ChartOptions
-    {
-        ChartPalette = new[]
-        {
-            "#66bb6a", // Completed (Green)
-            "#f44336", // Failed (Red)
-            "#ff9800", // Cancelled (Orange)
-            "#42a5f5", // Running (Blue)
-            "#9e9e9e"  // Queued (Gray)
-        }
-    };
     
     // Job pipeline stats
     private AdrJobStats? _jobStats;
@@ -927,19 +913,7 @@
     // Job pipeline chart data
     private double[] _jobPipelineChartData = Array.Empty<double>();
     private string[] _jobPipelineChartLabels = Array.Empty<string>();
-    private ChartOptions _jobPipelineChartOptions = new ChartOptions
-    {
-        ChartPalette = new[]
-        {
-            "#9e9e9e", // Pending (Gray)
-            "#42a5f5", // Credential Verified (Blue/Info)
-            "#ff9800", // Credential Failed (Orange/Warning)
-            "#7e57c2", // ADR Request Sent (Purple/Primary)
-            "#66bb6a", // Completed (Green/Success)
-            "#f44336", // Failed (Red/Error)
-            "#ffa726"  // Needs Review (Orange/Warning - slightly different shade)
-        }
-    };
+    private string[] _jobPipelineChartColors = Array.Empty<string>();
 
     protected override async Task OnInitializedAsync()
     {
@@ -1017,9 +991,20 @@
         {
             _orchestrationChartData = Array.Empty<double>();
             _orchestrationChartLabels = Array.Empty<string>();
+            _orchestrationChartColors = Array.Empty<string>();
             _orchestrationStatusCounts = new Dictionary<string, int>();
             return;
         }
+        
+        // Status to color mapping for Plotly
+        var statusColorMap = new Dictionary<string, string>
+        {
+            { "Completed", "#66bb6a" }, // Green
+            { "Failed", "#f44336" },    // Red
+            { "Cancelled", "#ff9800" }, // Orange
+            { "Running", "#42a5f5" },   // Blue
+            { "Queued", "#9e9e9e" }     // Gray
+        };
         
         // Count runs by status - order matches the color palette
         var statusOrder = new[] { "Completed", "Failed", "Cancelled", "Running", "Queued" };
@@ -1030,6 +1015,7 @@
         // Build chart data in the order of the color palette
         var dataList = new List<double>();
         var labelList = new List<string>();
+        var colorList = new List<string>();
         
         foreach (var status in statusOrder)
         {
@@ -1037,11 +1023,13 @@
             {
                 dataList.Add(count);
                 labelList.Add(status);
+                colorList.Add(statusColorMap.TryGetValue(status, out var color) ? color : "#9e9e9e");
             }
         }
         
         _orchestrationChartData = dataList.ToArray();
         _orchestrationChartLabels = labelList.ToArray();
+        _orchestrationChartColors = colorList.ToArray();
     }
     
     private void UpdateJobPipelineChartData()
@@ -1050,52 +1038,74 @@
         {
             _jobPipelineChartData = Array.Empty<double>();
             _jobPipelineChartLabels = Array.Empty<string>();
+            _jobPipelineChartColors = Array.Empty<string>();
             return;
         }
+        
+        // Status to color mapping for Plotly
+        var statusColorMap = new Dictionary<string, string>
+        {
+            { "Pending", "#9e9e9e" },           // Gray
+            { "Credential Verified", "#42a5f5" }, // Blue/Info
+            { "Credential Failed", "#ff9800" },  // Orange/Warning
+            { "ADR Request Sent", "#7e57c2" },   // Purple/Primary
+            { "Completed", "#66bb6a" },          // Green/Success
+            { "Failed", "#f44336" },             // Red/Error
+            { "Needs Review", "#ffa726" }        // Orange/Warning - slightly different shade
+        };
         
         // Build chart data - order matches the color palette
         // Only include non-zero values to avoid empty slices
         var dataList = new List<double>();
         var labelList = new List<string>();
+        var colorList = new List<string>();
         
         if (_jobStats.PendingCount > 0)
         {
             dataList.Add(_jobStats.PendingCount);
             labelList.Add("Pending");
+            colorList.Add(statusColorMap["Pending"]);
         }
         if (_jobStats.CredentialVerifiedCount > 0)
         {
             dataList.Add(_jobStats.CredentialVerifiedCount);
             labelList.Add("Credential Verified");
+            colorList.Add(statusColorMap["Credential Verified"]);
         }
         if (_jobStats.CredentialFailedCount > 0)
         {
             dataList.Add(_jobStats.CredentialFailedCount);
             labelList.Add("Credential Failed");
+            colorList.Add(statusColorMap["Credential Failed"]);
         }
         if (_jobStats.ScrapeRequestedCount > 0)
         {
             dataList.Add(_jobStats.ScrapeRequestedCount);
             labelList.Add("ADR Request Sent");
+            colorList.Add(statusColorMap["ADR Request Sent"]);
         }
         if (_jobStats.CompletedCount > 0)
         {
             dataList.Add(_jobStats.CompletedCount);
             labelList.Add("Completed");
+            colorList.Add(statusColorMap["Completed"]);
         }
         if (_jobStats.FailedCount > 0)
         {
             dataList.Add(_jobStats.FailedCount);
             labelList.Add("Failed");
+            colorList.Add(statusColorMap["Failed"]);
         }
         if (_jobStats.NeedsReviewCount > 0)
         {
             dataList.Add(_jobStats.NeedsReviewCount);
             labelList.Add("Needs Review");
+            colorList.Add(statusColorMap["Needs Review"]);
         }
         
         _jobPipelineChartData = dataList.ToArray();
         _jobPipelineChartLabels = labelList.ToArray();
+        _jobPipelineChartColors = colorList.ToArray();
     }
     
     private async Task LoadCurrentStatusAsync()
