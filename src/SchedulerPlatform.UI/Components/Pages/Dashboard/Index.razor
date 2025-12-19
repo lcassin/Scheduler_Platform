@@ -162,11 +162,13 @@
             }
             else if (_adrStats != null && _adrAccountChartData.Any())
             {
-                <PlotlyDonutChart Values="@_adrAccountChartData"
-                                  Labels="@_adrAccountChartLabels"
-                                  Colors="@_adrAccountChartColors"
-                                  Height="300px"
-                                  ShowLegend="true" />
+                                <PlotlyDonutChart Values="@_adrAccountChartData"
+                                                  Labels="@_adrAccountChartLabels"
+                                                  Colors="@_adrAccountChartColors"
+                                                  CustomData="@_adrAccountChartLabels"
+                                                  Height="300px"
+                                                  ShowLegend="true"
+                                                  OnSliceClick="OnAdrAccountChartClick" />
                 <MudGrid Class="mt-2">
                     <MudItem xs="6">
                         <MudText Typo="Typo.body2"><strong>Run Now:</strong> @FormatNumber(_adrStats.RunNowCount)</MudText>
@@ -246,8 +248,10 @@
                         <PlotlyPieChart Values="@_adrJobChartData"
                                         Labels="@_adrJobChartLabels"
                                         Colors="@_adrJobChartColors"
+                                        CustomData="@_adrJobChartCustomData"
                                         Height="280px"
-                                        ShowLegend="true" />
+                                        ShowLegend="true"
+                                        OnSliceClick="OnAdrJobChartClick" />
                 }
             }
             else
@@ -681,6 +685,7 @@
                 private double[] _adrJobChartData = Array.Empty<double>();
                 private string[] _adrJobChartLabels = Array.Empty<string>();
                 private string[] _adrJobChartColors = Array.Empty<string>();
+                private string[] _adrJobChartCustomData = Array.Empty<string>();
     
         private IEnumerable<JobStatus>? SelectedStatuses
     {
@@ -1034,46 +1039,56 @@
                         { "Needs Review", "#ffa726" }       // Orange
                     };
                     
+                    // CustomData maps display labels to internal status values for navigation
+                    var customDataList = new List<string>();
+                    
                     if (_adrJobStats.PendingCount > 0)
                     {
                         dataList.Add(_adrJobStats.PendingCount);
                         labelList.Add("Pending");
                         colorList.Add(colorMap["Pending"]);
+                        customDataList.Add("Pending");
                     }
                     if (_adrJobStats.CredentialVerifiedCount > 0)
                     {
                         dataList.Add(_adrJobStats.CredentialVerifiedCount);
                         labelList.Add("Credential Verified");
                         colorList.Add(colorMap["Credential Verified"]);
+                        customDataList.Add("CredentialVerified");
                     }
                     if (_adrJobStats.ScrapeRequestedCount > 0)
                     {
                         dataList.Add(_adrJobStats.ScrapeRequestedCount);
                         labelList.Add("ADR Request Sent");
                         colorList.Add(colorMap["ADR Request Sent"]);
+                        customDataList.Add("ScrapeRequested");
                     }
                     if (_adrJobStats.CompletedCount > 0)
                     {
                         dataList.Add(_adrJobStats.CompletedCount);
                         labelList.Add("Completed");
                         colorList.Add(colorMap["Completed"]);
+                        customDataList.Add("Completed");
                     }
                     if (_adrJobStats.FailedCount > 0)
                     {
                         dataList.Add(_adrJobStats.FailedCount);
                         labelList.Add("Failed");
                         colorList.Add(colorMap["Failed"]);
+                        customDataList.Add("Failed");
                     }
                     if (_adrJobStats.NeedsReviewCount > 0)
                     {
                         dataList.Add(_adrJobStats.NeedsReviewCount);
                         labelList.Add("Needs Review");
                         colorList.Add(colorMap["Needs Review"]);
+                        customDataList.Add("NeedsReview");
                     }
                     
                     _adrJobChartData = dataList.ToArray();
                     _adrJobChartLabels = labelList.ToArray();
                     _adrJobChartColors = colorList.ToArray();
+                    _adrJobChartCustomData = customDataList.ToArray();
                 }
             }
             catch (Exception ex)
@@ -1181,6 +1196,29 @@
             url += $"?status={status}";
         }
         NavigationManager.NavigateTo(url);
+    }
+
+    private void OnAdrAccountChartClick(string status)
+    {
+        // Navigate to ADR Accounts page with the clicked status as a filter
+        // Status values: "Run Now", "Due Soon", "Upcoming", "Future", "Missing"
+        if (status == "Missing")
+        {
+            NavigationManager.NavigateTo("/adr/missing-accounts");
+        }
+        else
+        {
+            var encodedStatus = Uri.EscapeDataString(status);
+            NavigationManager.NavigateTo($"/adr/accounts?nextRunStatus={encodedStatus}");
+        }
+    }
+
+    private void OnAdrJobChartClick(string status)
+    {
+        // Navigate to ADR Jobs page with the clicked status as a filter
+        // Status values are internal enum values: "Pending", "CredentialVerified", "ScrapeRequested", "Completed", "Failed", "NeedsReview"
+        var encodedStatus = Uri.EscapeDataString(status);
+        NavigationManager.NavigateTo($"/adr/jobs?status={encodedStatus}");
     }
 
     public void Dispose()

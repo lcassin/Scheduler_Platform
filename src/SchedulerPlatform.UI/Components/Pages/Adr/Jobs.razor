@@ -294,6 +294,10 @@
     [SupplyParameterFromQuery(Name = "latestPerAccount")]
     public string? LatestPerAccountParam { get; set; }
 
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "status")]
+    public string? StatusParam { get; set; }
+
     protected override void OnInitialized()
     {
         if (!string.IsNullOrEmpty(VendorCodeParam))
@@ -310,6 +314,12 @@
         if (!string.IsNullOrEmpty(LatestPerAccountParam) && bool.TryParse(LatestPerAccountParam, out var latestPerAccount))
         {
             _showLatestPerAccount = latestPerAccount;
+        }
+        // Handle status parameter (e.g., from Dashboard chart click)
+        if (!string.IsNullOrEmpty(StatusParam))
+        {
+            _selectedStatus = StatusParam;
+            _filterStatus = StatusParam;
         }
         _loading = false;
     }

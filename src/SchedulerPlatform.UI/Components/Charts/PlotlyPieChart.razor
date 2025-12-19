@@ -2,8 +2,11 @@
 @using Plotly.Blazor.LayoutLib
 @using Plotly.Blazor.ConfigLib
 @using Plotly.Blazor.Traces
+@using Plotly.Blazor.Interop
 
-<PlotlyChart @ref="_chart" Data="_data" Layout="_layout" Config="_config" style="@($"width: 100%; height: {Height};")" />
+<PlotlyChart @ref="_chart" Data="_data" Layout="_layout" Config="_config" 
+             ClickAction="OnChartClick"
+             style="@($"width: 100%; height: {Height}; cursor: {(OnSliceClick.HasDelegate ? "pointer" : "default")};")" />
 
 @code {
     [Parameter]
@@ -16,6 +19,9 @@
     public string[] Colors { get; set; } = Array.Empty<string>();
     
     [Parameter]
+    public string[] CustomData { get; set; } = Array.Empty<string>();
+    
+    [Parameter]
     public string Height { get; set; } = "200px";
     
     [Parameter]
@@ -23,6 +29,9 @@
     
     [Parameter]
     public string? Title { get; set; }
+    
+    [Parameter]
+    public EventCallback<string> OnSliceClick { get; set; }
 
     private PlotlyChart? _chart;
     private IList<ITrace> _data = new List<ITrace>();
@@ -40,6 +49,7 @@
         {
             Values = Values.Cast<object>().ToList(),
             Labels = Labels.Cast<object>().ToList(),
+            CustomData = CustomData.Any() ? CustomData.Cast<object>().ToList() : null,
             TextInfo = Plotly.Blazor.Traces.PieLib.TextInfoFlag.Percent,
             HoverInfo = Plotly.Blazor.Traces.PieLib.HoverInfoFlag.Label | Plotly.Blazor.Traces.PieLib.HoverInfoFlag.Value | Plotly.Blazor.Traces.PieLib.HoverInfoFlag.Percent,
             Hole = 0m,
@@ -90,6 +100,41 @@
         {
             BuildChart();
             await _chart.React();
+        }
+    }
+
+    private void OnChartClick(IEnumerable<EventDataPoint> eventData)
+    {
+        if (!OnSliceClick.HasDelegate)
+            return;
+
+        var point = eventData.FirstOrDefault();
+        if (point == null)
+            return;
+
+        // Get the point index to look up the value from our arrays
+        var pointIndex = point.PointNumber as int? ?? point.PointIndex as int? ?? -1;
+        if (pointIndex < 0)
+            return;
+
+        // Try to get the custom data first (internal status key), fall back to label
+        string clickedValue;
+        if (CustomData.Any() && pointIndex < CustomData.Length)
+        {
+            clickedValue = CustomData[pointIndex];
+        }
+        else if (pointIndex < Labels.Length)
+        {
+            clickedValue = Labels[pointIndex];
+        }
+        else
+        {
+            return;
+        }
+
+        if (!string.IsNullOrEmpty(clickedValue))
+        {
+            OnSliceClick.InvokeAsync(clickedValue);
         }
     }
 }
