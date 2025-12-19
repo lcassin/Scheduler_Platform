@@ -6,41 +6,66 @@ window.chartInterop = {
     _subscriptions: new Map(),
 
     // Subscribe to plotly_click event on a chart element
-    subscribeToClick: function (dotNetRef, chartId) {
+    subscribeToClick: function (dotNetRef, wrapperId) {
         // Remove any existing subscription for this chart
-        this.unsubscribeFromClick(chartId);
+        this.unsubscribeFromClick(wrapperId);
 
         // Wait for the chart element to be ready with retry logic
-        const maxRetries = 20;
+        const maxRetries = 30;
         let retryCount = 0;
 
         const trySubscribe = () => {
-            const chartElement = document.getElementById(chartId);
+            const wrapperElement = document.getElementById(wrapperId);
             
-            if (!chartElement) {
-                console.log(`[chartInterop] Chart element '${chartId}' not found, retry ${retryCount + 1}/${maxRetries}`);
+            if (!wrapperElement) {
+                console.log(`[chartInterop] Wrapper element '${wrapperId}' not found, retry ${retryCount + 1}/${maxRetries}`);
                 if (retryCount < maxRetries) {
                     retryCount++;
-                    setTimeout(trySubscribe, 100);
+                    setTimeout(trySubscribe, 150);
                 } else {
-                    console.error(`[chartInterop] Failed to find chart element '${chartId}' after ${maxRetries} retries`);
+                    console.error(`[chartInterop] Failed to find wrapper element '${wrapperId}' after ${maxRetries} retries`);
+                }
+                return;
+            }
+
+            // Find the actual Plotly chart element inside the wrapper
+            // Plotly creates elements with class 'js-plotly-plot' or 'plotly-graph-div'
+            let plotlyElement = wrapperElement.querySelector('.js-plotly-plot');
+            if (!plotlyElement) {
+                plotlyElement = wrapperElement.querySelector('[class*="plotly"]');
+            }
+            // Also check if the wrapper itself might be the plotly element
+            if (!plotlyElement && wrapperElement.classList.contains('js-plotly-plot')) {
+                plotlyElement = wrapperElement;
+            }
+            
+            if (!plotlyElement) {
+                console.log(`[chartInterop] Plotly element not found inside '${wrapperId}', retry ${retryCount + 1}/${maxRetries}`);
+                if (retryCount < maxRetries) {
+                    retryCount++;
+                    setTimeout(trySubscribe, 150);
+                } else {
+                    console.error(`[chartInterop] Failed to find Plotly element inside '${wrapperId}' after ${maxRetries} retries`);
+                    // Log what we found for debugging
+                    console.log(`[chartInterop] Wrapper innerHTML:`, wrapperElement.innerHTML.substring(0, 500));
                 }
                 return;
             }
 
             // Check if Plotly has initialized this element (it should have 'on' method)
-            if (!chartElement.on) {
-                console.log(`[chartInterop] Chart element '${chartId}' not initialized by Plotly yet, retry ${retryCount + 1}/${maxRetries}`);
+            if (!plotlyElement.on) {
+                console.log(`[chartInterop] Plotly element inside '${wrapperId}' not initialized yet (no 'on' method), retry ${retryCount + 1}/${maxRetries}`);
                 if (retryCount < maxRetries) {
                     retryCount++;
-                    setTimeout(trySubscribe, 100);
+                    setTimeout(trySubscribe, 150);
                 } else {
-                    console.error(`[chartInterop] Chart element '${chartId}' never got Plotly 'on' method after ${maxRetries} retries`);
+                    console.error(`[chartInterop] Plotly element inside '${wrapperId}' never got 'on' method after ${maxRetries} retries`);
+                    console.log(`[chartInterop] Element classes:`, plotlyElement.className);
                 }
                 return;
             }
 
-            console.log(`[chartInterop] Subscribing to plotly_click on '${chartId}'`);
+            console.log(`[chartInterop] Found Plotly element inside '${wrapperId}', subscribing to plotly_click`);
 
             // Create the click handler
             const clickHandler = function (data) {
@@ -79,16 +104,16 @@ window.chartInterop = {
             };
 
             // Subscribe to the event
-            chartElement.on('plotly_click', clickHandler);
+            plotlyElement.on('plotly_click', clickHandler);
 
             // Store the subscription for cleanup
-            this._subscriptions.set(chartId, {
-                element: chartElement,
+            this._subscriptions.set(wrapperId, {
+                element: plotlyElement,
                 handler: clickHandler,
                 dotNetRef: dotNetRef
             });
 
-            console.log(`[chartInterop] Successfully subscribed to plotly_click on '${chartId}'`);
+            console.log(`[chartInterop] Successfully subscribed to plotly_click on '${wrapperId}'`);
         };
 
         // Start the subscription attempt
