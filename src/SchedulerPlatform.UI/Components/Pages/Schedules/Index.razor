@@ -175,7 +175,7 @@
                     <MudText Typo="Typo.body2" Color="Color.Secondary">@context.Description</MudText>
                 </MudTd>
                 <MudTd DataLabel="Type">
-                    <MudChip T="string" Size="Size.Small">@context.JobType.ToString()</MudChip>
+                    <MudChip T="string" Size="Size.Small">@GetJobTypeDisplay(context.JobType)</MudChip>
                 </MudTd>
                 <MudTd DataLabel="Frequency">@context.Frequency.ToString()</MudTd>
                                                 <MudTd DataLabel="Next Run">
@@ -225,7 +225,7 @@
                 <MudTd DataLabel="Actions">
                     <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
                         <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewScheduleDetails(context)">View Details</MudMenuItem>
-                        @if (_canUpdate && !context.IsSystemSchedule)
+                        @if (_canUpdate && (!context.IsSystemSchedule || _isSystemAdmin))
                         {
                             <MudMenuItem Icon="@Icons.Material.Filled.Edit" OnClick="() => EditSchedule(context.Id)">Edit</MudMenuItem>
                         }
@@ -791,6 +791,18 @@
 			JobStatus.Retrying => Color.Warning,
 			JobStatus.Cancelled => Color.Default,
 			_ => Color.Default
+		};
+	}
+
+	private string GetJobTypeDisplay(SchedulerPlatform.UI.Models.JobType jobType)
+	{
+		return jobType switch
+		{
+			SchedulerPlatform.UI.Models.JobType.Process => "Process",
+			SchedulerPlatform.UI.Models.JobType.StoredProcedure => "StoredProcedure",
+			SchedulerPlatform.UI.Models.JobType.ApiCall => "ApiCall",
+			SchedulerPlatform.UI.Models.JobType.Maintenance => "Maintenance",
+			_ => jobType.ToString()
 		};
 	}
 
