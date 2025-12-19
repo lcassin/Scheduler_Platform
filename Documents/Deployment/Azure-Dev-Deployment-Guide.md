@@ -19,6 +19,9 @@
 
 **Provide this section to your Duende administrator.**
 
+> **Important Note on Permissions vs Claims:**
+> This section only covers OIDC client registration. The Scheduler Platform manages its own permissions internally via its database - Duende does not need to configure any permission system. The "claims" listed below (like `permission`, `role`) are simply claim types that should be included in tokens if your Duende instance supports them. If not, the Scheduler Platform can look up user permissions from its own database using the `sub` (subject) claim.
+
 ### Required API Resource & Scopes
 
 The following must be registered in the existing Duende instance:
@@ -95,32 +98,6 @@ Access Token Lifetime: 3600 seconds
 Require Consent: No
 ```
 
-### Client 3: ADR Scheduler Service Account (Background Jobs)
-
-```
-Client ID: svc-adrscheduler
-Client Name: ADR Scheduler Service Account
-Grant Type: Client Credentials
-Requires Client Secret: Yes
-Client Secret: [Generate secure secret - store in Key Vault]
-
-Allowed Scopes:
-  - scheduler-api
-
-Client Claims (IMPORTANT - these must be included in tokens):
-  - permission = scheduler:read
-  - permission = schedules:read
-  - permission = schedules:create
-  - permission = schedules:update
-  - permission = schedules:delete
-  - permission = schedules:execute
-  - permission = jobs:read
-
-Always Send Client Claims: Yes
-Client Claims Prefix: (empty string)
-Access Token Lifetime: 3600 seconds
-```
-
 ---
 
 ## Part 2: Key Vault Secrets
@@ -188,7 +165,7 @@ ALTER ROLE db_ddladmin ADD MEMBER [nuscetsadrschdevmi];  -- For migrations
 
 ### Pre-Deployment
 
-- [ ] Duende admin has registered all 3 clients
+- [ ] Duende admin has registered both clients (UI and Swagger)
 - [ ] Duende admin has confirmed API resource `scheduler-api` exists
 - [ ] Duende admin has confirmed identity resources `role` and `permissions` exist
 - [ ] Received client secrets from Duende admin
@@ -255,9 +232,9 @@ ALTER ROLE db_ddladmin ADD MEMBER [nuscetsadrschdevmi];  -- For migrations
 
 ---
 
-## Appendix: Claim Requirements
+## Appendix: Claim Types (Optional)
 
-The ADR Scheduler API authorization system expects these claims in access tokens:
+The ADR Scheduler API can use these claims for authorization if present in tokens. However, if your Duende instance doesn't emit these claims, the Scheduler Platform will look up user permissions from its own database using the `sub` (subject) claim to identify the user.
 
 | Claim Type | Description | Example Values |
 |------------|-------------|----------------|
