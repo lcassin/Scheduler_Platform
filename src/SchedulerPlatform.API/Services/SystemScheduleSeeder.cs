@@ -37,6 +37,10 @@ public class SystemScheduleSeeder : IHostedService
             var dbContext = scope.ServiceProvider.GetRequiredService<SchedulerDbContext>();
             var schedulerService = scope.ServiceProvider.GetRequiredService<ISchedulerService>();
 
+            // Remove deprecated Daily Log Cleanup schedule (replaced by MaintenanceJob)
+            await RemoveDeprecatedLogCleanupScheduleAsync(dbContext, schedulerService, cancellationToken);
+
+            // Seed the new System Maintenance schedule
             await SeedMaintenanceScheduleAsync(dbContext, schedulerService, cancellationToken);
 
             _logger.LogInformation("SystemScheduleSeeder: completed");
@@ -48,6 +52,49 @@ public class SystemScheduleSeeder : IHostedService
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>
+    /// Removes the deprecated "Daily Log Cleanup" schedule which has been replaced by the MaintenanceJob.
+    /// This schedule was created in earlier versions but is no longer needed.
+    /// </summary>
+    private async Task RemoveDeprecatedLogCleanupScheduleAsync(
+        SchedulerDbContext dbContext,
+        ISchedulerService schedulerService,
+        CancellationToken cancellationToken)
+    {
+        const string deprecatedScheduleName = "Daily Log Cleanup";
+
+        var deprecatedSchedule = await dbContext.Schedules
+            .FirstOrDefaultAsync(s => s.Name == deprecatedScheduleName && !s.IsDeleted, cancellationToken);
+
+        if (deprecatedSchedule == null)
+        {
+            _logger.LogDebug("SystemScheduleSeeder: No deprecated '{ScheduleName}' schedule found", deprecatedScheduleName);
+            return;
+        }
+
+        try
+        {
+            // Unschedule from Quartz first
+            await schedulerService.UnscheduleJob(deprecatedSchedule.Id, deprecatedSchedule.ClientId);
+            _logger.LogInformation("SystemScheduleSeeder: Unscheduled deprecated '{ScheduleName}' from Quartz", deprecatedScheduleName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "SystemScheduleSeeder: Could not unschedule deprecated '{ScheduleName}' from Quartz", deprecatedScheduleName);
+        }
+
+        // Soft-delete the schedule
+        deprecatedSchedule.IsDeleted = true;
+        deprecatedSchedule.IsEnabled = false;
+        deprecatedSchedule.ModifiedDateTime = DateTime.UtcNow;
+        deprecatedSchedule.ModifiedBy = "System";
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        _logger.LogInformation(
+            "SystemScheduleSeeder: Soft-deleted deprecated '{ScheduleName}' schedule (Id: {ScheduleId}). It has been replaced by the System Maintenance job.",
+            deprecatedScheduleName, deprecatedSchedule.Id);
+    }
 
     private async Task SeedMaintenanceScheduleAsync(
         SchedulerDbContext dbContext, 
