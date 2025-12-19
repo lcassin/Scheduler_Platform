@@ -238,6 +238,7 @@ builder.Services.AddHostedService<SchedulerPlatform.API.Services.StartupRecovery
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.ScheduleHydrationService>();
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.MissedSchedulesProcessor>();
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.DataArchivalService>();
+builder.Services.AddHostedService<SchedulerPlatform.API.Services.SystemScheduleSeeder>();
 
 builder.Services.AddHttpClient("ApiCallJob");
 builder.Services.AddHttpClient("AdrApi");
