@@ -43,6 +43,14 @@ public class ProcessJob : IJob
             return;
         }
 
+        // Safety check: Don't execute if schedule is disabled (paused)
+        if (!schedule.IsEnabled)
+        {
+            _logger.LogWarning("Schedule {ScheduleId} ({ScheduleName}) is disabled/paused, skipping execution", 
+                scheduleId, schedule.Name);
+            return;
+        }
+
         var execNow = DateTime.UtcNow;
         var jobExecution = new JobExecution
         {

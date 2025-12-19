@@ -684,6 +684,67 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
+    /// Updates the Super Admin status of a user. Requires Super Admin privileges.
+    /// Cannot remove Super Admin status from the last Super Admin in the system.
+    /// </summary>
+    /// <param name="id">The user ID.</param>
+    /// <param name="request">The Super Admin status update request.</param>
+    /// <returns>No content on success.</returns>
+    /// <response code="204">The Super Admin status was successfully updated.</response>
+    /// <response code="400">Cannot remove the last Super Admin or invalid request.</response>
+    /// <response code="403">Only Super Admins can modify Super Admin status.</response>
+    /// <response code="404">The user was not found.</response>
+    /// <response code="500">An error occurred while updating Super Admin status.</response>
+    [HttpPut("{id}/super-admin")]
+    [Authorize(Policy = "SuperAdmin")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> UpdateSuperAdminStatus(int id, [FromBody] UpdateSuperAdminStatusRequest request)
+    {
+        try
+        {
+            var user = await _unitOfWork.Users.GetByIdAsync(id);
+            if (user == null)
+            {
+                return NotFound(new { message = "User not found" });
+            }
+
+            // If trying to remove Super Admin status, check if this is the last Super Admin
+            if (!request.IsSuperAdmin && user.IsSystemAdmin)
+            {
+                var allUsers = await _unitOfWork.Users.GetAllAsync();
+                var superAdminCount = allUsers.Count(u => u.IsSystemAdmin && u.IsActive);
+                
+                if (superAdminCount <= 1)
+                {
+                    return BadRequest(new { message = "Cannot remove Super Admin status from the last Super Admin. Promote another user to Super Admin first." });
+                }
+            }
+
+            var oldStatus = user.IsSystemAdmin;
+            user.IsSystemAdmin = request.IsSuperAdmin;
+            user.ModifiedDateTime = DateTime.UtcNow;
+            user.ModifiedBy = User.Identity?.Name ?? "System";
+
+            await _unitOfWork.Users.UpdateAsync(user);
+            await _unitOfWork.SaveChangesAsync();
+
+            _logger.LogWarning("Super Admin status changed for user {UserId} ({Email}) from {OldStatus} to {NewStatus} by {ModifiedBy}",
+                id, user.Email, oldStatus, request.IsSuperAdmin, User.Identity?.Name ?? "System");
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating Super Admin status for user {UserId}", id);
+            return StatusCode(500, "An error occurred while updating Super Admin status");
+        }
+    }
+
+    /// <summary>
     /// Retrieves all available permission templates. Requires Users.Manage.Read policy.
     /// </summary>
     /// <returns>A list of permission templates (Viewer, Editor, Admin).</returns>

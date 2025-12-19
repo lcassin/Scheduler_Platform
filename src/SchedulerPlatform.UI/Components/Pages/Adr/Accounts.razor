@@ -284,14 +284,24 @@
     [SupplyParameterFromQuery(Name = "accountNumber")]
     public string? AccountNumberParam { get; set; }
 
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "nextRunStatus")]
+    public string? NextRunStatusParam { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            // Apply query parameters if provided (e.g., from "View Account" action on Jobs page)
+            // Apply query parameters if provided (e.g., from "View Account" action on Jobs page or Dashboard chart click)
             if (!string.IsNullOrEmpty(AccountNumberParam))
             {
                 _searchTerm = AccountNumberParam;
+            }
+            
+            if (!string.IsNullOrEmpty(NextRunStatusParam))
+            {
+                _selectedNextRunStatus = NextRunStatusParam;
+                _filterNextRunStatus = NextRunStatusParam;
             }
             
             _clients = await ClientService.GetClientsAsync();

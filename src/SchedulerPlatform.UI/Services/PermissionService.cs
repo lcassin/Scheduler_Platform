@@ -69,4 +69,25 @@ public class PermissionService : IPermissionService
             c.Type == "is_system_admin" &&
             string.Equals(c.Value, "true", StringComparison.OrdinalIgnoreCase));
     }
+
+    public async Task<bool> IsAdminOrAboveAsync()
+    {
+        var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        if (!user.Identity?.IsAuthenticated ?? true)
+            return false;
+
+        // Check is_system_admin (Super Admin) case-insensitively
+        var isSystemAdmin = user.Claims.Any(c =>
+            c.Type == "is_system_admin" &&
+            string.Equals(c.Value, "true", StringComparison.OrdinalIgnoreCase));
+        
+        if (isSystemAdmin)
+            return true;
+
+        // Check for Admin role
+        var role = user.Claims.FirstOrDefault(c => c.Type == "role")?.Value;
+        return role == "Admin";
+    }
 }

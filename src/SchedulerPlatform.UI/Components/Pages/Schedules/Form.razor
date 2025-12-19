@@ -15,33 +15,53 @@
 
 <MudText Typo="Typo.h4" Class="mb-4">@(_isEdit ? "Edit Schedule" : "Create Schedule")</MudText>
 
+@if (_schedule.IsSystemSchedule)
+{
+    <MudAlert Severity="Severity.Info" Class="mb-4">
+        <strong>System Schedule</strong><br />
+        This is a protected system schedule. You can only modify the schedule timing (cron expression), timezone, and enable/disable status.
+    </MudAlert>
+}
+
 <MudPaper Class="pa-4" Style="padding-bottom: 80px;">
     <EditForm Model="@_schedule" OnValidSubmit="HandleSubmit">
         <DataAnnotationsValidator />
         
         <MudGrid>
             <MudItem xs="12" md="6">
-                <MudTextField @bind-Value="_schedule.Name" Label="Schedule Name" Required="true" />
+                <MudTextField @bind-Value="_schedule.Name" Label="Schedule Name" Required="true" Disabled="@_schedule.IsSystemSchedule" />
             </MudItem>
             
             <MudItem xs="12" md="6">
-                <MudSelect T="int" @bind-Value="_schedule.ClientId" Label="Client" Required="true">
-                    @foreach (var client in _clients)
-                    {
-                        <MudSelectItem Value="client.Id">@client.ClientName</MudSelectItem>
-                    }
-                </MudSelect>
+                <MudAutocomplete T="Client" 
+                                 Label="Client" 
+                                 Value="_selectedClient"
+                                 SearchFunc="SearchClients"
+                                 ToStringFunc="@(c => c?.ClientName ?? "")"
+                                 ValueChanged="OnClientChanged"
+                                 Variant="Variant.Outlined" 
+                                 Margin="Margin.Dense" 
+                                 Required="true"
+                                 ResetValueOnEmptyText="false"
+                                 CoerceText="false"
+                                 AdornmentIcon="@Icons.Material.Filled.Business"
+                                 ShowProgressIndicator="true"
+                                 Disabled="@_schedule.IsSystemSchedule" />
             </MudItem>
             
             <MudItem xs="12">
-                <MudTextField @bind-Value="_schedule.Description" Label="Description" Lines="3" />
+                <MudTextField @bind-Value="_schedule.Description" Label="Description" Lines="3" Disabled="@_schedule.IsSystemSchedule" />
             </MudItem>
             
             <MudItem xs="12" md="6">
-                <MudSelect Value="_schedule.JobType" ValueChanged="OnJobTypeChanged" Label="Job Type" Required="true" T="JobType">
+                <MudSelect Value="_schedule.JobType" ValueChanged="OnJobTypeChanged" Label="Job Type" Required="true" T="JobType" Disabled="@_schedule.IsSystemSchedule">
                     <MudSelectItem Value="JobType.Process">Process</MudSelectItem>
                     <MudSelectItem Value="JobType.StoredProcedure">Stored Procedure</MudSelectItem>
                     <MudSelectItem Value="JobType.ApiCall">API Call</MudSelectItem>
+                    @if (_schedule.IsSystemSchedule && _schedule.JobType == JobType.Maintenance)
+                    {
+                        <MudSelectItem Value="JobType.Maintenance">Maintenance (System)</MudSelectItem>
+                    }
                 </MudSelect>
             </MudItem>
             
@@ -49,35 +69,38 @@
                 <MudSwitch @bind-Value="_schedule.IsEnabled" Label="Enabled" Color="Color.Primary" />
             </MudItem>
             
-            <MudItem xs="12" md="4">
-                <MudNumericField @bind-Value="_schedule.MaxRetries" 
-                                 @bind-Value:after="OnFormFieldChanged"
-                                 Label="Max Retries" 
-                                 HelperText="Maximum number of retry attempts"
-                                 Min="0"
-                                 Variant="Variant.Outlined"
-                                 Margin="Margin.Dense" />
-            </MudItem>
-            
-            <MudItem xs="12" md="4">
-                <MudNumericField @bind-Value="_schedule.RetryDelayMinutes" 
-                                 @bind-Value:after="OnFormFieldChanged"
-                                 Label="Retry Delay (minutes)" 
-                                 HelperText="Delay between retry attempts"
-                                 Min="1"
-                                 Variant="Variant.Outlined"
-                                 Margin="Margin.Dense" />
-            </MudItem>
-            
-            <MudItem xs="12" md="4">
-                <MudNumericField @bind-Value="_schedule.TimeoutMinutes" 
-                                 @bind-Value:after="OnFormFieldChanged"
-                                 Label="Timeout (minutes)" 
-                                 HelperText="Optional. Leave empty for default (5 minutes)"
-                                 Min="0"
-                                 Variant="Variant.Outlined"
-                                 Margin="Margin.Dense" />
-            </MudItem>
+            @if (!_schedule.IsSystemSchedule)
+            {
+                <MudItem xs="12" md="4">
+                    <MudNumericField @bind-Value="_schedule.MaxRetries" 
+                                     @bind-Value:after="OnFormFieldChanged"
+                                     Label="Max Retries" 
+                                     HelperText="Maximum number of retry attempts"
+                                     Min="0"
+                                     Variant="Variant.Outlined"
+                                     Margin="Margin.Dense" />
+                </MudItem>
+                
+                <MudItem xs="12" md="4">
+                    <MudNumericField @bind-Value="_schedule.RetryDelayMinutes" 
+                                     @bind-Value:after="OnFormFieldChanged"
+                                     Label="Retry Delay (minutes)" 
+                                     HelperText="Delay between retry attempts"
+                                     Min="1"
+                                     Variant="Variant.Outlined"
+                                     Margin="Margin.Dense" />
+                </MudItem>
+                
+                <MudItem xs="12" md="4">
+                    <MudNumericField @bind-Value="_schedule.TimeoutMinutes" 
+                                     @bind-Value:after="OnFormFieldChanged"
+                                     Label="Timeout (minutes)" 
+                                     HelperText="Optional. Leave empty for default (5 minutes)"
+                                     Min="0"
+                                     Variant="Variant.Outlined"
+                                     Margin="Margin.Dense" />
+                </MudItem>
+            }
             
             <MudItem xs="12">
                 <MudText Typo="Typo.h6" Class="mb-2">Schedule Configuration</MudText>
@@ -148,6 +171,8 @@
                         }
                     </MudExpansionPanel>
                     
+                    @if (!_schedule.IsSystemSchedule)
+                    {
                     <MudExpansionPanel Text="Job Configuration">
                         @if (_schedule.JobType == JobType.Process)
                         {
@@ -272,7 +297,10 @@
                                              Class="mb-2" />
                         }
                     </MudExpansionPanel>
+                    }
                     
+                    @if (!_schedule.IsSystemSchedule)
+                    {
                     <MudExpansionPanel Text="Advanced: Raw JSON Override">
                         <MudStack>
                             <MudText Typo="Typo.body2" Class="mb-2">
@@ -292,6 +320,7 @@
                             }
                         </MudStack>
                     </MudExpansionPanel>
+                    }
                 </MudExpansionPanels>
             </MudItem>
         </MudGrid>
@@ -319,6 +348,7 @@
 
     private Schedule _schedule = new() { ClientId = 1, IsEnabled = true, Frequency = ScheduleFrequency.Daily, JobType = JobType.Process, JobDataJson = "{}", TimeZone = "Central Standard Time" };
     private List<Client> _clients = new();
+    private Client? _selectedClient;
     private bool _isEdit => Id.HasValue;
     private bool _saving = false;
     private bool _notifyOnSuccess = false;
@@ -359,6 +389,7 @@
         if (_clients.Count > 0 && !_isEdit)
         {
             _schedule.ClientId = _clients[0].Id;
+            _selectedClient = _clients[0];
             
             try
             {
@@ -380,6 +411,7 @@
                 if (schedule != null)
                 {
                     _schedule = schedule;
+                    _selectedClient = _clients.FirstOrDefault(c => c.Id == _schedule.ClientId);
                     
                     if (_schedule.NextRunDateTime.HasValue)
                     {
@@ -493,6 +525,26 @@
     private void Cancel()
     {
         Navigation.NavigateTo("/schedules");
+    }
+
+    private void OnClientChanged(Client? client)
+    {
+        _selectedClient = client;
+        if (client != null)
+        {
+            _schedule.ClientId = client.Id;
+        }
+    }
+
+    private Task<IEnumerable<Client>> SearchClients(string value, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return Task.FromResult(_clients.Take(50).AsEnumerable());
+
+        return Task.FromResult(_clients
+            .Where(c => c.ClientName.Contains(value, StringComparison.OrdinalIgnoreCase))
+            .Take(50)
+            .AsEnumerable());
     }
 
     private string? ValidateEmailList(string? emailList)
