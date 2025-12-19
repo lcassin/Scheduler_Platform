@@ -348,7 +348,7 @@
                 null, // vmAccountId - not used for filtering
                 _filterInterfaceAccountId,
                 null, // credentialId - removed from UI
-                _showManualJobs ? true : false, // false = hide manual jobs (default), true = show only manual jobs
+                _showManualJobs ? true : (bool?)null, // null = show all jobs (default), true = show only manual jobs
                 sortColumn,
                 sortDescending);
 

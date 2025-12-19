@@ -48,7 +48,6 @@
 
     protected override void OnParametersSet()
     {
-        Console.WriteLine($"[PlotlyPieChart] OnParametersSet - OnSliceClick.HasDelegate={OnSliceClick.HasDelegate}, Labels={Labels?.Length ?? 0}, Values={Values?.Length ?? 0}");
         BuildChart();
     }
     
@@ -56,7 +55,6 @@
     {
         if (OnSliceClick.HasDelegate && !_isSubscribed)
         {
-            Console.WriteLine($"[PlotlyPieChart] OnAfterRenderAsync - Subscribing to click events for chart {_chartId}");
             _dotNetRef ??= DotNetObjectReference.Create(this);
             
             // Small delay to ensure Plotly has initialized the chart
@@ -66,11 +64,10 @@
             {
                 await JSRuntime.InvokeVoidAsync("chartInterop.subscribeToClick", _dotNetRef, _chartId);
                 _isSubscribed = true;
-                Console.WriteLine($"[PlotlyPieChart] Successfully subscribed to click events");
             }
-            catch (Exception ex)
+            catch
             {
-                Console.WriteLine($"[PlotlyPieChart] Error subscribing to click events: {ex.Message}");
+                // Subscription failed - click events won't work but chart will still display
             }
         }
     }
@@ -78,57 +75,42 @@
     [JSInvokable]
     public async Task OnChartClickFromJs(JsonElement[] points)
     {
-        Console.WriteLine($"[PlotlyPieChart] OnChartClickFromJs FIRED! Points count={points?.Length ?? 0}");
-        
         if (!OnSliceClick.HasDelegate || points == null || points.Length == 0)
-        {
-            Console.WriteLine("[PlotlyPieChart] No delegate or no points, returning early");
             return;
-        }
         
         var point = points[0];
-        Console.WriteLine($"[PlotlyPieChart] Point JSON: {point}");
         
         // Try to get PointNumber or PointIndex from the JSON
         int pointIndex = -1;
         if (point.TryGetProperty("PointNumber", out var pointNumber) && pointNumber.ValueKind == JsonValueKind.Number)
         {
             pointIndex = pointNumber.GetInt32();
-            Console.WriteLine($"[PlotlyPieChart] Got PointNumber: {pointIndex}");
         }
         else if (point.TryGetProperty("PointIndex", out var pointIdx) && pointIdx.ValueKind == JsonValueKind.Number)
         {
             pointIndex = pointIdx.GetInt32();
-            Console.WriteLine($"[PlotlyPieChart] Got PointIndex: {pointIndex}");
         }
         
         if (pointIndex < 0)
-        {
-            Console.WriteLine("[PlotlyPieChart] Could not get valid point index");
             return;
-        }
         
         // Get the clicked value from CustomData or Labels
         string clickedValue;
         if (CustomData.Any() && pointIndex < CustomData.Length)
         {
             clickedValue = CustomData[pointIndex];
-            Console.WriteLine($"[PlotlyPieChart] Using CustomData value: {clickedValue}");
         }
         else if (pointIndex < Labels.Length)
         {
             clickedValue = Labels[pointIndex];
-            Console.WriteLine($"[PlotlyPieChart] Using Labels value: {clickedValue}");
         }
         else
         {
-            Console.WriteLine($"[PlotlyPieChart] Index {pointIndex} out of range");
             return;
         }
         
         if (!string.IsNullOrEmpty(clickedValue))
         {
-            Console.WriteLine($"[PlotlyPieChart] Invoking OnSliceClick with value: {clickedValue}");
             await OnSliceClick.InvokeAsync(clickedValue);
         }
     }
@@ -141,9 +123,9 @@
             {
                 await JSRuntime.InvokeVoidAsync("chartInterop.unsubscribeFromClick", _chartId);
             }
-            catch (Exception ex)
+            catch
             {
-                Console.WriteLine($"[PlotlyPieChart] Error unsubscribing: {ex.Message}");
+                // Ignore disposal errors
             }
         }
         _dotNetRef?.Dispose();
