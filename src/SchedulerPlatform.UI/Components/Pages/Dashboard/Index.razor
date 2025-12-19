@@ -392,18 +392,19 @@
             </MudSelect>
         </MudItem>
         <MudItem xs="12" md="3">
-            <MudSelect Value="_selectedClientId" 
-                      Label="Filter by Client" 
-                      Variant="Variant.Outlined" 
-                      Margin="Margin.Dense" 
-                      Clearable="true"
-                      ValueChanged="@(async (int? value) => await OnClientChanged(value))">
-                <MudSelectItem Value="@((int?)null)">All Clients</MudSelectItem>
-                @foreach (var client in _clients)
-                {
-                    <MudSelectItem Value="@((int?)client.Id)">@client.ClientName</MudSelectItem>
-                }
-            </MudSelect>
+            <MudAutocomplete T="Client" 
+                             Label="Filter by Client" 
+                             Value="_selectedClient"
+                             SearchFunc="SearchClients"
+                             ToStringFunc="@(c => c?.ClientName ?? "All Clients")"
+                             ValueChanged="OnClientFilterChanged"
+                             Variant="Variant.Outlined" 
+                             Margin="Margin.Dense" 
+                             Clearable="true"
+                             ResetValueOnEmptyText="true"
+                             CoerceText="false"
+                             AdornmentIcon="@Icons.Material.Filled.Business"
+                             ShowProgressIndicator="true" />
         </MudItem>
         <MudItem xs="12" md="4">
             <MudSelect T="JobStatus" 
@@ -651,7 +652,8 @@
     private PeriodicTimer? _timer;
 
     private int _selectedTimeWindow = 24;
-    private int? _selectedClientId;
+    private Client? _selectedClient;
+    private int? _selectedClientId => _selectedClient?.Id;
     private JobStatus _selectedStatusesValue;
         private IEnumerable<JobStatus>? _selectedStatusesBackingField = null;
     
@@ -787,10 +789,20 @@
         RefreshData();
     }
 
-    private async Task OnClientChanged(int? value)
+    private async Task OnClientFilterChanged(Client? client)
     {
-        _selectedClientId = value;
+        _selectedClient = client;
         RefreshData();
+    }
+
+    private async Task<IEnumerable<Client>> SearchClients(string value, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return _clients.Take(50);
+
+        return _clients
+            .Where(c => c.ClientName.Contains(value, StringComparison.OrdinalIgnoreCase))
+            .Take(50);
     }
 
         private void RefreshData()

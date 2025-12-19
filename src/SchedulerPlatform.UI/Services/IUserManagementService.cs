@@ -11,4 +11,5 @@ public interface IUserManagementService
     Task<List<PermissionTemplate>> GetPermissionTemplatesAsync();
     Task<UserDetail> CreateUserAsync(CreateUserRequest request);
     Task UpdateUserStatusAsync(int id, bool isActive);
+    Task UpdateSuperAdminStatusAsync(int id, bool isSuperAdmin);
 }

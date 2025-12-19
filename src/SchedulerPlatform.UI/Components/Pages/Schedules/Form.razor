@@ -25,12 +25,19 @@
             </MudItem>
             
             <MudItem xs="12" md="6">
-                <MudSelect T="int" @bind-Value="_schedule.ClientId" Label="Client" Required="true">
-                    @foreach (var client in _clients)
-                    {
-                        <MudSelectItem Value="client.Id">@client.ClientName</MudSelectItem>
-                    }
-                </MudSelect>
+                <MudAutocomplete T="Client" 
+                                 Label="Client" 
+                                 Value="_selectedClient"
+                                 SearchFunc="SearchClients"
+                                 ToStringFunc="@(c => c?.ClientName ?? "")"
+                                 ValueChanged="OnClientChanged"
+                                 Variant="Variant.Outlined" 
+                                 Margin="Margin.Dense" 
+                                 Required="true"
+                                 ResetValueOnEmptyText="false"
+                                 CoerceText="false"
+                                 AdornmentIcon="@Icons.Material.Filled.Business"
+                                 ShowProgressIndicator="true" />
             </MudItem>
             
             <MudItem xs="12">
@@ -319,6 +326,7 @@
 
     private Schedule _schedule = new() { ClientId = 1, IsEnabled = true, Frequency = ScheduleFrequency.Daily, JobType = JobType.Process, JobDataJson = "{}", TimeZone = "Central Standard Time" };
     private List<Client> _clients = new();
+    private Client? _selectedClient;
     private bool _isEdit => Id.HasValue;
     private bool _saving = false;
     private bool _notifyOnSuccess = false;
@@ -359,6 +367,7 @@
         if (_clients.Count > 0 && !_isEdit)
         {
             _schedule.ClientId = _clients[0].Id;
+            _selectedClient = _clients[0];
             
             try
             {
@@ -380,6 +389,7 @@
                 if (schedule != null)
                 {
                     _schedule = schedule;
+                    _selectedClient = _clients.FirstOrDefault(c => c.Id == _schedule.ClientId);
                     
                     if (_schedule.NextRunDateTime.HasValue)
                     {
@@ -493,6 +503,26 @@
     private void Cancel()
     {
         Navigation.NavigateTo("/schedules");
+    }
+
+    private void OnClientChanged(Client? client)
+    {
+        _selectedClient = client;
+        if (client != null)
+        {
+            _schedule.ClientId = client.Id;
+        }
+    }
+
+    private Task<IEnumerable<Client>> SearchClients(string value, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return Task.FromResult(_clients.Take(50).AsEnumerable());
+
+        return Task.FromResult(_clients
+            .Where(c => c.ClientName.Contains(value, StringComparison.OrdinalIgnoreCase))
+            .Take(50)
+            .AsEnumerable());
     }
 
     private string? ValidateEmailList(string? emailList)

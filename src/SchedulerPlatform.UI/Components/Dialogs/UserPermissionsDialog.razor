@@ -1,6 +1,8 @@
 @using SchedulerPlatform.UI.Services
 @using SchedulerPlatform.UI.Models
 @inject IUserManagementService UserManagementService
+@inject IPermissionService PermissionService
+@inject IDialogService DialogService
 @inject ISnackbar Snackbar
 
 <MudDialog>
@@ -11,6 +13,32 @@
         }
         else if (_user != null)
         {
+            <MudText Typo="Typo.h6" Class="mb-2">@_user.Email</MudText>
+            <MudText Typo="Typo.body2" Class="mb-4">@_user.FullName</MudText>
+
+            @* Super Admin toggle - only visible to current Super Admins *@
+            @if (_currentUserIsSuperAdmin)
+            {
+                <MudPaper Class="pa-4 mb-4" Style="background-color: #fff3e0;">
+                    <div class="d-flex align-center justify-space-between">
+                        <div>
+                            <MudText Typo="Typo.subtitle1" Style="color: #e65100;">
+                                <MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Class="mr-2" Style="vertical-align: middle;" />
+                                Super Admin Status
+                            </MudText>
+                            <MudText Typo="Typo.caption" Class="mt-1">
+                                Super Admins have full access to all features and can manage other users' permissions.
+                            </MudText>
+                        </div>
+                        <MudSwitch T="bool" 
+                                   Value="@_user.IsSystemAdmin" 
+                                   ValueChanged="@(async (bool value) => await ToggleSuperAdminStatus(value))"
+                                   Color="Color.Warning"
+                                   Disabled="@_savingSuperAdmin" />
+                    </div>
+                </MudPaper>
+            }
+
             @if (_user.IsSystemAdmin)
             {
                 <MudAlert Severity="Severity.Warning" Class="mb-4">
@@ -18,9 +46,6 @@
                     This user is a system administrator. Permissions cannot be modified.
                 </MudAlert>
             }
-
-            <MudText Typo="Typo.h6" Class="mb-2">@_user.Email</MudText>
-            <MudText Typo="Typo.body2" Class="mb-4">@_user.FullName</MudText>
 
             @if (!_user.IsSystemAdmin)
             {
@@ -123,12 +148,15 @@
     private List<PermissionTemplate> _templates = new();
     private string? _selectedTemplate;
     private bool _loading = true;
+    private bool _currentUserIsSuperAdmin = false;
+    private bool _savingSuperAdmin = false;
     private Dictionary<string, PermissionGroup> _permissionGroups = new(StringComparer.OrdinalIgnoreCase);
     private List<PermissionGroup> _permissionGroupList = new();
     private readonly string[] _permissionNames = new[] { "scheduler", "schedules", "jobs", "adr", "users:manage" };
 
     protected override async Task OnInitializedAsync()
     {
+        _currentUserIsSuperAdmin = await PermissionService.IsSystemAdminAsync();
         await LoadUser();
         await LoadTemplates();
         _selectedTemplate = GetCurrentTemplate();
@@ -325,6 +353,65 @@
     private void Cancel()
     {
         MudDialog?.Cancel();
+    }
+
+    private async Task ToggleSuperAdminStatus(bool newValue)
+    {
+        if (_user == null) return;
+
+        var action = newValue ? "grant Super Admin status to" : "remove Super Admin status from";
+        var parameters = new DialogParameters
+        {
+            ["ContentText"] = $"Are you sure you want to {action} {_user.Email}?\n\nThis is a high-privilege operation that will be logged.",
+            ["ButtonText"] = newValue ? "Grant Super Admin" : "Remove Super Admin",
+            ["Color"] = newValue ? Color.Warning : Color.Error
+        };
+
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.Small };
+        var dialog = await DialogService.ShowAsync<ConfirmDialog>("Confirm Super Admin Change", parameters, options);
+        var result = await dialog.Result;
+
+        if (result == null || result.Canceled)
+        {
+            return;
+        }
+
+        try
+        {
+            _savingSuperAdmin = true;
+            StateHasChanged();
+
+            await UserManagementService.UpdateSuperAdminStatusAsync(UserId, newValue);
+            _user.IsSystemAdmin = newValue;
+            
+            var message = newValue 
+                ? $"{_user.Email} is now a Super Admin" 
+                : $"Super Admin status removed from {_user.Email}";
+            Snackbar.Add(message, Severity.Success);
+
+            // If we just made them a Super Admin, they no longer need custom permissions
+            // If we removed Super Admin, they may need permissions set up
+            if (newValue)
+            {
+                _permissionGroupList.Clear();
+                _permissionGroups.Clear();
+            }
+            else
+            {
+                InitializePermissionGroups();
+            }
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error updating Super Admin status: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _savingSuperAdmin = false;
+            StateHasChanged();
+        }
     }
 
     private class PermissionGroup
