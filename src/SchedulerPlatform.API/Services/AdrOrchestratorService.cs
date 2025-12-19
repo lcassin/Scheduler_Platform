@@ -1178,9 +1178,31 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     }
                     else
                     {
-                        // Job is still processing - revert to ScrapeRequested so it gets picked up again
-                        job.Status = "ScrapeRequested";
-                        result.JobsStillProcessing++;
+                        // Job is still processing - check if billing window has been exhausted
+                        var today = DateTime.UtcNow.Date;
+                        var windowEnd = job.NextRangeEndDateTime?.Date ?? today;
+                        
+                        if (today > windowEnd)
+                        {
+                            // Billing window exhausted without finding a bill
+                            // Mark job as NoInvoiceFound and advance rule to next cycle
+                            job.Status = "NoInvoiceFound";
+                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                            result.JobsNeedingReview++; // Count as needing review for reporting
+                            
+                            _logger.LogInformation(
+                                "Job {JobId}: Billing window exhausted (ended {WindowEnd}), marking as NoInvoiceFound and advancing rule",
+                                job.Id, windowEnd);
+                            
+                            // Advance the rule to the next billing cycle so it doesn't get stuck
+                            await AdvanceRuleToNextCycleAsync(job);
+                        }
+                        else
+                        {
+                            // Still within billing window - revert to ScrapeRequested so it gets picked up again
+                            job.Status = "ScrapeRequested";
+                            result.JobsStillProcessing++;
+                        }
                     }
 
                     // Update job properties directly - no need to call UpdateAsync since
@@ -1498,9 +1520,31 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     }
                     else
                     {
-                        // Job is still processing - revert to ScrapeRequested so it gets picked up again
-                        job.Status = "ScrapeRequested";
-                        result.JobsStillProcessing++;
+                        // Job is still processing - check if billing window has been exhausted
+                        var today = DateTime.UtcNow.Date;
+                        var windowEnd = job.NextRangeEndDateTime?.Date ?? today;
+                        
+                        if (today > windowEnd)
+                        {
+                            // Billing window exhausted without finding a bill
+                            // Mark job as NoInvoiceFound and advance rule to next cycle
+                            job.Status = "NoInvoiceFound";
+                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                            result.JobsNeedingReview++; // Count as needing review for reporting
+                            
+                            _logger.LogInformation(
+                                "Job {JobId}: Billing window exhausted (ended {WindowEnd}), marking as NoInvoiceFound and advancing rule",
+                                job.Id, windowEnd);
+                            
+                            // Advance the rule to the next billing cycle so it doesn't get stuck
+                            await AdvanceRuleToNextCycleAsync(job);
+                        }
+                        else
+                        {
+                            // Still within billing window - revert to ScrapeRequested so it gets picked up again
+                            job.Status = "ScrapeRequested";
+                            result.JobsStillProcessing++;
+                        }
                     }
 
                     // Update job properties directly - no need to call UpdateAsync since
