@@ -130,4 +130,19 @@ public class AdrConfiguration : BaseEntity
     /// Default: 5000 records per batch
     /// </summary>
     public int ArchivalBatchSize { get; set; } = 5000;
+    
+    /// <summary>
+    /// Number of years to keep archived records before permanent deletion.
+    /// Archives older than this will be permanently deleted.
+    /// Default: 7 years (per regulatory requirements)
+    /// </summary>
+    public int ArchiveRetentionYears { get; set; } = 7;
+    
+    /// <summary>
+    /// Number of days to keep log files before deletion.
+    /// Log files older than this will be deleted during maintenance.
+    /// Default: 30 days
+    /// Note: Only applies to file-based logs in non-Azure environments.
+    /// </summary>
+    public int LogRetentionDays { get; set; } = 30;
 }

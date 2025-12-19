@@ -143,6 +143,65 @@
                     
                     <MudItem xs="12">
                         <MudDivider Class="my-4" />
+                        <MudText Typo="Typo.h6" Class="mb-2">Data Retention Settings</MudText>
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudSwitch @bind-Value="_config.IsArchivalEnabled" 
+                                   Label="Data Archival Enabled" 
+                                   Color="Color.Primary" />
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudNumericField @bind-Value="_config.JobRetentionMonths" 
+                                         Label="Job Retention (Months)" 
+                                         Variant="Variant.Outlined"
+                                         Min="1" Max="60"
+                                         HelperText="Months to keep ADR jobs before archiving" />
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudNumericField @bind-Value="_config.JobExecutionRetentionMonths" 
+                                         Label="Execution Retention (Months)" 
+                                         Variant="Variant.Outlined"
+                                         Min="1" Max="60"
+                                         HelperText="Months to keep job executions before archiving" />
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudNumericField @bind-Value="_config.AuditLogRetentionDays" 
+                                         Label="Audit Log Retention (Days)" 
+                                         Variant="Variant.Outlined"
+                                         Min="30" Max="365"
+                                         HelperText="Days to keep audit logs before archiving" />
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudNumericField @bind-Value="_config.ArchiveRetentionYears" 
+                                         Label="Archive Retention (Years)" 
+                                         Variant="Variant.Outlined"
+                                         Min="1" Max="10"
+                                         HelperText="Years to keep archived records before deletion" />
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudNumericField @bind-Value="_config.LogRetentionDays" 
+                                         Label="Log File Retention (Days)" 
+                                         Variant="Variant.Outlined"
+                                         Min="1" Max="365"
+                                         HelperText="Days to keep log files before deletion" />
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudNumericField @bind-Value="_config.ArchivalBatchSize" 
+                                         Label="Archival Batch Size" 
+                                         Variant="Variant.Outlined"
+                                         Min="100" Max="10000"
+                                         HelperText="Records to archive per batch" />
+                    </MudItem>
+                    
+                    <MudItem xs="12">
+                        <MudDivider Class="my-4" />
                         <MudText Typo="Typo.h6" Class="mb-2">Notes</MudText>
                     </MudItem>
                     
@@ -277,6 +336,14 @@
         public string? MissingInvoiceAlertEmail { get; set; }
         public bool IsOrchestrationEnabled { get; set; } = true;
         public string? Notes { get; set; }
+        // Data Retention Settings
+        public int JobRetentionMonths { get; set; } = 12;
+        public int JobExecutionRetentionMonths { get; set; } = 12;
+        public int AuditLogRetentionDays { get; set; } = 90;
+        public bool IsArchivalEnabled { get; set; } = true;
+        public int ArchivalBatchSize { get; set; } = 5000;
+        public int ArchiveRetentionYears { get; set; } = 7;
+        public int LogRetentionDays { get; set; } = 30;
         public string? ModifiedBy { get; set; }
         public DateTime? ModifiedDateTime { get; set; }
     }

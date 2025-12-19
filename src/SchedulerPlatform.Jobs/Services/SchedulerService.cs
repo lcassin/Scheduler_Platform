@@ -27,6 +27,7 @@ public class SchedulerService : ISchedulerService
             JobType.Process => typeof(ProcessJob),
             JobType.StoredProcedure => typeof(StoredProcedureJob),
             JobType.ApiCall => typeof(ApiCallJob),
+            JobType.Maintenance => typeof(MaintenanceJob),
             _ => throw new ArgumentException($"Unsupported job type: {schedule.JobType}")
         };
 
