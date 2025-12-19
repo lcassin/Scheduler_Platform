@@ -40,8 +40,11 @@ public class SystemScheduleSeeder : IHostedService
             // Remove deprecated Daily Log Cleanup schedule (replaced by MaintenanceJob)
             await RemoveDeprecatedLogCleanupScheduleAsync(dbContext, schedulerService, cancellationToken);
 
-            // Seed the new System Maintenance schedule
+            // Seed the System Maintenance schedule
             await SeedMaintenanceScheduleAsync(dbContext, schedulerService, cancellationToken);
+
+            // Seed the ADR Full Cycle schedule
+            await SeedAdrFullCycleScheduleAsync(dbContext, schedulerService, cancellationToken);
 
             _logger.LogInformation("SystemScheduleSeeder: completed");
         }
@@ -112,27 +115,15 @@ public class SystemScheduleSeeder : IHostedService
             return;
         }
 
-        var systemClient = await dbContext.Clients
-            .FirstOrDefaultAsync(c => c.ClientName == "System" && !c.IsDeleted, cancellationToken);
-
-        if (systemClient == null)
-        {
-            systemClient = await dbContext.Clients
-                .FirstOrDefaultAsync(c => !c.IsDeleted, cancellationToken);
-
-            if (systemClient == null)
-            {
-                _logger.LogWarning("SystemScheduleSeeder: No client found to assign maintenance schedule. Skipping seeding.");
-                return;
-            }
-        }
+        // ClientId 1 is always "Cass Information Systems (Internal Client)"
+        const int cassClientId = 1;
 
         var now = DateTime.UtcNow;
         var maintenanceSchedule = new Schedule
         {
             Name = maintenanceScheduleName,
             Description = "System maintenance job that archives old data, purges old archives, and cleans up log files. Runs daily at 2 AM UTC.",
-            ClientId = systemClient.Id,
+            ClientId = cassClientId,
             JobType = JobType.Maintenance,
             Frequency = ScheduleFrequency.Daily,
             CronExpression = "0 0 2 * * ?",
@@ -175,6 +166,81 @@ public class SystemScheduleSeeder : IHostedService
         catch (Exception ex)
         {
             _logger.LogError(ex, "SystemScheduleSeeder: Failed to register maintenance schedule with Quartz scheduler");
+        }
+    }
+
+    private async Task SeedAdrFullCycleScheduleAsync(
+        SchedulerDbContext dbContext,
+        ISchedulerService schedulerService,
+        CancellationToken cancellationToken)
+    {
+        const string adrFullCycleScheduleName = "ADR Full Cycle";
+
+        var existingSchedule = await dbContext.Schedules
+            .FirstOrDefaultAsync(s => s.Name == adrFullCycleScheduleName && s.IsSystemSchedule && !s.IsDeleted, cancellationToken);
+
+        if (existingSchedule != null)
+        {
+            _logger.LogInformation("SystemScheduleSeeder: ADR Full Cycle schedule already exists (Id: {ScheduleId})", existingSchedule.Id);
+            return;
+        }
+
+        // ClientId 1 is always "Cass Information Systems (Internal Client)"
+        const int cassClientId = 1;
+
+        var now = DateTime.UtcNow;
+        var adrFullCycleSchedule = new Schedule
+        {
+            Name = adrFullCycleScheduleName,
+            Description = "ADR Full Cycle orchestration: syncs accounts, creates jobs, verifies credentials, checks statuses, and processes ADR requests. Runs daily at 6 AM UTC.",
+            ClientId = cassClientId,
+            JobType = JobType.ApiCall,
+            Frequency = ScheduleFrequency.Daily,
+            CronExpression = "0 0 6 * * ?", // 6 AM UTC daily
+            IsEnabled = true,
+            IsSystemSchedule = true,
+            MaxRetries = 3,
+            RetryDelayMinutes = 30,
+            TimeoutMinutes = 120, // ADR cycle can take longer
+            TimeZone = "UTC",
+            JobConfiguration = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                Url = "/api/adr/orchestrate/run-full-cycle",
+                Method = "POST",
+                AuthorizationType = "SchedulerApiKey"
+            }),
+            CreatedDateTime = now,
+            CreatedBy = "System",
+            ModifiedDateTime = now,
+            ModifiedBy = "System"
+        };
+
+        try
+        {
+            var cronExpression = new Quartz.CronExpression(adrFullCycleSchedule.CronExpression);
+            var nextOccurrence = cronExpression.GetNextValidTimeAfter(DateTimeOffset.UtcNow);
+            adrFullCycleSchedule.NextRunDateTime = nextOccurrence?.UtcDateTime;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "SystemScheduleSeeder: Could not calculate NextRunDateTime for ADR Full Cycle schedule");
+        }
+
+        dbContext.Schedules.Add(adrFullCycleSchedule);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "SystemScheduleSeeder: Created ADR Full Cycle schedule (Id: {ScheduleId}, NextRun: {NextRun})",
+            adrFullCycleSchedule.Id, adrFullCycleSchedule.NextRunDateTime);
+
+        try
+        {
+            await schedulerService.ScheduleJob(adrFullCycleSchedule);
+            _logger.LogInformation("SystemScheduleSeeder: Registered ADR Full Cycle schedule with Quartz scheduler");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "SystemScheduleSeeder: Failed to register ADR Full Cycle schedule with Quartz scheduler");
         }
     }
 }
