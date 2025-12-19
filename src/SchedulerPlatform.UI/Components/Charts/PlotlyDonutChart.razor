@@ -3,10 +3,14 @@
 @using Plotly.Blazor.ConfigLib
 @using Plotly.Blazor.Traces
 @using Plotly.Blazor.Interop
+@using System.Text.Json
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
 
-<PlotlyChart @ref="_chart" Data="_data" Layout="_layout" Config="_config" 
-             ClickAction="OnChartClick"
-             style="@($"width: 100%; height: {Height}; cursor: {(OnSliceClick.HasDelegate ? "pointer" : "default")};")" />
+<div id="@_chartId">
+    <PlotlyChart @ref="_chart" Data="_data" Layout="_layout" Config="_config" 
+                 style="@($"width: 100%; height: {Height}; cursor: {(OnSliceClick.HasDelegate ? "pointer" : "default")};")" />
+</div>
 
 @code {
     [Parameter]
@@ -40,11 +44,112 @@
     private IList<ITrace> _data = new List<ITrace>();
     private Plotly.Blazor.Layout _layout = new Plotly.Blazor.Layout();
     private Plotly.Blazor.Config _config = new Plotly.Blazor.Config();
+    
+    private string _chartId = $"plotly-donut-{Guid.NewGuid():N}";
+    private DotNetObjectReference<PlotlyDonutChart>? _dotNetRef;
+    private bool _isSubscribed = false;
 
     protected override void OnParametersSet()
     {
         Console.WriteLine($"[PlotlyDonutChart] OnParametersSet - OnSliceClick.HasDelegate={OnSliceClick.HasDelegate}, Labels={Labels?.Length ?? 0}, Values={Values?.Length ?? 0}");
         BuildChart();
+    }
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (OnSliceClick.HasDelegate && !_isSubscribed)
+        {
+            Console.WriteLine($"[PlotlyDonutChart] OnAfterRenderAsync - Subscribing to click events for chart {_chartId}");
+            _dotNetRef ??= DotNetObjectReference.Create(this);
+            
+            // Small delay to ensure Plotly has initialized the chart
+            await Task.Delay(200);
+            
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("chartInterop.subscribeToClick", _dotNetRef, _chartId);
+                _isSubscribed = true;
+                Console.WriteLine($"[PlotlyDonutChart] Successfully subscribed to click events");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[PlotlyDonutChart] Error subscribing to click events: {ex.Message}");
+            }
+        }
+    }
+    
+    [JSInvokable]
+    public async Task OnChartClickFromJs(JsonElement[] points)
+    {
+        Console.WriteLine($"[PlotlyDonutChart] OnChartClickFromJs FIRED! Points count={points?.Length ?? 0}");
+        
+        if (!OnSliceClick.HasDelegate || points == null || points.Length == 0)
+        {
+            Console.WriteLine("[PlotlyDonutChart] No delegate or no points, returning early");
+            return;
+        }
+        
+        var point = points[0];
+        Console.WriteLine($"[PlotlyDonutChart] Point JSON: {point}");
+        
+        // Try to get PointNumber or PointIndex from the JSON
+        int pointIndex = -1;
+        if (point.TryGetProperty("PointNumber", out var pointNumber) && pointNumber.ValueKind == JsonValueKind.Number)
+        {
+            pointIndex = pointNumber.GetInt32();
+            Console.WriteLine($"[PlotlyDonutChart] Got PointNumber: {pointIndex}");
+        }
+        else if (point.TryGetProperty("PointIndex", out var pointIdx) && pointIdx.ValueKind == JsonValueKind.Number)
+        {
+            pointIndex = pointIdx.GetInt32();
+            Console.WriteLine($"[PlotlyDonutChart] Got PointIndex: {pointIndex}");
+        }
+        
+        if (pointIndex < 0)
+        {
+            Console.WriteLine("[PlotlyDonutChart] Could not get valid point index");
+            return;
+        }
+        
+        // Get the clicked value from CustomData or Labels
+        string clickedValue;
+        if (CustomData.Any() && pointIndex < CustomData.Length)
+        {
+            clickedValue = CustomData[pointIndex];
+            Console.WriteLine($"[PlotlyDonutChart] Using CustomData value: {clickedValue}");
+        }
+        else if (pointIndex < Labels.Length)
+        {
+            clickedValue = Labels[pointIndex];
+            Console.WriteLine($"[PlotlyDonutChart] Using Labels value: {clickedValue}");
+        }
+        else
+        {
+            Console.WriteLine($"[PlotlyDonutChart] Index {pointIndex} out of range");
+            return;
+        }
+        
+        if (!string.IsNullOrEmpty(clickedValue))
+        {
+            Console.WriteLine($"[PlotlyDonutChart] Invoking OnSliceClick with value: {clickedValue}");
+            await OnSliceClick.InvokeAsync(clickedValue);
+        }
+    }
+    
+    public async ValueTask DisposeAsync()
+    {
+        if (_isSubscribed)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("chartInterop.unsubscribeFromClick", _chartId);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[PlotlyDonutChart] Error unsubscribing: {ex.Message}");
+            }
+        }
+        _dotNetRef?.Dispose();
     }
 
     private void BuildChart()
@@ -105,79 +210,5 @@
             BuildChart();
             await _chart.React();
         }
-    }
-
-    private void OnChartClick(IEnumerable<EventDataPoint> eventData)
-    {
-        Console.WriteLine($"[PlotlyDonutChart] OnChartClick FIRED! HasDelegate={OnSliceClick.HasDelegate}, EventData count={eventData?.Count() ?? 0}");
-        
-        if (!OnSliceClick.HasDelegate)
-        {
-            Console.WriteLine("[PlotlyDonutChart] No delegate attached, returning early");
-            return;
-        }
-
-        var point = eventData.FirstOrDefault();
-        if (point == null)
-        {
-            Console.WriteLine("[PlotlyDonutChart] No point data in event, returning early");
-            return;
-        }
-
-        // Log all available properties from the EventDataPoint
-        Console.WriteLine($"[PlotlyDonutChart] Point data - PointNumber: {point.PointNumber} (type: {point.PointNumber?.GetType().Name ?? "null"}), PointIndex: {point.PointIndex} (type: {point.PointIndex?.GetType().Name ?? "null"})");
-        Console.WriteLine($"[PlotlyDonutChart] Point data - X: {point.X}, Y: {point.Y}, Text: {point.Text}, CurveNumber: {point.CurveNumber}");
-
-        // Get the point index to look up the value from our arrays
-        // Handle multiple numeric types that Plotly.Blazor might return (int, long, double, decimal)
-        var pointIndex = GetPointIndex(point.PointNumber) ?? GetPointIndex(point.PointIndex) ?? -1;
-        Console.WriteLine($"[PlotlyDonutChart] Calculated pointIndex: {pointIndex}");
-        
-        if (pointIndex < 0)
-        {
-            Console.WriteLine("[PlotlyDonutChart] Invalid point index, returning early");
-            return;
-        }
-
-        // Try to get the custom data first (internal status key), fall back to label
-        string clickedValue;
-        if (CustomData.Any() && pointIndex < CustomData.Length)
-        {
-            clickedValue = CustomData[pointIndex];
-            Console.WriteLine($"[PlotlyDonutChart] Using CustomData value: {clickedValue}");
-        }
-        else if (pointIndex < Labels.Length)
-        {
-            clickedValue = Labels[pointIndex];
-            Console.WriteLine($"[PlotlyDonutChart] Using Labels value: {clickedValue}");
-        }
-        else
-        {
-            Console.WriteLine($"[PlotlyDonutChart] Index {pointIndex} out of range (CustomData: {CustomData.Length}, Labels: {Labels.Length})");
-            return;
-        }
-
-        if (!string.IsNullOrEmpty(clickedValue))
-        {
-            Console.WriteLine($"[PlotlyDonutChart] Invoking OnSliceClick with value: {clickedValue}");
-            OnSliceClick.InvokeAsync(clickedValue);
-        }
-    }
-
-    private int? GetPointIndex(object? value)
-    {
-        if (value == null)
-            return null;
-        
-        // Handle various numeric types that Plotly.Blazor might return
-        return value switch
-        {
-            int i => i,
-            long l => (int)l,
-            double d => (int)d,
-            decimal dec => (int)dec,
-            float f => (int)f,
-            _ => null
-        };
     }
 }
