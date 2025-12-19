@@ -1,6 +1,6 @@
 @page "/"
 @page "/dashboard"
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @attribute [Authorize]
 @using SchedulerPlatform.Core.Domain.Enums
 @using SchedulerPlatform.UI.Services
