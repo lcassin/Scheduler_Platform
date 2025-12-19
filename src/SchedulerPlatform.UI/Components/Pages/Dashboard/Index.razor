@@ -1,6 +1,6 @@
 @page "/"
 @page "/dashboard"
-@rendermode InteractiveServer
+@rendermode @(new InteractiveServerRenderMode(prerender: false))
 @attribute [Authorize]
 @using SchedulerPlatform.Core.Domain.Enums
 @using SchedulerPlatform.UI.Services
@@ -162,11 +162,13 @@
             }
             else if (_adrStats != null && _adrAccountChartData.Any())
             {
-                <PlotlyDonutChart Values="@_adrAccountChartData"
-                                  Labels="@_adrAccountChartLabels"
-                                  Colors="@_adrAccountChartColors"
-                                  Height="300px"
-                                  ShowLegend="true" />
+                                <PlotlyDonutChart Values="@_adrAccountChartData"
+                                                  Labels="@_adrAccountChartLabels"
+                                                  Colors="@_adrAccountChartColors"
+                                                  CustomData="@_adrAccountChartLabels"
+                                                  Height="300px"
+                                                  ShowLegend="true"
+                                                  OnSliceClick="OnAdrAccountChartClick" />
                 <MudGrid Class="mt-2">
                     <MudItem xs="6">
                         <MudText Typo="Typo.body2"><strong>Run Now:</strong> @FormatNumber(_adrStats.RunNowCount)</MudText>
@@ -246,8 +248,10 @@
                         <PlotlyPieChart Values="@_adrJobChartData"
                                         Labels="@_adrJobChartLabels"
                                         Colors="@_adrJobChartColors"
+                                        CustomData="@_adrJobChartCustomData"
                                         Height="280px"
-                                        ShowLegend="true" />
+                                        ShowLegend="true"
+                                        OnSliceClick="OnAdrJobChartClick" />
                 }
             }
             else
@@ -392,18 +396,19 @@
             </MudSelect>
         </MudItem>
         <MudItem xs="12" md="3">
-            <MudSelect Value="_selectedClientId" 
-                      Label="Filter by Client" 
-                      Variant="Variant.Outlined" 
-                      Margin="Margin.Dense" 
-                      Clearable="true"
-                      ValueChanged="@(async (int? value) => await OnClientChanged(value))">
-                <MudSelectItem Value="@((int?)null)">All Clients</MudSelectItem>
-                @foreach (var client in _clients)
-                {
-                    <MudSelectItem Value="@((int?)client.Id)">@client.ClientName</MudSelectItem>
-                }
-            </MudSelect>
+            <MudAutocomplete T="Client" 
+                             Label="Filter by Client" 
+                             Value="_selectedClient"
+                             SearchFunc="SearchClients"
+                             ToStringFunc="@(c => c?.ClientName ?? "All Clients")"
+                             ValueChanged="OnClientFilterChanged"
+                             Variant="Variant.Outlined" 
+                             Margin="Margin.Dense" 
+                             Clearable="true"
+                             ResetValueOnEmptyText="true"
+                             CoerceText="false"
+                             AdornmentIcon="@Icons.Material.Filled.Business"
+                             ShowProgressIndicator="true" />
         </MudItem>
         <MudItem xs="12" md="4">
             <MudSelect T="JobStatus" 
@@ -651,7 +656,8 @@
     private PeriodicTimer? _timer;
 
     private int _selectedTimeWindow = 24;
-    private int? _selectedClientId;
+    private Client? _selectedClient;
+    private int? _selectedClientId => _selectedClient?.Id;
     private JobStatus _selectedStatusesValue;
         private IEnumerable<JobStatus>? _selectedStatusesBackingField = null;
     
@@ -679,6 +685,7 @@
                 private double[] _adrJobChartData = Array.Empty<double>();
                 private string[] _adrJobChartLabels = Array.Empty<string>();
                 private string[] _adrJobChartColors = Array.Empty<string>();
+                private string[] _adrJobChartCustomData = Array.Empty<string>();
     
         private IEnumerable<JobStatus>? SelectedStatuses
     {
@@ -787,10 +794,20 @@
         RefreshData();
     }
 
-    private async Task OnClientChanged(int? value)
+    private async Task OnClientFilterChanged(Client? client)
     {
-        _selectedClientId = value;
+        _selectedClient = client;
         RefreshData();
+    }
+
+    private async Task<IEnumerable<Client>> SearchClients(string value, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return _clients.Take(50);
+
+        return _clients
+            .Where(c => c.ClientName.Contains(value, StringComparison.OrdinalIgnoreCase))
+            .Take(50);
     }
 
         private void RefreshData()
@@ -1022,46 +1039,56 @@
                         { "Needs Review", "#ffa726" }       // Orange
                     };
                     
+                    // CustomData maps display labels to internal status values for navigation
+                    var customDataList = new List<string>();
+                    
                     if (_adrJobStats.PendingCount > 0)
                     {
                         dataList.Add(_adrJobStats.PendingCount);
                         labelList.Add("Pending");
                         colorList.Add(colorMap["Pending"]);
+                        customDataList.Add("Pending");
                     }
                     if (_adrJobStats.CredentialVerifiedCount > 0)
                     {
                         dataList.Add(_adrJobStats.CredentialVerifiedCount);
                         labelList.Add("Credential Verified");
                         colorList.Add(colorMap["Credential Verified"]);
+                        customDataList.Add("CredentialVerified");
                     }
                     if (_adrJobStats.ScrapeRequestedCount > 0)
                     {
                         dataList.Add(_adrJobStats.ScrapeRequestedCount);
                         labelList.Add("ADR Request Sent");
                         colorList.Add(colorMap["ADR Request Sent"]);
+                        customDataList.Add("ScrapeRequested");
                     }
                     if (_adrJobStats.CompletedCount > 0)
                     {
                         dataList.Add(_adrJobStats.CompletedCount);
                         labelList.Add("Completed");
                         colorList.Add(colorMap["Completed"]);
+                        customDataList.Add("Completed");
                     }
                     if (_adrJobStats.FailedCount > 0)
                     {
                         dataList.Add(_adrJobStats.FailedCount);
                         labelList.Add("Failed");
                         colorList.Add(colorMap["Failed"]);
+                        customDataList.Add("Failed");
                     }
                     if (_adrJobStats.NeedsReviewCount > 0)
                     {
                         dataList.Add(_adrJobStats.NeedsReviewCount);
                         labelList.Add("Needs Review");
                         colorList.Add(colorMap["Needs Review"]);
+                        customDataList.Add("NeedsReview");
                     }
                     
                     _adrJobChartData = dataList.ToArray();
                     _adrJobChartLabels = labelList.ToArray();
                     _adrJobChartColors = colorList.ToArray();
+                    _adrJobChartCustomData = customDataList.ToArray();
                 }
             }
             catch (Exception ex)
@@ -1169,6 +1196,29 @@
             url += $"?status={status}";
         }
         NavigationManager.NavigateTo(url);
+    }
+
+    private void OnAdrAccountChartClick(string status)
+    {
+        // Navigate to ADR Accounts page with the clicked status as a filter
+        // Status values: "Run Now", "Due Soon", "Upcoming", "Future", "Missing"
+        if (status == "Missing")
+        {
+            NavigationManager.NavigateTo("/adr/missing-accounts");
+        }
+        else
+        {
+            var encodedStatus = Uri.EscapeDataString(status);
+            NavigationManager.NavigateTo($"/adr/accounts?nextRunStatus={encodedStatus}");
+        }
+    }
+
+    private void OnAdrJobChartClick(string status)
+    {
+        // Navigate to ADR Jobs page with the clicked status as a filter
+        // Status values are internal enum values: "Pending", "CredentialVerified", "ScrapeRequested", "Completed", "Failed", "NeedsReview"
+        var encodedStatus = Uri.EscapeDataString(status);
+        NavigationManager.NavigateTo($"/adr/jobs?status={encodedStatus}");
     }
 
     public void Dispose()

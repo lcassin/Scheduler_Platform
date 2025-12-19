@@ -175,11 +175,16 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options => { });
 
 builder.Services.AddSingleton<IAuthorizationHandler, SchedulerPlatform.API.Authorization.PermissionAuthorizationHandler>();
+builder.Services.AddSingleton<IAuthorizationHandler, SchedulerPlatform.API.Authorization.SuperAdminAuthorizationHandler>();
 
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
     options.AddPolicy("ClientAccess", policy => policy.RequireAuthenticatedUser());
+    
+    // Super Admin only policy - for high-privilege operations like granting Super Admin status
+    options.AddPolicy("SuperAdmin", policy => 
+        policy.Requirements.Add(new SchedulerPlatform.API.Authorization.SuperAdminRequirement()));
     
     options.AddPolicy("Scheduler.Access", policy => 
         policy.Requirements.Add(new SchedulerPlatform.API.Authorization.PermissionRequirement("scheduler:read")));
@@ -238,6 +243,7 @@ builder.Services.AddHostedService<SchedulerPlatform.API.Services.StartupRecovery
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.ScheduleHydrationService>();
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.MissedSchedulesProcessor>();
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.DataArchivalService>();
+builder.Services.AddHostedService<SchedulerPlatform.API.Services.SystemScheduleSeeder>();
 
 builder.Services.AddHttpClient("ApiCallJob");
 builder.Services.AddHttpClient("AdrApi");

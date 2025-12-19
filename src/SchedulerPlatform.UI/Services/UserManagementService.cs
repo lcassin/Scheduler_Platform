@@ -143,4 +143,22 @@ public class UserManagementService : IUserManagementService
             throw;
         }
     }
+
+    public async Task UpdateSuperAdminStatusAsync(int id, bool isSuperAdmin)
+    {
+        try
+        {
+            var client = CreateClient();
+            var request = new { IsSuperAdmin = isSuperAdmin };
+            var response = await client.PutAsJsonAsync($"Users/{id}/super-admin", request);
+            response.EnsureSuccessStatusCode();
+            
+            _logger.LogInformation("Updated user {UserId} Super Admin status to {IsSuperAdmin}", id, isSuperAdmin);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating Super Admin status for user {UserId}", id);
+            throw;
+        }
+    }
 }

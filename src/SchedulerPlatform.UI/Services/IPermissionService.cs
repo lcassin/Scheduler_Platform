@@ -9,4 +9,5 @@ public interface IPermissionService
     Task<bool> CanDeleteAsync(string resource);
     Task<bool> CanExecuteAsync(string resource);
     Task<bool> IsSystemAdminAsync();
+    Task<bool> IsAdminOrAboveAsync();
 }

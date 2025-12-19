@@ -12,6 +12,7 @@ public static class SchedulerExtensions
         services.AddTransient<ProcessJob>();
         services.AddTransient<StoredProcedureJob>();
         services.AddTransient<ApiCallJob>();
+        services.AddTransient<MaintenanceJob>();
         
         Console.WriteLine($"[Quartz] Starting Quartz configuration. Connection string provided: {!string.IsNullOrEmpty(connectionString)}");
         

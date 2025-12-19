@@ -235,14 +235,14 @@ public class SchedulesController : ControllerBase
 
     /// <summary>
     /// Updates an existing schedule with the specified configuration.
-    /// System schedules cannot be modified.
+    /// System schedules can only have timing (CronExpression, TimeZone) and IsEnabled modified by Admins.
     /// </summary>
     /// <param name="id">The unique identifier of the schedule to update.</param>
     /// <param name="schedule">The updated schedule object.</param>
     /// <returns>No content on success.</returns>
     /// <response code="204">Schedule was updated successfully.</response>
     /// <response code="400">Schedule ID mismatch or invalid data provided.</response>
-    /// <response code="403">Cannot modify system schedules.</response>
+    /// <response code="403">Cannot modify system schedules or insufficient permissions.</response>
     /// <response code="404">Schedule with the specified ID was not found.</response>
     /// <response code="500">An error occurred while updating the schedule.</response>
     [HttpPut("{id}")]
@@ -267,10 +267,62 @@ public class SchedulesController : ControllerBase
                 return NotFound();
             }
 
+            var isSystemAdmin = User.FindFirst("is_system_admin")?.Value?.Equals("True", StringComparison.OrdinalIgnoreCase) == true;
+            var userRole = User.FindFirst("role")?.Value;
+            var isAdmin = isSystemAdmin || userRole == "Admin" || userRole == "Super Admin";
+
             if (existingSchedule.IsSystemSchedule)
             {
-                _logger.LogWarning("Attempted to modify system schedule {ScheduleId} ({ScheduleName})", id, existingSchedule.Name);
-                return StatusCode(403, "System schedules cannot be modified. This schedule is required for core system operations.");
+                if (!isAdmin)
+                {
+                    _logger.LogWarning("Non-admin user attempted to modify system schedule {ScheduleId} ({ScheduleName})", id, existingSchedule.Name);
+                    return StatusCode(403, "Only administrators can modify system schedules.");
+                }
+
+                // For system schedules, only allow changes to timing and enable/disable
+                // Preserve all other fields from the existing schedule
+                existingSchedule.CronExpression = schedule.CronExpression;
+                existingSchedule.IsEnabled = schedule.IsEnabled;
+                existingSchedule.TimeZone = schedule.TimeZone;
+                existingSchedule.ModifiedDateTime = DateTime.UtcNow;
+                existingSchedule.ModifiedBy = User.Identity?.Name ?? "System";
+
+                // Calculate next run time if enabled
+                if (!existingSchedule.IsDeleted && existingSchedule.IsEnabled && !string.IsNullOrWhiteSpace(existingSchedule.CronExpression))
+                {
+                    try
+                    {
+                        var trigger = TriggerBuilder.Create()
+                            .WithCronSchedule(existingSchedule.CronExpression)
+                            .Build();
+                        existingSchedule.NextRunDateTime = trigger.GetNextFireTimeUtc()?.DateTime;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Could not calculate NextRunDateTime for system schedule {ScheduleId}", existingSchedule.Id);
+                    }
+                }
+                else if (!existingSchedule.IsEnabled)
+                {
+                    existingSchedule.NextRunDateTime = null;
+                }
+
+                await _unitOfWork.Schedules.UpdateAsync(existingSchedule);
+                await _unitOfWork.SaveChangesAsync();
+
+                if (existingSchedule.IsEnabled)
+                {
+                    await _schedulerService.ScheduleJob(existingSchedule);
+                }
+                else
+                {
+                    await _schedulerService.UnscheduleJob(existingSchedule.Id, existingSchedule.ClientId);
+                }
+
+                _logger.LogInformation("Admin {User} updated system schedule {ScheduleId} ({ScheduleName}) - CronExpression: {Cron}, IsEnabled: {Enabled}",
+                    User.Identity?.Name, id, existingSchedule.Name, existingSchedule.CronExpression, existingSchedule.IsEnabled);
+
+                return NoContent();
             }
 
             var notificationSetting = schedule.NotificationSetting;
