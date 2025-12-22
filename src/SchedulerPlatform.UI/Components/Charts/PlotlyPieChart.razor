@@ -3,11 +3,14 @@
 @using Plotly.Blazor.ConfigLib
 @using Plotly.Blazor.Traces
 @using Plotly.Blazor.Interop
+@using System.Text.Json
 @inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
 
-<PlotlyChart @ref="_chart" Data="_data" Layout="_layout" Config="_config" 
-             ClickAction="OnChartClick"
-             style="@($"width: 100%; height: {Height}; cursor: {(OnSliceClick.HasDelegate ? "pointer" : "default")};")" />
+<div id="@_chartId">
+    <PlotlyChart @ref="_chart" Data="_data" Layout="_layout" Config="_config" 
+                 style="@($"width: 100%; height: {Height}; cursor: {(OnSliceClick.HasDelegate ? "pointer" : "default")};")" />
+</div>
 
 @code {
     [Parameter]
@@ -38,11 +41,94 @@
     private IList<ITrace> _data = new List<ITrace>();
     private Plotly.Blazor.Layout _layout = new Plotly.Blazor.Layout();
     private Plotly.Blazor.Config _config = new Plotly.Blazor.Config();
+    
+    private string _chartId = $"plotly-pie-{Guid.NewGuid():N}";
+    private DotNetObjectReference<PlotlyPieChart>? _dotNetRef;
+    private bool _isSubscribed = false;
 
     protected override void OnParametersSet()
     {
-        Console.WriteLine($"[PlotlyPieChart] OnParametersSet - OnSliceClick.HasDelegate={OnSliceClick.HasDelegate}, Labels={Labels?.Length ?? 0}, Values={Values?.Length ?? 0}");
         BuildChart();
+    }
+    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (OnSliceClick.HasDelegate && !_isSubscribed)
+        {
+            _dotNetRef ??= DotNetObjectReference.Create(this);
+            
+            // Small delay to ensure Plotly has initialized the chart
+            await Task.Delay(200);
+            
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("chartInterop.subscribeToClick", _dotNetRef, _chartId);
+                _isSubscribed = true;
+            }
+            catch
+            {
+                // Subscription failed - click events won't work but chart will still display
+            }
+        }
+    }
+    
+    [JSInvokable]
+    public async Task OnChartClickFromJs(JsonElement[] points)
+    {
+        if (!OnSliceClick.HasDelegate || points == null || points.Length == 0)
+            return;
+        
+        var point = points[0];
+        
+        // Try to get PointNumber or PointIndex from the JSON
+        int pointIndex = -1;
+        if (point.TryGetProperty("PointNumber", out var pointNumber) && pointNumber.ValueKind == JsonValueKind.Number)
+        {
+            pointIndex = pointNumber.GetInt32();
+        }
+        else if (point.TryGetProperty("PointIndex", out var pointIdx) && pointIdx.ValueKind == JsonValueKind.Number)
+        {
+            pointIndex = pointIdx.GetInt32();
+        }
+        
+        if (pointIndex < 0)
+            return;
+        
+        // Get the clicked value from CustomData or Labels
+        string clickedValue;
+        if (CustomData.Any() && pointIndex < CustomData.Length)
+        {
+            clickedValue = CustomData[pointIndex];
+        }
+        else if (pointIndex < Labels.Length)
+        {
+            clickedValue = Labels[pointIndex];
+        }
+        else
+        {
+            return;
+        }
+        
+        if (!string.IsNullOrEmpty(clickedValue))
+        {
+            await OnSliceClick.InvokeAsync(clickedValue);
+        }
+    }
+    
+    public async ValueTask DisposeAsync()
+    {
+        if (_isSubscribed)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("chartInterop.unsubscribeFromClick", _chartId);
+            }
+            catch
+            {
+                // Ignore disposal errors
+            }
+        }
+        _dotNetRef?.Dispose();
     }
 
     private void BuildChart()
@@ -103,79 +189,5 @@
             BuildChart();
             await _chart.React();
         }
-    }
-
-    private void OnChartClick(IEnumerable<EventDataPoint> eventData)
-    {
-        Console.WriteLine($"[PlotlyPieChart] OnChartClick FIRED! HasDelegate={OnSliceClick.HasDelegate}, EventData count={eventData?.Count() ?? 0}");
-        
-        if (!OnSliceClick.HasDelegate)
-        {
-            Console.WriteLine("[PlotlyPieChart] No delegate attached, returning early");
-            return;
-        }
-
-        var point = eventData.FirstOrDefault();
-        if (point == null)
-        {
-            Console.WriteLine("[PlotlyPieChart] No point data in event, returning early");
-            return;
-        }
-
-        // Log all available properties from the EventDataPoint
-        Console.WriteLine($"[PlotlyPieChart] Point data - PointNumber: {point.PointNumber} (type: {point.PointNumber?.GetType().Name ?? "null"}), PointIndex: {point.PointIndex} (type: {point.PointIndex?.GetType().Name ?? "null"})");
-        Console.WriteLine($"[PlotlyPieChart] Point data - X: {point.X}, Y: {point.Y}, Text: {point.Text}, CurveNumber: {point.CurveNumber}");
-
-        // Get the point index to look up the value from our arrays
-        // Handle multiple numeric types that Plotly.Blazor might return (int, long, double, decimal)
-        var pointIndex = GetPointIndex(point.PointNumber) ?? GetPointIndex(point.PointIndex) ?? -1;
-        Console.WriteLine($"[PlotlyPieChart] Calculated pointIndex: {pointIndex}");
-        
-        if (pointIndex < 0)
-        {
-            Console.WriteLine("[PlotlyPieChart] Invalid point index, returning early");
-            return;
-        }
-
-        // Try to get the custom data first (internal status key), fall back to label
-        string clickedValue;
-        if (CustomData.Any() && pointIndex < CustomData.Length)
-        {
-            clickedValue = CustomData[pointIndex];
-            Console.WriteLine($"[PlotlyPieChart] Using CustomData value: {clickedValue}");
-        }
-        else if (pointIndex < Labels.Length)
-        {
-            clickedValue = Labels[pointIndex];
-            Console.WriteLine($"[PlotlyPieChart] Using Labels value: {clickedValue}");
-        }
-        else
-        {
-            Console.WriteLine($"[PlotlyPieChart] Index {pointIndex} out of range (CustomData: {CustomData.Length}, Labels: {Labels.Length})");
-            return;
-        }
-
-        if (!string.IsNullOrEmpty(clickedValue))
-        {
-            Console.WriteLine($"[PlotlyPieChart] Invoking OnSliceClick with value: {clickedValue}");
-            OnSliceClick.InvokeAsync(clickedValue);
-        }
-    }
-
-    private int? GetPointIndex(object? value)
-    {
-        if (value == null)
-            return null;
-        
-        // Handle various numeric types that Plotly.Blazor might return
-        return value switch
-        {
-            int i => i,
-            long l => (int)l,
-            double d => (int)d,
-            decimal dec => (int)dec,
-            float f => (int)f,
-            _ => null
-        };
     }
 }

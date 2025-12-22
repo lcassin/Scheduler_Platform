@@ -23,6 +23,7 @@ public class JobCreationResult
 {
     public int JobsCreated { get; set; }
     public int JobsSkipped { get; set; }
+    public int BlacklistedCount { get; set; }
     public int Errors { get; set; }
     public List<string> ErrorMessages { get; set; } = new();
 }
@@ -356,6 +357,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 await _unitOfWork.SaveChangesAsync();
             }
 
+            result.BlacklistedCount = blacklistedCount;
+            
             _logger.LogInformation(
                 "Job creation completed. Created: {Created}, Skipped: {Skipped} (Blacklisted: {Blacklisted}), Errors: {Errors}",
                 result.JobsCreated, result.JobsSkipped, blacklistedCount, result.Errors);

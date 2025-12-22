@@ -1,0 +1,64 @@
+@namespace SchedulerPlatform.UI.Components.Shared
+
+<MudMenu Icon="@Icons.Material.Filled.Help" Size="Size.Small" Color="Color.Default" Dense="true" AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+    <MudText Typo="Typo.subtitle2" Class="px-4 pt-2 pb-1"><strong>Icon Legend</strong></MudText>
+    <MudDivider />
+    <MudList T="string" Dense="true" Class="py-1">
+        @if (ShowBlacklistIcons)
+        {
+            <MudListItem Dense="true" Class="py-0">
+                <div class="d-flex align-center gap-2">
+                    <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" Color="Color.Error" />
+                    <MudText Typo="Typo.body2">Currently Blacklisted</MudText>
+                </div>
+            </MudListItem>
+            <MudListItem Dense="true" Class="py-0">
+                <div class="d-flex align-center gap-2">
+                    <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Color="Color.Warning" />
+                    <MudText Typo="Typo.body2">Future Blacklist Scheduled</MudText>
+                </div>
+            </MudListItem>
+        }
+        @if (ShowOverrideIcon)
+        {
+            <MudListItem Dense="true" Class="py-0">
+                <div class="d-flex align-center gap-2">
+                    <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Warning" />
+                    <MudText Typo="Typo.body2">Manually Overridden</MudText>
+                </div>
+            </MudListItem>
+        }
+        @if (ShowWarningIcon)
+        {
+            <MudListItem Dense="true" Class="py-0">
+                <div class="d-flex align-center gap-2">
+                    <MudIcon Icon="@Icons.Material.Filled.Warning" Size="Size.Small" Color="Color.Warning" />
+                    <MudText Typo="Typo.body2">Data Issue Detected</MudText>
+                </div>
+            </MudListItem>
+        }
+        @if (ShowManualRequestIcon)
+        {
+            <MudListItem Dense="true" Class="py-0">
+                <div class="d-flex align-center gap-2">
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">Manual</MudChip>
+                    <MudText Typo="Typo.body2">Manual ADR Request</MudText>
+                </div>
+            </MudListItem>
+        }
+    </MudList>
+</MudMenu>
+
+@code {
+    [Parameter]
+    public bool ShowBlacklistIcons { get; set; } = true;
+    
+    [Parameter]
+    public bool ShowOverrideIcon { get; set; } = true;
+    
+    [Parameter]
+    public bool ShowWarningIcon { get; set; } = false;
+    
+    [Parameter]
+    public bool ShowManualRequestIcon { get; set; } = false;
+}

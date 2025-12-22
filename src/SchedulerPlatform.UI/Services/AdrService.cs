@@ -25,6 +25,7 @@ public class AdrService : IAdrService
         string? historicalBillingStatus = null,
         bool? isOverridden = null,
         string? jobStatus = null,
+        string? blacklistStatus = null,
         string? sortColumn = null,
         bool sortDescending = false)
     {
@@ -52,6 +53,9 @@ public class AdrService : IAdrService
 
         if (!string.IsNullOrWhiteSpace(jobStatus))
             queryParams.Add($"jobStatus={Uri.EscapeDataString(jobStatus)}");
+
+        if (!string.IsNullOrWhiteSpace(blacklistStatus))
+            queryParams.Add($"blacklistStatus={Uri.EscapeDataString(blacklistStatus)}");
 
         if (!string.IsNullOrWhiteSpace(sortColumn))
             queryParams.Add($"sortColumn={Uri.EscapeDataString(sortColumn)}");
@@ -175,6 +179,7 @@ public class AdrService : IAdrService
             string? interfaceAccountId = null,
             int? credentialId = null,
             bool? isManualRequest = null,
+            string? blacklistStatus = null,
             string? sortColumn = null,
             bool sortDescending = true)
         {
@@ -211,6 +216,9 @@ public class AdrService : IAdrService
 
             if (isManualRequest.HasValue)
                 queryParams.Add($"isManualRequest={isManualRequest.Value.ToString().ToLower()}");
+
+            if (!string.IsNullOrWhiteSpace(blacklistStatus))
+                queryParams.Add($"blacklistStatus={Uri.EscapeDataString(blacklistStatus)}");
 
             if (!string.IsNullOrWhiteSpace(sortColumn))
                 queryParams.Add($"sortColumn={Uri.EscapeDataString(sortColumn)}");
@@ -506,6 +514,20 @@ public class AdrService : IAdrService
                 Error = ex.Message,
                 RequestId = requestId
             };
+        }
+    }
+
+    public async Task<BlacklistCountsResult> GetBlacklistCountsAsync()
+    {
+        var client = CreateClient();
+        try
+        {
+            var result = await client.GetFromJsonAsync<BlacklistCountsResult>("adr/blacklist/counts");
+            return result ?? new BlacklistCountsResult();
+        }
+        catch (HttpRequestException)
+        {
+            return new BlacklistCountsResult();
         }
     }
 

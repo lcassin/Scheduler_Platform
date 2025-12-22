@@ -14,6 +14,7 @@ public interface IAdrService
         string? historicalBillingStatus = null,
         bool? isOverridden = null,
         string? jobStatus = null,
+        string? blacklistStatus = null,
         string? sortColumn = null,
         bool sortDescending = false);
     Task<AdrAccount?> GetAccountAsync(int id);
@@ -42,6 +43,7 @@ public interface IAdrService
             string? interfaceAccountId = null,
             int? credentialId = null,
             bool? isManualRequest = null,
+            string? blacklistStatus = null,
             string? sortColumn = null,
             bool sortDescending = true);
     Task<AdrJob?> GetJobAsync(int id);
@@ -93,6 +95,12 @@ public interface IAdrService
     /// Cancels a running or queued orchestration request.
     /// </summary>
     Task<CancelOrchestrationResult> CancelOrchestrationAsync(string requestId);
+    
+    /// <summary>
+    /// Gets the count of current and future blacklist entries.
+    /// </summary>
+    Task<BlacklistCountsResult> GetBlacklistCountsAsync();
+    
     Task<byte[]> DownloadRulesExportAsync(
         string? vendorCode = null,
         string? accountNumber = null,

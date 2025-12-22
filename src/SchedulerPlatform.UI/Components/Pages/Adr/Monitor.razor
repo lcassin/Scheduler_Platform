@@ -544,44 +544,54 @@
                 
                 <MudSimpleTable Dense="true" Hover="true" Style="overflow-x: auto;">
                     <tbody>
-                        <tr>
+                        <tr style="cursor: pointer;" @onclick="@(() => Navigation.NavigateTo("/adr/jobs"))">
                             <td><MudIcon Icon="@Icons.Material.Filled.Work" Size="Size.Small" Class="mr-2" />Total Jobs</td>
                             <td class="text-right"><strong>@_jobStats.TotalCount</strong></td>
                         </tr>
                         <tr style="background-color: rgba(var(--mud-palette-info-rgb), 0.05);">
                             <td colspan="2"><MudText Typo="Typo.caption" Color="Color.Info"><strong>Credential Phase</strong></MudText></td>
                         </tr>
-                        <tr>
+                        <tr style="cursor: pointer;" @onclick="@(() => OnJobPipelineChartClick("Pending"))">
                             <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.HourglassEmpty" Size="Size.Small" Color="Color.Default" Class="mr-2" />Pending</td>
                             <td class="text-right">@_jobStats.PendingCount</td>
                         </tr>
-                        <tr>
+                        <tr style="cursor: pointer;" @onclick="@(() => OnJobPipelineChartClick("CredentialVerified"))">
                             <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.VerifiedUser" Size="Size.Small" Color="Color.Info" Class="mr-2" />Credential Verified</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-info);">@_jobStats.CredentialVerifiedCount</strong></td>
                         </tr>
-                        <tr>
+                        <tr style="cursor: pointer;" @onclick="@(() => OnJobPipelineChartClick("CredentialFailed"))">
                             <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.GppBad" Size="Size.Small" Color="Color.Warning" Class="mr-2" />Credential Failed</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-warning);">@_jobStats.CredentialFailedCount</strong></td>
                         </tr>
                         <tr style="background-color: rgba(var(--mud-palette-primary-rgb), 0.05);">
                             <td colspan="2"><MudText Typo="Typo.caption" Color="Color.Primary"><strong>ADR Document Phase</strong></MudText></td>
                         </tr>
-                        <tr>
+                        <tr style="cursor: pointer;" @onclick="@(() => OnJobPipelineChartClick("ScrapeRequested"))">
                             <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.CloudDownload" Size="Size.Small" Color="Color.Primary" Class="mr-2" />ADR Request Sent</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-primary);">@_jobStats.ScrapeRequestedCount</strong></td>
                         </tr>
-                        <tr>
+                        <tr style="cursor: pointer;" @onclick="@(() => OnJobPipelineChartClick("Completed"))">
                             <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" Class="mr-2" />Completed</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-success);">@_jobStats.CompletedCount</strong></td>
                         </tr>
-                        <tr>
+                        <tr style="cursor: pointer;" @onclick="@(() => OnJobPipelineChartClick("Failed"))">
                             <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error" Class="mr-2" />Failed</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-error);">@_jobStats.FailedCount</strong></td>
                         </tr>
-                        <tr>
+                        <tr style="cursor: pointer;" @onclick="@(() => OnJobPipelineChartClick("NeedsReview"))">
                             <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.RateReview" Size="Size.Small" Color="Color.Warning" Class="mr-2" />Needs Review</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-warning);">@_jobStats.NeedsReviewCount</strong></td>
                         </tr>
+                        @if (_blacklistCounts != null && _blacklistCounts.CurrentCount > 0)
+                        {
+                            <tr style="background-color: rgba(var(--mud-palette-error-rgb), 0.05);">
+                                <td colspan="2"><MudText Typo="Typo.caption" Color="Color.Error"><strong>Blacklist</strong></MudText></td>
+                            </tr>
+                            <tr style="cursor: pointer;" @onclick="@(() => Navigation.NavigateTo("/admin/adr-blacklist?status=current"))">
+                                <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" Color="Color.Error" Class="mr-2" />Currently Blacklisted</td>
+                                <td class="text-right"><strong style="color: var(--mud-palette-error);">@_blacklistCounts.CurrentCount</strong></td>
+                            </tr>
+                        }
                     </tbody>
                 </MudSimpleTable>
                 <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">Current status of all jobs in database</MudText>
@@ -592,8 +602,10 @@
                         <PlotlyPieChart Values="@_jobPipelineChartData"
                                         Labels="@_jobPipelineChartLabels"
                                         Colors="@_jobPipelineChartColors"
+                                        CustomData="@_jobPipelineChartCustomData"
                                         Height="280px"
-                                        ShowLegend="true" />
+                                        ShowLegend="true"
+                                        OnSliceClick="OnJobPipelineChartClick" />
                     </div>
                 }
             }
@@ -910,10 +922,14 @@
     // Job pipeline stats
     private AdrJobStats? _jobStats;
     
+    // Blacklist counts
+    private BlacklistCountsResult? _blacklistCounts;
+    
     // Job pipeline chart data
     private double[] _jobPipelineChartData = Array.Empty<double>();
     private string[] _jobPipelineChartLabels = Array.Empty<string>();
     private string[] _jobPipelineChartColors = Array.Empty<string>();
+    private string[] _jobPipelineChartCustomData = Array.Empty<string>(); // Internal status values for navigation
 
     protected override async Task OnInitializedAsync()
     {
@@ -956,6 +972,7 @@
             UpdateChartData();
             // Show all jobs in the pipeline, not just last 20 runs
             _jobStats = await AdrService.GetJobStatsAsync();
+            _blacklistCounts = await AdrService.GetBlacklistCountsAsync();
             UpdateJobPipelineChartData();
             
             // Start/stop fast progress polling based on orchestration state
@@ -1039,6 +1056,7 @@
             _jobPipelineChartData = Array.Empty<double>();
             _jobPipelineChartLabels = Array.Empty<string>();
             _jobPipelineChartColors = Array.Empty<string>();
+            _jobPipelineChartCustomData = Array.Empty<string>();
             return;
         }
         
@@ -1059,53 +1077,70 @@
         var dataList = new List<double>();
         var labelList = new List<string>();
         var colorList = new List<string>();
+        var customDataList = new List<string>(); // Internal status values for navigation
         
         if (_jobStats.PendingCount > 0)
         {
             dataList.Add(_jobStats.PendingCount);
             labelList.Add("Pending");
             colorList.Add(statusColorMap["Pending"]);
+            customDataList.Add("Pending");
         }
         if (_jobStats.CredentialVerifiedCount > 0)
         {
             dataList.Add(_jobStats.CredentialVerifiedCount);
             labelList.Add("Credential Verified");
             colorList.Add(statusColorMap["Credential Verified"]);
+            customDataList.Add("CredentialVerified");
         }
         if (_jobStats.CredentialFailedCount > 0)
         {
             dataList.Add(_jobStats.CredentialFailedCount);
             labelList.Add("Credential Failed");
             colorList.Add(statusColorMap["Credential Failed"]);
+            customDataList.Add("CredentialFailed");
         }
         if (_jobStats.ScrapeRequestedCount > 0)
         {
             dataList.Add(_jobStats.ScrapeRequestedCount);
             labelList.Add("ADR Request Sent");
             colorList.Add(statusColorMap["ADR Request Sent"]);
+            customDataList.Add("ScrapeRequested");
         }
         if (_jobStats.CompletedCount > 0)
         {
             dataList.Add(_jobStats.CompletedCount);
             labelList.Add("Completed");
             colorList.Add(statusColorMap["Completed"]);
+            customDataList.Add("Completed");
         }
         if (_jobStats.FailedCount > 0)
         {
             dataList.Add(_jobStats.FailedCount);
             labelList.Add("Failed");
             colorList.Add(statusColorMap["Failed"]);
+            customDataList.Add("Failed");
         }
         if (_jobStats.NeedsReviewCount > 0)
         {
             dataList.Add(_jobStats.NeedsReviewCount);
             labelList.Add("Needs Review");
             colorList.Add(statusColorMap["Needs Review"]);
+            customDataList.Add("NeedsReview");
         }
         
         _jobPipelineChartData = dataList.ToArray();
         _jobPipelineChartLabels = labelList.ToArray();
         _jobPipelineChartColors = colorList.ToArray();
+        _jobPipelineChartCustomData = customDataList.ToArray();
+    }
+    
+    private void OnJobPipelineChartClick(string status)
+    {
+        // Navigate to ADR Jobs page with the clicked status as a filter
+        // Status values are internal enum values: "Pending", "CredentialVerified", "ScrapeRequested", "Completed", "Failed", "NeedsReview"
+        var encodedStatus = Uri.EscapeDataString(status);
+        Navigation.NavigateTo($"/adr/jobs?status={encodedStatus}");
     }
     
     private async Task LoadCurrentStatusAsync()

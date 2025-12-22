@@ -190,9 +190,16 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             int? credentialId = null,
             bool? isManualRequest = null,
             string? sortColumn = null,
-            bool sortDescending = true)
+            bool sortDescending = true,
+            List<int>? jobIds = null)
         {
             var query = _dbSet.Where(j => !j.IsDeleted);
+            
+            // Filter by specific job IDs (used for blacklist filtering)
+            if (jobIds != null)
+            {
+                query = query.Where(j => jobIds.Contains(j.Id));
+            }
             
             // Filter by manual request status
             // null = show all jobs (default)
@@ -210,7 +217,16 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
 
             if (!string.IsNullOrWhiteSpace(status))
             {
-                query = query.Where(j => j.Status == status);
+                // "ScrapeRequested" is a status group that includes "StatusCheckInProgress"
+                // This matches the chart behavior which counts both statuses as "ADR Request Sent"
+                if (status == "ScrapeRequested")
+                {
+                    query = query.Where(j => j.Status == "ScrapeRequested" || j.Status == "StatusCheckInProgress");
+                }
+                else
+                {
+                    query = query.Where(j => j.Status == status);
+                }
             }
 
             if (billingPeriodStart.HasValue)

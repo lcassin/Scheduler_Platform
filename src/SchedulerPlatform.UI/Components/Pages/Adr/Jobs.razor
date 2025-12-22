@@ -48,7 +48,15 @@
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" md="2">
-                <MudTextField @bind-Value="_searchInterfaceAccountId" 
+                <MudSelect T="string" @bind-Value="_selectedBlacklistStatus" Label="Blacklist" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                    <MudSelectItem Value="@("")">All</MudSelectItem>
+                    <MudSelectItem Value="@("current")">Currently Blacklisted</MudSelectItem>
+                    <MudSelectItem Value="@("future")">Future Blacklist</MudSelectItem>
+                    <MudSelectItem Value="@("any")">Any Blacklist</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2">
+                <MudTextField @bind-Value="_searchInterfaceAccountId"
                               Label="Interface Account ID" 
                               Placeholder="Enter interface acct"
                               Variant="Variant.Outlined" 
@@ -65,6 +73,7 @@
         </MudGrid>
         <MudGrid Class="mb-4" Spacing="2">
             <MudItem xs="12" Class="d-flex align-center justify-end gap-2">
+                <SchedulerPlatform.UI.Components.Shared.IconLegend ShowBlacklistIcons="true" ShowOverrideIcon="false" ShowManualRequestIcon="true" />
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters" StartIcon="@Icons.Material.Filled.FilterAlt">
                     Apply
                 </MudButton>
@@ -143,7 +152,25 @@
                                 }
                             </MudTd>
                             <MudTd DataLabel="Account #">
-                                <MudText Typo="Typo.body2"><strong>@context.VMAccountNumber</strong></MudText>
+                                <div class="d-flex align-center gap-1">
+                                    <MudText Typo="Typo.body2"><strong>@context.VMAccountNumber</strong></MudText>
+                                    @if (context.HasCurrentBlacklist)
+                                    {
+                                        <MudTooltip Text="@GetBlacklistTooltip(context, true)">
+                                            <MudBadge Content="@context.CurrentBlacklistCount" Color="Color.Error" Overlap="true" Visible="@(context.CurrentBlacklistCount > 1)">
+                                                <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" Color="Color.Error" />
+                                            </MudBadge>
+                                        </MudTooltip>
+                                    }
+                                    else if (context.HasFutureBlacklist)
+                                    {
+                                        <MudTooltip Text="@GetBlacklistTooltip(context, false)">
+                                            <MudBadge Content="@context.FutureBlacklistCount" Color="Color.Warning" Overlap="true" Visible="@(context.FutureBlacklistCount > 1)">
+                                                <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Color="Color.Warning" />
+                                            </MudBadge>
+                                        </MudTooltip>
+                                    }
+                                </div>
                             </MudTd>
                 <MudTd DataLabel="Billing Period">
                     <MudText Typo="Typo.body2">@context.BillingPeriodStartDateTime.ToString("MM/dd/yy") - @context.BillingPeriodEndDateTime.ToString("MM/dd/yy")</MudText>
@@ -273,10 +300,12 @@
     private string? _searchVendorCode;
     private string? _searchAccountNumber;
     private string _selectedStatus = "";
+    private string _selectedBlacklistStatus = "";
     private string? _searchInterfaceAccountId;
     private string? _filterVendorCode;
     private string? _filterAccountNumber;
     private string? _filterStatus;
+    private string? _filterBlacklistStatus;
     private string? _filterInterfaceAccountId;
     private bool _showLatestPerAccount = true;
     private bool _showManualJobs = false;
@@ -297,6 +326,10 @@
     [Parameter]
     [SupplyParameterFromQuery(Name = "status")]
     public string? StatusParam { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "blacklistStatus")]
+    public string? BlacklistStatusParam { get; set; }
 
     protected override void OnInitialized()
     {
@@ -320,6 +353,12 @@
         {
             _selectedStatus = StatusParam;
             _filterStatus = StatusParam;
+        }
+        // Handle blacklist status parameter
+        if (!string.IsNullOrEmpty(BlacklistStatusParam))
+        {
+            _selectedBlacklistStatus = BlacklistStatusParam;
+            _filterBlacklistStatus = BlacklistStatusParam;
         }
         _loading = false;
     }
@@ -348,7 +387,8 @@
                 null, // vmAccountId - not used for filtering
                 _filterInterfaceAccountId,
                 null, // credentialId - removed from UI
-                _showManualJobs ? true : false, // false = hide manual jobs (default), true = show only manual jobs
+                _showManualJobs ? true : (bool?)null, // null = show all jobs (default), true = show only manual jobs
+                _filterBlacklistStatus,
                 sortColumn,
                 sortDescending);
 
@@ -388,6 +428,7 @@
         _filterVendorCode = string.IsNullOrWhiteSpace(_searchVendorCode) ? null : _searchVendorCode;
         _filterAccountNumber = string.IsNullOrWhiteSpace(_searchAccountNumber) ? null : _searchAccountNumber;
         _filterStatus = string.IsNullOrEmpty(_selectedStatus) ? null : _selectedStatus;
+        _filterBlacklistStatus = string.IsNullOrEmpty(_selectedBlacklistStatus) ? null : _selectedBlacklistStatus;
         _filterInterfaceAccountId = string.IsNullOrWhiteSpace(_searchInterfaceAccountId) ? null : _searchInterfaceAccountId;
         await _table.ReloadServerData();
     }
@@ -397,14 +438,56 @@
         _searchVendorCode = null;
         _searchAccountNumber = null;
         _selectedStatus = "";
+        _selectedBlacklistStatus = "";
         _searchInterfaceAccountId = null;
         _showManualJobs = false;
         _filterVendorCode = null;
         _filterAccountNumber = null;
         _filterStatus = null;
+        _filterBlacklistStatus = null;
         _filterInterfaceAccountId = null;
         Navigation.NavigateTo("/adr/jobs");
         await _table.ReloadServerData();
+    }
+
+    private string GetBlacklistTooltip(AdrJob job, bool isCurrent)
+    {
+        if (isCurrent)
+        {
+            var count = job.CurrentBlacklistCount;
+            var baseText = count == 1 
+                ? "Currently blacklisted - ADR requests will not be created automatically" 
+                : $"{count} active blacklist entries - ADR requests will not be created automatically";
+            
+            if (job.CurrentBlacklists?.Any() == true)
+            {
+                var dateRanges = job.CurrentBlacklists
+                    .Select(b => $"{b.EffectiveStartDate?.ToString("MM/dd/yyyy") ?? "N/A"} - {b.EffectiveEndDate?.ToString("MM/dd/yyyy") ?? "N/A"}: {b.Reason}")
+                    .Take(3);
+                baseText += "\n" + string.Join("\n", dateRanges);
+                if (job.CurrentBlacklists.Count > 3)
+                    baseText += $"\n...and {job.CurrentBlacklists.Count - 3} more";
+            }
+            return baseText;
+        }
+        else
+        {
+            var count = job.FutureBlacklistCount;
+            var baseText = count == 1 
+                ? "Future blacklist scheduled" 
+                : $"{count} future blacklist entries scheduled";
+            
+            if (job.FutureBlacklists?.Any() == true)
+            {
+                var dateRanges = job.FutureBlacklists
+                    .Select(b => $"Starts {b.EffectiveStartDate?.ToString("MM/dd/yyyy") ?? "N/A"}: {b.Reason}")
+                    .Take(3);
+                baseText += "\n" + string.Join("\n", dateRanges);
+                if (job.FutureBlacklists.Count > 3)
+                    baseText += $"\n...and {job.FutureBlacklists.Count - 3} more";
+            }
+            return baseText;
+        }
     }
 
     private Color GetStatusColor(string status) => status switch

@@ -186,6 +186,29 @@
                         <MudText Typo="Typo.body2"><strong>Missing:</strong> @FormatNumber(_adrStats.MissingCount)</MudText>
                     </MudItem>
                 </MudGrid>
+                @if (_blacklistCounts != null)
+                {
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.subtitle2" Class="mb-1">Blacklist Status</MudText>
+                    <MudGrid>
+                        <MudItem xs="6">
+                            <MudLink Href="/adr/accounts?blacklistStatus=current" Style="text-decoration: none;">
+                                <MudText Typo="Typo.body2" Style="cursor: pointer;">
+                                    <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" Color="Color.Error" Class="mr-1" Style="vertical-align: middle;" />
+                                    <strong>Currently Blacklisted:</strong> @FormatNumber(_blacklistCounts.CurrentCount)
+                                </MudText>
+                            </MudLink>
+                        </MudItem>
+                        <MudItem xs="6">
+                            <MudLink Href="/adr/accounts?blacklistStatus=future" Style="text-decoration: none;">
+                                <MudText Typo="Typo.body2" Style="cursor: pointer;">
+                                    <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Color="Color.Warning" Class="mr-1" Style="vertical-align: middle;" />
+                                    <strong>Future Blacklist:</strong> @FormatNumber(_blacklistCounts.FutureCount)
+                                </MudText>
+                            </MudLink>
+                        </MudItem>
+                    </MudGrid>
+                }
             }
             else
             {
@@ -675,6 +698,7 @@
                 private AdrAccountStats? _adrStats;
                 private AdrJobStats? _adrJobStats;
                 private bool _adrJobStatsLoading;
+                private BlacklistCountsResult? _blacklistCounts;
                 private OrchestrationCurrentResponse? _orchestrationStatus;
                 private bool _orchestrationLoading;
                 private List<AdrOrchestrationStatus>? _orchestrationHistory;
@@ -1000,6 +1024,9 @@
                         "Missing"
                     };
                 }
+                
+                // Load blacklist counts
+                _blacklistCounts = await AdrService.GetBlacklistCountsAsync();
             }
             catch (Exception ex)
             {
