@@ -3610,6 +3610,50 @@ public class AdrController : ControllerBase
     }
 
     /// <summary>
+    /// Gets the count of currently active blacklist entries.
+    /// Used by the ADR Monitor page to display blacklist summary.
+    /// Available to all authenticated users (Viewers and above).
+    /// </summary>
+    /// <returns>Count of current and future blacklist entries.</returns>
+    /// <response code="200">Returns the blacklist counts.</response>
+    /// <response code="500">An error occurred while retrieving blacklist counts.</response>
+    [HttpGet("blacklist/counts")]
+    [Authorize]
+    [ProducesResponseType(typeof(BlacklistCountsResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<BlacklistCountsResult>> GetBlacklistCounts()
+    {
+        try
+        {
+            var today = DateTime.UtcNow.Date;
+            
+            // Count current blacklists (active now)
+            var currentCount = await _dbContext.AdrAccountBlacklists
+                .Where(b => !b.IsDeleted && b.IsActive)
+                .Where(b => !b.EffectiveStartDate.HasValue || b.EffectiveStartDate.Value <= today)
+                .Where(b => !b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= today)
+                .CountAsync();
+            
+            // Count future blacklists
+            var futureCount = await _dbContext.AdrAccountBlacklists
+                .Where(b => !b.IsDeleted && b.IsActive)
+                .Where(b => b.EffectiveStartDate.HasValue && b.EffectiveStartDate.Value > today)
+                .CountAsync();
+            
+            return Ok(new BlacklistCountsResult
+            {
+                CurrentCount = currentCount,
+                FutureCount = futureCount
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving blacklist counts");
+            return StatusCode(500, "An error occurred while retrieving blacklist counts");
+        }
+    }
+
+    /// <summary>
     /// Checks blacklist status for a batch of accounts or jobs.
     /// Returns current and future blacklist information for each item.
     /// Available to all authenticated users (Viewers and above).
@@ -4762,6 +4806,22 @@ public class UpdateRuleRequest
     public int? PeriodDays { get; set; }
     public int? JobTypeId { get; set; }
     public bool? IsEnabled { get; set; }
+}
+
+/// <summary>
+/// Result containing counts of blacklist entries by status
+/// </summary>
+public class BlacklistCountsResult
+{
+    /// <summary>
+    /// Count of currently active blacklist entries (affecting accounts now)
+    /// </summary>
+    public int CurrentCount { get; set; }
+    
+    /// <summary>
+    /// Count of future blacklist entries (will become active in the future)
+    /// </summary>
+    public int FutureCount { get; set; }
 }
 
 #endregion
