@@ -14,6 +14,7 @@ public interface IAdrService
         string? historicalBillingStatus = null,
         bool? isOverridden = null,
         string? jobStatus = null,
+        string? blacklistStatus = null,
         string? sortColumn = null,
         bool sortDescending = false);
     Task<AdrAccount?> GetAccountAsync(int id);
@@ -42,6 +43,7 @@ public interface IAdrService
             string? interfaceAccountId = null,
             int? credentialId = null,
             bool? isManualRequest = null,
+            string? blacklistStatus = null,
             string? sortColumn = null,
             bool sortDescending = true);
     Task<AdrJob?> GetJobAsync(int id);

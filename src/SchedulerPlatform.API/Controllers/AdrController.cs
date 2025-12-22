@@ -79,6 +79,7 @@ public class AdrController : ControllerBase
         [FromQuery] string? historicalBillingStatus = null,
         [FromQuery] bool? isOverridden = null,
         [FromQuery] string? jobStatus = null,
+        [FromQuery] string? blacklistStatus = null,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20,
         [FromQuery] string? sortColumn = null,
@@ -121,6 +122,88 @@ public class AdrController : ControllerBase
                         .ToListAsync();
                 }
             }
+            
+            // If filtering by blacklist status, we need to get the account IDs first
+            List<int>? accountIdsWithBlacklistStatus = null;
+            if (!string.IsNullOrWhiteSpace(blacklistStatus))
+            {
+                var today = DateTime.UtcNow.Date;
+                var activeBlacklistsForFilter = await _dbContext.AdrAccountBlacklists
+                    .Where(b => !b.IsDeleted && b.IsActive)
+                    .Where(b => !b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= today)
+                    .ToListAsync();
+                
+                // Get all non-deleted accounts
+                var allAccounts = await _dbContext.AdrAccounts
+                    .Where(a => !a.IsDeleted)
+                    .Select(a => new { a.Id, a.VendorCode, a.VMAccountId, a.VMAccountNumber, a.CredentialId })
+                    .ToListAsync();
+                
+                if (blacklistStatus == "current")
+                {
+                    // Get accounts that are currently blacklisted
+                    accountIdsWithBlacklistStatus = allAccounts
+                        .Where(a => activeBlacklistsForFilter.Any(b =>
+                        {
+                            var matches = (!string.IsNullOrEmpty(b.VendorCode) && b.VendorCode == a.VendorCode) ||
+                                          (b.VMAccountId.HasValue && b.VMAccountId == a.VMAccountId) ||
+                                          (!string.IsNullOrEmpty(b.VMAccountNumber) && b.VMAccountNumber == a.VMAccountNumber) ||
+                                          (b.CredentialId.HasValue && b.CredentialId == a.CredentialId);
+                            if (!matches) return false;
+                            
+                            var isCurrent = (!b.EffectiveStartDate.HasValue || b.EffectiveStartDate.Value <= today) &&
+                                           (!b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= today);
+                            return isCurrent;
+                        }))
+                        .Select(a => a.Id)
+                        .ToList();
+                }
+                else if (blacklistStatus == "future")
+                {
+                    // Get accounts that have a future blacklist scheduled
+                    accountIdsWithBlacklistStatus = allAccounts
+                        .Where(a => activeBlacklistsForFilter.Any(b =>
+                        {
+                            var matches = (!string.IsNullOrEmpty(b.VendorCode) && b.VendorCode == a.VendorCode) ||
+                                          (b.VMAccountId.HasValue && b.VMAccountId == a.VMAccountId) ||
+                                          (!string.IsNullOrEmpty(b.VMAccountNumber) && b.VMAccountNumber == a.VMAccountNumber) ||
+                                          (b.CredentialId.HasValue && b.CredentialId == a.CredentialId);
+                            if (!matches) return false;
+                            
+                            var isFuture = b.EffectiveStartDate.HasValue && b.EffectiveStartDate.Value > today;
+                            return isFuture;
+                        }))
+                        .Select(a => a.Id)
+                        .ToList();
+                }
+                else if (blacklistStatus == "any")
+                {
+                    // Get accounts that have any blacklist (current or future)
+                    accountIdsWithBlacklistStatus = allAccounts
+                        .Where(a => activeBlacklistsForFilter.Any(b =>
+                            (!string.IsNullOrEmpty(b.VendorCode) && b.VendorCode == a.VendorCode) ||
+                            (b.VMAccountId.HasValue && b.VMAccountId == a.VMAccountId) ||
+                            (!string.IsNullOrEmpty(b.VMAccountNumber) && b.VMAccountNumber == a.VMAccountNumber) ||
+                            (b.CredentialId.HasValue && b.CredentialId == a.CredentialId)))
+                        .Select(a => a.Id)
+                        .ToList();
+                }
+            }
+            
+            // Combine job status and blacklist status filters if both are present
+            List<int>? combinedAccountIds = null;
+            if (accountIdsWithJobStatus != null && accountIdsWithBlacklistStatus != null)
+            {
+                combinedAccountIds = accountIdsWithJobStatus.Intersect(accountIdsWithBlacklistStatus).ToList();
+            }
+            else if (accountIdsWithJobStatus != null)
+            {
+                combinedAccountIds = accountIdsWithJobStatus;
+            }
+            else if (accountIdsWithBlacklistStatus != null)
+            {
+                combinedAccountIds = accountIdsWithBlacklistStatus;
+            }
 
             var (items, totalCount) = await _unitOfWork.AdrAccounts.GetPagedAsync(
                 pageNumber,
@@ -133,7 +216,7 @@ public class AdrController : ControllerBase
                 isOverridden,
                 sortColumn,
                 sortDescending,
-                accountIdsWithJobStatus);
+                combinedAccountIds);
 
             // Get account IDs from the current page
             var accountIds = items.Select(a => a.Id).ToList();
@@ -1396,11 +1479,85 @@ public class AdrController : ControllerBase
         [FromQuery] string? interfaceAccountId = null,
         [FromQuery] int? credentialId = null,
         [FromQuery] bool? isManualRequest = null,
+        [FromQuery] string? blacklistStatus = null,
         [FromQuery] string? sortColumn = null,
         [FromQuery] bool sortDescending = true)
     {
             try
             {
+                // If filtering by blacklist status, we need to get the job IDs first
+                List<int>? jobIdsWithBlacklistStatus = null;
+                if (!string.IsNullOrWhiteSpace(blacklistStatus))
+                {
+                    var today = DateTime.UtcNow.Date;
+                    var activeBlacklistsForFilter = await _dbContext.AdrAccountBlacklists
+                        .Where(b => !b.IsDeleted && b.IsActive)
+                        .Where(b => !b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= today)
+                        .ToListAsync();
+                    
+                    // Get all non-deleted jobs with their account info
+                    var allJobs = await _dbContext.AdrJobs
+                        .Where(j => !j.IsDeleted)
+                        .Include(j => j.AdrAccount)
+                        .Select(j => new { j.Id, j.VendorCode, j.VMAccountId, j.VMAccountNumber, j.CredentialId, AccountVendorCode = j.AdrAccount != null ? j.AdrAccount.VendorCode : null })
+                        .ToListAsync();
+                    
+                    if (blacklistStatus == "current")
+                    {
+                        // Get jobs that are currently blacklisted
+                        jobIdsWithBlacklistStatus = allJobs
+                            .Where(j => activeBlacklistsForFilter.Any(b =>
+                            {
+                                var jobVendorCode = !string.IsNullOrEmpty(j.VendorCode) ? j.VendorCode : j.AccountVendorCode;
+                                var matches = (!string.IsNullOrEmpty(b.VendorCode) && b.VendorCode == jobVendorCode) ||
+                                              (b.VMAccountId.HasValue && b.VMAccountId == j.VMAccountId) ||
+                                              (!string.IsNullOrEmpty(b.VMAccountNumber) && b.VMAccountNumber == j.VMAccountNumber) ||
+                                              (b.CredentialId.HasValue && b.CredentialId == j.CredentialId);
+                                if (!matches) return false;
+                                
+                                var isCurrent = (!b.EffectiveStartDate.HasValue || b.EffectiveStartDate.Value <= today) &&
+                                               (!b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= today);
+                                return isCurrent;
+                            }))
+                            .Select(j => j.Id)
+                            .ToList();
+                    }
+                    else if (blacklistStatus == "future")
+                    {
+                        // Get jobs that have a future blacklist scheduled
+                        jobIdsWithBlacklistStatus = allJobs
+                            .Where(j => activeBlacklistsForFilter.Any(b =>
+                            {
+                                var jobVendorCode = !string.IsNullOrEmpty(j.VendorCode) ? j.VendorCode : j.AccountVendorCode;
+                                var matches = (!string.IsNullOrEmpty(b.VendorCode) && b.VendorCode == jobVendorCode) ||
+                                              (b.VMAccountId.HasValue && b.VMAccountId == j.VMAccountId) ||
+                                              (!string.IsNullOrEmpty(b.VMAccountNumber) && b.VMAccountNumber == j.VMAccountNumber) ||
+                                              (b.CredentialId.HasValue && b.CredentialId == j.CredentialId);
+                                if (!matches) return false;
+                                
+                                var isFuture = b.EffectiveStartDate.HasValue && b.EffectiveStartDate.Value > today;
+                                return isFuture;
+                            }))
+                            .Select(j => j.Id)
+                            .ToList();
+                    }
+                    else if (blacklistStatus == "any")
+                    {
+                        // Get jobs that have any blacklist (current or future)
+                        jobIdsWithBlacklistStatus = allJobs
+                            .Where(j => activeBlacklistsForFilter.Any(b =>
+                            {
+                                var jobVendorCode = !string.IsNullOrEmpty(j.VendorCode) ? j.VendorCode : j.AccountVendorCode;
+                                return (!string.IsNullOrEmpty(b.VendorCode) && b.VendorCode == jobVendorCode) ||
+                                       (b.VMAccountId.HasValue && b.VMAccountId == j.VMAccountId) ||
+                                       (!string.IsNullOrEmpty(b.VMAccountNumber) && b.VMAccountNumber == j.VMAccountNumber) ||
+                                       (b.CredentialId.HasValue && b.CredentialId == j.CredentialId);
+                            }))
+                            .Select(j => j.Id)
+                            .ToList();
+                    }
+                }
+                
                 var (items, totalCount) = await _unitOfWork.AdrJobs.GetPagedAsync(
                     pageNumber,
                     pageSize,
@@ -1416,7 +1573,8 @@ public class AdrController : ControllerBase
                     credentialId,
                     isManualRequest,
                     sortColumn,
-                    sortDescending);
+                    sortDescending,
+                    jobIdsWithBlacklistStatus);
 
                 // Get blacklist status for each job (single query)
                 var today = DateTime.UtcNow.Date;

@@ -78,6 +78,14 @@
                 <MudSelectItem Value="@("NoJob")">No Job</MudSelectItem>
             </MudSelect>
         </MudItem>
+        <MudItem xs="12" md="2">
+            <MudSelect T="string" @bind-Value="_selectedBlacklistStatus" Label="Blacklist" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                <MudSelectItem Value="@("")">All</MudSelectItem>
+                <MudSelectItem Value="@("current")">Currently Blacklisted</MudSelectItem>
+                <MudSelectItem Value="@("future")">Future Blacklist</MudSelectItem>
+                <MudSelectItem Value="@("any")">Any Blacklist</MudSelectItem>
+            </MudSelect>
+        </MudItem>
     </MudGrid>
     <MudGrid Class="mb-4" Spacing="2">
         <MudItem xs="12" Class="d-flex align-center justify-end gap-2">
@@ -293,10 +301,12 @@
     private string _selectedHistoricalStatus = "";
     private string _selectedOverrideFilter = "";
     private string _selectedJobStatus = "";
+    private string _selectedBlacklistStatus = "";
     private string? _filterNextRunStatus;
     private string? _filterHistoricalStatus;
     private bool? _filterIsOverridden;
     private string? _filterJobStatus;
+    private string? _filterBlacklistStatus;
 
     [Parameter]
     [SupplyParameterFromQuery(Name = "accountNumber")]
@@ -305,6 +315,10 @@
     [Parameter]
     [SupplyParameterFromQuery(Name = "nextRunStatus")]
     public string? NextRunStatusParam { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "blacklistStatus")]
+    public string? BlacklistStatusParam { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
@@ -320,6 +334,12 @@
             {
                 _selectedNextRunStatus = NextRunStatusParam;
                 _filterNextRunStatus = NextRunStatusParam;
+            }
+            
+            if (!string.IsNullOrEmpty(BlacklistStatusParam))
+            {
+                _selectedBlacklistStatus = BlacklistStatusParam;
+                _filterBlacklistStatus = BlacklistStatusParam;
             }
             
             _clients = await ClientService.GetClientsAsync();
@@ -360,6 +380,7 @@
                 _filterHistoricalStatus,
                 _filterIsOverridden,
                 _filterJobStatus,
+                _filterBlacklistStatus,
                 sortColumn,
                 sortDescending);
 
@@ -408,6 +429,7 @@
         _filterHistoricalStatus = string.IsNullOrEmpty(_selectedHistoricalStatus) ? null : _selectedHistoricalStatus;
         _filterIsOverridden = string.IsNullOrEmpty(_selectedOverrideFilter) ? null : bool.Parse(_selectedOverrideFilter);
         _filterJobStatus = string.IsNullOrEmpty(_selectedJobStatus) ? null : _selectedJobStatus;
+        _filterBlacklistStatus = string.IsNullOrEmpty(_selectedBlacklistStatus) ? null : _selectedBlacklistStatus;
         await _table.ReloadServerData();
     }
 
@@ -419,10 +441,12 @@
         _selectedHistoricalStatus = "";
         _selectedOverrideFilter = "";
         _selectedJobStatus = "";
+        _selectedBlacklistStatus = "";
         _filterNextRunStatus = null;
         _filterHistoricalStatus = null;
         _filterIsOverridden = null;
         _filterJobStatus = null;
+        _filterBlacklistStatus = null;
         await _table.ReloadServerData();
     }
 
