@@ -65,6 +65,7 @@
         </MudGrid>
         <MudGrid Class="mb-4" Spacing="2">
             <MudItem xs="12" Class="d-flex align-center justify-end gap-2">
+                <SchedulerPlatform.UI.Components.Shared.IconLegend ShowBlacklistIcons="true" ShowOverrideIcon="false" ShowManualRequestIcon="true" />
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters" StartIcon="@Icons.Material.Filled.FilterAlt">
                     Apply
                 </MudButton>
@@ -430,16 +431,38 @@
         if (isCurrent)
         {
             var count = job.CurrentBlacklistCount;
-            return count == 1 
+            var baseText = count == 1 
                 ? "Currently blacklisted - ADR requests will not be created automatically" 
                 : $"{count} active blacklist entries - ADR requests will not be created automatically";
+            
+            if (job.CurrentBlacklists?.Any() == true)
+            {
+                var dateRanges = job.CurrentBlacklists
+                    .Select(b => $"{b.EffectiveStartDate?.ToString("MM/dd/yyyy") ?? "N/A"} - {b.EffectiveEndDate?.ToString("MM/dd/yyyy") ?? "N/A"}: {b.Reason}")
+                    .Take(3);
+                baseText += "\n" + string.Join("\n", dateRanges);
+                if (job.CurrentBlacklists.Count > 3)
+                    baseText += $"\n...and {job.CurrentBlacklists.Count - 3} more";
+            }
+            return baseText;
         }
         else
         {
             var count = job.FutureBlacklistCount;
-            return count == 1 
+            var baseText = count == 1 
                 ? "Future blacklist scheduled" 
                 : $"{count} future blacklist entries scheduled";
+            
+            if (job.FutureBlacklists?.Any() == true)
+            {
+                var dateRanges = job.FutureBlacklists
+                    .Select(b => $"Starts {b.EffectiveStartDate?.ToString("MM/dd/yyyy") ?? "N/A"}: {b.Reason}")
+                    .Take(3);
+                baseText += "\n" + string.Join("\n", dateRanges);
+                if (job.FutureBlacklists.Count > 3)
+                    baseText += $"\n...and {job.FutureBlacklists.Count - 3} more";
+            }
+            return baseText;
         }
     }
 

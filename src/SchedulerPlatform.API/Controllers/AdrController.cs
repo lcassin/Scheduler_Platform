@@ -187,7 +187,7 @@ public class AdrController : ControllerBase
                 .ToListAsync();
             
             // Build blacklist status lookup for each account
-            var blacklistStatusLookup = new Dictionary<int, (bool HasCurrent, bool HasFuture, int CurrentCount, int FutureCount)>();
+            var blacklistStatusLookup = new Dictionary<int, (bool HasCurrent, bool HasFuture, int CurrentCount, int FutureCount, List<BlacklistSummary> CurrentSummaries, List<BlacklistSummary> FutureSummaries)>();
             foreach (var account in items)
             {
                 var matchingBlacklists = activeBlacklists.Where(b =>
@@ -212,11 +212,39 @@ public class AdrController : ControllerBase
                     .Where(b => b.EffectiveStartDate.HasValue && b.EffectiveStartDate.Value > today)
                     .ToList();
                 
+                var currentSummaries = currentBlacklists.Select(b => new BlacklistSummary
+                {
+                    Id = b.Id,
+                    Reason = b.Reason ?? string.Empty,
+                    ExclusionType = b.ExclusionType ?? "All",
+                    EffectiveStartDate = b.EffectiveStartDate,
+                    EffectiveEndDate = b.EffectiveEndDate,
+                    VendorCode = b.VendorCode,
+                    VMAccountId = b.VMAccountId,
+                    VMAccountNumber = b.VMAccountNumber,
+                    CredentialId = b.CredentialId
+                }).ToList();
+                
+                var futureSummaries = futureBlacklists.Select(b => new BlacklistSummary
+                {
+                    Id = b.Id,
+                    Reason = b.Reason ?? string.Empty,
+                    ExclusionType = b.ExclusionType ?? "All",
+                    EffectiveStartDate = b.EffectiveStartDate,
+                    EffectiveEndDate = b.EffectiveEndDate,
+                    VendorCode = b.VendorCode,
+                    VMAccountId = b.VMAccountId,
+                    VMAccountNumber = b.VMAccountNumber,
+                    CredentialId = b.CredentialId
+                }).ToList();
+                
                 blacklistStatusLookup[account.Id] = (
                     currentBlacklists.Any(),
                     futureBlacklists.Any(),
                     currentBlacklists.Count,
-                    futureBlacklists.Count
+                    futureBlacklists.Count,
+                    currentSummaries,
+                    futureSummaries
                 );
             }
             
@@ -260,7 +288,9 @@ public class AdrController : ControllerBase
                 HasCurrentBlacklist = blacklistStatusLookup.TryGetValue(a.Id, out var bl) && bl.HasCurrent,
                 HasFutureBlacklist = blacklistStatusLookup.TryGetValue(a.Id, out var bl2) && bl2.HasFuture,
                 CurrentBlacklistCount = blacklistStatusLookup.TryGetValue(a.Id, out var bl3) ? bl3.CurrentCount : 0,
-                FutureBlacklistCount = blacklistStatusLookup.TryGetValue(a.Id, out var bl4) ? bl4.FutureCount : 0
+                FutureBlacklistCount = blacklistStatusLookup.TryGetValue(a.Id, out var bl4) ? bl4.FutureCount : 0,
+                CurrentBlacklists = blacklistStatusLookup.TryGetValue(a.Id, out var bl5) ? bl5.CurrentSummaries : new List<BlacklistSummary>(),
+                FutureBlacklists = blacklistStatusLookup.TryGetValue(a.Id, out var bl6) ? bl6.FutureSummaries : new List<BlacklistSummary>()
             }).ToList();
 
             return Ok(new
@@ -1396,7 +1426,7 @@ public class AdrController : ControllerBase
                     .ToListAsync();
                 
                 // Build blacklist status lookup for each job
-                var blacklistStatusLookup = new Dictionary<int, (bool HasCurrent, bool HasFuture, int CurrentCount, int FutureCount)>();
+                var blacklistStatusLookup = new Dictionary<int, (bool HasCurrent, bool HasFuture, int CurrentCount, int FutureCount, List<BlacklistSummary> CurrentSummaries, List<BlacklistSummary> FutureSummaries)>();
                 foreach (var job in items)
                 {
                     var jobVendorCode = !string.IsNullOrEmpty(job.VendorCode) ? job.VendorCode : job.AdrAccount?.VendorCode;
@@ -1422,11 +1452,39 @@ public class AdrController : ControllerBase
                         .Where(b => b.EffectiveStartDate.HasValue && b.EffectiveStartDate.Value > today)
                         .ToList();
                     
+                    var currentSummaries = currentBlacklists.Select(b => new BlacklistSummary
+                    {
+                        Id = b.Id,
+                        Reason = b.Reason ?? string.Empty,
+                        ExclusionType = b.ExclusionType ?? "All",
+                        EffectiveStartDate = b.EffectiveStartDate,
+                        EffectiveEndDate = b.EffectiveEndDate,
+                        VendorCode = b.VendorCode,
+                        VMAccountId = b.VMAccountId,
+                        VMAccountNumber = b.VMAccountNumber,
+                        CredentialId = b.CredentialId
+                    }).ToList();
+                    
+                    var futureSummaries = futureBlacklists.Select(b => new BlacklistSummary
+                    {
+                        Id = b.Id,
+                        Reason = b.Reason ?? string.Empty,
+                        ExclusionType = b.ExclusionType ?? "All",
+                        EffectiveStartDate = b.EffectiveStartDate,
+                        EffectiveEndDate = b.EffectiveEndDate,
+                        VendorCode = b.VendorCode,
+                        VMAccountId = b.VMAccountId,
+                        VMAccountNumber = b.VMAccountNumber,
+                        CredentialId = b.CredentialId
+                    }).ToList();
+                    
                     blacklistStatusLookup[job.Id] = (
                         currentBlacklists.Any(),
                         futureBlacklists.Any(),
                         currentBlacklists.Count,
-                        futureBlacklists.Count
+                        futureBlacklists.Count,
+                        currentSummaries,
+                        futureSummaries
                     );
                 }
 
@@ -1461,7 +1519,9 @@ public class AdrController : ControllerBase
                     HasCurrentBlacklist = blacklistStatusLookup.TryGetValue(j.Id, out var bl) && bl.HasCurrent,
                     HasFutureBlacklist = blacklistStatusLookup.TryGetValue(j.Id, out var bl2) && bl2.HasFuture,
                     CurrentBlacklistCount = blacklistStatusLookup.TryGetValue(j.Id, out var bl3) ? bl3.CurrentCount : 0,
-                    FutureBlacklistCount = blacklistStatusLookup.TryGetValue(j.Id, out var bl4) ? bl4.FutureCount : 0
+                    FutureBlacklistCount = blacklistStatusLookup.TryGetValue(j.Id, out var bl4) ? bl4.FutureCount : 0,
+                    CurrentBlacklists = blacklistStatusLookup.TryGetValue(j.Id, out var bl5) ? bl5.CurrentSummaries : new List<BlacklistSummary>(),
+                    FutureBlacklists = blacklistStatusLookup.TryGetValue(j.Id, out var bl6) ? bl6.FutureSummaries : new List<BlacklistSummary>()
                 }).ToList();
 
                 return Ok(new
@@ -3819,6 +3879,22 @@ public class AdrController : ControllerBase
                 return BadRequest("At least one exclusion criteria (VendorCode, VMAccountId, VMAccountNumber, or CredentialId) must be provided");
             }
             
+            // Both effective dates are required
+            if (!request.EffectiveStartDate.HasValue)
+            {
+                return BadRequest("Effective Start Date is required");
+            }
+            
+            if (!request.EffectiveEndDate.HasValue)
+            {
+                return BadRequest("Effective End Date is required");
+            }
+            
+            if (request.EffectiveEndDate.Value < request.EffectiveStartDate.Value)
+            {
+                return BadRequest("Effective End Date must be on or after Effective Start Date");
+            }
+            
             var username = User.Identity?.Name ?? "System Created";
             
             var entry = new AdrAccountBlacklist
@@ -3896,6 +3972,31 @@ public class AdrController : ControllerBase
             if (request.EffectiveStartDate.HasValue) entry.EffectiveStartDate = request.EffectiveStartDate;
             if (request.EffectiveEndDate.HasValue) entry.EffectiveEndDate = request.EffectiveEndDate;
             if (request.Notes != null) entry.Notes = request.Notes;
+            
+            // Validate at least one exclusion criteria exists after update
+            if (string.IsNullOrWhiteSpace(entry.VendorCode) && 
+                !entry.VMAccountId.HasValue && 
+                string.IsNullOrWhiteSpace(entry.VMAccountNumber) && 
+                !entry.CredentialId.HasValue)
+            {
+                return BadRequest("At least one exclusion criteria (VendorCode, VMAccountId, VMAccountNumber, or CredentialId) must be provided");
+            }
+            
+            // Validate both effective dates are set
+            if (!entry.EffectiveStartDate.HasValue)
+            {
+                return BadRequest("Effective Start Date is required");
+            }
+            
+            if (!entry.EffectiveEndDate.HasValue)
+            {
+                return BadRequest("Effective End Date is required");
+            }
+            
+            if (entry.EffectiveEndDate.Value < entry.EffectiveStartDate.Value)
+            {
+                return BadRequest("Effective End Date must be on or after Effective Start Date");
+            }
             
             entry.ModifiedDateTime = DateTime.UtcNow;
             entry.ModifiedBy = username;

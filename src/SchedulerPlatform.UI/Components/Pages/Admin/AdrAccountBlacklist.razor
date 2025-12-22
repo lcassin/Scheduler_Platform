@@ -180,30 +180,33 @@
     <DialogContent>
         @if (_editingEntry != null)
         {
+            <MudAlert Severity="Severity.Info" Class="mb-4">
+                At least one of the following must be provided: Vendor Code, VM Account ID, Account Number, or Credential ID.
+            </MudAlert>
             <MudGrid>
                 <MudItem xs="12" sm="6">
                     <MudTextField @bind-Value="_editingEntry.VendorCode" 
                                   Label="Vendor Code" 
                                   Variant="Variant.Outlined"
-                                  HelperText="Leave empty to match all vendors" />
+                                  HelperText="Match by vendor code" />
                 </MudItem>
                 <MudItem xs="12" sm="6">
                     <MudNumericField @bind-Value="_editingEntry.VMAccountId" 
                                      Label="VM Account ID" 
                                      Variant="Variant.Outlined"
-                                     HelperText="Leave empty to match all accounts" />
+                                     HelperText="Match by VM account ID" />
                 </MudItem>
                 <MudItem xs="12" sm="6">
                     <MudTextField @bind-Value="_editingEntry.VMAccountNumber" 
                                   Label="Account Number" 
                                   Variant="Variant.Outlined"
-                                  HelperText="Leave empty to match all account numbers" />
+                                  HelperText="Match by account number" />
                 </MudItem>
                 <MudItem xs="12" sm="6">
                     <MudNumericField @bind-Value="_editingEntry.CredentialId" 
                                      Label="Credential ID" 
                                      Variant="Variant.Outlined"
-                                     HelperText="Leave empty to match all credentials" />
+                                     HelperText="Match by credential ID" />
                 </MudItem>
                 <MudItem xs="12" sm="6">
                     <MudSelect @bind-Value="_editingEntry.ExclusionType" 
@@ -232,13 +235,17 @@
                     <MudDatePicker @bind-Date="_editingEntry.EffectiveStartDate" 
                                    Label="Effective Start Date" 
                                    Variant="Variant.Outlined"
-                                   HelperText="Leave empty for immediate effect" />
+                                   Required="true"
+                                   RequiredError="Effective Start Date is required"
+                                   HelperText="When the blacklist becomes active" />
                 </MudItem>
                 <MudItem xs="12" sm="6">
                     <MudDatePicker @bind-Date="_editingEntry.EffectiveEndDate" 
                                    Label="Effective End Date" 
                                    Variant="Variant.Outlined"
-                                   HelperText="Leave empty for indefinite" />
+                                   Required="true"
+                                   RequiredError="Effective End Date is required"
+                                   HelperText="When the blacklist expires" />
                 </MudItem>
                 <MudItem xs="12">
                     <MudTextField @bind-Value="_editingEntry.Notes" 
@@ -433,9 +440,39 @@
         private async Task SaveEntry()
         {
             if (_editingEntry == null) return;
+            
+            // Validate at least one exclusion criteria is provided
+            if (string.IsNullOrWhiteSpace(_editingEntry.VendorCode) && 
+                !_editingEntry.VMAccountId.HasValue && 
+                string.IsNullOrWhiteSpace(_editingEntry.VMAccountNumber) && 
+                !_editingEntry.CredentialId.HasValue)
+            {
+                Snackbar.Add("At least one of Vendor Code, VM Account ID, Account Number, or Credential ID is required", Severity.Warning);
+                return;
+            }
+            
             if (string.IsNullOrWhiteSpace(_editingEntry.Reason))
             {
                 Snackbar.Add("Reason is required", Severity.Warning);
+                return;
+            }
+            
+            // Validate effective dates are provided
+            if (!_editingEntry.EffectiveStartDate.HasValue)
+            {
+                Snackbar.Add("Effective Start Date is required", Severity.Warning);
+                return;
+            }
+            
+            if (!_editingEntry.EffectiveEndDate.HasValue)
+            {
+                Snackbar.Add("Effective End Date is required", Severity.Warning);
+                return;
+            }
+            
+            if (_editingEntry.EffectiveEndDate.Value < _editingEntry.EffectiveStartDate.Value)
+            {
+                Snackbar.Add("Effective End Date must be on or after Effective Start Date", Severity.Warning);
                 return;
             }
         

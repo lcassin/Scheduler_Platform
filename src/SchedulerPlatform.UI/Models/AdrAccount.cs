@@ -46,6 +46,21 @@ public class AdrAccount
     public bool HasFutureBlacklist { get; set; }
     public int CurrentBlacklistCount { get; set; }
     public int FutureBlacklistCount { get; set; }
+    public List<BlacklistSummary> CurrentBlacklists { get; set; } = new();
+    public List<BlacklistSummary> FutureBlacklists { get; set; } = new();
+}
+
+public class BlacklistSummary
+{
+    public int Id { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public string ExclusionType { get; set; } = string.Empty;
+    public DateTime? EffectiveStartDate { get; set; }
+    public DateTime? EffectiveEndDate { get; set; }
+    public string? VendorCode { get; set; }
+    public long? VMAccountId { get; set; }
+    public string? VMAccountNumber { get; set; }
+    public int? CredentialId { get; set; }
 }
 
 public class AdrAccountStats
