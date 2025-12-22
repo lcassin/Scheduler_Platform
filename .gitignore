@@ -21,3 +21,6 @@
 *.suo
 *.userosscache
 /src/SchedulerPlatform.IdentityServer/appsettings.json
+*.pubxml
+/src/SchedulerPlatform.API/appsettings.AzureDev.json
+/src/SchedulerPlatform.UI/appsettings.AzureDev.json

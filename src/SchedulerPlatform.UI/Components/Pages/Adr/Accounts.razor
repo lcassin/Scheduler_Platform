@@ -8,6 +8,7 @@
 @inject ISnackbar Snackbar
 @inject IJSRuntime JSRuntime
 @inject IPermissionService PermissionService
+@inject IHttpClientFactory HttpClientFactory
 
 <PageTitle>ADR Accounts</PageTitle>
 
@@ -77,9 +78,16 @@
                 <MudSelectItem Value="@("NoJob")">No Job</MudSelectItem>
             </MudSelect>
         </MudItem>
-    </MudGrid>
-    <MudGrid Class="mb-4" Spacing="2">
-        <MudItem xs="12" Class="d-flex align-center justify-end gap-2">
+        <MudItem xs="12" md="2">
+            <MudSelect T="string" @bind-Value="_selectedBlacklistStatus" Label="Blacklist" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                <MudSelectItem Value="@("")">All</MudSelectItem>
+                <MudSelectItem Value="@("current")">Currently Blacklisted</MudSelectItem>
+                <MudSelectItem Value="@("future")">Future Blacklist</MudSelectItem>
+                <MudSelectItem Value="@("any")">Any Blacklist</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="10" Class="d-flex align-center justify-end gap-2">
+            <SchedulerPlatform.UI.Components.Shared.IconLegend ShowBlacklistIcons="true" ShowOverrideIcon="true" ShowWarningIcon="true" />
             <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters" StartIcon="@Icons.Material.Filled.FilterAlt">
                 Apply
             </MudButton>
@@ -142,6 +150,22 @@
                         {
                             <MudTooltip Text="@($"Rule manually overridden by {context.RuleOverriddenBy} on {context.RuleOverriddenDateTime?.ToString("MM/dd/yyyy")}")">
                                 <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Warning" />
+                            </MudTooltip>
+                        }
+                        @if (context.HasCurrentBlacklist)
+                        {
+                            <MudTooltip Text="@GetBlacklistTooltip(context, true)">
+                                <MudBadge Content="@context.CurrentBlacklistCount" Color="Color.Error" Overlap="true" Visible="@(context.CurrentBlacklistCount > 1)">
+                                    <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" Color="Color.Error" />
+                                </MudBadge>
+                            </MudTooltip>
+                        }
+                        else if (context.HasFutureBlacklist)
+                        {
+                            <MudTooltip Text="@GetBlacklistTooltip(context, false)">
+                                <MudBadge Content="@context.FutureBlacklistCount" Color="Color.Warning" Overlap="true" Visible="@(context.FutureBlacklistCount > 1)">
+                                    <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Color="Color.Warning" />
+                                </MudBadge>
                             </MudTooltip>
                         }
                     </div>
@@ -275,10 +299,12 @@
     private string _selectedHistoricalStatus = "";
     private string _selectedOverrideFilter = "";
     private string _selectedJobStatus = "";
+    private string _selectedBlacklistStatus = "";
     private string? _filterNextRunStatus;
     private string? _filterHistoricalStatus;
     private bool? _filterIsOverridden;
     private string? _filterJobStatus;
+    private string? _filterBlacklistStatus;
 
     [Parameter]
     [SupplyParameterFromQuery(Name = "accountNumber")]
@@ -287,6 +313,10 @@
     [Parameter]
     [SupplyParameterFromQuery(Name = "nextRunStatus")]
     public string? NextRunStatusParam { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "blacklistStatus")]
+    public string? BlacklistStatusParam { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
@@ -302,6 +332,12 @@
             {
                 _selectedNextRunStatus = NextRunStatusParam;
                 _filterNextRunStatus = NextRunStatusParam;
+            }
+            
+            if (!string.IsNullOrEmpty(BlacklistStatusParam))
+            {
+                _selectedBlacklistStatus = BlacklistStatusParam;
+                _filterBlacklistStatus = BlacklistStatusParam;
             }
             
             _clients = await ClientService.GetClientsAsync();
@@ -342,6 +378,7 @@
                 _filterHistoricalStatus,
                 _filterIsOverridden,
                 _filterJobStatus,
+                _filterBlacklistStatus,
                 sortColumn,
                 sortDescending);
 
@@ -390,6 +427,7 @@
         _filterHistoricalStatus = string.IsNullOrEmpty(_selectedHistoricalStatus) ? null : _selectedHistoricalStatus;
         _filterIsOverridden = string.IsNullOrEmpty(_selectedOverrideFilter) ? null : bool.Parse(_selectedOverrideFilter);
         _filterJobStatus = string.IsNullOrEmpty(_selectedJobStatus) ? null : _selectedJobStatus;
+        _filterBlacklistStatus = string.IsNullOrEmpty(_selectedBlacklistStatus) ? null : _selectedBlacklistStatus;
         await _table.ReloadServerData();
     }
 
@@ -401,10 +439,12 @@
         _selectedHistoricalStatus = "";
         _selectedOverrideFilter = "";
         _selectedJobStatus = "";
+        _selectedBlacklistStatus = "";
         _filterNextRunStatus = null;
         _filterHistoricalStatus = null;
         _filterIsOverridden = null;
         _filterJobStatus = null;
+        _filterBlacklistStatus = null;
         await _table.ReloadServerData();
     }
 
@@ -448,6 +488,46 @@
         "Due Now" => Color.Info,
         _ => Color.Default
     };
+
+    private string GetBlacklistTooltip(AdrAccount account, bool isCurrent)
+    {
+        if (isCurrent)
+        {
+            var count = account.CurrentBlacklistCount;
+            var baseText = count == 1 
+                ? "Currently blacklisted - ADR requests will not be created automatically" 
+                : $"{count} active blacklist entries - ADR requests will not be created automatically";
+            
+            if (account.CurrentBlacklists?.Any() == true)
+            {
+                var dateRanges = account.CurrentBlacklists
+                    .Select(b => $"{b.EffectiveStartDate?.ToString("MM/dd/yyyy") ?? "N/A"} - {b.EffectiveEndDate?.ToString("MM/dd/yyyy") ?? "N/A"}: {b.Reason}")
+                    .Take(3);
+                baseText += "\n" + string.Join("\n", dateRanges);
+                if (account.CurrentBlacklists.Count > 3)
+                    baseText += $"\n...and {account.CurrentBlacklists.Count - 3} more";
+            }
+            return baseText;
+        }
+        else
+        {
+            var count = account.FutureBlacklistCount;
+            var baseText = count == 1 
+                ? "Future blacklist scheduled" 
+                : $"{count} future blacklist entries scheduled";
+            
+            if (account.FutureBlacklists?.Any() == true)
+            {
+                var dateRanges = account.FutureBlacklists
+                    .Select(b => $"Starts {b.EffectiveStartDate?.ToString("MM/dd/yyyy") ?? "N/A"}: {b.Reason}")
+                    .Take(3);
+                baseText += "\n" + string.Join("\n", dateRanges);
+                if (account.FutureBlacklists.Count > 3)
+                    baseText += $"\n...and {account.FutureBlacklists.Count - 3} more";
+            }
+            return baseText;
+        }
+    }
 
     private async Task ViewAccountDetails(AdrAccount account)
     {

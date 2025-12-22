@@ -30,6 +30,14 @@ public class AdrJob
     
         // Navigation property
     public AdrAccount? AdrAccount { get; set; }
+    
+    // Blacklist status fields - populated from matching blacklist entries
+    public bool HasCurrentBlacklist { get; set; }
+    public bool HasFutureBlacklist { get; set; }
+    public int CurrentBlacklistCount { get; set; }
+    public int FutureBlacklistCount { get; set; }
+    public List<BlacklistSummary> CurrentBlacklists { get; set; } = new();
+    public List<BlacklistSummary> FutureBlacklists { get; set; } = new();
 }
 
 public class AdrJobStats

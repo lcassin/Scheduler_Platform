@@ -19,6 +19,7 @@ public class JobCreationResult
 {
     public int JobsCreated { get; set; }
     public int JobsSkipped { get; set; }
+    public int BlacklistedCount { get; set; }
     public int Errors { get; set; }
     public List<string> ErrorMessages { get; set; } = new();
 }
@@ -174,4 +175,10 @@ public class AdrOrchestrationStatus
     public CredentialVerificationResult? CredentialVerificationResult { get; set; }
     public ScrapeResult? ScrapeResult { get; set; }
     public StatusCheckResult? StatusCheckResult { get; set; }
+}
+
+public class BlacklistCountsResult
+{
+    public int CurrentCount { get; set; }
+    public int FutureCount { get; set; }
 }
