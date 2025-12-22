@@ -143,7 +143,25 @@
                                 }
                             </MudTd>
                             <MudTd DataLabel="Account #">
-                                <MudText Typo="Typo.body2"><strong>@context.VMAccountNumber</strong></MudText>
+                                <div class="d-flex align-center gap-1">
+                                    <MudText Typo="Typo.body2"><strong>@context.VMAccountNumber</strong></MudText>
+                                    @if (context.HasCurrentBlacklist)
+                                    {
+                                        <MudTooltip Text="@GetBlacklistTooltip(context, true)">
+                                            <MudBadge Content="@context.CurrentBlacklistCount" Color="Color.Error" Overlap="true" Visible="@(context.CurrentBlacklistCount > 1)">
+                                                <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" Color="Color.Error" />
+                                            </MudBadge>
+                                        </MudTooltip>
+                                    }
+                                    else if (context.HasFutureBlacklist)
+                                    {
+                                        <MudTooltip Text="@GetBlacklistTooltip(context, false)">
+                                            <MudBadge Content="@context.FutureBlacklistCount" Color="Color.Warning" Overlap="true" Visible="@(context.FutureBlacklistCount > 1)">
+                                                <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Color="Color.Warning" />
+                                            </MudBadge>
+                                        </MudTooltip>
+                                    }
+                                </div>
                             </MudTd>
                 <MudTd DataLabel="Billing Period">
                     <MudText Typo="Typo.body2">@context.BillingPeriodStartDateTime.ToString("MM/dd/yy") - @context.BillingPeriodEndDateTime.ToString("MM/dd/yy")</MudText>
@@ -405,6 +423,24 @@
         _filterInterfaceAccountId = null;
         Navigation.NavigateTo("/adr/jobs");
         await _table.ReloadServerData();
+    }
+
+    private string GetBlacklistTooltip(AdrJob job, bool isCurrent)
+    {
+        if (isCurrent)
+        {
+            var count = job.CurrentBlacklistCount;
+            return count == 1 
+                ? "Currently blacklisted - ADR requests will not be created automatically" 
+                : $"{count} active blacklist entries - ADR requests will not be created automatically";
+        }
+        else
+        {
+            var count = job.FutureBlacklistCount;
+            return count == 1 
+                ? "Future blacklist scheduled" 
+                : $"{count} future blacklist entries scheduled";
+        }
     }
 
     private Color GetStatusColor(string status) => status switch
