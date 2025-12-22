@@ -544,7 +544,7 @@
                 
                 <MudSimpleTable Dense="true" Hover="true" Style="overflow-x: auto;">
                     <tbody>
-                        <tr>
+                        <tr style="cursor: pointer;" @onclick="@(() => Navigation.NavigateTo("/adr/jobs"))">
                             <td><MudIcon Icon="@Icons.Material.Filled.Work" Size="Size.Small" Class="mr-2" />Total Jobs</td>
                             <td class="text-right"><strong>@_jobStats.TotalCount</strong></td>
                         </tr>
