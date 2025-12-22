@@ -127,10 +127,10 @@ public class AdrController : ControllerBase
             List<int>? accountIdsWithBlacklistStatus = null;
             if (!string.IsNullOrWhiteSpace(blacklistStatus))
             {
-                var today = DateTime.UtcNow.Date;
+                var filterToday = DateTime.UtcNow.Date;
                 var activeBlacklistsForFilter = await _dbContext.AdrAccountBlacklists
                     .Where(b => !b.IsDeleted && b.IsActive)
-                    .Where(b => !b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= today)
+                    .Where(b => !b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= filterToday)
                     .ToListAsync();
                 
                 // Get all non-deleted accounts
@@ -151,8 +151,8 @@ public class AdrController : ControllerBase
                                           (b.CredentialId.HasValue && b.CredentialId == a.CredentialId);
                             if (!matches) return false;
                             
-                            var isCurrent = (!b.EffectiveStartDate.HasValue || b.EffectiveStartDate.Value <= today) &&
-                                           (!b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= today);
+                            var isCurrent = (!b.EffectiveStartDate.HasValue || b.EffectiveStartDate.Value <= filterToday) &&
+                                           (!b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= filterToday);
                             return isCurrent;
                         }))
                         .Select(a => a.Id)
@@ -170,7 +170,7 @@ public class AdrController : ControllerBase
                                           (b.CredentialId.HasValue && b.CredentialId == a.CredentialId);
                             if (!matches) return false;
                             
-                            var isFuture = b.EffectiveStartDate.HasValue && b.EffectiveStartDate.Value > today;
+                            var isFuture = b.EffectiveStartDate.HasValue && b.EffectiveStartDate.Value > filterToday;
                             return isFuture;
                         }))
                         .Select(a => a.Id)
@@ -1489,10 +1489,10 @@ public class AdrController : ControllerBase
                 List<int>? jobIdsWithBlacklistStatus = null;
                 if (!string.IsNullOrWhiteSpace(blacklistStatus))
                 {
-                    var today = DateTime.UtcNow.Date;
+                    var filterToday = DateTime.UtcNow.Date;
                     var activeBlacklistsForFilter = await _dbContext.AdrAccountBlacklists
                         .Where(b => !b.IsDeleted && b.IsActive)
-                        .Where(b => !b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= today)
+                        .Where(b => !b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= filterToday)
                         .ToListAsync();
                     
                     // Get all non-deleted jobs with their account info
@@ -1515,8 +1515,8 @@ public class AdrController : ControllerBase
                                               (b.CredentialId.HasValue && b.CredentialId == j.CredentialId);
                                 if (!matches) return false;
                                 
-                                var isCurrent = (!b.EffectiveStartDate.HasValue || b.EffectiveStartDate.Value <= today) &&
-                                               (!b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= today);
+                                var isCurrent = (!b.EffectiveStartDate.HasValue || b.EffectiveStartDate.Value <= filterToday) &&
+                                               (!b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= filterToday);
                                 return isCurrent;
                             }))
                             .Select(j => j.Id)
@@ -1535,7 +1535,7 @@ public class AdrController : ControllerBase
                                               (b.CredentialId.HasValue && b.CredentialId == j.CredentialId);
                                 if (!matches) return false;
                                 
-                                var isFuture = b.EffectiveStartDate.HasValue && b.EffectiveStartDate.Value > today;
+                                var isFuture = b.EffectiveStartDate.HasValue && b.EffectiveStartDate.Value > filterToday;
                                 return isFuture;
                             }))
                             .Select(j => j.Id)
