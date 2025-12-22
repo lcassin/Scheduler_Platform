@@ -582,6 +582,16 @@
                             <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.RateReview" Size="Size.Small" Color="Color.Warning" Class="mr-2" />Needs Review</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-warning);">@_jobStats.NeedsReviewCount</strong></td>
                         </tr>
+                        @if (_blacklistCounts != null && _blacklistCounts.CurrentCount > 0)
+                        {
+                            <tr style="background-color: rgba(var(--mud-palette-error-rgb), 0.05);">
+                                <td colspan="2"><MudText Typo="Typo.caption" Color="Color.Error"><strong>Blacklist</strong></MudText></td>
+                            </tr>
+                            <tr style="cursor: pointer;" @onclick="@(() => Navigation.NavigateTo("/admin/adr-blacklist?status=current"))">
+                                <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" Color="Color.Error" Class="mr-2" />Currently Blacklisted</td>
+                                <td class="text-right"><strong style="color: var(--mud-palette-error);">@_blacklistCounts.CurrentCount</strong></td>
+                            </tr>
+                        }
                     </tbody>
                 </MudSimpleTable>
                 <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">Current status of all jobs in database</MudText>
@@ -912,6 +922,9 @@
     // Job pipeline stats
     private AdrJobStats? _jobStats;
     
+    // Blacklist counts
+    private BlacklistCountsResult? _blacklistCounts;
+    
     // Job pipeline chart data
     private double[] _jobPipelineChartData = Array.Empty<double>();
     private string[] _jobPipelineChartLabels = Array.Empty<string>();
@@ -959,6 +972,7 @@
             UpdateChartData();
             // Show all jobs in the pipeline, not just last 20 runs
             _jobStats = await AdrService.GetJobStatsAsync();
+            _blacklistCounts = await AdrService.GetBlacklistCountsAsync();
             UpdateJobPipelineChartData();
             
             // Start/stop fast progress polling based on orchestration state

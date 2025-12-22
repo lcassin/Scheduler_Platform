@@ -93,6 +93,12 @@ public interface IAdrService
     /// Cancels a running or queued orchestration request.
     /// </summary>
     Task<CancelOrchestrationResult> CancelOrchestrationAsync(string requestId);
+    
+    /// <summary>
+    /// Gets the count of current and future blacklist entries.
+    /// </summary>
+    Task<BlacklistCountsResult> GetBlacklistCountsAsync();
+    
     Task<byte[]> DownloadRulesExportAsync(
         string? vendorCode = null,
         string? accountNumber = null,

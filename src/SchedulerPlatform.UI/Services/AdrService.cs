@@ -509,6 +509,20 @@ public class AdrService : IAdrService
         }
     }
 
+    public async Task<BlacklistCountsResult> GetBlacklistCountsAsync()
+    {
+        var client = CreateClient();
+        try
+        {
+            var result = await client.GetFromJsonAsync<BlacklistCountsResult>("adr/blacklist/counts");
+            return result ?? new BlacklistCountsResult();
+        }
+        catch (HttpRequestException)
+        {
+            return new BlacklistCountsResult();
+        }
+    }
+
     #endregion
 
     #region Rule Operations

@@ -36,6 +36,8 @@ public class AdrJob
     public bool HasFutureBlacklist { get; set; }
     public int CurrentBlacklistCount { get; set; }
     public int FutureBlacklistCount { get; set; }
+    public List<BlacklistSummary> CurrentBlacklists { get; set; } = new();
+    public List<BlacklistSummary> FutureBlacklists { get; set; } = new();
 }
 
 public class AdrJobStats
