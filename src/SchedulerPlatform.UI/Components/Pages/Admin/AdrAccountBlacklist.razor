@@ -6,6 +6,7 @@
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IPermissionService PermissionService
+@inject IJSRuntime JSRuntime
 
 <PageTitle>ADR Account Blacklist</PageTitle>
 
@@ -52,13 +53,15 @@
                                   AdornmentIcon="@Icons.Material.Filled.Search" />
                 </MudItem>
                 <MudItem xs="12" md="2">
-                    <MudSelect @bind-Value="_filterActive" 
+                    <MudSelect @bind-Value="_filterStatus" 
                                Label="Status" 
                                Variant="Variant.Outlined"
                                Margin="Margin.Dense">
-                        <MudSelectItem Value="@((bool?)null)">All</MudSelectItem>
-                        <MudSelectItem Value="@((bool?)true)">Active</MudSelectItem>
-                        <MudSelectItem Value="@((bool?)false)">Inactive</MudSelectItem>
+                        <MudSelectItem Value="@("current")">Current</MudSelectItem>
+                        <MudSelectItem Value="@("future")">Future</MudSelectItem>
+                        <MudSelectItem Value="@("expired")">Expired</MudSelectItem>
+                        <MudSelectItem Value="@("inactive")">Inactive</MudSelectItem>
+                        <MudSelectItem Value="@("all")">All</MudSelectItem>
                     </MudSelect>
                 </MudItem>
                 <MudItem xs="12" md="4" Class="d-flex align-center justify-end gap-2">
@@ -68,6 +71,10 @@
                     <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ClearFilters" StartIcon="@Icons.Material.Filled.Clear">
                         Clear
                     </MudButton>
+                    <MudMenu Label="Export" StartIcon="@Icons.Material.Filled.Download" Variant="Variant.Outlined" Color="Color.Primary">
+                        <MudMenuItem OnClick="@(() => ExportBlacklist(_filterStatus))">Export Current View</MudMenuItem>
+                        <MudMenuItem OnClick="@(() => ExportBlacklist("all"))">Export All</MudMenuItem>
+                    </MudMenu>
                 </MudItem>
             </MudGrid>
         </MudPaper>
@@ -265,7 +272,8 @@
     
     private string? _searchVendorCode;
     private string? _searchAccountNumber;
-    private bool? _filterActive = true;
+    private string _filterStatus = "current";
+    private bool _exporting = false;
     
     private int _currentPage = 1;
     private int _totalPages = 1;
@@ -297,16 +305,15 @@
             {
                 var queryParams = new List<string>
                 {
-                    $"page={_currentPage}",
-                    $"pageSize={_pageSize}"
+                    $"pageNumber={_currentPage}",
+                    $"pageSize={_pageSize}",
+                    $"status={_filterStatus}"
                 };
             
                 if (!string.IsNullOrWhiteSpace(_searchVendorCode))
                     queryParams.Add($"vendorCode={Uri.EscapeDataString(_searchVendorCode)}");
                 if (!string.IsNullOrWhiteSpace(_searchAccountNumber))
                     queryParams.Add($"accountNumber={Uri.EscapeDataString(_searchAccountNumber)}");
-                if (_filterActive.HasValue)
-                    queryParams.Add($"isActive={_filterActive.Value}");
             
                 var url = $"adr/blacklist?{string.Join("&", queryParams)}";
                 var client = CreateClient();
@@ -332,9 +339,54 @@
     {
         _searchVendorCode = null;
         _searchAccountNumber = null;
-        _filterActive = true;
+        _filterStatus = "current";
         _currentPage = 1;
         await LoadBlacklist();
+    }
+
+    private async Task ExportBlacklist(string status)
+    {
+        _exporting = true;
+        StateHasChanged();
+        try
+        {
+            var queryParams = new List<string> { $"status={status}" };
+            
+            if (!string.IsNullOrWhiteSpace(_searchVendorCode))
+                queryParams.Add($"vendorCode={Uri.EscapeDataString(_searchVendorCode)}");
+            if (!string.IsNullOrWhiteSpace(_searchAccountNumber))
+                queryParams.Add($"accountNumber={Uri.EscapeDataString(_searchAccountNumber)}");
+            
+            var url = $"adr/blacklist/export?{string.Join("&", queryParams)}";
+            var client = CreateClient();
+            var response = await client.GetAsync(url);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsByteArrayAsync();
+                var fileName = response.Content.Headers.ContentDisposition?.FileName?.Trim('"') ?? $"ADR_Blacklist_{DateTime.Now:yyyyMMdd}.xlsx";
+                
+                // Trigger download via JavaScript
+                var base64 = Convert.ToBase64String(content);
+                await JSRuntime.InvokeVoidAsync("downloadFile", fileName, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", base64);
+                
+                Snackbar.Add("Export completed successfully", Severity.Success);
+            }
+            else
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                Snackbar.Add($"Export failed: {error}", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Export failed: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _exporting = false;
+            StateHasChanged();
+        }
     }
 
     private async Task OnPageChanged(int page)

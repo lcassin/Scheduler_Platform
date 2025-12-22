@@ -8,6 +8,7 @@
 @inject ISnackbar Snackbar
 @inject IJSRuntime JSRuntime
 @inject IPermissionService PermissionService
+@inject IHttpClientFactory HttpClientFactory
 
 <PageTitle>ADR Accounts</PageTitle>
 
@@ -142,6 +143,22 @@
                         {
                             <MudTooltip Text="@($"Rule manually overridden by {context.RuleOverriddenBy} on {context.RuleOverriddenDateTime?.ToString("MM/dd/yyyy")}")">
                                 <MudIcon Icon="@Icons.Material.Filled.Edit" Size="Size.Small" Color="Color.Warning" />
+                            </MudTooltip>
+                        }
+                        @if (context.HasCurrentBlacklist)
+                        {
+                            <MudTooltip Text="@GetBlacklistTooltip(context, true)">
+                                <MudBadge Content="@context.CurrentBlacklistCount" Color="Color.Error" Overlap="true" Visible="@(context.CurrentBlacklistCount > 1)">
+                                    <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" Color="Color.Error" />
+                                </MudBadge>
+                            </MudTooltip>
+                        }
+                        else if (context.HasFutureBlacklist)
+                        {
+                            <MudTooltip Text="@GetBlacklistTooltip(context, false)">
+                                <MudBadge Content="@context.FutureBlacklistCount" Color="Color.Warning" Overlap="true" Visible="@(context.FutureBlacklistCount > 1)">
+                                    <MudIcon Icon="@Icons.Material.Filled.Schedule" Size="Size.Small" Color="Color.Warning" />
+                                </MudBadge>
                             </MudTooltip>
                         }
                     </div>
@@ -448,6 +465,24 @@
         "Due Now" => Color.Info,
         _ => Color.Default
     };
+
+    private string GetBlacklistTooltip(AdrAccount account, bool isCurrent)
+    {
+        if (isCurrent)
+        {
+            var count = account.CurrentBlacklistCount;
+            return count == 1 
+                ? "Currently blacklisted - ADR requests will not be created automatically" 
+                : $"{count} active blacklist entries - ADR requests will not be created automatically";
+        }
+        else
+        {
+            var count = account.FutureBlacklistCount;
+            return count == 1 
+                ? "Future blacklist scheduled" 
+                : $"{count} future blacklist entries scheduled";
+        }
+    }
 
     private async Task ViewAccountDetails(AdrAccount account)
     {
