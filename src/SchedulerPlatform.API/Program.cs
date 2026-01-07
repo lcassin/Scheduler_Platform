@@ -48,6 +48,8 @@ if (!string.IsNullOrEmpty(appInsightsConnectionString))
     });
 }
 
+Console.WriteLine($"[AUTH] Authority: {builder.Configuration["Authentication:Authority"]}");
+
 builder.Services.AddControllers()
     .ConfigureApiBehaviorOptions(options =>
     {
@@ -160,7 +162,16 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.Audience = builder.Configuration["Authentication:Audience"];
         options.RequireHttpsMetadata = builder.Configuration.GetValue<bool>("Authentication:RequireHttpsMetadata");
 
-        options.TokenValidationParameters = new TokenValidationParameters
+		options.Events = new JwtBearerEvents
+		{
+			OnAuthenticationFailed = context =>
+			{
+				Console.WriteLine($"[JWT] Auth failed: {context.Exception.Message}");
+				return Task.CompletedTask;
+			}
+		};
+
+		options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
             ValidateAudience = true,
