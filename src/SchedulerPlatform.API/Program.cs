@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -47,6 +48,8 @@ if (!string.IsNullOrEmpty(appInsightsConnectionString))
         options.ConnectionString = appInsightsConnectionString;
     });
 }
+
+Console.WriteLine($"[AUTH] Authority: {builder.Configuration["Authentication:Authority"]}");
 
 builder.Services.AddControllers()
     .ConfigureApiBehaviorOptions(options =>
@@ -160,7 +163,16 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         options.Audience = builder.Configuration["Authentication:Audience"];
         options.RequireHttpsMetadata = builder.Configuration.GetValue<bool>("Authentication:RequireHttpsMetadata");
 
-        options.TokenValidationParameters = new TokenValidationParameters
+		options.Events = new JwtBearerEvents
+		{
+			OnAuthenticationFailed = context =>
+			{
+				Console.WriteLine($"[JWT] Auth failed: {context.Exception.Message}");
+				return Task.CompletedTask;
+			}
+		};
+
+		options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
             ValidateAudience = true,
@@ -176,6 +188,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddSingleton<IAuthorizationHandler, SchedulerPlatform.API.Authorization.PermissionAuthorizationHandler>();
 builder.Services.AddSingleton<IAuthorizationHandler, SchedulerPlatform.API.Authorization.SuperAdminAuthorizationHandler>();
+builder.Services.AddScoped<IClaimsTransformation, SchedulerPlatform.API.Authorization.UserClaimsTransformation>();
 
 builder.Services.AddAuthorization(options =>
 {
@@ -278,7 +291,7 @@ if (app.Environment.IsDevelopment() ||
     app.UseSwaggerUI(c =>
     {
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "ADR Scheduler API v1");
-        c.OAuthClientId("swagger-ui");
+        c.OAuthClientId(builder.Configuration["Swagger:OAuthClientId"] ?? "swagger-ui");
         c.OAuthUsePkce();
         c.OAuthScopes("openid", "profile", "email", "scheduler-api", "role", "permissions");
     });
