@@ -130,10 +130,10 @@ public class UserClaimsTransformation : IClaimsTransformation
     {
         try
         {
-            var authority = _configuration["IdentityServer:Authority"];
+            var authority = _configuration["Authentication:Authority"];
             if (string.IsNullOrEmpty(authority))
             {
-                _logger.LogWarning("IdentityServer:Authority not configured. Cannot call userinfo endpoint.");
+                _logger.LogWarning("Authentication:Authority not configured. Cannot call userinfo endpoint.");
                 return null;
             }
 
