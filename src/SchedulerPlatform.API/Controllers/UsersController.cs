@@ -27,18 +27,21 @@ public class UsersController : ControllerBase
     private readonly PasswordHasher<User> _passwordHasher;
     private readonly IConfiguration _configuration;
     private readonly IHttpClientFactory _httpClientFactory;
+	private readonly IWebHostEnvironment _env;
 
-    public UsersController(
+	public UsersController(
         IUnitOfWork unitOfWork, 
         ILogger<UsersController> logger, 
         IEmailService emailService,
         IConfiguration configuration,
-        IHttpClientFactory httpClientFactory)
+        IHttpClientFactory httpClientFactory,
+		IWebHostEnvironment env	)
     {
         _unitOfWork = unitOfWork;
         _logger = logger;
         _emailService = emailService;
-        _passwordHasher = new PasswordHasher<User>();
+		_env = env;
+		_passwordHasher = new PasswordHasher<User>();
         _configuration = configuration;
         _httpClientFactory = httpClientFactory;
     }
@@ -147,13 +150,24 @@ public class UsersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<CurrentUserResponse>> GetCurrentUser()
     {
-        // Log all claims for debugging
-        foreach (var claim in User.Claims)
-        {
-            _logger.LogInformation("Claim: {Type} = {Value}", claim.Type, claim.Value);
-        }
-        
-        try
+		try
+		{
+		// Log all claims for debugging
+		if (_env.IsDevelopment() || _env.IsStaging())
+			{
+				var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+				_logger.LogInformation("Raw Authorization header: {Header}", authHeader);
+				foreach (var claim in User.Claims)
+				{
+					_logger.LogInformation("Claim: {Type} = {Value}", claim.Type, claim.Value);
+				}
+			}
+		} catch (Exception ex) { 
+			_logger.LogError(ex, "Error logging user claims");
+		}
+
+
+		try
         {
             // Try to get email from various claim types (including mapped WS-Fed URIs)
             var email = User.FindFirst("email")?.Value
