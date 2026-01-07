@@ -6,6 +6,9 @@ using SchedulerPlatform.API.Models;
 using SchedulerPlatform.Core.Domain.Entities;
 using SchedulerPlatform.Core.Domain.Interfaces;
 using SchedulerPlatform.Core.Security;
+using System.Net.Http.Headers;
+using System.Security.Claims;
+using System.Text.Json;
 
 namespace SchedulerPlatform.API.Controllers;
 
@@ -22,13 +25,25 @@ public class UsersController : ControllerBase
     private readonly ILogger<UsersController> _logger;
     private readonly IEmailService _emailService;
     private readonly PasswordHasher<User> _passwordHasher;
+    private readonly IConfiguration _configuration;
+    private readonly IHttpClientFactory _httpClientFactory;
+	private readonly IWebHostEnvironment _env;
 
-    public UsersController(IUnitOfWork unitOfWork, ILogger<UsersController> logger, IEmailService emailService)
+	public UsersController(
+        IUnitOfWork unitOfWork, 
+        ILogger<UsersController> logger, 
+        IEmailService emailService,
+        IConfiguration configuration,
+        IHttpClientFactory httpClientFactory,
+		IWebHostEnvironment env	)
     {
         _unitOfWork = unitOfWork;
         _logger = logger;
         _emailService = emailService;
-        _passwordHasher = new PasswordHasher<User>();
+		_env = env;
+		_passwordHasher = new PasswordHasher<User>();
+        _configuration = configuration;
+        _httpClientFactory = httpClientFactory;
     }
 
     /// <summary>
@@ -135,11 +150,37 @@ public class UsersController : ControllerBase
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<CurrentUserResponse>> GetCurrentUser()
     {
-        try
+		try
+		{
+		// Log all claims for debugging
+		if (_env.IsDevelopment() || _env.IsStaging())
+			{
+				var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+				_logger.LogInformation("Raw Authorization header: {Header}", authHeader);
+				foreach (var claim in User.Claims)
+				{
+					_logger.LogInformation("Claim: {Type} = {Value}", claim.Type, claim.Value);
+				}
+			}
+		} catch (Exception ex) { 
+			_logger.LogError(ex, "Error logging user claims");
+		}
+
+
+		try
         {
+            // Try to get email from various claim types (including mapped WS-Fed URIs)
             var email = User.FindFirst("email")?.Value
                        ?? User.FindFirst("preferred_username")?.Value
-                       ?? User.FindFirst("upn")?.Value;
+                       ?? User.FindFirst("upn")?.Value
+                       ?? User.FindFirst(ClaimTypes.Email)?.Value
+                       ?? User.FindFirst(ClaimTypes.Upn)?.Value;
+
+            // If no email claim found, try to get it from the userinfo endpoint
+            if (string.IsNullOrEmpty(email))
+            {
+                email = await GetEmailFromUserInfoAsync();
+            }
 
             if (string.IsNullOrEmpty(email))
             {
@@ -942,5 +983,93 @@ public class UsersController : ControllerBase
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Attempts to retrieve the user's email from the IdentityServer userinfo endpoint.
+    /// This is used as a fallback when the access token doesn't contain an email claim.
+    /// </summary>
+    private async Task<string?> GetEmailFromUserInfoAsync()
+    {
+        try
+        {
+            var authority = _configuration["Authentication:Authority"];
+            if (string.IsNullOrEmpty(authority))
+            {
+                _logger.LogWarning("Authentication:Authority not configured. Cannot call userinfo endpoint.");
+                return null;
+            }
+
+            // Extract the bearer token from the Authorization header
+            var authHeader = Request.Headers["Authorization"].FirstOrDefault();
+            if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogDebug("No Bearer token in Authorization header for userinfo call");
+                return null;
+            }
+
+            var accessToken = authHeader.Substring("Bearer ".Length).Trim();
+
+            // Build userinfo endpoint URL
+            var userInfoUrl = authority.TrimEnd('/') + "/connect/userinfo";
+
+            using var httpClient = _httpClientFactory.CreateClient();
+            httpClient.Timeout = TimeSpan.FromSeconds(5);
+            httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+            _logger.LogDebug("Calling userinfo endpoint: {Url}", userInfoUrl);
+            var response = await httpClient.GetAsync(userInfoUrl);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Userinfo endpoint returned {StatusCode}", response.StatusCode);
+                return null;
+            }
+
+            var content = await response.Content.ReadAsStringAsync();
+            _logger.LogDebug("Userinfo response: {Content}", content);
+            
+            using var doc = JsonDocument.Parse(content);
+            var root = doc.RootElement;
+
+            // Try to get email from userinfo response
+            if (root.TryGetProperty("email", out var emailProp) && emailProp.ValueKind == JsonValueKind.String)
+            {
+                var email = emailProp.GetString();
+                _logger.LogInformation("Retrieved email from userinfo endpoint: {Email}", email);
+                return email;
+            }
+
+            // Try preferred_username as fallback
+            if (root.TryGetProperty("preferred_username", out var usernameProp) && usernameProp.ValueKind == JsonValueKind.String)
+            {
+                var username = usernameProp.GetString();
+                // Only use if it looks like an email
+                if (username?.Contains("@") == true)
+                {
+                    _logger.LogInformation("Retrieved email from userinfo preferred_username: {Email}", username);
+                    return username;
+                }
+            }
+
+            // Try name as last resort (some IdPs put email in name)
+            if (root.TryGetProperty("name", out var nameProp) && nameProp.ValueKind == JsonValueKind.String)
+            {
+                var name = nameProp.GetString();
+                if (name?.Contains("@") == true)
+                {
+                    _logger.LogInformation("Retrieved email from userinfo name: {Email}", name);
+                    return name;
+                }
+            }
+
+            _logger.LogWarning("Userinfo endpoint did not return an email claim. Response: {Content}", content);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error calling userinfo endpoint");
+            return null;
+        }
     }
 }
