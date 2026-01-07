@@ -121,6 +121,82 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
+    /// Retrieves the current authenticated user's information and permissions.
+    /// This endpoint is used for claims enrichment when using external identity providers.
+    /// </summary>
+    /// <returns>The current user's details including permissions.</returns>
+    /// <response code="200">Returns the current user's details.</response>
+    /// <response code="404">The user was not found in the database.</response>
+    /// <response code="500">An error occurred while retrieving the user.</response>
+    [HttpGet("me")]
+    [Authorize]
+    [ProducesResponseType(typeof(CurrentUserResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<CurrentUserResponse>> GetCurrentUser()
+    {
+        try
+        {
+            var email = User.FindFirst("email")?.Value
+                       ?? User.FindFirst("preferred_username")?.Value
+                       ?? User.FindFirst("upn")?.Value;
+
+            if (string.IsNullOrEmpty(email))
+            {
+                _logger.LogWarning("No email claim found for authenticated user");
+                return NotFound("User email not found in claims");
+            }
+
+            var users = await _unitOfWork.Users.GetAllAsync();
+            var user = users.FirstOrDefault(u =>
+                string.Equals(u.Email, email, StringComparison.OrdinalIgnoreCase));
+
+            if (user == null)
+            {
+                _logger.LogWarning("User with email {Email} not found in database", email);
+                return NotFound("User not found");
+            }
+
+            var permissions = await _unitOfWork.UserPermissions.GetByUserIdAsync(user.Id);
+            var permissionsList = permissions.ToList();
+
+            var permissionStrings = new List<string>();
+            foreach (var perm in permissionsList)
+            {
+                if (perm.CanRead)
+                    permissionStrings.Add($"{perm.PermissionName}:read");
+                if (perm.CanCreate)
+                    permissionStrings.Add($"{perm.PermissionName}:create");
+                if (perm.CanUpdate)
+                    permissionStrings.Add($"{perm.PermissionName}:update");
+                if (perm.CanDelete)
+                    permissionStrings.Add($"{perm.PermissionName}:delete");
+                if (perm.CanExecute)
+                    permissionStrings.Add($"{perm.PermissionName}:execute");
+            }
+
+            var response = new CurrentUserResponse
+            {
+                Id = user.Id,
+                Email = user.Email,
+                FirstName = user.FirstName,
+                LastName = user.LastName,
+                IsSystemAdmin = user.IsSystemAdmin,
+                Role = DetermineUserRole(user, permissionsList),
+                Permissions = permissionStrings,
+                ClientId = user.ClientId
+            };
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving current user");
+            return StatusCode(500, "An error occurred while retrieving the current user");
+        }
+    }
+
+    /// <summary>
     /// Retrieves a specific user by ID with their permissions. Requires Users.Manage.Read policy.
     /// </summary>
     /// <param name="id">The user ID.</param>
