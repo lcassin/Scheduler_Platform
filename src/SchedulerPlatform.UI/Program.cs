@@ -6,6 +6,7 @@ using MudBlazor.Services;
 using SchedulerPlatform.UI.Components;
 using SchedulerPlatform.UI.Services;
 using Azure.Identity;
+using System.Security.Claims;
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -170,6 +171,108 @@ builder.Services.AddAuthentication(options =>
                 context.HandleResponse();
             }
             return Task.CompletedTask;
+        },
+        OnTokenValidated = async context =>
+        {
+            var logger = context.HttpContext.RequestServices.GetRequiredService<ILogger<Program>>();
+            var config = context.HttpContext.RequestServices.GetRequiredService<IConfiguration>();
+            
+            try
+            {
+                var accessToken = context.TokenEndpointResponse?.AccessToken;
+                if (string.IsNullOrEmpty(accessToken))
+                {
+                    logger.LogWarning("No access token available for claims enrichment");
+                    return;
+                }
+
+                var apiBaseUrl = config["API:BaseUrl"];
+                if (string.IsNullOrEmpty(apiBaseUrl))
+                {
+                    logger.LogWarning("API:BaseUrl not configured for claims enrichment");
+                    return;
+                }
+
+                // Ensure URL ends with / for proper URI combination
+                if (!apiBaseUrl.EndsWith("/"))
+                {
+                    apiBaseUrl += "/";
+                }
+
+                // Use HttpClientHandler to disable auto-redirects and prevent auth loops
+                using var handler = new HttpClientHandler
+                {
+                    AllowAutoRedirect = false
+                };
+                using var httpClient = new HttpClient(handler);
+                httpClient.BaseAddress = new Uri(apiBaseUrl);
+                httpClient.DefaultRequestHeaders.Authorization = 
+                    new AuthenticationHeaderValue("Bearer", accessToken);
+                httpClient.Timeout = TimeSpan.FromSeconds(10);
+
+                var internalApiKey = config["Scheduler:InternalApiKey"];
+                if (!string.IsNullOrEmpty(internalApiKey))
+                {
+                    httpClient.DefaultRequestHeaders.Add("X-Scheduler-Api-Key", internalApiKey);
+                }
+
+                logger.LogDebug("Calling API for claims enrichment: {Url}", apiBaseUrl + "users/me");
+                var response = await httpClient.GetAsync("users/me");
+                
+                if (response.StatusCode == System.Net.HttpStatusCode.Redirect || 
+                    response.StatusCode == System.Net.HttpStatusCode.Found ||
+                    response.StatusCode == System.Net.HttpStatusCode.MovedPermanently)
+                {
+                    logger.LogWarning("API returned redirect during claims enrichment. Location: {Location}", 
+                        response.Headers.Location);
+                    return;
+                }
+                
+                if (!response.IsSuccessStatusCode)
+                {
+                    logger.LogWarning("Failed to get user info from API for claims enrichment: {StatusCode}", response.StatusCode);
+                    return;
+                }
+
+                var content = await response.Content.ReadAsStringAsync();
+                logger.LogDebug("API response for claims enrichment: {Content}", content);
+                
+                using var userInfo = JsonDocument.Parse(content);
+                var root = userInfo.RootElement;
+
+                var identity = context.Principal?.Identity as ClaimsIdentity;
+                if (identity == null)
+                {
+                    return;
+                }
+
+                if (root.TryGetProperty("isSystemAdmin", out var isSystemAdmin) && isSystemAdmin.GetBoolean())
+                {
+                    identity.AddClaim(new Claim("is_system_admin", "true"));
+                }
+
+                if (root.TryGetProperty("role", out var role) && role.ValueKind == JsonValueKind.String)
+                {
+                    identity.AddClaim(new Claim("role", role.GetString()!));
+                }
+
+                if (root.TryGetProperty("permissions", out var permissions) && permissions.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var permission in permissions.EnumerateArray())
+                    {
+                        if (permission.ValueKind == JsonValueKind.String)
+                        {
+                            identity.AddClaim(new Claim("permission", permission.GetString()!));
+                        }
+                    }
+                }
+
+                logger.LogInformation("Successfully enriched claims for user during login");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error enriching claims during OIDC token validation");
+            }
         }
     };
 });

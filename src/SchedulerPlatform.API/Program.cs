@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -176,6 +177,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 builder.Services.AddSingleton<IAuthorizationHandler, SchedulerPlatform.API.Authorization.PermissionAuthorizationHandler>();
 builder.Services.AddSingleton<IAuthorizationHandler, SchedulerPlatform.API.Authorization.SuperAdminAuthorizationHandler>();
+builder.Services.AddScoped<IClaimsTransformation, SchedulerPlatform.API.Authorization.UserClaimsTransformation>();
 
 builder.Services.AddAuthorization(options =>
 {
