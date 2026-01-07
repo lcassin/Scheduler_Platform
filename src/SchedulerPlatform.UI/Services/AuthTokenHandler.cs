@@ -18,15 +18,18 @@ public class AuthTokenHandler : DelegatingHandler
     private readonly IHttpContextAccessor _httpContextAccessor;
     private readonly ILogger<AuthTokenHandler> _logger;
     private readonly SessionStateService _sessionStateService;
+    private readonly IConfiguration _configuration;
 
     public AuthTokenHandler(
         IHttpContextAccessor httpContextAccessor,
         ILogger<AuthTokenHandler> logger,
-        SessionStateService sessionStateService)
+        SessionStateService sessionStateService,
+        IConfiguration configuration)
     {
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
         _sessionStateService = sessionStateService;
+        _configuration = configuration;
     }
 
     protected override async Task<HttpResponseMessage> SendAsync(
@@ -55,6 +58,15 @@ public class AuthTokenHandler : DelegatingHandler
             {
                 _logger.LogWarning(ex, "Failed to get access token for request");
             }
+        }
+
+        // Add internal API key as fallback authentication for long-running operations
+        // The API accepts both JWT and API key authentication, so if the JWT token expires
+        // during a long-running operation, the API key will still authenticate the request
+        var internalApiKey = _configuration["Scheduler:InternalApiKey"];
+        if (!string.IsNullOrEmpty(internalApiKey))
+        {
+            request.Headers.Add("X-Scheduler-Api-Key", internalApiKey);
         }
 
         var response = await base.SendAsync(request, cancellationToken);
