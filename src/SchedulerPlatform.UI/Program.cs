@@ -99,10 +99,22 @@ builder.Services.AddAuthentication(options =>
                     return;
                 }
 
-                using var httpClient = new HttpClient();
+                // Ensure URL ends with / for proper URI combination
+                if (!apiBaseUrl.EndsWith("/"))
+                {
+                    apiBaseUrl += "/";
+                }
+
+                // Use HttpClientHandler to disable auto-redirects and prevent auth loops
+                using var handler = new HttpClientHandler
+                {
+                    AllowAutoRedirect = false
+                };
+                using var httpClient = new HttpClient(handler);
                 httpClient.BaseAddress = new Uri(apiBaseUrl);
                 httpClient.DefaultRequestHeaders.Authorization = 
                     new AuthenticationHeaderValue("Bearer", accessToken);
+                httpClient.Timeout = TimeSpan.FromSeconds(10);
 
                 var internalApiKey = config["Scheduler:InternalApiKey"];
                 if (!string.IsNullOrEmpty(internalApiKey))
@@ -110,7 +122,18 @@ builder.Services.AddAuthentication(options =>
                     httpClient.DefaultRequestHeaders.Add("X-Scheduler-Api-Key", internalApiKey);
                 }
 
+                logger.LogDebug("Calling API for claims enrichment: {Url}", apiBaseUrl + "users/me");
                 var response = await httpClient.GetAsync("users/me");
+                
+                if (response.StatusCode == System.Net.HttpStatusCode.Redirect || 
+                    response.StatusCode == System.Net.HttpStatusCode.Found ||
+                    response.StatusCode == System.Net.HttpStatusCode.MovedPermanently)
+                {
+                    logger.LogWarning("API returned redirect during claims enrichment. Location: {Location}", 
+                        response.Headers.Location);
+                    return;
+                }
+                
                 if (!response.IsSuccessStatusCode)
                 {
                     logger.LogWarning("Failed to get user info from API for claims enrichment: {StatusCode}", response.StatusCode);
@@ -118,7 +141,9 @@ builder.Services.AddAuthentication(options =>
                 }
 
                 var content = await response.Content.ReadAsStringAsync();
-                var userInfo = JsonDocument.Parse(content);
+                logger.LogDebug("API response for claims enrichment: {Content}", content);
+                
+                using var userInfo = JsonDocument.Parse(content);
                 var root = userInfo.RootElement;
 
                 var identity = context.Principal?.Identity as ClaimsIdentity;
