@@ -486,10 +486,27 @@ public class SchedulesController : ControllerBase
                 return NotFound();
             }
 
-            var userClientId = User.FindFirst("client_id")?.Value;
-            var isSystemAdmin = User.FindFirst("is_system_admin")?.Value == "True";
+            var userClientId = User.FindFirst("user_client_id")?.Value;
+            var isSystemAdminValue = User.FindFirst("is_system_admin")?.Value;
+            var isSystemAdmin = string.Equals(isSystemAdminValue, "True", StringComparison.OrdinalIgnoreCase) || isSystemAdminValue == "1";
+            var userRole = User.FindFirst("role")?.Value;
+            var isAdmin = isSystemAdmin || userRole == "Admin" || userRole == "Super Admin";
             
-            if (!isSystemAdmin && schedule.ClientId.ToString() != userClientId)
+            // Log claims for debugging authorization issues
+            var authType = User.Identity?.AuthenticationType ?? "unknown";
+            var userEmail = User.FindFirst("email")?.Value ?? User.FindFirst("preferred_username")?.Value ?? "unknown";
+            _logger.LogInformation(
+                "TriggerSchedule auth check - ScheduleId: {ScheduleId}, IsSystemSchedule: {IsSystemSchedule}, AuthType: {AuthType}, Email: {Email}, is_system_admin: {IsSystemAdminValue}, role: {Role}, user_client_id: {ClientId}, isAdmin: {IsAdmin}",
+                id, schedule.IsSystemSchedule, authType, userEmail, isSystemAdminValue ?? "null", userRole ?? "null", userClientId ?? "null", isAdmin);
+            
+            // System schedules can be triggered by Admin or Super Admin; regular schedules require matching client
+            if (schedule.IsSystemSchedule && !isAdmin)
+            {
+                _logger.LogWarning("Non-admin user attempted to trigger system schedule {ScheduleId} ({ScheduleName}). Claims: is_system_admin={IsSystemAdmin}, role={Role}", id, schedule.Name, isSystemAdminValue ?? "null", userRole ?? "null");
+                return Forbid();
+            }
+            
+            if (!schedule.IsSystemSchedule && !isAdmin && schedule.ClientId.ToString() != userClientId)
             {
                 _logger.LogWarning(
                     "Unauthorized trigger attempt: User with ClientId {UserClientId} attempted to trigger Schedule {ScheduleId} belonging to ClientId {ScheduleClientId}",
