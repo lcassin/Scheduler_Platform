@@ -159,8 +159,10 @@ builder.Services.AddDbContext<SchedulerDbContext>((serviceProvider, options) =>
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        options.Authority = builder.Configuration["Authentication:Authority"];
-        options.Audience = builder.Configuration["Authentication:Audience"];
+        var authority = builder.Configuration["Authentication:Authority"];
+        var primaryAudience = builder.Configuration["Authentication:Audience"];
+        
+        options.Authority = authority;
         options.RequireHttpsMetadata = builder.Configuration.GetValue<bool>("Authentication:RequireHttpsMetadata");
 
 		options.Events = new JwtBearerEvents
@@ -172,10 +174,24 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 			}
 		};
 
+		// Configure valid audiences - Duende IdentityServer may include multiple audiences in the token
+		// (e.g., "scheduler-api" and "https://oidc.uat.expensesmart.com/resources")
+		var validAudiences = new List<string>();
+		if (!string.IsNullOrEmpty(primaryAudience))
+		{
+			validAudiences.Add(primaryAudience);
+		}
+		// Also accept the IdentityServer resources endpoint as a valid audience
+		if (!string.IsNullOrEmpty(authority))
+		{
+			validAudiences.Add($"{authority.TrimEnd('/')}/resources");
+		}
+
 		options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
             ValidateAudience = true,
+            ValidAudiences = validAudiences,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
             NameClaimType = "name"
