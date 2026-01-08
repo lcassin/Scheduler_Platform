@@ -274,7 +274,13 @@ builder.Services.AddHostedService<SchedulerPlatform.API.Services.MissedSchedules
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.DataArchivalService>();
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.SystemScheduleSeeder>();
 
-builder.Services.AddHttpClient("ApiCallJob");
+// Configure ApiCallJob HttpClient with BaseAddress for internal API calls
+// This allows scheduled jobs to call API endpoints using relative URLs like "/api/adr/orchestrate/run-full-cycle"
+var apiBaseUrl = builder.Configuration["API:BaseUrl"] ?? builder.Configuration["Kestrel:Endpoints:Https:Url"] ?? "https://localhost:5001";
+builder.Services.AddHttpClient("ApiCallJob", client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl.TrimEnd('/') + "/");
+});
 builder.Services.AddHttpClient("AdrApi");
 
 builder.Services.AddQuartzJobServices(builder.Configuration.GetConnectionString("DefaultConnection")!);
