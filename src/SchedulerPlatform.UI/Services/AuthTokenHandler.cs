@@ -51,6 +51,7 @@ public class AuthTokenHandler : DelegatingHandler
                         new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
                     
                     // Log token metadata for debugging (never log the actual token)
+                    // Using Information level so it shows up in Azure App Service eventlog.xml
                     try
                     {
                         var handler = new JwtSecurityTokenHandler();
@@ -63,9 +64,9 @@ public class AuthTokenHandler : DelegatingHandler
                             var clientId = jwt.Claims.FirstOrDefault(c => c.Type == "client_id")?.Value ?? "unknown";
                             var isExpired = exp < DateTime.UtcNow;
                             
-                            _logger.LogDebug(
-                                "Token attached to request. Issuer: {Issuer}, Audience: {Audience}, ClientId: {ClientId}, Expires: {Expires}, IsExpired: {IsExpired}",
-                                iss, aud, clientId, exp, isExpired);
+                            _logger.LogInformation(
+                                "Token attached to request. Issuer: {Issuer}, Audience: {Audience}, ClientId: {ClientId}, Expires: {Expires}, IsExpired: {IsExpired}, TokenLength: {TokenLength}",
+                                iss, aud, clientId, exp, isExpired, accessToken.Length);
                             
                             if (isExpired)
                             {
@@ -74,10 +75,18 @@ public class AuthTokenHandler : DelegatingHandler
                                     exp, DateTime.UtcNow);
                             }
                         }
+                        else
+                        {
+                            // Token is not a JWT (could be opaque/reference token)
+                            var hasTwoDots = accessToken.Count(c => c == '.') == 2;
+                            _logger.LogWarning(
+                                "Token is NOT a parseable JWT. TokenLength: {TokenLength}, HasJwtStructure: {HasJwtStructure}",
+                                accessToken.Length, hasTwoDots);
+                        }
                     }
                     catch (Exception tokenEx)
                     {
-                        _logger.LogDebug(tokenEx, "Could not parse JWT token for logging");
+                        _logger.LogWarning(tokenEx, "Could not parse JWT token for logging. TokenLength: {TokenLength}", accessToken.Length);
                     }
                 }
                 else
@@ -89,6 +98,15 @@ public class AuthTokenHandler : DelegatingHandler
             {
                 _logger.LogWarning(ex, "Failed to get access token for request");
             }
+        }
+        else
+        {
+            // Log when HttpContext is null or user is not authenticated
+            var hasHttpContext = httpContext != null;
+            var isAuthenticated = httpContext?.User?.Identity?.IsAuthenticated ?? false;
+            _logger.LogWarning(
+                "Skipping token attachment. HasHttpContext: {HasHttpContext}, IsAuthenticated: {IsAuthenticated}",
+                hasHttpContext, isAuthenticated);
         }
 
         // Add internal API key as fallback authentication for long-running operations
