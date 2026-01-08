@@ -2,7 +2,8 @@
 @inject SchedulerPlatform.UI.Services.SessionStateService SessionStateService
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
-@implements IDisposable
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
 
 <MudLayout>
     <MudAppBar Elevation="1">
@@ -38,11 +39,35 @@
 @code {
     private bool _drawerOpen = true;
     private bool _sessionExpiredHandled = false;
+    private System.Threading.Timer? _keepaliveTimer;
 
     protected override void OnInitialized()
     {
         // Subscribe to session expiration events for centralized handling
         SessionStateService.OnSessionExpired += HandleSessionExpired;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Start keepalive timer for authenticated users
+            // This pings /keepalive every 5 minutes to trigger token refresh in OnValidatePrincipal
+            // The refresh threshold is 10 minutes, so 5-minute intervals ensure we refresh before expiry
+            _keepaliveTimer = new System.Threading.Timer(async _ =>
+            {
+                try
+                {
+                    // Use JavaScript fetch to make an HTTP request that includes the auth cookie
+                    // This triggers OnValidatePrincipal which handles token refresh
+                    await JSRuntime.InvokeVoidAsync("fetch", "/keepalive", new { credentials = "same-origin" });
+                }
+                catch
+                {
+                    // Ignore errors - if keepalive fails, the normal 401 handling will redirect to login
+                }
+            }, null, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5));
+        }
     }
 
     private void HandleSessionExpired()
@@ -64,8 +89,12 @@
         _drawerOpen = !_drawerOpen;
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         SessionStateService.OnSessionExpired -= HandleSessionExpired;
+        if (_keepaliveTimer != null)
+        {
+            await _keepaliveTimer.DisposeAsync();
+        }
     }
 }
