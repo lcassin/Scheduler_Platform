@@ -559,10 +559,17 @@ public class SchedulesController : ControllerBase
             var userRole = User.FindFirst("role")?.Value;
             var isAdmin = isSystemAdmin || userRole == "Admin" || userRole == "Super Admin";
             
+            // Log claims for debugging authorization issues
+            var authType = User.Identity?.AuthenticationType ?? "unknown";
+            var userEmail = User.FindFirst("email")?.Value ?? User.FindFirst("preferred_username")?.Value ?? "unknown";
+            _logger.LogInformation(
+                "PauseSchedule auth check - ScheduleId: {ScheduleId}, IsSystemSchedule: {IsSystemSchedule}, AuthType: {AuthType}, Email: {Email}, is_system_admin: {IsSystemAdminValue}, role: {Role}, user_client_id: {ClientId}, isAdmin: {IsAdmin}",
+                id, schedule.IsSystemSchedule, authType, userEmail, isSystemAdminValue ?? "null", userRole ?? "null", userClientId ?? "null", isAdmin);
+            
             // System schedules can only be paused by Admin or Super Admin
             if (schedule.IsSystemSchedule && !isAdmin)
             {
-                _logger.LogWarning("Non-admin user attempted to pause system schedule {ScheduleId} ({ScheduleName})", id, schedule.Name);
+                _logger.LogWarning("Non-admin user attempted to pause system schedule {ScheduleId} ({ScheduleName}). Claims: is_system_admin={IsSystemAdmin}, role={Role}", id, schedule.Name, isSystemAdminValue ?? "null", userRole ?? "null");
                 return StatusCode(403, "Only administrators can pause system schedules.");
             }
             
@@ -625,10 +632,17 @@ public class SchedulesController : ControllerBase
             var userRole = User.FindFirst("role")?.Value;
             var isAdmin = isSystemAdmin || userRole == "Admin" || userRole == "Super Admin";
             
+            // Log claims for debugging authorization issues
+            var authType = User.Identity?.AuthenticationType ?? "unknown";
+            var userEmail = User.FindFirst("email")?.Value ?? User.FindFirst("preferred_username")?.Value ?? "unknown";
+            _logger.LogInformation(
+                "ResumeSchedule auth check - ScheduleId: {ScheduleId}, IsSystemSchedule: {IsSystemSchedule}, AuthType: {AuthType}, Email: {Email}, is_system_admin: {IsSystemAdminValue}, role: {Role}, user_client_id: {ClientId}, isAdmin: {IsAdmin}",
+                id, schedule.IsSystemSchedule, authType, userEmail, isSystemAdminValue ?? "null", userRole ?? "null", userClientId ?? "null", isAdmin);
+            
             // System schedules can only be resumed by Admin or Super Admin
             if (schedule.IsSystemSchedule && !isAdmin)
             {
-                _logger.LogWarning("Non-admin user attempted to resume system schedule {ScheduleId} ({ScheduleName})", id, schedule.Name);
+                _logger.LogWarning("Non-admin user attempted to resume system schedule {ScheduleId} ({ScheduleName}). Claims: is_system_admin={IsSystemAdmin}, role={Role}", id, schedule.Name, isSystemAdminValue ?? "null", userRole ?? "null");
                 return StatusCode(403, "Only administrators can resume system schedules.");
             }
             
