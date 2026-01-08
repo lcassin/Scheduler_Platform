@@ -2,7 +2,9 @@
 @inject SchedulerPlatform.UI.Services.SessionStateService SessionStateService
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
-@implements IDisposable
+@inject IJSRuntime JSRuntime
+@inject IDialogService DialogService
+@implements IAsyncDisposable
 
 <MudLayout>
     <MudAppBar Elevation="1">
@@ -35,14 +37,109 @@
     </MudMainContent>
 </MudLayout>
 
+@* Session Expiry Warning Dialog *@
+<MudDialog @bind-Visible="_showSessionExpiryWarning" Options="@_sessionDialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="mr-2" />
+            Session Expiring Soon
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText>Your session will expire in approximately @_minutesRemaining minute(s).</MudText>
+        <MudText Class="mt-2">Click "Stay Logged In" to extend your session, or you will be automatically logged out.</MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="ExtendSession">Stay Logged In</MudButton>
+        <MudButton Color="Color.Default" OnClick="LogoutNow">Logout Now</MudButton>
+    </DialogActions>
+</MudDialog>
+
 @code {
     private bool _drawerOpen = true;
     private bool _sessionExpiredHandled = false;
+    private bool _showSessionExpiryWarning = false;
+    private int _minutesRemaining = 5;
+    private System.Threading.Timer? _keepaliveTimer;
+    private int _lastKnownMinutesRemaining = int.MaxValue;
+    
+    private readonly DialogOptions _sessionDialogOptions = new()
+    {
+        BackdropClick = false,
+        CloseOnEscapeKey = false,
+        MaxWidth = MaxWidth.Small
+    };
 
     protected override void OnInitialized()
     {
         // Subscribe to session expiration events for centralized handling
         SessionStateService.OnSessionExpired += HandleSessionExpired;
+        SessionStateService.OnSessionExpiringWarning += HandleSessionExpiringWarning;
+        SessionStateService.OnSessionRefreshed += HandleSessionRefreshed;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Start keepalive timer for authenticated users
+            // This pings /keepalive every 2 minutes to:
+            // 1. Trigger token refresh in OnValidatePrincipal (refresh happens 5 min before expiry)
+            // 2. Check remaining session time and show warning if needed
+            _keepaliveTimer = new System.Threading.Timer(async _ =>
+            {
+                try
+                {
+                    // Use JavaScript fetch to make an HTTP request that includes the auth cookie
+                    // This triggers OnValidatePrincipal which handles token refresh
+                    var result = await JSRuntime.InvokeAsync<KeepaliveResponse>("eval", @"
+                        (async () => {
+                            try {
+                                const response = await fetch('/keepalive', { credentials: 'same-origin' });
+                                if (response.ok) {
+                                    return await response.json();
+                                }
+                                return { authenticated: false, minutesRemaining: null };
+                            } catch {
+                                return { authenticated: false, minutesRemaining: null };
+                            }
+                        })()
+                    ");
+                    
+                    if (result != null && result.Authenticated)
+                    {
+                        var minutes = result.MinutesRemaining ?? 60;
+                        
+                        // Show warning when session is about to expire (5 minutes or less)
+                        if (minutes <= 5 && minutes > 0 && !_showSessionExpiryWarning)
+                        {
+                            await InvokeAsync(() =>
+                            {
+                                _minutesRemaining = minutes;
+                                _showSessionExpiryWarning = true;
+                                StateHasChanged();
+                            });
+                        }
+                        // Session was refreshed - hide warning if showing
+                        else if (minutes > 5 && _showSessionExpiryWarning)
+                        {
+                            await InvokeAsync(() =>
+                            {
+                                _showSessionExpiryWarning = false;
+                                Snackbar.Add("Session extended successfully.", Severity.Success);
+                                StateHasChanged();
+                            });
+                        }
+                        
+                        _lastKnownMinutesRemaining = minutes;
+                    }
+                }
+                catch
+                {
+                    // Ignore errors - if keepalive fails, the normal 401 handling will redirect to login
+                }
+            }, null, TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(2));
+        }
     }
 
     private void HandleSessionExpired()
@@ -53,10 +150,51 @@
         
         InvokeAsync(() =>
         {
+            _showSessionExpiryWarning = false;
             Snackbar.Add("Your session has expired. Redirecting to login...", Severity.Warning);
             // Pass sessionExpired=true so the login page can show an alert
             Navigation.NavigateTo("/Account/Logout?sessionExpired=true", forceLoad: true);
         });
+    }
+    
+    private void HandleSessionExpiringWarning(int minutesRemaining)
+    {
+        InvokeAsync(() =>
+        {
+            _minutesRemaining = minutesRemaining;
+            _showSessionExpiryWarning = true;
+            StateHasChanged();
+        });
+    }
+    
+    private void HandleSessionRefreshed()
+    {
+        InvokeAsync(() =>
+        {
+            _showSessionExpiryWarning = false;
+            StateHasChanged();
+        });
+    }
+    
+    private async Task ExtendSession()
+    {
+        try
+        {
+            // Make a keepalive request to trigger token refresh
+            await JSRuntime.InvokeVoidAsync("eval", "fetch('/keepalive', { credentials: 'same-origin' })");
+            _showSessionExpiryWarning = false;
+            Snackbar.Add("Session extended successfully.", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add("Failed to extend session. Please try again.", Severity.Error);
+        }
+    }
+    
+    private void LogoutNow()
+    {
+        _showSessionExpiryWarning = false;
+        Navigation.NavigateTo("/Account/Logout", forceLoad: true);
     }
 
     private void DrawerToggle()
@@ -64,8 +202,22 @@
         _drawerOpen = !_drawerOpen;
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         SessionStateService.OnSessionExpired -= HandleSessionExpired;
+        SessionStateService.OnSessionExpiringWarning -= HandleSessionExpiringWarning;
+        SessionStateService.OnSessionRefreshed -= HandleSessionRefreshed;
+        if (_keepaliveTimer != null)
+        {
+            await _keepaliveTimer.DisposeAsync();
+        }
+    }
+    
+    private class KeepaliveResponse
+    {
+        public bool Authenticated { get; set; }
+        public int? MinutesRemaining { get; set; }
+        public string? ExpiresAt { get; set; }
+        public string? ServerTime { get; set; }
     }
 }
