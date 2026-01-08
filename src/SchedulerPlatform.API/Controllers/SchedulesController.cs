@@ -553,10 +553,21 @@ public class SchedulesController : ControllerBase
                 return NotFound();
             }
 
-            var userClientId = User.FindFirst("client_id")?.Value;
-            var isSystemAdmin = User.FindFirst("is_system_admin")?.Value == "True";
+            var userClientId = User.FindFirst("user_client_id")?.Value;
+            var isSystemAdminValue = User.FindFirst("is_system_admin")?.Value;
+            var isSystemAdmin = string.Equals(isSystemAdminValue, "True", StringComparison.OrdinalIgnoreCase) || isSystemAdminValue == "1";
+            var userRole = User.FindFirst("role")?.Value;
+            var isAdmin = isSystemAdmin || userRole == "Admin" || userRole == "Super Admin";
             
-            if (!isSystemAdmin && schedule.ClientId.ToString() != userClientId)
+            // System schedules can only be paused by Admin or Super Admin
+            if (schedule.IsSystemSchedule && !isAdmin)
+            {
+                _logger.LogWarning("Non-admin user attempted to pause system schedule {ScheduleId} ({ScheduleName})", id, schedule.Name);
+                return StatusCode(403, "Only administrators can pause system schedules.");
+            }
+            
+            // Non-system schedules: check client ownership
+            if (!schedule.IsSystemSchedule && !isSystemAdmin && schedule.ClientId.ToString() != userClientId)
             {
                 _logger.LogWarning(
                     "Unauthorized pause attempt: User with ClientId {UserClientId} attempted to pause Schedule {ScheduleId} belonging to ClientId {ScheduleClientId}",
@@ -608,10 +619,21 @@ public class SchedulesController : ControllerBase
                 return NotFound();
             }
 
-            var userClientId = User.FindFirst("client_id")?.Value;
-            var isSystemAdmin = User.FindFirst("is_system_admin")?.Value == "True";
+            var userClientId = User.FindFirst("user_client_id")?.Value;
+            var isSystemAdminValue = User.FindFirst("is_system_admin")?.Value;
+            var isSystemAdmin = string.Equals(isSystemAdminValue, "True", StringComparison.OrdinalIgnoreCase) || isSystemAdminValue == "1";
+            var userRole = User.FindFirst("role")?.Value;
+            var isAdmin = isSystemAdmin || userRole == "Admin" || userRole == "Super Admin";
             
-            if (!isSystemAdmin && schedule.ClientId.ToString() != userClientId)
+            // System schedules can only be resumed by Admin or Super Admin
+            if (schedule.IsSystemSchedule && !isAdmin)
+            {
+                _logger.LogWarning("Non-admin user attempted to resume system schedule {ScheduleId} ({ScheduleName})", id, schedule.Name);
+                return StatusCode(403, "Only administrators can resume system schedules.");
+            }
+            
+            // Non-system schedules: check client ownership
+            if (!schedule.IsSystemSchedule && !isSystemAdmin && schedule.ClientId.ToString() != userClientId)
             {
                 _logger.LogWarning(
                     "Unauthorized resume attempt: User with ClientId {UserClientId} attempted to resume Schedule {ScheduleId} belonging to ClientId {ScheduleClientId}",
