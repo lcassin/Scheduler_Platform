@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authentication;
+using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 
 namespace SchedulerPlatform.UI.Services;
@@ -48,6 +49,36 @@ public class AuthTokenHandler : DelegatingHandler
                 {
                     request.Headers.Authorization = 
                         new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+                    
+                    // Log token metadata for debugging (never log the actual token)
+                    try
+                    {
+                        var handler = new JwtSecurityTokenHandler();
+                        if (handler.CanReadToken(accessToken))
+                        {
+                            var jwt = handler.ReadJwtToken(accessToken);
+                            var exp = jwt.ValidTo;
+                            var aud = string.Join(",", jwt.Audiences);
+                            var iss = jwt.Issuer;
+                            var clientId = jwt.Claims.FirstOrDefault(c => c.Type == "client_id")?.Value ?? "unknown";
+                            var isExpired = exp < DateTime.UtcNow;
+                            
+                            _logger.LogDebug(
+                                "Token attached to request. Issuer: {Issuer}, Audience: {Audience}, ClientId: {ClientId}, Expires: {Expires}, IsExpired: {IsExpired}",
+                                iss, aud, clientId, exp, isExpired);
+                            
+                            if (isExpired)
+                            {
+                                _logger.LogWarning(
+                                    "Access token is EXPIRED. Expires: {Expires}, Now: {Now}",
+                                    exp, DateTime.UtcNow);
+                            }
+                        }
+                    }
+                    catch (Exception tokenEx)
+                    {
+                        _logger.LogDebug(tokenEx, "Could not parse JWT token for logging");
+                    }
                 }
                 else
                 {
@@ -74,9 +105,11 @@ public class AuthTokenHandler : DelegatingHandler
         // Check for 401 Unauthorized - session has expired
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
+            // Log the WWW-Authenticate header to understand why the token was rejected
+            var wwwAuthenticate = response.Headers.WwwAuthenticate.ToString();
             _logger.LogWarning(
-                "Received 401 Unauthorized from API. User session may have expired. Request: {Method} {Uri}",
-                request.Method, request.RequestUri);
+                "Received 401 Unauthorized from API. Request: {Method} {Uri}, WWW-Authenticate: {WwwAuthenticate}",
+                request.Method, request.RequestUri, wwwAuthenticate);
             
             // Notify all subscribers (like MainLayout) that the session has expired
             // This allows centralized handling of session expiration with automatic redirect
