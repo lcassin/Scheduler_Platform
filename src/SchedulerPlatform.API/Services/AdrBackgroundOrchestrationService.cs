@@ -41,11 +41,16 @@ public class AdrOrchestrationStatus
     public string Status { get; set; } = "Queued"; // Queued, Running, Completed, Failed
     public string? CurrentStep { get; set; }
     public string? CurrentStepPhase { get; set; } // Preparing, Calling API, Saving results
+    public string? CurrentSubStep { get; set; } // Sub-step within the current step (e.g., "Syncing rules" within "Syncing accounts")
     public string? ErrorMessage { get; set; }
     
     // Progress tracking for current step
     public int CurrentStepProgress { get; set; }
     public int CurrentStepTotal { get; set; }
+    
+    // Secondary progress tracking for sub-steps (e.g., rule sync progress within account sync)
+    public int? SubStepProgress { get; set; }
+    public int? SubStepTotal { get; set; }
     
     // Results from each step
     public AdrAccountSyncResult? SyncResult { get; set; }
@@ -354,19 +359,36 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                 _queue.UpdateStatus(request.RequestId, s => 
                 {
                     s.CurrentStep = "Syncing accounts";
+                    s.CurrentSubStep = null;
                     s.CurrentStepProgress = 0;
                     s.CurrentStepTotal = 0;
+                    s.SubStepProgress = null;
+                    s.SubStepTotal = null;
                 });
                 _logger.LogInformation("Request {RequestId}: Starting account sync", request.RequestId);
                 
                 var syncResult = await syncService.SyncAccountsAsync(
+                    // Main progress callback for account sync
                     (progress, total) => _queue.UpdateStatus(request.RequestId, s => 
                     {
                         s.CurrentStepProgress = progress;
                         s.CurrentStepTotal = total;
                     }),
+                    // Sub-step callback for rule sync (and potentially other sub-steps)
+                    (subStep, progress, total) => _queue.UpdateStatus(request.RequestId, s =>
+                    {
+                        s.CurrentSubStep = subStep;
+                        s.SubStepProgress = progress;
+                        s.SubStepTotal = total;
+                    }),
                     token);
-                _queue.UpdateStatus(request.RequestId, s => s.SyncResult = syncResult);
+                _queue.UpdateStatus(request.RequestId, s => 
+                {
+                    s.SyncResult = syncResult;
+                    s.CurrentSubStep = null;
+                    s.SubStepProgress = null;
+                    s.SubStepTotal = null;
+                });
                 
                 _logger.LogInformation(
                     "Request {RequestId}: Account sync completed. Inserted: {Inserted}, Updated: {Updated}",

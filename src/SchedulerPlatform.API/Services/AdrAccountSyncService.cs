@@ -10,7 +10,10 @@ namespace SchedulerPlatform.API.Services;
 
 public interface IAdrAccountSyncService
 {
-    Task<AdrAccountSyncResult> SyncAccountsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
+    Task<AdrAccountSyncResult> SyncAccountsAsync(
+        Action<int, int>? progressCallback = null, 
+        Action<string, int, int>? subStepCallback = null,
+        CancellationToken cancellationToken = default);
 }
 
 public class AdrAccountSyncResult
@@ -50,7 +53,10 @@ public class AdrAccountSyncService : IAdrAccountSyncService
         _logger = logger;
     }
 
-    public async Task<AdrAccountSyncResult> SyncAccountsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    public async Task<AdrAccountSyncResult> SyncAccountsAsync(
+        Action<int, int>? progressCallback = null, 
+        Action<string, int, int>? subStepCallback = null,
+        CancellationToken cancellationToken = default)
     {
         var result = new AdrAccountSyncResult
         {
@@ -210,7 +216,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
 
             // Step 4: Sync AdrAccountRules - create/update rules for each account
             // Rules drive the orchestrator, so we need to keep them in sync with account scheduling data
-            await SyncAccountRulesAsync(existingAccounts.Values.ToList(), externalAccounts, result, cancellationToken);
+            await SyncAccountRulesAsync(existingAccounts.Values.ToList(), externalAccounts, result, subStepCallback, cancellationToken);
 
             result.SyncEndDateTime = DateTime.UtcNow;
             _logger.LogInformation(
@@ -637,9 +643,14 @@ DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
         List<AdrAccount> accounts,
         List<ExternalAccountData> externalAccounts,
         AdrAccountSyncResult result,
+        Action<string, int, int>? subStepCallback,
         CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Starting rule sync for {Count} accounts", accounts.Count);
+        var accountsToSync = accounts.Where(a => !a.IsDeleted).ToList();
+        _logger.LogInformation("Starting rule sync for {Count} accounts", accountsToSync.Count);
+        
+        // Report sub-step start
+        subStepCallback?.Invoke("Syncing rules", 0, accountsToSync.Count);
 
         // Build lookup from VMAccountId+VMAccountNumber to external data for scheduling fields
         var externalDataLookup = externalAccounts
@@ -649,7 +660,7 @@ DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
                 g => g.First());
 
         // Get all account IDs that need rules
-        var accountIds = accounts.Where(a => !a.IsDeleted).Select(a => a.Id).ToList();
+        var accountIds = accountsToSync.Select(a => a.Id).ToList();
 
         // Load existing rules for these accounts (JobTypeId = 2 for DownloadInvoice)
         var existingRules = await _dbContext.AdrAccountRules
@@ -663,8 +674,9 @@ DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
         const int batchSize = 5000;
         int processedSinceLastSave = 0;
         int batchNumber = 1;
+        int totalProcessed = 0;
 
-        foreach (var account in accounts.Where(a => !a.IsDeleted))
+        foreach (var account in accountsToSync)
         {
             try
             {
@@ -722,6 +734,7 @@ DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
                 }
 
                 processedSinceLastSave++;
+                totalProcessed++;
 
                 // Save in batches
                 if (processedSinceLastSave >= batchSize)
@@ -729,6 +742,10 @@ DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
                     await _dbContext.SaveChangesAsync(cancellationToken);
                     _logger.LogInformation("Rule sync batch {BatchNumber} saved: {Created} created, {Updated} updated, {Skipped} skipped so far",
                         batchNumber, result.RulesCreated, result.RulesUpdated, result.RulesSkippedOverridden);
+                    
+                    // Report sub-step progress after each batch
+                    subStepCallback?.Invoke("Syncing rules", totalProcessed, accountsToSync.Count);
+                    
                     processedSinceLastSave = 0;
                     batchNumber++;
                 }
@@ -738,6 +755,7 @@ DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
                 _logger.LogError(ex, "Error syncing rule for account {AccountId}", account.Id);
                 result.Errors++;
                 result.ErrorMessages.Add($"Rule sync for AccountId {account.Id}: {ex.Message}");
+                totalProcessed++;
             }
         }
 
@@ -745,6 +763,8 @@ DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
         if (processedSinceLastSave > 0)
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
+            // Report final sub-step progress
+            subStepCallback?.Invoke("Syncing rules", totalProcessed, accountsToSync.Count);
         }
 
         _logger.LogInformation("Rule sync completed. Created: {Created}, Updated: {Updated}, Skipped (overridden): {Skipped}",
