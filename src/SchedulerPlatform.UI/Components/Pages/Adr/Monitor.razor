@@ -359,12 +359,35 @@
                                 <MudTimelineItem Color="@GetStepColor("Syncing accounts", _currentStatus.Status)" Icon="@GetStepIcon("Syncing accounts", _currentStatus.Status)">
                                     <ItemContent>
                                         <MudText Typo="Typo.body2">Sync Accounts</MudText>
-                                        @if (_currentStatus.Status.CurrentStep == "Syncing accounts" && _currentStatus.Status.CurrentStepTotal > 0)
+                                        @if (_currentStatus.Status.CurrentStep == "Syncing accounts")
                                         {
-                                            <MudText Typo="Typo.caption" Color="Color.Info">
-                                                @_currentStatus.Status.CurrentStepProgress / @_currentStatus.Status.CurrentStepTotal (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
-                                            </MudText>
-                                            <MudProgressLinear Color="Color.Info" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
+                                            @if (!string.IsNullOrEmpty(_currentStatus.Status.CurrentSubStep))
+                                            {
+                                                @* Sub-step progress (e.g., rule sync) *@
+                                                <MudText Typo="Typo.caption" Color="Color.Warning">
+                                                    @_currentStatus.Status.CurrentSubStep: @(_currentStatus.Status.SubStepProgress?.ToString("N0") ?? "0") / @(_currentStatus.Status.SubStepTotal?.ToString("N0") ?? "0")
+                                                    @if (_currentStatus.Status.SubStepTotal > 0)
+                                                    {
+                                                        <text> (@((_currentStatus.Status.SubStepProgress.GetValueOrDefault() * 100.0 / _currentStatus.Status.SubStepTotal.GetValueOrDefault()).ToString("F1"))%)</text>
+                                                    }
+                                                </MudText>
+                                                <MudProgressLinear Color="Color.Warning" 
+                                                                   Value="@(_currentStatus.Status.SubStepTotal > 0 ? _currentStatus.Status.SubStepProgress.GetValueOrDefault() * 100.0 / _currentStatus.Status.SubStepTotal.GetValueOrDefault() : 0)" 
+                                                                   Class="mt-1" />
+                                            }
+                                            else if (_currentStatus.Status.CurrentStepTotal > 0)
+                                            {
+                                                @* Main account sync progress *@
+                                                <MudText Typo="Typo.caption" Color="Color.Info">
+                                                    Syncing accounts: @_currentStatus.Status.CurrentStepProgress.ToString("N0") / @_currentStatus.Status.CurrentStepTotal.ToString("N0") (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
+                                                </MudText>
+                                                <MudProgressLinear Color="Color.Info" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
+                                            }
+                                            else
+                                            {
+                                                <MudText Typo="Typo.caption" Color="Color.Info">Starting...</MudText>
+                                                <MudProgressLinear Color="Color.Info" Indeterminate="true" Class="mt-1" />
+                                            }
                                         }
                                         else if (_currentStatus.Status.SyncResult != null)
                                         {
