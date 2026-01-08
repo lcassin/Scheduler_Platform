@@ -26,6 +26,7 @@ public class JobCreationResult
     public int BlacklistedCount { get; set; }
     public int Errors { get; set; }
     public List<string> ErrorMessages { get; set; } = new();
+    public TimeSpan Duration { get; set; }
 }
 
 public class CredentialVerificationResult
@@ -35,6 +36,7 @@ public class CredentialVerificationResult
     public int CredentialsFailed { get; set; }
     public int Errors { get; set; }
     public List<string> ErrorMessages { get; set; } = new();
+    public TimeSpan Duration { get; set; }
 }
 
 public class ScrapeResult
@@ -45,6 +47,7 @@ public class ScrapeResult
     public int ScrapesFailed { get; set; }
     public int Errors { get; set; }
     public List<string> ErrorMessages { get; set; } = new();
+    public TimeSpan Duration { get; set; }
 }
 
 public class StatusCheckResult
@@ -55,6 +58,7 @@ public class StatusCheckResult
     public int JobsStillProcessing { get; set; }
     public int Errors { get; set; }
     public List<string> ErrorMessages { get; set; } = new();
+    public TimeSpan Duration { get; set; }
 }
 
 #endregion
@@ -242,6 +246,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     public async Task<JobCreationResult> CreateJobsForDueAccountsAsync(CancellationToken cancellationToken = default)
     {
         var result = new JobCreationResult();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         try
         {
@@ -359,9 +364,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
             result.BlacklistedCount = blacklistedCount;
             
+            stopwatch.Stop();
+            result.Duration = stopwatch.Elapsed;
+            
             _logger.LogInformation(
-                "Job creation completed. Created: {Created}, Skipped: {Skipped} (Blacklisted: {Blacklisted}), Errors: {Errors}",
-                result.JobsCreated, result.JobsSkipped, blacklistedCount, result.Errors);
+                "Job creation completed in {Duration}. Created: {Created}, Skipped: {Skipped} (Blacklisted: {Blacklisted}), Errors: {Errors}",
+                result.Duration, result.JobsCreated, result.JobsSkipped, blacklistedCount, result.Errors);
 
             return result;
         }
@@ -381,6 +389,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     public async Task<CredentialVerificationResult> VerifyCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
     {
         var result = new CredentialVerificationResult();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var maxParallel = GetMaxParallelRequests();
         var credentialCheckLeadDays = GetCredentialCheckLeadDays();
 
@@ -657,9 +666,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 await _unitOfWork.SaveChangesAsync();
             }
 
+            stopwatch.Stop();
+            result.Duration = stopwatch.Elapsed;
+            
             _logger.LogInformation(
-                "Credential verification completed. Processed: {Processed}, Verified: {Verified}, Failed: {Failed}, Errors: {Errors}",
-                result.JobsProcessed, result.CredentialsVerified, result.CredentialsFailed, result.Errors);
+                "Credential verification completed in {Duration}. Processed: {Processed}, Verified: {Verified}, Failed: {Failed}, Errors: {Errors}",
+                result.Duration, result.JobsProcessed, result.CredentialsVerified, result.CredentialsFailed, result.Errors);
 
             return result;
         }
@@ -679,6 +691,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     public async Task<ScrapeResult> ProcessScrapingAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
     {
         var result = new ScrapeResult();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var maxParallel = GetMaxParallelRequests();
 
         try
@@ -947,9 +960,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 await _unitOfWork.SaveChangesAsync();
             }
 
+            stopwatch.Stop();
+            result.Duration = stopwatch.Elapsed;
+            
             _logger.LogInformation(
-                "Invoice scraping completed. Processed: {Processed}, Requested: {Requested}, Completed: {Completed}, Failed: {Failed}, Errors: {Errors}",
-                result.JobsProcessed, result.ScrapesRequested, result.ScrapesCompleted, result.ScrapesFailed, result.Errors);
+                "Invoice scraping completed in {Duration}. Processed: {Processed}, Requested: {Requested}, Completed: {Completed}, Failed: {Failed}, Errors: {Errors}",
+                result.Duration, result.JobsProcessed, result.ScrapesRequested, result.ScrapesCompleted, result.ScrapesFailed, result.Errors);
 
             return result;
         }
@@ -969,6 +985,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     public async Task<StatusCheckResult> CheckPendingStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
     {
         var result = new StatusCheckResult();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var maxParallel = GetMaxParallelRequests();
 
         try
@@ -1241,9 +1258,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 await _unitOfWork.SaveChangesAsync();
             }
 
+            stopwatch.Stop();
+            result.Duration = stopwatch.Elapsed;
+            
             _logger.LogInformation(
-                "Status check completed. Checked: {Checked}, Completed: {Completed}, NeedsReview: {NeedsReview}, Processing: {Processing}, Errors: {Errors}",
-                result.JobsChecked, result.JobsCompleted, result.JobsNeedingReview, result.JobsStillProcessing, result.Errors);
+                "Status check completed in {Duration}. Checked: {Checked}, Completed: {Completed}, NeedsReview: {NeedsReview}, Processing: {Processing}, Errors: {Errors}",
+                result.Duration, result.JobsChecked, result.JobsCompleted, result.JobsNeedingReview, result.JobsStillProcessing, result.Errors);
 
             return result;
         }
@@ -1264,6 +1284,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     public async Task<StatusCheckResult> CheckAllScrapedStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
     {
         var result = new StatusCheckResult();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var maxParallel = GetMaxParallelRequests();
 
         try
@@ -1583,9 +1604,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 await _unitOfWork.SaveChangesAsync();
             }
 
+            stopwatch.Stop();
+            result.Duration = stopwatch.Elapsed;
+            
             _logger.LogInformation(
-                "Manual status check completed. Checked: {Checked}, Completed: {Completed}, NeedsReview: {NeedsReview}, Processing: {Processing}, Errors: {Errors}",
-                result.JobsChecked, result.JobsCompleted, result.JobsNeedingReview, result.JobsStillProcessing, result.Errors);
+                "Manual status check completed in {Duration}. Checked: {Checked}, Completed: {Completed}, NeedsReview: {NeedsReview}, Processing: {Processing}, Errors: {Errors}",
+                result.Duration, result.JobsChecked, result.JobsCompleted, result.JobsNeedingReview, result.JobsStillProcessing, result.Errors);
 
             return result;
         }

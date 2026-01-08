@@ -22,6 +22,7 @@ public class JobCreationResult
     public int BlacklistedCount { get; set; }
     public int Errors { get; set; }
     public List<string> ErrorMessages { get; set; } = new();
+    public TimeSpan Duration { get; set; }
 }
 
 public class CredentialVerificationResult
@@ -31,6 +32,7 @@ public class CredentialVerificationResult
     public int CredentialsFailed { get; set; }
     public int Errors { get; set; }
     public List<string> ErrorMessages { get; set; } = new();
+    public TimeSpan Duration { get; set; }
 }
 
 public class ScrapeResult
@@ -41,6 +43,7 @@ public class ScrapeResult
     public int ScrapesFailed { get; set; }
     public int Errors { get; set; }
     public List<string> ErrorMessages { get; set; } = new();
+    public TimeSpan Duration { get; set; }
 }
 
 public class StatusCheckResult
@@ -51,6 +54,7 @@ public class StatusCheckResult
     public int JobsStillProcessing { get; set; }
     public int Errors { get; set; }
     public List<string> ErrorMessages { get; set; } = new();
+    public TimeSpan Duration { get; set; }
 }
 
 public class FullCycleResult
