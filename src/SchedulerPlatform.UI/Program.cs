@@ -61,8 +61,8 @@ builder.Services.AddAuthentication(options =>
             if (expiresAtToken != null && 
                 DateTimeOffset.TryParse(expiresAtToken.Value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var expiresAt))
             {
-                // Refresh if token expires within 5 minutes
-                if (expiresAt <= DateTimeOffset.UtcNow.AddMinutes(5))
+                // Refresh if token expires within 10 minutes (gives buffer for keepalive interval)
+                if (expiresAt <= DateTimeOffset.UtcNow.AddMinutes(10))
                 {
                     var refreshToken = tokens.FirstOrDefault(t => t.Name == "refresh_token")?.Value;
                     if (!string.IsNullOrEmpty(refreshToken))
@@ -328,6 +328,19 @@ app.MapGet("/logout", async (HttpContext context) =>
             RedirectUri = redirectUri 
         });
 });
+
+// Keepalive endpoint for token refresh during long-running Blazor Server circuits
+// This endpoint is authenticated, so hitting it triggers OnValidatePrincipal which refreshes tokens
+app.MapGet("/keepalive", (HttpContext context) =>
+{
+    // Return token expiry info for debugging (without exposing the actual token)
+    var tokens = context.GetTokenAsync("expires_at").Result;
+    return Results.Ok(new { 
+        authenticated = context.User.Identity?.IsAuthenticated ?? false,
+        expiresAt = tokens,
+        serverTime = DateTimeOffset.UtcNow.ToString("o")
+    });
+}).RequireAuthorization();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
