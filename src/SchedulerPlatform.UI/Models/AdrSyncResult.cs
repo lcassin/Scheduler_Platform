@@ -163,11 +163,16 @@ public class AdrOrchestrationStatus
     public string Status { get; set; } = "Queued"; // Queued, Running, Completed, Failed, Cancelled
     public string? CurrentStep { get; set; }
     public string? CurrentStepPhase { get; set; } // Preparing, Calling API, Saving results
+    public string? CurrentSubStep { get; set; } // Sub-step within the current step (e.g., "Syncing rules" within "Syncing accounts")
     public string? ErrorMessage { get; set; }
     
     // Progress tracking for current step
     public int CurrentStepProgress { get; set; }
     public int CurrentStepTotal { get; set; }
+    
+    // Secondary progress tracking for sub-steps (e.g., rule sync progress within account sync)
+    public int? SubStepProgress { get; set; }
+    public int? SubStepTotal { get; set; }
     
     // Results from each step
     public AdrAccountSyncResult? SyncResult { get; set; }

@@ -2659,7 +2659,7 @@ public class AdrController : ControllerBase
         try
         {
             _logger.LogInformation("Manual account sync triggered by {User}", User.Identity?.Name ?? "Unknown");
-            var result = await _syncService.SyncAccountsAsync(null, cancellationToken);
+            var result = await _syncService.SyncAccountsAsync(null, null, cancellationToken);
             return Ok(result);
         }
         catch (Exception ex)
@@ -2794,7 +2794,7 @@ public class AdrController : ControllerBase
             _logger.LogInformation("Full ADR cycle triggered by {User}", User.Identity?.Name ?? "Unknown");
 
             // Step 1: Sync accounts from VendorCred
-            var syncResult = await _syncService.SyncAccountsAsync(null, cancellationToken);
+            var syncResult = await _syncService.SyncAccountsAsync(null, null, cancellationToken);
             
             // Step 2: Create jobs for accounts due for processing
             var jobCreationResult = await _orchestratorService.CreateJobsForDueAccountsAsync(cancellationToken);
