@@ -271,7 +271,7 @@
             || string.Equals(isSystemAdmin, "True", StringComparison.OrdinalIgnoreCase);
     }
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
         SessionStateService.OnSessionExpired -= HandleSessionExpired;
         SessionStateService.OnSessionExpiringWarning -= HandleSessionExpiringWarning;
