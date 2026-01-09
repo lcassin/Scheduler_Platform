@@ -14,8 +14,40 @@
         <MudSpacer />
         <AuthorizeView>
             <Authorized>
-                <MudText Typo="Typo.body2" Class="mr-4">@context.User.Identity?.Name</MudText>
-                <MudButton Href="/Account/Logout" Color="Color.Inherit" Variant="Variant.Text">Logout</MudButton>
+                <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                    <ActivatorContent>
+                        <MudButton Color="Color.Inherit" Variant="Variant.Text" EndIcon="@Icons.Material.Filled.ArrowDropDown">
+                            <MudAvatar Size="Size.Small" Color="Color.Primary" Class="mr-2">
+                                @GetInitials(context.User.Identity?.Name)
+                            </MudAvatar>
+                            @context.User.Identity?.Name
+                        </MudButton>
+                    </ActivatorContent>
+                    <ChildContent>
+                        <MudPaper Class="pa-4" Style="min-width: 280px;">
+                            <div class="d-flex align-center mb-3">
+                                <MudAvatar Size="Size.Large" Color="Color.Primary" Class="mr-3">
+                                    @GetInitials(context.User.Identity?.Name)
+                                </MudAvatar>
+                                <div>
+                                    <MudText Typo="Typo.subtitle1">@context.User.Identity?.Name</MudText>
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">@GetUserEmail(context.User)</MudText>
+                                </div>
+                            </div>
+                            <MudDivider Class="mb-2" />
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Role</MudText>
+                            <MudText Typo="Typo.body2" Class="mb-2">@GetUserRole(context.User)</MudText>
+                            @if (IsSuperAdmin(context.User))
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled">Super Admin</MudChip>
+                            }
+                            <MudDivider Class="my-2" />
+                            <MudButton Href="/Account/Logout" Color="Color.Error" Variant="Variant.Text" FullWidth="true" StartIcon="@Icons.Material.Filled.Logout">
+                                Sign Out
+                            </MudButton>
+                        </MudPaper>
+                    </ChildContent>
+                </MudMenu>
             </Authorized>
             <NotAuthorized>
                 <MudButton Href="/Account/Login" Color="Color.Inherit" Variant="Variant.Text">Login</MudButton>
@@ -202,7 +234,44 @@
         _drawerOpen = !_drawerOpen;
     }
 
-    public async ValueTask DisposeAsync()
+    private string GetInitials(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "?";
+        
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2)
+            return $"{parts[0][0]}{parts[^1][0]}".ToUpper();
+        if (parts.Length == 1 && parts[0].Length >= 2)
+            return parts[0][..2].ToUpper();
+        return parts.Length > 0 ? parts[0][0].ToString().ToUpper() : "?";
+    }
+
+    private string GetUserEmail(System.Security.Claims.ClaimsPrincipal user)
+    {
+        return user.FindFirst("email")?.Value 
+            ?? user.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value 
+            ?? user.FindFirst("preferred_username")?.Value
+            ?? "";
+    }
+
+    private string GetUserRole(System.Security.Claims.ClaimsPrincipal user)
+    {
+        if (IsSuperAdmin(user)) return "Super Admin";
+        
+        var role = user.FindFirst("role")?.Value 
+            ?? user.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+        
+        return role ?? "User";
+    }
+
+    private bool IsSuperAdmin(System.Security.Claims.ClaimsPrincipal user)
+    {
+        var isSystemAdmin = user.FindFirst("is_system_admin")?.Value;
+        return string.Equals(isSystemAdmin, "true", StringComparison.OrdinalIgnoreCase) 
+            || string.Equals(isSystemAdmin, "True", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public void Dispose()
     {
         SessionStateService.OnSessionExpired -= HandleSessionExpired;
         SessionStateService.OnSessionExpiringWarning -= HandleSessionExpiringWarning;

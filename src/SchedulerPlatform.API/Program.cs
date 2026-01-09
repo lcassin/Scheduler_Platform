@@ -211,14 +211,23 @@ builder.Services.AddAuthentication(options =>
     {
         options.ForwardDefaultSelector = context =>
         {
-            // Check if the request has an API key header - if so, use API key auth
+            // Prefer Bearer token when present - this preserves user identity and permissions
+            // The UI may send both Bearer token AND API key header, so we must check Bearer first
+            var authHeader = context.Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                return JwtBearerDefaults.AuthenticationScheme;
+            }
+            
+            // Fall back to API key auth only when no Bearer token is present
+            // This is used when HttpContext is null in Blazor Server (SignalR circuit events)
             var apiKeyHeader = context.Request.Headers[SchedulerPlatform.API.Authorization.SchedulerApiKeyAuthenticationOptions.HeaderName].FirstOrDefault();
             if (!string.IsNullOrEmpty(apiKeyHeader))
             {
                 return SchedulerPlatform.API.Authorization.SchedulerApiKeyAuthenticationOptions.DefaultScheme;
             }
             
-            // Otherwise, use JWT Bearer auth
+            // Default to Bearer auth (will fail if no token, but that's expected)
             return JwtBearerDefaults.AuthenticationScheme;
         };
     });
