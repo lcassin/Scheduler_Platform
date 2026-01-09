@@ -18,19 +18,39 @@
                     <ActivatorContent>
                         <MudButton Color="Color.Inherit" Variant="Variant.Text" EndIcon="@Icons.Material.Filled.ArrowDropDown">
                             <MudAvatar Size="Size.Small" Color="Color.Primary" Class="mr-2">
-                                @GetInitials(context.User.Identity?.Name)
+                                @{
+                                    var initials = GetInitials(GetDisplayName(context.User));
+                                    if (initials == "?")
+                                    {
+                                        <MudIcon Icon="@Icons.Material.Filled.Person" />
+                                    }
+                                    else
+                                    {
+                                        @initials
+                                    }
+                                }
                             </MudAvatar>
-                            @context.User.Identity?.Name
+                            @GetDisplayName(context.User)
                         </MudButton>
                     </ActivatorContent>
                     <ChildContent>
                         <MudPaper Class="pa-4" Style="min-width: 280px;">
                             <div class="d-flex align-center mb-3">
                                 <MudAvatar Size="Size.Large" Color="Color.Primary" Class="mr-3">
-                                    @GetInitials(context.User.Identity?.Name)
+                                    @{
+                                        var largeInitials = GetInitials(GetDisplayName(context.User));
+                                        if (largeInitials == "?")
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.Person" />
+                                        }
+                                        else
+                                        {
+                                            @largeInitials
+                                        }
+                                    }
                                 </MudAvatar>
                                 <div>
-                                    <MudText Typo="Typo.subtitle1">@context.User.Identity?.Name</MudText>
+                                    <MudText Typo="Typo.subtitle1">@GetDisplayName(context.User)</MudText>
                                     <MudText Typo="Typo.body2" Color="Color.Secondary">@GetUserEmail(context.User)</MudText>
                                 </div>
                             </div>
@@ -234,9 +254,37 @@
         _drawerOpen = !_drawerOpen;
     }
 
+    private string GetDisplayName(System.Security.Claims.ClaimsPrincipal user)
+    {
+        // Try to build name from given_name and family_name claims (from Duende/Azure AD)
+        var givenName = user.FindFirst("given_name")?.Value 
+            ?? user.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value;
+        var familyName = user.FindFirst("family_name")?.Value 
+            ?? user.FindFirst(System.Security.Claims.ClaimTypes.Surname)?.Value;
+        
+        if (!string.IsNullOrWhiteSpace(givenName) && !string.IsNullOrWhiteSpace(familyName))
+            return $"{givenName} {familyName}";
+        if (!string.IsNullOrWhiteSpace(givenName))
+            return givenName;
+        if (!string.IsNullOrWhiteSpace(familyName))
+            return familyName;
+        
+        // Fall back to name claim (but check if it looks like an email - if so, use just the username part)
+        var name = user.FindFirst("name")?.Value ?? user.Identity?.Name;
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            // If name looks like an email, extract the username part
+            if (name.Contains('@'))
+                return name.Split('@')[0];
+            return name;
+        }
+        
+        return "User";
+    }
+
     private string GetInitials(string? name)
     {
-        if (string.IsNullOrWhiteSpace(name)) return "?";
+        if (string.IsNullOrWhiteSpace(name) || name == "User") return "?";
         
         var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length >= 2)
