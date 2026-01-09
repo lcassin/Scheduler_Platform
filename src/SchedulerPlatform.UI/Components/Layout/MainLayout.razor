@@ -1,5 +1,6 @@
 @inherits LayoutComponentBase
 @inject SchedulerPlatform.UI.Services.SessionStateService SessionStateService
+@inject SchedulerPlatform.UI.Services.UserPermissionCacheService PermissionCache
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 @inject IJSRuntime JSRuntime
@@ -128,16 +129,24 @@
         SessionStateService.OnSessionExpired += HandleSessionExpired;
         SessionStateService.OnSessionExpiringWarning += HandleSessionExpiringWarning;
         SessionStateService.OnSessionRefreshed += HandleSessionRefreshed;
+        
+        // Subscribe to permission cache refresh events to update UI
+        PermissionCache.OnPermissionsRefreshed += HandlePermissionsRefreshed;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
         {
+            // Initial permission cache load
+            await PermissionCache.RefreshPermissionsAsync();
+            await InvokeAsync(StateHasChanged);
+            
             // Start keepalive timer for authenticated users
             // This pings /keepalive every 2 minutes to:
             // 1. Trigger token refresh in OnValidatePrincipal (refresh happens 5 min before expiry)
             // 2. Check remaining session time and show warning if needed
+            // 3. Refresh permission cache to pick up any permission changes
             _keepaliveTimer = new System.Threading.Timer(async _ =>
             {
                 try
@@ -161,6 +170,9 @@
                     if (result != null && result.Authenticated)
                     {
                         var minutes = result.MinutesRemaining ?? 60;
+                        
+                        // Refresh permission cache on each keepalive
+                        await PermissionCache.RefreshPermissionsAsync();
                         
                         // Show warning when session is about to expire (5 minutes or less)
                         if (minutes <= 5 && minutes > 0 && !_showSessionExpiryWarning)
@@ -192,6 +204,11 @@
                 }
             }, null, TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(2));
         }
+    }
+    
+    private void HandlePermissionsRefreshed()
+    {
+        InvokeAsync(StateHasChanged);
     }
 
     private void HandleSessionExpired()
@@ -256,7 +273,13 @@
 
     private string GetDisplayName(System.Security.Claims.ClaimsPrincipal user)
     {
-        // Try to build name from given_name and family_name claims (from Duende/Azure AD)
+        // Use cached permissions if available (preferred - has enriched data from API)
+        if (PermissionCache.CachedPermissions != null)
+        {
+            return PermissionCache.GetDisplayName();
+        }
+        
+        // Fall back to claims-based lookup
         var givenName = user.FindFirst("given_name")?.Value 
             ?? user.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value;
         var familyName = user.FindFirst("family_name")?.Value 
@@ -269,11 +292,9 @@
         if (!string.IsNullOrWhiteSpace(familyName))
             return familyName;
         
-        // Fall back to name claim (but check if it looks like an email - if so, use just the username part)
         var name = user.FindFirst("name")?.Value ?? user.Identity?.Name;
         if (!string.IsNullOrWhiteSpace(name))
         {
-            // If name looks like an email, extract the username part
             if (name.Contains('@'))
                 return name.Split('@')[0];
             return name;
@@ -296,7 +317,13 @@
 
     private string GetUserEmail(System.Security.Claims.ClaimsPrincipal user)
     {
-        // Check standard email claims first
+        // Use cached permissions if available (preferred - has enriched data from API)
+        if (PermissionCache.CachedPermissions != null)
+        {
+            return PermissionCache.GetEmail();
+        }
+        
+        // Fall back to claims-based lookup
         var email = user.FindFirst("email")?.Value 
             ?? user.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value 
             ?? user.FindFirst("preferred_username")?.Value;
@@ -314,25 +341,33 @@
 
     private string GetUserRole(System.Security.Claims.ClaimsPrincipal user)
     {
-        // Check for is_system_admin claim (enriched by API's UserClaimsTransformation)
+        // Use cached permissions if available (preferred - has enriched data from API)
+        if (PermissionCache.CachedPermissions != null)
+        {
+            return PermissionCache.GetRole();
+        }
+        
+        // Fall back to claims-based lookup
         if (IsSuperAdmin(user)) return "Super Admin";
         
-        // Check for role claim
         var role = user.FindFirst("role")?.Value 
             ?? user.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
         
         if (!string.IsNullOrWhiteSpace(role))
             return role;
         
-        // If no role claims available, check if user is authenticated
-        // The actual role/permissions are determined by the API via claims enrichment
         return user.Identity?.IsAuthenticated == true ? "Authenticated" : "User";
     }
 
     private bool IsSuperAdmin(System.Security.Claims.ClaimsPrincipal user)
     {
-        // Only check is_system_admin claim (added by API's UserClaimsTransformation)
-        // This is the ONLY way to identify Super Admins - regular Admins do NOT have this claim
+        // Use cached permissions if available (preferred - has enriched data from API)
+        if (PermissionCache.CachedPermissions != null)
+        {
+            return PermissionCache.IsSystemAdmin();
+        }
+        
+        // Fall back to claims-based lookup
         var isSystemAdmin = user.FindFirst("is_system_admin")?.Value;
         return string.Equals(isSystemAdmin, "true", StringComparison.OrdinalIgnoreCase) 
             || string.Equals(isSystemAdmin, "True", StringComparison.OrdinalIgnoreCase);
@@ -343,6 +378,7 @@
         SessionStateService.OnSessionExpired -= HandleSessionExpired;
         SessionStateService.OnSessionExpiringWarning -= HandleSessionExpiringWarning;
         SessionStateService.OnSessionRefreshed -= HandleSessionRefreshed;
+        PermissionCache.OnPermissionsRefreshed -= HandlePermissionsRefreshed;
         if (_keepaliveTimer != null)
         {
             await _keepaliveTimer.DisposeAsync();

@@ -286,8 +286,16 @@ builder.Services.AddHttpClient("SchedulerAPI", client =>
 })
 .AddHttpMessageHandler<AuthTokenHandler>();
 
+// Named HttpClient for permission cache service (uses same auth handler)
+builder.Services.AddHttpClient("SchedulerApi", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["API:BaseUrl"]!);
+})
+.AddHttpMessageHandler<AuthTokenHandler>();
+
 builder.Services.AddScoped<SessionStateService>();
 builder.Services.AddScoped<AuthTokenHandler>();
+builder.Services.AddScoped<UserPermissionCacheService>();
 builder.Services.AddScoped<IScheduleService, ScheduleService>();
 builder.Services.AddScoped<IJobExecutionService, JobExecutionService>();
 builder.Services.AddScoped<IClientService, ClientService>();
