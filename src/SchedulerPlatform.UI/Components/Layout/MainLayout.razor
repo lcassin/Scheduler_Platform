@@ -331,23 +331,11 @@
 
     private bool IsSuperAdmin(System.Security.Claims.ClaimsPrincipal user)
     {
-        // Check is_system_admin claim (added by API's UserClaimsTransformation)
+        // Only check is_system_admin claim (added by API's UserClaimsTransformation)
+        // This is the ONLY way to identify Super Admins - regular Admins do NOT have this claim
         var isSystemAdmin = user.FindFirst("is_system_admin")?.Value;
-        if (string.Equals(isSystemAdmin, "true", StringComparison.OrdinalIgnoreCase) 
-            || string.Equals(isSystemAdmin, "True", StringComparison.OrdinalIgnoreCase))
-            return true;
-        
-        // Also check for role claim containing "Super Admin" or "SystemAdmin"
-        var role = user.FindFirst("role")?.Value 
-            ?? user.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
-        if (!string.IsNullOrWhiteSpace(role))
-        {
-            return role.Contains("Super", StringComparison.OrdinalIgnoreCase) 
-                || role.Contains("System", StringComparison.OrdinalIgnoreCase)
-                || role.Contains("Admin", StringComparison.OrdinalIgnoreCase);
-        }
-        
-        return false;
+        return string.Equals(isSystemAdmin, "true", StringComparison.OrdinalIgnoreCase) 
+            || string.Equals(isSystemAdmin, "True", StringComparison.OrdinalIgnoreCase);
     }
 
     public async ValueTask DisposeAsync()
