@@ -18,7 +18,7 @@
                 <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
                     <ActivatorContent>
                         <MudButton Color="Color.Inherit" Variant="Variant.Text" EndIcon="@Icons.Material.Filled.ArrowDropDown">
-                            <MudAvatar Size="Size.Small" Color="Color.Primary" Class="mr-2">
+                            <MudAvatar Size="Size.Small" Style="background-color: #ffffff; color: #3d5afe;" Class="mr-2">
                                 @{
                                     var initials = GetInitials(GetDisplayName(context.User));
                                     if (initials == "?")
@@ -37,7 +37,7 @@
                     <ChildContent>
                         <MudPaper Class="pa-4" Style="min-width: 280px;">
                             <div class="d-flex align-center mb-3">
-                                <MudAvatar Size="Size.Large" Color="Color.Primary" Class="mr-3">
+                                <MudAvatar Size="Size.Large" Style="background-color: #ffffff; color: #3d5afe;" Class="mr-3">
                                     @{
                                         var largeInitials = GetInitials(GetDisplayName(context.User));
                                         if (largeInitials == "?")
