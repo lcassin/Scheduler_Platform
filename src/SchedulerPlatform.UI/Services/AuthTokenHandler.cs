@@ -37,24 +37,29 @@ public class AuthTokenHandler : DelegatingHandler
     }
 
     /// <summary>
-    /// Gets the AccessTokenCacheService from the current request's scope.
-    /// IHttpClientFactory pools handlers with a 2-minute lifetime, so we can't hold a direct
-    /// reference to scoped services - they may be from a stale scope. Instead, we resolve
-    /// from the current HttpContext.RequestServices when available, or fall back to the
-    /// root service provider (which will create a new scope).
+    /// Extracts a user identifier from the claims principal for use as a cache key.
+    /// Tries multiple claim types to find a stable identifier.
     /// </summary>
-    private AccessTokenCacheService GetTokenCache()
+    private static string? GetUserKey(System.Security.Claims.ClaimsPrincipal? user)
     {
-        var httpContext = _httpContextAccessor.HttpContext;
-        if (httpContext?.RequestServices != null)
-        {
-            return httpContext.RequestServices.GetRequiredService<AccessTokenCacheService>();
-        }
-        
-        // Fallback to root service provider - this creates a new instance but at least
-        // allows the request to proceed. This path is taken when HttpContext is null
-        // (e.g., during Blazor Server SignalR circuit events).
-        return _serviceProvider.GetRequiredService<AccessTokenCacheService>();
+        if (user?.Identity?.IsAuthenticated != true)
+            return null;
+            
+        // Try various claim types that could identify the user
+        var email = user.FindFirst("email")?.Value
+            ?? user.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
+            ?? user.FindFirst("preferred_username")?.Value
+            ?? user.FindFirst("upn")?.Value
+            ?? user.FindFirst("unique_name")?.Value;
+            
+        if (!string.IsNullOrEmpty(email))
+            return email.ToLowerInvariant();
+            
+        // Fall back to sub or nameidentifier
+        var sub = user.FindFirst("sub")?.Value
+            ?? user.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            
+        return sub;
     }
 
     protected override async Task<HttpResponseMessage> SendAsync(
@@ -63,18 +68,19 @@ public class AuthTokenHandler : DelegatingHandler
     {
         var httpContext = _httpContextAccessor.HttpContext;
         string? accessToken = null;
-        
-        // Get the token cache from the current request's scope (not the handler's stale scope)
-        var tokenCache = GetTokenCache();
+        string? userKey = null;
         
         if (httpContext?.User?.Identity?.IsAuthenticated == true)
         {
+            // Extract user key for token caching
+            userKey = GetUserKey(httpContext.User);
+            
             try
             {
                 accessToken = await httpContext.GetTokenAsync("access_token");
                 
-                // Update the token cache when we have HttpContext available
-                if (!string.IsNullOrEmpty(accessToken))
+                // Update the global token store when we have HttpContext available
+                if (!string.IsNullOrEmpty(accessToken) && !string.IsNullOrEmpty(userKey))
                 {
                     // Try to get expiry for cache
                     var expiresAtStr = await httpContext.GetTokenAsync("expires_at");
@@ -85,7 +91,10 @@ public class AuthTokenHandler : DelegatingHandler
                     {
                         expiresAt = parsed;
                     }
-                    tokenCache.UpdateToken(accessToken, expiresAt);
+                    
+                    // Store in global token store keyed by user
+                    GlobalTokenStore.SetToken(userKey, accessToken, expiresAt);
+                    _logger.LogDebug("Cached token for user {UserKey}", userKey);
                 }
             }
             catch (Exception ex)
@@ -96,18 +105,19 @@ public class AuthTokenHandler : DelegatingHandler
         else
         {
             // HttpContext is null (common in Blazor Server SignalR circuits)
-            // Try to use the cached token instead
-            accessToken = tokenCache.GetCachedToken();
+            // Try to get the cached token using the AsyncLocal user key
+            accessToken = GlobalTokenStore.GetToken();
             
             if (!string.IsNullOrEmpty(accessToken))
             {
-                _logger.LogDebug("Using cached access token (HttpContext unavailable)");
+                _logger.LogDebug("Using cached token from GlobalTokenStore (HttpContext unavailable, UserKey: {UserKey})", 
+                    GlobalTokenStore.CurrentUserKey ?? "unknown");
             }
             else
             {
                 _logger.LogWarning(
-                    "No access token available. HttpContext: {HasHttpContext}, CachedToken: {HasCachedToken}",
-                    httpContext != null, tokenCache.HasValidToken);
+                    "No access token available. HttpContext: {HasHttpContext}, CurrentUserKey: {UserKey}, HasCachedToken: {HasCachedToken}",
+                    httpContext != null, GlobalTokenStore.CurrentUserKey ?? "null", GlobalTokenStore.HasValidToken());
             }
         }
         
