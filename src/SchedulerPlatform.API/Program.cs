@@ -156,8 +156,14 @@ builder.Services.AddDbContext<SchedulerDbContext>((serviceProvider, options) =>
     .AddInterceptors(auditLogInterceptor);
 });
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+// Configure authentication with a policy scheme that tries both Bearer and API key
+// This allows the UI to authenticate via API key when HttpContext is null (Blazor Server SignalR)
+builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultScheme = "BearerOrApiKey";
+        options.DefaultChallengeScheme = "BearerOrApiKey";
+    })
+    .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
     {
         options.Authority = builder.Configuration["Authentication:Authority"];
         options.Audience = builder.Configuration["Authentication:Audience"];
@@ -184,7 +190,31 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddScheme<SchedulerPlatform.API.Authorization.SchedulerApiKeyAuthenticationOptions, 
                SchedulerPlatform.API.Authorization.SchedulerApiKeyAuthenticationHandler>(
         SchedulerPlatform.API.Authorization.SchedulerApiKeyAuthenticationOptions.DefaultScheme, 
-        options => { });
+        options => { })
+    .AddPolicyScheme("BearerOrApiKey", "Bearer or API Key", options =>
+    {
+        options.ForwardDefaultSelector = context =>
+        {
+            // Prefer Bearer token when present - this preserves user identity and permissions
+            // The UI may send both Bearer token AND API key header, so we must check Bearer first
+            var authHeader = context.Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                return JwtBearerDefaults.AuthenticationScheme;
+            }
+            
+            // Fall back to API key auth only when no Bearer token is present
+            // This is used when HttpContext is null in Blazor Server (SignalR circuit events)
+            var apiKeyHeader = context.Request.Headers[SchedulerPlatform.API.Authorization.SchedulerApiKeyAuthenticationOptions.HeaderName].FirstOrDefault();
+            if (!string.IsNullOrEmpty(apiKeyHeader))
+            {
+                return SchedulerPlatform.API.Authorization.SchedulerApiKeyAuthenticationOptions.DefaultScheme;
+            }
+            
+            // Default to Bearer auth (will fail if no token, but that's expected)
+            return JwtBearerDefaults.AuthenticationScheme;
+        };
+    });
 
 builder.Services.AddSingleton<IAuthorizationHandler, SchedulerPlatform.API.Authorization.PermissionAuthorizationHandler>();
 builder.Services.AddSingleton<IAuthorizationHandler, SchedulerPlatform.API.Authorization.SuperAdminAuthorizationHandler>();
