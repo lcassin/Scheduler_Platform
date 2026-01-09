@@ -5,19 +5,18 @@ namespace SchedulerPlatform.UI.Services;
 
 public class ClientService : IClientService
 {
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly AuthenticatedHttpClientService _httpClient;
 
-    public ClientService(IHttpClientFactory httpClientFactory)
+    public ClientService(AuthenticatedHttpClientService httpClient)
     {
-        _httpClientFactory = httpClientFactory;
+        _httpClient = httpClient;
     }
-
-    private HttpClient CreateClient() => _httpClientFactory.CreateClient("SchedulerAPI");
 
     public async Task<List<Client>> GetClientsAsync()
     {
-        var client = CreateClient();
-        var result = await client.GetFromJsonAsync<List<Client>>("clients");
+        var response = await _httpClient.GetAsync("clients");
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<List<Client>>();
         return result ?? new List<Client>();
     }
 }

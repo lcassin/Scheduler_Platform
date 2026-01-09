@@ -6,7 +6,7 @@ namespace SchedulerPlatform.UI.Services;
 /// </summary>
 public class UserPermissionCacheService
 {
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly AuthenticatedHttpClientService _httpClient;
     private readonly ILogger<UserPermissionCacheService> _logger;
     
     private CachedUserPermissions? _cachedPermissions;
@@ -19,10 +19,10 @@ public class UserPermissionCacheService
     public event Action? OnPermissionsRefreshed;
 
     public UserPermissionCacheService(
-        IHttpClientFactory httpClientFactory,
+        AuthenticatedHttpClientService httpClient,
         ILogger<UserPermissionCacheService> logger)
     {
-        _httpClientFactory = httpClientFactory;
+        _httpClient = httpClient;
         _logger = logger;
     }
 
@@ -41,8 +41,7 @@ public class UserPermissionCacheService
         await _refreshLock.WaitAsync();
         try
         {
-            var client = _httpClientFactory.CreateClient("SchedulerApi");
-            var response = await client.GetAsync("api/users/me");
+            var response = await _httpClient.GetAsync("api/users/me");
             
             if (!response.IsSuccessStatusCode)
             {
