@@ -14,6 +14,18 @@ public class SessionExpiredException : Exception
     public SessionExpiredException(string message) : base(message) { }
 }
 
+/// <summary>
+/// Key used to pass the user identifier through HttpRequestMessage.Options.
+/// This allows circuit-scoped services to pass the user identity to the pooled handler.
+/// </summary>
+public static class AuthTokenHandlerOptions
+{
+    /// <summary>
+    /// The key used to store the user identifier in HttpRequestMessage.Options.
+    /// </summary>
+    public static readonly HttpRequestOptionsKey<string> UserKeyOption = new("UserKey");
+}
+
 public class AuthTokenHandler : DelegatingHandler
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
@@ -40,7 +52,7 @@ public class AuthTokenHandler : DelegatingHandler
     /// Extracts a user identifier from the claims principal for use as a cache key.
     /// Tries multiple claim types to find a stable identifier.
     /// </summary>
-    private static string? GetUserKey(System.Security.Claims.ClaimsPrincipal? user)
+    public static string? GetUserKey(System.Security.Claims.ClaimsPrincipal? user)
     {
         if (user?.Identity?.IsAuthenticated != true)
             return null;
@@ -70,9 +82,27 @@ public class AuthTokenHandler : DelegatingHandler
         string? accessToken = null;
         string? userKey = null;
         
-        if (httpContext?.User?.Identity?.IsAuthenticated == true)
+        // First, check if the caller passed a userKey via request options
+        // This is the preferred method for Blazor Server SignalR circuits where HttpContext is null
+        if (request.Options.TryGetValue(AuthTokenHandlerOptions.UserKeyOption, out var requestUserKey) && 
+            !string.IsNullOrEmpty(requestUserKey))
         {
-            // Extract user key for token caching
+            userKey = requestUserKey;
+            accessToken = GlobalTokenStore.GetToken(userKey);
+            
+            if (!string.IsNullOrEmpty(accessToken))
+            {
+                _logger.LogDebug("Using token from GlobalTokenStore via request options (UserKey: {UserKey})", userKey);
+            }
+            else
+            {
+                _logger.LogWarning("UserKey {UserKey} provided via request options but no token found in GlobalTokenStore", userKey);
+            }
+        }
+        else if (httpContext?.User?.Identity?.IsAuthenticated == true)
+        {
+            // HttpContext is available (initial page load, keepalive requests)
+            // Extract user key and cache the token for later use
             userKey = GetUserKey(httpContext.User);
             
             try
@@ -94,7 +124,7 @@ public class AuthTokenHandler : DelegatingHandler
                     
                     // Store in global token store keyed by user
                     GlobalTokenStore.SetToken(userKey, accessToken, expiresAt);
-                    _logger.LogDebug("Cached token for user {UserKey}", userKey);
+                    _logger.LogDebug("Cached token for user {UserKey} from HttpContext", userKey);
                 }
             }
             catch (Exception ex)
@@ -104,20 +134,20 @@ public class AuthTokenHandler : DelegatingHandler
         }
         else
         {
-            // HttpContext is null (common in Blazor Server SignalR circuits)
-            // Try to get the cached token using the AsyncLocal user key
+            // No userKey from request options and no HttpContext
+            // This is a fallback - try AsyncLocal (may work in some cases)
             accessToken = GlobalTokenStore.GetToken();
             
             if (!string.IsNullOrEmpty(accessToken))
             {
-                _logger.LogDebug("Using cached token from GlobalTokenStore (HttpContext unavailable, UserKey: {UserKey})", 
+                _logger.LogDebug("Using cached token from GlobalTokenStore via AsyncLocal (UserKey: {UserKey})", 
                     GlobalTokenStore.CurrentUserKey ?? "unknown");
             }
             else
             {
                 _logger.LogWarning(
-                    "No access token available. HttpContext: {HasHttpContext}, CurrentUserKey: {UserKey}, HasCachedToken: {HasCachedToken}",
-                    httpContext != null, GlobalTokenStore.CurrentUserKey ?? "null", GlobalTokenStore.HasValidToken());
+                    "No access token available. HttpContext: {HasHttpContext}, RequestOptionsUserKey: {RequestUserKey}, AsyncLocalUserKey: {AsyncLocalKey}",
+                    httpContext != null, requestUserKey ?? "null", GlobalTokenStore.CurrentUserKey ?? "null");
             }
         }
         
