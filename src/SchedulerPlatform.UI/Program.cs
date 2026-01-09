@@ -331,13 +331,25 @@ app.MapGet("/logout", async (HttpContext context) =>
 
 // Keepalive endpoint for token refresh during long-running Blazor Server circuits
 // This endpoint is authenticated, so hitting it triggers OnValidatePrincipal which refreshes tokens
-app.MapGet("/keepalive", (HttpContext context) =>
+app.MapGet("/keepalive", async (HttpContext context) =>
 {
-    // Return token expiry info for debugging (without exposing the actual token)
-    var tokens = context.GetTokenAsync("expires_at").Result;
+    // Get token expiry info for the response
+    var expiresAt = await context.GetTokenAsync("expires_at");
+    DateTimeOffset? expiresAtParsed = null;
+    int? minutesRemaining = null;
+    
+    if (!string.IsNullOrEmpty(expiresAt) && 
+        DateTimeOffset.TryParse(expiresAt, System.Globalization.CultureInfo.InvariantCulture, 
+            System.Globalization.DateTimeStyles.RoundtripKind, out var parsed))
+    {
+        expiresAtParsed = parsed;
+        minutesRemaining = (int)Math.Max(0, (parsed - DateTimeOffset.UtcNow).TotalMinutes);
+    }
+    
     return Results.Ok(new { 
         authenticated = context.User.Identity?.IsAuthenticated ?? false,
-        expiresAt = tokens,
+        expiresAt = expiresAtParsed?.ToString("o"),
+        minutesRemaining = minutesRemaining,
         serverTime = DateTimeOffset.UtcNow.ToString("o")
     });
 }).RequireAuthorization();
