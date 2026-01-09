@@ -294,6 +294,7 @@ builder.Services.AddHttpClient("SchedulerApi", client =>
 .AddHttpMessageHandler<AuthTokenHandler>();
 
 builder.Services.AddScoped<SessionStateService>();
+builder.Services.AddScoped<AccessTokenCacheService>();
 builder.Services.AddScoped<AuthTokenHandler>();
 builder.Services.AddScoped<UserPermissionCacheService>();
 builder.Services.AddScoped<IScheduleService, ScheduleService>();

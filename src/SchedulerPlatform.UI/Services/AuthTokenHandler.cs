@@ -20,17 +20,20 @@ public class AuthTokenHandler : DelegatingHandler
     private readonly ILogger<AuthTokenHandler> _logger;
     private readonly SessionStateService _sessionStateService;
     private readonly IConfiguration _configuration;
+    private readonly AccessTokenCacheService _tokenCache;
 
     public AuthTokenHandler(
         IHttpContextAccessor httpContextAccessor,
         ILogger<AuthTokenHandler> logger,
         SessionStateService sessionStateService,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        AccessTokenCacheService tokenCache)
     {
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
         _sessionStateService = sessionStateService;
         _configuration = configuration;
+        _tokenCache = tokenCache;
     }
 
     protected override async Task<HttpResponseMessage> SendAsync(
@@ -38,75 +41,87 @@ public class AuthTokenHandler : DelegatingHandler
         CancellationToken cancellationToken)
     {
         var httpContext = _httpContextAccessor.HttpContext;
+        string? accessToken = null;
         
         if (httpContext?.User?.Identity?.IsAuthenticated == true)
         {
             try
             {
-                var accessToken = await httpContext.GetTokenAsync("access_token");
+                accessToken = await httpContext.GetTokenAsync("access_token");
                 
+                // Update the token cache when we have HttpContext available
                 if (!string.IsNullOrEmpty(accessToken))
                 {
-                    request.Headers.Authorization = 
-                        new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
-                    
-                    // Log token metadata for debugging (never log the actual token)
-                    // Using Information level so it shows up in Azure App Service eventlog.xml
-                    try
+                    // Try to get expiry for cache
+                    var expiresAtStr = await httpContext.GetTokenAsync("expires_at");
+                    DateTimeOffset? expiresAt = null;
+                    if (!string.IsNullOrEmpty(expiresAtStr) && 
+                        DateTimeOffset.TryParse(expiresAtStr, System.Globalization.CultureInfo.InvariantCulture, 
+                            System.Globalization.DateTimeStyles.RoundtripKind, out var parsed))
                     {
-                        var handler = new JwtSecurityTokenHandler();
-                        if (handler.CanReadToken(accessToken))
-                        {
-                            var jwt = handler.ReadJwtToken(accessToken);
-                            var exp = jwt.ValidTo;
-                            var aud = string.Join(",", jwt.Audiences);
-                            var iss = jwt.Issuer;
-                            var clientId = jwt.Claims.FirstOrDefault(c => c.Type == "client_id")?.Value ?? "unknown";
-                            var isExpired = exp < DateTime.UtcNow;
-                            
-                            _logger.LogInformation(
-                                "Token attached to request. Issuer: {Issuer}, Audience: {Audience}, ClientId: {ClientId}, Expires: {Expires}, IsExpired: {IsExpired}, TokenLength: {TokenLength}",
-                                iss, aud, clientId, exp, isExpired, accessToken.Length);
-                            
-                            if (isExpired)
-                            {
-                                _logger.LogWarning(
-                                    "Access token is EXPIRED. Expires: {Expires}, Now: {Now}",
-                                    exp, DateTime.UtcNow);
-                            }
-                        }
-                        else
-                        {
-                            // Token is not a JWT (could be opaque/reference token)
-                            var hasTwoDots = accessToken.Count(c => c == '.') == 2;
-                            _logger.LogWarning(
-                                "Token is NOT a parseable JWT. TokenLength: {TokenLength}, HasJwtStructure: {HasJwtStructure}",
-                                accessToken.Length, hasTwoDots);
-                        }
+                        expiresAt = parsed;
                     }
-                    catch (Exception tokenEx)
-                    {
-                        _logger.LogWarning(tokenEx, "Could not parse JWT token for logging. TokenLength: {TokenLength}", accessToken.Length);
-                    }
-                }
-                else
-                {
-                    _logger.LogWarning("No access token available for authenticated user");
+                    _tokenCache.UpdateToken(accessToken, expiresAt);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to get access token for request");
+                _logger.LogWarning(ex, "Failed to get access token from HttpContext");
             }
         }
         else
         {
-            // Log when HttpContext is null or user is not authenticated
-            var hasHttpContext = httpContext != null;
-            var isAuthenticated = httpContext?.User?.Identity?.IsAuthenticated ?? false;
-            _logger.LogWarning(
-                "Skipping token attachment. HasHttpContext: {HasHttpContext}, IsAuthenticated: {IsAuthenticated}",
-                hasHttpContext, isAuthenticated);
+            // HttpContext is null (common in Blazor Server SignalR circuits)
+            // Try to use the cached token instead
+            accessToken = _tokenCache.GetCachedToken();
+            
+            if (!string.IsNullOrEmpty(accessToken))
+            {
+                _logger.LogDebug("Using cached access token (HttpContext unavailable)");
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "No access token available. HttpContext: {HasHttpContext}, CachedToken: {HasCachedToken}",
+                    httpContext != null, _tokenCache.HasValidToken);
+            }
+        }
+        
+        // Attach the Bearer token if we have one
+        if (!string.IsNullOrEmpty(accessToken))
+        {
+            request.Headers.Authorization = 
+                new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+            
+            // Log token metadata for debugging (never log the actual token)
+            try
+            {
+                var handler = new JwtSecurityTokenHandler();
+                if (handler.CanReadToken(accessToken))
+                {
+                    var jwt = handler.ReadJwtToken(accessToken);
+                    var exp = jwt.ValidTo;
+                    var aud = string.Join(",", jwt.Audiences);
+                    var iss = jwt.Issuer;
+                    var clientId = jwt.Claims.FirstOrDefault(c => c.Type == "client_id")?.Value ?? "unknown";
+                    var isExpired = exp < DateTime.UtcNow;
+                    
+                    _logger.LogDebug(
+                        "Token attached. Issuer: {Issuer}, Audience: {Audience}, ClientId: {ClientId}, Expires: {Expires}, IsExpired: {IsExpired}",
+                        iss, aud, clientId, exp, isExpired);
+                    
+                    if (isExpired)
+                    {
+                        _logger.LogWarning(
+                            "Access token is EXPIRED. Expires: {Expires}, Now: {Now}",
+                            exp, DateTime.UtcNow);
+                    }
+                }
+            }
+            catch (Exception tokenEx)
+            {
+                _logger.LogDebug(tokenEx, "Could not parse JWT token for logging");
+            }
         }
 
         // Add internal API key as fallback authentication for long-running operations
