@@ -20,20 +20,41 @@ public class AuthTokenHandler : DelegatingHandler
     private readonly ILogger<AuthTokenHandler> _logger;
     private readonly SessionStateService _sessionStateService;
     private readonly IConfiguration _configuration;
-    private readonly AccessTokenCacheService _tokenCache;
+    private readonly IServiceProvider _serviceProvider;
 
     public AuthTokenHandler(
         IHttpContextAccessor httpContextAccessor,
         ILogger<AuthTokenHandler> logger,
         SessionStateService sessionStateService,
         IConfiguration configuration,
-        AccessTokenCacheService tokenCache)
+        IServiceProvider serviceProvider)
     {
         _httpContextAccessor = httpContextAccessor;
         _logger = logger;
         _sessionStateService = sessionStateService;
         _configuration = configuration;
-        _tokenCache = tokenCache;
+        _serviceProvider = serviceProvider;
+    }
+
+    /// <summary>
+    /// Gets the AccessTokenCacheService from the current request's scope.
+    /// IHttpClientFactory pools handlers with a 2-minute lifetime, so we can't hold a direct
+    /// reference to scoped services - they may be from a stale scope. Instead, we resolve
+    /// from the current HttpContext.RequestServices when available, or fall back to the
+    /// root service provider (which will create a new scope).
+    /// </summary>
+    private AccessTokenCacheService GetTokenCache()
+    {
+        var httpContext = _httpContextAccessor.HttpContext;
+        if (httpContext?.RequestServices != null)
+        {
+            return httpContext.RequestServices.GetRequiredService<AccessTokenCacheService>();
+        }
+        
+        // Fallback to root service provider - this creates a new instance but at least
+        // allows the request to proceed. This path is taken when HttpContext is null
+        // (e.g., during Blazor Server SignalR circuit events).
+        return _serviceProvider.GetRequiredService<AccessTokenCacheService>();
     }
 
     protected override async Task<HttpResponseMessage> SendAsync(
@@ -42,6 +63,9 @@ public class AuthTokenHandler : DelegatingHandler
     {
         var httpContext = _httpContextAccessor.HttpContext;
         string? accessToken = null;
+        
+        // Get the token cache from the current request's scope (not the handler's stale scope)
+        var tokenCache = GetTokenCache();
         
         if (httpContext?.User?.Identity?.IsAuthenticated == true)
         {
@@ -61,7 +85,7 @@ public class AuthTokenHandler : DelegatingHandler
                     {
                         expiresAt = parsed;
                     }
-                    _tokenCache.UpdateToken(accessToken, expiresAt);
+                    tokenCache.UpdateToken(accessToken, expiresAt);
                 }
             }
             catch (Exception ex)
@@ -73,7 +97,7 @@ public class AuthTokenHandler : DelegatingHandler
         {
             // HttpContext is null (common in Blazor Server SignalR circuits)
             // Try to use the cached token instead
-            accessToken = _tokenCache.GetCachedToken();
+            accessToken = tokenCache.GetCachedToken();
             
             if (!string.IsNullOrEmpty(accessToken))
             {
@@ -83,7 +107,7 @@ public class AuthTokenHandler : DelegatingHandler
             {
                 _logger.LogWarning(
                     "No access token available. HttpContext: {HasHttpContext}, CachedToken: {HasCachedToken}",
-                    httpContext != null, _tokenCache.HasValidToken);
+                    httpContext != null, tokenCache.HasValidToken);
             }
         }
         
