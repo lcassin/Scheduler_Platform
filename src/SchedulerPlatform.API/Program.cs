@@ -156,8 +156,14 @@ builder.Services.AddDbContext<SchedulerDbContext>((serviceProvider, options) =>
     .AddInterceptors(auditLogInterceptor);
 });
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+// Configure authentication with a policy scheme that tries both Bearer and API key
+// This allows the UI to authenticate via API key when HttpContext is null (Blazor Server SignalR)
+builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultScheme = "BearerOrApiKey";
+        options.DefaultChallengeScheme = "BearerOrApiKey";
+    })
+    .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
     {
         options.Authority = builder.Configuration["Authentication:Authority"];
         options.Audience = builder.Configuration["Authentication:Audience"];
@@ -184,7 +190,22 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddScheme<SchedulerPlatform.API.Authorization.SchedulerApiKeyAuthenticationOptions, 
                SchedulerPlatform.API.Authorization.SchedulerApiKeyAuthenticationHandler>(
         SchedulerPlatform.API.Authorization.SchedulerApiKeyAuthenticationOptions.DefaultScheme, 
-        options => { });
+        options => { })
+    .AddPolicyScheme("BearerOrApiKey", "Bearer or API Key", options =>
+    {
+        options.ForwardDefaultSelector = context =>
+        {
+            // Check if the request has an API key header - if so, use API key auth
+            var apiKeyHeader = context.Request.Headers[SchedulerPlatform.API.Authorization.SchedulerApiKeyAuthenticationOptions.HeaderName].FirstOrDefault();
+            if (!string.IsNullOrEmpty(apiKeyHeader))
+            {
+                return SchedulerPlatform.API.Authorization.SchedulerApiKeyAuthenticationOptions.DefaultScheme;
+            }
+            
+            // Otherwise, use JWT Bearer auth
+            return JwtBearerDefaults.AuthenticationScheme;
+        };
+    });
 
 builder.Services.AddSingleton<IAuthorizationHandler, SchedulerPlatform.API.Authorization.PermissionAuthorizationHandler>();
 builder.Services.AddSingleton<IAuthorizationHandler, SchedulerPlatform.API.Authorization.SuperAdminAuthorizationHandler>();
