@@ -15,6 +15,13 @@ public interface IAdrOrchestratorService
     Task<ScrapeResult> ProcessScrapingAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
     Task<StatusCheckResult> CheckPendingStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
     Task<StatusCheckResult> CheckAllScrapedStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Finalizes stale pending jobs that missed their processing window.
+    /// Jobs in Pending or CredentialCheckInProgress status with NextRangeEndDateTime in the past
+    /// are marked as Cancelled and their rules are advanced to the next billing cycle.
+    /// This does NOT call any ADR APIs (no cost incurred).
+    /// </summary>
+    Task<StalePendingJobsResult> FinalizeStalePendingJobsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
 }
 
 #region Result Classes
@@ -56,6 +63,16 @@ public class StatusCheckResult
     public int JobsCompleted { get; set; }
     public int JobsNeedingReview { get; set; }
     public int JobsStillProcessing { get; set; }
+    public int Errors { get; set; }
+    public List<string> ErrorMessages { get; set; } = new();
+    public TimeSpan Duration { get; set; }
+}
+
+public class StalePendingJobsResult
+{
+    public int JobsFound { get; set; }
+    public int JobsCancelled { get; set; }
+    public int RulesAdvanced { get; set; }
     public int Errors { get; set; }
     public List<string> ErrorMessages { get; set; } = new();
     public TimeSpan Duration { get; set; }
@@ -1618,6 +1635,127 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             _logger.LogError(ex, "Manual status check failed");
             result.Errors++;
             result.ErrorMessages.Add($"Manual status check failed: {ex.Message}");
+            throw;
+        }
+    }
+
+    #endregion
+
+    #region Stale Job Finalization
+
+    /// <summary>
+    /// Finalizes stale pending jobs that missed their processing window.
+    /// Jobs in Pending or CredentialCheckInProgress status with NextRangeEndDateTime in the past
+    /// are marked as Cancelled and their rules are advanced to the next billing cycle.
+    /// This does NOT call any ADR APIs (no cost incurred).
+    /// </summary>
+    public async Task<StalePendingJobsResult> FinalizeStalePendingJobsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    {
+        var result = new StalePendingJobsResult();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+        try
+        {
+            _logger.LogInformation("Starting stale pending jobs finalization");
+
+            // Load configuration from database (cached for this orchestration run)
+            var config = await GetConfigurationAsync();
+            
+            // Check if orchestration is enabled
+            if (!config.IsOrchestrationEnabled)
+            {
+                _logger.LogWarning("ADR orchestration is disabled in configuration. Skipping stale job finalization.");
+                return result;
+            }
+
+            // Get stale pending jobs (default 90 day lookback)
+            var staleJobs = (await _unitOfWork.AdrJobs.GetStalePendingJobsAsync(DateTime.UtcNow)).ToList();
+            result.JobsFound = staleJobs.Count;
+            
+            _logger.LogInformation("Found {Count} stale pending jobs to finalize", staleJobs.Count);
+
+            // Report initial progress (0 of total)
+            progressCallback?.Invoke(0, staleJobs.Count);
+
+            if (!staleJobs.Any())
+            {
+                stopwatch.Stop();
+                result.Duration = stopwatch.Elapsed;
+                return result;
+            }
+
+            int processedCount = 0;
+            int processedSinceLastSave = 0;
+            var batchSize = config.BatchSize;
+
+            foreach (var job in staleJobs)
+            {
+                try
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    // Mark job as Cancelled with reason
+                    job.Status = "Cancelled";
+                    job.ErrorMessage = $"Job missed processing window. Billing period ended {job.NextRangeEndDateTime:yyyy-MM-dd}. Finalized on {DateTime.UtcNow:yyyy-MM-dd}.";
+                    job.ModifiedDateTime = DateTime.UtcNow;
+                    job.ModifiedBy = "System Created";
+                    result.JobsCancelled++;
+
+                    // Advance the rule to the next billing cycle
+                    await AdvanceRuleToNextCycleAsync(job);
+                    result.RulesAdvanced++;
+
+                    processedCount++;
+                    processedSinceLastSave++;
+
+                    // Save in batches
+                    if (processedSinceLastSave >= batchSize)
+                    {
+                        await _unitOfWork.SaveChangesAsync();
+                        _logger.LogInformation("Stale job finalization batch saved: {Count}/{Total} jobs processed", 
+                            processedCount, staleJobs.Count);
+                        processedSinceLastSave = 0;
+                        
+                        // Report progress
+                        progressCallback?.Invoke(processedCount, staleJobs.Count);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error finalizing stale job {JobId}", job.Id);
+                    result.Errors++;
+                    result.ErrorMessages.Add($"Job {job.Id}: {ex.Message}");
+                    processedCount++;
+                }
+            }
+
+            // Final save for remaining jobs
+            if (processedSinceLastSave > 0)
+            {
+                await _unitOfWork.SaveChangesAsync();
+            }
+
+            // Report final progress
+            progressCallback?.Invoke(processedCount, staleJobs.Count);
+
+            stopwatch.Stop();
+            result.Duration = stopwatch.Elapsed;
+            
+            _logger.LogInformation(
+                "Stale pending jobs finalization completed in {Duration}. Found: {Found}, Cancelled: {Cancelled}, Rules Advanced: {RulesAdvanced}, Errors: {Errors}",
+                result.Duration, result.JobsFound, result.JobsCancelled, result.RulesAdvanced, result.Errors);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Stale pending jobs finalization failed");
+            result.Errors++;
+            result.ErrorMessages.Add($"Stale pending jobs finalization failed: {ex.Message}");
             throw;
         }
     }

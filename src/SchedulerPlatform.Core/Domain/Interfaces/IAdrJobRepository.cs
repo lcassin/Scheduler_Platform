@@ -37,4 +37,12 @@ public interface IAdrJobRepository : IRepository<AdrJob>
     Task<IEnumerable<AdrJob>> GetJobsNeedingDailyStatusCheckAsync(DateTime currentDate, int delayDays = 1);
     Task<IEnumerable<AdrJob>> GetJobsNeedingFinalStatusCheckAsync(DateTime currentDate, int finalDelayDays = 5);
     Task<IEnumerable<AdrJob>> GetAllJobsForManualStatusCheckAsync();
+    /// <summary>
+    /// Gets jobs that are stuck in Pending or CredentialCheckInProgress status
+    /// but have passed their billing window (NextRangeEndDateTime &lt; today).
+    /// These jobs need to be finalized (cancelled) and their rules advanced to the next cycle.
+    /// </summary>
+    /// <param name="currentDate">The current date for comparison</param>
+    /// <param name="maxLookbackDays">Maximum days to look back (to avoid processing very old jobs)</param>
+    Task<IEnumerable<AdrJob>> GetStalePendingJobsAsync(DateTime currentDate, int maxLookbackDays = 90);
 }
