@@ -194,7 +194,13 @@
                                     <MudTimeline TimelinePosition="TimelinePosition.Start">
                                         <MudTimelineItem Color="@GetLastRunStepColor("Syncing accounts")" Icon="@Icons.Material.Filled.CheckCircle">
                                             <ItemContent>
-                                                <MudText Typo="Typo.body2">Sync Accounts</MudText>
+                                                <MudText Typo="Typo.body2">
+                                                    Sync Accounts
+                                                    @if (_lastCompletedRun.SyncResult?.Duration.TotalSeconds > 0)
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-2">@FormatDuration(_lastCompletedRun.SyncResult.Duration)</MudChip>
+                                                    }
+                                                </MudText>
                                                 @if (_lastCompletedRun.SyncResult != null)
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
@@ -209,7 +215,13 @@
                                         </MudTimelineItem>
                                         <MudTimelineItem Color="@GetLastRunStepColor("Creating jobs")" Icon="@Icons.Material.Filled.CheckCircle">
                                             <ItemContent>
-                                                <MudText Typo="Typo.body2">Create Jobs</MudText>
+                                                <MudText Typo="Typo.body2">
+                                                    Create Jobs
+                                                    @if (_lastCompletedRun.JobCreationResult?.Duration.TotalSeconds > 0)
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-2">@FormatDuration(_lastCompletedRun.JobCreationResult.Duration)</MudChip>
+                                                    }
+                                                </MudText>
                                                 @if (_lastCompletedRun.JobCreationResult != null)
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
@@ -224,7 +236,13 @@
                                         </MudTimelineItem>
                                         <MudTimelineItem Color="@GetLastRunStepColor("Verifying credentials")" Icon="@Icons.Material.Filled.CheckCircle">
                                             <ItemContent>
-                                                <MudText Typo="Typo.body2">Verify Credentials</MudText>
+                                                <MudText Typo="Typo.body2">
+                                                    Verify Credentials
+                                                    @if (_lastCompletedRun.CredentialVerificationResult?.Duration.TotalSeconds > 0)
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-2">@FormatDuration(_lastCompletedRun.CredentialVerificationResult.Duration)</MudChip>
+                                                    }
+                                                </MudText>
                                                 @if (_lastCompletedRun.CredentialVerificationResult != null)
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
@@ -239,7 +257,13 @@
                                         </MudTimelineItem>
                                         <MudTimelineItem Color="@GetLastRunStepColor("Checking statuses")" Icon="@Icons.Material.Filled.CheckCircle">
                                             <ItemContent>
-                                                <MudText Typo="Typo.body2">Check Statuses</MudText>
+                                                <MudText Typo="Typo.body2">
+                                                    Check Statuses
+                                                    @if (_lastCompletedRun.StatusCheckResult?.Duration.TotalSeconds > 0)
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-2">@FormatDuration(_lastCompletedRun.StatusCheckResult.Duration)</MudChip>
+                                                    }
+                                                </MudText>
                                                 @if (_lastCompletedRun.StatusCheckResult != null)
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
@@ -254,7 +278,13 @@
                                         </MudTimelineItem>
                                         <MudTimelineItem Color="@GetLastRunStepColor("Processing scraping")" Icon="@Icons.Material.Filled.CheckCircle">
                                             <ItemContent>
-                                                <MudText Typo="Typo.body2">Send ADR Requests</MudText>
+                                                <MudText Typo="Typo.body2">
+                                                    Send ADR Requests
+                                                    @if (_lastCompletedRun.ScrapeResult?.Duration.TotalSeconds > 0)
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-2">@FormatDuration(_lastCompletedRun.ScrapeResult.Duration)</MudChip>
+                                                    }
+                                                </MudText>
                                                 @if (_lastCompletedRun.ScrapeResult != null)
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
@@ -393,6 +423,10 @@
                                         {
                                             <MudText Typo="Typo.caption" Color="Color.Secondary">
                                                 @_currentStatus.Status.SyncResult.AccountsInserted inserted, @_currentStatus.Status.SyncResult.AccountsUpdated updated
+                                                @if (_currentStatus.Status.SyncResult.Duration.TotalSeconds > 0)
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-2">@FormatDuration(_currentStatus.Status.SyncResult.Duration)</MudChip>
+                                                }
                                             </MudText>
                                         }
                                     </ItemContent>
@@ -404,6 +438,10 @@
                                         {
                                             <MudText Typo="Typo.caption" Color="Color.Secondary">
                                                 @_currentStatus.Status.JobCreationResult.JobsCreated created, @_currentStatus.Status.JobCreationResult.JobsSkipped skipped
+                                                @if (_currentStatus.Status.JobCreationResult.Duration.TotalSeconds > 0)
+                                                {
+                                                    <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-2">@FormatDuration(_currentStatus.Status.JobCreationResult.Duration)</MudChip>
+                                                }
                                             </MudText>
                                         }
                                     </ItemContent>
@@ -432,6 +470,10 @@
                                             {
                                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
                                                     @_currentStatus.Status.CredentialVerificationResult.CredentialsVerified verified, @_currentStatus.Status.CredentialVerificationResult.CredentialsFailed failed
+                                                    @if (_currentStatus.Status.CredentialVerificationResult.Duration.TotalSeconds > 0)
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-2">@FormatDuration(_currentStatus.Status.CredentialVerificationResult.Duration)</MudChip>
+                                                    }
                                                 </MudText>
                                             }
                                         </ItemContent>
@@ -463,13 +505,17 @@
                                             {
                                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
                                                     @_currentStatus.Status.StatusCheckResult.JobsCompleted completed, @_currentStatus.Status.StatusCheckResult.JobsNeedingReview need review
+                                                    @if (_currentStatus.Status.StatusCheckResult.Duration.TotalSeconds > 0)
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-2">@FormatDuration(_currentStatus.Status.StatusCheckResult.Duration)</MudChip>
+                                                    }
                                                 </MudText>
                                             }
                                         </ItemContent>
                                     </MudTimelineItem>
                                     <MudTimelineItem Color="@GetStepColor("Processing scraping", _currentStatus.Status)" Icon="@GetStepIcon("Processing scraping", _currentStatus.Status)">
                                         <ItemContent>
-                                            <MudText Typo="Typo.body2">Process Scraping</MudText>
+                                            <MudText Typo="Typo.body2">Send ADR Requests</MudText>
                                             @if (_currentStatus.Status.CurrentStep == "Processing scraping" && _currentStatus.Status.CurrentStepTotal > 0)
                                             {
                                                 @if (_currentStatus.Status.CurrentStepPhase == "Preparing")
@@ -491,6 +537,10 @@
                                             {
                                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
                                                     @_currentStatus.Status.ScrapeResult.ScrapesRequested ADR requests sent, @_currentStatus.Status.ScrapeResult.ScrapesCompleted completed
+                                                    @if (_currentStatus.Status.ScrapeResult.Duration.TotalSeconds > 0)
+                                                    {
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-2">@FormatDuration(_currentStatus.Status.ScrapeResult.Duration)</MudChip>
+                                                    }
                                                 </MudText>
                                             }
                                         </ItemContent>
@@ -1628,5 +1678,22 @@
         var localTime = ConvertToUserTime(dateTime.Value);
         var abbr = !string.IsNullOrEmpty(_userTimeZoneAbbr) ? $" ({_userTimeZoneAbbr})" : "";
         return $"{localTime.ToString(format)}{abbr}";
+    }
+    
+    /// <summary>
+    /// Formats a TimeSpan duration for display (e.g., "2m 34s", "1h 5m 12s").
+    /// </summary>
+    private string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalSeconds < 1)
+            return "< 1s";
+        
+        if (duration.TotalMinutes < 1)
+            return $"{duration.Seconds}s";
+        
+        if (duration.TotalHours < 1)
+            return $"{duration.Minutes}m {duration.Seconds}s";
+        
+        return $"{(int)duration.TotalHours}h {duration.Minutes}m {duration.Seconds}s";
     }
 }
