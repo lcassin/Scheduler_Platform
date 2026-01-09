@@ -296,27 +296,58 @@
 
     private string GetUserEmail(System.Security.Claims.ClaimsPrincipal user)
     {
-        return user.FindFirst("email")?.Value 
+        // Check standard email claims first
+        var email = user.FindFirst("email")?.Value 
             ?? user.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value 
-            ?? user.FindFirst("preferred_username")?.Value
-            ?? "";
+            ?? user.FindFirst("preferred_username")?.Value;
+        
+        if (!string.IsNullOrWhiteSpace(email))
+            return email;
+        
+        // In Duende with Azure AD federation, the email is often in the 'name' claim
+        var name = user.FindFirst("name")?.Value;
+        if (!string.IsNullOrWhiteSpace(name) && name.Contains('@'))
+            return name;
+        
+        return "";
     }
 
     private string GetUserRole(System.Security.Claims.ClaimsPrincipal user)
     {
+        // Check for is_system_admin claim (enriched by API's UserClaimsTransformation)
         if (IsSuperAdmin(user)) return "Super Admin";
         
+        // Check for role claim
         var role = user.FindFirst("role")?.Value 
             ?? user.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
         
-        return role ?? "User";
+        if (!string.IsNullOrWhiteSpace(role))
+            return role;
+        
+        // If no role claims available, check if user is authenticated
+        // The actual role/permissions are determined by the API via claims enrichment
+        return user.Identity?.IsAuthenticated == true ? "Authenticated" : "User";
     }
 
     private bool IsSuperAdmin(System.Security.Claims.ClaimsPrincipal user)
     {
+        // Check is_system_admin claim (added by API's UserClaimsTransformation)
         var isSystemAdmin = user.FindFirst("is_system_admin")?.Value;
-        return string.Equals(isSystemAdmin, "true", StringComparison.OrdinalIgnoreCase) 
-            || string.Equals(isSystemAdmin, "True", StringComparison.OrdinalIgnoreCase);
+        if (string.Equals(isSystemAdmin, "true", StringComparison.OrdinalIgnoreCase) 
+            || string.Equals(isSystemAdmin, "True", StringComparison.OrdinalIgnoreCase))
+            return true;
+        
+        // Also check for role claim containing "Super Admin" or "SystemAdmin"
+        var role = user.FindFirst("role")?.Value 
+            ?? user.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+        if (!string.IsNullOrWhiteSpace(role))
+        {
+            return role.Contains("Super", StringComparison.OrdinalIgnoreCase) 
+                || role.Contains("System", StringComparison.OrdinalIgnoreCase)
+                || role.Contains("Admin", StringComparison.OrdinalIgnoreCase);
+        }
+        
+        return false;
     }
 
     public async ValueTask DisposeAsync()
