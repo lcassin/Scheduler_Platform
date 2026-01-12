@@ -110,6 +110,15 @@
                 }
             </MudTd>
             <MudTd DataLabel="Actions">
+                @if (_canUpdateUsers)
+                {
+                    <MudButton Variant="Variant.Text"
+                               Color="Color.Primary"
+                               Size="Size.Small"
+                               OnClick="@(() => OpenEditUserDialog(context.Id))">
+                        Edit
+                    </MudButton>
+                }
                 <MudButton Variant="Variant.Text"
                            Color="Color.Primary"
                            Size="Size.Small"
@@ -280,6 +289,29 @@
         };
 
         var dialog = await DialogService.ShowAsync<UserPermissionsDialog>("Manage User Permissions", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await _table!.ReloadServerData();
+        }
+    }
+
+    private async Task OpenEditUserDialog(int userId)
+    {
+        var parameters = new DialogParameters
+        {
+            ["UserId"] = userId
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        var dialog = await DialogService.ShowAsync<EditUserDialog>("Edit User", parameters, options);
         var result = await dialog.Result;
 
         if (!result.Canceled)

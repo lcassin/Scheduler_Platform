@@ -13,4 +13,5 @@ public interface IUserManagementService
     Task UpdateUserStatusAsync(int id, bool isActive);
     Task UpdateSuperAdminStatusAsync(int id, bool isSuperAdmin);
     Task UpdateUserTimezoneAsync(int id, string? preferredTimeZone);
+    Task UpdateUserDetailsAsync(int id, string? email, string? firstName, string? lastName, string? preferredTimeZone, bool clearTimezone = false);
 }

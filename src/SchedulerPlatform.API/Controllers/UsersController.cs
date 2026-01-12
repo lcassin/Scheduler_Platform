@@ -721,6 +721,79 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
+    /// Updates user details (email, first name, last name, timezone). Requires Users.Manage.Update policy.
+    /// </summary>
+    /// <param name="id">The user ID.</param>
+    /// <param name="request">The user details update request.</param>
+    /// <returns>No content on success.</returns>
+    /// <response code="204">The user details were successfully updated.</response>
+    /// <response code="400">Email already exists for another user or cannot modify system administrators.</response>
+    /// <response code="404">The user was not found.</response>
+    /// <response code="500">An error occurred while updating user details.</response>
+    [HttpPut("{id}/details")]
+    [Authorize(Policy = "Users.Manage.Update")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> UpdateUserDetails(int id, [FromBody] UpdateUserDetailsRequest request)
+    {
+        try
+        {
+            var user = await _unitOfWork.Users.GetByIdAsync(id);
+            if (user == null)
+            {
+                return NotFound();
+            }
+
+            // Check if email is being changed and if it already exists
+            if (!string.IsNullOrWhiteSpace(request.Email) && 
+                !string.Equals(user.Email, request.Email, StringComparison.OrdinalIgnoreCase))
+            {
+                var existingUsers = await _unitOfWork.Users.GetAllAsync();
+                if (existingUsers.Any(u => u.Id != id && 
+                    string.Equals(u.Email, request.Email, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return BadRequest(new { message = "A user with this email already exists" });
+                }
+                user.Email = request.Email.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.FirstName))
+            {
+                user.FirstName = request.FirstName.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.LastName))
+            {
+                user.LastName = request.LastName.Trim();
+            }
+
+            // Allow timezone to be set to null (Browser Default)
+            if (request.PreferredTimeZone != null || request.ClearTimezone)
+            {
+                user.PreferredTimeZone = request.PreferredTimeZone;
+            }
+
+            user.ModifiedDateTime = DateTime.UtcNow;
+            user.ModifiedBy = User.Identity?.Name ?? "System";
+
+            await _unitOfWork.Users.UpdateAsync(user);
+            await _unitOfWork.SaveChangesAsync();
+
+            _logger.LogInformation("Updated details for user {UserId} by {ModifiedBy}", 
+                id, User.Identity?.Name ?? "System");
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating details for user {UserId}", id);
+            return StatusCode(500, "An error occurred while updating user details");
+        }
+    }
+
+    /// <summary>
     /// Updates the preferred timezone for a user. Requires Users.Manage.Update policy.
     /// </summary>
     /// <param name="id">The user ID.</param>

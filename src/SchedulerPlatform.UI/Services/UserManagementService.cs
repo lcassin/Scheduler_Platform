@@ -175,4 +175,28 @@ public class UserManagementService : IUserManagementService
             throw;
         }
     }
+
+    public async Task UpdateUserDetailsAsync(int id, string? email, string? firstName, string? lastName, string? preferredTimeZone, bool clearTimezone = false)
+    {
+        try
+        {
+            var request = new 
+            { 
+                Email = email, 
+                FirstName = firstName, 
+                LastName = lastName, 
+                PreferredTimeZone = preferredTimeZone,
+                ClearTimezone = clearTimezone
+            };
+            var response = await _httpClient.PutAsJsonAsync($"Users/{id}/details", request);
+            response.EnsureSuccessStatusCode();
+            
+            _logger.LogInformation("Updated user {UserId} details", id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating details for user {UserId}", id);
+            throw;
+        }
+    }
 }
