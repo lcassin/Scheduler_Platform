@@ -7,6 +7,7 @@
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IPermissionService PermissionService
+@inject IUserTimeZoneService TimeZoneService
 
 <PageTitle>User Management</PageTitle>
 
@@ -78,7 +79,7 @@
             <MudTd DataLabel="Last Login">
                 @if (context.LastLoginDateTime.HasValue)
                 {
-                    @context.LastLoginDateTime.Value.ToLocalTime().ToString("g")
+                    @GetFormattedLastLogin(context.Id, context.LastLoginDateTime.Value)
                 }
                 else
                 {
@@ -128,6 +129,7 @@
     private bool _loading = false;
     private bool _canCreateUsers = false;
     private bool _canUpdateUsers = false;
+    private Dictionary<int, string> _formattedLastLogins = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -135,9 +137,34 @@
         _canUpdateUsers = await PermissionService.CanUpdateAsync("users:manage");
     }
 
+    private string GetFormattedLastLogin(int userId, DateTime lastLogin)
+    {
+        if (_formattedLastLogins.TryGetValue(userId, out var formatted))
+            return formatted;
+
+        // Format asynchronously and update the dictionary
+        _ = FormatLastLoginAsync(userId, lastLogin);
+        return lastLogin.ToString("g"); // Return unformatted initially
+    }
+
+    private async Task FormatLastLoginAsync(int userId, DateTime lastLogin)
+    {
+        try
+        {
+            var formatted = await TimeZoneService.FormatDateTimeAsync(lastLogin);
+            _formattedLastLogins[userId] = formatted;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            _formattedLastLogins[userId] = lastLogin.ToString("g");
+        }
+    }
+
     private async Task<TableData<UserListItem>> ServerReload(TableState state, CancellationToken cancellationToken)
     {
         _loading = true;
+        _formattedLastLogins.Clear(); // Clear cache when reloading
         try
         {
             var result = await UserManagementService.GetUsersAsync(

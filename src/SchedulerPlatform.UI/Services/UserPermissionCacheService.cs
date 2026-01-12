@@ -67,6 +67,7 @@ public class UserPermissionCacheService
                 Role = userInfo.Role,
                 Permissions = userInfo.Permissions ?? new List<string>(),
                 ClientId = userInfo.ClientId,
+                PreferredTimeZone = userInfo.PreferredTimeZone,
                 LastRefreshed = DateTime.UtcNow
             };
             
@@ -175,6 +176,15 @@ public class UserPermissionCacheService
         return _cachedPermissions.Role ?? "User";
     }
 
+    /// <summary>
+    /// Gets the user's preferred timezone from cached permissions.
+    /// Returns null if not set or not yet loaded.
+    /// </summary>
+    public string? GetPreferredTimeZone()
+    {
+        return _cachedPermissions?.PreferredTimeZone;
+    }
+
     private bool PermissionsChanged(CachedUserPermissions previous, CachedUserPermissions current)
     {
         if (previous.IsSystemAdmin != current.IsSystemAdmin)
@@ -201,6 +211,7 @@ public class CachedUserPermissions
     public string? Role { get; set; }
     public List<string> Permissions { get; set; } = new();
     public int ClientId { get; set; }
+    public string? PreferredTimeZone { get; set; }
     public DateTime LastRefreshed { get; set; }
 }
 
@@ -217,4 +228,5 @@ internal class CurrentUserResponse
     public string? Role { get; set; }
     public List<string>? Permissions { get; set; }
     public int ClientId { get; set; }
+    public string? PreferredTimeZone { get; set; }
 }

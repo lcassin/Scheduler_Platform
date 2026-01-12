@@ -115,6 +115,7 @@ public class UsersController : ControllerBase
                                 IsActive = user.IsActive,
                                 IsSystemAdmin = user.IsSystemAdmin,
                                 LastLoginDateTime = user.LastLoginDateTime,
+                                PreferredTimeZone = user.PreferredTimeZone,
                                 PermissionCount = individualPermissionCount,
                                 Role = DetermineUserRole(user, permissionsList)
                             });
@@ -198,6 +199,13 @@ public class UsersController : ControllerBase
                 return NotFound("User not found");
             }
 
+            // Update LastLoginDateTime since IdentityServer doesn't have database access
+            user.LastLoginDateTime = DateTime.UtcNow;
+            user.ModifiedDateTime = DateTime.UtcNow;
+            user.ModifiedBy = user.Email;
+            await _unitOfWork.Users.UpdateAsync(user);
+            await _unitOfWork.SaveChangesAsync();
+
             var permissions = await _unitOfWork.UserPermissions.GetByUserIdAsync(user.Id);
             var permissionsList = permissions.ToList();
 
@@ -225,7 +233,8 @@ public class UsersController : ControllerBase
                 IsSystemAdmin = user.IsSystemAdmin,
                 Role = DetermineUserRole(user, permissionsList),
                 Permissions = permissionStrings,
-                ClientId = user.ClientId
+                ClientId = user.ClientId,
+                PreferredTimeZone = user.PreferredTimeZone
             };
 
             return Ok(response);
@@ -286,6 +295,7 @@ public class UsersController : ControllerBase
                 IsSystemAdmin = user.IsSystemAdmin,
                 LastLoginDateTime = user.LastLoginDateTime,
                 ClientId = user.ClientId,
+                PreferredTimeZone = user.PreferredTimeZone,
                 Permissions = permissionResponses
             };
 
@@ -499,6 +509,7 @@ public class UsersController : ControllerBase
                 PasswordHash = passwordHash,
                 MustChangePassword = true,
                 PasswordChangedDateTime = userNow,
+                PreferredTimeZone = "Central Standard Time", // Default timezone for new users
                 CreatedDateTime = userNow,
                 CreatedBy = userCreatedBy,
                 ModifiedDateTime = userNow,
@@ -646,6 +657,7 @@ public class UsersController : ControllerBase
                 IsSystemAdmin = user.IsSystemAdmin,
                 LastLoginDateTime = user.LastLoginDateTime,
                 ClientId = user.ClientId,
+                PreferredTimeZone = user.PreferredTimeZone,
                 Permissions = permissionResponses
             };
 
