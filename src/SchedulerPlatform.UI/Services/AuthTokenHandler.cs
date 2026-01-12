@@ -96,7 +96,45 @@ public class AuthTokenHandler : DelegatingHandler
             }
             else
             {
-                _logger.LogWarning("UserKey {UserKey} provided via request options but no token found in GlobalTokenStore", userKey);
+                // Token not in GlobalTokenStore - try to get from HttpContext as fallback
+                // This can happen on the first request after login before the token is cached
+                _logger.LogDebug("UserKey {UserKey} provided but no token in GlobalTokenStore, trying HttpContext fallback", userKey);
+                
+                if (httpContext?.User?.Identity?.IsAuthenticated == true)
+                {
+                    try
+                    {
+                        accessToken = await httpContext.GetTokenAsync("access_token");
+                        
+                        if (!string.IsNullOrEmpty(accessToken))
+                        {
+                            // Store in GlobalTokenStore for future requests
+                            var expiresAtStr = await httpContext.GetTokenAsync("expires_at");
+                            DateTimeOffset? expiresAt = null;
+                            if (!string.IsNullOrEmpty(expiresAtStr) && 
+                                DateTimeOffset.TryParse(expiresAtStr, System.Globalization.CultureInfo.InvariantCulture, 
+                                    System.Globalization.DateTimeStyles.RoundtripKind, out var parsed))
+                            {
+                                expiresAt = parsed;
+                            }
+                            
+                            GlobalTokenStore.SetToken(userKey, accessToken, expiresAt);
+                            _logger.LogInformation("Bootstrapped token for user {UserKey} from HttpContext into GlobalTokenStore", userKey);
+                        }
+                        else
+                        {
+                            _logger.LogWarning("UserKey {UserKey} provided but no token in GlobalTokenStore and HttpContext.GetTokenAsync returned null", userKey);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to get access token from HttpContext for userKey {UserKey}", userKey);
+                    }
+                }
+                else
+                {
+                    _logger.LogWarning("UserKey {UserKey} provided but no token in GlobalTokenStore and HttpContext is not authenticated", userKey);
+                }
             }
         }
         else if (httpContext?.User?.Identity?.IsAuthenticated == true)
