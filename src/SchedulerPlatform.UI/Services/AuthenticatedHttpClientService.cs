@@ -74,8 +74,12 @@ public class AuthenticatedHttpClientService
     }
 
     /// <summary>
-    /// Creates an HttpClient configured for the SchedulerAPI with the current user's authentication.
+    /// Creates an HttpClient configured for the SchedulerAPI.
+    /// WARNING: This method returns a raw HttpClient that does NOT automatically set the userKey.
+    /// Prefer using GetAsync, PostAsync, PostAsJsonAsync, PutAsJsonAsync, DeleteAsync, or SendAsync
+    /// which properly set the userKey for authentication.
     /// </summary>
+    [Obsolete("Use GetAsync, PostAsync, PostAsJsonAsync, PutAsJsonAsync, DeleteAsync, or SendAsync instead to ensure userKey is set for authentication.")]
     public HttpClient CreateClient(string name = "SchedulerAPI")
     {
         return _httpClientFactory.CreateClient(name);
@@ -105,6 +109,18 @@ public class AuthenticatedHttpClientService
     public async Task<HttpResponseMessage> GetAsync(string requestUri, CancellationToken cancellationToken = default)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+        return await SendAsync(request, cancellationToken);
+    }
+
+    /// <summary>
+    /// Sends a POST request with optional content and the current user's authentication.
+    /// </summary>
+    public async Task<HttpResponseMessage> PostAsync(string requestUri, HttpContent? content = null, CancellationToken cancellationToken = default)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, requestUri)
+        {
+            Content = content
+        };
         return await SendAsync(request, cancellationToken);
     }
 

@@ -303,8 +303,6 @@
             }
         }
 
-        private HttpClient CreateClient() => HttpClientService.CreateClient();
-
         private async Task LoadBlacklist()
         {
             _loading = true;
@@ -323,8 +321,9 @@
                     queryParams.Add($"accountNumber={Uri.EscapeDataString(_searchAccountNumber)}");
             
                 var url = $"adr/blacklist?{string.Join("&", queryParams)}";
-                var client = CreateClient();
-                var response = await client.GetFromJsonAsync<BlacklistPagedResponse>(url);
+                var httpResponse = await HttpClientService.GetAsync(url);
+                httpResponse.EnsureSuccessStatusCode();
+                var response = await httpResponse.Content.ReadFromJsonAsync<BlacklistPagedResponse>();
             
                 if (response != null)
                 {
@@ -365,8 +364,7 @@
                 queryParams.Add($"accountNumber={Uri.EscapeDataString(_searchAccountNumber)}");
             
             var url = $"adr/blacklist/export?{string.Join("&", queryParams)}";
-            var client = CreateClient();
-            var response = await client.GetAsync(url);
+            var response = await HttpClientService.GetAsync(url);
             
             if (response.IsSuccessStatusCode)
             {
@@ -479,15 +477,14 @@
             _saving = true;
             try
             {
-                var client = CreateClient();
                 HttpResponseMessage response;
                 if (_editingEntry.Id > 0)
                 {
-                    response = await client.PutAsJsonAsync($"adr/blacklist/{_editingEntry.Id}", _editingEntry);
+                    response = await HttpClientService.PutAsJsonAsync($"adr/blacklist/{_editingEntry.Id}", _editingEntry);
                 }
                 else
                 {
-                    response = await client.PostAsJsonAsync("adr/blacklist", _editingEntry);
+                    response = await HttpClientService.PostAsJsonAsync("adr/blacklist", _editingEntry);
                 }
             
                 if (response.IsSuccessStatusCode)
@@ -524,8 +521,7 @@
             {
                 try
                 {
-                    var client = CreateClient();
-                    var response = await client.DeleteAsync($"adr/blacklist/{entry.Id}");
+                    var response = await HttpClientService.DeleteAsync($"adr/blacklist/{entry.Id}");
                     if (response.IsSuccessStatusCode)
                     {
                         Snackbar.Add("Entry deleted successfully", Severity.Success);
