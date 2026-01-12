@@ -2,7 +2,7 @@
 @using SchedulerPlatform.UI.Services
 @using Microsoft.AspNetCore.Authorization
 @attribute [Authorize]
-@inject IHttpClientFactory HttpClientFactory
+@inject AuthenticatedHttpClientService HttpClient
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IPermissionService PermissionService
@@ -213,16 +213,15 @@
         }
     }
 
-        private HttpClient CreateClient() => HttpClientFactory.CreateClient("SchedulerAPI");
-
         private async Task LoadJobTypes()
         {
             _loading = true;
             try
             {
-                var client = CreateClient();
                 var url = $"adr/job-types?includeInactive={_includeInactive}";
-                _jobTypes = await client.GetFromJsonAsync<List<JobTypeModel>>(url) ?? new();
+                var response = await HttpClient.GetAsync(url);
+                response.EnsureSuccessStatusCode();
+                _jobTypes = await response.Content.ReadFromJsonAsync<List<JobTypeModel>>() ?? new();
             }
             catch (Exception ex)
             {
@@ -282,18 +281,17 @@
             _saving = true;
             try
             {
-                var client = CreateClient();
                 HttpResponseMessage response;
             
                 if (_editingJobType.Id > 0)
                 {
                     // Update existing
-                    response = await client.PutAsJsonAsync($"adr/job-types/{_editingJobType.Id}", _editingJobType);
+                    response = await HttpClient.PutAsJsonAsync($"adr/job-types/{_editingJobType.Id}", _editingJobType);
                 }
                 else
                 {
                     // Create new
-                    response = await client.PostAsJsonAsync("adr/job-types", _editingJobType);
+                    response = await HttpClient.PostAsJsonAsync("adr/job-types", _editingJobType);
                 }
             
                 if (response.IsSuccessStatusCode)
@@ -330,8 +328,7 @@
             {
                 try
                 {
-                    var client = CreateClient();
-                    var response = await client.DeleteAsync($"adr/job-types/{jobType.Id}");
+                    var response = await HttpClient.DeleteAsync($"adr/job-types/{jobType.Id}");
                 
                     if (response.IsSuccessStatusCode)
                     {

@@ -41,7 +41,7 @@ public class UserPermissionCacheService
         await _refreshLock.WaitAsync();
         try
         {
-            var response = await _httpClient.GetAsync("api/users/me");
+            var response = await _httpClient.GetAsync("users/me");
             
             if (!response.IsSuccessStatusCode)
             {

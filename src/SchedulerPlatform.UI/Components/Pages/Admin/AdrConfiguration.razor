@@ -2,7 +2,7 @@
 @using SchedulerPlatform.UI.Services
 @using Microsoft.AspNetCore.Authorization
 @attribute [Authorize]
-@inject IHttpClientFactory HttpClientFactory
+@inject AuthenticatedHttpClientService HttpClient
 @inject ISnackbar Snackbar
 @inject IPermissionService PermissionService
 
@@ -268,15 +268,14 @@
             }
         }
 
-        private HttpClient CreateClient() => HttpClientFactory.CreateClient("SchedulerAPI");
-
         private async Task LoadConfiguration()
         {
             _loading = true;
             try
             {
-                var client = CreateClient();
-                _config = await client.GetFromJsonAsync<AdrConfigurationModel>("adr/configuration");
+                var response = await HttpClient.GetAsync("adr/configuration");
+                response.EnsureSuccessStatusCode();
+                _config = await response.Content.ReadFromJsonAsync<AdrConfigurationModel>();
             }
             catch (Exception ex)
             {
@@ -296,8 +295,7 @@
             _saving = true;
             try
             {
-                var client = CreateClient();
-                var response = await client.PutAsJsonAsync("adr/configuration", _config);
+                var response = await HttpClient.PutAsJsonAsync("adr/configuration", _config);
                 if (response.IsSuccessStatusCode)
                 {
                     _config = await response.Content.ReadFromJsonAsync<AdrConfigurationModel>();
