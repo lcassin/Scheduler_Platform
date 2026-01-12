@@ -78,26 +78,7 @@
             </MudTd>
             <MudTd DataLabel="Permissions">@context.PermissionCount</MudTd>
             <MudTd DataLabel="Timezone">
-                @if (_canUpdateUsers)
-                {
-                    <MudSelect T="string" 
-                               Value="@context.PreferredTimeZone"
-                               ValueChanged="@(async (string tz) => await UpdateUserTimezone(context.Id, context.Email, tz))"
-                               Dense="true"
-                               Margin="Margin.Dense"
-                               Variant="Variant.Text"
-                               Style="min-width: 180px;">
-                        <MudSelectItem T="string" Value="@((string?)null)">Browser Default</MudSelectItem>
-                        @foreach (var tz in _availableTimezones)
-                        {
-                            <MudSelectItem T="string" Value="@tz.Id">@tz.DisplayName</MudSelectItem>
-                        }
-                    </MudSelect>
-                }
-                else
-                {
-                    @(context.PreferredTimeZone ?? "Browser Default")
-                }
+                @(GetTimezoneDisplayName(context.PreferredTimeZone))
             </MudTd>
             <MudTd DataLabel="Last Login">
                 @if (context.LastLoginDateTime.HasValue)
@@ -360,5 +341,14 @@
             "No Access" => Color.Default,
             _ => Color.Secondary
         };
+    }
+
+    private string GetTimezoneDisplayName(string? timezoneId)
+    {
+        if (string.IsNullOrEmpty(timezoneId))
+            return "Browser Default";
+
+        var tz = _availableTimezones.FirstOrDefault(t => t.Id == timezoneId);
+        return tz.DisplayName ?? timezoneId;
     }
 }

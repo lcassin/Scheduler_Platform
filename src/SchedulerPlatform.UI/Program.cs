@@ -10,7 +10,6 @@ using System.Security.Claims;
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text.Json;
-using System.Globalization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -354,6 +353,21 @@ app.MapGet("/keepalive", async (HttpContext context) =>
     {
         expiresAtParsed = parsed;
         minutesRemaining = (int)Math.Max(0, (parsed - DateTimeOffset.UtcNow).TotalMinutes);
+    }
+    
+    // Update GlobalTokenStore with the refreshed token
+    // This is critical for Blazor Server circuits where API calls use the token store
+    if (context.User.Identity?.IsAuthenticated == true)
+    {
+        var userKey = AuthTokenHandler.GetUserKey(context.User);
+        if (!string.IsNullOrEmpty(userKey))
+        {
+            var accessToken = await context.GetTokenAsync("access_token");
+            if (!string.IsNullOrEmpty(accessToken))
+            {
+                GlobalTokenStore.SetToken(userKey, accessToken, expiresAtParsed);
+            }
+        }
     }
     
     return Results.Ok(new { 
