@@ -158,4 +158,21 @@ public class UserManagementService : IUserManagementService
             throw;
         }
     }
+
+    public async Task UpdateUserTimezoneAsync(int id, string? preferredTimeZone)
+    {
+        try
+        {
+            var request = new { PreferredTimeZone = preferredTimeZone };
+            var response = await _httpClient.PutAsJsonAsync($"Users/{id}/timezone", request);
+            response.EnsureSuccessStatusCode();
+            
+            _logger.LogInformation("Updated user {UserId} timezone to {TimeZone}", id, preferredTimeZone);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating timezone for user {UserId}", id);
+            throw;
+        }
+    }
 }

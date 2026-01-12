@@ -721,6 +721,49 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
+    /// Updates the preferred timezone for a user. Requires Users.Manage.Update policy.
+    /// </summary>
+    /// <param name="id">The user ID.</param>
+    /// <param name="request">The timezone update request containing the new timezone ID.</param>
+    /// <returns>No content on success.</returns>
+    /// <response code="204">The user timezone was successfully updated.</response>
+    /// <response code="404">The user was not found.</response>
+    /// <response code="500">An error occurred while updating user timezone.</response>
+    [HttpPut("{id}/timezone")]
+    [Authorize(Policy = "Users.Manage.Update")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> UpdateUserTimezone(int id, [FromBody] UpdateUserTimezoneRequest request)
+    {
+        try
+        {
+            var user = await _unitOfWork.Users.GetByIdAsync(id);
+            if (user == null)
+            {
+                return NotFound();
+            }
+
+            user.PreferredTimeZone = request.PreferredTimeZone;
+            user.ModifiedDateTime = DateTime.UtcNow;
+            user.ModifiedBy = User.Identity?.Name ?? "System";
+
+            await _unitOfWork.Users.UpdateAsync(user);
+            await _unitOfWork.SaveChangesAsync();
+
+            _logger.LogInformation("Updated timezone for user {UserId} to {TimeZone} by {ModifiedBy}", 
+                id, request.PreferredTimeZone, User.Identity?.Name ?? "System");
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating timezone for user {UserId}", id);
+            return StatusCode(500, "An error occurred while updating user timezone");
+        }
+    }
+
+    /// <summary>
     /// Resets a user's password and sends them a new temporary password via email. Requires Users.Manage.Update policy.
     /// </summary>
     /// <param name="id">The user ID.</param>

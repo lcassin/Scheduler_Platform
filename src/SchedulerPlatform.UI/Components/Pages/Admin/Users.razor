@@ -56,6 +56,7 @@
             <MudTh>Status</MudTh>
             <MudTh>Role</MudTh>
             <MudTh>Permissions</MudTh>
+            <MudTh>Timezone</MudTh>
             <MudTh>Last Login</MudTh>
             <MudTh>Actions</MudTh>
         </HeaderContent>
@@ -76,6 +77,28 @@
                 <MudChip T="string" Color="@GetRoleColor(context.Role)" Size="Size.Small">@context.Role</MudChip>
             </MudTd>
             <MudTd DataLabel="Permissions">@context.PermissionCount</MudTd>
+            <MudTd DataLabel="Timezone">
+                @if (_canUpdateUsers)
+                {
+                    <MudSelect T="string" 
+                               Value="@context.PreferredTimeZone"
+                               ValueChanged="@(async (string tz) => await UpdateUserTimezone(context.Id, context.Email, tz))"
+                               Dense="true"
+                               Margin="Margin.Dense"
+                               Variant="Variant.Text"
+                               Style="min-width: 180px;">
+                        <MudSelectItem T="string" Value="@((string?)null)">Browser Default</MudSelectItem>
+                        @foreach (var tz in _availableTimezones)
+                        {
+                            <MudSelectItem T="string" Value="@tz.Id">@tz.DisplayName</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
+                else
+                {
+                    @(context.PreferredTimeZone ?? "Browser Default")
+                }
+            </MudTd>
             <MudTd DataLabel="Last Login">
                 @if (context.LastLoginDateTime.HasValue)
                 {
@@ -131,10 +154,36 @@
     private bool _canUpdateUsers = false;
     private Dictionary<int, string> _formattedLastLogins = new();
 
+    private static readonly List<(string Id, string DisplayName)> _availableTimezones = new()
+    {
+        ("Eastern Standard Time", "Eastern Time (ET)"),
+        ("Central Standard Time", "Central Time (CT)"),
+        ("Mountain Standard Time", "Mountain Time (MT)"),
+        ("US Mountain Standard Time", "Arizona (MST)"),
+        ("Pacific Standard Time", "Pacific Time (PT)"),
+        ("Alaskan Standard Time", "Alaska Time (AKT)"),
+        ("Hawaiian Standard Time", "Hawaii Time (HST)"),
+        ("UTC", "UTC")
+    };
+
     protected override async Task OnInitializedAsync()
     {
         _canCreateUsers = await PermissionService.CanCreateAsync("users:manage");
         _canUpdateUsers = await PermissionService.CanUpdateAsync("users:manage");
+    }
+
+    private async Task UpdateUserTimezone(int userId, string email, string? timezone)
+    {
+        try
+        {
+            await UserManagementService.UpdateUserTimezoneAsync(userId, timezone);
+            Snackbar.Add($"Timezone updated for {email}", Severity.Success);
+            await _table!.ReloadServerData();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error updating timezone: {ex.Message}", Severity.Error);
+        }
     }
 
     private string GetFormattedLastLogin(int userId, DateTime lastLogin)

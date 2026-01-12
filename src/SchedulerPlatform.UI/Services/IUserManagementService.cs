@@ -12,4 +12,5 @@ public interface IUserManagementService
     Task<UserDetail> CreateUserAsync(CreateUserRequest request);
     Task UpdateUserStatusAsync(int id, bool isActive);
     Task UpdateSuperAdminStatusAsync(int id, bool isSuperAdmin);
+    Task UpdateUserTimezoneAsync(int id, string? preferredTimeZone);
 }
