@@ -179,7 +179,27 @@ public class ApiCallJob : IJob
             
             var responseContent = await response.Content.ReadAsStringAsync();
             
-            response.EnsureSuccessStatusCode();
+            // Check for non-success status codes and capture the response body before throwing
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorMessage = $"API returned {(int)response.StatusCode} {response.StatusCode}";
+                
+                // Try to extract error details from the response body
+                if (!string.IsNullOrEmpty(responseContent))
+                {
+                    // Truncate very long responses to avoid database issues
+                    var truncatedResponse = responseContent.Length > 4000 
+                        ? responseContent.Substring(0, 4000) + "... [truncated]" 
+                        : responseContent;
+                    errorMessage += $"\n\nResponse Body:\n{truncatedResponse}";
+                }
+                
+                _logger.LogError("API call failed with status {StatusCode}. Response: {Response}", 
+                    response.StatusCode, responseContent);
+                
+                // Throw with the detailed error message so it gets captured in the catch block
+                throw new HttpRequestException(errorMessage);
+            }
             
             jobExecution.Status = JobStatus.Completed;
             jobExecution.EndDateTime = DateTime.UtcNow;
