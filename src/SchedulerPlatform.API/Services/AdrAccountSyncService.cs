@@ -22,6 +22,7 @@ public class AdrAccountSyncResult
     public int AccountsInserted { get; set; }
     public int AccountsUpdated { get; set; }
     public int AccountsMarkedDeleted { get; set; }
+    public int DuplicatesMarkedDeleted { get; set; }
     public int ClientsCreated { get; set; }
     public int ClientsUpdated { get; set; }
     public int RulesCreated { get; set; }
@@ -89,25 +90,53 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             var existingAccountList = await _dbContext.AdrAccounts
                 .ToListAsync(cancellationToken);
 
+            // Mark duplicate (VMAccountId, VMAccountNumber) rows as deleted, keeping only the most recently modified
+            var duplicatesToDelete = new List<AdrAccount>();
             var existingAccounts = existingAccountList
                 .GroupBy(a => (a.VMAccountId, a.VMAccountNumber))
                 .ToDictionary(
                     g => g.Key,
                     g =>
                     {
-                        if (g.Count() > 1)
+                        var orderedAccounts = g.OrderByDescending(a => a.ModifiedDateTime).ToList();
+                        if (orderedAccounts.Count > 1)
                         {
                             _logger.LogWarning(
                                 "Found {Count} AdrAccount rows with VMAccountId {VMAccountId} and VMAccountNumber {VMAccountNumber}. " +
-                                "Using the most recently modified one.",
-                                g.Count(),
+                                "Keeping the most recently modified one and marking {DuplicateCount} duplicates as deleted.",
+                                orderedAccounts.Count,
                                 g.Key.VMAccountId,
-                                g.Key.VMAccountNumber);
+                                g.Key.VMAccountNumber,
+                                orderedAccounts.Count - 1);
+                            
+                            // Mark all but the first (most recent) as deleted
+                            foreach (var duplicate in orderedAccounts.Skip(1))
+                            {
+                                if (!duplicate.IsDeleted)
+                                {
+                                    duplicatesToDelete.Add(duplicate);
+                                }
+                            }
                         }
-                        return g.OrderByDescending(a => a.ModifiedDateTime).First();
+                        return orderedAccounts.First();
                     });
 
-            _logger.LogInformation("Loaded {Count} existing accounts from local database", existingAccounts.Count);
+            // Mark duplicates as deleted
+            if (duplicatesToDelete.Count > 0)
+            {
+                _logger.LogInformation("Marking {Count} duplicate AdrAccount rows as deleted", duplicatesToDelete.Count);
+                foreach (var duplicate in duplicatesToDelete)
+                {
+                    duplicate.IsDeleted = true;
+                    duplicate.ModifiedDateTime = DateTime.UtcNow;
+                    duplicate.ModifiedBy = "Duplicate Cleanup";
+                }
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                result.DuplicatesMarkedDeleted = duplicatesToDelete.Count;
+                _logger.LogInformation("Duplicate cleanup complete: {Count} rows marked as deleted", duplicatesToDelete.Count);
+            }
+
+            _logger.LogInformation("Loaded {Count} unique accounts from local database", existingAccounts.Count);
 
             // Use local database count for progress reporting
             // This includes both accounts to sync AND accounts to mark as deleted
