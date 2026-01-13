@@ -101,12 +101,27 @@ namespace SchedulerPlatform.API.Services
             {
                 _logger.LogInformation("StartupRecoveryService: checking for orphaned ADR orchestration runs");
 
-                var currentRun = _orchestrationQueue.GetCurrentRun();
-                if (currentRun != null)
+                if (_orchestrationQueue.IsOrchestrationRunningInMemory())
+                {
+                    var currentRun = _orchestrationQueue.GetCurrentRun();
+                    _logger.LogInformation(
+                        "StartupRecoveryService: orchestration {RequestId} is currently running or queued in memory, skipping orchestration recovery",
+                        currentRun?.RequestId ?? "unknown");
+                    return;
+                }
+                
+                var recentRunningInDb = await dbContext.AdrOrchestrationRuns
+                    .Where(r => !r.IsDeleted 
+                             && r.Status == "Running" 
+                             && r.StartedDateTime.HasValue 
+                             && r.StartedDateTime > now.AddMinutes(-30)
+                             && r.CompletedDateTime == null)
+                    .AnyAsync(cancellationToken);
+                    
+                if (recentRunningInDb)
                 {
                     _logger.LogInformation(
-                        "StartupRecoveryService: orchestration {RequestId} is currently running, skipping orchestration recovery",
-                        currentRun.RequestId);
+                        "StartupRecoveryService: a recent orchestration is running in database (started within last 30 minutes), skipping orchestration recovery");
                     return;
                 }
 

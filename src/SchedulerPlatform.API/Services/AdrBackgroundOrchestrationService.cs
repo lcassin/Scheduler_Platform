@@ -75,6 +75,13 @@ public interface IAdrOrchestrationQueue
     /// Get the cancellation token for a specific request.
     /// </summary>
     CancellationToken GetRequestToken(string requestId);
+    
+    /// <summary>
+    /// Checks if an orchestration is currently running or queued in memory.
+    /// This only checks the in-memory state - use in combination with database checks
+    /// for a complete picture across app restarts.
+    /// </summary>
+    bool IsOrchestrationRunningInMemory();
 }
 
 /// <summary>
@@ -225,6 +232,19 @@ public class AdrOrchestrationQueue : IAdrOrchestrationQueue
             {
                 _statuses.Remove(key);
             }
+        }
+    }
+    
+    public bool IsOrchestrationRunningInMemory()
+    {
+        lock (_lock)
+        {
+            if (_currentRunId != null && _statuses.TryGetValue(_currentRunId, out var status))
+            {
+                return status.Status == "Running" || status.Status == "Cancelling";
+            }
+            
+            return _statuses.Values.Any(s => s.Status == "Queued" || s.Status == "Running" || s.Status == "Cancelling");
         }
     }
 }
