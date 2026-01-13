@@ -139,56 +139,75 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
     /// <summary>
     /// Checks if an account is blacklisted from job creation.
+    /// This method queries the database each time - use IsAccountBlacklistedCached for batch operations.
     /// </summary>
     private async Task<bool> IsAccountBlacklistedAsync(AdrAccount account, string exclusionType = "All")
     {
         try
         {
-            var today = DateTime.UtcNow.Date;
-            var blacklistEntries = await _unitOfWork.AdrAccountBlacklists.FindAsync(b =>
-                !b.IsDeleted &&
-                b.IsActive &&
-                (b.EffectiveStartDate == null || b.EffectiveStartDate <= today) &&
-                (b.EffectiveEndDate == null || b.EffectiveEndDate >= today) &&
-                (b.ExclusionType == "All" || b.ExclusionType == exclusionType));
-
-            foreach (var entry in blacklistEntries)
-            {
-                // Check if this blacklist entry matches the account
-                bool matches = false;
-
-                // Match by VendorCode (if specified)
-                if (!string.IsNullOrEmpty(entry.VendorCode) && entry.VendorCode == account.VendorCode)
-                    matches = true;
-
-                // Match by VMAccountId (if specified)
-                if (entry.VMAccountId.HasValue && entry.VMAccountId == account.VMAccountId)
-                    matches = true;
-
-                // Match by VMAccountNumber (if specified)
-                if (!string.IsNullOrEmpty(entry.VMAccountNumber) && entry.VMAccountNumber == account.VMAccountNumber)
-                    matches = true;
-
-                // Match by CredentialId (if specified)
-                if (entry.CredentialId.HasValue && entry.CredentialId == account.CredentialId)
-                    matches = true;
-
-                if (matches)
-                {
-                    _logger.LogInformation(
-                        "Account {AccountId} (VMAccountId: {VMAccountId}, VendorCode: {VendorCode}) is blacklisted. Reason: {Reason}",
-                        account.Id, account.VMAccountId, account.VendorCode, entry.Reason);
-                    return true;
-                }
-            }
-
-            return false;
+            var blacklistEntries = await LoadBlacklistEntriesAsync(exclusionType);
+            return IsAccountBlacklistedCached(account, blacklistEntries);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to check blacklist for account {AccountId}, allowing job creation", account.Id);
             return false; // Allow job creation if blacklist check fails
         }
+    }
+
+    /// <summary>
+    /// Loads all active blacklist entries for the given exclusion type.
+    /// Call this once at the start of batch operations to avoid N database queries.
+    /// </summary>
+    private async Task<List<AdrAccountBlacklist>> LoadBlacklistEntriesAsync(string exclusionType = "All")
+    {
+        var today = DateTime.UtcNow.Date;
+        var entries = await _unitOfWork.AdrAccountBlacklists.FindAsync(b =>
+            !b.IsDeleted &&
+            b.IsActive &&
+            (b.EffectiveStartDate == null || b.EffectiveStartDate <= today) &&
+            (b.EffectiveEndDate == null || b.EffectiveEndDate >= today) &&
+            (b.ExclusionType == "All" || b.ExclusionType == exclusionType));
+        return entries.ToList();
+    }
+
+    /// <summary>
+    /// Checks if an account matches any of the cached blacklist entries.
+    /// Use this for batch operations after loading entries with LoadBlacklistEntriesAsync.
+    /// </summary>
+    private bool IsAccountBlacklistedCached(AdrAccount account, List<AdrAccountBlacklist> blacklistEntries)
+    {
+        foreach (var entry in blacklistEntries)
+        {
+            // Check if this blacklist entry matches the account
+            bool matches = false;
+
+            // Match by VendorCode (if specified)
+            if (!string.IsNullOrEmpty(entry.VendorCode) && entry.VendorCode == account.VendorCode)
+                matches = true;
+
+            // Match by VMAccountId (if specified)
+            if (entry.VMAccountId.HasValue && entry.VMAccountId == account.VMAccountId)
+                matches = true;
+
+            // Match by VMAccountNumber (if specified)
+            if (!string.IsNullOrEmpty(entry.VMAccountNumber) && entry.VMAccountNumber == account.VMAccountNumber)
+                matches = true;
+
+            // Match by CredentialId (if specified)
+            if (entry.CredentialId.HasValue && entry.CredentialId == account.CredentialId)
+                matches = true;
+
+            if (matches)
+            {
+                _logger.LogInformation(
+                    "Account {AccountId} (VMAccountId: {VMAccountId}, VendorCode: {VendorCode}) is blacklisted. Reason: {Reason}",
+                    account.Id, account.VMAccountId, account.VendorCode, entry.Reason);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private async Task<int> GetMaxParallelRequestsAsync()
@@ -267,12 +286,16 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             var batchSize = config.BatchSize;
             _logger.LogInformation("Processing {Count} due accounts in batches of {BatchSize}", dueAccountsList.Count, batchSize);
 
+            // PERFORMANCE OPTIMIZATION: Load blacklist entries once instead of N database queries
+            var blacklistEntries = await LoadBlacklistEntriesAsync("Download");
+            _logger.LogInformation("Loaded {Count} active blacklist entries for job creation", blacklistEntries.Count);
+
             foreach (var account in dueAccountsList)
             {
                 try
                 {
-                    // Check if account is blacklisted before creating job
-                    if (await IsAccountBlacklistedAsync(account, "Download"))
+                    // Check if account is blacklisted before creating job (using cached entries)
+                    if (IsAccountBlacklistedCached(account, blacklistEntries))
                     {
                         result.JobsSkipped++;
                         blacklistedCount++;
