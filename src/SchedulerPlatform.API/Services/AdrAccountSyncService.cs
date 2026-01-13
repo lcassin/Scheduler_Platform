@@ -279,15 +279,15 @@ public class AdrAccountSyncService : IAdrAccountSyncService
     /// </summary>
     private async Task<int> GetExternalAccountCountAsync(string connectionString, CancellationToken cancellationToken)
     {
-        // Count query must match the main GetAccountSyncQuery() logic exactly:
-        // - Start from ADRInvoiceAccountData (not CredentialAccount)
-        // - Use AD.VCAccountId and AD.AccountNumber (not A.AccountNumber)
-        // - Same joins: CredentialAccount and Credential with IsActive = 1
+        // Use a simplified count query that mirrors the main query's filtering logic
+        // Uses Account.AccountNumber (not ADRInvoiceAccountData.AccountNumber) to match
+        // the unique account combinations that will be synced
         var countQuery = @"
-SELECT COUNT(DISTINCT CONCAT(AD.VCAccountId, '_', AD.AccountNumber))
-FROM [dbo].[ADRInvoiceAccountData] AD
-INNER JOIN CredentialAccount CA ON AD.VCAccountId = CA.AccountId
-INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId";
+SELECT COUNT(DISTINCT CONCAT(CA.AccountId, '_', A.AccountNumber))
+FROM CredentialAccount CA
+INNER JOIN Account A ON CA.AccountId = A.AccountId
+INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId
+WHERE EXISTS (SELECT 1 FROM ADRInvoiceAccountData AD WHERE AD.VCAccountId = CA.AccountId)";
 
         await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
