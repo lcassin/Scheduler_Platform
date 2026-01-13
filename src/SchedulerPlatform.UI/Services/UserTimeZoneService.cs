@@ -6,13 +6,20 @@ namespace SchedulerPlatform.UI.Services;
 /// <summary>
 /// Implementation of IUserTimeZoneService that detects the user's timezone from their browser
 /// and provides consistent date/time display across the application.
+/// Uses the user's stored PreferredTimeZone from the database when available.
 /// </summary>
 public class UserTimeZoneService : IUserTimeZoneService
 {
     private readonly IJSRuntime _jsRuntime;
     private readonly AuthenticationStateProvider _authStateProvider;
+    private readonly UserPermissionCacheService _permissionCache;
     private string? _cachedTimeZoneId;
     private TimeZoneInfo? _cachedTimeZone;
+    
+    /// <summary>
+    /// Default timezone for users who don't have a preference set.
+    /// </summary>
+    private const string DefaultTimeZone = "Central Standard Time";
     
     // Map of Windows timezone IDs to abbreviations
     private static readonly Dictionary<string, string> TimeZoneAbbreviations = new()
@@ -45,10 +52,11 @@ public class UserTimeZoneService : IUserTimeZoneService
         { "Etc/UTC", "UTC" }
     };
 
-    public UserTimeZoneService(IJSRuntime jsRuntime, AuthenticationStateProvider authStateProvider)
+    public UserTimeZoneService(IJSRuntime jsRuntime, AuthenticationStateProvider authStateProvider, UserPermissionCacheService permissionCache)
     {
         _jsRuntime = jsRuntime;
         _authStateProvider = authStateProvider;
+        _permissionCache = permissionCache;
     }
 
     public async Task<string> GetUserTimeZoneIdAsync()
@@ -58,7 +66,15 @@ public class UserTimeZoneService : IUserTimeZoneService
 
         try
         {
-            // First, try to get timezone from user claims
+            // First, check if user has a stored PreferredTimeZone in the database
+            var preferredTimeZone = _permissionCache.GetPreferredTimeZone();
+            if (!string.IsNullOrEmpty(preferredTimeZone))
+            {
+                _cachedTimeZoneId = preferredTimeZone;
+                return _cachedTimeZoneId;
+            }
+
+            // Second, try to get timezone from user claims
             var authState = await _authStateProvider.GetAuthenticationStateAsync();
             var timezoneClaim = authState.User.FindFirst("timezone")?.Value;
             
@@ -68,32 +84,43 @@ public class UserTimeZoneService : IUserTimeZoneService
                 return _cachedTimeZoneId;
             }
 
-            // Fall back to browser timezone detection via JavaScript
-            var ianaTimeZone = await _jsRuntime.InvokeAsync<string>("Intl.DateTimeFormat().resolvedOptions().timeZone");
-            
-            if (!string.IsNullOrEmpty(ianaTimeZone))
+            // Third, try browser timezone detection via JavaScript
+            try
             {
-                // Convert IANA to Windows timezone ID if we have a mapping
-                if (IanaToWindowsMap.TryGetValue(ianaTimeZone, out var windowsId))
+                var ianaTimeZone = await _jsRuntime.InvokeAsync<string>("Intl.DateTimeFormat().resolvedOptions().timeZone");
+                
+                if (!string.IsNullOrEmpty(ianaTimeZone))
                 {
-                    _cachedTimeZoneId = windowsId;
-                }
-                else
-                {
-                    // Try to find a matching Windows timezone by searching
-                    _cachedTimeZoneId = FindWindowsTimeZoneFromIana(ianaTimeZone) ?? TimeZoneInfo.Local.Id;
+                    // Convert IANA to Windows timezone ID if we have a mapping
+                    if (IanaToWindowsMap.TryGetValue(ianaTimeZone, out var windowsId))
+                    {
+                        _cachedTimeZoneId = windowsId;
+                        return _cachedTimeZoneId;
+                    }
+                    else
+                    {
+                        // Try to find a matching Windows timezone by searching
+                        var foundTimeZone = FindWindowsTimeZoneFromIana(ianaTimeZone);
+                        if (foundTimeZone != null)
+                        {
+                            _cachedTimeZoneId = foundTimeZone;
+                            return _cachedTimeZoneId;
+                        }
+                    }
                 }
             }
-            else
+            catch
             {
-                // Ultimate fallback to server's local timezone
-                _cachedTimeZoneId = TimeZoneInfo.Local.Id;
+                // JS interop failed (e.g., during prerendering), continue to default
             }
+
+            // Ultimate fallback to configured default timezone (not server local)
+            _cachedTimeZoneId = DefaultTimeZone;
         }
         catch (Exception)
         {
-            // If JS interop fails (e.g., during prerendering), use server's local timezone
-            _cachedTimeZoneId = TimeZoneInfo.Local.Id;
+            // If anything fails, use the configured default timezone
+            _cachedTimeZoneId = DefaultTimeZone;
         }
 
         return _cachedTimeZoneId;

@@ -269,6 +269,8 @@ public class SchedulerDbContext : DbContext
             entity.HasIndex(e => e.NextRunDateTime);
             entity.HasIndex(e => new { e.AdrAccountId, e.JobTypeId });
             entity.HasIndex(e => new { e.IsDeleted, e.IsEnabled, e.NextRunDateTime });
+            // Optimized index for sync query: WHERE AdrAccountId IN (...) AND IsDeleted = 0 AND JobTypeId = 2
+            entity.HasIndex(e => new { e.IsDeleted, e.JobTypeId, e.AdrAccountId });
         });
 
         // ADR Account entity configuration

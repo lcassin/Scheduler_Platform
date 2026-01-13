@@ -145,4 +145,20 @@ public class AdrConfiguration : BaseEntity
     /// Note: Only applies to file-based logs in non-Azure environments.
     /// </summary>
     public int LogRetentionDays { get; set; } = 30;
+    
+    // Orchestration Performance Settings
+    
+    /// <summary>
+    /// Maximum expected duration for an orchestration run in minutes.
+    /// Orchestrations running longer than this without completion will be marked as failed.
+    /// Default: 240 minutes (4 hours) to accommodate large datasets and slow API responses.
+    /// </summary>
+    public int MaxOrchestrationDurationMinutes { get; set; } = 240;
+    
+    /// <summary>
+    /// Command timeout in seconds for database operations during orchestration.
+    /// Applies to long-running queries and batch save operations.
+    /// Default: 600 seconds (10 minutes) to handle large batch operations.
+    /// </summary>
+    public int DatabaseCommandTimeoutSeconds { get; set; } = 600;
 }

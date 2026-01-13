@@ -453,4 +453,31 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             .Include(j => j.AdrAccount)
             .ToListAsync();
     }
+
+    public async Task<IEnumerable<AdrJob>> GetStalePendingJobsAsync(DateTime currentDate, int maxLookbackDays = 90)
+    {
+        // Stale pending jobs: Jobs that are stuck in Pending or CredentialCheckInProgress status
+        // but have passed their billing window (NextRangeEndDateTime < today).
+        // These jobs missed their processing window and need to be finalized (cancelled)
+        // so their rules can be advanced to the next billing cycle.
+        //
+        // We use a max lookback to avoid processing very old jobs that may have been
+        // intentionally left in place or are from before the orchestration system was implemented.
+        var today = currentDate.Date;
+        var lookbackCutoff = today.AddDays(-maxLookbackDays);
+
+        return await _dbSet
+            .Where(j => !j.IsDeleted &&
+                        !j.IsManualRequest && // Exclude manual jobs from automatic finalization
+                        (j.Status == "Pending" || j.Status == "CredentialCheckInProgress") &&
+                        // Billing window has ended (NextRangeEndDateTime < today)
+                        j.NextRangeEndDateTime.HasValue &&
+                        j.NextRangeEndDateTime.Value.Date < today &&
+                        // But not too old (within lookback window)
+                        j.NextRangeEndDateTime.Value.Date >= lookbackCutoff &&
+                        // Must have a rule to advance
+                        j.AdrAccountRuleId.HasValue)
+            .Include(j => j.AdrAccount)
+            .ToListAsync();
+    }
 }

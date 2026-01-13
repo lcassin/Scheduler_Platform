@@ -10,6 +10,7 @@ public class UserListItemResponse
     public bool IsActive { get; set; }
     public bool IsSystemAdmin { get; set; }
     public DateTime? LastLoginDateTime { get; set; }
+    public string? PreferredTimeZone { get; set; }
     public int PermissionCount { get; set; }
     public string Role { get; set; } = string.Empty;
 }

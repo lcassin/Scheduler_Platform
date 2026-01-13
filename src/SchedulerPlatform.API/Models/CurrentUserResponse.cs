@@ -14,4 +14,5 @@ public class CurrentUserResponse
     public string? Role { get; set; }
     public List<string>? Permissions { get; set; }
     public int ClientId { get; set; }
+    public string? PreferredTimeZone { get; set; }
 }

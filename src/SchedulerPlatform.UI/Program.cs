@@ -10,7 +10,6 @@ using System.Security.Claims;
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text.Json;
-using System.Globalization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -61,8 +60,8 @@ builder.Services.AddAuthentication(options =>
             if (expiresAtToken != null && 
                 DateTimeOffset.TryParse(expiresAtToken.Value, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var expiresAt))
             {
-                // Refresh if token expires within 5 minutes
-                if (expiresAt <= DateTimeOffset.UtcNow.AddMinutes(5))
+                // Refresh if token expires within 10 minutes (gives buffer for keepalive interval)
+                if (expiresAt <= DateTimeOffset.UtcNow.AddMinutes(10))
                 {
                     var refreshToken = tokens.FirstOrDefault(t => t.Name == "refresh_token")?.Value;
                     if (!string.IsNullOrEmpty(refreshToken))
@@ -286,8 +285,18 @@ builder.Services.AddHttpClient("SchedulerAPI", client =>
 })
 .AddHttpMessageHandler<AuthTokenHandler>();
 
+// Named HttpClient for permission cache service (uses same auth handler)
+builder.Services.AddHttpClient("SchedulerApi", client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["API:BaseUrl"]!);
+})
+.AddHttpMessageHandler<AuthTokenHandler>();
+
 builder.Services.AddScoped<SessionStateService>();
+builder.Services.AddScoped<AccessTokenCacheService>();
 builder.Services.AddScoped<AuthTokenHandler>();
+builder.Services.AddScoped<AuthenticatedHttpClientService>();
+builder.Services.AddScoped<UserPermissionCacheService>();
 builder.Services.AddScoped<IScheduleService, ScheduleService>();
 builder.Services.AddScoped<IJobExecutionService, JobExecutionService>();
 builder.Services.AddScoped<IClientService, ClientService>();
@@ -328,6 +337,46 @@ app.MapGet("/logout", async (HttpContext context) =>
             RedirectUri = redirectUri 
         });
 });
+
+// Keepalive endpoint for token refresh during long-running Blazor Server circuits
+// This endpoint is authenticated, so hitting it triggers OnValidatePrincipal which refreshes tokens
+app.MapGet("/keepalive", async (HttpContext context) =>
+{
+    // Get token expiry info for the response
+    var expiresAt = await context.GetTokenAsync("expires_at");
+    DateTimeOffset? expiresAtParsed = null;
+    int? minutesRemaining = null;
+    
+    if (!string.IsNullOrEmpty(expiresAt) && 
+        DateTimeOffset.TryParse(expiresAt, System.Globalization.CultureInfo.InvariantCulture, 
+            System.Globalization.DateTimeStyles.RoundtripKind, out var parsed))
+    {
+        expiresAtParsed = parsed;
+        minutesRemaining = (int)Math.Max(0, (parsed - DateTimeOffset.UtcNow).TotalMinutes);
+    }
+    
+    // Update GlobalTokenStore with the refreshed token
+    // This is critical for Blazor Server circuits where API calls use the token store
+    if (context.User.Identity?.IsAuthenticated == true)
+    {
+        var userKey = AuthTokenHandler.GetUserKey(context.User);
+        if (!string.IsNullOrEmpty(userKey))
+        {
+            var accessToken = await context.GetTokenAsync("access_token");
+            if (!string.IsNullOrEmpty(accessToken))
+            {
+                GlobalTokenStore.SetToken(userKey, accessToken, expiresAtParsed);
+            }
+        }
+    }
+    
+    return Results.Ok(new { 
+        authenticated = context.User.Identity?.IsAuthenticated ?? false,
+        expiresAt = expiresAtParsed?.ToString("o"),
+        minutesRemaining = minutesRemaining,
+        serverTime = DateTimeOffset.UtcNow.ToString("o")
+    });
+}).RequireAuthorization();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

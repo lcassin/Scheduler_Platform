@@ -22,6 +22,7 @@ public class JobCreationResult
     public int BlacklistedCount { get; set; }
     public int Errors { get; set; }
     public List<string> ErrorMessages { get; set; } = new();
+    public TimeSpan Duration { get; set; }
 }
 
 public class CredentialVerificationResult
@@ -31,6 +32,7 @@ public class CredentialVerificationResult
     public int CredentialsFailed { get; set; }
     public int Errors { get; set; }
     public List<string> ErrorMessages { get; set; } = new();
+    public TimeSpan Duration { get; set; }
 }
 
 public class ScrapeResult
@@ -41,6 +43,7 @@ public class ScrapeResult
     public int ScrapesFailed { get; set; }
     public int Errors { get; set; }
     public List<string> ErrorMessages { get; set; } = new();
+    public TimeSpan Duration { get; set; }
 }
 
 public class StatusCheckResult
@@ -51,6 +54,7 @@ public class StatusCheckResult
     public int JobsStillProcessing { get; set; }
     public int Errors { get; set; }
     public List<string> ErrorMessages { get; set; } = new();
+    public TimeSpan Duration { get; set; }
 }
 
 public class FullCycleResult
@@ -163,11 +167,16 @@ public class AdrOrchestrationStatus
     public string Status { get; set; } = "Queued"; // Queued, Running, Completed, Failed, Cancelled
     public string? CurrentStep { get; set; }
     public string? CurrentStepPhase { get; set; } // Preparing, Calling API, Saving results
+    public string? CurrentSubStep { get; set; } // Sub-step within the current step (e.g., "Syncing rules" within "Syncing accounts")
     public string? ErrorMessage { get; set; }
     
     // Progress tracking for current step
     public int CurrentStepProgress { get; set; }
     public int CurrentStepTotal { get; set; }
+    
+    // Secondary progress tracking for sub-steps (e.g., rule sync progress within account sync)
+    public int? SubStepProgress { get; set; }
+    public int? SubStepTotal { get; set; }
     
     // Results from each step
     public AdrAccountSyncResult? SyncResult { get; set; }

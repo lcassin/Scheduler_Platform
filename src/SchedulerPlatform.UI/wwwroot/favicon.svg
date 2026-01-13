@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Document background with folded corner -->
+  <path d="M12 4 L44 4 L52 12 L52 60 L12 60 Z" fill="#ffffff" stroke="#2196F3" stroke-width="2"/>
+  
+  <!-- Folded corner -->
+  <path d="M44 4 L44 12 L52 12 Z" fill="#BBDEFB" stroke="#2196F3" stroke-width="1"/>
+  
+  <!-- Dollar sign circle (invoice indicator) -->
+  <circle cx="32" cy="32" r="14" fill="#4CAF50"/>
+  <text x="32" y="38" font-family="Arial, sans-serif" font-size="20" font-weight="bold" fill="white" text-anchor="middle">$</text>
+  
+  <!-- Document lines (top) -->
+  <line x1="18" y1="14" x2="38" y2="14" stroke="#90CAF9" stroke-width="2" stroke-linecap="round"/>
+  <line x1="18" y1="20" x2="32" y2="20" stroke="#90CAF9" stroke-width="2" stroke-linecap="round"/>
+  
+  <!-- Document lines (bottom) -->
+  <line x1="18" y1="50" x2="46" y2="50" stroke="#90CAF9" stroke-width="2" stroke-linecap="round"/>
+  <line x1="18" y1="54" x2="40" y2="54" stroke="#90CAF9" stroke-width="2" stroke-linecap="round"/>
+</svg>

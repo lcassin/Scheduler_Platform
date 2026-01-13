@@ -2,7 +2,7 @@
 @using SchedulerPlatform.UI.Services
 @using Microsoft.AspNetCore.Authorization
 @attribute [Authorize]
-@inject IHttpClientFactory HttpClientFactory
+@inject AuthenticatedHttpClientService HttpClient
 @inject ISnackbar Snackbar
 @inject IPermissionService PermissionService
 
@@ -115,6 +115,22 @@
                                          Variant="Variant.Outlined"
                                          Min="100" Max="10000"
                                          HelperText="Records to process per batch" />
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudNumericField @bind-Value="_config.MaxOrchestrationDurationMinutes" 
+                                         Label="Max Orchestration Duration (Minutes)" 
+                                         Variant="Variant.Outlined"
+                                         Min="30" Max="720"
+                                         HelperText="Max time before orchestration is marked as failed" />
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudNumericField @bind-Value="_config.DatabaseCommandTimeoutSeconds" 
+                                         Label="Database Command Timeout (Seconds)" 
+                                         Variant="Variant.Outlined"
+                                         Min="30" Max="1800"
+                                         HelperText="Timeout for long-running database operations" />
                     </MudItem>
                     
                     <MudItem xs="12">
@@ -268,15 +284,14 @@
             }
         }
 
-        private HttpClient CreateClient() => HttpClientFactory.CreateClient("SchedulerAPI");
-
         private async Task LoadConfiguration()
         {
             _loading = true;
             try
             {
-                var client = CreateClient();
-                _config = await client.GetFromJsonAsync<AdrConfigurationModel>("adr/configuration");
+                var response = await HttpClient.GetAsync("adr/configuration");
+                response.EnsureSuccessStatusCode();
+                _config = await response.Content.ReadFromJsonAsync<AdrConfigurationModel>();
             }
             catch (Exception ex)
             {
@@ -296,8 +311,7 @@
             _saving = true;
             try
             {
-                var client = CreateClient();
-                var response = await client.PutAsJsonAsync("adr/configuration", _config);
+                var response = await HttpClient.PutAsJsonAsync("adr/configuration", _config);
                 if (response.IsSuccessStatusCode)
                 {
                     _config = await response.Content.ReadFromJsonAsync<AdrConfigurationModel>();
@@ -344,6 +358,9 @@
         public int ArchivalBatchSize { get; set; } = 5000;
         public int ArchiveRetentionYears { get; set; } = 7;
         public int LogRetentionDays { get; set; } = 30;
+        // Orchestration Performance Settings
+        public int MaxOrchestrationDurationMinutes { get; set; } = 240;
+        public int DatabaseCommandTimeoutSeconds { get; set; } = 600;
         public string? ModifiedBy { get; set; }
         public DateTime? ModifiedDateTime { get; set; }
     }

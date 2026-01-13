@@ -6,14 +6,12 @@ namespace SchedulerPlatform.UI.Services;
 
 public class JobExecutionService : IJobExecutionService
 {
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly AuthenticatedHttpClientService _httpClient;
 
-    public JobExecutionService(IHttpClientFactory httpClientFactory)
+    public JobExecutionService(AuthenticatedHttpClientService httpClient)
     {
-        _httpClientFactory = httpClientFactory;
+        _httpClient = httpClient;
     }
-
-    private HttpClient CreateClient() => _httpClientFactory.CreateClient("SchedulerAPI");
 
     public async Task<PagedResult<JobExecution>> GetJobExecutionsAsync(
         int? scheduleId = null, 
@@ -21,7 +19,6 @@ public class JobExecutionService : IJobExecutionService
         int pageNumber = 1, 
         int pageSize = 20)
     {
-        var client = CreateClient();
         var queryParams = new List<string>();
         
         if (scheduleId.HasValue)
@@ -31,7 +28,9 @@ public class JobExecutionService : IJobExecutionService
             queryParams.Add($"status={status.Value}");
         
         var query = queryParams.Any() ? "?" + string.Join("&", queryParams) : "";
-        var allExecutions = await client.GetFromJsonAsync<List<JobExecution>>($"jobexecutions{query}");
+        var response = await _httpClient.GetAsync($"jobexecutions{query}");
+        response.EnsureSuccessStatusCode();
+        var allExecutions = await response.Content.ReadFromJsonAsync<List<JobExecution>>();
         
         if (allExecutions == null || !allExecutions.Any())
         {
@@ -67,7 +66,6 @@ public class JobExecutionService : IJobExecutionService
         int pageNumber = 1,
         int pageSize = 100)
     {
-        var client = _httpClientFactory.CreateClient("SchedulerAPI");
         var queryParams = new List<string>();
         
         if (scheduleId.HasValue)
@@ -96,7 +94,9 @@ public class JobExecutionService : IJobExecutionService
             url += "?" + string.Join("&", queryParams);
         }
         
-        var allExecutions = await client.GetFromJsonAsync<List<JobExecution>>(url) ?? new List<JobExecution>();
+        var response = await _httpClient.GetAsync(url);
+        response.EnsureSuccessStatusCode();
+        var allExecutions = await response.Content.ReadFromJsonAsync<List<JobExecution>>() ?? new List<JobExecution>();
         
         var pagedItems = allExecutions
             .Skip((pageNumber - 1) * pageSize)
@@ -114,14 +114,12 @@ public class JobExecutionService : IJobExecutionService
 
     public async Task RetryJobExecutionAsync(int id)
     {
-        var client = CreateClient();
-        var response = await client.PostAsync($"jobexecutions/{id}/retry", null);
+        var response = await _httpClient.PostAsJsonAsync($"jobexecutions/{id}/retry", new { });
         response.EnsureSuccessStatusCode();
     }
 
     public async Task<byte[]> DownloadJobExecutionsExportAsync(int? scheduleId, string? status, DateTime? startDate, DateTime? endDate, string format)
     {
-        var client = CreateClient();
         var queryParams = new List<string>();
         
         if (scheduleId.HasValue)
@@ -139,7 +137,7 @@ public class JobExecutionService : IJobExecutionService
         queryParams.Add($"format={format}");
         
         var query = queryParams.Count > 0 ? "?" + string.Join("&", queryParams) : "";
-        var response = await client.GetAsync($"jobexecutions/export{query}");
+        var response = await _httpClient.GetAsync($"jobexecutions/export{query}");
         response.EnsureSuccessStatusCode();
         
         return await response.Content.ReadAsByteArrayAsync();
@@ -147,16 +145,14 @@ public class JobExecutionService : IJobExecutionService
 
     public async Task<JobExecution?> GetJobExecutionAsync(int id)
     {
-        var client = CreateClient();
-        var response = await client.GetAsync($"jobexecutions/{id}");
+        var response = await _httpClient.GetAsync($"jobexecutions/{id}");
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadFromJsonAsync<JobExecution>();
     }
 
     public async Task CancelJobExecutionAsync(int executionId)
     {
-        var client = CreateClient();
-        var response = await client.PostAsync($"jobexecutions/{executionId}/cancel", null);
+        var response = await _httpClient.PostAsJsonAsync($"jobexecutions/{executionId}/cancel", new { });
         response.EnsureSuccessStatusCode();
     }
 }

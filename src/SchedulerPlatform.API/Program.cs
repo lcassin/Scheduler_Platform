@@ -143,11 +143,16 @@ builder.Services.AddScoped<AuditLogInterceptor>();
 builder.Services.AddDbContext<SchedulerDbContext>((serviceProvider, options) =>
 {
     var auditLogInterceptor = serviceProvider.GetRequiredService<AuditLogInterceptor>();
+    // Get command timeout from configuration, default to 600 seconds (10 minutes) for long-running operations
+    // This is needed for large batch operations during ADR orchestration (syncing 170k+ accounts, processing thousands of jobs)
+    var commandTimeoutSeconds = builder.Configuration.GetValue<int>("Database:CommandTimeoutSeconds", 600);
+    
     options.UseSqlServer(
         builder.Configuration.GetConnectionString("DefaultConnection"),
         sqlOptions =>
         {
             sqlOptions.MigrationsAssembly("SchedulerPlatform.Infrastructure");
+            sqlOptions.CommandTimeout(commandTimeoutSeconds);
             sqlOptions.EnableRetryOnFailure(
                 maxRetryCount: 3,
                 maxRetryDelay: TimeSpan.FromSeconds(5),
@@ -156,11 +161,19 @@ builder.Services.AddDbContext<SchedulerDbContext>((serviceProvider, options) =>
     .AddInterceptors(auditLogInterceptor);
 });
 
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
+// Configure authentication with a policy scheme that tries both Bearer and API key
+// This allows the UI to authenticate via API key when HttpContext is null (Blazor Server SignalR)
+builder.Services.AddAuthentication(options =>
     {
-        options.Authority = builder.Configuration["Authentication:Authority"];
-        options.Audience = builder.Configuration["Authentication:Audience"];
+        options.DefaultScheme = "BearerOrApiKey";
+        options.DefaultChallengeScheme = "BearerOrApiKey";
+    })
+    .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
+    {
+        var authority = builder.Configuration["Authentication:Authority"];
+        var primaryAudience = builder.Configuration["Authentication:Audience"];
+        
+        options.Authority = authority;
         options.RequireHttpsMetadata = builder.Configuration.GetValue<bool>("Authentication:RequireHttpsMetadata");
 
 		options.Events = new JwtBearerEvents
@@ -172,10 +185,24 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 			}
 		};
 
+		// Configure valid audiences - Duende IdentityServer may include multiple audiences in the token
+		// (e.g., "scheduler-api" and "https://oidc.uat.expensesmart.com/resources")
+		var validAudiences = new List<string>();
+		if (!string.IsNullOrEmpty(primaryAudience))
+		{
+			validAudiences.Add(primaryAudience);
+		}
+		// Also accept the IdentityServer resources endpoint as a valid audience
+		if (!string.IsNullOrEmpty(authority))
+		{
+			validAudiences.Add($"{authority.TrimEnd('/')}/resources");
+		}
+
 		options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
             ValidateAudience = true,
+            ValidAudiences = validAudiences,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
             NameClaimType = "name"
@@ -184,7 +211,31 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddScheme<SchedulerPlatform.API.Authorization.SchedulerApiKeyAuthenticationOptions, 
                SchedulerPlatform.API.Authorization.SchedulerApiKeyAuthenticationHandler>(
         SchedulerPlatform.API.Authorization.SchedulerApiKeyAuthenticationOptions.DefaultScheme, 
-        options => { });
+        options => { })
+    .AddPolicyScheme("BearerOrApiKey", "Bearer or API Key", options =>
+    {
+        options.ForwardDefaultSelector = context =>
+        {
+            // Prefer Bearer token when present - this preserves user identity and permissions
+            // The UI may send both Bearer token AND API key header, so we must check Bearer first
+            var authHeader = context.Request.Headers["Authorization"].FirstOrDefault();
+            if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                return JwtBearerDefaults.AuthenticationScheme;
+            }
+            
+            // Fall back to API key auth only when no Bearer token is present
+            // This is used when HttpContext is null in Blazor Server (SignalR circuit events)
+            var apiKeyHeader = context.Request.Headers[SchedulerPlatform.API.Authorization.SchedulerApiKeyAuthenticationOptions.HeaderName].FirstOrDefault();
+            if (!string.IsNullOrEmpty(apiKeyHeader))
+            {
+                return SchedulerPlatform.API.Authorization.SchedulerApiKeyAuthenticationOptions.DefaultScheme;
+            }
+            
+            // Default to Bearer auth (will fail if no token, but that's expected)
+            return JwtBearerDefaults.AuthenticationScheme;
+        };
+    });
 
 builder.Services.AddSingleton<IAuthorizationHandler, SchedulerPlatform.API.Authorization.PermissionAuthorizationHandler>();
 builder.Services.AddSingleton<IAuthorizationHandler, SchedulerPlatform.API.Authorization.SuperAdminAuthorizationHandler>();
@@ -258,7 +309,13 @@ builder.Services.AddHostedService<SchedulerPlatform.API.Services.MissedSchedules
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.DataArchivalService>();
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.SystemScheduleSeeder>();
 
-builder.Services.AddHttpClient("ApiCallJob");
+// Configure ApiCallJob HttpClient with BaseAddress for internal API calls
+// This allows scheduled jobs to call API endpoints using relative URLs like "/api/adr/orchestrate/run-full-cycle"
+var apiBaseUrl = builder.Configuration["API:BaseUrl"] ?? builder.Configuration["Kestrel:Endpoints:Https:Url"] ?? "https://localhost:5001";
+builder.Services.AddHttpClient("ApiCallJob", client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl.TrimEnd('/') + "/");
+});
 builder.Services.AddHttpClient("AdrApi");
 
 builder.Services.AddQuartzJobServices(builder.Configuration.GetConnectionString("DefaultConnection")!);

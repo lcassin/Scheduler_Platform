@@ -4,7 +4,7 @@ namespace SchedulerPlatform.UI.Services;
 
 public interface IUserManagementService
 {
-    Task<PagedResult<UserListItem>> GetUsersAsync(string? searchTerm, int pageNumber, int pageSize, bool showInactive = false);
+    Task<PagedResult<UserListItem>> GetUsersAsync(string? searchTerm, int pageNumber, int pageSize, bool showInactive = false, string? sortColumn = null, bool sortDescending = false);
     Task<UserDetail?> GetUserAsync(int id);
     Task UpdateUserPermissionsAsync(int id, List<UserPermissionDto> permissions);
     Task ApplyPermissionTemplateAsync(int id, string templateName);
@@ -12,4 +12,6 @@ public interface IUserManagementService
     Task<UserDetail> CreateUserAsync(CreateUserRequest request);
     Task UpdateUserStatusAsync(int id, bool isActive);
     Task UpdateSuperAdminStatusAsync(int id, bool isSuperAdmin);
+    Task UpdateUserTimezoneAsync(int id, string? preferredTimeZone);
+    Task UpdateUserDetailsAsync(int id, string? email, string? firstName, string? lastName, string? preferredTimeZone, bool clearTimezone = false);
 }

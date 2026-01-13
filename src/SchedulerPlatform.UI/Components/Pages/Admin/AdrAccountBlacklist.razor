@@ -2,7 +2,7 @@
 @using SchedulerPlatform.UI.Services
 @using Microsoft.AspNetCore.Authorization
 @attribute [Authorize]
-@inject IHttpClientFactory HttpClientFactory
+@inject AuthenticatedHttpClientService HttpClientService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IPermissionService PermissionService
@@ -90,16 +90,18 @@
                       Striped="true"
                       Dense="true"
                       Loading="@_loading"
-                      LoadingProgressColor="Color.Primary">
+                      LoadingProgressColor="Color.Primary"
+                      SortLabel="@_sortColumn"
+                      SortLabelChanged="OnSortChanged">
                 <HeaderContent>
-                    <MudTh>Vendor Code</MudTh>
+                    <MudTh><MudTableSortLabel SortLabel="VendorCode" T="BlacklistEntryModel">Vendor Code</MudTableSortLabel></MudTh>
                     <MudTh>VM Account ID</MudTh>
-                    <MudTh>Account Number</MudTh>
+                    <MudTh><MudTableSortLabel SortLabel="VMAccountNumber" T="BlacklistEntryModel">Account Number</MudTableSortLabel></MudTh>
                     <MudTh>Credential ID</MudTh>
                     <MudTh>Exclusion Type</MudTh>
                     <MudTh>Reason</MudTh>
-                    <MudTh>Status</MudTh>
-                    <MudTh>Effective Dates</MudTh>
+                    <MudTh><MudTableSortLabel SortLabel="IsActive" T="BlacklistEntryModel">Status</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortLabel="EffectiveEndDate" T="BlacklistEntryModel" InitialDirection="SortDirection.Descending">End Date</MudTableSortLabel></MudTh>
                     <MudTh>Blacklisted By</MudTh>
                     <MudTh>Actions</MudTh>
                 </HeaderContent>
@@ -284,7 +286,9 @@
     
     private int _currentPage = 1;
     private int _totalPages = 1;
-    private int _pageSize = 20;
+    private int _pageSize = 50;
+    private string _sortColumn = "EffectiveEndDate";
+    private SortDirection _sortDirection = SortDirection.Descending;
 
         protected override async Task OnInitializedAsync()
         {
@@ -303,18 +307,21 @@
             }
         }
 
-        private HttpClient CreateClient() => HttpClientFactory.CreateClient("SchedulerAPI");
-
         private async Task LoadBlacklist()
         {
             _loading = true;
             try
             {
+                var sortDescending = _sortDirection == SortDirection.Descending;
+                var sortColumn = string.IsNullOrEmpty(_sortColumn) ? "EffectiveEndDate" : _sortColumn;
+                
                 var queryParams = new List<string>
                 {
                     $"pageNumber={_currentPage}",
                     $"pageSize={_pageSize}",
-                    $"status={_filterStatus}"
+                    $"status={_filterStatus}",
+                    $"sortColumn={Uri.EscapeDataString(sortColumn)}",
+                    $"sortDescending={sortDescending}"
                 };
             
                 if (!string.IsNullOrWhiteSpace(_searchVendorCode))
@@ -323,8 +330,9 @@
                     queryParams.Add($"accountNumber={Uri.EscapeDataString(_searchAccountNumber)}");
             
                 var url = $"adr/blacklist?{string.Join("&", queryParams)}";
-                var client = CreateClient();
-                var response = await client.GetFromJsonAsync<BlacklistPagedResponse>(url);
+                var httpResponse = await HttpClientService.GetAsync(url);
+                httpResponse.EnsureSuccessStatusCode();
+                var response = await httpResponse.Content.ReadFromJsonAsync<BlacklistPagedResponse>();
             
                 if (response != null)
                 {
@@ -340,6 +348,23 @@
             {
                 _loading = false;
             }
+        }
+        
+        private async Task OnSortChanged(string sortLabel)
+        {
+            if (_sortColumn == sortLabel)
+            {
+                _sortDirection = _sortDirection == SortDirection.Ascending 
+                    ? SortDirection.Descending 
+                    : SortDirection.Ascending;
+            }
+            else
+            {
+                _sortColumn = sortLabel;
+                _sortDirection = sortLabel == "EffectiveEndDate" ? SortDirection.Descending : SortDirection.Ascending;
+            }
+            _currentPage = 1;
+            await LoadBlacklist();
         }
 
     private async Task ClearFilters()
@@ -365,8 +390,7 @@
                 queryParams.Add($"accountNumber={Uri.EscapeDataString(_searchAccountNumber)}");
             
             var url = $"adr/blacklist/export?{string.Join("&", queryParams)}";
-            var client = CreateClient();
-            var response = await client.GetAsync(url);
+            var response = await HttpClientService.GetAsync(url);
             
             if (response.IsSuccessStatusCode)
             {
@@ -479,15 +503,14 @@
             _saving = true;
             try
             {
-                var client = CreateClient();
                 HttpResponseMessage response;
                 if (_editingEntry.Id > 0)
                 {
-                    response = await client.PutAsJsonAsync($"adr/blacklist/{_editingEntry.Id}", _editingEntry);
+                    response = await HttpClientService.PutAsJsonAsync($"adr/blacklist/{_editingEntry.Id}", _editingEntry);
                 }
                 else
                 {
-                    response = await client.PostAsJsonAsync("adr/blacklist", _editingEntry);
+                    response = await HttpClientService.PostAsJsonAsync("adr/blacklist", _editingEntry);
                 }
             
                 if (response.IsSuccessStatusCode)
@@ -524,8 +547,7 @@
             {
                 try
                 {
-                    var client = CreateClient();
-                    var response = await client.DeleteAsync($"adr/blacklist/{entry.Id}");
+                    var response = await HttpClientService.DeleteAsync($"adr/blacklist/{entry.Id}");
                     if (response.IsSuccessStatusCode)
                     {
                         Snackbar.Add("Entry deleted successfully", Severity.Success);

@@ -11,5 +11,6 @@ public class UserDetailResponse
     public bool IsSystemAdmin { get; set; }
     public DateTime? LastLoginDateTime { get; set; }
     public int ClientId { get; set; }
+    public string? PreferredTimeZone { get; set; }
     public List<UserPermissionResponse> Permissions { get; set; } = new();
 }

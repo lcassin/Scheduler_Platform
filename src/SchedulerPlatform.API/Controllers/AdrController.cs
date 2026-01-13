@@ -2659,7 +2659,7 @@ public class AdrController : ControllerBase
         try
         {
             _logger.LogInformation("Manual account sync triggered by {User}", User.Identity?.Name ?? "Unknown");
-            var result = await _syncService.SyncAccountsAsync(null, cancellationToken);
+            var result = await _syncService.SyncAccountsAsync(null, null, cancellationToken);
             return Ok(result);
         }
         catch (Exception ex)
@@ -2794,7 +2794,7 @@ public class AdrController : ControllerBase
             _logger.LogInformation("Full ADR cycle triggered by {User}", User.Identity?.Name ?? "Unknown");
 
             // Step 1: Sync accounts from VendorCred
-            var syncResult = await _syncService.SyncAccountsAsync(null, cancellationToken);
+            var syncResult = await _syncService.SyncAccountsAsync(null, null, cancellationToken);
             
             // Step 2: Create jobs for accounts due for processing
             var jobCreationResult = await _orchestratorService.CreateJobsForDueAccountsAsync(cancellationToken);
@@ -2833,19 +2833,62 @@ public class AdrController : ControllerBase
     /// Triggers ADR orchestration to run in the background. Returns immediately with a request ID
     /// that can be used to check status. This endpoint does NOT depend on user session - the
     /// background job will continue running even if the user logs out.
+    /// Only one orchestration can run at a time - returns 409 Conflict if an orchestration is already running.
     /// </summary>
     /// <param name="request">Optional request specifying which orchestration steps to run.</param>
     /// <returns>The queued request details including request ID for status tracking.</returns>
     /// <response code="200">Returns the queued orchestration request details.</response>
+    /// <response code="409">An orchestration is already running.</response>
     /// <response code="500">An error occurred while queuing the orchestration.</response>
     [HttpPost("orchestrate/run-background")]
     [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<object>> RunBackgroundOrchestration([FromBody] BackgroundOrchestrationRequest? request = null)
     {
         try
         {
+            if (_orchestrationQueue.IsOrchestrationRunningInMemory())
+            {
+                var currentRun = _orchestrationQueue.GetCurrentRun();
+                _logger.LogWarning(
+                    "Rejected orchestration request - orchestration {CurrentRequestId} is already running in memory",
+                    currentRun?.RequestId ?? "unknown");
+                return Conflict(new 
+                { 
+                    error = "An orchestration is already running", 
+                    message = "Only one orchestration can run at a time. Please wait for the current orchestration to complete.",
+                    currentRequestId = currentRun?.RequestId,
+                    currentStatus = currentRun?.Status,
+                    currentStep = currentRun?.CurrentStep
+                });
+            }
+            
+            var recentRunningInDb = await _dbContext.AdrOrchestrationRuns
+                .Where(r => !r.IsDeleted 
+                         && r.Status == "Running" 
+                         && r.StartedDateTime.HasValue 
+                         && r.StartedDateTime > DateTime.UtcNow.AddMinutes(-30)
+                         && r.CompletedDateTime == null)
+                .OrderByDescending(r => r.StartedDateTime)
+                .FirstOrDefaultAsync();
+                
+            if (recentRunningInDb != null)
+            {
+                _logger.LogWarning(
+                    "Rejected orchestration request - orchestration {DbRequestId} is running in database (started {StartedAt})",
+                    recentRunningInDb.RequestId, recentRunningInDb.StartedDateTime);
+                return Conflict(new 
+                { 
+                    error = "An orchestration is already running", 
+                    message = "Only one orchestration can run at a time. Please wait for the current orchestration to complete.",
+                    currentRequestId = recentRunningInDb.RequestId,
+                    currentStatus = recentRunningInDb.Status,
+                    startedAt = recentRunningInDb.StartedDateTime
+                });
+            }
+            
             var orchestrationRequest = new AdrOrchestrationRequest
             {
                 RequestedBy = User.Identity?.Name ?? "Unknown",
@@ -2997,8 +3040,13 @@ public class AdrController : ControllerBase
     {
         try
         {
-            // First, detect and fix stale "Running" records (running for more than 30 minutes without completion)
-            var staleThreshold = DateTime.UtcNow.AddMinutes(-30);
+            // Get the configurable max orchestration duration from AdrConfiguration
+            // Default to 240 minutes (4 hours) if not configured
+            var config = await _dbContext.AdrConfigurations.FirstOrDefaultAsync(c => !c.IsDeleted);
+            var maxDurationMinutes = config?.MaxOrchestrationDurationMinutes ?? 240;
+            
+            // First, detect and fix stale "Running" records (running longer than configured max duration without completion)
+            var staleThreshold = DateTime.UtcNow.AddMinutes(-maxDurationMinutes);
             var staleRuns = await _dbContext.AdrOrchestrationRuns
                 .Where(r => !r.IsDeleted && r.Status == "Running" && r.StartedDateTime.HasValue && r.StartedDateTime < staleThreshold && r.CompletedDateTime == null)
                 .ToListAsync();
@@ -3009,11 +3057,11 @@ public class AdrController : ControllerBase
                 {
                     staleRun.Status = "Failed";
                     staleRun.CompletedDateTime = DateTime.UtcNow;
-                    staleRun.ErrorMessage = "Orchestration run exceeded maximum expected duration (30 minutes) and was marked as failed. The process may have crashed or been terminated unexpectedly.";
+                    staleRun.ErrorMessage = $"Orchestration run exceeded maximum expected duration ({maxDurationMinutes} minutes) and was marked as failed. The process may have crashed or been terminated unexpectedly.";
                     staleRun.ModifiedDateTime = DateTime.UtcNow;
                     staleRun.ModifiedBy = "System";
-                    _logger.LogWarning("Marking stale orchestration run {RequestId} as Failed - started at {StartedAt}, exceeded 30 minute threshold", 
-                        staleRun.RequestId, staleRun.StartedDateTime);
+                    _logger.LogWarning("Marking stale orchestration run {RequestId} as Failed - started at {StartedAt}, exceeded {MaxDuration} minute threshold", 
+                        staleRun.RequestId, staleRun.StartedDateTime, maxDurationMinutes);
                 }
                 await _dbContext.SaveChangesAsync();
             }
@@ -3712,6 +3760,8 @@ public class AdrController : ControllerBase
             config.MissingInvoiceAlertEmail = request.MissingInvoiceAlertEmail ?? config.MissingInvoiceAlertEmail;
             config.IsOrchestrationEnabled = request.IsOrchestrationEnabled ?? config.IsOrchestrationEnabled;
             config.Notes = request.Notes ?? config.Notes;
+            config.MaxOrchestrationDurationMinutes = request.MaxOrchestrationDurationMinutes ?? config.MaxOrchestrationDurationMinutes;
+            config.DatabaseCommandTimeoutSeconds = request.DatabaseCommandTimeoutSeconds ?? config.DatabaseCommandTimeoutSeconds;
             config.ModifiedDateTime = DateTime.UtcNow;
             config.ModifiedBy = username;
             
@@ -3733,15 +3783,17 @@ public class AdrController : ControllerBase
     #region AdrAccountBlacklist Endpoints (Admin/Super Admin only)
 
     /// <summary>
-    /// Retrieves a paginated list of blacklist entries.
+    /// Retrieves a paginated list of blacklist entries with sorting support.
     /// Only Admin and Super Admin users can access this endpoint.
     /// </summary>
     /// <param name="pageNumber">Page number for pagination (default: 1).</param>
-    /// <param name="pageSize">Number of items per page (default: 20).</param>
+    /// <param name="pageSize">Number of items per page (default: 50).</param>
     /// <param name="status">Filter by status: "current" (active now), "future" (starts in future), "expired" (end date passed), "inactive" (manually disabled), "all" (default).</param>
     /// <param name="vendorCode">Optional filter by vendor code.</param>
     /// <param name="accountNumber">Optional filter by account number.</param>
     /// <param name="isActive">Optional filter by active status.</param>
+    /// <param name="sortColumn">Column to sort by: VendorCode, VMAccountNumber, EffectiveStartDate, EffectiveEndDate, CreatedDateTime, IsActive (default: EffectiveEndDate).</param>
+    /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
     /// <returns>A paginated list of blacklist entries.</returns>
     /// <response code="200">Returns the list of blacklist entries.</response>
     /// <response code="500">An error occurred while retrieving blacklist entries.</response>
@@ -3751,11 +3803,13 @@ public class AdrController : ControllerBase
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<object>> GetBlacklist(
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20,
+        [FromQuery] int pageSize = 50,
         [FromQuery] string? status = null,
         [FromQuery] string? vendorCode = null,
         [FromQuery] string? accountNumber = null,
-        [FromQuery] bool? isActive = null)
+        [FromQuery] bool? isActive = null,
+        [FromQuery] string sortColumn = "EffectiveEndDate",
+        [FromQuery] bool sortDescending = true)
     {
         try
         {
@@ -3806,8 +3860,20 @@ public class AdrController : ControllerBase
             }
             
             var totalCount = await query.CountAsync();
-            var items = await query
-                .OrderByDescending(b => b.CreatedDateTime)
+            
+            // Apply sorting based on sortColumn parameter
+            IOrderedQueryable<AdrAccountBlacklist> orderedQuery = sortColumn.ToLowerInvariant() switch
+            {
+                "vendorcode" => sortDescending ? query.OrderByDescending(b => b.VendorCode) : query.OrderBy(b => b.VendorCode),
+                "vmaccountnumber" => sortDescending ? query.OrderByDescending(b => b.VMAccountNumber) : query.OrderBy(b => b.VMAccountNumber),
+                "effectivestartdate" => sortDescending ? query.OrderByDescending(b => b.EffectiveStartDate) : query.OrderBy(b => b.EffectiveStartDate),
+                "effectiveenddate" => sortDescending ? query.OrderByDescending(b => b.EffectiveEndDate) : query.OrderBy(b => b.EffectiveEndDate),
+                "createddatetime" => sortDescending ? query.OrderByDescending(b => b.CreatedDateTime) : query.OrderBy(b => b.CreatedDateTime),
+                "isactive" => sortDescending ? query.OrderByDescending(b => b.IsActive) : query.OrderBy(b => b.IsActive),
+                _ => sortDescending ? query.OrderByDescending(b => b.EffectiveEndDate) : query.OrderBy(b => b.EffectiveEndDate) // Default to EffectiveEndDate
+            };
+            
+            var items = await orderedQuery
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();
@@ -4785,6 +4851,8 @@ public class UpdateAdrConfigurationRequest
     public string? MissingInvoiceAlertEmail { get; set; }
     public bool? IsOrchestrationEnabled { get; set; }
     public string? Notes { get; set; }
+    public int? MaxOrchestrationDurationMinutes { get; set; }
+    public int? DatabaseCommandTimeoutSeconds { get; set; }
 }
 
 /// <summary>
