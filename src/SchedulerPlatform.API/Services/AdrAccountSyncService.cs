@@ -210,7 +210,19 @@ public class AdrAccountSyncService : IAdrAccountSyncService
 
             // Step 4: Sync AdrAccountRules - create/update rules for each account
             // Rules drive the orchestrator, so we need to keep them in sync with account scheduling data
-            await SyncAccountRulesAsync(existingAccounts.Values.ToList(), externalAccounts, result, cancellationToken);
+            
+            // PERFORMANCE OPTIMIZATION: Detach account entities from change tracker before rule sync
+            // The rule sync only reads account properties (Id, VMAccountId, VMAccountNumber) - it doesn't modify accounts.
+            // With 170k+ accounts tracked, every SaveChangesAsync() during rule sync was scanning all tracked entities,
+            // causing 8+ minutes per batch. By detaching accounts, rule sync only tracks the rules being created/updated.
+            var accountsList = existingAccounts.Values.ToList();
+            foreach (var account in accountsList)
+            {
+                _dbContext.Entry(account).State = EntityState.Detached;
+            }
+            _logger.LogInformation("Detached {Count} account entities from change tracker before rule sync", accountsList.Count);
+            
+            await SyncAccountRulesAsync(accountsList, externalAccounts, result, cancellationToken);
 
             result.SyncEndDateTime = DateTime.UtcNow;
             _logger.LogInformation(
