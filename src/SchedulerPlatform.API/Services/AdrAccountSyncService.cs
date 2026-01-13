@@ -76,14 +76,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             // PERFORMANCE OPTIMIZATION: Stream external data instead of loading all into memory
             // This reduces memory usage from 2x170k full records to streaming + lookups
             
-            // Step 1: Get total count for progress reporting (lightweight query)
-            var totalExternalCount = await GetExternalAccountCountAsync(externalConnectionString, cancellationToken);
-            _logger.LogInformation("External database has {Count} accounts to sync", totalExternalCount);
-            
-            // Report initial progress (0 of total)
-            progressCallback?.Invoke(0, totalExternalCount);
-
-            // Step 2: Sync Clients first - fetch unique clients from VendorCred (lightweight query)
+            // Step 1: Sync Clients first - fetch unique clients from VendorCred (lightweight query)
             var externalClientIdToInternalClientId = await SyncClientsFromExternalAsync(externalConnectionString, result, cancellationToken);
             _logger.LogInformation("Client sync complete. Created: {Created}, Updated: {Updated}", 
                 result.ClientsCreated, result.ClientsUpdated);
@@ -116,14 +109,23 @@ public class AdrAccountSyncService : IAdrAccountSyncService
 
             _logger.LogInformation("Loaded {Count} existing accounts from local database", existingAccounts.Count);
 
+            // Use local database count for progress reporting
+            // This includes both accounts to sync AND accounts to mark as deleted
+            var totalAccountCount = existingAccounts.Count;
+            _logger.LogInformation("Total accounts for progress tracking: {Count}", totalAccountCount);
+            
+            // Report initial progress (0 of total)
+            progressCallback?.Invoke(0, totalAccountCount);
+
             // Track processed accounts and scheduling data for rule sync
             var processedAccountKeys = new HashSet<(long VMAccountId, string VMAccountNumber)>();
             var schedulingDataLookup = new Dictionary<(long VMAccountId, string VMAccountNumber), SchedulingData>();
             int processedSinceLastSave = 0;
             int batchNumber = 1;
+            int totalProcessed = 0; // Track total for progress (sync + deletions)
 
-            // Step 4: Stream external accounts and process in batches
-            _logger.LogInformation("Streaming and processing {Count} accounts in batches of {BatchSize}", totalExternalCount, batchSize);
+            // Step 2: Stream external accounts and process in batches
+            _logger.LogInformation("Streaming and processing accounts in batches of {BatchSize}", batchSize);
 
             await using var connection = new SqlConnection(externalConnectionString);
             await connection.OpenAsync(cancellationToken);
@@ -174,6 +176,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
 
                     result.TotalAccountsProcessed++;
                     processedSinceLastSave++;
+                    totalProcessed++;
 
                     // Save in batches
                     if (processedSinceLastSave >= batchSize)
@@ -182,7 +185,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                         _logger.LogInformation("Batch {BatchNumber} saved: {Count} accounts processed so far", 
                             batchNumber, result.TotalAccountsProcessed);
                         
-                        progressCallback?.Invoke(result.TotalAccountsProcessed, totalExternalCount);
+                        progressCallback?.Invoke(totalProcessed, totalAccountCount);
                         
                         processedSinceLastSave = 0;
                         batchNumber++;
@@ -200,7 +203,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                 }
             }
 
-            // Mark accounts not in external data as deleted
+            // Mark accounts not in external data as deleted (accounts with inactive credentials)
             int deletedSinceLastSave = 0;
             foreach (var kvp in existingAccounts)
             {
@@ -214,12 +217,16 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                     existingAccount.ModifiedBy = "System Created";
                     result.AccountsMarkedDeleted++;
                     deletedSinceLastSave++;
+                    totalProcessed++;
 
                     if (deletedSinceLastSave >= batchSize)
                     {
                         await _dbContext.SaveChangesAsync(cancellationToken);
                         _logger.LogInformation("Deletion batch saved: {Count} accounts marked deleted so far", 
                             result.AccountsMarkedDeleted);
+                        
+                        progressCallback?.Invoke(totalProcessed, totalAccountCount);
+                        
                         deletedSinceLastSave = 0;
                     }
                 }
@@ -229,7 +236,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             await _dbContext.SaveChangesAsync(cancellationToken);
             _logger.LogInformation("Final batch saved. Total batches: {BatchCount}", batchNumber);
             
-            progressCallback?.Invoke(totalExternalCount, totalExternalCount);
+            progressCallback?.Invoke(totalAccountCount, totalAccountCount);
 
             // Step 5: Sync AdrAccountRules using lightweight scheduling data
             // PERFORMANCE OPTIMIZATION: Detach account entities from change tracker before rule sync
