@@ -240,7 +240,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             }
             _logger.LogInformation("Detached {Count} account entities from change tracker before rule sync", accountsList.Count);
             
-            await SyncAccountRulesOptimizedAsync(accountsList, schedulingDataLookup, result, cancellationToken);
+            await SyncAccountRulesOptimizedAsync(accountsList, schedulingDataLookup, result, subStepCallback, cancellationToken);
 
             result.SyncEndDateTime = DateTime.UtcNow;
             _logger.LogInformation(
@@ -501,11 +501,16 @@ WHERE CL.ClientId IS NOT NULL";
         List<AdrAccount> accounts,
         Dictionary<(long VMAccountId, string VMAccountNumber), SchedulingData> schedulingDataLookup,
         AdrAccountSyncResult result,
+        Action<string, int, int>? subStepCallback,
         CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Starting optimized rule sync for {Count} accounts", accounts.Count);
+        var accountsToSync = accounts.Where(a => !a.IsDeleted).ToList();
+        _logger.LogInformation("Starting optimized rule sync for {Count} accounts", accountsToSync.Count);
+        
+        // Report sub-step start
+        subStepCallback?.Invoke("Syncing rules", 0, accountsToSync.Count);
 
-        var accountIds = accounts.Where(a => !a.IsDeleted).Select(a => a.Id).ToList();
+        var accountIds = accountsToSync.Select(a => a.Id).ToList();
 
         var existingRules = await _dbContext.AdrAccountRules
             .Where(r => accountIds.Contains(r.AdrAccountId) && !r.IsDeleted && r.JobTypeId == 2)
@@ -518,8 +523,9 @@ WHERE CL.ClientId IS NOT NULL";
         const int batchSize = 5000;
         int processedSinceLastSave = 0;
         int batchNumber = 1;
+        int totalProcessed = 0;
 
-        foreach (var account in accounts.Where(a => !a.IsDeleted))
+        foreach (var account in accountsToSync)
         {
             try
             {
@@ -571,12 +577,17 @@ WHERE CL.ClientId IS NOT NULL";
                 }
 
                 processedSinceLastSave++;
+                totalProcessed++;
 
                 if (processedSinceLastSave >= batchSize)
                 {
                     await _dbContext.SaveChangesAsync(cancellationToken);
                     _logger.LogInformation("Rule sync batch {BatchNumber} saved: {Created} created, {Updated} updated, {Skipped} skipped so far",
                         batchNumber, result.RulesCreated, result.RulesUpdated, result.RulesSkippedOverridden);
+                    
+                    // Report sub-step progress after each batch
+                    subStepCallback?.Invoke("Syncing rules", totalProcessed, accountsToSync.Count);
+                    
                     processedSinceLastSave = 0;
                     batchNumber++;
                 }
@@ -586,12 +597,15 @@ WHERE CL.ClientId IS NOT NULL";
                 _logger.LogError(ex, "Error syncing rule for account {AccountId}", account.Id);
                 result.Errors++;
                 result.ErrorMessages.Add($"Rule sync for AccountId {account.Id}: {ex.Message}");
+                totalProcessed++;
             }
         }
 
         if (processedSinceLastSave > 0)
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
+            // Report final sub-step progress
+            subStepCallback?.Invoke("Syncing rules", totalProcessed, accountsToSync.Count);
         }
 
         _logger.LogInformation("Rule sync completed. Created: {Created}, Updated: {Updated}, Skipped (overridden): {Skipped}",
