@@ -1036,9 +1036,18 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             // 1. Daily status checks (1-day delay): Jobs still in their billing window
             // 2. Final status checks (5-day delay after NextRangeEndDate): Jobs past their billing window
             var now = DateTime.UtcNow;
+            var dailyDelayDays = GetDailyStatusCheckDelayDays();
+            var finalDelayDays = GetFinalStatusCheckDelayDays();
             
-            var dailyJobs = (await _unitOfWork.AdrJobs.GetJobsNeedingDailyStatusCheckAsync(now, GetDailyStatusCheckDelayDays())).ToList();
-            var finalJobs = (await _unitOfWork.AdrJobs.GetJobsNeedingFinalStatusCheckAsync(now, GetFinalStatusCheckDelayDays())).ToList();
+            // Log the query parameters for debugging
+            _logger.LogInformation(
+                "Status check query parameters: Now={Now}, DailyDelayDays={DailyDelay}, FinalDelayDays={FinalDelay}, " +
+                "DailyThreshold={DailyThreshold}, FinalThreshold={FinalThreshold}",
+                now, dailyDelayDays, finalDelayDays, 
+                now.AddDays(-dailyDelayDays).Date, now.AddDays(-finalDelayDays).Date);
+            
+            var dailyJobs = (await _unitOfWork.AdrJobs.GetJobsNeedingDailyStatusCheckAsync(now, dailyDelayDays)).ToList();
+            var finalJobs = (await _unitOfWork.AdrJobs.GetJobsNeedingFinalStatusCheckAsync(now, finalDelayDays)).ToList();
             
             // Merge and deduplicate by job ID
             var jobsNeedingStatusCheck = dailyJobs
