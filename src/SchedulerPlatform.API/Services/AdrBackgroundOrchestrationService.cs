@@ -595,13 +595,16 @@ public class AdrBackgroundOrchestrationService : BackgroundService
         {
             _logger.LogError(ex, "Request {RequestId}: ADR orchestration failed", request.RequestId);
             
+            // Build detailed error message including inner exceptions for debugging
+            var errorMessage = BuildDetailedErrorMessage(ex);
+            
             _queue.UpdateStatus(request.RequestId, s =>
             {
                 s.Status = "Failed";
-                s.ErrorMessage = ex.Message;
+                s.ErrorMessage = errorMessage;
                 s.CompletedAt = DateTime.UtcNow;
             });
-            await SaveOrchestrationResultAsync(request.RequestId, dbRunId, "Failed", ex.Message, CancellationToken.None);
+            await SaveOrchestrationResultAsync(request.RequestId, dbRunId, "Failed", errorMessage, CancellationToken.None);
         }
         finally
         {
@@ -673,5 +676,59 @@ public class AdrBackgroundOrchestrationService : BackgroundService
         {
             _logger.LogWarning(ex, "Request {RequestId}: Failed to save orchestration results to database", requestId);
         }
+    }
+    
+    /// <summary>
+    /// Builds a detailed error message including all inner exceptions for debugging.
+    /// This captures the full exception chain which is critical for diagnosing EF Core errors
+    /// like "An error occurred while saving the entity changes" which hide the real cause.
+    /// </summary>
+    private static string BuildDetailedErrorMessage(Exception ex, int maxLength = 4000)
+    {
+        var sb = new System.Text.StringBuilder();
+        var current = ex;
+        var depth = 0;
+        
+        while (current != null && depth < 10)
+        {
+            if (depth > 0)
+            {
+                sb.AppendLine();
+                sb.Append("---> Inner Exception: ");
+            }
+            
+            sb.Append($"[{current.GetType().Name}] {current.Message}");
+            
+            // For SQL exceptions, try to get more details
+            if (current is Microsoft.Data.SqlClient.SqlException sqlEx)
+            {
+                sb.Append($" (Number: {sqlEx.Number}, State: {sqlEx.State})");
+                foreach (Microsoft.Data.SqlClient.SqlError error in sqlEx.Errors)
+                {
+                    sb.Append($" | Error {error.Number}: {error.Message}");
+                }
+            }
+            
+            current = current.InnerException;
+            depth++;
+        }
+        
+        // Add first part of stack trace for context
+        if (ex.StackTrace != null)
+        {
+            var stackLines = ex.StackTrace.Split('\n').Take(5);
+            sb.AppendLine();
+            sb.Append("Stack: ");
+            sb.Append(string.Join(" | ", stackLines.Select(l => l.Trim())));
+        }
+        
+        // Truncate if too long (database column may have length limit)
+        var result = sb.ToString();
+        if (result.Length > maxLength)
+        {
+            result = result.Substring(0, maxLength - 3) + "...";
+        }
+        
+        return result;
     }
 }
