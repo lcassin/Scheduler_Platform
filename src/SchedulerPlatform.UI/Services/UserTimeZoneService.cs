@@ -8,13 +8,14 @@ namespace SchedulerPlatform.UI.Services;
 /// and provides consistent date/time display across the application.
 /// Uses the user's stored PreferredTimeZone from the database when available.
 /// </summary>
-public class UserTimeZoneService : IUserTimeZoneService
+public class UserTimeZoneService : IUserTimeZoneService, IDisposable
 {
     private readonly IJSRuntime _jsRuntime;
     private readonly AuthenticationStateProvider _authStateProvider;
     private readonly UserPermissionCacheService _permissionCache;
     private string? _cachedTimeZoneId;
     private TimeZoneInfo? _cachedTimeZone;
+    private bool _disposed;
     
     /// <summary>
     /// Default timezone for users who don't have a preference set.
@@ -57,6 +58,33 @@ public class UserTimeZoneService : IUserTimeZoneService
         _jsRuntime = jsRuntime;
         _authStateProvider = authStateProvider;
         _permissionCache = permissionCache;
+        
+        // Subscribe to permission refresh events to update timezone when user preferences change
+        _permissionCache.OnPermissionsRefreshed += OnPermissionsRefreshed;
+    }
+    
+    /// <summary>
+    /// Clears the cached timezone when permissions are refreshed.
+    /// This ensures the timezone is re-evaluated with the latest user preferences.
+    /// </summary>
+    private void OnPermissionsRefreshed()
+    {
+        // Clear the cache so the next call will re-evaluate the timezone
+        // using the updated permission cache
+        _cachedTimeZoneId = null;
+        _cachedTimeZone = null;
+    }
+    
+    /// <summary>
+    /// Disposes the service and unsubscribes from events.
+    /// </summary>
+    public void Dispose()
+    {
+        if (!_disposed)
+        {
+            _permissionCache.OnPermissionsRefreshed -= OnPermissionsRefreshed;
+            _disposed = true;
+        }
     }
 
     public async Task<string> GetUserTimeZoneIdAsync()
