@@ -2997,8 +2997,13 @@ public class AdrController : ControllerBase
     {
         try
         {
-            // First, detect and fix stale "Running" records (running for more than 30 minutes without completion)
-            var staleThreshold = DateTime.UtcNow.AddMinutes(-30);
+            // Get the configurable max orchestration duration from AdrConfiguration
+            // Default to 240 minutes (4 hours) if not configured
+            var config = await _dbContext.AdrConfigurations.FirstOrDefaultAsync(c => !c.IsDeleted);
+            var maxDurationMinutes = config?.MaxOrchestrationDurationMinutes ?? 240;
+            
+            // First, detect and fix stale "Running" records (running longer than configured max duration without completion)
+            var staleThreshold = DateTime.UtcNow.AddMinutes(-maxDurationMinutes);
             var staleRuns = await _dbContext.AdrOrchestrationRuns
                 .Where(r => !r.IsDeleted && r.Status == "Running" && r.StartedDateTime.HasValue && r.StartedDateTime < staleThreshold && r.CompletedDateTime == null)
                 .ToListAsync();
@@ -3009,11 +3014,11 @@ public class AdrController : ControllerBase
                 {
                     staleRun.Status = "Failed";
                     staleRun.CompletedDateTime = DateTime.UtcNow;
-                    staleRun.ErrorMessage = "Orchestration run exceeded maximum expected duration (30 minutes) and was marked as failed. The process may have crashed or been terminated unexpectedly.";
+                    staleRun.ErrorMessage = $"Orchestration run exceeded maximum expected duration ({maxDurationMinutes} minutes) and was marked as failed. The process may have crashed or been terminated unexpectedly.";
                     staleRun.ModifiedDateTime = DateTime.UtcNow;
                     staleRun.ModifiedBy = "System";
-                    _logger.LogWarning("Marking stale orchestration run {RequestId} as Failed - started at {StartedAt}, exceeded 30 minute threshold", 
-                        staleRun.RequestId, staleRun.StartedDateTime);
+                    _logger.LogWarning("Marking stale orchestration run {RequestId} as Failed - started at {StartedAt}, exceeded {MaxDuration} minute threshold", 
+                        staleRun.RequestId, staleRun.StartedDateTime, maxDurationMinutes);
                 }
                 await _dbContext.SaveChangesAsync();
             }
@@ -3712,6 +3717,8 @@ public class AdrController : ControllerBase
             config.MissingInvoiceAlertEmail = request.MissingInvoiceAlertEmail ?? config.MissingInvoiceAlertEmail;
             config.IsOrchestrationEnabled = request.IsOrchestrationEnabled ?? config.IsOrchestrationEnabled;
             config.Notes = request.Notes ?? config.Notes;
+            config.MaxOrchestrationDurationMinutes = request.MaxOrchestrationDurationMinutes ?? config.MaxOrchestrationDurationMinutes;
+            config.DatabaseCommandTimeoutSeconds = request.DatabaseCommandTimeoutSeconds ?? config.DatabaseCommandTimeoutSeconds;
             config.ModifiedDateTime = DateTime.UtcNow;
             config.ModifiedBy = username;
             
@@ -4801,6 +4808,8 @@ public class UpdateAdrConfigurationRequest
     public string? MissingInvoiceAlertEmail { get; set; }
     public bool? IsOrchestrationEnabled { get; set; }
     public string? Notes { get; set; }
+    public int? MaxOrchestrationDurationMinutes { get; set; }
+    public int? DatabaseCommandTimeoutSeconds { get; set; }
 }
 
 /// <summary>

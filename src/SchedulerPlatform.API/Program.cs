@@ -143,11 +143,16 @@ builder.Services.AddScoped<AuditLogInterceptor>();
 builder.Services.AddDbContext<SchedulerDbContext>((serviceProvider, options) =>
 {
     var auditLogInterceptor = serviceProvider.GetRequiredService<AuditLogInterceptor>();
+    // Get command timeout from configuration, default to 600 seconds (10 minutes) for long-running operations
+    // This is needed for large batch operations during ADR orchestration (syncing 170k+ accounts, processing thousands of jobs)
+    var commandTimeoutSeconds = builder.Configuration.GetValue<int>("Database:CommandTimeoutSeconds", 600);
+    
     options.UseSqlServer(
         builder.Configuration.GetConnectionString("DefaultConnection"),
         sqlOptions =>
         {
             sqlOptions.MigrationsAssembly("SchedulerPlatform.Infrastructure");
+            sqlOptions.CommandTimeout(commandTimeoutSeconds);
             sqlOptions.EnableRetryOnFailure(
                 maxRetryCount: 3,
                 maxRetryDelay: TimeSpan.FromSeconds(5),
