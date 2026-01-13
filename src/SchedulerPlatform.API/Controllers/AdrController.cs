@@ -2833,19 +2833,62 @@ public class AdrController : ControllerBase
     /// Triggers ADR orchestration to run in the background. Returns immediately with a request ID
     /// that can be used to check status. This endpoint does NOT depend on user session - the
     /// background job will continue running even if the user logs out.
+    /// Only one orchestration can run at a time - returns 409 Conflict if an orchestration is already running.
     /// </summary>
     /// <param name="request">Optional request specifying which orchestration steps to run.</param>
     /// <returns>The queued request details including request ID for status tracking.</returns>
     /// <response code="200">Returns the queued orchestration request details.</response>
+    /// <response code="409">An orchestration is already running.</response>
     /// <response code="500">An error occurred while queuing the orchestration.</response>
     [HttpPost("orchestrate/run-background")]
     [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<object>> RunBackgroundOrchestration([FromBody] BackgroundOrchestrationRequest? request = null)
     {
         try
         {
+            if (_orchestrationQueue.IsOrchestrationRunningInMemory())
+            {
+                var currentRun = _orchestrationQueue.GetCurrentRun();
+                _logger.LogWarning(
+                    "Rejected orchestration request - orchestration {CurrentRequestId} is already running in memory",
+                    currentRun?.RequestId ?? "unknown");
+                return Conflict(new 
+                { 
+                    error = "An orchestration is already running", 
+                    message = "Only one orchestration can run at a time. Please wait for the current orchestration to complete.",
+                    currentRequestId = currentRun?.RequestId,
+                    currentStatus = currentRun?.Status,
+                    currentStep = currentRun?.CurrentStep
+                });
+            }
+            
+            var recentRunningInDb = await _dbContext.AdrOrchestrationRuns
+                .Where(r => !r.IsDeleted 
+                         && r.Status == "Running" 
+                         && r.StartedDateTime.HasValue 
+                         && r.StartedDateTime > DateTime.UtcNow.AddMinutes(-30)
+                         && r.CompletedDateTime == null)
+                .OrderByDescending(r => r.StartedDateTime)
+                .FirstOrDefaultAsync();
+                
+            if (recentRunningInDb != null)
+            {
+                _logger.LogWarning(
+                    "Rejected orchestration request - orchestration {DbRequestId} is running in database (started {StartedAt})",
+                    recentRunningInDb.RequestId, recentRunningInDb.StartedDateTime);
+                return Conflict(new 
+                { 
+                    error = "An orchestration is already running", 
+                    message = "Only one orchestration can run at a time. Please wait for the current orchestration to complete.",
+                    currentRequestId = recentRunningInDb.RequestId,
+                    currentStatus = recentRunningInDb.Status,
+                    startedAt = recentRunningInDb.StartedDateTime
+                });
+            }
+            
             var orchestrationRequest = new AdrOrchestrationRequest
             {
                 RequestedBy = User.Identity?.Name ?? "Unknown",
