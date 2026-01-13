@@ -276,18 +276,18 @@ public class AdrAccountSyncService : IAdrAccountSyncService
     
     /// <summary>
     /// Gets the count of accounts from the external database for progress reporting.
+    /// This count matches the streaming query's unique (VCAccountId, AccountNumber) combinations.
     /// </summary>
     private async Task<int> GetExternalAccountCountAsync(string connectionString, CancellationToken cancellationToken)
     {
-        // Use a simplified count query that mirrors the main query's filtering logic
-        // Uses Account.AccountNumber (not ADRInvoiceAccountData.AccountNumber) to match
-        // the unique account combinations that will be synced
+        // Count query must match the streaming query's logic:
+        // - Uses ADRInvoiceAccountData.AccountNumber (not Account.AccountNumber)
+        // - Same joins and filters as GetAccountSyncQuery()
         var countQuery = @"
-SELECT COUNT(DISTINCT CONCAT(CA.AccountId, '_', A.AccountNumber))
-FROM CredentialAccount CA
-INNER JOIN Account A ON CA.AccountId = A.AccountId
-INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId
-WHERE EXISTS (SELECT 1 FROM ADRInvoiceAccountData AD WHERE AD.VCAccountId = CA.AccountId)";
+SELECT COUNT(DISTINCT CONCAT(AD.VCAccountId, '_', AD.AccountNumber))
+FROM [dbo].[ADRInvoiceAccountData] AD
+INNER JOIN CredentialAccount CA ON AD.VCAccountId = CA.AccountId
+INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId";
 
         await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
