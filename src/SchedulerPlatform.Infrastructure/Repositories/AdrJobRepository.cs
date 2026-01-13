@@ -193,7 +193,8 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             bool sortDescending = true,
             List<int>? jobIds = null)
         {
-            var query = _dbSet.Where(j => !j.IsDeleted);
+            // Filter by both job.IsDeleted AND account.IsDeleted to exclude jobs for deleted accounts
+            var query = _dbSet.Where(j => !j.IsDeleted && j.AdrAccount != null && !j.AdrAccount.IsDeleted);
             
             // Filter by specific job IDs (used for blacklist filtering)
             if (jobIds != null)

@@ -83,10 +83,10 @@ public class AdrAccountSyncService : IAdrAccountSyncService
 
             // Step 3: Load existing local accounts into dictionary for lookups
             // We need this to determine updates vs inserts and for deletion detection
+            // IMPORTANT: Include deleted accounts so they can be re-activated if credentials become active again
             const int batchSize = 5000;
             
             var existingAccountList = await _dbContext.AdrAccounts
-                .Where(a => !a.IsDeleted)
                 .ToListAsync(cancellationToken);
 
             var existingAccounts = existingAccountList
@@ -204,13 +204,19 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             }
 
             // Mark accounts not in external data as deleted (accounts with inactive credentials)
+            var accountsToDelete = existingAccounts.Where(kvp => !processedAccountKeys.Contains(kvp.Key)).ToList();
+            _logger.LogInformation(
+                "Deletion phase: {ExistingCount} existing accounts, {ProcessedCount} processed from VendorCred, {ToDeleteCount} to mark as deleted",
+                existingAccounts.Count, processedAccountKeys.Count, accountsToDelete.Count);
+            
             int deletedSinceLastSave = 0;
-            foreach (var kvp in existingAccounts)
+            foreach (var kvp in accountsToDelete)
             {
                 var accountKey = kvp.Key;
                 var existingAccount = kvp.Value;
                 
-                if (!processedAccountKeys.Contains(accountKey))
+                // Only mark as deleted if not already deleted
+                if (!existingAccount.IsDeleted)
                 {
                     existingAccount.IsDeleted = true;
                     existingAccount.ModifiedDateTime = DateTime.UtcNow;
@@ -1178,6 +1184,9 @@ DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
         // NOTE: Scheduling configuration fields (PeriodType, PeriodDays, NextRunDateTime, NextRangeStartDateTime, 
         // NextRangeEndDateTime) are now managed on AdrAccountRule, not AdrAccount.
         // The SyncAccountRulesAsync method handles syncing these fields to rules.
+        
+        // Re-activate deleted accounts if they appear in VendorCred again (credentials became active)
+        existing.IsDeleted = false;
         
         existing.LastSyncedDateTime = DateTime.UtcNow;
         existing.ModifiedDateTime = DateTime.UtcNow;

@@ -1495,9 +1495,9 @@ public class AdrController : ControllerBase
                         .Where(b => !b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= filterToday)
                         .ToListAsync();
                     
-                    // Get all non-deleted jobs with their account info
+                    // Get all non-deleted jobs with their account info (also filter by account.IsDeleted)
                     var allJobs = await _dbContext.AdrJobs
-                        .Where(j => !j.IsDeleted)
+                        .Where(j => !j.IsDeleted && j.AdrAccount != null && !j.AdrAccount.IsDeleted)
                         .Include(j => j.AdrAccount)
                         .Select(j => new { j.Id, j.VendorCode, j.VMAccountId, j.VMAccountNumber, j.CredentialId, AccountVendorCode = j.AdrAccount != null ? j.AdrAccount.VendorCode : null })
                         .ToListAsync();
@@ -3188,9 +3188,10 @@ public class AdrController : ControllerBase
         {
             try
             {
+                // Filter by both rule.IsDeleted AND account.IsDeleted to exclude rules for deleted accounts
                 var query = _dbContext.AdrAccountRules
                     .Include(r => r.AdrAccount)
-                    .Where(r => !r.IsDeleted);
+                    .Where(r => !r.IsDeleted && r.AdrAccount != null && !r.AdrAccount.IsDeleted);
             
                 if (!string.IsNullOrWhiteSpace(vendorCode))
                 {
@@ -3323,9 +3324,10 @@ public class AdrController : ControllerBase
         {
             try
             {
+                // Filter by both rule.IsDeleted AND account.IsDeleted to exclude rules for deleted accounts
                 var query = _dbContext.AdrAccountRules
                     .Include(r => r.AdrAccount)
-                    .Where(r => !r.IsDeleted);
+                    .Where(r => !r.IsDeleted && r.AdrAccount != null && !r.AdrAccount.IsDeleted);
             
                 if (!string.IsNullOrWhiteSpace(vendorCode))
                 {
