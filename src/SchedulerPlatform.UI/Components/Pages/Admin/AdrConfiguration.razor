@@ -117,6 +117,22 @@
                                          HelperText="Records to process per batch" />
                     </MudItem>
                     
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudNumericField @bind-Value="_config.MaxOrchestrationDurationMinutes" 
+                                         Label="Max Orchestration Duration (Minutes)" 
+                                         Variant="Variant.Outlined"
+                                         Min="30" Max="720"
+                                         HelperText="Max time before orchestration is marked as failed" />
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudNumericField @bind-Value="_config.DatabaseCommandTimeoutSeconds" 
+                                         Label="Database Command Timeout (Seconds)" 
+                                         Variant="Variant.Outlined"
+                                         Min="30" Max="1800"
+                                         HelperText="Timeout for long-running database operations" />
+                    </MudItem>
+                    
                     <MudItem xs="12">
                         <MudDivider Class="my-4" />
                         <MudText Typo="Typo.h6" Class="mb-2">Feature Flags</MudText>
@@ -344,6 +360,9 @@
         public int ArchivalBatchSize { get; set; } = 5000;
         public int ArchiveRetentionYears { get; set; } = 7;
         public int LogRetentionDays { get; set; } = 30;
+        // Orchestration Performance Settings
+        public int MaxOrchestrationDurationMinutes { get; set; } = 240;
+        public int DatabaseCommandTimeoutSeconds { get; set; } = 600;
         public string? ModifiedBy { get; set; }
         public DateTime? ModifiedDateTime { get; set; }
     }
