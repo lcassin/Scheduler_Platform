@@ -47,12 +47,14 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Retrieves a paginated list of users with optional filtering. Requires Users.Manage.Read policy.
+    /// Retrieves a paginated list of users with optional filtering and sorting. Requires Users.Manage.Read policy.
     /// </summary>
     /// <param name="searchTerm">Optional search term to filter by email, first name, last name, or username.</param>
     /// <param name="pageNumber">Page number for pagination (default: 1).</param>
-    /// <param name="pageSize">Number of items per page (default: 20).</param>
+    /// <param name="pageSize">Number of items per page (default: 50).</param>
     /// <param name="showInactive">Whether to include inactive users (default: false).</param>
+    /// <param name="sortColumn">Column to sort by: Email, FirstName, LastName, IsActive, LastLoginDateTime, PreferredTimeZone (default: LastName).</param>
+    /// <param name="sortDescending">Whether to sort in descending order (default: false).</param>
     /// <returns>A paginated list of users with their permission counts and roles.</returns>
     /// <response code="200">Returns the paginated list of users.</response>
     /// <response code="500">An error occurred while retrieving users.</response>
@@ -63,8 +65,10 @@ public class UsersController : ControllerBase
     public async Task<ActionResult<object>> GetUsers(
         [FromQuery] string? searchTerm = null,
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20,
-        [FromQuery] bool showInactive = false)
+        [FromQuery] int pageSize = 50,
+        [FromQuery] bool showInactive = false,
+        [FromQuery] string sortColumn = "LastName",
+        [FromQuery] bool sortDescending = false)
     {
         try
         {
@@ -86,8 +90,20 @@ public class UsersController : ControllerBase
             }
 
             var totalCount = query.Count();
+            
+            // Apply sorting based on sortColumn parameter
+            query = sortColumn.ToLowerInvariant() switch
+            {
+                "email" => sortDescending ? query.OrderByDescending(u => u.Email) : query.OrderBy(u => u.Email),
+                "firstname" => sortDescending ? query.OrderByDescending(u => u.FirstName) : query.OrderBy(u => u.FirstName),
+                "lastname" => sortDescending ? query.OrderByDescending(u => u.LastName) : query.OrderBy(u => u.LastName),
+                "isactive" => sortDescending ? query.OrderByDescending(u => u.IsActive) : query.OrderBy(u => u.IsActive),
+                "lastlogindatetime" => sortDescending ? query.OrderByDescending(u => u.LastLoginDateTime) : query.OrderBy(u => u.LastLoginDateTime),
+                "preferredtimezone" => sortDescending ? query.OrderByDescending(u => u.PreferredTimeZone) : query.OrderBy(u => u.PreferredTimeZone),
+                _ => sortDescending ? query.OrderByDescending(u => u.LastName) : query.OrderBy(u => u.LastName) // Default to LastName
+            };
+            
             var users = query
-                .OrderBy(u => u.Email)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
                 .ToList();

@@ -14,7 +14,7 @@ public class UserManagementService : IUserManagementService
         _logger = logger;
     }
 
-    public async Task<PagedResult<UserListItem>> GetUsersAsync(string? searchTerm, int pageNumber, int pageSize, bool showInactive = false)
+    public async Task<PagedResult<UserListItem>> GetUsersAsync(string? searchTerm, int pageNumber, int pageSize, bool showInactive = false, string? sortColumn = null, bool sortDescending = false)
     {
         try
         {
@@ -22,6 +22,10 @@ public class UserManagementService : IUserManagementService
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 query += $"&searchTerm={Uri.EscapeDataString(searchTerm)}";
+            }
+            if (!string.IsNullOrWhiteSpace(sortColumn))
+            {
+                query += $"&sortColumn={Uri.EscapeDataString(sortColumn)}&sortDescending={sortDescending}";
             }
 
             var response = await _httpClient.GetAsync(query);

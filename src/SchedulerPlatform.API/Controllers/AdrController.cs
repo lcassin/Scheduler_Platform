@@ -3733,15 +3733,17 @@ public class AdrController : ControllerBase
     #region AdrAccountBlacklist Endpoints (Admin/Super Admin only)
 
     /// <summary>
-    /// Retrieves a paginated list of blacklist entries.
+    /// Retrieves a paginated list of blacklist entries with sorting support.
     /// Only Admin and Super Admin users can access this endpoint.
     /// </summary>
     /// <param name="pageNumber">Page number for pagination (default: 1).</param>
-    /// <param name="pageSize">Number of items per page (default: 20).</param>
+    /// <param name="pageSize">Number of items per page (default: 50).</param>
     /// <param name="status">Filter by status: "current" (active now), "future" (starts in future), "expired" (end date passed), "inactive" (manually disabled), "all" (default).</param>
     /// <param name="vendorCode">Optional filter by vendor code.</param>
     /// <param name="accountNumber">Optional filter by account number.</param>
     /// <param name="isActive">Optional filter by active status.</param>
+    /// <param name="sortColumn">Column to sort by: VendorCode, VMAccountNumber, EffectiveStartDate, EffectiveEndDate, CreatedDateTime, IsActive (default: EffectiveEndDate).</param>
+    /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
     /// <returns>A paginated list of blacklist entries.</returns>
     /// <response code="200">Returns the list of blacklist entries.</response>
     /// <response code="500">An error occurred while retrieving blacklist entries.</response>
@@ -3751,11 +3753,13 @@ public class AdrController : ControllerBase
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<object>> GetBlacklist(
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20,
+        [FromQuery] int pageSize = 50,
         [FromQuery] string? status = null,
         [FromQuery] string? vendorCode = null,
         [FromQuery] string? accountNumber = null,
-        [FromQuery] bool? isActive = null)
+        [FromQuery] bool? isActive = null,
+        [FromQuery] string sortColumn = "EffectiveEndDate",
+        [FromQuery] bool sortDescending = true)
     {
         try
         {
@@ -3806,8 +3810,20 @@ public class AdrController : ControllerBase
             }
             
             var totalCount = await query.CountAsync();
-            var items = await query
-                .OrderByDescending(b => b.CreatedDateTime)
+            
+            // Apply sorting based on sortColumn parameter
+            IOrderedQueryable<AdrAccountBlacklist> orderedQuery = sortColumn.ToLowerInvariant() switch
+            {
+                "vendorcode" => sortDescending ? query.OrderByDescending(b => b.VendorCode) : query.OrderBy(b => b.VendorCode),
+                "vmaccountnumber" => sortDescending ? query.OrderByDescending(b => b.VMAccountNumber) : query.OrderBy(b => b.VMAccountNumber),
+                "effectivestartdate" => sortDescending ? query.OrderByDescending(b => b.EffectiveStartDate) : query.OrderBy(b => b.EffectiveStartDate),
+                "effectiveenddate" => sortDescending ? query.OrderByDescending(b => b.EffectiveEndDate) : query.OrderBy(b => b.EffectiveEndDate),
+                "createddatetime" => sortDescending ? query.OrderByDescending(b => b.CreatedDateTime) : query.OrderBy(b => b.CreatedDateTime),
+                "isactive" => sortDescending ? query.OrderByDescending(b => b.IsActive) : query.OrderBy(b => b.IsActive),
+                _ => sortDescending ? query.OrderByDescending(b => b.EffectiveEndDate) : query.OrderBy(b => b.EffectiveEndDate) // Default to EffectiveEndDate
+            };
+            
+            var items = await orderedQuery
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
                 .ToListAsync();

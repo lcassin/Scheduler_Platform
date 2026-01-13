@@ -90,16 +90,18 @@
                       Striped="true"
                       Dense="true"
                       Loading="@_loading"
-                      LoadingProgressColor="Color.Primary">
+                      LoadingProgressColor="Color.Primary"
+                      SortLabel="@_sortColumn"
+                      SortLabelChanged="OnSortChanged">
                 <HeaderContent>
-                    <MudTh>Vendor Code</MudTh>
+                    <MudTh><MudTableSortLabel SortLabel="VendorCode" T="BlacklistEntryModel">Vendor Code</MudTableSortLabel></MudTh>
                     <MudTh>VM Account ID</MudTh>
-                    <MudTh>Account Number</MudTh>
+                    <MudTh><MudTableSortLabel SortLabel="VMAccountNumber" T="BlacklistEntryModel">Account Number</MudTableSortLabel></MudTh>
                     <MudTh>Credential ID</MudTh>
                     <MudTh>Exclusion Type</MudTh>
                     <MudTh>Reason</MudTh>
-                    <MudTh>Status</MudTh>
-                    <MudTh>Effective Dates</MudTh>
+                    <MudTh><MudTableSortLabel SortLabel="IsActive" T="BlacklistEntryModel">Status</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortLabel="EffectiveEndDate" T="BlacklistEntryModel" InitialDirection="SortDirection.Descending">End Date</MudTableSortLabel></MudTh>
                     <MudTh>Blacklisted By</MudTh>
                     <MudTh>Actions</MudTh>
                 </HeaderContent>
@@ -284,7 +286,9 @@
     
     private int _currentPage = 1;
     private int _totalPages = 1;
-    private int _pageSize = 20;
+    private int _pageSize = 50;
+    private string _sortColumn = "EffectiveEndDate";
+    private SortDirection _sortDirection = SortDirection.Descending;
 
         protected override async Task OnInitializedAsync()
         {
@@ -308,11 +312,16 @@
             _loading = true;
             try
             {
+                var sortDescending = _sortDirection == SortDirection.Descending;
+                var sortColumn = string.IsNullOrEmpty(_sortColumn) ? "EffectiveEndDate" : _sortColumn;
+                
                 var queryParams = new List<string>
                 {
                     $"pageNumber={_currentPage}",
                     $"pageSize={_pageSize}",
-                    $"status={_filterStatus}"
+                    $"status={_filterStatus}",
+                    $"sortColumn={Uri.EscapeDataString(sortColumn)}",
+                    $"sortDescending={sortDescending}"
                 };
             
                 if (!string.IsNullOrWhiteSpace(_searchVendorCode))
@@ -339,6 +348,23 @@
             {
                 _loading = false;
             }
+        }
+        
+        private async Task OnSortChanged(string sortLabel)
+        {
+            if (_sortColumn == sortLabel)
+            {
+                _sortDirection = _sortDirection == SortDirection.Ascending 
+                    ? SortDirection.Descending 
+                    : SortDirection.Ascending;
+            }
+            else
+            {
+                _sortColumn = sortLabel;
+                _sortDirection = sortLabel == "EffectiveEndDate" ? SortDirection.Descending : SortDirection.Ascending;
+            }
+            _currentPage = 1;
+            await LoadBlacklist();
         }
 
     private async Task ClearFilters()

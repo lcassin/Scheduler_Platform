@@ -51,13 +51,13 @@
               Loading="@_loading"
               LoadingProgressColor="Color.Info">
         <HeaderContent>
-            <MudTh>Email</MudTh>
-            <MudTh>Name</MudTh>
-            <MudTh>Status</MudTh>
+            <MudTh><MudTableSortLabel SortLabel="Email" T="UserListItem">Email</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortLabel="LastName" T="UserListItem" InitialDirection="SortDirection.Ascending">Name</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortLabel="IsActive" T="UserListItem">Status</MudTableSortLabel></MudTh>
             <MudTh>Role</MudTh>
             <MudTh>Permissions</MudTh>
-            <MudTh>Timezone</MudTh>
-            <MudTh>Last Login</MudTh>
+            <MudTh><MudTableSortLabel SortLabel="PreferredTimeZone" T="UserListItem">Timezone</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortLabel="LastLoginDateTime" T="UserListItem">Last Login</MudTableSortLabel></MudTh>
             <MudTh>Actions</MudTh>
         </HeaderContent>
         <RowTemplate>
@@ -206,11 +206,16 @@
         _formattedLastLogins.Clear(); // Clear cache when reloading
         try
         {
+            var sortDescending = state.SortDirection == SortDirection.Descending;
+            var sortColumn = string.IsNullOrEmpty(state.SortLabel) ? "LastName" : state.SortLabel;
+            
             var result = await UserManagementService.GetUsersAsync(
                 string.IsNullOrWhiteSpace(_searchTerm) ? null : _searchTerm,
                 state.Page + 1,
                 state.PageSize,
-                _showInactiveUsers);
+                _showInactiveUsers,
+                sortColumn,
+                sortDescending);
 
             return new TableData<UserListItem>
             {
