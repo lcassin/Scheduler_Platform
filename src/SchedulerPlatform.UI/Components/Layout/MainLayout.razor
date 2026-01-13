@@ -1,8 +1,11 @@
 @inherits LayoutComponentBase
 @inject SchedulerPlatform.UI.Services.SessionStateService SessionStateService
+@inject SchedulerPlatform.UI.Services.UserPermissionCacheService PermissionCache
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
-@implements IDisposable
+@inject IJSRuntime JSRuntime
+@inject IDialogService DialogService
+@implements IAsyncDisposable
 
 <MudLayout>
     <MudAppBar Elevation="1">
@@ -12,8 +15,60 @@
         <MudSpacer />
         <AuthorizeView>
             <Authorized>
-                <MudText Typo="Typo.body2" Class="mr-4">@context.User.Identity?.Name</MudText>
-                <MudButton Href="/Account/Logout" Color="Color.Inherit" Variant="Variant.Text">Logout</MudButton>
+                <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
+                    <ActivatorContent>
+                        <MudButton Color="Color.Inherit" Variant="Variant.Text" EndIcon="@Icons.Material.Filled.ArrowDropDown">
+                            <MudAvatar Size="Size.Small" Style="background-color: #ffffff; color: #3d5afe;" Class="mr-2">
+                                @{
+                                    var initials = GetInitials(GetDisplayName(context.User));
+                                    if (initials == "?")
+                                    {
+                                        <MudIcon Icon="@Icons.Material.Filled.Person" />
+                                    }
+                                    else
+                                    {
+                                        @initials
+                                    }
+                                }
+                            </MudAvatar>
+                            @GetDisplayName(context.User)
+                        </MudButton>
+                    </ActivatorContent>
+                    <ChildContent>
+                        <MudPaper Class="pa-4" Style="min-width: 280px;">
+                            <div class="d-flex align-center mb-3">
+                                <MudAvatar Size="Size.Large" Style="background-color: #ffffff; color: #3d5afe;" Class="mr-3">
+                                    @{
+                                        var largeInitials = GetInitials(GetDisplayName(context.User));
+                                        if (largeInitials == "?")
+                                        {
+                                            <MudIcon Icon="@Icons.Material.Filled.Person" />
+                                        }
+                                        else
+                                        {
+                                            @largeInitials
+                                        }
+                                    }
+                                </MudAvatar>
+                                <div>
+                                    <MudText Typo="Typo.subtitle1">@GetDisplayName(context.User)</MudText>
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">@GetUserEmail(context.User)</MudText>
+                                </div>
+                            </div>
+                            <MudDivider Class="mb-2" />
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Role</MudText>
+                            <MudText Typo="Typo.body2" Class="mb-2">@GetUserRole(context.User)</MudText>
+                            @if (IsSuperAdmin(context.User))
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled">Super Admin</MudChip>
+                            }
+                            <MudDivider Class="my-2" />
+                            <MudButton Href="/Account/Logout" Color="Color.Error" Variant="Variant.Text" FullWidth="true" StartIcon="@Icons.Material.Filled.Logout">
+                                Sign Out
+                            </MudButton>
+                        </MudPaper>
+                    </ChildContent>
+                </MudMenu>
             </Authorized>
             <NotAuthorized>
                 <MudButton Href="/Account/Login" Color="Color.Inherit" Variant="Variant.Text">Login</MudButton>
@@ -35,14 +90,125 @@
     </MudMainContent>
 </MudLayout>
 
+@* Session Expiry Warning Dialog *@
+<MudDialog @bind-Visible="_showSessionExpiryWarning" Options="@_sessionDialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning" Class="mr-2" />
+            Session Expiring Soon
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText>Your session will expire in approximately @_minutesRemaining minute(s).</MudText>
+        <MudText Class="mt-2">Click "Stay Logged In" to extend your session, or you will be automatically logged out.</MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="ExtendSession">Stay Logged In</MudButton>
+        <MudButton Color="Color.Default" OnClick="LogoutNow">Logout Now</MudButton>
+    </DialogActions>
+</MudDialog>
+
 @code {
     private bool _drawerOpen = true;
     private bool _sessionExpiredHandled = false;
+    private bool _showSessionExpiryWarning = false;
+    private int _minutesRemaining = 5;
+    private System.Threading.Timer? _keepaliveTimer;
+    private int _lastKnownMinutesRemaining = int.MaxValue;
+    
+    private readonly DialogOptions _sessionDialogOptions = new()
+    {
+        BackdropClick = false,
+        CloseOnEscapeKey = false,
+        MaxWidth = MaxWidth.Small
+    };
 
     protected override void OnInitialized()
     {
         // Subscribe to session expiration events for centralized handling
         SessionStateService.OnSessionExpired += HandleSessionExpired;
+        SessionStateService.OnSessionExpiringWarning += HandleSessionExpiringWarning;
+        SessionStateService.OnSessionRefreshed += HandleSessionRefreshed;
+        
+        // Subscribe to permission cache refresh events to update UI
+        PermissionCache.OnPermissionsRefreshed += HandlePermissionsRefreshed;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Initial permission cache load
+            await PermissionCache.RefreshPermissionsAsync();
+            await InvokeAsync(StateHasChanged);
+            
+            // Start keepalive timer for authenticated users
+            // This pings /keepalive every 2 minutes to:
+            // 1. Trigger token refresh in OnValidatePrincipal (refresh happens 5 min before expiry)
+            // 2. Check remaining session time and show warning if needed
+            // 3. Refresh permission cache to pick up any permission changes
+            _keepaliveTimer = new System.Threading.Timer(async _ =>
+            {
+                try
+                {
+                    // Use JavaScript fetch to make an HTTP request that includes the auth cookie
+                    // This triggers OnValidatePrincipal which handles token refresh
+                    var result = await JSRuntime.InvokeAsync<KeepaliveResponse>("eval", @"
+                        (async () => {
+                            try {
+                                const response = await fetch('/keepalive', { credentials: 'same-origin' });
+                                if (response.ok) {
+                                    return await response.json();
+                                }
+                                return { authenticated: false, minutesRemaining: null };
+                            } catch {
+                                return { authenticated: false, minutesRemaining: null };
+                            }
+                        })()
+                    ");
+                    
+                    if (result != null && result.Authenticated)
+                    {
+                        var minutes = result.MinutesRemaining ?? 60;
+                        
+                        // Refresh permission cache on each keepalive
+                        await PermissionCache.RefreshPermissionsAsync();
+                        
+                        // Show warning when session is about to expire (5 minutes or less)
+                        if (minutes <= 5 && minutes > 0 && !_showSessionExpiryWarning)
+                        {
+                            await InvokeAsync(() =>
+                            {
+                                _minutesRemaining = minutes;
+                                _showSessionExpiryWarning = true;
+                                StateHasChanged();
+                            });
+                        }
+                        // Session was refreshed - hide warning if showing
+                        else if (minutes > 5 && _showSessionExpiryWarning)
+                        {
+                            await InvokeAsync(() =>
+                            {
+                                _showSessionExpiryWarning = false;
+                                Snackbar.Add("Session extended successfully.", Severity.Success);
+                                StateHasChanged();
+                            });
+                        }
+                        
+                        _lastKnownMinutesRemaining = minutes;
+                    }
+                }
+                catch
+                {
+                    // Ignore errors - if keepalive fails, the normal 401 handling will redirect to login
+                }
+            }, null, TimeSpan.FromMinutes(2), TimeSpan.FromMinutes(2));
+        }
+    }
+    
+    private void HandlePermissionsRefreshed()
+    {
+        InvokeAsync(StateHasChanged);
     }
 
     private void HandleSessionExpired()
@@ -53,10 +219,51 @@
         
         InvokeAsync(() =>
         {
+            _showSessionExpiryWarning = false;
             Snackbar.Add("Your session has expired. Redirecting to login...", Severity.Warning);
             // Pass sessionExpired=true so the login page can show an alert
             Navigation.NavigateTo("/Account/Logout?sessionExpired=true", forceLoad: true);
         });
+    }
+    
+    private void HandleSessionExpiringWarning(int minutesRemaining)
+    {
+        InvokeAsync(() =>
+        {
+            _minutesRemaining = minutesRemaining;
+            _showSessionExpiryWarning = true;
+            StateHasChanged();
+        });
+    }
+    
+    private void HandleSessionRefreshed()
+    {
+        InvokeAsync(() =>
+        {
+            _showSessionExpiryWarning = false;
+            StateHasChanged();
+        });
+    }
+    
+    private async Task ExtendSession()
+    {
+        try
+        {
+            // Make a keepalive request to trigger token refresh
+            await JSRuntime.InvokeVoidAsync("eval", "fetch('/keepalive', { credentials: 'same-origin' })");
+            _showSessionExpiryWarning = false;
+            Snackbar.Add("Session extended successfully.", Severity.Success);
+        }
+        catch
+        {
+            Snackbar.Add("Failed to extend session. Please try again.", Severity.Error);
+        }
+    }
+    
+    private void LogoutNow()
+    {
+        _showSessionExpiryWarning = false;
+        Navigation.NavigateTo("/Account/Logout", forceLoad: true);
     }
 
     private void DrawerToggle()
@@ -64,8 +271,125 @@
         _drawerOpen = !_drawerOpen;
     }
 
-    public void Dispose()
+    private string GetDisplayName(System.Security.Claims.ClaimsPrincipal user)
+    {
+        // Use cached permissions if available (preferred - has enriched data from API)
+        if (PermissionCache.CachedPermissions != null)
+        {
+            return PermissionCache.GetDisplayName();
+        }
+        
+        // Fall back to claims-based lookup
+        var givenName = user.FindFirst("given_name")?.Value 
+            ?? user.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value;
+        var familyName = user.FindFirst("family_name")?.Value 
+            ?? user.FindFirst(System.Security.Claims.ClaimTypes.Surname)?.Value;
+        
+        if (!string.IsNullOrWhiteSpace(givenName) && !string.IsNullOrWhiteSpace(familyName))
+            return $"{givenName} {familyName}";
+        if (!string.IsNullOrWhiteSpace(givenName))
+            return givenName;
+        if (!string.IsNullOrWhiteSpace(familyName))
+            return familyName;
+        
+        var name = user.FindFirst("name")?.Value ?? user.Identity?.Name;
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            if (name.Contains('@'))
+                return name.Split('@')[0];
+            return name;
+        }
+        
+        return "User";
+    }
+
+    private string GetInitials(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name == "User") return "?";
+        
+        var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length >= 2)
+            return $"{parts[0][0]}{parts[^1][0]}".ToUpper();
+        if (parts.Length == 1 && parts[0].Length >= 2)
+            return parts[0][..2].ToUpper();
+        return parts.Length > 0 ? parts[0][0].ToString().ToUpper() : "?";
+    }
+
+    private string GetUserEmail(System.Security.Claims.ClaimsPrincipal user)
+    {
+        // Use cached permissions if available (preferred - has enriched data from API)
+        if (PermissionCache.CachedPermissions != null)
+        {
+            return PermissionCache.GetEmail();
+        }
+        
+        // Fall back to claims-based lookup
+        var email = user.FindFirst("email")?.Value 
+            ?? user.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value 
+            ?? user.FindFirst("preferred_username")?.Value;
+        
+        if (!string.IsNullOrWhiteSpace(email))
+            return email;
+        
+        // In Duende with Azure AD federation, the email is often in the 'name' claim
+        var name = user.FindFirst("name")?.Value;
+        if (!string.IsNullOrWhiteSpace(name) && name.Contains('@'))
+            return name;
+        
+        return "";
+    }
+
+    private string GetUserRole(System.Security.Claims.ClaimsPrincipal user)
+    {
+        // Use cached permissions if available (preferred - has enriched data from API)
+        if (PermissionCache.CachedPermissions != null)
+        {
+            return PermissionCache.GetRole();
+        }
+        
+        // Fall back to claims-based lookup
+        if (IsSuperAdmin(user)) return "Super Admin";
+        
+        var role = user.FindFirst("role")?.Value 
+            ?? user.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+        
+        if (!string.IsNullOrWhiteSpace(role))
+            return role;
+        
+        return user.Identity?.IsAuthenticated == true ? "Authenticated" : "User";
+    }
+
+    private bool IsSuperAdmin(System.Security.Claims.ClaimsPrincipal user)
+    {
+        // Use cached permissions if available (preferred - has enriched data from API)
+        if (PermissionCache.CachedPermissions != null)
+        {
+            return PermissionCache.IsSystemAdmin();
+        }
+        
+        // Fall back to claims-based lookup
+        var isSystemAdmin = user.FindFirst("is_system_admin")?.Value;
+        return string.Equals(isSystemAdmin, "true", StringComparison.OrdinalIgnoreCase) 
+            || string.Equals(isSystemAdmin, "True", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public async ValueTask DisposeAsync()
     {
         SessionStateService.OnSessionExpired -= HandleSessionExpired;
+        SessionStateService.OnSessionExpiringWarning -= HandleSessionExpiringWarning;
+        SessionStateService.OnSessionRefreshed -= HandleSessionRefreshed;
+        PermissionCache.OnPermissionsRefreshed -= HandlePermissionsRefreshed;
+        if (_keepaliveTimer != null)
+        {
+            await _keepaliveTimer.DisposeAsync();
+        }
+    }
+    
+    private class KeepaliveResponse
+    {
+        public bool Authenticated { get; set; }
+        public int? MinutesRemaining { get; set; }
+        public string? ExpiresAt { get; set; }
+        public string? ServerTime { get; set; }
     }
 }

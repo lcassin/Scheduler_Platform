@@ -44,6 +44,14 @@ public class ApiCallJob : IJob
         string? triggeredBy = jobDataMap.ContainsKey("TriggeredBy") 
             ? jobDataMap.GetString("TriggeredBy") 
             : null;
+        
+        // Read RetryCount from trigger's JobDataMap (set by retry mechanism)
+        int retryCount = 0;
+        if (jobDataMap.ContainsKey("RetryCount"))
+        {
+            var retryCountStr = jobDataMap.GetString("RetryCount");
+            int.TryParse(retryCountStr, out retryCount);
+        }
 
         var schedule = await _unitOfWork.Schedules.GetByIdAsync(scheduleId);
         if (schedule == null)
@@ -67,6 +75,7 @@ public class ApiCallJob : IJob
             StartDateTime = execNow,
             Status = JobStatus.Running,
             TriggeredBy = triggeredBy ?? "Scheduler",
+            RetryCount = retryCount,
             CreatedDateTime = execNow,
             CreatedBy = "System",
             ModifiedDateTime = execNow,
@@ -170,7 +179,27 @@ public class ApiCallJob : IJob
             
             var responseContent = await response.Content.ReadAsStringAsync();
             
-            response.EnsureSuccessStatusCode();
+            // Check for non-success status codes and capture the response body before throwing
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorMessage = $"API returned {(int)response.StatusCode} {response.StatusCode}";
+                
+                // Try to extract error details from the response body
+                if (!string.IsNullOrEmpty(responseContent))
+                {
+                    // Truncate very long responses to avoid database issues
+                    var truncatedResponse = responseContent.Length > 4000 
+                        ? responseContent.Substring(0, 4000) + "... [truncated]" 
+                        : responseContent;
+                    errorMessage += $"\n\nResponse Body:\n{truncatedResponse}";
+                }
+                
+                _logger.LogError("API call failed with status {StatusCode}. Response: {Response}", 
+                    response.StatusCode, responseContent);
+                
+                // Throw with the detailed error message so it gets captured in the catch block
+                throw new HttpRequestException(errorMessage);
+            }
             
             jobExecution.Status = JobStatus.Completed;
             jobExecution.EndDateTime = DateTime.UtcNow;
@@ -237,15 +266,28 @@ public class ApiCallJob : IJob
 
                 try
                 {
+                    var triggerKey = new TriggerKey($"Retry_{scheduleId}_{jobExecution.RetryCount + 1}");
+                    
                     ITrigger retryTrigger = TriggerBuilder.Create()
                         .ForJob(context.JobDetail.Key)
-                        .WithIdentity($"Retry_{scheduleId}_{jobExecution.RetryCount + 1}")
+                        .WithIdentity(triggerKey)
                         .StartAt(retryTime)
                         .UsingJobData("RetryCount", (jobExecution.RetryCount + 1).ToString())
                         .UsingJobData("TriggeredBy", "RetryMechanism")
                         .Build();
 
-                    await context.Scheduler.ScheduleJob(retryTrigger);
+                    // Check if trigger already exists and reschedule if so (idempotent operation)
+                    if (await context.Scheduler.CheckExists(triggerKey))
+                    {
+                        _logger.LogInformation(
+                            "Retry trigger {TriggerKey} already exists for schedule {ScheduleId}, rescheduling",
+                            triggerKey, scheduleId);
+                        await context.Scheduler.RescheduleJob(triggerKey, retryTrigger);
+                    }
+                    else
+                    {
+                        await context.Scheduler.ScheduleJob(retryTrigger);
+                    }
                     
                     _logger.LogInformation(
                         "Successfully scheduled retry {RetryCount} for schedule {ScheduleId}",
@@ -261,17 +303,6 @@ public class ApiCallJob : IJob
                         jobExecution.RetryCount + 1, retryTime);
                     
                     jobExecution.ErrorMessage += $"\n\nAdditional Error: Failed to schedule retry - {retryEx.Message}";
-                    
-                    if (retryEx.Message.Contains("already exists", StringComparison.OrdinalIgnoreCase) || 
-                        retryEx.Message.Contains("duplicate", StringComparison.OrdinalIgnoreCase) ||
-                        retryEx.Message.Contains("ObjectAlreadyExistsException", StringComparison.OrdinalIgnoreCase))
-                    {
-                        _logger.LogWarning(
-                            "Retry trigger already exists for schedule {ScheduleId}. " +
-                            "This may indicate stale Quartz data or a previously failed retry attempt. " +
-                            "Consider cleaning up orphaned triggers in the Quartz database.",
-                            scheduleId);
-                    }
                 }
             }
 

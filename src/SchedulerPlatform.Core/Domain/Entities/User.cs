@@ -17,6 +17,7 @@ public class User : BaseEntity
     public DateTime? LastLoginDateTime { get; set; }
     public bool MustChangePassword { get; set; }
     public DateTime? PasswordChangedDateTime { get; set; }
+    public string? PreferredTimeZone { get; set; }
     
     [JsonIgnore]
     public Client Client { get; set; } = null!;

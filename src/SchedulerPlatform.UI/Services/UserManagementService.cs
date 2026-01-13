@@ -5,35 +5,39 @@ namespace SchedulerPlatform.UI.Services;
 
 public class UserManagementService : IUserManagementService
 {
-    private readonly IHttpClientFactory _httpClientFactory;
+    private readonly AuthenticatedHttpClientService _httpClient;
     private readonly ILogger<UserManagementService> _logger;
 
-    public UserManagementService(IHttpClientFactory httpClientFactory, ILogger<UserManagementService> logger)
+    public UserManagementService(AuthenticatedHttpClientService httpClient, ILogger<UserManagementService> logger)
     {
-        _httpClientFactory = httpClientFactory;
+        _httpClient = httpClient;
         _logger = logger;
     }
 
-    private HttpClient CreateClient() => _httpClientFactory.CreateClient("SchedulerAPI");
-
-    public async Task<PagedResult<UserListItem>> GetUsersAsync(string? searchTerm, int pageNumber, int pageSize, bool showInactive = false)
+    public async Task<PagedResult<UserListItem>> GetUsersAsync(string? searchTerm, int pageNumber, int pageSize, bool showInactive = false, string? sortColumn = null, bool sortDescending = false)
     {
         try
         {
-            var client = CreateClient();
             var query = $"Users?pageNumber={pageNumber}&pageSize={pageSize}&showInactive={showInactive}";
             if (!string.IsNullOrWhiteSpace(searchTerm))
             {
                 query += $"&searchTerm={Uri.EscapeDataString(searchTerm)}";
             }
+            if (!string.IsNullOrWhiteSpace(sortColumn))
+            {
+                query += $"&sortColumn={Uri.EscapeDataString(sortColumn)}&sortDescending={sortDescending}";
+            }
 
-            var response = await client.GetFromJsonAsync<PagedResult<UserListItem>>(query);
-            if (response == null)
+            var response = await _httpClient.GetAsync(query);
+            response.EnsureSuccessStatusCode();
+            
+            var result = await response.Content.ReadFromJsonAsync<PagedResult<UserListItem>>();
+            if (result == null)
             {
                 return new PagedResult<UserListItem>();
             }
 
-            return response;
+            return result;
         }
         catch (Exception ex)
         {
@@ -46,8 +50,9 @@ public class UserManagementService : IUserManagementService
     {
         try
         {
-            var client = CreateClient();
-            return await client.GetFromJsonAsync<UserDetail>($"Users/{id}");
+            var response = await _httpClient.GetAsync($"Users/{id}");
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadFromJsonAsync<UserDetail>();
         }
         catch (Exception ex)
         {
@@ -60,9 +65,8 @@ public class UserManagementService : IUserManagementService
     {
         try
         {
-            var client = CreateClient();
             var request = new { Permissions = permissions };
-            var response = await client.PutAsJsonAsync($"Users/{id}/permissions", request);
+            var response = await _httpClient.PutAsJsonAsync($"Users/{id}/permissions", request);
             response.EnsureSuccessStatusCode();
         }
         catch (Exception ex)
@@ -76,8 +80,7 @@ public class UserManagementService : IUserManagementService
     {
         try
         {
-            var client = CreateClient();
-            var response = await client.PostAsync($"Users/{id}/templates/{templateName}", null);
+            var response = await _httpClient.PostAsJsonAsync($"Users/{id}/templates/{templateName}", new { });
             response.EnsureSuccessStatusCode();
         }
         catch (Exception ex)
@@ -91,8 +94,9 @@ public class UserManagementService : IUserManagementService
     {
         try
         {
-            var client = CreateClient();
-            var templates = await client.GetFromJsonAsync<List<PermissionTemplate>>("Users/templates");
+            var response = await _httpClient.GetAsync("Users/templates");
+            response.EnsureSuccessStatusCode();
+            var templates = await response.Content.ReadFromJsonAsync<List<PermissionTemplate>>();
             return templates ?? new List<PermissionTemplate>();
         }
         catch (Exception ex)
@@ -106,8 +110,7 @@ public class UserManagementService : IUserManagementService
     {
         try
         {
-            var client = CreateClient();
-            var response = await client.PostAsJsonAsync("Users", request);
+            var response = await _httpClient.PostAsJsonAsync("Users", request);
             response.EnsureSuccessStatusCode();
             
             var createdUser = await response.Content.ReadFromJsonAsync<UserDetail>();
@@ -130,9 +133,8 @@ public class UserManagementService : IUserManagementService
     {
         try
         {
-            var client = CreateClient();
             var request = new UpdateUserStatusRequest { IsActive = isActive };
-            var response = await client.PutAsJsonAsync($"Users/{id}/status", request);
+            var response = await _httpClient.PutAsJsonAsync($"Users/{id}/status", request);
             response.EnsureSuccessStatusCode();
             
             _logger.LogInformation("Updated user {UserId} status to {IsActive}", id, isActive);
@@ -148,9 +150,8 @@ public class UserManagementService : IUserManagementService
     {
         try
         {
-            var client = CreateClient();
             var request = new { IsSuperAdmin = isSuperAdmin };
-            var response = await client.PutAsJsonAsync($"Users/{id}/super-admin", request);
+            var response = await _httpClient.PutAsJsonAsync($"Users/{id}/super-admin", request);
             response.EnsureSuccessStatusCode();
             
             _logger.LogInformation("Updated user {UserId} Super Admin status to {IsSuperAdmin}", id, isSuperAdmin);
@@ -158,6 +159,47 @@ public class UserManagementService : IUserManagementService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error updating Super Admin status for user {UserId}", id);
+            throw;
+        }
+    }
+
+    public async Task UpdateUserTimezoneAsync(int id, string? preferredTimeZone)
+    {
+        try
+        {
+            var request = new { PreferredTimeZone = preferredTimeZone };
+            var response = await _httpClient.PutAsJsonAsync($"Users/{id}/timezone", request);
+            response.EnsureSuccessStatusCode();
+            
+            _logger.LogInformation("Updated user {UserId} timezone to {TimeZone}", id, preferredTimeZone);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating timezone for user {UserId}", id);
+            throw;
+        }
+    }
+
+    public async Task UpdateUserDetailsAsync(int id, string? email, string? firstName, string? lastName, string? preferredTimeZone, bool clearTimezone = false)
+    {
+        try
+        {
+            var request = new 
+            { 
+                Email = email, 
+                FirstName = firstName, 
+                LastName = lastName, 
+                PreferredTimeZone = preferredTimeZone,
+                ClearTimezone = clearTimezone
+            };
+            var response = await _httpClient.PutAsJsonAsync($"Users/{id}/details", request);
+            response.EnsureSuccessStatusCode();
+            
+            _logger.LogInformation("Updated user {UserId} details", id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating details for user {UserId}", id);
             throw;
         }
     }

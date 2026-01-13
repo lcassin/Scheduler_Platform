@@ -47,12 +47,14 @@ public class UsersController : ControllerBase
     }
 
     /// <summary>
-    /// Retrieves a paginated list of users with optional filtering. Requires Users.Manage.Read policy.
+    /// Retrieves a paginated list of users with optional filtering and sorting. Requires Users.Manage.Read policy.
     /// </summary>
     /// <param name="searchTerm">Optional search term to filter by email, first name, last name, or username.</param>
     /// <param name="pageNumber">Page number for pagination (default: 1).</param>
-    /// <param name="pageSize">Number of items per page (default: 20).</param>
+    /// <param name="pageSize">Number of items per page (default: 50).</param>
     /// <param name="showInactive">Whether to include inactive users (default: false).</param>
+    /// <param name="sortColumn">Column to sort by: Email, FirstName, LastName, IsActive, LastLoginDateTime, PreferredTimeZone (default: LastName).</param>
+    /// <param name="sortDescending">Whether to sort in descending order (default: false).</param>
     /// <returns>A paginated list of users with their permission counts and roles.</returns>
     /// <response code="200">Returns the paginated list of users.</response>
     /// <response code="500">An error occurred while retrieving users.</response>
@@ -63,8 +65,10 @@ public class UsersController : ControllerBase
     public async Task<ActionResult<object>> GetUsers(
         [FromQuery] string? searchTerm = null,
         [FromQuery] int pageNumber = 1,
-        [FromQuery] int pageSize = 20,
-        [FromQuery] bool showInactive = false)
+        [FromQuery] int pageSize = 50,
+        [FromQuery] bool showInactive = false,
+        [FromQuery] string sortColumn = "LastName",
+        [FromQuery] bool sortDescending = false)
     {
         try
         {
@@ -86,8 +90,20 @@ public class UsersController : ControllerBase
             }
 
             var totalCount = query.Count();
+            
+            // Apply sorting based on sortColumn parameter
+            query = sortColumn.ToLowerInvariant() switch
+            {
+                "email" => sortDescending ? query.OrderByDescending(u => u.Email) : query.OrderBy(u => u.Email),
+                "firstname" => sortDescending ? query.OrderByDescending(u => u.FirstName) : query.OrderBy(u => u.FirstName),
+                "lastname" => sortDescending ? query.OrderByDescending(u => u.LastName) : query.OrderBy(u => u.LastName),
+                "isactive" => sortDescending ? query.OrderByDescending(u => u.IsActive) : query.OrderBy(u => u.IsActive),
+                "lastlogindatetime" => sortDescending ? query.OrderByDescending(u => u.LastLoginDateTime) : query.OrderBy(u => u.LastLoginDateTime),
+                "preferredtimezone" => sortDescending ? query.OrderByDescending(u => u.PreferredTimeZone) : query.OrderBy(u => u.PreferredTimeZone),
+                _ => sortDescending ? query.OrderByDescending(u => u.LastName) : query.OrderBy(u => u.LastName) // Default to LastName
+            };
+            
             var users = query
-                .OrderBy(u => u.Email)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
                 .ToList();
@@ -115,6 +131,7 @@ public class UsersController : ControllerBase
                                 IsActive = user.IsActive,
                                 IsSystemAdmin = user.IsSystemAdmin,
                                 LastLoginDateTime = user.LastLoginDateTime,
+                                PreferredTimeZone = user.PreferredTimeZone,
                                 PermissionCount = individualPermissionCount,
                                 Role = DetermineUserRole(user, permissionsList)
                             });
@@ -198,6 +215,13 @@ public class UsersController : ControllerBase
                 return NotFound("User not found");
             }
 
+            // Update LastLoginDateTime since IdentityServer doesn't have database access
+            user.LastLoginDateTime = DateTime.UtcNow;
+            user.ModifiedDateTime = DateTime.UtcNow;
+            user.ModifiedBy = user.Email;
+            await _unitOfWork.Users.UpdateAsync(user);
+            await _unitOfWork.SaveChangesAsync();
+
             var permissions = await _unitOfWork.UserPermissions.GetByUserIdAsync(user.Id);
             var permissionsList = permissions.ToList();
 
@@ -225,7 +249,8 @@ public class UsersController : ControllerBase
                 IsSystemAdmin = user.IsSystemAdmin,
                 Role = DetermineUserRole(user, permissionsList),
                 Permissions = permissionStrings,
-                ClientId = user.ClientId
+                ClientId = user.ClientId,
+                PreferredTimeZone = user.PreferredTimeZone
             };
 
             return Ok(response);
@@ -286,6 +311,7 @@ public class UsersController : ControllerBase
                 IsSystemAdmin = user.IsSystemAdmin,
                 LastLoginDateTime = user.LastLoginDateTime,
                 ClientId = user.ClientId,
+                PreferredTimeZone = user.PreferredTimeZone,
                 Permissions = permissionResponses
             };
 
@@ -499,6 +525,7 @@ public class UsersController : ControllerBase
                 PasswordHash = passwordHash,
                 MustChangePassword = true,
                 PasswordChangedDateTime = userNow,
+                PreferredTimeZone = "Central Standard Time", // Default timezone for new users
                 CreatedDateTime = userNow,
                 CreatedBy = userCreatedBy,
                 ModifiedDateTime = userNow,
@@ -646,6 +673,7 @@ public class UsersController : ControllerBase
                 IsSystemAdmin = user.IsSystemAdmin,
                 LastLoginDateTime = user.LastLoginDateTime,
                 ClientId = user.ClientId,
+                PreferredTimeZone = user.PreferredTimeZone,
                 Permissions = permissionResponses
             };
 
@@ -705,6 +733,122 @@ public class UsersController : ControllerBase
         {
             _logger.LogError(ex, "Error updating status for user {UserId}", id);
             return StatusCode(500, "An error occurred while updating user status");
+        }
+    }
+
+    /// <summary>
+    /// Updates user details (email, first name, last name, timezone). Requires Users.Manage.Update policy.
+    /// </summary>
+    /// <param name="id">The user ID.</param>
+    /// <param name="request">The user details update request.</param>
+    /// <returns>No content on success.</returns>
+    /// <response code="204">The user details were successfully updated.</response>
+    /// <response code="400">Email already exists for another user or cannot modify system administrators.</response>
+    /// <response code="404">The user was not found.</response>
+    /// <response code="500">An error occurred while updating user details.</response>
+    [HttpPut("{id}/details")]
+    [Authorize(Policy = "Users.Manage.Update")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> UpdateUserDetails(int id, [FromBody] UpdateUserDetailsRequest request)
+    {
+        try
+        {
+            var user = await _unitOfWork.Users.GetByIdAsync(id);
+            if (user == null)
+            {
+                return NotFound();
+            }
+
+            // Check if email is being changed and if it already exists
+            if (!string.IsNullOrWhiteSpace(request.Email) && 
+                !string.Equals(user.Email, request.Email, StringComparison.OrdinalIgnoreCase))
+            {
+                var existingUsers = await _unitOfWork.Users.GetAllAsync();
+                if (existingUsers.Any(u => u.Id != id && 
+                    string.Equals(u.Email, request.Email, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return BadRequest(new { message = "A user with this email already exists" });
+                }
+                user.Email = request.Email.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.FirstName))
+            {
+                user.FirstName = request.FirstName.Trim();
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.LastName))
+            {
+                user.LastName = request.LastName.Trim();
+            }
+
+            // Allow timezone to be set to null (Browser Default)
+            if (request.PreferredTimeZone != null || request.ClearTimezone)
+            {
+                user.PreferredTimeZone = request.PreferredTimeZone;
+            }
+
+            user.ModifiedDateTime = DateTime.UtcNow;
+            user.ModifiedBy = User.Identity?.Name ?? "System";
+
+            await _unitOfWork.Users.UpdateAsync(user);
+            await _unitOfWork.SaveChangesAsync();
+
+            _logger.LogInformation("Updated details for user {UserId} by {ModifiedBy}", 
+                id, User.Identity?.Name ?? "System");
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating details for user {UserId}", id);
+            return StatusCode(500, "An error occurred while updating user details");
+        }
+    }
+
+    /// <summary>
+    /// Updates the preferred timezone for a user. Requires Users.Manage.Update policy.
+    /// </summary>
+    /// <param name="id">The user ID.</param>
+    /// <param name="request">The timezone update request containing the new timezone ID.</param>
+    /// <returns>No content on success.</returns>
+    /// <response code="204">The user timezone was successfully updated.</response>
+    /// <response code="404">The user was not found.</response>
+    /// <response code="500">An error occurred while updating user timezone.</response>
+    [HttpPut("{id}/timezone")]
+    [Authorize(Policy = "Users.Manage.Update")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> UpdateUserTimezone(int id, [FromBody] UpdateUserTimezoneRequest request)
+    {
+        try
+        {
+            var user = await _unitOfWork.Users.GetByIdAsync(id);
+            if (user == null)
+            {
+                return NotFound();
+            }
+
+            user.PreferredTimeZone = request.PreferredTimeZone;
+            user.ModifiedDateTime = DateTime.UtcNow;
+            user.ModifiedBy = User.Identity?.Name ?? "System";
+
+            await _unitOfWork.Users.UpdateAsync(user);
+            await _unitOfWork.SaveChangesAsync();
+
+            _logger.LogInformation("Updated timezone for user {UserId} to {TimeZone} by {ModifiedBy}", 
+                id, request.PreferredTimeZone, User.Identity?.Name ?? "System");
+
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating timezone for user {UserId}", id);
+            return StatusCode(500, "An error occurred while updating user timezone");
         }
     }
 

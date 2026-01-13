@@ -205,7 +205,7 @@ public class SystemScheduleSeeder : IHostedService
             TimeZone = "UTC",
             JobConfiguration = System.Text.Json.JsonSerializer.Serialize(new
             {
-                Url = "/api/adr/orchestrate/run-full-cycle",
+                Url = "/api/adr/orchestrate/run-background",
                 Method = "POST",
                 AuthorizationType = "SchedulerApiKey"
             }),

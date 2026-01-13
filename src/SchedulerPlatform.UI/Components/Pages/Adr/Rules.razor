@@ -2,7 +2,7 @@
 @using SchedulerPlatform.UI.Services
 @using Microsoft.AspNetCore.Authorization
 @attribute [Authorize]
-@inject IHttpClientFactory HttpClientFactory
+@inject AuthenticatedHttpClientService HttpClientService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IPermissionService PermissionService
@@ -197,8 +197,6 @@
     private bool? _filterEnabled = true;
     private bool? _filterOverridden;
 
-    private HttpClient CreateClient() => HttpClientFactory.CreateClient("SchedulerAPI");
-
     protected override void OnInitialized()
     {
         _loading = false;
@@ -233,8 +231,9 @@
                 queryParams.Add($"isOverridden={_filterOverridden.Value}");
             
             var url = $"adr/rules?{string.Join("&", queryParams)}";
-            var client = CreateClient();
-            var response = await client.GetFromJsonAsync<RulesPagedResponse>(url, cancellationToken);
+            var httpResponse = await HttpClientService.GetAsync(url);
+            httpResponse.EnsureSuccessStatusCode();
+            var response = await httpResponse.Content.ReadFromJsonAsync<RulesPagedResponse>(cancellationToken);
             
             if (response != null)
             {
@@ -319,8 +318,7 @@
         {
             try
             {
-                var client = CreateClient();
-                var response = await client.PostAsync($"adr/rules/{rule.Id}/clear-override", null);
+                var response = await HttpClientService.PostAsync($"adr/rules/{rule.Id}/clear-override");
                 response.EnsureSuccessStatusCode();
                 Snackbar.Add("Override cleared successfully", Severity.Success);
                 if (_table != null)
@@ -341,7 +339,6 @@
         StateHasChanged();
         try
         {
-            var client = CreateClient();
             var queryParams = new List<string> { $"format={format}" };
             
             if (!string.IsNullOrWhiteSpace(_searchVendorCode))
@@ -354,7 +351,7 @@
                 queryParams.Add($"isOverridden={_filterOverridden.Value}");
             
             var url = $"adr/rules/export?{string.Join("&", queryParams)}";
-            var response = await client.GetAsync(url);
+            var response = await HttpClientService.GetAsync(url);
             response.EnsureSuccessStatusCode();
             var bytes = await response.Content.ReadAsByteArrayAsync();
 

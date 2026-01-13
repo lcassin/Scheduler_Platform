@@ -7,6 +7,7 @@
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IPermissionService PermissionService
+@inject IUserTimeZoneService TimeZoneService
 
 <PageTitle>User Management</PageTitle>
 
@@ -50,12 +51,13 @@
               Loading="@_loading"
               LoadingProgressColor="Color.Info">
         <HeaderContent>
-            <MudTh>Email</MudTh>
-            <MudTh>Name</MudTh>
-            <MudTh>Status</MudTh>
+            <MudTh><MudTableSortLabel SortLabel="Email" T="UserListItem">Email</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortLabel="LastName" T="UserListItem" InitialDirection="SortDirection.Ascending">Name</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortLabel="IsActive" T="UserListItem">Status</MudTableSortLabel></MudTh>
             <MudTh>Role</MudTh>
             <MudTh>Permissions</MudTh>
-            <MudTh>Last Login</MudTh>
+            <MudTh><MudTableSortLabel SortLabel="PreferredTimeZone" T="UserListItem">Timezone</MudTableSortLabel></MudTh>
+            <MudTh><MudTableSortLabel SortLabel="LastLoginDateTime" T="UserListItem">Last Login</MudTableSortLabel></MudTh>
             <MudTh>Actions</MudTh>
         </HeaderContent>
         <RowTemplate>
@@ -75,10 +77,13 @@
                 <MudChip T="string" Color="@GetRoleColor(context.Role)" Size="Size.Small">@context.Role</MudChip>
             </MudTd>
             <MudTd DataLabel="Permissions">@context.PermissionCount</MudTd>
+            <MudTd DataLabel="Timezone">
+                @(GetTimezoneDisplayName(context.PreferredTimeZone))
+            </MudTd>
             <MudTd DataLabel="Last Login">
                 @if (context.LastLoginDateTime.HasValue)
                 {
-                    @context.LastLoginDateTime.Value.ToLocalTime().ToString("g")
+                    @GetFormattedLastLogin(context.Id, context.LastLoginDateTime.Value)
                 }
                 else
                 {
@@ -86,6 +91,15 @@
                 }
             </MudTd>
             <MudTd DataLabel="Actions">
+                @if (_canUpdateUsers)
+                {
+                    <MudButton Variant="Variant.Text"
+                               Color="Color.Primary"
+                               Size="Size.Small"
+                               OnClick="@(() => OpenEditUserDialog(context.Id))">
+                        Edit
+                    </MudButton>
+                }
                 <MudButton Variant="Variant.Text"
                            Color="Color.Primary"
                            Size="Size.Small"
@@ -128,6 +142,19 @@
     private bool _loading = false;
     private bool _canCreateUsers = false;
     private bool _canUpdateUsers = false;
+    private Dictionary<int, string> _formattedLastLogins = new();
+
+    private static readonly List<(string Id, string DisplayName)> _availableTimezones = new()
+    {
+        ("Eastern Standard Time", "Eastern Time (ET)"),
+        ("Central Standard Time", "Central Time (CT)"),
+        ("Mountain Standard Time", "Mountain Time (MT)"),
+        ("US Mountain Standard Time", "Arizona (MST)"),
+        ("Pacific Standard Time", "Pacific Time (PT)"),
+        ("Alaskan Standard Time", "Alaska Time (AKT)"),
+        ("Hawaiian Standard Time", "Hawaii Time (HST)"),
+        ("UTC", "UTC")
+    };
 
     protected override async Task OnInitializedAsync()
     {
@@ -135,16 +162,60 @@
         _canUpdateUsers = await PermissionService.CanUpdateAsync("users:manage");
     }
 
+    private async Task UpdateUserTimezone(int userId, string email, string? timezone)
+    {
+        try
+        {
+            await UserManagementService.UpdateUserTimezoneAsync(userId, timezone);
+            Snackbar.Add($"Timezone updated for {email}", Severity.Success);
+            await _table!.ReloadServerData();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error updating timezone: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private string GetFormattedLastLogin(int userId, DateTime lastLogin)
+    {
+        if (_formattedLastLogins.TryGetValue(userId, out var formatted))
+            return formatted;
+
+        // Format asynchronously and update the dictionary
+        _ = FormatLastLoginAsync(userId, lastLogin);
+        return lastLogin.ToString("g"); // Return unformatted initially
+    }
+
+    private async Task FormatLastLoginAsync(int userId, DateTime lastLogin)
+    {
+        try
+        {
+            var formatted = await TimeZoneService.FormatDateTimeAsync(lastLogin);
+            _formattedLastLogins[userId] = formatted;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            _formattedLastLogins[userId] = lastLogin.ToString("g");
+        }
+    }
+
     private async Task<TableData<UserListItem>> ServerReload(TableState state, CancellationToken cancellationToken)
     {
         _loading = true;
+        _formattedLastLogins.Clear(); // Clear cache when reloading
         try
         {
+            var sortDescending = state.SortDirection == SortDirection.Descending;
+            var sortColumn = string.IsNullOrEmpty(state.SortLabel) ? "LastName" : state.SortLabel;
+            
             var result = await UserManagementService.GetUsersAsync(
                 string.IsNullOrWhiteSpace(_searchTerm) ? null : _searchTerm,
                 state.Page + 1,
                 state.PageSize,
-                _showInactiveUsers);
+                _showInactiveUsers,
+                sortColumn,
+                sortDescending);
 
             return new TableData<UserListItem>
             {
@@ -212,6 +283,29 @@
         }
     }
 
+    private async Task OpenEditUserDialog(int userId)
+    {
+        var parameters = new DialogParameters
+        {
+            ["UserId"] = userId
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            CloseButton = true
+        };
+
+        var dialog = await DialogService.ShowAsync<EditUserDialog>("Edit User", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            await _table!.ReloadServerData();
+        }
+    }
+
     private async Task ToggleUserStatus(int userId, string email, bool newStatus)
     {
         var action = newStatus ? "enable" : "disable";
@@ -252,5 +346,14 @@
             "No Access" => Color.Default,
             _ => Color.Secondary
         };
+    }
+
+    private string GetTimezoneDisplayName(string? timezoneId)
+    {
+        if (string.IsNullOrEmpty(timezoneId))
+            return "Browser Default";
+
+        var tz = _availableTimezones.FirstOrDefault(t => t.Id == timezoneId);
+        return tz.DisplayName ?? timezoneId;
     }
 }
