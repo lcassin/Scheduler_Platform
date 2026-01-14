@@ -22,6 +22,7 @@ public class AdrAccountSyncResult
     public int AccountsInserted { get; set; }
     public int AccountsUpdated { get; set; }
     public int AccountsMarkedDeleted { get; set; }
+    public int DuplicatesMarkedDeleted { get; set; }
     public int ClientsCreated { get; set; }
     public int ClientsUpdated { get; set; }
     public int RulesCreated { get; set; }
@@ -73,62 +74,113 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                 throw new InvalidOperationException("VendorCredential connection string not configured");
             }
 
-            // Step 1: Fetch external accounts from VendorCred
-            var externalAccounts = await FetchExternalAccountsAsync(externalConnectionString, cancellationToken);
-            _logger.LogInformation("Fetched {Count} accounts from external database", externalAccounts.Count);
+            // PERFORMANCE OPTIMIZATION: Stream external data instead of loading all into memory
+            // This reduces memory usage from 2x170k full records to streaming + lookups
             
-            // Report initial progress (0 of total)
-            progressCallback?.Invoke(0, externalAccounts.Count);
-
-            // Step 2: Sync Clients - create/update Client records based on ExternalClientId
-            var externalClientIdToInternalClientId = await SyncClientsAsync(externalAccounts, result, cancellationToken);
+            // Step 1: Sync Clients first - fetch unique clients from VendorCred (lightweight query)
+            var externalClientIdToInternalClientId = await SyncClientsFromExternalAsync(externalConnectionString, result, cancellationToken);
             _logger.LogInformation("Client sync complete. Created: {Created}, Updated: {Updated}", 
                 result.ClientsCreated, result.ClientsUpdated);
 
-            // Step 3: Sync AdrAccounts using the ExternalClientId -> internal ClientId mapping
-            // Process in batches to avoid large transactions and memory pressure
+            // Step 3: Load existing local accounts into dictionary for lookups
+            // We need this to determine updates vs inserts and for deletion detection
+            // IMPORTANT: Include deleted accounts so they can be re-activated if credentials become active again
             const int batchSize = 5000;
             
-            // Use VMAccountId + VMAccountNumber as composite key since VMAccountId can have multiple account numbers
-            // (historical account number changes in source system)
             var existingAccountList = await _dbContext.AdrAccounts
-                .Where(a => !a.IsDeleted)
                 .ToListAsync(cancellationToken);
 
+            // Mark duplicate (VMAccountId, VMAccountNumber) rows as deleted, keeping only the most recently modified
+            var duplicatesToDelete = new List<AdrAccount>();
             var existingAccounts = existingAccountList
                 .GroupBy(a => (a.VMAccountId, a.VMAccountNumber))
                 .ToDictionary(
                     g => g.Key,
                     g =>
                     {
-                        if (g.Count() > 1)
+                        var orderedAccounts = g.OrderByDescending(a => a.ModifiedDateTime).ToList();
+                        if (orderedAccounts.Count > 1)
                         {
                             _logger.LogWarning(
                                 "Found {Count} AdrAccount rows with VMAccountId {VMAccountId} and VMAccountNumber {VMAccountNumber}. " +
-                                "Using the most recently modified one.",
-                                g.Count(),
+                                "Keeping the most recently modified one and marking {DuplicateCount} duplicates as deleted.",
+                                orderedAccounts.Count,
                                 g.Key.VMAccountId,
-                                g.Key.VMAccountNumber);
+                                g.Key.VMAccountNumber,
+                                orderedAccounts.Count - 1);
+                            
+                            // Mark all but the first (most recent) as deleted
+                            foreach (var duplicate in orderedAccounts.Skip(1))
+                            {
+                                if (!duplicate.IsDeleted)
+                                {
+                                    duplicatesToDelete.Add(duplicate);
+                                }
+                            }
                         }
-                        // Use most recently modified
-                        return g
-                            .OrderByDescending(a => a.ModifiedDateTime)
-                            .First();
+                        return orderedAccounts.First();
                     });
 
-            // Track processed accounts by composite key (VMAccountId + VMAccountNumber)
+            // Mark duplicates as deleted
+            if (duplicatesToDelete.Count > 0)
+            {
+                _logger.LogInformation("Marking {Count} duplicate AdrAccount rows as deleted", duplicatesToDelete.Count);
+                foreach (var duplicate in duplicatesToDelete)
+                {
+                    duplicate.IsDeleted = true;
+                    duplicate.ModifiedDateTime = DateTime.UtcNow;
+                    duplicate.ModifiedBy = "Duplicate Cleanup";
+                }
+                await _dbContext.SaveChangesAsync(cancellationToken);
+                result.DuplicatesMarkedDeleted = duplicatesToDelete.Count;
+                _logger.LogInformation("Duplicate cleanup complete: {Count} rows marked as deleted", duplicatesToDelete.Count);
+            }
+
+            _logger.LogInformation("Loaded {Count} unique accounts from local database", existingAccounts.Count);
+
+            // Use local database count for progress reporting
+            // This includes both accounts to sync AND accounts to mark as deleted
+            var totalAccountCount = existingAccounts.Count;
+            _logger.LogInformation("Total accounts for progress tracking: {Count}", totalAccountCount);
+            
+            // Report initial progress (0 of total)
+            progressCallback?.Invoke(0, totalAccountCount);
+
+            // Track processed accounts and scheduling data for rule sync
             var processedAccountKeys = new HashSet<(long VMAccountId, string VMAccountNumber)>();
+            var schedulingDataLookup = new Dictionary<(long VMAccountId, string VMAccountNumber), SchedulingData>();
             int processedSinceLastSave = 0;
             int batchNumber = 1;
+            int totalProcessed = 0; // Track total for progress (sync + deletions)
 
-            _logger.LogInformation("Processing {Count} accounts in batches of {BatchSize}", externalAccounts.Count, batchSize);
+            // Step 2: Stream external accounts and process in batches
+            _logger.LogInformation("Streaming and processing accounts in batches of {BatchSize}", batchSize);
 
-            foreach (var externalAccount in externalAccounts)
+            await using var connection = new SqlConnection(externalConnectionString);
+            await connection.OpenAsync(cancellationToken);
+
+            var query = GetAccountSyncQuery();
+            await using var command = new SqlCommand(query, connection);
+            command.CommandTimeout = 300;
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
             {
                 try
                 {
+                    var externalAccount = ReadExternalAccountFromReader(reader);
                     var accountKey = (externalAccount.VMAccountId, externalAccount.VMAccountNumber);
                     processedAccountKeys.Add(accountKey);
+
+                    // Store scheduling data for rule sync (lightweight - only fields needed for rules)
+                    schedulingDataLookup[accountKey] = new SchedulingData
+                    {
+                        PeriodType = externalAccount.PeriodType,
+                        PeriodDays = externalAccount.PeriodDays,
+                        NextRunDateTime = externalAccount.NextRunDateTime,
+                        NextRangeStartDateTime = externalAccount.NextRangeStartDateTime,
+                        NextRangeEndDateTime = externalAccount.NextRangeEndDateTime
+                    };
 
                     // Look up the internal ClientId using the ExternalClientId mapping
                     int? internalClientId = null;
@@ -147,22 +199,22 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                     {
                         var newAccount = CreateNewAccount(externalAccount, internalClientId);
                         await _dbContext.AdrAccounts.AddAsync(newAccount, cancellationToken);
-                        existingAccounts[accountKey] = newAccount; // Track for future lookups
+                        existingAccounts[accountKey] = newAccount;
                         result.AccountsInserted++;
                     }
 
                     result.TotalAccountsProcessed++;
                     processedSinceLastSave++;
+                    totalProcessed++;
 
-                    // Save in batches to reduce transaction size and memory pressure
+                    // Save in batches
                     if (processedSinceLastSave >= batchSize)
                     {
                         await _dbContext.SaveChangesAsync(cancellationToken);
                         _logger.LogInformation("Batch {BatchNumber} saved: {Count} accounts processed so far", 
                             batchNumber, result.TotalAccountsProcessed);
                         
-                        // Report progress after each batch
-                        progressCallback?.Invoke(result.TotalAccountsProcessed, externalAccounts.Count);
+                        progressCallback?.Invoke(totalProcessed, totalAccountCount);
                         
                         processedSinceLastSave = 0;
                         batchNumber++;
@@ -170,38 +222,46 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                 }
                 catch (OperationCanceledException)
                 {
-                    // Re-throw cancellation to stop the sync loop
                     throw;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error processing account VMAccountId={VMAccountId}", externalAccount.VMAccountId);
+                    _logger.LogError(ex, "Error processing account from external data");
                     result.Errors++;
-                    result.ErrorMessages.Add($"VMAccountId {externalAccount.VMAccountId}: {ex.Message}");
+                    result.ErrorMessages.Add($"Error processing account: {ex.Message}");
                 }
             }
 
-            // Mark accounts not in external data as deleted
+            // Mark accounts not in external data as deleted (accounts with inactive credentials)
+            var accountsToDelete = existingAccounts.Where(kvp => !processedAccountKeys.Contains(kvp.Key)).ToList();
+            _logger.LogInformation(
+                "Deletion phase: {ExistingCount} existing accounts, {ProcessedCount} processed from VendorCred, {ToDeleteCount} to mark as deleted",
+                existingAccounts.Count, processedAccountKeys.Count, accountsToDelete.Count);
+            
             int deletedSinceLastSave = 0;
-            foreach (var kvp in existingAccounts)
+            foreach (var kvp in accountsToDelete)
             {
                 var accountKey = kvp.Key;
                 var existingAccount = kvp.Value;
                 
-                if (!processedAccountKeys.Contains(accountKey))
+                // Only mark as deleted if not already deleted
+                if (!existingAccount.IsDeleted)
                 {
                     existingAccount.IsDeleted = true;
                     existingAccount.ModifiedDateTime = DateTime.UtcNow;
                     existingAccount.ModifiedBy = "System Created";
                     result.AccountsMarkedDeleted++;
                     deletedSinceLastSave++;
+                    totalProcessed++;
 
-                    // Also batch the deletion updates
                     if (deletedSinceLastSave >= batchSize)
                     {
                         await _dbContext.SaveChangesAsync(cancellationToken);
                         _logger.LogInformation("Deletion batch saved: {Count} accounts marked deleted so far", 
                             result.AccountsMarkedDeleted);
+                        
+                        progressCallback?.Invoke(totalProcessed, totalAccountCount);
+                        
                         deletedSinceLastSave = 0;
                     }
                 }
@@ -211,12 +271,18 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             await _dbContext.SaveChangesAsync(cancellationToken);
             _logger.LogInformation("Final batch saved. Total batches: {BatchCount}", batchNumber);
             
-            // Report final progress (100%)
-            progressCallback?.Invoke(externalAccounts.Count, externalAccounts.Count);
+            progressCallback?.Invoke(totalAccountCount, totalAccountCount);
 
-            // Step 4: Sync AdrAccountRules - create/update rules for each account
-            // Rules drive the orchestrator, so we need to keep them in sync with account scheduling data
-            await SyncAccountRulesAsync(existingAccounts.Values.ToList(), externalAccounts, result, subStepCallback, cancellationToken);
+            // Step 5: Sync AdrAccountRules using lightweight scheduling data
+            // PERFORMANCE OPTIMIZATION: Detach account entities from change tracker before rule sync
+            var accountsList = existingAccounts.Values.ToList();
+            foreach (var account in accountsList)
+            {
+                _dbContext.Entry(account).State = EntityState.Detached;
+            }
+            _logger.LogInformation("Detached {Count} account entities from change tracker before rule sync", accountsList.Count);
+            
+            await SyncAccountRulesOptimizedAsync(accountsList, schedulingDataLookup, result, subStepCallback, cancellationToken);
 
             result.SyncEndDateTime = DateTime.UtcNow;
             _logger.LogInformation(
@@ -235,6 +301,357 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             result.ErrorMessages.Add($"Sync failed: {ex.Message}");
             throw;
         }
+    }
+    
+    /// <summary>
+    /// Lightweight class to store only the scheduling fields needed for rule sync.
+    /// This reduces memory usage compared to storing full ExternalAccountData objects.
+    /// </summary>
+    private class SchedulingData
+    {
+        public string? PeriodType { get; set; }
+        public int? PeriodDays { get; set; }
+        public DateTime? NextRunDateTime { get; set; }
+        public DateTime? NextRangeStartDateTime { get; set; }
+        public DateTime? NextRangeEndDateTime { get; set; }
+    }
+    
+    /// <summary>
+    /// Gets the count of accounts from the external database for progress reporting.
+    /// This count matches the streaming query's unique (VCAccountId, AccountNumber) combinations.
+    /// </summary>
+    private async Task<int> GetExternalAccountCountAsync(string connectionString, CancellationToken cancellationToken)
+    {
+        // Count query must match the streaming query's logic:
+        // - Uses ADRInvoiceAccountData.AccountNumber (not Account.AccountNumber)
+        // - Same joins and filters as GetAccountSyncQuery()
+        var countQuery = @"
+SELECT COUNT(DISTINCT CONCAT(AD.VCAccountId, '_', AD.AccountNumber))
+FROM [dbo].[ADRInvoiceAccountData] AD
+INNER JOIN CredentialAccount CA ON AD.VCAccountId = CA.AccountId
+INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId";
+
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        
+        await using var command = new SqlCommand(countQuery, connection);
+        command.CommandTimeout = 120;
+        
+        var countResult = await command.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt32(countResult);
+    }
+    
+    /// <summary>
+    /// Syncs clients directly from the external database without loading all account data.
+    /// </summary>
+    private async Task<Dictionary<int, int>> SyncClientsFromExternalAsync(
+        string connectionString,
+        AdrAccountSyncResult result,
+        CancellationToken cancellationToken)
+    {
+        // Query unique clients from external database
+        var clientQuery = @"
+SELECT DISTINCT CL.ClientId, CL.ClientName
+FROM [dbo].[ADRInvoiceAccountData] AD
+    LEFT OUTER JOIN Account A ON AD.VCAccountId = A.AccountId
+    LEFT OUTER JOIN Client CL ON A.ClientId = CL.ClientId
+WHERE CL.ClientId IS NOT NULL";
+
+        var uniqueClients = new List<(int ExternalClientId, string ClientName)>();
+        
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        
+        await using var command = new SqlCommand(clientQuery, connection);
+        command.CommandTimeout = 120;
+        
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var clientId = reader.GetInt32(0);
+            var clientName = reader.IsDBNull(1) ? $"Client {clientId}" : reader.GetString(1);
+            uniqueClients.Add((clientId, clientName));
+        }
+
+        _logger.LogInformation("Found {Count} unique clients in external data", uniqueClients.Count);
+
+        // Load existing clients by ExternalClientId
+        var externalClientIds = uniqueClients.Select(c => c.ExternalClientId).ToList();
+        var clientList = await _dbContext.Clients
+            .Where(c => externalClientIds.Contains(c.ExternalClientId))
+            .ToListAsync(cancellationToken);
+
+        var existingClients = clientList
+            .GroupBy(c => c.ExternalClientId)
+            .ToDictionary(
+                g => g.Key,
+                g =>
+                {
+                    if (g.Count() > 1)
+                    {
+                        _logger.LogWarning(
+                            "Found {Count} Client rows with ExternalClientId {ExternalClientId}. Using the most recently modified one.",
+                            g.Count(), g.Key);
+                    }
+                    return g.OrderBy(c => c.IsDeleted).ThenByDescending(c => c.ModifiedDateTime).First();
+                });
+
+        var now = DateTime.UtcNow;
+
+        foreach (var (externalClientId, clientName) in uniqueClients)
+        {
+            if (existingClients.TryGetValue(externalClientId, out var existingClient))
+            {
+                if (existingClient.ClientName != clientName)
+                {
+                    existingClient.ClientName = clientName;
+                    existingClient.ModifiedDateTime = now;
+                    existingClient.ModifiedBy = "System Created";
+                    existingClient.LastSyncedDateTime = now;
+                    result.ClientsUpdated++;
+                }
+                else
+                {
+                    existingClient.LastSyncedDateTime = now;
+                }
+            }
+            else
+            {
+                var newClient = new Client
+                {
+                    ExternalClientId = externalClientId,
+                    ClientName = clientName,
+                    ClientCode = clientName.Length > 50 ? clientName.Substring(0, 50) : clientName,
+                    IsActive = true,
+                    CreatedDateTime = now,
+                    CreatedBy = "System Created",
+                    ModifiedDateTime = now,
+                    ModifiedBy = "System Created",
+                    LastSyncedDateTime = now,
+                    IsDeleted = false
+                };
+
+                await _dbContext.Clients.AddAsync(newClient, cancellationToken);
+                existingClients[externalClientId] = newClient;
+                result.ClientsCreated++;
+            }
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return existingClients.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Id);
+    }
+    
+    /// <summary>
+    /// Reads a single external account record from the data reader.
+    /// </summary>
+    private ExternalAccountData ReadExternalAccountFromReader(SqlDataReader reader)
+    {
+        var account = new ExternalAccountData
+        {
+            VMAccountId = reader.GetInt64(reader.GetOrdinal("VMAccountId")),
+            CredentialId = reader.GetInt32(reader.GetOrdinal("CredentialId")),
+            ClientId = reader.IsDBNull(reader.GetOrdinal("ClientId")) ? null : reader.GetInt32(reader.GetOrdinal("ClientId")),
+            ClientName = reader.IsDBNull(reader.GetOrdinal("ClientName")) ? null : reader.GetString(reader.GetOrdinal("ClientName")),
+            VendorCode = reader.IsDBNull(reader.GetOrdinal("VendorCode")) ? null : reader.GetString(reader.GetOrdinal("VendorCode")),
+            VMAccountNumber = reader.GetString(reader.GetOrdinal("VMAccountNumber")),
+            InterfaceAccountId = reader.IsDBNull(reader.GetOrdinal("InterfaceAccountId")) ? null : reader.GetString(reader.GetOrdinal("InterfaceAccountId")),
+            PeriodType = reader.IsDBNull(reader.GetOrdinal("PeriodType")) ? null : reader.GetString(reader.GetOrdinal("PeriodType")),
+            PeriodDays = reader.IsDBNull(reader.GetOrdinal("PeriodDays")) ? null : reader.GetInt32(reader.GetOrdinal("PeriodDays")),
+            MedianDays = reader.IsDBNull(reader.GetOrdinal("MedianDays")) ? null : reader.GetDouble(reader.GetOrdinal("MedianDays")),
+            InvoiceCount = reader.GetInt32(reader.GetOrdinal("InvoiceCount")),
+            LastInvoiceDateTime = reader.IsDBNull(reader.GetOrdinal("LastInvoiceDate")) ? null : reader.GetDateTime(reader.GetOrdinal("LastInvoiceDate")),
+            ExpectedRangeStartDateTime = reader.IsDBNull(reader.GetOrdinal("ExpectedRangeStart")) ? null : reader.GetDateTime(reader.GetOrdinal("ExpectedRangeStart")),
+            ExpectedNextDateTime = reader.IsDBNull(reader.GetOrdinal("ExpectedNextDate")) ? null : reader.GetDateTime(reader.GetOrdinal("ExpectedNextDate")),
+            ExpectedRangeEndDateTime = reader.IsDBNull(reader.GetOrdinal("ExpectedRangeEnd")) ? null : reader.GetDateTime(reader.GetOrdinal("ExpectedRangeEnd")),
+            NextRangeStartDateTime = reader.IsDBNull(reader.GetOrdinal("NextRangeStart")) ? null : reader.GetDateTime(reader.GetOrdinal("NextRangeStart")),
+            NextRunDateTime = reader.IsDBNull(reader.GetOrdinal("NextRunDate")) ? null : reader.GetDateTime(reader.GetOrdinal("NextRunDate")),
+            NextRangeEndDateTime = reader.IsDBNull(reader.GetOrdinal("NextRangeEnd")) ? null : reader.GetDateTime(reader.GetOrdinal("NextRangeEnd")),
+            DaysUntilNextRun = reader.IsDBNull(reader.GetOrdinal("DaysUntilNextRun")) ? null : reader.GetInt32(reader.GetOrdinal("DaysUntilNextRun")),
+            NextRunStatus = reader.IsDBNull(reader.GetOrdinal("NextRunStatus")) ? null : reader.GetString(reader.GetOrdinal("NextRunStatus")),
+            HistoricalBillingStatus = reader.IsDBNull(reader.GetOrdinal("HistoricalBillingStatus")) ? null : reader.GetString(reader.GetOrdinal("HistoricalBillingStatus"))
+        };
+        
+        // Recalculate dates using BillingPeriodCalculator to prevent date creep
+        if (account.LastInvoiceDateTime.HasValue)
+        {
+            var today = DateTime.UtcNow.Date;
+            var anchorDayOfMonth = BillingPeriodCalculator.GetAnchorDayOfMonth(account.LastInvoiceDateTime.Value);
+            var (windowBefore, windowAfter) = BillingPeriodCalculator.GetDefaultWindowDays(account.PeriodType);
+            
+            var expectedNext = BillingPeriodCalculator.CalculateNextRunDate(
+                account.PeriodType,
+                account.LastInvoiceDateTime.Value,
+                anchorDayOfMonth);
+            
+            var nextRun = BillingPeriodCalculator.CalculateNextRunDateOnOrAfterToday(
+                account.PeriodType,
+                account.LastInvoiceDateTime.Value,
+                today,
+                anchorDayOfMonth);
+            
+            account.ExpectedNextDateTime = expectedNext;
+            account.ExpectedRangeStartDateTime = expectedNext.AddDays(-windowBefore);
+            account.ExpectedRangeEndDateTime = expectedNext.AddDays(windowAfter);
+            account.NextRunDateTime = nextRun;
+            account.NextRangeStartDateTime = nextRun.AddDays(-windowBefore);
+            account.NextRangeEndDateTime = nextRun.AddDays(windowAfter);
+            account.DaysUntilNextRun = (int)(nextRun - today).TotalDays;
+            
+            var periodDays = BillingPeriodCalculator.GetApproximatePeriodDays(account.PeriodType);
+            var daysUntilExpected = (int)(expectedNext - today).TotalDays;
+            
+            var missingThreshold = -(periodDays * 2);
+            if (daysUntilExpected < missingThreshold)
+                account.HistoricalBillingStatus = "Missing";
+            else if (daysUntilExpected < -windowBefore)
+                account.HistoricalBillingStatus = "Overdue";
+            else if (daysUntilExpected < 0)
+                account.HistoricalBillingStatus = "Due Now";
+            else if (daysUntilExpected <= windowBefore)
+                account.HistoricalBillingStatus = "Due Soon";
+            else if (daysUntilExpected <= 30)
+                account.HistoricalBillingStatus = "Upcoming";
+            else
+                account.HistoricalBillingStatus = "Future";
+            
+            if (account.HistoricalBillingStatus == "Missing")
+            {
+                account.NextRunStatus = "Missing";
+            }
+            else
+            {
+                var daysUntilRun = account.DaysUntilNextRun ?? 0;
+                if (daysUntilRun <= 0)
+                    account.NextRunStatus = "Run Now";
+                else if (daysUntilRun <= windowBefore)
+                    account.NextRunStatus = "Due Soon";
+                else if (daysUntilRun <= 30)
+                    account.NextRunStatus = "Upcoming";
+                else
+                    account.NextRunStatus = "Future";
+            }
+        }
+        
+        return account;
+    }
+    
+    /// <summary>
+    /// Optimized rule sync that uses lightweight scheduling data instead of full ExternalAccountData.
+    /// </summary>
+    private async Task SyncAccountRulesOptimizedAsync(
+        List<AdrAccount> accounts,
+        Dictionary<(long VMAccountId, string VMAccountNumber), SchedulingData> schedulingDataLookup,
+        AdrAccountSyncResult result,
+        Action<string, int, int>? subStepCallback,
+        CancellationToken cancellationToken)
+    {
+        var accountsToSync = accounts.Where(a => !a.IsDeleted).ToList();
+        _logger.LogInformation("Starting optimized rule sync for {Count} accounts", accountsToSync.Count);
+        
+        // Report sub-step start
+        subStepCallback?.Invoke("Syncing rules", 0, accountsToSync.Count);
+
+        var accountIds = accountsToSync.Select(a => a.Id).ToList();
+
+        var existingRules = await _dbContext.AdrAccountRules
+            .Where(r => accountIds.Contains(r.AdrAccountId) && !r.IsDeleted && r.JobTypeId == 2)
+            .ToListAsync(cancellationToken);
+
+        var existingRulesByAccountId = existingRules
+            .GroupBy(r => r.AdrAccountId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        const int batchSize = 5000;
+        int processedSinceLastSave = 0;
+        int batchNumber = 1;
+        int totalProcessed = 0;
+
+        foreach (var account in accountsToSync)
+        {
+            try
+            {
+                var accountKey = (account.VMAccountId, account.VMAccountNumber ?? string.Empty);
+                if (!schedulingDataLookup.TryGetValue(accountKey, out var schedulingData))
+                {
+                    continue;
+                }
+
+                if (existingRulesByAccountId.TryGetValue(account.Id, out var existingRule))
+                {
+                    if (existingRule.IsManuallyOverridden)
+                    {
+                        result.RulesSkippedOverridden++;
+                    }
+                    else
+                    {
+                        existingRule.PeriodType = schedulingData.PeriodType;
+                        existingRule.PeriodDays = schedulingData.PeriodDays;
+                        existingRule.NextRunDateTime = schedulingData.NextRunDateTime;
+                        existingRule.NextRangeStartDateTime = schedulingData.NextRangeStartDateTime;
+                        existingRule.NextRangeEndDateTime = schedulingData.NextRangeEndDateTime;
+                        existingRule.ModifiedDateTime = DateTime.UtcNow;
+                        existingRule.ModifiedBy = "System Created";
+                        result.RulesUpdated++;
+                    }
+                }
+                else
+                {
+                    var newRule = new AdrAccountRule
+                    {
+                        AdrAccountId = account.Id,
+                        JobTypeId = 2,
+                        PeriodType = schedulingData.PeriodType,
+                        PeriodDays = schedulingData.PeriodDays,
+                        NextRunDateTime = schedulingData.NextRunDateTime,
+                        NextRangeStartDateTime = schedulingData.NextRangeStartDateTime,
+                        NextRangeEndDateTime = schedulingData.NextRangeEndDateTime,
+                        IsEnabled = true,
+                        IsManuallyOverridden = false,
+                        CreatedDateTime = DateTime.UtcNow,
+                        CreatedBy = "System Created",
+                        ModifiedDateTime = DateTime.UtcNow,
+                        ModifiedBy = "System Created",
+                        IsDeleted = false
+                    };
+                    await _dbContext.AdrAccountRules.AddAsync(newRule, cancellationToken);
+                    result.RulesCreated++;
+                }
+
+                processedSinceLastSave++;
+                totalProcessed++;
+
+                if (processedSinceLastSave >= batchSize)
+                {
+                    await _dbContext.SaveChangesAsync(cancellationToken);
+                    _logger.LogInformation("Rule sync batch {BatchNumber} saved: {Created} created, {Updated} updated, {Skipped} skipped so far",
+                        batchNumber, result.RulesCreated, result.RulesUpdated, result.RulesSkippedOverridden);
+                    
+                    // Report sub-step progress after each batch
+                    subStepCallback?.Invoke("Syncing rules", totalProcessed, accountsToSync.Count);
+                    
+                    processedSinceLastSave = 0;
+                    batchNumber++;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error syncing rule for account {AccountId}", account.Id);
+                result.Errors++;
+                result.ErrorMessages.Add($"Rule sync for AccountId {account.Id}: {ex.Message}");
+                totalProcessed++;
+            }
+        }
+
+        if (processedSinceLastSave > 0)
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            // Report final sub-step progress
+            subStepCallback?.Invoke("Syncing rules", totalProcessed, accountsToSync.Count);
+        }
+
+        _logger.LogInformation("Rule sync completed. Created: {Created}, Updated: {Updated}, Skipped (overridden): {Skipped}",
+            result.RulesCreated, result.RulesUpdated, result.RulesSkippedOverridden);
     }
 
     /// <summary>
@@ -796,6 +1213,9 @@ DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
         // NOTE: Scheduling configuration fields (PeriodType, PeriodDays, NextRunDateTime, NextRangeStartDateTime, 
         // NextRangeEndDateTime) are now managed on AdrAccountRule, not AdrAccount.
         // The SyncAccountRulesAsync method handles syncing these fields to rules.
+        
+        // Re-activate deleted accounts if they appear in VendorCred again (credentials became active)
+        existing.IsDeleted = false;
         
         existing.LastSyncedDateTime = DateTime.UtcNow;
         existing.ModifiedDateTime = DateTime.UtcNow;

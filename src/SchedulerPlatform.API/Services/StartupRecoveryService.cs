@@ -110,27 +110,32 @@ namespace SchedulerPlatform.API.Services
                     return;
                 }
                 
-                var recentRunningInDb = await dbContext.AdrOrchestrationRuns
+                // Any orchestration that started BEFORE the app started is orphaned (the app restarted while it was running)
+                // We use the app start time as the cutoff, not a fixed 30-minute window
+                var appStartCutoff = _appLifetime.StartUtc;
+                
+                // Check if there's an orchestration that started AFTER the app started (meaning it's legitimately running)
+                var runningAfterAppStart = await dbContext.AdrOrchestrationRuns
                     .Where(r => !r.IsDeleted 
                              && r.Status == "Running" 
                              && r.StartedDateTime.HasValue 
-                             && r.StartedDateTime > now.AddMinutes(-30)
+                             && r.StartedDateTime >= appStartCutoff
                              && r.CompletedDateTime == null)
                     .AnyAsync(cancellationToken);
                     
-                if (recentRunningInDb)
+                if (runningAfterAppStart)
                 {
                     _logger.LogInformation(
-                        "StartupRecoveryService: a recent orchestration is running in database (started within last 30 minutes), skipping orchestration recovery");
+                        "StartupRecoveryService: an orchestration started after app startup is running, skipping orchestration recovery");
                     return;
                 }
 
-                var orchestrationCutoff = now.AddMinutes(-30);
+                // Find orphaned runs - any orchestration that started BEFORE the app started and is still "Running"
                 var orphanedRuns = await dbContext.AdrOrchestrationRuns
                     .Where(r => !r.IsDeleted 
                              && r.Status == "Running" 
                              && r.StartedDateTime.HasValue 
-                             && r.StartedDateTime < orchestrationCutoff 
+                             && r.StartedDateTime < appStartCutoff 
                              && r.CompletedDateTime == null)
                     .OrderByDescending(r => r.StartedDateTime)
                     .ToListAsync(cancellationToken);

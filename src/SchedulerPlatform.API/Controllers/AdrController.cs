@@ -900,7 +900,7 @@ public class AdrController : ControllerBase
                 await _unitOfWork.SaveChangesAsync();
 
                 // Step 3: Make the actual ADR API call (same as orchestrator)
-                var baseUrl = _configuration["AdrApi:BaseUrl"] ?? "https://nuse2etsadrdevfn01.azurewebsites.net/api/";
+                var baseUrl = _configuration["AdrApi:BaseUrl"] ?? "https://nuscetsadrdevfn01.azurewebsites.net/api/";
                 var sourceApplicationName = _configuration["AdrApi:SourceApplicationName"] ?? "ADRScheduler";
                 var recipientEmail = _configuration["AdrApi:RecipientEmail"] ?? "lcassin@cassinfo.com";
 
@@ -1149,7 +1149,7 @@ public class AdrController : ControllerBase
                 await _unitOfWork.SaveChangesAsync();
 
                 // Call the status check API
-                var baseUrl = _configuration["AdrApi:BaseUrl"] ?? "https://nuse2etsadrdevfn01.azurewebsites.net/api/";
+                var baseUrl = _configuration["AdrApi:BaseUrl"] ?? "https://nuscetsadrdevfn01.azurewebsites.net/api/";
                 var client = _httpClientFactory.CreateClient("AdrApi");
 
                 int? httpStatusCode = null;
@@ -1495,9 +1495,9 @@ public class AdrController : ControllerBase
                         .Where(b => !b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= filterToday)
                         .ToListAsync();
                     
-                    // Get all non-deleted jobs with their account info
+                    // Get all non-deleted jobs with their account info (also filter by account.IsDeleted)
                     var allJobs = await _dbContext.AdrJobs
-                        .Where(j => !j.IsDeleted)
+                        .Where(j => !j.IsDeleted && j.AdrAccount != null && !j.AdrAccount.IsDeleted)
                         .Include(j => j.AdrAccount)
                         .Select(j => new { j.Id, j.VendorCode, j.VMAccountId, j.VMAccountNumber, j.CredentialId, AccountVendorCode = j.AdrAccount != null ? j.AdrAccount.VendorCode : null })
                         .ToListAsync();
@@ -3188,9 +3188,10 @@ public class AdrController : ControllerBase
         {
             try
             {
+                // Filter by both rule.IsDeleted AND account.IsDeleted to exclude rules for deleted accounts
                 var query = _dbContext.AdrAccountRules
                     .Include(r => r.AdrAccount)
-                    .Where(r => !r.IsDeleted);
+                    .Where(r => !r.IsDeleted && r.AdrAccount != null && !r.AdrAccount.IsDeleted);
             
                 if (!string.IsNullOrWhiteSpace(vendorCode))
                 {
@@ -3323,9 +3324,10 @@ public class AdrController : ControllerBase
         {
             try
             {
+                // Filter by both rule.IsDeleted AND account.IsDeleted to exclude rules for deleted accounts
                 var query = _dbContext.AdrAccountRules
                     .Include(r => r.AdrAccount)
-                    .Where(r => !r.IsDeleted);
+                    .Where(r => !r.IsDeleted && r.AdrAccount != null && !r.AdrAccount.IsDeleted);
             
                 if (!string.IsNullOrWhiteSpace(vendorCode))
                 {
