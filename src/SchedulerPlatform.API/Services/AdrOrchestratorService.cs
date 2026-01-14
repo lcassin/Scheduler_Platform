@@ -1680,8 +1680,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         _logger.LogInformation("Manual status check batch {BatchNumber} saved: {Count} jobs checked so far", 
                             batchNumber, result.JobsChecked);
                         
-                        // Report progress for database update phase (use negative values to indicate sub-step)
-                        progressCallback?.Invoke(-result.JobsChecked, totalJobsToUpdate);
+                        // Report progress for database update phase
+                        // Use values < -1000000 to indicate "Updating database" phase (distinct from "Preparing" which uses small negative values)
+                        progressCallback?.Invoke(-1000000 - result.JobsChecked, totalJobsToUpdate);
                         
                         processedSinceLastSave = 0;
                         batchNumber++;
@@ -1704,7 +1705,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             {
                 await _unitOfWork.SaveChangesAsync();
                 // Report final progress for database update phase
-                progressCallback?.Invoke(-result.JobsChecked, totalJobsToUpdate);
+                progressCallback?.Invoke(-1000000 - result.JobsChecked, totalJobsToUpdate);
             }
 
             stopwatch.Stop();

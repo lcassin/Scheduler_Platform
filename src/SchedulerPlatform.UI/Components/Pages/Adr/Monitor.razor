@@ -490,6 +490,13 @@
                                                     </MudText>
                                                     <MudProgressLinear Color="Color.Warning" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
                                                 }
+                                                else if (_currentStatus.Status.CurrentStepPhase == "Updating database")
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Success">
+                                                        Updating database: @_currentStatus.Status.CurrentStepProgress.ToString("N0") / @_currentStatus.Status.CurrentStepTotal.ToString("N0") (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
+                                                    </MudText>
+                                                    <MudProgressLinear Color="Color.Success" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
+                                                }
                                                 else
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Info">
