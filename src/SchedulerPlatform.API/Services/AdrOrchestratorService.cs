@@ -160,56 +160,75 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
     /// <summary>
     /// Checks if an account is blacklisted from job creation.
+    /// This method queries the database each time - use IsAccountBlacklistedCached for batch operations.
     /// </summary>
     private async Task<bool> IsAccountBlacklistedAsync(AdrAccount account, string exclusionType = "All")
     {
         try
         {
-            var today = DateTime.UtcNow.Date;
-            var blacklistEntries = await _unitOfWork.AdrAccountBlacklists.FindAsync(b =>
-                !b.IsDeleted &&
-                b.IsActive &&
-                (b.EffectiveStartDate == null || b.EffectiveStartDate <= today) &&
-                (b.EffectiveEndDate == null || b.EffectiveEndDate >= today) &&
-                (b.ExclusionType == "All" || b.ExclusionType == exclusionType));
-
-            foreach (var entry in blacklistEntries)
-            {
-                // Check if this blacklist entry matches the account
-                bool matches = false;
-
-                // Match by VendorCode (if specified)
-                if (!string.IsNullOrEmpty(entry.VendorCode) && entry.VendorCode == account.VendorCode)
-                    matches = true;
-
-                // Match by VMAccountId (if specified)
-                if (entry.VMAccountId.HasValue && entry.VMAccountId == account.VMAccountId)
-                    matches = true;
-
-                // Match by VMAccountNumber (if specified)
-                if (!string.IsNullOrEmpty(entry.VMAccountNumber) && entry.VMAccountNumber == account.VMAccountNumber)
-                    matches = true;
-
-                // Match by CredentialId (if specified)
-                if (entry.CredentialId.HasValue && entry.CredentialId == account.CredentialId)
-                    matches = true;
-
-                if (matches)
-                {
-                    _logger.LogInformation(
-                        "Account {AccountId} (VMAccountId: {VMAccountId}, VendorCode: {VendorCode}) is blacklisted. Reason: {Reason}",
-                        account.Id, account.VMAccountId, account.VendorCode, entry.Reason);
-                    return true;
-                }
-            }
-
-            return false;
+            var blacklistEntries = await LoadBlacklistEntriesAsync(exclusionType);
+            return IsAccountBlacklistedCached(account, blacklistEntries);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to check blacklist for account {AccountId}, allowing job creation", account.Id);
             return false; // Allow job creation if blacklist check fails
         }
+    }
+
+    /// <summary>
+    /// Loads all active blacklist entries for the given exclusion type.
+    /// Call this once at the start of batch operations to avoid N database queries.
+    /// </summary>
+    private async Task<List<AdrAccountBlacklist>> LoadBlacklistEntriesAsync(string exclusionType = "All")
+    {
+        var today = DateTime.UtcNow.Date;
+        var entries = await _unitOfWork.AdrAccountBlacklists.FindAsync(b =>
+            !b.IsDeleted &&
+            b.IsActive &&
+            (b.EffectiveStartDate == null || b.EffectiveStartDate <= today) &&
+            (b.EffectiveEndDate == null || b.EffectiveEndDate >= today) &&
+            (b.ExclusionType == "All" || b.ExclusionType == exclusionType));
+        return entries.ToList();
+    }
+
+    /// <summary>
+    /// Checks if an account matches any of the cached blacklist entries.
+    /// Use this for batch operations after loading entries with LoadBlacklistEntriesAsync.
+    /// </summary>
+    private bool IsAccountBlacklistedCached(AdrAccount account, List<AdrAccountBlacklist> blacklistEntries)
+    {
+        foreach (var entry in blacklistEntries)
+        {
+            // Check if this blacklist entry matches the account
+            bool matches = false;
+
+            // Match by VendorCode (if specified)
+            if (!string.IsNullOrEmpty(entry.VendorCode) && entry.VendorCode == account.VendorCode)
+                matches = true;
+
+            // Match by VMAccountId (if specified)
+            if (entry.VMAccountId.HasValue && entry.VMAccountId == account.VMAccountId)
+                matches = true;
+
+            // Match by VMAccountNumber (if specified)
+            if (!string.IsNullOrEmpty(entry.VMAccountNumber) && entry.VMAccountNumber == account.VMAccountNumber)
+                matches = true;
+
+            // Match by CredentialId (if specified)
+            if (entry.CredentialId.HasValue && entry.CredentialId == account.CredentialId)
+                matches = true;
+
+            if (matches)
+            {
+                _logger.LogInformation(
+                    "Account {AccountId} (VMAccountId: {VMAccountId}, VendorCode: {VendorCode}) is blacklisted. Reason: {Reason}",
+                    account.Id, account.VMAccountId, account.VendorCode, entry.Reason);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private async Task<int> GetMaxParallelRequestsAsync()
@@ -289,12 +308,16 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             var batchSize = config.BatchSize;
             _logger.LogInformation("Processing {Count} due accounts in batches of {BatchSize}", dueAccountsList.Count, batchSize);
 
+            // PERFORMANCE OPTIMIZATION: Load blacklist entries once instead of N database queries
+            var blacklistEntries = await LoadBlacklistEntriesAsync("Download");
+            _logger.LogInformation("Loaded {Count} active blacklist entries for job creation", blacklistEntries.Count);
+
             foreach (var account in dueAccountsList)
             {
                 try
                 {
-                    // Check if account is blacklisted before creating job
-                    if (await IsAccountBlacklistedAsync(account, "Download"))
+                    // Check if account is blacklisted before creating job (using cached entries)
+                    if (IsAccountBlacklistedCached(account, blacklistEntries))
                     {
                         result.JobsSkipped++;
                         blacklistedCount++;
@@ -1013,9 +1036,18 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             // 1. Daily status checks (1-day delay): Jobs still in their billing window
             // 2. Final status checks (5-day delay after NextRangeEndDate): Jobs past their billing window
             var now = DateTime.UtcNow;
+            var dailyDelayDays = GetDailyStatusCheckDelayDays();
+            var finalDelayDays = GetFinalStatusCheckDelayDays();
             
-            var dailyJobs = (await _unitOfWork.AdrJobs.GetJobsNeedingDailyStatusCheckAsync(now, GetDailyStatusCheckDelayDays())).ToList();
-            var finalJobs = (await _unitOfWork.AdrJobs.GetJobsNeedingFinalStatusCheckAsync(now, GetFinalStatusCheckDelayDays())).ToList();
+            // Log the query parameters for debugging
+            _logger.LogInformation(
+                "Status check query parameters: Now={Now}, DailyDelayDays={DailyDelay}, FinalDelayDays={FinalDelay}, " +
+                "DailyThreshold={DailyThreshold}, FinalThreshold={FinalThreshold}",
+                now, dailyDelayDays, finalDelayDays, 
+                now.AddDays(-dailyDelayDays).Date, now.AddDays(-finalDelayDays).Date);
+            
+            var dailyJobs = (await _unitOfWork.AdrJobs.GetJobsNeedingDailyStatusCheckAsync(now, dailyDelayDays)).ToList();
+            var finalJobs = (await _unitOfWork.AdrJobs.GetJobsNeedingFinalStatusCheckAsync(now, finalDelayDays)).ToList();
             
             // Merge and deduplicate by job ID
             var jobsNeedingStatusCheck = dailyJobs
@@ -1819,7 +1851,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
         try
         {
-            var baseUrl = _configuration["AdrApi:BaseUrl"] ?? "https://nuse2etsadrdevfn01.azurewebsites.net/api/";
+            var baseUrl = _configuration["AdrApi:BaseUrl"] ?? "https://nuscetsadrdevfn01.azurewebsites.net/api/";
             var sourceApplicationName = _configuration["AdrApi:SourceApplicationName"] ?? "ADRScheduler";
             var recipientEmail = _configuration["AdrApi:RecipientEmail"] ?? "lcassin@cassinfo.com";
 
@@ -1989,7 +2021,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     {
         try
         {
-            var baseUrl = _configuration["AdrApi:BaseUrl"] ?? "https://nuse2etsadrdevfn01.azurewebsites.net/api/";
+            var baseUrl = _configuration["AdrApi:BaseUrl"] ?? "https://nuscetsadrdevfn01.azurewebsites.net/api/";
 
             var client = _httpClientFactory.CreateClient("AdrApi");
 
