@@ -1851,7 +1851,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
         try
         {
-            var baseUrl = _configuration["AdrApi:BaseUrl"] ?? "https://nuse2etsadrdevfn01.azurewebsites.net/api/";
+            var baseUrl = _configuration["AdrApi:BaseUrl"] ?? "https://nuscetsadrdevfn01.azurewebsites.net/api/";
             var sourceApplicationName = _configuration["AdrApi:SourceApplicationName"] ?? "ADRScheduler";
             var recipientEmail = _configuration["AdrApi:RecipientEmail"] ?? "lcassin@cassinfo.com";
 
@@ -2021,7 +2021,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     {
         try
         {
-            var baseUrl = _configuration["AdrApi:BaseUrl"] ?? "https://nuse2etsadrdevfn01.azurewebsites.net/api/";
+            var baseUrl = _configuration["AdrApi:BaseUrl"] ?? "https://nuscetsadrdevfn01.azurewebsites.net/api/";
 
             var client = _httpClientFactory.CreateClient("AdrApi");
 
