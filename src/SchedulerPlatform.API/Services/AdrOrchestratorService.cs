@@ -1182,7 +1182,30 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
             _logger.LogInformation("Completed {Count} parallel status checks, updating job statuses", statusResults.Count);
 
-            // Step 3: Update job statuses sequentially (EF DbContext is not thread-safe)
+            // Step 3: Pre-load all rules that might need advancement (optimization to avoid N+1 queries)
+            var ruleIdsToLoad = jobsNeedingStatusCheck
+                .Where(j => j.AdrAccountRuleId.HasValue)
+                .Select(j => j.AdrAccountRuleId!.Value)
+                .Distinct()
+                .ToList();
+            
+            _logger.LogInformation("Pre-loading {Count} rules for potential advancement", ruleIdsToLoad.Count);
+            var rulesById = new Dictionary<int, AdrAccountRule>();
+            
+            // Load rules in batches to avoid huge IN clauses
+            const int ruleBatchSize = 1000;
+            for (int i = 0; i < ruleIdsToLoad.Count; i += ruleBatchSize)
+            {
+                var batchIds = ruleIdsToLoad.Skip(i).Take(ruleBatchSize).ToList();
+                var batchRules = await _unitOfWork.AdrAccountRules.FindAsync(r => batchIds.Contains(r.Id) && !r.IsDeleted);
+                foreach (var rule in batchRules)
+                {
+                    rulesById[rule.Id] = rule;
+                }
+            }
+            _logger.LogInformation("Pre-loaded {Count} rules for advancement", rulesById.Count);
+
+            // Step 4: Update job statuses sequentially (EF DbContext is not thread-safe)
             // Use the job objects we already have from the setup phase - no need to re-fetch
             int processedSinceLastSave = 0;
             int batchNumber = 1;
@@ -1235,8 +1258,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                                 job.AdrAccount.ModifiedBy = "System Created";
                             }
                             
-                            // Advance the rule to the next billing cycle using calendar-based arithmetic
-                            await AdvanceRuleToNextCycleAsync(job);
+                            // Advance the rule to the next billing cycle using pre-loaded rules (no DB round-trip)
+                            AdvanceRuleToNextCycleSync(job, rulesById);
                         }
                         else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
                         {
@@ -1263,8 +1286,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                                 "Job {JobId}: Billing window exhausted (ended {WindowEnd}), marking as NoInvoiceFound and advancing rule",
                                 job.Id, windowEnd);
                             
-                            // Advance the rule to the next billing cycle so it doesn't get stuck
-                            await AdvanceRuleToNextCycleAsync(job);
+                            // Advance the rule to the next billing cycle using pre-loaded rules (no DB round-trip)
+                            AdvanceRuleToNextCycleSync(job, rulesById);
                         }
                         else
                         {
@@ -1497,9 +1520,34 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             }
             _logger.LogInformation("=== END STATUS CHECK DISTRIBUTION SUMMARY ===");
 
-            // Step 3: Update job statuses sequentially (EF DbContext is not thread-safe)
+            // Step 3: Pre-load all rules that might need advancement (optimization to avoid N+1 queries)
+            var ruleIdsToLoad = jobsNeedingStatusCheck
+                .Where(j => j.AdrAccountRuleId.HasValue)
+                .Select(j => j.AdrAccountRuleId!.Value)
+                .Distinct()
+                .ToList();
+            
+            _logger.LogInformation("Pre-loading {Count} rules for potential advancement", ruleIdsToLoad.Count);
+            var rulesById = new Dictionary<int, AdrAccountRule>();
+            
+            // Load rules in batches to avoid huge IN clauses
+            const int ruleBatchSize = 1000;
+            for (int i = 0; i < ruleIdsToLoad.Count; i += ruleBatchSize)
+            {
+                var batchIds = ruleIdsToLoad.Skip(i).Take(ruleBatchSize).ToList();
+                var batchRules = await _unitOfWork.AdrAccountRules.FindAsync(r => batchIds.Contains(r.Id) && !r.IsDeleted);
+                foreach (var rule in batchRules)
+                {
+                    rulesById[rule.Id] = rule;
+                }
+            }
+            _logger.LogInformation("Pre-loaded {Count} rules for advancement", rulesById.Count);
+
+            // Step 4: Update job statuses sequentially (EF DbContext is not thread-safe)
             int processedSinceLastSave = 0;
             int batchNumber = 1;
+            int totalJobsToUpdate = jobsToProcess.Count;
+            int jobsUpdated = 0;
 
             // Create a lookup for jobs by ID (they're already tracked by EF from the setup phase)
             var jobsById = jobsNeedingStatusCheck.ToDictionary(j => j.Id);
@@ -1554,8 +1602,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                                 job.AdrAccount.ModifiedBy = "System Created";
                             }
                             
-                            // Advance the rule to the next billing cycle using calendar-based arithmetic
-                            await AdvanceRuleToNextCycleAsync(job);
+                            // Advance the rule to the next billing cycle using pre-loaded rules (no DB round-trip)
+                            AdvanceRuleToNextCycleSync(job, rulesById);
                         }
                         else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
                         {
@@ -1609,8 +1657,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                                 "Job {JobId}: Billing window exhausted (ended {WindowEnd}), marking as NoInvoiceFound and advancing rule",
                                 job.Id, windowEnd);
                             
-                            // Advance the rule to the next billing cycle so it doesn't get stuck
-                            await AdvanceRuleToNextCycleAsync(job);
+                            // Advance the rule to the next billing cycle using pre-loaded rules (no DB round-trip)
+                            AdvanceRuleToNextCycleSync(job, rulesById);
                         }
                         else
                         {
@@ -1631,6 +1679,10 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         await _unitOfWork.SaveChangesAsync();
                         _logger.LogInformation("Manual status check batch {BatchNumber} saved: {Count} jobs checked so far", 
                             batchNumber, result.JobsChecked);
+                        
+                        // Report progress for database update phase (use negative values to indicate sub-step)
+                        progressCallback?.Invoke(-result.JobsChecked, totalJobsToUpdate);
+                        
                         processedSinceLastSave = 0;
                         batchNumber++;
                     }
@@ -1651,6 +1703,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             if (processedSinceLastSave > 0)
             {
                 await _unitOfWork.SaveChangesAsync();
+                // Report final progress for database update phase
+                progressCallback?.Invoke(-result.JobsChecked, totalJobsToUpdate);
             }
 
             stopwatch.Stop();
@@ -2174,7 +2228,14 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// Preserves the current window offsets (days before/after NextRunDateTime) to maintain
     /// any manual adjustments to the search window size.
     /// </summary>
-    private async Task AdvanceRuleToNextCycleAsync(AdrJob job)
+    private async Task AdvanceRuleToNextCycleAsync(AdrJob job) => 
+        AdvanceRuleToNextCycleSync(job, null);
+
+    /// <summary>
+    /// Synchronous version of AdvanceRuleToNextCycleAsync that uses pre-loaded rules dictionary.
+    /// This avoids N+1 database queries when processing many jobs.
+    /// </summary>
+    private void AdvanceRuleToNextCycleSync(AdrJob job, Dictionary<int, AdrAccountRule>? preloadedRules)
     {
         if (!job.AdrAccountRuleId.HasValue)
         {
@@ -2184,11 +2245,19 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
         try
         {
-            // Load the rule that created this job
-            var rule = await _unitOfWork.AdrAccountRules.GetByIdAsync(job.AdrAccountRuleId.Value);
+            // Use pre-loaded rule if available, otherwise skip (rule will be updated on next full orchestration)
+            AdrAccountRule? rule = null;
+            if (preloadedRules != null)
+            {
+                preloadedRules.TryGetValue(job.AdrAccountRuleId.Value, out rule);
+            }
+            
             if (rule == null || rule.IsDeleted)
             {
-                _logger.LogWarning("Rule {RuleId} not found or deleted for job {JobId}", job.AdrAccountRuleId, job.Id);
+                if (preloadedRules != null)
+                {
+                    _logger.LogWarning("Rule {RuleId} not found in preloaded rules or deleted for job {JobId}", job.AdrAccountRuleId, job.Id);
+                }
                 return;
             }
 
@@ -2238,7 +2307,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             var (nextRangeStart, nextRangeEnd) = BillingPeriodCalculator.CalculateBillingWindow(
                 nextRunDate, windowBefore, windowAfter);
 
-            // Update rule with next cycle dates
+            // Update rule with next cycle dates (rule is already tracked by EF, will be saved in batch)
             rule.NextRunDateTime = nextRunDate;
             rule.NextRangeStartDateTime = nextRangeStart;
             rule.NextRangeEndDateTime = nextRangeEnd;
@@ -2252,7 +2321,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             rule.ModifiedDateTime = DateTime.UtcNow;
             rule.ModifiedBy = "System Created";
 
-            await _unitOfWork.AdrAccountRules.UpdateAsync(rule);
+            // Note: No UpdateAsync call here - the rule is already tracked by EF and will be saved
+            // in the batch SaveChangesAsync call in the calling method
 
             _logger.LogInformation(
                 "Advanced rule {RuleId} to next cycle using calendar arithmetic: PeriodType={PeriodType}, NextRunDateTime={NextRun}, NextRangeStart={RangeStart}, NextRangeEnd={RangeEnd} (window: -{Before}/+{After} days)",
