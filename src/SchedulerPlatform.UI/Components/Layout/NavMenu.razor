@@ -1,6 +1,7 @@
 @using SchedulerPlatform.UI.Services
 @inject IPermissionService PermissionService
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject UserPermissionCacheService PermissionCacheService
 @implements IDisposable
 
 <MudNavMenu>
@@ -36,6 +37,8 @@
     {
         await LoadPermissionsAsync();
         AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
+        // Subscribe to permission cache refresh events to update menu when permissions are loaded
+        PermissionCacheService.OnPermissionsRefreshed += OnPermissionsRefreshed;
     }
 
     private async Task LoadPermissionsAsync()
@@ -49,9 +52,17 @@
         await InvokeAsync(StateHasChanged);
     }
 
+    private async void OnPermissionsRefreshed()
+    {
+        // Permissions were refreshed from the API, reload and update UI
+        await LoadPermissionsAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
     public void Dispose()
     {
         AuthenticationStateProvider.AuthenticationStateChanged -= OnAuthenticationStateChanged;
+        PermissionCacheService.OnPermissionsRefreshed -= OnPermissionsRefreshed;
     }
 }
 
