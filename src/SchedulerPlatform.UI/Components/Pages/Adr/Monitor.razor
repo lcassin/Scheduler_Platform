@@ -15,7 +15,28 @@
     <MudItem xs="12" md="8" Class="d-flex">
         <MudPaper Class="pa-4 mb-4 flex-grow-1">
             <div class="d-flex justify-space-between align-center mb-4">
-                <MudText Typo="Typo.h6">Current Orchestration Status</MudText>
+                <div class="d-flex align-center gap-2">
+                    <MudText Typo="Typo.h6">Current Orchestration Status</MudText>
+                    @if (_currentStatus?.IsRunning == true && _isProgressPolling)
+                    {
+                        @if (IsProgressStale())
+                        {
+                            <MudTooltip Text="Auto-refresh may have stopped. Click Refresh to update.">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Icon="@Icons.Material.Filled.Warning">
+                                    Updates stale
+                                </MudChip>
+                            </MudTooltip>
+                        }
+                        else if (_lastProgressUpdate.HasValue)
+                        {
+                            <MudTooltip Text="@($"Last updated: {_lastProgressUpdate.Value:hh:mm:ss tt}")">
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Sync">
+                                    Auto-refreshing
+                                </MudChip>
+                            </MudTooltip>
+                        }
+                    }
+                </div>
                 <div class="d-flex gap-2">
                     <MudButton Variant="Variant.Outlined" 
                                Color="Color.Primary" 
@@ -979,6 +1000,11 @@
     private CancellationTokenSource? _progressTimerCts;
     private bool _isProgressPolling = false;
     
+    // Progress polling health tracking
+    private DateTime? _lastProgressUpdate;
+    private int _consecutivePollingFailures = 0;
+    private const int StaleThresholdSeconds = 30; // Show warning if no update in 30 seconds
+    
     // Cached timezone info for display
     private string _userTimeZoneAbbr = "";
     private string _userTimeZoneId = "";
@@ -1498,6 +1524,8 @@
         _progressTimerCts = cts;
         _progressTimer = timer;
         _isProgressPolling = true;
+        _lastProgressUpdate = DateTime.Now;
+        _consecutivePollingFailures = 0;
         
         _ = Task.Run(async () =>
         {
@@ -1510,7 +1538,18 @@
                     {
                         await InvokeAsync(async () =>
                         {
-                            await LoadCurrentStatusAsync();
+                            try
+                            {
+                                await LoadCurrentStatusAsync();
+                                _lastProgressUpdate = DateTime.Now;
+                                _consecutivePollingFailures = 0;
+                                StateHasChanged();
+                            }
+                            catch (Exception)
+                            {
+                                _consecutivePollingFailures++;
+                                StateHasChanged();
+                            }
                         });
                     }
                 }
@@ -1548,6 +1587,15 @@
     {
         // Only cancel - the background task will handle disposal in its finally block
         _progressTimerCts?.Cancel();
+    }
+    
+    private bool IsProgressStale()
+    {
+        if (!_lastProgressUpdate.HasValue || !_isProgressPolling)
+            return false;
+        
+        var secondsSinceUpdate = (DateTime.Now - _lastProgressUpdate.Value).TotalSeconds;
+        return secondsSinceUpdate > StaleThresholdSeconds || _consecutivePollingFailures >= 3;
     }
 
     private Color GetStatusColor(string status) => status switch
