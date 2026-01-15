@@ -423,6 +423,12 @@ app.UseMiddleware<SchedulerPlatform.API.Middleware.AutoUserCreationMiddleware>()
 
 app.MapControllers();
 
+// Health check endpoint for Azure App Service health probes
+// Returns 200 OK to prevent 404 errors in Application Insights from health probe requests to "/"
+app.MapGet("/", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
+   .AllowAnonymous()
+   .ExcludeFromDescription(); // Hide from Swagger
+
 try
 {
     Log.Information("Starting ADR Scheduler API");
