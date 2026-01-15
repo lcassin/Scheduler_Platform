@@ -1,4 +1,3 @@
-using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -4675,16 +4674,6 @@ public class AdrController : ControllerBase
         }
 
         #endregion
-
-        private static string CsvEscape(string? value)
-    {
-        if (value == null) return "";
-        if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
-        {
-            return $"\"{value.Replace("\"", "\"\"")}\"";
-        }
-        return value;
-    }
 }
 
 #region Request DTOs

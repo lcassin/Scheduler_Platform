@@ -1,6 +1,4 @@
 using System.Text;
-using ClosedXML.Excel;
-using DocumentFormat.OpenXml.Office2010.Drawing.Charts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
@@ -977,16 +975,6 @@ public class SchedulesController : ControllerBase
             _logger.LogError(ex, "Error exporting schedules");
             return StatusCode(500, "An error occurred while exporting schedules");
         }
-    }
-
-    private static string CsvEscape(string? value)
-    {
-        if (value == null) return "";
-        if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
-        {
-            return $"\"{value.Replace("\"", "\"\"")}\"";
-        }
-        return value;
     }
 
     /// <summary>

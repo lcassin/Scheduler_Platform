@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text;
-using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Quartz;
@@ -262,16 +261,6 @@ public class JobExecutionsController : ControllerBase
             _logger.LogError(ex, "Error exporting job executions");
             return StatusCode(500, "An error occurred while exporting job executions");
         }
-    }
-
-    private static string CsvEscape(string? value)
-    {
-        if (value == null) return "";
-        if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
-        {
-            return $"\"{value.Replace("\"", "\"\"")}\"";
-        }
-        return value;
     }
 
     /// <summary>
