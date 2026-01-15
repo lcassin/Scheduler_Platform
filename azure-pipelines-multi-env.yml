@@ -16,7 +16,7 @@
 trigger:
   branches:
     include:
-      - Net-10-Upgrade
+      - Staging
 
 pool:
   vmImage: 'windows-latest'
