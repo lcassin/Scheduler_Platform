@@ -83,38 +83,85 @@
                     }
                     else
                     {
-                        <div class="d-flex justify-space-between align-center mb-3">
+                        <div class="d-flex justify-space-between align-center mb-2">
                             <div>
-                                <MudText Typo="Typo.h6">@_selectedFile.FileName</MudText>
+                                <MudText Typo="Typo.subtitle1" Class="font-weight-bold">@_selectedFile.FileName</MudText>
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
                                     @_selectedFile.SizeFormatted | Last modified: @_selectedFile.LastModifiedUtc.ToLocalTime().ToString("g")
                                 </MudText>
                             </div>
-                            <div class="d-flex gap-2">
+                            <div class="d-flex gap-2 align-center">
                                 <MudNumericField @bind-Value="_linesToShow" 
                                                  Label="Lines" 
                                                  Variant="Variant.Outlined"
                                                  Min="100" Max="10000"
-                                                 Style="width: 120px;"
+                                                 Style="width: 100px;"
                                                  Margin="Margin.Dense" />
                                 <MudButton Variant="Variant.Outlined" 
                                            Color="Color.Primary" 
                                            StartIcon="@Icons.Material.Filled.Refresh"
                                            OnClick="@(() => LoadFileContent(_selectedFile))"
-                                           Disabled="@_loadingContent">
+                                           Disabled="@_loadingContent"
+                                           Size="Size.Small">
                                     Refresh
                                 </MudButton>
                                 <MudButton Variant="Variant.Outlined" 
                                            Color="Color.Secondary" 
                                            StartIcon="@Icons.Material.Filled.Download"
                                            OnClick="@(() => DownloadFile(_selectedFile))"
-                                           Disabled="@_downloading">
+                                           Disabled="@_downloading"
+                                           Size="Size.Small">
                                     Download
                                 </MudButton>
                             </div>
                         </div>
                         
-                        @if (_loadingContent)
+                        <div class="d-flex gap-2 align-center mb-2">
+                            <MudTextField @bind-Value="_searchTerm"
+                                          Placeholder="Search term..."
+                                          Variant="Variant.Outlined"
+                                          Adornment="Adornment.Start"
+                                          AdornmentIcon="@Icons.Material.Filled.Search"
+                                          Margin="Margin.Dense"
+                                          Style="flex: 1;"
+                                          Immediate="true"
+                                          OnKeyDown="@OnSearchKeyDown" />
+                            <MudButton Variant="Variant.Filled" 
+                                       Color="Color.Primary" 
+                                       OnClick="SearchEntireFile"
+                                       Disabled="@(_searching || string.IsNullOrWhiteSpace(_searchTerm))"
+                                       Size="Size.Small">
+                                @if (_searching)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                }
+                                Search File
+                            </MudButton>
+                        </div>
+                        
+                        @if (_searchResults != null)
+                        {
+                            <MudAlert Severity="@(_searchResults.TotalMatches > 0 ? Severity.Success : Severity.Info)" 
+                                      Dense="true" 
+                                      Class="mb-2"
+                                      ShowCloseIcon="true"
+                                      CloseIconClicked="ClearSearchResults">
+                                @if (_searchResults.TotalMatches > 0)
+                                {
+                                    <text>Found @_searchResults.TotalMatches matches in @_searchResults.TotalLinesScanned.ToString("N0") lines</text>
+                                    @if (_searchResults.MaxResultsReached)
+                                    {
+                                        <text> (showing first @_searchResults.TotalMatches, more may exist)</text>
+                                    }
+                                }
+                                else
+                                {
+                                    <text>No matches found for "@_searchResults.SearchTerm" in @_searchResults.TotalLinesScanned.ToString("N0") lines</text>
+                                }
+                            </MudAlert>
+                        }
+                        
+                        @if (_loadingContent || _searching)
                         {
                             <div class="d-flex align-center justify-center" style="flex: 1;">
                                 <MudProgressCircular Indeterminate="true" />
@@ -122,21 +169,12 @@
                         }
                         else if (!string.IsNullOrEmpty(_fileContent))
                         {
-                            <MudTextField @bind-Value="_searchTerm"
-                                          Placeholder="Search in log..."
-                                          Variant="Variant.Outlined"
-                                          Adornment="Adornment.Start"
-                                          AdornmentIcon="@Icons.Material.Filled.Search"
-                                          Margin="Margin.Dense"
-                                          Class="mb-2"
-                                          Immediate="true" />
-                            
-                            <div style="flex: 1; overflow-y: auto; background-color: #1e1e1e; border-radius: 4px; padding: 12px;">
+                            <div style="flex: 1; overflow-y: auto; background-color: #1e1e1e; border-radius: 4px; padding: 8px 12px; min-height: 0;">
                                 <pre style="margin: 0; white-space: pre-wrap; word-wrap: break-word; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; color: #d4d4d4; line-height: 1.4;">@GetFilteredContent()</pre>
                             </div>
                             
-                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
-                                Showing @_totalLines lines
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                                Showing @_totalLines lines (most recent)
                                 @if (!string.IsNullOrEmpty(_searchTerm))
                                 {
                                     <text> | Filtered by: "@_searchTerm"</text>
@@ -166,8 +204,10 @@
     private bool _loading = true;
     private bool _loadingContent = false;
     private bool _downloading = false;
+    private bool _searching = false;
     private bool _hasAccess = false;
     private bool _isSuperAdmin = false;
+    private LogSearchResult? _searchResults;
 
     protected override async Task OnInitializedAsync()
     {
@@ -214,6 +254,7 @@
     {
         _selectedFile = file;
         _searchTerm = string.Empty;
+        _searchResults = null;
         await LoadFileContent(file);
     }
 
@@ -316,7 +357,14 @@
 
     private string GetFilteredContent()
     {
-        if (string.IsNullOrEmpty(_searchTerm))
+        // If we have search results from server-side search, show those instead
+        if (_searchResults != null && _searchResults.Matches.Count > 0)
+        {
+            return string.Join('\n', _searchResults.Matches.Select(m => $"[Line {m.LineNumber}] {m.Content}"));
+        }
+        
+        // Otherwise show loaded content (optionally filtered client-side)
+        if (string.IsNullOrEmpty(_searchTerm) || _searchResults != null)
         {
             return _fileContent;
         }
@@ -324,6 +372,46 @@
         var lines = _fileContent.Split('\n');
         var filteredLines = lines.Where(l => l.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
         return string.Join('\n', filteredLines);
+    }
+
+    private async Task OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_searchTerm))
+        {
+            await SearchEntireFile();
+        }
+    }
+
+    private async Task SearchEntireFile()
+    {
+        if (_selectedFile == null || string.IsNullOrWhiteSpace(_searchTerm))
+            return;
+
+        _searching = true;
+        _searchResults = null;
+        StateHasChanged();
+
+        try
+        {
+            var response = await HttpClient.GetAsync($"logs/{_selectedFile.FileName}/search?term={Uri.EscapeDataString(_searchTerm)}&maxResults=500");
+            response.EnsureSuccessStatusCode();
+            _searchResults = await response.Content.ReadFromJsonAsync<LogSearchResult>();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error searching log file: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _searching = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ClearSearchResults()
+    {
+        _searchResults = null;
+        StateHasChanged();
     }
 
     private class LogFileInfo
@@ -342,5 +430,21 @@
         public long SizeBytes { get; set; }
         public DateTime LastModifiedUtc { get; set; }
         public int TotalLines { get; set; }
+    }
+
+    private class LogSearchResult
+    {
+        public string FileName { get; set; } = string.Empty;
+        public string SearchTerm { get; set; } = string.Empty;
+        public List<LogSearchMatch> Matches { get; set; } = new();
+        public int TotalMatches { get; set; }
+        public int TotalLinesScanned { get; set; }
+        public bool MaxResultsReached { get; set; }
+    }
+
+    private class LogSearchMatch
+    {
+        public int LineNumber { get; set; }
+        public string Content { get; set; } = string.Empty;
     }
 }

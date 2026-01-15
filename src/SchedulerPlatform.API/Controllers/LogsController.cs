@@ -115,15 +115,16 @@ public class LogsController : ControllerBase
             var fileInfo = new FileInfo(filePath);
             string content;
 
+            // Use FileShare.ReadWrite to allow reading files that are open by the logging system
             if (lines.HasValue && lines.Value > 0)
             {
-                var allLines = await System.IO.File.ReadAllLinesAsync(filePath);
-                var linesToTake = Math.Min(lines.Value, allLines.Length);
+                var allLines = await ReadAllLinesWithShareAsync(filePath);
+                var linesToTake = Math.Min(lines.Value, allLines.Count);
                 content = string.Join(Environment.NewLine, allLines.TakeLast(linesToTake));
             }
             else
             {
-                content = await System.IO.File.ReadAllTextAsync(filePath);
+                content = await ReadAllTextWithShareAsync(filePath);
             }
 
             _logger.LogInformation("Admin {User} viewed log file {FileName}", User.Identity?.Name ?? "Unknown", fileName);
@@ -184,13 +185,106 @@ public class LogsController : ControllerBase
 
             _logger.LogInformation("Admin {User} downloaded log file {FileName}", User.Identity?.Name ?? "Unknown", fileName);
 
-            var fileBytes = System.IO.File.ReadAllBytes(filePath);
+            // Use FileShare.ReadWrite to allow downloading files that are open by the logging system
+            var fileBytes = ReadAllBytesWithShare(filePath);
             return File(fileBytes, "text/plain", fileName);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error downloading log file {FileName}", fileName);
             return StatusCode(500, "An error occurred while downloading the log file");
+        }
+    }
+
+    /// <summary>
+    /// Searches the entire log file for matching lines (from bottom-up, most recent first).
+    /// Uses streaming to efficiently search large files without loading them entirely into memory.
+    /// </summary>
+    /// <param name="fileName">The name of the log file to search.</param>
+    /// <param name="term">The search term to look for (case-insensitive).</param>
+    /// <param name="maxResults">Maximum number of matching lines to return (default: 500).</param>
+    /// <returns>Matching lines with line numbers, ordered from most recent (bottom) to oldest (top).</returns>
+    /// <response code="200">Returns the search results.</response>
+    /// <response code="400">Invalid file name or missing search term.</response>
+    /// <response code="403">User is not authorized to search logs.</response>
+    /// <response code="404">Log file not found.</response>
+    /// <response code="500">An error occurred while searching the log file.</response>
+    [HttpGet("{fileName}/search")]
+    [ProducesResponseType(typeof(LogSearchResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<LogSearchResult>> SearchLogFile(
+        string fileName, 
+        [FromQuery] string term, 
+        [FromQuery] int maxResults = 500)
+    {
+        try
+        {
+            if (!IsAdminOrAbove())
+            {
+                _logger.LogWarning("Non-admin user attempted to search log file {FileName}", fileName);
+                return Forbid();
+            }
+
+            if (string.IsNullOrWhiteSpace(term))
+            {
+                return BadRequest("Search term is required");
+            }
+
+            if (string.IsNullOrWhiteSpace(fileName) || fileName.Contains("..") || fileName.Contains("/") || fileName.Contains("\\"))
+            {
+                return BadRequest("Invalid file name");
+            }
+
+            var filePath = Path.Combine(_logsPath, fileName);
+            
+            if (!System.IO.File.Exists(filePath))
+            {
+                return NotFound("Log file not found");
+            }
+
+            var fileInfo = new FileInfo(filePath);
+            var matches = new List<LogSearchMatch>();
+            var totalLinesScanned = 0;
+
+            // Read all lines and search from bottom-up (most recent first)
+            // Use FileShare.ReadWrite to allow searching files that are open by the logging system
+            var allLines = await ReadAllLinesWithShareAsync(filePath);
+
+            totalLinesScanned = allLines.Count;
+
+            // Search from bottom to top (most recent logs first)
+            for (int i = allLines.Count - 1; i >= 0 && matches.Count < maxResults; i--)
+            {
+                if (allLines[i].Contains(term, StringComparison.OrdinalIgnoreCase))
+                {
+                    matches.Add(new LogSearchMatch
+                    {
+                        LineNumber = i + 1, // 1-based line numbers
+                        Content = allLines[i]
+                    });
+                }
+            }
+
+            _logger.LogInformation("Admin {User} searched log file {FileName} for '{Term}', found {Count} matches", 
+                User.Identity?.Name ?? "Unknown", fileName, term, matches.Count);
+
+            return Ok(new LogSearchResult
+            {
+                FileName = fileName,
+                SearchTerm = term,
+                Matches = matches,
+                TotalMatches = matches.Count,
+                TotalLinesScanned = totalLinesScanned,
+                MaxResultsReached = matches.Count >= maxResults
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error searching log file {FileName}", fileName);
+            return StatusCode(500, "An error occurred while searching the log file");
         }
     }
 
@@ -264,6 +358,43 @@ public class LogsController : ControllerBase
         
         var userRole = User.FindFirst("role")?.Value;
         return userRole == "Admin" || userRole == "Super Admin";
+    }
+
+    /// <summary>
+    /// Reads all text from a file using FileShare.ReadWrite to allow reading files that are open by other processes.
+    /// </summary>
+    private static async Task<string> ReadAllTextWithShareAsync(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var reader = new StreamReader(stream);
+        return await reader.ReadToEndAsync();
+    }
+
+    /// <summary>
+    /// Reads all lines from a file using FileShare.ReadWrite to allow reading files that are open by other processes.
+    /// </summary>
+    private static async Task<List<string>> ReadAllLinesWithShareAsync(string path)
+    {
+        var lines = new List<string>();
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var reader = new StreamReader(stream);
+        string? line;
+        while ((line = await reader.ReadLineAsync()) != null)
+        {
+            lines.Add(line);
+        }
+        return lines;
+    }
+
+    /// <summary>
+    /// Reads all bytes from a file using FileShare.ReadWrite to allow reading files that are open by other processes.
+    /// </summary>
+    private static byte[] ReadAllBytesWithShare(string path)
+    {
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var memoryStream = new MemoryStream();
+        stream.CopyTo(memoryStream);
+        return memoryStream.ToArray();
     }
 
     private static string FormatFileSize(long bytes)
@@ -340,4 +471,56 @@ public class LogFileContent
     /// The total number of lines in the content.
     /// </summary>
     public int TotalLines { get; set; }
+}
+
+/// <summary>
+/// Result of a log file search operation.
+/// </summary>
+public class LogSearchResult
+{
+    /// <summary>
+    /// The name of the log file that was searched.
+    /// </summary>
+    public string FileName { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// The search term that was used.
+    /// </summary>
+    public string SearchTerm { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// The matching lines found, ordered from most recent (bottom of file) to oldest (top of file).
+    /// </summary>
+    public List<LogSearchMatch> Matches { get; set; } = new();
+    
+    /// <summary>
+    /// The total number of matches found (may be limited by maxResults).
+    /// </summary>
+    public int TotalMatches { get; set; }
+    
+    /// <summary>
+    /// The total number of lines scanned in the file.
+    /// </summary>
+    public int TotalLinesScanned { get; set; }
+    
+    /// <summary>
+    /// Whether the maximum number of results was reached (more matches may exist).
+    /// </summary>
+    public bool MaxResultsReached { get; set; }
+}
+
+/// <summary>
+/// A single matching line from a log file search.
+/// </summary>
+public class LogSearchMatch
+{
+    /// <summary>
+    /// The line number in the file (1-based).
+    /// </summary>
+    public int LineNumber { get; set; }
+    
+    /// <summary>
+    /// The content of the matching line.
+    /// </summary>
+    public string Content { get; set; } = string.Empty;
 }
