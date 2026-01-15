@@ -2,6 +2,7 @@ using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SchedulerPlatform.API.Models;
 using SchedulerPlatform.API.Services;
 using SchedulerPlatform.Core.Domain.Entities;
 using SchedulerPlatform.Core.Domain.Enums;
@@ -3031,7 +3032,7 @@ public class AdrController : ControllerBase
     /// <response code="500">An error occurred while retrieving orchestration history.</response>
     [HttpGet("orchestrate/history")]
     [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
-    [ProducesResponseType(typeof(OrchestrationHistoryPagedResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PagedResponse<AdrOrchestrationStatus>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<object>> GetOrchestrationHistory(
         [FromQuery] int? count = null,
@@ -3133,14 +3134,7 @@ public class AdrController : ControllerBase
                 // Return with pagination info if not using legacy count mode
                 if (!count.HasValue)
                 {
-                    return Ok(new OrchestrationHistoryPagedResponse
-                    {
-                        Items = dbHistory,
-                        TotalCount = totalCount,
-                        PageNumber = pageNumber,
-                        PageSize = pageSize,
-                        TotalPages = (int)Math.Ceiling((double)totalCount / pageSize)
-                    });
+                    return Ok(new PagedResponse<AdrOrchestrationStatus>(dbHistory, totalCount, pageNumber, pageSize));
                 }
                 return Ok(dbHistory);
             }
@@ -3174,9 +3168,9 @@ public class AdrController : ControllerBase
         /// <response code="200">Returns the paginated list of account rules.</response>
         /// <response code="500">An error occurred while retrieving account rules.</response>
         [HttpGet("rules")]
-        [ProducesResponseType(typeof(RulesPagedResponse), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(PagedResponse<AccountRuleDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-        public async Task<ActionResult<RulesPagedResponse>> GetRules(
+        public async Task<ActionResult<PagedResponse<AccountRuleDto>>> GetRules(
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 20,
             [FromQuery] string? vendorCode = null,
@@ -3286,13 +3280,7 @@ public class AdrController : ControllerBase
                     })
                     .ToListAsync();
             
-                return Ok(new RulesPagedResponse
-                {
-                    Items = rules,
-                    TotalCount = totalCount,
-                    Page = page,
-                    PageSize = pageSize
-                });
+                return Ok(new PagedResponse<AccountRuleDto>(rules, totalCount, page, pageSize));
             }
             catch (Exception ex)
             {
@@ -4777,15 +4765,6 @@ public class UpdateAccountBillingRequest
     public string? HistoricalBillingStatus { get; set; }
 }
 
-public class OrchestrationHistoryPagedResponse
-{
-    public List<AdrOrchestrationStatus> Items { get; set; } = new();
-    public int TotalCount { get; set; }
-    public int PageNumber { get; set; }
-    public int PageSize { get; set; }
-    public int TotalPages { get; set; }
-}
-
 /// <summary>
 /// Request for admin-only manual ADR operation
 /// </summary>
@@ -5089,17 +5068,6 @@ public class UpdateJobTypeRequest
     /// Optional notes about this job type
     /// </summary>
     public string? Notes { get; set; }
-}
-
-/// <summary>
-/// Paginated response for account rules
-/// </summary>
-public class RulesPagedResponse
-{
-    public List<AccountRuleDto>? Items { get; set; }
-    public int TotalCount { get; set; }
-    public int Page { get; set; }
-    public int PageSize { get; set; }
 }
 
 /// <summary>
