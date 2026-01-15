@@ -1,0 +1,204 @@
+# Azure DevOps CI/CD Pipeline for Scheduler Platform (Multi-Environment)
+# This pipeline builds once and deploys to DEV, UAT, and PROD with approval gates
+#
+# SETUP INSTRUCTIONS:
+# 1. Create Environments in Azure DevOps (Pipelines -> Environments):
+#    - Scheduler-DEV (no approvals needed)
+#    - Scheduler-UAT (configure 1 approval)
+#    - Scheduler-PROD (configure 2 approvals)
+#
+# 2. Update the App Service names and service connections below for UAT and PROD
+#
+# 3. Ensure you have the following variable groups:
+#    - Adr-Scheduler-Library-Dev (for DEV)
+#    - Create similar groups for UAT and PROD if needed
+
+trigger:
+  branches:
+    include:
+      - Net-10-Upgrade
+
+pool:
+  vmImage: 'windows-latest'
+
+variables:
+- group: Adr-Scheduler-Library-Dev
+- name: buildConfiguration
+  value: 'Release'
+- name: dotnetVersion
+  value: '10.0.x'
+- name: apiProjectPath
+  value: 'Scheduler/src/SchedulerPlatform.API/SchedulerPlatform.API.csproj'
+- name: uiProjectPath
+  value: 'Scheduler/src/SchedulerPlatform.UI/SchedulerPlatform.UI.csproj'
+
+stages:
+# =============================================================================
+# Build Stage (uses hosted agent)
+# =============================================================================
+- stage: Build
+  displayName: 'Build'
+  jobs:
+  - job: BuildJob
+    displayName: 'Build All Projects'
+    steps:
+    - checkout: self
+      fetchDepth: 0
+
+    - task: UseDotNet@2
+      displayName: 'Install .NET SDK'
+      inputs:
+        packageType: 'sdk'
+        version: '$(dotnetVersion)'
+        includePreviewVersions: true
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Restore NuGet Packages'
+      inputs:
+        command: 'restore'
+        projects: |
+          $(apiProjectPath)
+          $(uiProjectPath)
+        feedsToUse: 'select'
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Publish API'
+      inputs:
+        command: 'publish'
+        publishWebProjects: false
+        projects: '$(apiProjectPath)'
+        arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/api'
+        zipAfterPublish: true
+        modifyOutputPath: false
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Publish UI'
+      inputs:
+        command: 'publish'
+        publishWebProjects: false
+        projects: '$(uiProjectPath)'
+        arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/ui'
+        zipAfterPublish: true
+        modifyOutputPath: false
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish Artifacts'
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName: 'drop'
+        publishLocation: 'Container'
+
+# =============================================================================
+# DEV - Auto deploy (no approval gate)
+# =============================================================================
+- stage: DeployDev
+  displayName: 'Deploy to DEV'
+  dependsOn: Build
+  condition: succeeded()
+  pool:
+    name: OnPrem Hyde16 CoLo
+  variables:
+    apiAppName: 'nuscetsadrschdevwebapi'
+    uiAppName: 'nuscetsadrschdevwebui'
+    azureServiceConnection: 'ADR DEV RG'
+  jobs:
+  - deployment: DeployDev
+    displayName: 'Deploy to DEV Environment'
+    environment: 'Scheduler-DEV'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureWebApp@1
+            displayName: 'Deploy API'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              appName: '$(apiAppName)'
+              appType: 'webApp'
+              package: '$(Pipeline.Workspace)/drop/api/*.zip'
+
+          - task: AzureWebApp@1
+            displayName: 'Deploy UI'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              appName: '$(uiAppName)'
+              appType: 'webApp'
+              package: '$(Pipeline.Workspace)/drop/ui/*.zip'
+
+# =============================================================================
+# UAT - Requires 1 approval
+# Configure approval in Azure DevOps: Pipelines -> Environments -> Scheduler-UAT -> Approvals and checks
+# =============================================================================
+- stage: DeployUat
+  displayName: 'Deploy to UAT'
+  dependsOn: DeployDev
+  condition: succeeded()
+  pool:
+    name: OnPrem Hyde16 CoLo
+  variables:
+    # TODO: Update these values for your UAT environment
+    apiAppName: 'YOUR-UAT-API-APP-NAME'
+    uiAppName: 'YOUR-UAT-UI-APP-NAME'
+    azureServiceConnection: 'ADR UAT RG'  # Update if different
+  jobs:
+  - deployment: DeployUat
+    displayName: 'Deploy to UAT Environment'
+    environment: 'Scheduler-UAT'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureWebApp@1
+            displayName: 'Deploy API'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              appName: '$(apiAppName)'
+              appType: 'webApp'
+              package: '$(Pipeline.Workspace)/drop/api/*.zip'
+
+          - task: AzureWebApp@1
+            displayName: 'Deploy UI'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              appName: '$(uiAppName)'
+              appType: 'webApp'
+              package: '$(Pipeline.Workspace)/drop/ui/*.zip'
+
+# =============================================================================
+# PROD - Requires 2 approvals
+# Configure approvals in Azure DevOps: Pipelines -> Environments -> Scheduler-PROD -> Approvals and checks
+# =============================================================================
+- stage: DeployProd
+  displayName: 'Deploy to PROD'
+  dependsOn: DeployUat
+  condition: succeeded()
+  pool:
+    name: OnPrem Hyde16 CoLo
+  variables:
+    # TODO: Update these values for your PROD environment
+    apiAppName: 'YOUR-PROD-API-APP-NAME'
+    uiAppName: 'YOUR-PROD-UI-APP-NAME'
+    azureServiceConnection: 'ADR PROD RG'  # Update if different
+  jobs:
+  - deployment: DeployProd
+    displayName: 'Deploy to PROD Environment'
+    environment: 'Scheduler-PROD'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureWebApp@1
+            displayName: 'Deploy API'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              appName: '$(apiAppName)'
+              appType: 'webApp'
+              package: '$(Pipeline.Workspace)/drop/api/*.zip'
+
+          - task: AzureWebApp@1
+            displayName: 'Deploy UI'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              appName: '$(uiAppName)'
+              appType: 'webApp'
+              package: '$(Pipeline.Workspace)/drop/ui/*.zip'
