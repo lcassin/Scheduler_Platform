@@ -231,25 +231,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         return false;
     }
 
-    private async Task<int> GetMaxParallelRequestsAsync()
-    {
-        var config = await GetConfigurationAsync();
-        return config.MaxParallelRequests;
-    }
-
-    private async Task<int> GetCredentialCheckLeadDaysAsync()
-    {
-        var config = await GetConfigurationAsync();
-        return config.CredentialCheckLeadDays;
-    }
-
-    private async Task<int> GetBatchSizeAsync()
-    {
-        var config = await GetConfigurationAsync();
-        return config.BatchSize;
-    }
-
-    // Legacy synchronous methods for backward compatibility (use async versions when possible)
+    // Configuration helper methods - use cached config with fallback to IConfiguration
     private int GetMaxParallelRequests()
     {
         return _cachedConfig?.MaxParallelRequests ?? 
