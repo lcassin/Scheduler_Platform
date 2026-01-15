@@ -31,10 +31,23 @@ if (!string.IsNullOrEmpty(keyVaultUri) && !builder.Environment.IsDevelopment())
         new DefaultAzureCredential());
 }
 
+// Determine the log path based on environment
+// Azure App Service: Use D:\home\LogFiles\Application\ which persists across deployments
+// Local development: Use relative logs/ folder
+var isAzureAppService = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WEBSITE_SITE_NAME"));
+var logPath = isAzureAppService 
+    ? @"D:\home\LogFiles\Application\scheduler-api-.txt"
+    : "logs/scheduler-api-.txt";
+
+// Override the Serilog file path in configuration
+builder.Configuration["Serilog:WriteTo:1:Args:path"] = logPath;
+
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .Enrich.FromLogContext()
     .CreateLogger();
+
+Log.Information("Log path configured: {LogPath} (Azure: {IsAzure})", logPath, isAzureAppService);
 
 builder.Host.UseSerilog();
 

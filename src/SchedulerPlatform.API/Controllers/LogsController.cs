@@ -21,7 +21,14 @@ public class LogsController : ControllerBase
     {
         _logger = logger;
         _environment = environment;
-        _logsPath = Path.Combine(_environment.ContentRootPath, "logs");
+        
+        // Determine the log path based on environment
+        // Azure App Service: Use D:\home\LogFiles\Application\ which persists across deployments
+        // Local development: Use relative logs/ folder under ContentRootPath
+        var isAzureAppService = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WEBSITE_SITE_NAME"));
+        _logsPath = isAzureAppService 
+            ? @"D:\home\LogFiles\Application"
+            : Path.Combine(_environment.ContentRootPath, "logs");
     }
 
     /// <summary>
