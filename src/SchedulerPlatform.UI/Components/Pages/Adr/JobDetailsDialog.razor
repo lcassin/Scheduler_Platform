@@ -1,4 +1,6 @@
 @using SchedulerPlatform.UI.Models
+@using SchedulerPlatform.UI.Services
+@inject AuthenticatedHttpClientService HttpService
 
 <MudDialog>
     <TitleContent>
@@ -118,6 +120,71 @@
                         <MudAlert Severity="Severity.Error">@Job.ErrorMessage</MudAlert>
                     </MudItem>
                 }
+
+                <MudItem xs="12">
+                    <MudDivider Class="my-2" />
+                    <MudText Typo="Typo.subtitle1" Class="mb-2">
+                        <strong>Latest Execution</strong>
+                        @if (_loadingExecutions)
+                        {
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="ml-2" />
+                        }
+                    </MudText>
+                </MudItem>
+
+                @if (_latestExecution != null)
+                {
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Execution ID</MudText>
+                        <MudText Typo="Typo.body1">@_latestExecution.Id</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Request Type</MudText>
+                        <MudText Typo="Typo.body1">@GetRequestTypeName(_latestExecution.AdrRequestTypeId)</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">HTTP Status</MudText>
+                        <MudText Typo="Typo.body1">@(_latestExecution.HttpStatusCode?.ToString() ?? "N/A")</MudText>
+                    </MudItem>
+                    <MudItem xs="6">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Start Time</MudText>
+                        <MudText Typo="Typo.body1">@_latestExecution.StartDateTime.ToString("MM/dd/yyyy HH:mm:ss")</MudText>
+                    </MudItem>
+
+                    @if (!string.IsNullOrEmpty(_latestExecution.RequestPayload))
+                    {
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Request Payload</MudText>
+                            <MudPaper Class="pa-2 mt-1" Style="background-color: #f5f5f5; max-height: 200px; overflow-y: auto;">
+                                <MudText Typo="Typo.body2" Style="white-space: pre-wrap; font-family: monospace; font-size: 0.75rem;">@FormatJson(_latestExecution.RequestPayload)</MudText>
+                            </MudPaper>
+                        </MudItem>
+                    }
+
+                    @if (!string.IsNullOrEmpty(_latestExecution.ApiResponse))
+                    {
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">API Response</MudText>
+                            <MudPaper Class="pa-2 mt-1" Style="background-color: #f5f5f5; max-height: 200px; overflow-y: auto;">
+                                <MudText Typo="Typo.body2" Style="white-space: pre-wrap; font-family: monospace; font-size: 0.75rem;">@FormatJson(_latestExecution.ApiResponse)</MudText>
+                            </MudPaper>
+                        </MudItem>
+                    }
+
+                    @if (!string.IsNullOrEmpty(_latestExecution.ErrorMessage))
+                    {
+                        <MudItem xs="12">
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">Execution Error</MudText>
+                            <MudAlert Severity="Severity.Error" Dense="true">@_latestExecution.ErrorMessage</MudAlert>
+                        </MudItem>
+                    }
+                }
+                else if (!_loadingExecutions)
+                {
+                    <MudItem xs="12">
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">No executions found for this job.</MudText>
+                    </MudItem>
+                }
             </MudGrid>
         }
     </DialogContent>
@@ -133,6 +200,43 @@
     [Parameter]
     public AdrJob? Job { get; set; }
 
+    private AdrJobExecution? _latestExecution;
+    private bool _loadingExecutions = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (Job != null)
+        {
+            await LoadLatestExecutionAsync();
+        }
+    }
+
+    private async Task LoadLatestExecutionAsync()
+    {
+        try
+        {
+            _loadingExecutions = true;
+            var response = await HttpService.GetAsync($"api/adr/executions/by-job/{Job!.Id}");
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                var executions = System.Text.Json.JsonSerializer.Deserialize<List<AdrJobExecution>>(content, new System.Text.Json.JsonSerializerOptions 
+                { 
+                    PropertyNameCaseInsensitive = true 
+                });
+                _latestExecution = executions?.OrderByDescending(e => e.StartDateTime).FirstOrDefault();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading executions: {ex.Message}");
+        }
+        finally
+        {
+            _loadingExecutions = false;
+        }
+    }
+
     private void Cancel() => MudDialog.Cancel();
 
     private Color GetStatusColor(string status) => status switch
@@ -146,4 +250,30 @@
         "NeedsReview" => Color.Warning,
         _ => Color.Default
     };
+
+    private string GetRequestTypeName(int? requestTypeId) => requestTypeId switch
+    {
+        1 => "Credential Check",
+        2 => "ADR Request",
+        _ => requestTypeId?.ToString() ?? "Unknown"
+    };
+
+    private string FormatJson(string? json)
+    {
+        if (string.IsNullOrEmpty(json))
+            return string.Empty;
+
+        try
+        {
+            var obj = System.Text.Json.JsonSerializer.Deserialize<object>(json);
+            return System.Text.Json.JsonSerializer.Serialize(obj, new System.Text.Json.JsonSerializerOptions 
+            { 
+                WriteIndented = true 
+            });
+        }
+        catch
+        {
+            return json;
+        }
+    }
 }

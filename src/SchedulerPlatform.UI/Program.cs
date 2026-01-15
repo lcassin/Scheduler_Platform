@@ -29,7 +29,12 @@ Log.Logger = new LoggerConfiguration()
     .MinimumLevel.Override("System", Serilog.Events.LogEventLevel.Warning)
     .Enrich.FromLogContext()
     .WriteTo.Console()
-    .WriteTo.File(logPath, rollingInterval: RollingInterval.Day)
+    .WriteTo.File(
+        logPath, 
+        rollingInterval: RollingInterval.Day,
+        rollOnFileSizeLimit: true,
+        fileSizeLimitBytes: 30 * 1024 * 1024,  // 30MB
+        retainedFileCountLimit: 31)
     .CreateLogger();
 
 builder.Host.UseSerilog();

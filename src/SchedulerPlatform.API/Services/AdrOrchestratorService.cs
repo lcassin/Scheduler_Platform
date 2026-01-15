@@ -1868,6 +1868,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         execution.IsFinal = apiResult.IsFinal;
         execution.ErrorMessage = apiResult.ErrorMessage;
         execution.ApiResponse = apiResult.RawResponse;
+        execution.RequestPayload = apiResult.RequestPayload;
         execution.ModifiedDateTime = DateTime.UtcNow;
         execution.ModifiedBy = "System Created";
 
@@ -1906,6 +1907,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 AccountId = vmAccountId,
                 InterfaceAccountId = interfaceAccountId
             };
+
+            // Store the request payload for debugging/diagnostics
+            result.RequestPayload = JsonSerializer.Serialize(request);
 
             var response = await client.PostAsJsonAsync(
                 $"{baseUrl}IngestAdrRequest",
@@ -2333,6 +2337,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         public bool IsFinal { get; set; }
         public string? ErrorMessage { get; set; }
         public string? RawResponse { get; set; }
+        public string? RequestPayload { get; set; }
     }
 
     private class AdrApiResponse
