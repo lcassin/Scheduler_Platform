@@ -2,6 +2,7 @@ using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SchedulerPlatform.API.Extensions;
 using SchedulerPlatform.API.Services;
 using SchedulerPlatform.Core.Domain.Entities;
 using SchedulerPlatform.Core.Domain.Enums;
@@ -788,16 +789,15 @@ public class AdrController : ControllerBase
         {
             try
             {
-                // Check if user has permission (Editors, Admins, Super Admins)
-                var isSystemAdmin = User.Claims.Any(c => c.Type == "is_system_admin" && string.Equals(c.Value, "True", StringComparison.OrdinalIgnoreCase));
-                var isAdmin = User.Claims.Any(c => c.Type == "role" && c.Value == "Admin");
-                var isEditor = User.Claims.Any(c => c.Type == "role" && c.Value == "Editor");
-                var hasAdrUpdatePermission = User.Claims.Any(c => c.Type == "permission" && c.Value == "adr:update");
+                    // Check if user has permission (Editors, Admins, Super Admins)
+                    // Use extension methods for cleaner authorization checks
+                    var isEditor = User.GetRole() == "Editor";
+                    var hasAdrUpdatePermission = User.Claims.Any(c => c.Type == "permission" && c.Value == "adr:update");
             
-                if (!isSystemAdmin && !isAdmin && !isEditor && !hasAdrUpdatePermission)
-                {
-                    return Forbid("You do not have permission to perform manual ADR requests");
-                }
+                    if (!User.IsAdminOrAbove() && !isEditor && !hasAdrUpdatePermission)
+                    {
+                        return Forbid("You do not have permission to perform manual ADR requests");
+                    }
 
                 var account = await _unitOfWork.AdrAccounts.GetByIdAsync(id);
                 if (account == null)

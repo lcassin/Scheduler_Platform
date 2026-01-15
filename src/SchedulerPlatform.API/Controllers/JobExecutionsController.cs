@@ -4,6 +4,7 @@ using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Quartz;
+using SchedulerPlatform.API.Extensions;
 using SchedulerPlatform.API.Services;
 using SchedulerPlatform.Core.Domain.Entities;
 using SchedulerPlatform.Core.Domain.Enums;
@@ -374,12 +375,8 @@ public class JobExecutionsController : ControllerBase
                 return NotFound("Associated schedule not found");
             }
             
-            // Check authorization - similar to SchedulesController.TriggerSchedule
-            var userClientId = User.FindFirst("user_client_id")?.Value;
-            var isSystemAdminValue = User.FindFirst("is_system_admin")?.Value;
-            var isSystemAdmin = string.Equals(isSystemAdminValue, "True", StringComparison.OrdinalIgnoreCase) || isSystemAdminValue == "1";
-            var userRole = User.FindFirst("role")?.Value;
-            var isAdmin = isSystemAdmin || userRole == "Admin" || userRole == "Super Admin";
+            // Check authorization - use extension methods for cleaner authorization checks
+            var isAdmin = User.IsAdminOrAbove();
             
             // System schedules can be retried by Admin or Super Admin; regular schedules require matching client
             if (schedule.IsSystemSchedule && !isAdmin)
@@ -388,11 +385,11 @@ public class JobExecutionsController : ControllerBase
                 return Forbid();
             }
             
-            if (!schedule.IsSystemSchedule && !isAdmin && schedule.ClientId.ToString() != userClientId)
+            if (!schedule.IsSystemSchedule && !User.CanAccessClient(schedule.ClientId))
             {
                 _logger.LogWarning(
                     "Unauthorized retry attempt: User with ClientId {UserClientId} attempted to retry execution {ExecutionId} for Schedule {ScheduleId} belonging to ClientId {ScheduleClientId}",
-                    userClientId, id, schedule.Id, schedule.ClientId);
+                    User.GetClientId(), id, schedule.Id, schedule.ClientId);
                 return Forbid();
             }
             

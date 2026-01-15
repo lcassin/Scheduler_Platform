@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SchedulerPlatform.API.Extensions;
 
 namespace SchedulerPlatform.API.Controllers;
 
@@ -47,7 +48,7 @@ public class LogsController : ControllerBase
     {
         try
         {
-            if (!IsAdminOrAbove())
+            if (!User.IsAdminOrAbove())
             {
                 _logger.LogWarning("Non-admin user attempted to access log files");
                 return Forbid();
@@ -102,7 +103,7 @@ public class LogsController : ControllerBase
     {
         try
         {
-            if (!IsAdminOrAbove())
+            if (!User.IsAdminOrAbove())
             {
                 _logger.LogWarning("Non-admin user attempted to read log file {FileName}", fileName);
                 return Forbid();
@@ -173,7 +174,7 @@ public class LogsController : ControllerBase
     {
         try
         {
-            if (!IsAdminOrAbove())
+            if (!User.IsAdminOrAbove())
             {
                 _logger.LogWarning("Non-admin user attempted to download log file {FileName}", fileName);
                 return Forbid();
@@ -230,7 +231,7 @@ public class LogsController : ControllerBase
     {
         try
         {
-            if (!IsAdminOrAbove())
+            if (!User.IsAdminOrAbove())
             {
                 _logger.LogWarning("Non-admin user attempted to search log file {FileName}", fileName);
                 return Forbid();
@@ -313,7 +314,7 @@ public class LogsController : ControllerBase
     {
         try
         {
-            if (!IsSystemAdmin())
+            if (!User.IsSystemAdmin())
             {
                 _logger.LogWarning("Non-super-admin user attempted to delete log files");
                 return Forbid();
@@ -351,21 +352,6 @@ public class LogsController : ControllerBase
             _logger.LogError(ex, "Error cleaning up log files");
             return StatusCode(500, "An error occurred while cleaning up log files");
         }
-    }
-
-    private bool IsSystemAdmin()
-    {
-        var isSystemAdminValue = User.FindFirst("is_system_admin")?.Value;
-        return string.Equals(isSystemAdminValue, "True", StringComparison.OrdinalIgnoreCase) 
-            || isSystemAdminValue == "1";
-    }
-
-    private bool IsAdminOrAbove()
-    {
-        if (IsSystemAdmin()) return true;
-        
-        var userRole = User.FindFirst("role")?.Value;
-        return userRole == "Admin" || userRole == "Super Admin";
     }
 
     /// <summary>
