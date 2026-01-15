@@ -268,10 +268,7 @@
                                                                         }
                                                                         <MudMenuItem Icon="@Icons.Material.Filled.AccountBalance" OnClick="() => ViewAccount(context)">View Account</MudMenuItem>
                                                                         <MudMenuItem Icon="@Icons.Material.Filled.Replay" OnClick="() => RefireJob(context)">Refire Job</MudMenuItem>
-                                                                        @if (context.IsManualRequest && (context.Status == "ScrapeRequested" || context.Status == "ScrapeInProgress"))
-                                                                        {
-                                                                            <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="() => CheckJobStatus(context)">Check Status</MudMenuItem>
-                                                                        }
+                                                                        <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="() => CheckJobStatus(context)">Check Status</MudMenuItem>
                                                                     </MudMenu>
                                                                 </MudTd>
             </RowTemplate>
