@@ -67,14 +67,20 @@
         <MudItem xs="12" md="2">
             <MudSelect T="string" @bind-Value="_selectedJobStatus" Label="Job Status" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
                 <MudSelectItem Value="@("")">All</MudSelectItem>
+                <MudSelectItem Value="@("NoJob")">No Job</MudSelectItem>
                 <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
+                <MudSelectItem Value="@("CredentialCheckInProgress")">Credential Check In Progress</MudSelectItem>
                 <MudSelectItem Value="@("CredentialVerified")">Credential Verified</MudSelectItem>
                 <MudSelectItem Value="@("CredentialFailed")">Credential Failed</MudSelectItem>
-                <MudSelectItem Value="@("ScrapeRequested")">Request Sent</MudSelectItem>
+                <MudSelectItem Value="@("ScrapeInProgress")">ADR Request In Progress</MudSelectItem>
+                <MudSelectItem Value="@("ScrapeRequested")">ADR Request Sent</MudSelectItem>
+                <MudSelectItem Value="@("ScrapeFailed")">ADR Request Failed</MudSelectItem>
+                <MudSelectItem Value="@("StatusCheckInProgress")">Status Check In Progress</MudSelectItem>
+                <MudSelectItem Value="@("NoInvoiceFound")">No Invoice Found</MudSelectItem>
+                <MudSelectItem Value="@("Failed")">Failed</MudSelectItem>
                 <MudSelectItem Value="@("Completed")">Completed</MudSelectItem>
-                <MudSelectItem Value="@("Failed")">ADR Request Failed</MudSelectItem>
                 <MudSelectItem Value="@("NeedsReview")">Needs Review</MudSelectItem>
-                <MudSelectItem Value="@("NoJob")">No Job</MudSelectItem>
+                <MudSelectItem Value="@("Cancelled")">Cancelled</MudSelectItem>
             </MudSelect>
         </MudItem>
         <MudItem xs="12" md="2">
