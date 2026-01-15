@@ -1170,7 +1170,7 @@ public class AdrController : ControllerBase
 
                     if (response.IsSuccessStatusCode && !string.IsNullOrWhiteSpace(rawResponse))
                     {
-                        var apiResponse = System.Text.Json.JsonSerializer.Deserialize<ManualAdrApiResponse>(rawResponse, new System.Text.Json.JsonSerializerOptions
+                        var apiResponse = System.Text.Json.JsonSerializer.Deserialize<AdrStatusCheckApiResponse>(rawResponse, new System.Text.Json.JsonSerializerOptions
                         {
                             PropertyNameCaseInsensitive = true
                         });
@@ -1178,11 +1178,16 @@ public class AdrController : ControllerBase
                         if (apiResponse != null)
                         {
                             statusId = apiResponse.StatusId;
-                            statusDescription = apiResponse.StatusDescription;
-                            indexId = apiResponse.IndexId;
+                            statusDescription = apiResponse.Status;
                             isSuccess = true;
-                            isError = apiResponse.IsError;
-                            isFinal = apiResponse.IsFinal;
+                            
+                            // Determine IsFinal and IsError based on StatusId
+                            // Final statuses: 3, 4, 5, 7, 8, 9, 11, 14
+                            // Error statuses: 3, 4, 5, 7, 8, 14
+                            var finalStatuses = new[] { 3, 4, 5, 7, 8, 9, 11, 14 };
+                            var errorStatuses = new[] { 3, 4, 5, 7, 8, 14 };
+                            isFinal = finalStatuses.Contains(apiResponse.StatusId);
+                            isError = errorStatuses.Contains(apiResponse.StatusId);
                         }
                     }
                     else
@@ -4793,6 +4798,10 @@ public class ManualScrapeRequest
 /// <summary>
 /// Response from ADR API for manual requests
 /// </summary>
+/// <summary>
+/// Response from the ADR IngestAdrRequest API
+/// Used for manual scrape requests - returns StatusId, StatusDescription, IndexId, etc.
+/// </summary>
 public class ManualAdrApiResponse
 {
     public int StatusId { get; set; }
@@ -4800,6 +4809,17 @@ public class ManualAdrApiResponse
     public long? IndexId { get; set; }
     public bool IsError { get; set; }
     public bool IsFinal { get; set; }
+}
+
+/// <summary>
+/// Response from the ADR status check API (GetRequestStatusByJobId)
+/// API returns: {"JobId":90630,"StatusId":1,"Status":"Inserted"}
+/// </summary>
+public class AdrStatusCheckApiResponse
+{
+    public int JobId { get; set; }
+    public int StatusId { get; set; }
+    public string? Status { get; set; }
 }
 
 /// <summary>
