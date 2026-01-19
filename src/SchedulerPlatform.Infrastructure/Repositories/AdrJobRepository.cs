@@ -402,12 +402,22 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
         return results.ToDictionary(x => x.Status ?? "", x => x.Count);
     }
 
-    public async Task<IEnumerable<AdrJob>> GetJobsNeedingDailyStatusCheckAsync(DateTime currentDate, int delayDays = 1)
+    public async Task<IEnumerable<AdrJob>> GetJobsNeedingDailyStatusCheckAsync(DateTime currentDate, int delayDays = 1, int finalDelayDays = 5)
     {
-        // Daily status checks: Jobs that were scraped at least delayDays ago and are still in their billing window
+        // Daily status checks: Jobs that were scraped at least delayDays ago
         // This enables the "day after scraping, check status" workflow
+        //
+        // IMPORTANT: This query now includes jobs whose billing window has ended recently
+        // (within the last finalDelayDays) to eliminate the gap where jobs were orphaned.
+        // Previously, jobs whose billing window ended between 0-5 days ago weren't picked up
+        // by either daily or final status check queries.
+        //
+        // The orchestrator's CheckPendingStatusesAsync will handle these jobs appropriately:
+        // - Jobs still in billing window: revert to ScrapeRequested for retry
+        // - Jobs past billing window: mark as NoInvoiceFound and advance rule
         var checkDate = currentDate.AddDays(-delayDays).Date;
         var today = currentDate.Date;
+        var finalThreshold = currentDate.AddDays(-finalDelayDays).Date;
 
         return await _dbSet
             .Where(j => !j.IsDeleted &&
@@ -416,9 +426,12 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                         !j.ScrapingCompletedDateTime.HasValue &&
                         // At least delayDays since last modification
                         j.ModifiedDateTime <= checkDate &&
-                        // Still in normal billing window (NextRangeEndDateTime >= today)
                         j.NextRangeEndDateTime.HasValue &&
-                        j.NextRangeEndDateTime.Value.Date >= today)
+                        // Include jobs that are either:
+                        // 1. Still in billing window (NextRangeEndDateTime >= today), OR
+                        // 2. Recently past billing window (NextRangeEndDateTime >= finalThreshold)
+                        //    This eliminates the gap where jobs were orphaned
+                        j.NextRangeEndDateTime.Value.Date >= finalThreshold)
             .Include(j => j.AdrAccount)
             .ToListAsync();
     }

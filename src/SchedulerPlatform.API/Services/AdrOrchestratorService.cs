@@ -1028,7 +1028,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 now, dailyDelayDays, finalDelayDays, 
                 now.AddDays(-dailyDelayDays).Date, now.AddDays(-finalDelayDays).Date);
             
-            var dailyJobs = (await _unitOfWork.AdrJobs.GetJobsNeedingDailyStatusCheckAsync(now, dailyDelayDays)).ToList();
+            var dailyJobs = (await _unitOfWork.AdrJobs.GetJobsNeedingDailyStatusCheckAsync(now, dailyDelayDays, finalDelayDays)).ToList();
             var finalJobs = (await _unitOfWork.AdrJobs.GetJobsNeedingFinalStatusCheckAsync(now, finalDelayDays)).ToList();
             
             // Merge and deduplicate by job ID
