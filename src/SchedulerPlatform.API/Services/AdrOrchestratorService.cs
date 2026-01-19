@@ -259,6 +259,21 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         return _cachedConfig?.FinalStatusCheckDelayDays ?? DefaultFinalStatusCheckDelayDays;
     }
 
+    private bool IsTestModeEnabled()
+    {
+        return _cachedConfig?.TestModeEnabled ?? false;
+    }
+
+    private int GetTestModeMaxScrapingJobs()
+    {
+        return _cachedConfig?.TestModeMaxScrapingJobs ?? 50;
+    }
+
+    private int GetTestModeMaxCredentialChecks()
+    {
+        return _cachedConfig?.TestModeMaxCredentialChecks ?? 50;
+    }
+
     #region Step 2: Job Creation
 
     public async Task<JobCreationResult> CreateJobsForDueAccountsAsync(CancellationToken cancellationToken = default)
@@ -421,8 +436,22 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 maxParallel, credentialCheckLeadDays);
 
             var jobsNeedingVerification = (await _unitOfWork.AdrJobs.GetJobsNeedingCredentialVerificationAsync(DateTime.UtcNow, credentialCheckLeadDays)).ToList();
+            var totalJobsFound = jobsNeedingVerification.Count;
             _logger.LogInformation("Found {Count} jobs needing credential verification (NextRunDate within {LeadDays} days)", 
-                jobsNeedingVerification.Count, credentialCheckLeadDays);
+                totalJobsFound, credentialCheckLeadDays);
+
+            // Apply test mode limit if enabled
+            if (IsTestModeEnabled())
+            {
+                var maxJobs = GetTestModeMaxCredentialChecks();
+                if (maxJobs > 0 && jobsNeedingVerification.Count > maxJobs)
+                {
+                    // Order by JobId for consistency - same jobs will be picked each run
+                    jobsNeedingVerification = jobsNeedingVerification.OrderBy(j => j.Id).Take(maxJobs).ToList();
+                    _logger.LogWarning("TEST MODE ENABLED: Limiting credential checks from {Total} to {Max} jobs (ordered by JobId for consistency)", 
+                        totalJobsFound, maxJobs);
+                }
+            }
 
             // Report initial progress (0 of total)
             progressCallback?.Invoke(0, jobsNeedingVerification.Count);
@@ -721,7 +750,21 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             _logger.LogInformation("Starting invoice scraping with {MaxParallel} parallel workers", maxParallel);
 
             var jobsReadyForScraping = (await _unitOfWork.AdrJobs.GetJobsReadyForScrapingAsync(DateTime.UtcNow)).ToList();
-            _logger.LogInformation("Found {Count} jobs ready for scraping", jobsReadyForScraping.Count);
+            var totalJobsFound = jobsReadyForScraping.Count;
+            _logger.LogInformation("Found {Count} jobs ready for scraping", totalJobsFound);
+
+            // Apply test mode limit if enabled
+            if (IsTestModeEnabled())
+            {
+                var maxJobs = GetTestModeMaxScrapingJobs();
+                if (maxJobs > 0 && jobsReadyForScraping.Count > maxJobs)
+                {
+                    // Order by JobId for consistency - same jobs will be picked each run
+                    jobsReadyForScraping = jobsReadyForScraping.OrderBy(j => j.Id).Take(maxJobs).ToList();
+                    _logger.LogWarning("TEST MODE ENABLED: Limiting ADR requests from {Total} to {Max} jobs (ordered by JobId for consistency)", 
+                        totalJobsFound, maxJobs);
+                }
+            }
 
             // Report initial progress (0 of total)
             progressCallback?.Invoke(0, jobsReadyForScraping.Count);
