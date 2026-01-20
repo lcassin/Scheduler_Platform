@@ -13,6 +13,13 @@
 
 <MudText Typo="Typo.h4" Class="mb-4">ADR Accounts</MudText>
 
+@if (_testModeStatus?.IsEnabled == true)
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4" Icon="@Icons.Material.Filled.Warning">
+        <strong>TEST MODE IS ENABLED</strong> - ADR requests and credential checks are limited to @_testModeStatus.MaxScrapingJobs and @_testModeStatus.MaxCredentialChecks jobs respectively per orchestration run.
+    </MudAlert>
+}
+
 <MudPaper Class="pa-4">
     <MudGrid Class="mb-4" Spacing="2">
         <MudItem xs="12" md="3">
@@ -310,6 +317,7 @@
     private bool? _filterIsOverridden;
     private string? _filterJobStatus;
     private string? _filterBlacklistStatus;
+    private TestModeStatus? _testModeStatus;
 
     [Parameter]
     [SupplyParameterFromQuery(Name = "accountNumber")]
@@ -327,6 +335,9 @@
     {
         try
         {
+            // Load test mode status for banner display
+            _testModeStatus = await AdrService.GetTestModeStatusAsync();
+            
             // Apply query parameters if provided (e.g., from "View Account" action on Jobs page or Dashboard chart click)
             if (!string.IsNullOrEmpty(AccountNumberParam))
             {

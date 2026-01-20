@@ -11,6 +11,13 @@
 
 <MudText Typo="Typo.h4" Class="mb-4">ADR Job Monitor</MudText>
 
+@if (_testModeStatus?.IsEnabled == true)
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4" Icon="@Icons.Material.Filled.Warning">
+        <strong>TEST MODE IS ENABLED</strong> - ADR requests and credential checks are limited to @_testModeStatus.MaxScrapingJobs and @_testModeStatus.MaxCredentialChecks jobs respectively per orchestration run.
+    </MudAlert>
+}
+
 <MudGrid Style="align-items: stretch;">
     <MudItem xs="12" md="8" Class="d-flex">
         <MudPaper Class="pa-4 mb-4 flex-grow-1">
@@ -1031,6 +1038,9 @@
     // Blacklist counts
     private BlacklistCountsResult? _blacklistCounts;
     
+    // Test mode status
+    private TestModeStatus? _testModeStatus;
+    
     // Job pipeline chart data
     private double[] _jobPipelineChartData = Array.Empty<double>();
     private string[] _jobPipelineChartLabels = Array.Empty<string>();
@@ -1042,6 +1052,9 @@
         // Initialize timezone info
         _userTimeZoneId = await TimeZoneService.GetUserTimeZoneIdAsync();
         _userTimeZoneAbbr = await TimeZoneService.GetUserTimeZoneAbbreviationAsync();
+        
+        // Load test mode status for banner display
+        _testModeStatus = await AdrService.GetTestModeStatusAsync();
         
         await LoadDataAsync();
         StartAutoRefresh();

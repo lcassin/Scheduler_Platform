@@ -11,6 +11,13 @@
 
 <MudText Typo="Typo.h4" Class="mb-4">ADR Jobs</MudText>
 
+@if (_testModeStatus?.IsEnabled == true)
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4" Icon="@Icons.Material.Filled.Warning">
+        <strong>TEST MODE IS ENABLED</strong> - ADR requests and credential checks are limited to @_testModeStatus.MaxScrapingJobs and @_testModeStatus.MaxCredentialChecks jobs respectively per orchestration run.
+    </MudAlert>
+}
+
 <MudPaper Class="pa-4">
         <MudGrid Class="mb-4" Spacing="2">
             <MudItem xs="12" md="2">
@@ -313,6 +320,7 @@
     private bool _showLatestPerAccount = true;
     private bool _showManualJobs = false;
     private HashSet<AdrJob> _selectedJobs = new();
+    private TestModeStatus? _testModeStatus;
 
     [Parameter]
     [SupplyParameterFromQuery(Name = "vendorCode")]
@@ -334,8 +342,11 @@
     [SupplyParameterFromQuery(Name = "blacklistStatus")]
     public string? BlacklistStatusParam { get; set; }
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        // Load test mode status for banner display
+        _testModeStatus = await AdrService.GetTestModeStatusAsync();
+        
         if (!string.IsNullOrEmpty(VendorCodeParam))
         {
             _searchVendorCode = VendorCodeParam;

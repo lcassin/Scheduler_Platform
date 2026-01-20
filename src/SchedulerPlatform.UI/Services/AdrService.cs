@@ -601,6 +601,38 @@ public class AdrService : IAdrService
     }
 
     #endregion
+
+    #region Configuration Operations
+
+    public async Task<TestModeStatus> GetTestModeStatusAsync()
+    {
+        try
+        {
+            var response = await _httpClient.GetAsync("adr/configuration");
+            response.EnsureSuccessStatusCode();
+            var config = await response.Content.ReadFromJsonAsync<AdrConfigurationResponse>();
+            return new TestModeStatus
+            {
+                IsEnabled = config?.TestModeEnabled ?? false,
+                MaxScrapingJobs = config?.TestModeMaxScrapingJobs ?? 50,
+                MaxCredentialChecks = config?.TestModeMaxCredentialChecks ?? 50
+            };
+        }
+        catch
+        {
+            // Return default (disabled) if unable to fetch configuration
+            return new TestModeStatus { IsEnabled = false, MaxScrapingJobs = 50, MaxCredentialChecks = 50 };
+        }
+    }
+
+    #endregion
+}
+
+internal class AdrConfigurationResponse
+{
+    public bool TestModeEnabled { get; set; }
+    public int TestModeMaxScrapingJobs { get; set; }
+    public int TestModeMaxCredentialChecks { get; set; }
 }
 
 internal class CancelOrchestrationSuccessResponse
