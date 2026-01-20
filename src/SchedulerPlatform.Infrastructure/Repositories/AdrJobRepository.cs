@@ -242,10 +242,12 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
 
             if (!string.IsNullOrWhiteSpace(vendorCode))
             {
-                // Check both job's VendorCode and fallback to AdrAccount's VendorCode
+                // Check both job's PrimaryVendorCode/MasterVendorCode and fallback to AdrAccount's codes
                 query = query.Where(j => 
-                    (j.VendorCode != null && j.VendorCode.Contains(vendorCode)) ||
-                    (j.VendorCode == null && j.AdrAccount != null && j.AdrAccount.VendorCode != null && j.AdrAccount.VendorCode.Contains(vendorCode)));
+                    (j.PrimaryVendorCode != null && j.PrimaryVendorCode.Contains(vendorCode)) ||
+                    (j.MasterVendorCode != null && j.MasterVendorCode.Contains(vendorCode)) ||
+                    (j.PrimaryVendorCode == null && j.AdrAccount != null && j.AdrAccount.PrimaryVendorCode != null && j.AdrAccount.PrimaryVendorCode.Contains(vendorCode)) ||
+                    (j.MasterVendorCode == null && j.AdrAccount != null && j.AdrAccount.MasterVendorCode != null && j.AdrAccount.MasterVendorCode.Contains(vendorCode)));
             }
 
             if (!string.IsNullOrWhiteSpace(vmAccountNumber))
@@ -302,9 +304,12 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                 "Id" => sortDescending 
                     ? finalQuery.OrderByDescending(j => j.Id) 
                     : finalQuery.OrderBy(j => j.Id),
-                "VendorCode" => sortDescending 
-                    ? finalQuery.OrderByDescending(j => j.VendorCode ?? "") 
-                    : finalQuery.OrderBy(j => j.VendorCode ?? ""),
+                "PrimaryVendorCode" => sortDescending 
+                    ? finalQuery.OrderByDescending(j => j.PrimaryVendorCode ?? "") 
+                    : finalQuery.OrderBy(j => j.PrimaryVendorCode ?? ""),
+                "MasterVendorCode" => sortDescending 
+                    ? finalQuery.OrderByDescending(j => j.MasterVendorCode ?? "") 
+                    : finalQuery.OrderBy(j => j.MasterVendorCode ?? ""),
                 "VMAccountNumber" => sortDescending 
                     ? finalQuery.OrderByDescending(j => j.VMAccountNumber ?? "") 
                     : finalQuery.OrderBy(j => j.VMAccountNumber ?? ""),

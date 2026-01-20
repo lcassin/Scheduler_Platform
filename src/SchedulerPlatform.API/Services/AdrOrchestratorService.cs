@@ -203,8 +203,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             // Check if this blacklist entry matches the account
             bool matches = false;
 
-            // Match by VendorCode (if specified)
-            if (!string.IsNullOrEmpty(entry.VendorCode) && entry.VendorCode == account.VendorCode)
+            // Match by PrimaryVendorCode (if specified)
+            if (!string.IsNullOrEmpty(entry.PrimaryVendorCode) && entry.PrimaryVendorCode == account.PrimaryVendorCode)
+                matches = true;
+
+            // Match by MasterVendorCode (if specified)
+            if (!string.IsNullOrEmpty(entry.MasterVendorCode) && entry.MasterVendorCode == account.MasterVendorCode)
                 matches = true;
 
             // Match by VMAccountId (if specified)
@@ -222,8 +226,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             if (matches)
             {
                 _logger.LogInformation(
-                    "Account {AccountId} (VMAccountId: {VMAccountId}, VendorCode: {VendorCode}) is blacklisted. Reason: {Reason}",
-                    account.Id, account.VMAccountId, account.VendorCode, entry.Reason);
+                    "Account {AccountId} (VMAccountId: {VMAccountId}, PrimaryVendorCode: {PrimaryVendorCode}) is blacklisted. Reason: {Reason}",
+                    account.Id, account.VMAccountId, account.PrimaryVendorCode, entry.Reason);
                 return true;
             }
         }
@@ -354,7 +358,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         AdrAccountRuleId = accountRule.Id,  // Track which rule created this job
                         VMAccountId = account.VMAccountId,
                         VMAccountNumber = account.VMAccountNumber,
-                        VendorCode = account.VendorCode,
+                        PrimaryVendorCode = account.PrimaryVendorCode,
+                        MasterVendorCode = account.MasterVendorCode,
                         CredentialId = account.CredentialId,
                         PeriodType = accountRule.PeriodType,  // From rule
                         BillingPeriodStartDateTime = accountRule.NextRangeStartDateTime!.Value,  // From rule
