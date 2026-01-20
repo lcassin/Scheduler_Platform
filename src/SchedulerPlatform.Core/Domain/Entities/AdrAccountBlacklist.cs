@@ -10,10 +10,16 @@ namespace SchedulerPlatform.Core.Domain.Entities;
 public class AdrAccountBlacklist : BaseEntity
 {
     /// <summary>
-    /// Vendor code to exclude. If set, all accounts for this vendor are excluded.
+    /// Primary vendor code to exclude. If set, all accounts for this vendor are excluded.
     /// Can be used alone or in combination with other fields for more specific exclusions.
     /// </summary>
-    public string? VendorCode { get; set; }
+    public string? PrimaryVendorCode { get; set; }
+    
+    /// <summary>
+    /// Master vendor code to exclude. If set, all accounts under this master vendor are excluded.
+    /// Can be used alone or in combination with other fields for more specific exclusions.
+    /// </summary>
+    public string? MasterVendorCode { get; set; }
     
     /// <summary>
     /// VM Account ID to exclude. If set, this specific account is excluded.

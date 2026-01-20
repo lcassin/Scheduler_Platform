@@ -142,7 +142,8 @@
                 <MudTh><MudTableSortLabel SortLabel="VMAccountNumber" T="AdrAccount">Account #</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="InterfaceAccountId" T="AdrAccount">Interface Account ID</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="ClientName" T="AdrAccount">Client</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortLabel="VendorCode" T="AdrAccount">Vendor Code</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="PrimaryVendorCode" T="AdrAccount">Primary Vendor</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="MasterVendorCode" T="AdrAccount">Master Vendor</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="PeriodType" T="AdrAccount">Period Type</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="NextRunDateTime" T="AdrAccount" InitialDirection="SortDirection.Ascending">Next Run</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="NextRunStatus" T="AdrAccount">Run Status</MudTableSortLabel></MudTh>
@@ -184,7 +185,8 @@
                 </MudTd>
                 <MudTd DataLabel="Interface Account ID">@(context.InterfaceAccountId ?? "N/A")</MudTd>
                 <MudTd DataLabel="Client">@(context.ClientName ?? "N/A")</MudTd>
-                <MudTd DataLabel="Vendor Code">@(context.VendorCode ?? "N/A")</MudTd>
+                <MudTd DataLabel="Primary Vendor">@(context.PrimaryVendorCode ?? "N/A")</MudTd>
+                <MudTd DataLabel="Master Vendor">@(context.MasterVendorCode ?? "N/A")</MudTd>
                 <MudTd DataLabel="Period Type">
                     @if (!string.IsNullOrEmpty(context.PeriodType))
                     {
@@ -559,9 +561,9 @@
     {
         // Navigate to Jobs page with account number filter and disable "Latest per Account" to show all jobs
         var url = $"/adr/jobs?accountNumber={Uri.EscapeDataString(account.VMAccountNumber ?? "")}";
-        if (!string.IsNullOrWhiteSpace(account.VendorCode))
+        if (!string.IsNullOrWhiteSpace(account.PrimaryVendorCode))
         {
-            url += $"&vendorCode={Uri.EscapeDataString(account.VendorCode)}";
+            url += $"&primaryVendorCode={Uri.EscapeDataString(account.PrimaryVendorCode)}";
         }
         url += "&latestPerAccount=false";
         Navigation.NavigateTo(url);

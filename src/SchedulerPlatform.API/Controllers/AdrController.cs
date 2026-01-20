@@ -137,7 +137,7 @@ public class AdrController : ControllerBase
                 // Get all non-deleted accounts
                 var allAccounts = await _dbContext.AdrAccounts
                     .Where(a => !a.IsDeleted)
-                    .Select(a => new { a.Id, a.VendorCode, a.VMAccountId, a.VMAccountNumber, a.CredentialId })
+                    .Select(a => new { a.Id, a.PrimaryVendorCode, a.VMAccountId, a.VMAccountNumber, a.CredentialId })
                     .ToListAsync();
                 
                 if (blacklistStatus == "current")
@@ -146,7 +146,7 @@ public class AdrController : ControllerBase
                     accountIdsWithBlacklistStatus = allAccounts
                         .Where(a => activeBlacklistsForFilter.Any(b =>
                         {
-                            var matches = (!string.IsNullOrEmpty(b.VendorCode) && b.VendorCode == a.VendorCode) ||
+                            var matches = (!string.IsNullOrEmpty(b.PrimaryVendorCode) && b.PrimaryVendorCode == a.PrimaryVendorCode) ||
                                           (b.VMAccountId.HasValue && b.VMAccountId == a.VMAccountId) ||
                                           (!string.IsNullOrEmpty(b.VMAccountNumber) && b.VMAccountNumber == a.VMAccountNumber) ||
                                           (b.CredentialId.HasValue && b.CredentialId == a.CredentialId);
@@ -165,7 +165,7 @@ public class AdrController : ControllerBase
                     accountIdsWithBlacklistStatus = allAccounts
                         .Where(a => activeBlacklistsForFilter.Any(b =>
                         {
-                            var matches = (!string.IsNullOrEmpty(b.VendorCode) && b.VendorCode == a.VendorCode) ||
+                            var matches = (!string.IsNullOrEmpty(b.PrimaryVendorCode) && b.PrimaryVendorCode == a.PrimaryVendorCode) ||
                                           (b.VMAccountId.HasValue && b.VMAccountId == a.VMAccountId) ||
                                           (!string.IsNullOrEmpty(b.VMAccountNumber) && b.VMAccountNumber == a.VMAccountNumber) ||
                                           (b.CredentialId.HasValue && b.CredentialId == a.CredentialId);
@@ -182,7 +182,7 @@ public class AdrController : ControllerBase
                     // Get accounts that have any blacklist (current or future)
                     accountIdsWithBlacklistStatus = allAccounts
                         .Where(a => activeBlacklistsForFilter.Any(b =>
-                            (!string.IsNullOrEmpty(b.VendorCode) && b.VendorCode == a.VendorCode) ||
+                            (!string.IsNullOrEmpty(b.PrimaryVendorCode) && b.PrimaryVendorCode == a.PrimaryVendorCode) ||
                             (b.VMAccountId.HasValue && b.VMAccountId == a.VMAccountId) ||
                             (!string.IsNullOrEmpty(b.VMAccountNumber) && b.VMAccountNumber == a.VMAccountNumber) ||
                             (b.CredentialId.HasValue && b.CredentialId == a.CredentialId)))
@@ -276,7 +276,7 @@ public class AdrController : ControllerBase
             {
                 var matchingBlacklists = activeBlacklists.Where(b =>
                 {
-                    if (!string.IsNullOrEmpty(b.VendorCode) && b.VendorCode == account.VendorCode)
+                    if (!string.IsNullOrEmpty(b.PrimaryVendorCode) && b.PrimaryVendorCode == account.PrimaryVendorCode)
                         return true;
                     if (b.VMAccountId.HasValue && b.VMAccountId == account.VMAccountId)
                         return true;
@@ -303,7 +303,7 @@ public class AdrController : ControllerBase
                     ExclusionType = b.ExclusionType ?? "All",
                     EffectiveStartDate = b.EffectiveStartDate,
                     EffectiveEndDate = b.EffectiveEndDate,
-                    VendorCode = b.VendorCode,
+                    PrimaryVendorCode = b.PrimaryVendorCode,
                     VMAccountId = b.VMAccountId,
                     VMAccountNumber = b.VMAccountNumber,
                     CredentialId = b.CredentialId
@@ -316,7 +316,7 @@ public class AdrController : ControllerBase
                     ExclusionType = b.ExclusionType ?? "All",
                     EffectiveStartDate = b.EffectiveStartDate,
                     EffectiveEndDate = b.EffectiveEndDate,
-                    VendorCode = b.VendorCode,
+                    PrimaryVendorCode = b.PrimaryVendorCode,
                     VMAccountId = b.VMAccountId,
                     VMAccountNumber = b.VMAccountNumber,
                     CredentialId = b.CredentialId
@@ -342,7 +342,8 @@ public class AdrController : ControllerBase
                 a.ClientId,
                 a.ClientName,
                 a.CredentialId,
-                a.VendorCode,
+                a.PrimaryVendorCode,
+                a.MasterVendorCode,
                 a.PeriodType,
                 a.PeriodDays,
                 a.MedianDays,
@@ -839,7 +840,8 @@ public class AdrController : ControllerBase
                     AdrAccountId = account.Id,
                     VMAccountId = account.VMAccountId,
                     VMAccountNumber = account.VMAccountNumber,
-                    VendorCode = account.VendorCode,
+                    PrimaryVendorCode = account.PrimaryVendorCode,
+                    MasterVendorCode = account.MasterVendorCode,
                     CredentialId = account.CredentialId,
                     PeriodType = account.PeriodType,
                     BillingPeriodStartDateTime = rangeStart,
@@ -879,7 +881,8 @@ public class AdrController : ControllerBase
                         VMAccountNumber = account.VMAccountNumber,
                         InterfaceAccountId = account.InterfaceAccountId,
                         CredentialId = account.CredentialId,
-                        VendorCode = account.VendorCode,
+                        PrimaryVendorCode = account.PrimaryVendorCode,
+                        MasterVendorCode = account.MasterVendorCode,
                         ClientName = account.ClientName,
                         RangeStartDate = rangeStart,
                         RangeEndDate = rangeEnd,
@@ -1306,7 +1309,7 @@ public class AdrController : ControllerBase
                     a.VMAccountNumber.Contains(searchTerm) ||
                     (a.InterfaceAccountId != null && a.InterfaceAccountId.Contains(searchTerm)) ||
                     (a.ClientName != null && a.ClientName.Contains(searchTerm)) ||
-                    (a.VendorCode != null && a.VendorCode.Contains(searchTerm)));
+                    (a.PrimaryVendorCode != null && a.PrimaryVendorCode.Contains(searchTerm)));
             }
 
             // Project accounts with job status and rule override using correlated subqueries
@@ -1360,7 +1363,7 @@ public class AdrController : ControllerBase
                 var account = item.Account;
                 var matchingBlacklists = activeBlacklists.Where(b =>
                 {
-                    if (!string.IsNullOrEmpty(b.VendorCode) && b.VendorCode == account.VendorCode)
+                    if (!string.IsNullOrEmpty(b.PrimaryVendorCode) && b.PrimaryVendorCode == account.PrimaryVendorCode)
                         return true;
                     if (b.VMAccountId.HasValue && b.VMAccountId == account.VMAccountId)
                         return true;
@@ -1381,7 +1384,7 @@ public class AdrController : ControllerBase
                 blacklistStatusLookup[account.Id] = (hasCurrent, hasFuture);
             }
 
-            var headers = new[] { "Account #", "VM Account ID", "Interface Account ID", "Client", "Vendor Code", "Period Type", "Next Run", "Run Status", "Job Status", "Last Completed", "Historical Status", "Last Invoice", "Expected Next", "Account Overridden", "Account Overridden By", "Account Overridden Date", "Rule Overridden", "Rule Overridden By", "Rule Overridden Date", "Current Blacklist", "Future Blacklist" };
+            var headers = new[] { "Account #", "VM Account ID", "Interface Account ID", "Client", "Primary Vendor Code", "Master Vendor Code", "Period Type", "Next Run", "Run Status", "Job Status", "Last Completed", "Historical Status", "Last Invoice", "Expected Next", "Account Overridden", "Account Overridden By", "Account Overridden Date", "Rule Overridden", "Rule Overridden By", "Rule Overridden Date", "Current Blacklist", "Future Blacklist" };
 
             if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
             {
@@ -1392,7 +1395,7 @@ public class AdrController : ControllerBase
                     {
                         var a = item.Account;
                         var bl = blacklistStatusLookup.TryGetValue(a.Id, out var blStatus) ? blStatus : (HasCurrent: false, HasFuture: false);
-                        return $"{ExcelExportHelper.CsvEscape(a.VMAccountNumber)},{a.VMAccountId},{ExcelExportHelper.CsvEscape(a.InterfaceAccountId)},{ExcelExportHelper.CsvEscape(a.ClientName)},{ExcelExportHelper.CsvEscape(a.VendorCode)},{ExcelExportHelper.CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{ExcelExportHelper.CsvEscape(a.NextRunStatus)},{ExcelExportHelper.CsvEscape(item.CurrentJobStatus)},{item.LastCompletedDateTime?.ToString("MM/dd/yyyy") ?? ""},{ExcelExportHelper.CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.IsManuallyOverridden},{ExcelExportHelper.CsvEscape(a.OverriddenBy)},{a.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""},{(item.RuleIsManuallyOverridden ? "Yes" : "No")},{ExcelExportHelper.CsvEscape(item.RuleOverriddenBy)},{item.RuleOverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""},{(bl.HasCurrent ? "Yes" : "No")},{(bl.HasFuture ? "Yes" : "No")}";
+                        return $"{ExcelExportHelper.CsvEscape(a.VMAccountNumber)},{a.VMAccountId},{ExcelExportHelper.CsvEscape(a.InterfaceAccountId)},{ExcelExportHelper.CsvEscape(a.ClientName)},{ExcelExportHelper.CsvEscape(a.PrimaryVendorCode)},{ExcelExportHelper.CsvEscape(a.MasterVendorCode)},{ExcelExportHelper.CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{ExcelExportHelper.CsvEscape(a.NextRunStatus)},{ExcelExportHelper.CsvEscape(item.CurrentJobStatus)},{item.LastCompletedDateTime?.ToString("MM/dd/yyyy") ?? ""},{ExcelExportHelper.CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.IsManuallyOverridden},{ExcelExportHelper.CsvEscape(a.OverriddenBy)},{a.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""},{(item.RuleIsManuallyOverridden ? "Yes" : "No")},{ExcelExportHelper.CsvEscape(item.RuleOverriddenBy)},{item.RuleOverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""},{(bl.HasCurrent ? "Yes" : "No")},{(bl.HasFuture ? "Yes" : "No")}";
                     });
                 return File(csvBytes, "text/csv", $"adr_accounts_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
             }
@@ -1413,7 +1416,8 @@ public class AdrController : ControllerBase
                         a.VMAccountId,
                         a.InterfaceAccountId,
                         a.ClientName,
-                        a.VendorCode,
+                        a.PrimaryVendorCode,
+                        a.MasterVendorCode,
                         a.PeriodType,
                         a.NextRunDateTime,
                         a.NextRunStatus,
@@ -1504,7 +1508,7 @@ public class AdrController : ControllerBase
                     var allJobs = await _dbContext.AdrJobs
                         .Where(j => !j.IsDeleted && j.AdrAccount != null && !j.AdrAccount.IsDeleted)
                         .Include(j => j.AdrAccount)
-                        .Select(j => new { j.Id, j.VendorCode, j.VMAccountId, j.VMAccountNumber, j.CredentialId, AccountVendorCode = j.AdrAccount != null ? j.AdrAccount.VendorCode : null })
+                        .Select(j => new { j.Id, j.PrimaryVendorCode, j.VMAccountId, j.VMAccountNumber, j.CredentialId, AccountPrimaryVendorCode = j.AdrAccount != null ? j.AdrAccount.PrimaryVendorCode : null })
                         .ToListAsync();
                     
                     if (blacklistStatus == "current")
@@ -1513,8 +1517,8 @@ public class AdrController : ControllerBase
                         jobIdsWithBlacklistStatus = allJobs
                             .Where(j => activeBlacklistsForFilter.Any(b =>
                             {
-                                var jobVendorCode = !string.IsNullOrEmpty(j.VendorCode) ? j.VendorCode : j.AccountVendorCode;
-                                var matches = (!string.IsNullOrEmpty(b.VendorCode) && b.VendorCode == jobVendorCode) ||
+                                var jobPrimaryVendorCode = !string.IsNullOrEmpty(j.PrimaryVendorCode) ? j.PrimaryVendorCode : j.AccountPrimaryVendorCode;
+                                var matches = (!string.IsNullOrEmpty(b.PrimaryVendorCode) && b.PrimaryVendorCode == jobPrimaryVendorCode) ||
                                               (b.VMAccountId.HasValue && b.VMAccountId == j.VMAccountId) ||
                                               (!string.IsNullOrEmpty(b.VMAccountNumber) && b.VMAccountNumber == j.VMAccountNumber) ||
                                               (b.CredentialId.HasValue && b.CredentialId == j.CredentialId);
@@ -1533,8 +1537,8 @@ public class AdrController : ControllerBase
                         jobIdsWithBlacklistStatus = allJobs
                             .Where(j => activeBlacklistsForFilter.Any(b =>
                             {
-                                var jobVendorCode = !string.IsNullOrEmpty(j.VendorCode) ? j.VendorCode : j.AccountVendorCode;
-                                var matches = (!string.IsNullOrEmpty(b.VendorCode) && b.VendorCode == jobVendorCode) ||
+                                var jobPrimaryVendorCode = !string.IsNullOrEmpty(j.PrimaryVendorCode) ? j.PrimaryVendorCode : j.AccountPrimaryVendorCode;
+                                var matches = (!string.IsNullOrEmpty(b.PrimaryVendorCode) && b.PrimaryVendorCode == jobPrimaryVendorCode) ||
                                               (b.VMAccountId.HasValue && b.VMAccountId == j.VMAccountId) ||
                                               (!string.IsNullOrEmpty(b.VMAccountNumber) && b.VMAccountNumber == j.VMAccountNumber) ||
                                               (b.CredentialId.HasValue && b.CredentialId == j.CredentialId);
@@ -1552,8 +1556,8 @@ public class AdrController : ControllerBase
                         jobIdsWithBlacklistStatus = allJobs
                             .Where(j => activeBlacklistsForFilter.Any(b =>
                             {
-                                var jobVendorCode = !string.IsNullOrEmpty(j.VendorCode) ? j.VendorCode : j.AccountVendorCode;
-                                return (!string.IsNullOrEmpty(b.VendorCode) && b.VendorCode == jobVendorCode) ||
+                                var jobPrimaryVendorCode = !string.IsNullOrEmpty(j.PrimaryVendorCode) ? j.PrimaryVendorCode : j.AccountPrimaryVendorCode;
+                                return (!string.IsNullOrEmpty(b.PrimaryVendorCode) && b.PrimaryVendorCode == jobPrimaryVendorCode) ||
                                        (b.VMAccountId.HasValue && b.VMAccountId == j.VMAccountId) ||
                                        (!string.IsNullOrEmpty(b.VMAccountNumber) && b.VMAccountNumber == j.VMAccountNumber) ||
                                        (b.CredentialId.HasValue && b.CredentialId == j.CredentialId);
@@ -1592,10 +1596,10 @@ public class AdrController : ControllerBase
                 var blacklistStatusLookup = new Dictionary<int, (bool HasCurrent, bool HasFuture, int CurrentCount, int FutureCount, List<BlacklistSummary> CurrentSummaries, List<BlacklistSummary> FutureSummaries)>();
                 foreach (var job in items)
                 {
-                    var jobVendorCode = !string.IsNullOrEmpty(job.VendorCode) ? job.VendorCode : job.AdrAccount?.VendorCode;
+                    var jobPrimaryVendorCode = !string.IsNullOrEmpty(job.PrimaryVendorCode) ? job.PrimaryVendorCode : job.AdrAccount?.PrimaryVendorCode;
                     var matchingBlacklists = activeBlacklists.Where(b =>
                     {
-                        if (!string.IsNullOrEmpty(b.VendorCode) && b.VendorCode == jobVendorCode)
+                        if (!string.IsNullOrEmpty(b.PrimaryVendorCode) && b.PrimaryVendorCode == jobPrimaryVendorCode)
                             return true;
                         if (b.VMAccountId.HasValue && b.VMAccountId == job.VMAccountId)
                             return true;
@@ -1622,7 +1626,7 @@ public class AdrController : ControllerBase
                         ExclusionType = b.ExclusionType ?? "All",
                         EffectiveStartDate = b.EffectiveStartDate,
                         EffectiveEndDate = b.EffectiveEndDate,
-                        VendorCode = b.VendorCode,
+                        PrimaryVendorCode = b.PrimaryVendorCode,
                         VMAccountId = b.VMAccountId,
                         VMAccountNumber = b.VMAccountNumber,
                         CredentialId = b.CredentialId
@@ -1635,7 +1639,7 @@ public class AdrController : ControllerBase
                         ExclusionType = b.ExclusionType ?? "All",
                         EffectiveStartDate = b.EffectiveStartDate,
                         EffectiveEndDate = b.EffectiveEndDate,
-                        VendorCode = b.VendorCode,
+                        PrimaryVendorCode = b.PrimaryVendorCode,
                         VMAccountId = b.VMAccountId,
                         VMAccountNumber = b.VMAccountNumber,
                         CredentialId = b.CredentialId
@@ -1651,14 +1655,15 @@ public class AdrController : ControllerBase
                     );
                 }
 
-                // Map to DTOs with VendorCode fallback from AdrAccount when job's VendorCode is null
+                // Map to DTOs with PrimaryVendorCode fallback from AdrAccount when job's PrimaryVendorCode is null
                 var mappedItems = items.Select(j => new
                 {
                     j.Id,
                     j.AdrAccountId,
                     j.VMAccountId,
                     j.VMAccountNumber,
-                    VendorCode = !string.IsNullOrEmpty(j.VendorCode) ? j.VendorCode : j.AdrAccount?.VendorCode,
+                    PrimaryVendorCode = !string.IsNullOrEmpty(j.PrimaryVendorCode) ? j.PrimaryVendorCode : j.AdrAccount?.PrimaryVendorCode,
+                    MasterVendorCode = !string.IsNullOrEmpty(j.MasterVendorCode) ? j.MasterVendorCode : j.AdrAccount?.MasterVendorCode,
                     j.CredentialId,
                     j.PeriodType,
                     j.BillingPeriodStartDateTime,
@@ -2041,10 +2046,10 @@ public class AdrController : ControllerBase
             var blacklistStatusLookup = new Dictionary<int, (int CurrentCount, int FutureCount, string Details)>();
             foreach (var job in jobs)
             {
-                var jobVendorCode = !string.IsNullOrEmpty(job.VendorCode) ? job.VendorCode : job.AdrAccount?.VendorCode;
+                var jobPrimaryVendorCode = !string.IsNullOrEmpty(job.PrimaryVendorCode) ? job.PrimaryVendorCode : job.AdrAccount?.PrimaryVendorCode;
                 var matchingBlacklists = activeBlacklists.Where(b =>
                 {
-                    if (!string.IsNullOrEmpty(b.VendorCode) && b.VendorCode == jobVendorCode)
+                    if (!string.IsNullOrEmpty(b.PrimaryVendorCode) && b.PrimaryVendorCode == jobPrimaryVendorCode)
                         return true;
                     if (b.VMAccountId.HasValue && b.VMAccountId == job.VMAccountId)
                         return true;
@@ -2080,7 +2085,7 @@ public class AdrController : ControllerBase
                 blacklistStatusLookup[job.Id] = (currentBlacklists.Count, futureBlacklists.Count, detailsStr);
             }
 
-            var headers = new[] { "Job ID", "Vendor Code", "Account #", "VM Account ID", "Interface Account ID", "Billing Period Start", "Billing Period End", "Period Type", "Next Run", "Status", "ADR Status", "ADR Status Description", "Retry Count", "Is Manual", "Created", "Current Blacklist Count", "Future Blacklist Count", "Blacklist Details" };
+            var headers = new[] { "Job ID", "Primary Vendor Code", "Master Vendor Code", "Account #", "VM Account ID", "Interface Account ID", "Billing Period Start", "Billing Period End", "Period Type", "Next Run", "Status", "ADR Status", "ADR Status Description", "Retry Count", "Is Manual", "Created", "Current Blacklist Count", "Future Blacklist Count", "Blacklist Details" };
 
             if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
             {
@@ -2090,7 +2095,7 @@ public class AdrController : ControllerBase
                     j =>
                     {
                         var bl = blacklistStatusLookup.TryGetValue(j.Id, out var blStatus) ? blStatus : (CurrentCount: 0, FutureCount: 0, Details: "");
-                        return $"{j.Id},{ExcelExportHelper.CsvEscape(j.VendorCode)},{ExcelExportHelper.CsvEscape(j.VMAccountNumber)},{j.VMAccountId},{ExcelExportHelper.CsvEscape(j.AdrAccount?.InterfaceAccountId)},{j.BillingPeriodStartDateTime:MM/dd/yyyy},{j.BillingPeriodEndDateTime:MM/dd/yyyy},{ExcelExportHelper.CsvEscape(j.PeriodType)},{j.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{ExcelExportHelper.CsvEscape(j.Status)},{j.AdrStatusId?.ToString() ?? ""},{ExcelExportHelper.CsvEscape(j.AdrStatusDescription)},{j.RetryCount},{j.IsManualRequest},{j.CreatedDateTime:MM/dd/yyyy HH:mm},{bl.CurrentCount},{bl.FutureCount},{ExcelExportHelper.CsvEscape(bl.Details)}";
+                        return $"{j.Id},{ExcelExportHelper.CsvEscape(j.PrimaryVendorCode)},{ExcelExportHelper.CsvEscape(j.MasterVendorCode)},{ExcelExportHelper.CsvEscape(j.VMAccountNumber)},{j.VMAccountId},{ExcelExportHelper.CsvEscape(j.AdrAccount?.InterfaceAccountId)},{j.BillingPeriodStartDateTime:MM/dd/yyyy},{j.BillingPeriodEndDateTime:MM/dd/yyyy},{ExcelExportHelper.CsvEscape(j.PeriodType)},{j.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{ExcelExportHelper.CsvEscape(j.Status)},{j.AdrStatusId?.ToString() ?? ""},{ExcelExportHelper.CsvEscape(j.AdrStatusDescription)},{j.RetryCount},{j.IsManualRequest},{j.CreatedDateTime:MM/dd/yyyy HH:mm},{bl.CurrentCount},{bl.FutureCount},{ExcelExportHelper.CsvEscape(bl.Details)}";
                     });
                 return File(csvBytes, "text/csv", $"adr_jobs_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
             }
@@ -2107,7 +2112,8 @@ public class AdrController : ControllerBase
                     return new object?[]
                     {
                         j.Id,
-                        j.VendorCode,
+                        j.PrimaryVendorCode,
+                        j.MasterVendorCode,
                         j.VMAccountNumber,
                         j.VMAccountId,
                         j.AdrAccount?.InterfaceAccountId ?? "",
@@ -3193,8 +3199,8 @@ public class AdrController : ControllerBase
             
                 if (!string.IsNullOrWhiteSpace(vendorCode))
                 {
-                    query = query.Where(r => r.AdrAccount != null && r.AdrAccount.VendorCode != null && 
-                        r.AdrAccount.VendorCode.Contains(vendorCode));
+                    query = query.Where(r => r.AdrAccount != null && r.AdrAccount.PrimaryVendorCode != null && 
+                        r.AdrAccount.PrimaryVendorCode.Contains(vendorCode));
                 }
             
                 if (!string.IsNullOrWhiteSpace(accountNumber))
@@ -3254,11 +3260,12 @@ public class AdrController : ControllerBase
                             ? query.OrderByDescending(r => r.JobTypeId)
                             : query.OrderBy(r => r.JobTypeId);
                         break;
+                    case "primaryvendorcode":
                     case "vendorcode":
                     default:
                         orderedQuery = sortDescending 
-                            ? query.OrderByDescending(r => r.AdrAccount != null ? r.AdrAccount.VendorCode : "")
-                            : query.OrderBy(r => r.AdrAccount != null ? r.AdrAccount.VendorCode : "");
+                            ? query.OrderByDescending(r => r.AdrAccount != null ? r.AdrAccount.PrimaryVendorCode : "")
+                            : query.OrderBy(r => r.AdrAccount != null ? r.AdrAccount.PrimaryVendorCode : "");
                         break;
                 }
             
@@ -3269,7 +3276,7 @@ public class AdrController : ControllerBase
                     {
                         Id = r.Id,
                         AdrAccountId = r.AdrAccountId,
-                        VendorCode = r.AdrAccount != null ? r.AdrAccount.VendorCode : null,
+                        PrimaryVendorCode = r.AdrAccount != null ? r.AdrAccount.PrimaryVendorCode : null,
                         VMAccountNumber = r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : null,
                         JobTypeId = r.JobTypeId,
                         PeriodType = r.PeriodType,
@@ -3323,8 +3330,8 @@ public class AdrController : ControllerBase
             
                 if (!string.IsNullOrWhiteSpace(vendorCode))
                 {
-                    query = query.Where(r => r.AdrAccount != null && r.AdrAccount.VendorCode != null && 
-                        r.AdrAccount.VendorCode.Contains(vendorCode));
+                    query = query.Where(r => r.AdrAccount != null && r.AdrAccount.PrimaryVendorCode != null && 
+                        r.AdrAccount.PrimaryVendorCode.Contains(vendorCode));
                 }
             
                 if (!string.IsNullOrWhiteSpace(accountNumber))
@@ -3344,11 +3351,11 @@ public class AdrController : ControllerBase
                 }
             
                 var rules = await query
-                    .OrderBy(r => r.AdrAccount != null ? r.AdrAccount.VendorCode : "")
+                    .OrderBy(r => r.AdrAccount != null ? r.AdrAccount.PrimaryVendorCode : "")
                     .ThenBy(r => r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : "")
                     .Select(r => new
                     {
-                        VendorCode = r.AdrAccount != null ? r.AdrAccount.VendorCode : null,
+                        PrimaryVendorCode = r.AdrAccount != null ? r.AdrAccount.PrimaryVendorCode : null,
                         VMAccountNumber = r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : null,
                         r.JobTypeId,
                         r.PeriodType,
@@ -3363,14 +3370,14 @@ public class AdrController : ControllerBase
                     })
                     .ToListAsync();
 
-                var headers = new[] { "Vendor Code", "Account Number", "Job Type", "Period Type", "Period Days", "Next Run", "Search Window Start", "Search Window End", "Enabled", "Overridden", "Overridden By", "Overridden Date" };
+                var headers = new[] { "Primary Vendor Code", "Account Number", "Job Type", "Period Type", "Period Days", "Next Run", "Search Window Start", "Search Window End", "Enabled", "Overridden", "Overridden By", "Overridden Date" };
 
                 if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
                 {
                     var csvBytes = ExcelExportHelper.CreateCsvExport(
                         string.Join(",", headers),
                         rules,
-                        r => $"{ExcelExportHelper.CsvEscape(r.VendorCode)},{ExcelExportHelper.CsvEscape(r.VMAccountNumber)},{r.JobTypeId},{ExcelExportHelper.CsvEscape(r.PeriodType)},{r.PeriodDays},{r.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeStartDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? ""},{(r.IsEnabled ? "Yes" : "No")},{(r.IsManuallyOverridden ? "Yes" : "No")},{ExcelExportHelper.CsvEscape(r.OverriddenBy)},{r.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""}");
+                        r => $"{ExcelExportHelper.CsvEscape(r.PrimaryVendorCode)},{ExcelExportHelper.CsvEscape(r.VMAccountNumber)},{r.JobTypeId},{ExcelExportHelper.CsvEscape(r.PeriodType)},{r.PeriodDays},{r.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeStartDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? ""},{(r.IsEnabled ? "Yes" : "No")},{(r.IsManuallyOverridden ? "Yes" : "No")},{ExcelExportHelper.CsvEscape(r.OverriddenBy)},{r.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""}");
                     return File(csvBytes, "text/csv", $"adr_rules_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
                 }
 
@@ -3382,7 +3389,7 @@ public class AdrController : ControllerBase
                     rules,
                     r => new object?[]
                     {
-                        r.VendorCode ?? "",
+                        r.PrimaryVendorCode ?? "",
                         r.VMAccountNumber ?? "",
                         r.JobTypeId,
                         r.PeriodType ?? "",
@@ -3426,7 +3433,7 @@ public class AdrController : ControllerBase
                     {
                         Id = r.Id,
                         AdrAccountId = r.AdrAccountId,
-                        VendorCode = r.AdrAccount != null ? r.AdrAccount.VendorCode : null,
+                        PrimaryVendorCode = r.AdrAccount != null ? r.AdrAccount.PrimaryVendorCode : null,
                         VMAccountNumber = r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : null,
                         JobTypeId = r.JobTypeId,
                         PeriodType = r.PeriodType,
@@ -3473,7 +3480,7 @@ public class AdrController : ControllerBase
                     {
                         Id = r.Id,
                         AdrAccountId = r.AdrAccountId,
-                        VendorCode = r.AdrAccount != null ? r.AdrAccount.VendorCode : null,
+                        PrimaryVendorCode = r.AdrAccount != null ? r.AdrAccount.PrimaryVendorCode : null,
                         VMAccountNumber = r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : null,
                         JobTypeId = r.JobTypeId,
                         PeriodType = r.PeriodType,
@@ -3569,7 +3576,7 @@ public class AdrController : ControllerBase
                 {
                     Id = rule.Id,
                     AdrAccountId = rule.AdrAccountId,
-                    VendorCode = rule.AdrAccount?.VendorCode,
+                    PrimaryVendorCode = rule.AdrAccount?.PrimaryVendorCode,
                     VMAccountNumber = rule.AdrAccount?.VMAccountNumber,
                     JobTypeId = rule.JobTypeId,
                     PeriodType = rule.PeriodType,
@@ -3630,7 +3637,7 @@ public class AdrController : ControllerBase
                 {
                     Id = rule.Id,
                     AdrAccountId = rule.AdrAccountId,
-                    VendorCode = rule.AdrAccount?.VendorCode,
+                    PrimaryVendorCode = rule.AdrAccount?.PrimaryVendorCode,
                     VMAccountNumber = rule.AdrAccount?.VMAccountNumber,
                     JobTypeId = rule.JobTypeId,
                     PeriodType = rule.PeriodType,
@@ -3846,7 +3853,7 @@ public class AdrController : ControllerBase
             // Apply additional filters
             if (!string.IsNullOrWhiteSpace(vendorCode))
             {
-                query = query.Where(b => b.VendorCode != null && b.VendorCode.Contains(vendorCode));
+                query = query.Where(b => b.PrimaryVendorCode != null && b.PrimaryVendorCode.Contains(vendorCode));
             }
             if (!string.IsNullOrWhiteSpace(accountNumber))
             {
@@ -3858,7 +3865,7 @@ public class AdrController : ControllerBase
             // Apply sorting based on sortColumn parameter
             IOrderedQueryable<AdrAccountBlacklist> orderedQuery = sortColumn.ToLowerInvariant() switch
             {
-                "vendorcode" => sortDescending ? query.OrderByDescending(b => b.VendorCode) : query.OrderBy(b => b.VendorCode),
+                "primaryvendorcode" or "vendorcode" => sortDescending ? query.OrderByDescending(b => b.PrimaryVendorCode) : query.OrderBy(b => b.PrimaryVendorCode),
                 "vmaccountnumber" => sortDescending ? query.OrderByDescending(b => b.VMAccountNumber) : query.OrderBy(b => b.VMAccountNumber),
                 "effectivestartdate" => sortDescending ? query.OrderByDescending(b => b.EffectiveStartDate) : query.OrderBy(b => b.EffectiveStartDate),
                 "effectiveenddate" => sortDescending ? query.OrderByDescending(b => b.EffectiveEndDate) : query.OrderBy(b => b.EffectiveEndDate),
@@ -3962,8 +3969,8 @@ public class AdrController : ControllerBase
             {
                 var matchingBlacklists = allBlacklists.Where(b =>
                 {
-                    // Match by VendorCode
-                    if (!string.IsNullOrEmpty(b.VendorCode) && b.VendorCode == item.VendorCode)
+                    // Match by PrimaryVendorCode
+                    if (!string.IsNullOrEmpty(b.PrimaryVendorCode) && b.PrimaryVendorCode == item.PrimaryVendorCode)
                         return true;
                     // Match by VMAccountId
                     if (b.VMAccountId.HasValue && b.VMAccountId == item.VMAccountId)
@@ -3987,7 +3994,7 @@ public class AdrController : ControllerBase
                         ExclusionType = b.ExclusionType,
                         EffectiveStartDate = b.EffectiveStartDate,
                         EffectiveEndDate = b.EffectiveEndDate,
-                        VendorCode = b.VendorCode,
+                        PrimaryVendorCode = b.PrimaryVendorCode,
                         VMAccountId = b.VMAccountId,
                         VMAccountNumber = b.VMAccountNumber,
                         CredentialId = b.CredentialId
@@ -4003,7 +4010,7 @@ public class AdrController : ControllerBase
                         ExclusionType = b.ExclusionType,
                         EffectiveStartDate = b.EffectiveStartDate,
                         EffectiveEndDate = b.EffectiveEndDate,
-                        VendorCode = b.VendorCode,
+                        PrimaryVendorCode = b.PrimaryVendorCode,
                         VMAccountId = b.VMAccountId,
                         VMAccountNumber = b.VMAccountNumber,
                         CredentialId = b.CredentialId
@@ -4089,12 +4096,12 @@ public class AdrController : ControllerBase
             }
             
             // At least one exclusion criteria must be provided
-            if (string.IsNullOrWhiteSpace(request.VendorCode) && 
+            if (string.IsNullOrWhiteSpace(request.PrimaryVendorCode) && 
                 !request.VMAccountId.HasValue && 
                 string.IsNullOrWhiteSpace(request.VMAccountNumber) && 
                 !request.CredentialId.HasValue)
             {
-                return BadRequest("At least one exclusion criteria (VendorCode, VMAccountId, VMAccountNumber, or CredentialId) must be provided");
+                return BadRequest("At least one exclusion criteria (PrimaryVendorCode, VMAccountId, VMAccountNumber, or CredentialId) must be provided");
             }
             
             // Both effective dates are required
@@ -4117,7 +4124,7 @@ public class AdrController : ControllerBase
             
             var entry = new AdrAccountBlacklist
             {
-                VendorCode = request.VendorCode,
+                PrimaryVendorCode = request.PrimaryVendorCode,
                 VMAccountId = request.VMAccountId,
                 VMAccountNumber = request.VMAccountNumber,
                 CredentialId = request.CredentialId,
@@ -4138,8 +4145,8 @@ public class AdrController : ControllerBase
             await _unitOfWork.AdrAccountBlacklists.AddAsync(entry);
             await _unitOfWork.SaveChangesAsync();
             
-            _logger.LogInformation("Blacklist entry {Id} created by {User}. VendorCode: {VendorCode}, VMAccountId: {VMAccountId}, Reason: {Reason}",
-                entry.Id, username, request.VendorCode, request.VMAccountId, request.Reason);
+            _logger.LogInformation("Blacklist entry {Id} created by {User}. PrimaryVendorCode: {PrimaryVendorCode}, VMAccountId: {VMAccountId}, Reason: {Reason}",
+                entry.Id, username, request.PrimaryVendorCode, request.VMAccountId, request.Reason);
             
             return CreatedAtAction(nameof(GetBlacklistEntry), new { id = entry.Id }, entry);
         }
@@ -4180,7 +4187,7 @@ public class AdrController : ControllerBase
             var username = User.Identity?.Name ?? "System Created";
             
             // Update fields if provided
-            if (request.VendorCode != null) entry.VendorCode = request.VendorCode;
+            if (request.PrimaryVendorCode != null) entry.PrimaryVendorCode = request.PrimaryVendorCode;
             if (request.VMAccountId.HasValue) entry.VMAccountId = request.VMAccountId;
             if (request.VMAccountNumber != null) entry.VMAccountNumber = request.VMAccountNumber;
             if (request.CredentialId.HasValue) entry.CredentialId = request.CredentialId;
@@ -4192,12 +4199,12 @@ public class AdrController : ControllerBase
             if (request.Notes != null) entry.Notes = request.Notes;
             
             // Validate at least one exclusion criteria exists after update
-            if (string.IsNullOrWhiteSpace(entry.VendorCode) && 
+            if (string.IsNullOrWhiteSpace(entry.PrimaryVendorCode) && 
                 !entry.VMAccountId.HasValue && 
                 string.IsNullOrWhiteSpace(entry.VMAccountNumber) && 
                 !entry.CredentialId.HasValue)
             {
-                return BadRequest("At least one exclusion criteria (VendorCode, VMAccountId, VMAccountNumber, or CredentialId) must be provided");
+                return BadRequest("At least one exclusion criteria (PrimaryVendorCode, VMAccountId, VMAccountNumber, or CredentialId) must be provided");
             }
             
             // Validate both effective dates are set
@@ -4326,7 +4333,7 @@ public class AdrController : ControllerBase
             // Apply additional filters
             if (!string.IsNullOrWhiteSpace(vendorCode))
             {
-                query = query.Where(b => b.VendorCode != null && b.VendorCode.Contains(vendorCode));
+                query = query.Where(b => b.PrimaryVendorCode != null && b.PrimaryVendorCode.Contains(vendorCode));
             }
             if (!string.IsNullOrWhiteSpace(accountNumber))
             {
@@ -4339,7 +4346,7 @@ public class AdrController : ControllerBase
             
             var headers = new[]
             {
-                "ID", "Vendor Code", "VM Account ID", "Account Number", "Credential ID",
+                "ID", "Primary Vendor Code", "VM Account ID", "Account Number", "Credential ID",
                 "Exclusion Type", "Reason", "Is Active", "Effective Start", "Effective End",
                 "Blacklisted By", "Blacklisted Date", "Notes", "Created By", "Created Date"
             };
@@ -4352,7 +4359,7 @@ public class AdrController : ControllerBase
                 entry => new object?[]
                 {
                     entry.Id,
-                    entry.VendorCode,
+                    entry.PrimaryVendorCode,
                     entry.VMAccountId,
                     entry.VMAccountNumber,
                     entry.CredentialId,
@@ -4850,7 +4857,7 @@ public class UpdateAdrConfigurationRequest
 /// </summary>
 public class CreateBlacklistEntryRequest
 {
-    public string? VendorCode { get; set; }
+    public string? PrimaryVendorCode { get; set; }
     public long? VMAccountId { get; set; }
     public string? VMAccountNumber { get; set; }
     public int? CredentialId { get; set; }
@@ -4866,7 +4873,7 @@ public class CreateBlacklistEntryRequest
 /// </summary>
 public class UpdateBlacklistEntryRequest
 {
-    public string? VendorCode { get; set; }
+    public string? PrimaryVendorCode { get; set; }
     public long? VMAccountId { get; set; }
     public string? VMAccountNumber { get; set; }
     public int? CredentialId { get; set; }
@@ -4905,9 +4912,9 @@ public class BlacklistCheckItem
     public int? JobId { get; set; }
     
     /// <summary>
-    /// Vendor code to match against blacklist entries
+    /// Primary vendor code to match against blacklist entries
     /// </summary>
-    public string? VendorCode { get; set; }
+    public string? PrimaryVendorCode { get; set; }
     
     /// <summary>
     /// VM Account ID to match against blacklist entries
@@ -4981,7 +4988,7 @@ public class BlacklistSummary
     public string ExclusionType { get; set; } = string.Empty;
     public DateTime? EffectiveStartDate { get; set; }
     public DateTime? EffectiveEndDate { get; set; }
-    public string? VendorCode { get; set; }
+    public string? PrimaryVendorCode { get; set; }
     public long? VMAccountId { get; set; }
     public string? VMAccountNumber { get; set; }
     public int? CredentialId { get; set; }
@@ -5086,7 +5093,7 @@ public class AccountRuleDto
 {
     public int Id { get; set; }
     public int AdrAccountId { get; set; }
-    public string? VendorCode { get; set; }
+    public string? PrimaryVendorCode { get; set; }
     public string? VMAccountNumber { get; set; }
     public int JobTypeId { get; set; }
     public string? PeriodType { get; set; }

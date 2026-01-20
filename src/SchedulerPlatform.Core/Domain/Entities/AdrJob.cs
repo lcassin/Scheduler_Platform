@@ -30,9 +30,14 @@ public class AdrJob : BaseEntity
         public string VMAccountNumber { get; set; } = string.Empty;
     
         /// <summary>
-        /// Vendor code (denormalized for queries and schedule linking)
+        /// Primary vendor code (denormalized for queries and schedule linking)
         /// </summary>
-        public string? VendorCode { get; set; }
+        public string? PrimaryVendorCode { get; set; }
+    
+        /// <summary>
+        /// Master vendor code that groups related primary vendor codes (denormalized for queries)
+        /// </summary>
+        public string? MasterVendorCode { get; set; }
     
         /// <summary>
         /// Credential ID used for this job

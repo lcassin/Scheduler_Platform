@@ -39,9 +39,15 @@ public class AdrAccount : BaseEntity
     public int CredentialId { get; set; }
     
     /// <summary>
-    /// Vendor identifier code
+    /// Primary vendor identifier code (formerly VendorCode)
     /// </summary>
-    public string? VendorCode { get; set; }
+    public string? PrimaryVendorCode { get; set; }
+    
+    /// <summary>
+    /// Master vendor code that groups related primary vendor codes.
+    /// May be null if the vendor doesn't have a master vendor relationship.
+    /// </summary>
+    public string? MasterVendorCode { get; set; }
     
     /// <summary>
     /// Billing frequency type (Bi-Weekly, Monthly, Bi-Monthly, Quarterly, Semi-Annually, Annually)

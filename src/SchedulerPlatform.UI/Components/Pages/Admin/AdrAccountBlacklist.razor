@@ -35,8 +35,8 @@
         <MudPaper Class="pa-4 mb-4">
             <MudGrid Spacing="2">
                 <MudItem xs="12" md="3">
-                    <MudTextField @bind-Value="_searchVendorCode" 
-                                  Label="Vendor Code" 
+                    <MudTextField @bind-Value="_searchPrimaryVendorCode" 
+                                  Label="Primary Vendor Code" 
                                   Variant="Variant.Outlined"
                                   Margin="Margin.Dense"
                                   Immediate="true"
@@ -94,7 +94,7 @@
                       SortLabel="@_sortColumn"
                       SortLabelChanged="OnSortChanged">
                 <HeaderContent>
-                    <MudTh><MudTableSortLabel SortLabel="VendorCode" T="BlacklistEntryModel">Vendor Code</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortLabel="PrimaryVendorCode" T="BlacklistEntryModel">Primary Vendor Code</MudTableSortLabel></MudTh>
                     <MudTh>VM Account ID</MudTh>
                     <MudTh><MudTableSortLabel SortLabel="VMAccountNumber" T="BlacklistEntryModel">Account Number</MudTableSortLabel></MudTh>
                     <MudTh>Credential ID</MudTh>
@@ -106,7 +106,7 @@
                     <MudTh>Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
-                    <MudTd DataLabel="Vendor Code">@context.VendorCode</MudTd>
+                    <MudTd DataLabel="Primary Vendor Code">@context.PrimaryVendorCode</MudTd>
                     <MudTd DataLabel="VM Account ID">@context.VMAccountId</MudTd>
                     <MudTd DataLabel="Account Number">@context.VMAccountNumber</MudTd>
                     <MudTd DataLabel="Credential ID">@context.CredentialId</MudTd>
@@ -183,14 +183,14 @@
         @if (_editingEntry != null)
         {
             <MudAlert Severity="Severity.Info" Class="mb-4">
-                At least one of the following must be provided: Vendor Code, VM Account ID, Account Number, or Credential ID.
+                At least one of the following must be provided: Primary Vendor Code, VM Account ID, Account Number, or Credential ID.
             </MudAlert>
             <MudGrid>
                 <MudItem xs="12" sm="6">
-                    <MudTextField @bind-Value="_editingEntry.VendorCode" 
-                                  Label="Vendor Code" 
+                    <MudTextField @bind-Value="_editingEntry.PrimaryVendorCode" 
+                                  Label="Primary Vendor Code" 
                                   Variant="Variant.Outlined"
-                                  HelperText="Match by vendor code" />
+                                  HelperText="Match by primary vendor code" />
                 </MudItem>
                 <MudItem xs="12" sm="6">
                     <MudNumericField @bind-Value="_editingEntry.VMAccountId" 
@@ -279,7 +279,7 @@
     private bool _hasAccess = false;
     private bool _dialogVisible = false;
     
-    private string? _searchVendorCode;
+    private string? _searchPrimaryVendorCode;
     private string? _searchAccountNumber;
     private string _filterStatus = "current";
     private bool _exporting = false;
@@ -324,8 +324,8 @@
                     $"sortDescending={sortDescending}"
                 };
             
-                if (!string.IsNullOrWhiteSpace(_searchVendorCode))
-                    queryParams.Add($"vendorCode={Uri.EscapeDataString(_searchVendorCode)}");
+                if (!string.IsNullOrWhiteSpace(_searchPrimaryVendorCode))
+                    queryParams.Add($"primaryVendorCode={Uri.EscapeDataString(_searchPrimaryVendorCode)}");
                 if (!string.IsNullOrWhiteSpace(_searchAccountNumber))
                     queryParams.Add($"accountNumber={Uri.EscapeDataString(_searchAccountNumber)}");
             
@@ -369,7 +369,7 @@
 
     private async Task ClearFilters()
     {
-        _searchVendorCode = null;
+        _searchPrimaryVendorCode = null;
         _searchAccountNumber = null;
         _filterStatus = "current";
         _currentPage = 1;
@@ -384,8 +384,8 @@
         {
             var queryParams = new List<string> { $"status={status}" };
             
-            if (!string.IsNullOrWhiteSpace(_searchVendorCode))
-                queryParams.Add($"vendorCode={Uri.EscapeDataString(_searchVendorCode)}");
+            if (!string.IsNullOrWhiteSpace(_searchPrimaryVendorCode))
+                queryParams.Add($"primaryVendorCode={Uri.EscapeDataString(_searchPrimaryVendorCode)}");
             if (!string.IsNullOrWhiteSpace(_searchAccountNumber))
                 queryParams.Add($"accountNumber={Uri.EscapeDataString(_searchAccountNumber)}");
             
@@ -441,7 +441,7 @@
         _editingEntry = new BlacklistEntryModel
         {
             Id = entry.Id,
-            VendorCode = entry.VendorCode,
+            PrimaryVendorCode = entry.PrimaryVendorCode,
             VMAccountId = entry.VMAccountId,
             VMAccountNumber = entry.VMAccountNumber,
             CredentialId = entry.CredentialId,
@@ -466,12 +466,12 @@
             if (_editingEntry == null) return;
             
             // Validate at least one exclusion criteria is provided
-            if (string.IsNullOrWhiteSpace(_editingEntry.VendorCode) && 
+            if (string.IsNullOrWhiteSpace(_editingEntry.PrimaryVendorCode) && 
                 !_editingEntry.VMAccountId.HasValue && 
                 string.IsNullOrWhiteSpace(_editingEntry.VMAccountNumber) && 
                 !_editingEntry.CredentialId.HasValue)
             {
-                Snackbar.Add("At least one of Vendor Code, VM Account ID, Account Number, or Credential ID is required", Severity.Warning);
+                Snackbar.Add("At least one of Primary Vendor Code, VM Account ID, Account Number, or Credential ID is required", Severity.Warning);
                 return;
             }
             
@@ -580,7 +580,7 @@
     private class BlacklistEntryModel
     {
         public int Id { get; set; }
-        public string? VendorCode { get; set; }
+        public string? PrimaryVendorCode { get; set; }
         public long? VMAccountId { get; set; }
         public string? VMAccountNumber { get; set; }
         public int? CredentialId { get; set; }
