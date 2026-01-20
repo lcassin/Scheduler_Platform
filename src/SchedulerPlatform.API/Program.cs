@@ -31,10 +31,24 @@ if (!string.IsNullOrEmpty(keyVaultUri) && !builder.Environment.IsDevelopment())
         new DefaultAzureCredential());
 }
 
+// Determine the log path based on environment
+// Azure App Service: Use %HOME%\LogFiles\Application\ which persists across deployments
+// Local development: Use relative logs/ folder
+var azureHome = Environment.GetEnvironmentVariable("HOME");
+var isAzureAppService = !string.IsNullOrEmpty(azureHome) && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WEBSITE_SITE_NAME"));
+var logPath = isAzureAppService 
+    ? Path.Combine(azureHome!, "LogFiles", "Application", "scheduler-api-.txt")
+    : "logs/scheduler-api-.txt";
+
+// Override the Serilog file path in configuration
+builder.Configuration["Serilog:WriteTo:1:Args:path"] = logPath;
+
 Log.Logger = new LoggerConfiguration()
     .ReadFrom.Configuration(builder.Configuration)
     .Enrich.FromLogContext()
     .CreateLogger();
+
+Log.Information("Log path configured: {LogPath} (Azure: {IsAzure})", logPath, isAzureAppService);
 
 builder.Host.UseSerilog();
 
@@ -422,6 +436,12 @@ app.UseAuthorization();
 app.UseMiddleware<SchedulerPlatform.API.Middleware.AutoUserCreationMiddleware>();
 
 app.MapControllers();
+
+// Health check endpoint for Azure App Service health probes
+// Returns 200 OK to prevent 404 errors in Application Insights from health probe requests to "/"
+app.MapGet("/", () => Results.Ok(new { status = "healthy", timestamp = DateTime.UtcNow }))
+   .AllowAnonymous()
+   .ExcludeFromDescription(); // Hide from Swagger
 
 try
 {

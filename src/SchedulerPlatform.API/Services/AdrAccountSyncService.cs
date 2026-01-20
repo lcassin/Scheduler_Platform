@@ -453,7 +453,8 @@ WHERE CL.ClientId IS NOT NULL";
             CredentialId = reader.GetInt32(reader.GetOrdinal("CredentialId")),
             ClientId = reader.IsDBNull(reader.GetOrdinal("ClientId")) ? null : reader.GetInt32(reader.GetOrdinal("ClientId")),
             ClientName = reader.IsDBNull(reader.GetOrdinal("ClientName")) ? null : reader.GetString(reader.GetOrdinal("ClientName")),
-            VendorCode = reader.IsDBNull(reader.GetOrdinal("VendorCode")) ? null : reader.GetString(reader.GetOrdinal("VendorCode")),
+            PrimaryVendorCode = reader.IsDBNull(reader.GetOrdinal("PrimaryVendorCode")) ? null : reader.GetString(reader.GetOrdinal("PrimaryVendorCode")),
+            MasterVendorCode = reader.IsDBNull(reader.GetOrdinal("MasterVendorCode")) ? null : reader.GetString(reader.GetOrdinal("MasterVendorCode")),
             VMAccountNumber = reader.GetString(reader.GetOrdinal("VMAccountNumber")),
             InterfaceAccountId = reader.IsDBNull(reader.GetOrdinal("InterfaceAccountId")) ? null : reader.GetString(reader.GetOrdinal("InterfaceAccountId")),
             PeriodType = reader.IsDBNull(reader.GetOrdinal("PeriodType")) ? null : reader.GetString(reader.GetOrdinal("PeriodType")),
@@ -784,7 +785,8 @@ WHERE CL.ClientId IS NOT NULL";
                 CredentialId = reader.GetInt32(reader.GetOrdinal("CredentialId")),
                 ClientId = reader.IsDBNull(reader.GetOrdinal("ClientId")) ? null : reader.GetInt32(reader.GetOrdinal("ClientId")),
                 ClientName = reader.IsDBNull(reader.GetOrdinal("ClientName")) ? null : reader.GetString(reader.GetOrdinal("ClientName")),
-                VendorCode = reader.IsDBNull(reader.GetOrdinal("VendorCode")) ? null : reader.GetString(reader.GetOrdinal("VendorCode")),
+                PrimaryVendorCode = reader.IsDBNull(reader.GetOrdinal("PrimaryVendorCode")) ? null : reader.GetString(reader.GetOrdinal("PrimaryVendorCode")),
+            MasterVendorCode = reader.IsDBNull(reader.GetOrdinal("MasterVendorCode")) ? null : reader.GetString(reader.GetOrdinal("MasterVendorCode")),
                 VMAccountNumber = reader.GetString(reader.GetOrdinal("VMAccountNumber")),
                 InterfaceAccountId = reader.IsDBNull(reader.GetOrdinal("InterfaceAccountId")) ? null : reader.GetString(reader.GetOrdinal("InterfaceAccountId")),
                 PeriodType = reader.IsDBNull(reader.GetOrdinal("PeriodType")) ? null : reader.GetString(reader.GetOrdinal("PeriodType")),
@@ -889,7 +891,8 @@ SELECT [RecId]
       ,[BillId]
       ,[InvoiceDate]
       ,AD.[AccountNumber]
-      ,AD.[VendorCode]
+      ,AD.[VendorCode] AS PrimaryVendorCode
+      ,MV.[VendorCode] AS MasterVendorCode
       ,[VCAccountId] AS AccountId
       ,C.[CredentialId]
       ,C.ExpirationDate
@@ -900,7 +903,10 @@ FROM [dbo].[ADRInvoiceAccountData] AD
     LEFT OUTER JOIN Account A ON AD.VCAccountId = A.AccountId
     LEFT OUTER JOIN Client CL ON A.ClientId = CL.ClientId
     INNER JOIN CredentialAccount CA ON AD.VCAccountId = CA.AccountId
-    INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId;
+    INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId
+    LEFT OUTER JOIN Vendor V ON AD.VendorCode = V.VendorCode
+    LEFT OUTER JOIN VendorXRef VX ON V.VendorId = VX.PrimaryVendorId
+    LEFT OUTER JOIN Vendor MV ON VX.MasterVendorId = MV.VendorId;
 
 ;WITH AccountStats AS (
     SELECT AccountId,
@@ -973,8 +979,9 @@ Combined AS (
         cab.CredentialId, 
         cab.ClientId,
         cab.ClientName,
-        cab.VendorCode,
-        cab.AccountNumber AS VMAccountNumber, 
+        cab.PrimaryVendorCode,
+        cab.MasterVendorCode,
+        cab.AccountNumber AS VMAccountNumber,
         cab.InterfaceAccountId,
         nr.PeriodType,
         nr.PeriodDays,
@@ -1027,7 +1034,8 @@ SELECT DISTINCT
     CredentialId,
     ClientId,
     ClientName,
-    VendorCode,
+    PrimaryVendorCode,
+    MasterVendorCode,
     VMAccountNumber,
     InterfaceAccountId,
     PeriodType,
@@ -1196,7 +1204,8 @@ DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
         existing.ClientId = internalClientId;
         existing.ClientName = external.ClientName;
         existing.CredentialId = external.CredentialId;
-        existing.VendorCode = external.VendorCode;
+        existing.PrimaryVendorCode = external.PrimaryVendorCode;
+        existing.MasterVendorCode = external.MasterVendorCode;
         
         // Always update historical/calculated fields (these are derived from invoice history, not scheduling config)
         // These fields stay on Account per the data model: Account = identity + historical/calculated data
@@ -1236,7 +1245,8 @@ DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
             ClientId = internalClientId,
             ClientName = external.ClientName,
             CredentialId = external.CredentialId,
-            VendorCode = external.VendorCode,
+            PrimaryVendorCode = external.PrimaryVendorCode,
+            MasterVendorCode = external.MasterVendorCode,
             // Historical/calculated fields (derived from invoice history)
             MedianDays = external.MedianDays,
             InvoiceCount = external.InvoiceCount,
@@ -1265,7 +1275,8 @@ DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
         public int? ClientId { get; set; }
         public string? ClientName { get; set; }
         public int CredentialId { get; set; }
-        public string? VendorCode { get; set; }
+        public string? PrimaryVendorCode { get; set; }
+        public string? MasterVendorCode { get; set; }
         public string? PeriodType { get; set; }
         public int? PeriodDays { get; set; }
         public double? MedianDays { get; set; }

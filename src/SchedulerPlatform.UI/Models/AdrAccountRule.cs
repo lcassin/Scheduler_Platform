@@ -4,7 +4,8 @@ public class AccountRuleDto
 {
     public int Id { get; set; }
     public int AdrAccountId { get; set; }
-    public string? VendorCode { get; set; }
+    public string? PrimaryVendorCode { get; set; }
+    public string? MasterVendorCode { get; set; }
     public string? VMAccountNumber { get; set; }
     public int JobTypeId { get; set; }
     public string? PeriodType { get; set; }

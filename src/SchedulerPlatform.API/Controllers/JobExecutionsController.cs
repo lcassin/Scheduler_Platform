@@ -1,13 +1,14 @@
 using System.Globalization;
 using System.Text;
-using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Quartz;
+using SchedulerPlatform.API.Extensions;
 using SchedulerPlatform.API.Services;
 using SchedulerPlatform.Core.Domain.Entities;
 using SchedulerPlatform.Core.Domain.Enums;
 using SchedulerPlatform.Core.Domain.Interfaces;
+using SchedulerPlatform.Jobs.Services;
 
 namespace SchedulerPlatform.API.Controllers;
 
@@ -23,12 +24,18 @@ public class JobExecutionsController : ControllerBase
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<JobExecutionsController> _logger;
     private readonly IScheduler _scheduler;
+    private readonly ISchedulerService _schedulerService;
 
-    public JobExecutionsController(IUnitOfWork unitOfWork, ILogger<JobExecutionsController> logger, IScheduler scheduler)
+    public JobExecutionsController(
+        IUnitOfWork unitOfWork, 
+        ILogger<JobExecutionsController> logger, 
+        IScheduler scheduler,
+        ISchedulerService schedulerService)
     {
         _unitOfWork = unitOfWork;
         _logger = logger;
         _scheduler = scheduler;
+        _schedulerService = schedulerService;
     }
 
     /// <summary>
@@ -256,16 +263,6 @@ public class JobExecutionsController : ControllerBase
         }
     }
 
-    private static string CsvEscape(string? value)
-    {
-        if (value == null) return "";
-        if (value.Contains(',') || value.Contains('"') || value.Contains('\n'))
-        {
-            return $"\"{value.Replace("\"", "\"\"")}\"";
-        }
-        return value;
-    }
-
     /// <summary>
     /// Cancels a running job execution.
     /// Only jobs with a 'Running' status can be cancelled.
@@ -327,6 +324,97 @@ public class JobExecutionsController : ControllerBase
         {
             _logger.LogError(ex, "Error cancelling job execution {ExecutionId}", id);
             return StatusCode(500, "An error occurred while cancelling the job execution");
+        }
+    }
+
+    /// <summary>
+    /// Retries a failed or cancelled job execution by triggering the associated schedule.
+    /// Only jobs with 'Failed' or 'Cancelled' status can be retried.
+    /// </summary>
+    /// <param name="id">The unique identifier of the job execution to retry.</param>
+    /// <returns>A success message if the job was triggered for retry.</returns>
+    /// <response code="200">Job was triggered for retry successfully.</response>
+    /// <response code="400">Job is not in a failed or cancelled state and cannot be retried.</response>
+    /// <response code="404">Job execution or associated schedule was not found.</response>
+    /// <response code="500">An error occurred while retrying the job execution.</response>
+    [HttpPost("{id}/retry")]
+    [Authorize(Policy = "Schedules.Execute")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> RetryJobExecution(int id)
+    {
+        try
+        {
+            var execution = await _unitOfWork.JobExecutions.GetByIdAsync(id);
+            if (execution == null)
+            {
+                return NotFound("Job execution not found");
+            }
+            
+            if (execution.Status != JobStatus.Failed && execution.Status != JobStatus.Cancelled)
+            {
+                return BadRequest("Only failed or cancelled jobs can be retried");
+            }
+            
+            var schedule = await _unitOfWork.Schedules.GetByIdAsync(execution.ScheduleId);
+            if (schedule == null)
+            {
+                return NotFound("Associated schedule not found");
+            }
+            
+            // Check authorization - use extension methods for cleaner authorization checks
+            var isAdmin = User.IsAdminOrAbove();
+            
+            // System schedules can be retried by Admin or Super Admin; regular schedules require matching client
+            if (schedule.IsSystemSchedule && !isAdmin)
+            {
+                _logger.LogWarning("Non-admin user attempted to retry system schedule execution {ExecutionId}", id);
+                return Forbid();
+            }
+            
+            if (!schedule.IsSystemSchedule && !User.CanAccessClient(schedule.ClientId))
+            {
+                _logger.LogWarning(
+                    "Unauthorized retry attempt: User with ClientId {UserClientId} attempted to retry execution {ExecutionId} for Schedule {ScheduleId} belonging to ClientId {ScheduleClientId}",
+                    User.GetClientId(), id, schedule.Id, schedule.ClientId);
+                return Forbid();
+            }
+            
+            // Ensure the job exists in Quartz before triggering
+            var jobKey = new JobKey($"Job_{schedule.Id}", $"Group_{schedule.ClientId}");
+            if (!await _scheduler.CheckExists(jobKey))
+            {
+                _logger.LogWarning("Job {JobKey} not found in Quartz scheduler for schedule {ScheduleId}, attempting to register it now", 
+                    jobKey, schedule.Id);
+                
+                try
+                {
+                    await _schedulerService.ScheduleJob(schedule);
+                    _logger.LogInformation("Successfully registered job {JobKey} for schedule {ScheduleId}", 
+                        jobKey, schedule.Id);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to register job {JobKey} for schedule {ScheduleId}", 
+                        jobKey, schedule.Id);
+                    return StatusCode(500, $"Failed to register job before retrying: {ex.Message}");
+                }
+            }
+            
+            // Trigger the job
+            await _schedulerService.TriggerJobNow(schedule.Id, schedule.ClientId, User.Identity?.Name ?? "Manual Retry");
+            
+            _logger.LogInformation("Retry triggered for execution {ExecutionId}, schedule {ScheduleId} by user {User}", 
+                id, schedule.Id, User.Identity?.Name ?? "Unknown");
+            
+            return Ok(new { message = "Job retry triggered successfully", scheduleId = schedule.Id, scheduleName = schedule.Name });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrying job execution {ExecutionId}", id);
+            return StatusCode(500, "An error occurred while retrying the job execution");
         }
     }
 }

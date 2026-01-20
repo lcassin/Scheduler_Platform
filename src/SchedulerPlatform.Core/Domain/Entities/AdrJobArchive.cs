@@ -39,9 +39,14 @@ public class AdrJobArchive
     public string VMAccountNumber { get; set; } = string.Empty;
     
     /// <summary>
-    /// Vendor code
+    /// Primary vendor code
     /// </summary>
-    public string? VendorCode { get; set; }
+    public string? PrimaryVendorCode { get; set; }
+    
+    /// <summary>
+    /// Master vendor code that groups related primary vendor codes
+    /// </summary>
+    public string? MasterVendorCode { get; set; }
     
     /// <summary>
     /// Credential ID used for this job

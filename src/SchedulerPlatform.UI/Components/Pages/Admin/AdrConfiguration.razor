@@ -25,6 +25,14 @@
     }
     else if (_config != null)
     {
+        @if (_config.TestModeEnabled)
+        {
+            <MudAlert Severity="Severity.Warning" Class="mb-4" Icon="@Icons.Material.Filled.Warning">
+                <strong>TEST MODE IS ENABLED</strong> - ADR requests and credential checks are limited to @_config.TestModeMaxScrapingJobs and @_config.TestModeMaxCredentialChecks jobs respectively. 
+                Status checks are not limited. Disable test mode before going to production.
+            </MudAlert>
+        }
+        
         <MudPaper Class="pa-4">
             <MudForm @ref="_form">
                 <MudGrid>
@@ -155,6 +163,41 @@
                                       Label="Missing Invoice Alert Email" 
                                       Variant="Variant.Outlined"
                                       HelperText="Email for missing invoice notifications" />
+                    </MudItem>
+                    
+                    <MudItem xs="12">
+                        <MudDivider Class="my-4" />
+                        <MudText Typo="Typo.h6" Class="mb-2" Color="@(_config.TestModeEnabled ? Color.Warning : Color.Default)">
+                            Test Mode Settings @(_config.TestModeEnabled ? "(ENABLED)" : "")
+                        </MudText>
+                        <MudText Typo="Typo.body2" Class="mb-2">
+                            Use test mode to limit the number of ADR requests and credential checks during testing phases. 
+                            This reduces API costs while still processing real jobs through the full workflow.
+                        </MudText>
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudSwitch @bind-Value="_config.TestModeEnabled" 
+                                   Label="Test Mode Enabled" 
+                                   Color="Color.Warning" />
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudNumericField @bind-Value="_config.TestModeMaxScrapingJobs" 
+                                         Label="Max ADR Requests (Test Mode)" 
+                                         Variant="Variant.Outlined"
+                                         Min="0" Max="1000"
+                                         Disabled="@(!_config.TestModeEnabled)"
+                                         HelperText="Max ADR requests per run (0 = unlimited)" />
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudNumericField @bind-Value="_config.TestModeMaxCredentialChecks" 
+                                         Label="Max Credential Checks (Test Mode)" 
+                                         Variant="Variant.Outlined"
+                                         Min="0" Max="1000"
+                                         Disabled="@(!_config.TestModeEnabled)"
+                                         HelperText="Max credential checks per run (0 = unlimited)" />
                     </MudItem>
                     
                     <MudItem xs="12">
@@ -361,6 +404,10 @@
         // Orchestration Performance Settings
         public int MaxOrchestrationDurationMinutes { get; set; } = 240;
         public int DatabaseCommandTimeoutSeconds { get; set; } = 600;
+        // Test Mode Settings
+        public bool TestModeEnabled { get; set; } = false;
+        public int TestModeMaxScrapingJobs { get; set; } = 50;
+        public int TestModeMaxCredentialChecks { get; set; } = 50;
         public string? ModifiedBy { get; set; }
         public DateTime? ModifiedDateTime { get; set; }
     }

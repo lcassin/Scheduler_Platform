@@ -161,4 +161,28 @@ public class AdrConfiguration : BaseEntity
     /// Default: 600 seconds (10 minutes) to handle large batch operations.
     /// </summary>
     public int DatabaseCommandTimeoutSeconds { get; set; } = 600;
+    
+    // Test Mode Settings
+    
+    /// <summary>
+    /// Whether test mode is enabled for the orchestration process.
+    /// When enabled, limits the number of ADR requests and credential checks per run.
+    /// Use this during testing phases to reduce API costs.
+    /// Default: false
+    /// </summary>
+    public bool TestModeEnabled { get; set; } = false;
+    
+    /// <summary>
+    /// Maximum number of ADR scraping requests per orchestration run when test mode is enabled.
+    /// Set to 0 for unlimited (same as test mode disabled for this step).
+    /// Default: 50 jobs
+    /// </summary>
+    public int TestModeMaxScrapingJobs { get; set; } = 50;
+    
+    /// <summary>
+    /// Maximum number of credential checks per orchestration run when test mode is enabled.
+    /// Set to 0 for unlimited (same as test mode disabled for this step).
+    /// Default: 50 jobs
+    /// </summary>
+    public int TestModeMaxCredentialChecks { get; set; } = 50;
 }

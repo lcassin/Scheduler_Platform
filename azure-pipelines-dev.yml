@@ -1,0 +1,142 @@
+# Azure DevOps CI/CD Pipeline for Scheduler Platform (DEV Environment)
+# This pipeline builds and deploys to DEV automatically on push to Net-10-Upgrade branch
+
+trigger:
+  branches:
+    include:
+      - development
+
+pool:
+  vmImage: 'windows-latest'
+
+variables:
+- group: Adr-Scheduler-Library-Dev
+- name: buildConfiguration
+  value: 'Release'
+- name: dotnetVersion
+  value: '10.0.x'
+- name: apiAppServiceName
+  value: 'nuscetsadrschdevwebapi'
+- name: uiAppServiceName
+  value: 'nuscetsadrschdevwebui'
+- name: apiProjectPath
+  value: 'Scheduler/src/SchedulerPlatform.API/SchedulerPlatform.API.csproj'
+- name: uiProjectPath
+  value: 'Scheduler/src/SchedulerPlatform.UI/SchedulerPlatform.UI.csproj'
+
+stages:
+# =============================================================================
+# Stage 1: Build (uses hosted agent)
+# =============================================================================
+- stage: Build
+  displayName: 'Build Stage'
+  jobs:
+  - job: BuildJob
+    displayName: 'Build All Projects'
+    steps:
+    - checkout: self
+      fetchDepth: 0
+
+    - task: UseDotNet@2
+      displayName: 'Install .NET SDK'
+      inputs:
+        packageType: 'sdk'
+        version: '$(dotnetVersion)'
+        includePreviewVersions: true
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Restore NuGet Packages'
+      inputs:
+        command: 'restore'
+        projects: |
+          $(apiProjectPath)
+          $(uiProjectPath)
+        feedsToUse: 'select'
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Publish API'
+      inputs:
+        command: 'publish'
+        publishWebProjects: false
+        projects: '$(apiProjectPath)'
+        arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/api'
+        zipAfterPublish: true
+        modifyOutputPath: false
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Publish UI'
+      inputs:
+        command: 'publish'
+        publishWebProjects: false
+        projects: '$(uiProjectPath)'
+        arguments: '--configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/ui'
+        zipAfterPublish: true
+        modifyOutputPath: false
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish API Artifact'
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)/api'
+        ArtifactName: 'api-drop'
+        publishLocation: 'Container'
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish UI Artifact'
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)/ui'
+        ArtifactName: 'ui-drop'
+        publishLocation: 'Container'
+
+# =============================================================================
+# Stage 2: Deploy API (uses on-prem agent)
+# =============================================================================
+- stage: DeployAPI
+  displayName: 'Deploy API'
+  dependsOn: Build
+  condition: succeeded()
+  pool:
+    name: OnPrem Hyde16 CoLo
+  jobs:
+  - job: DeployAPIJob
+    displayName: 'Deploy API to Azure App Service'
+    steps:
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download API Artifact'
+      inputs:
+        artifactName: 'api-drop'
+        targetPath: '$(Pipeline.Workspace)/api-drop'
+
+    - task: AzureWebApp@1
+      displayName: 'Deploy API to Azure'
+      inputs:
+        azureSubscription: 'ADR DEV RG'
+        appName: '$(apiAppServiceName)'
+        appType: 'webApp'
+        package: '$(Pipeline.Workspace)/api-drop/*.zip'
+
+# =============================================================================
+# Stage 3: Deploy UI (uses on-prem agent)
+# =============================================================================
+- stage: DeployUI
+  displayName: 'Deploy UI'
+  dependsOn: DeployAPI
+  condition: succeeded()
+  pool:
+    name: OnPrem Hyde16 CoLo
+  jobs:
+  - job: DeployUIJob
+    displayName: 'Deploy UI to Azure App Service'
+    steps:
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download UI Artifact'
+      inputs:
+        artifactName: 'ui-drop'
+        targetPath: '$(Pipeline.Workspace)/ui-drop'
+
+    - task: AzureWebApp@1
+      displayName: 'Deploy UI to Azure'
+      inputs:
+        azureSubscription: 'ADR DEV RG'
+        appName: '$(uiAppServiceName)'
+        appType: 'webApp'
+        package: '$(Pipeline.Workspace)/ui-drop/*.zip'

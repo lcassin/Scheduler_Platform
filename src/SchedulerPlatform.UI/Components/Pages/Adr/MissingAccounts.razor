@@ -86,7 +86,8 @@
                 <MudTh><MudTableSortLabel SortLabel="VMAccountNumber" T="AdrAccount">Account #</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="InterfaceAccountId" T="AdrAccount">Interface Account ID</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="ClientName" T="AdrAccount">Client</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortLabel="VendorCode" T="AdrAccount">Vendor Code</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="PrimaryVendorCode" T="AdrAccount">Primary Vendor</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="MasterVendorCode" T="AdrAccount">Master Vendor</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="PeriodType" T="AdrAccount">Period Type</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="LastInvoiceDateTime" T="AdrAccount">Last Invoice</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="ExpectedNextDateTime" T="AdrAccount">Expected Next</MudTableSortLabel></MudTh>
@@ -100,7 +101,8 @@
                 </MudTd>
                 <MudTd DataLabel="Interface Account ID">@(context.InterfaceAccountId ?? "N/A")</MudTd>
                 <MudTd DataLabel="Client">@(context.ClientName ?? "N/A")</MudTd>
-                <MudTd DataLabel="Vendor Code">@(context.VendorCode ?? "N/A")</MudTd>
+                <MudTd DataLabel="Primary Vendor">@(context.PrimaryVendorCode ?? "N/A")</MudTd>
+                <MudTd DataLabel="Master Vendor">@(context.MasterVendorCode ?? "N/A")</MudTd>
                 <MudTd DataLabel="Period Type">
                     @if (!string.IsNullOrEmpty(context.PeriodType))
                     {

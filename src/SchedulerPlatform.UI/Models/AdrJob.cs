@@ -6,7 +6,8 @@ public class AdrJob
     public int AdrAccountId { get; set; }
     public long VMAccountId { get; set; }
     public string VMAccountNumber { get; set; } = string.Empty;
-    public string? VendorCode { get; set; }
+    public string? PrimaryVendorCode { get; set; }
+    public string? MasterVendorCode { get; set; }
     public int CredentialId { get; set; }
     public string? PeriodType { get; set; }
     public DateTime BillingPeriodStartDateTime { get; set; }

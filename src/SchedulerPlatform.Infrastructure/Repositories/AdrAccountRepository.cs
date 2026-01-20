@@ -89,7 +89,8 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
                 a.VMAccountNumber.Contains(searchTerm) ||
                 (a.InterfaceAccountId != null && a.InterfaceAccountId.Contains(searchTerm)) ||
                 (a.ClientName != null && a.ClientName.Contains(searchTerm)) ||
-                (a.VendorCode != null && a.VendorCode.Contains(searchTerm)));
+                (a.PrimaryVendorCode != null && a.PrimaryVendorCode.Contains(searchTerm)) ||
+                (a.MasterVendorCode != null && a.MasterVendorCode.Contains(searchTerm)));
         }
 
         var totalCount = await query.CountAsync();
@@ -106,9 +107,12 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
             "ClientName" => sortDescending 
                 ? query.OrderByDescending(a => a.ClientName ?? "") 
                 : query.OrderBy(a => a.ClientName ?? ""),
-            "VendorCode" => sortDescending 
-                ? query.OrderByDescending(a => a.VendorCode ?? "") 
-                : query.OrderBy(a => a.VendorCode ?? ""),
+            "PrimaryVendorCode" => sortDescending 
+                ? query.OrderByDescending(a => a.PrimaryVendorCode ?? "") 
+                : query.OrderBy(a => a.PrimaryVendorCode ?? ""),
+            "MasterVendorCode" => sortDescending 
+                ? query.OrderByDescending(a => a.MasterVendorCode ?? "") 
+                : query.OrderBy(a => a.MasterVendorCode ?? ""),
             "PeriodType" => sortDescending 
                 ? query.OrderByDescending(a => a.PeriodType ?? "") 
                 : query.OrderBy(a => a.PeriodType ?? ""),

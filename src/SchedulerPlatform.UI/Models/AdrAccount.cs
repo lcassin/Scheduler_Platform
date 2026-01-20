@@ -9,7 +9,8 @@ public class AdrAccount
     public int? ClientId { get; set; }
     public string? ClientName { get; set; }
     public int CredentialId { get; set; }
-    public string? VendorCode { get; set; }
+    public string? PrimaryVendorCode { get; set; }
+    public string? MasterVendorCode { get; set; }
     public string? PeriodType { get; set; }
     public int? PeriodDays { get; set; }
     public double? MedianDays { get; set; }
@@ -57,7 +58,8 @@ public class BlacklistSummary
     public string ExclusionType { get; set; } = string.Empty;
     public DateTime? EffectiveStartDate { get; set; }
     public DateTime? EffectiveEndDate { get; set; }
-    public string? VendorCode { get; set; }
+    public string? PrimaryVendorCode { get; set; }
+    public string? MasterVendorCode { get; set; }
     public long? VMAccountId { get; set; }
     public string? VMAccountNumber { get; set; }
     public int? CredentialId { get; set; }
