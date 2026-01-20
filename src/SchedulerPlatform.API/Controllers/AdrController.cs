@@ -3763,6 +3763,9 @@ public class AdrController : ControllerBase
             config.Notes = request.Notes ?? config.Notes;
             config.MaxOrchestrationDurationMinutes = request.MaxOrchestrationDurationMinutes ?? config.MaxOrchestrationDurationMinutes;
             config.DatabaseCommandTimeoutSeconds = request.DatabaseCommandTimeoutSeconds ?? config.DatabaseCommandTimeoutSeconds;
+            config.TestModeEnabled = request.TestModeEnabled ?? config.TestModeEnabled;
+            config.TestModeMaxScrapingJobs = request.TestModeMaxScrapingJobs ?? config.TestModeMaxScrapingJobs;
+            config.TestModeMaxCredentialChecks = request.TestModeMaxCredentialChecks ?? config.TestModeMaxCredentialChecks;
             config.ModifiedDateTime = DateTime.UtcNow;
             config.ModifiedBy = username;
             
@@ -4850,6 +4853,9 @@ public class UpdateAdrConfigurationRequest
     public string? Notes { get; set; }
     public int? MaxOrchestrationDurationMinutes { get; set; }
     public int? DatabaseCommandTimeoutSeconds { get; set; }
+    public bool? TestModeEnabled { get; set; }
+    public int? TestModeMaxScrapingJobs { get; set; }
+    public int? TestModeMaxCredentialChecks { get; set; }
 }
 
 /// <summary>
