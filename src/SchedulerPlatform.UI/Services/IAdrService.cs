@@ -107,4 +107,9 @@ public interface IAdrService
         bool? isEnabled = null,
         bool? isOverridden = null,
         string format = "excel");
+    
+    /// <summary>
+    /// Gets the current test mode status from the ADR configuration.
+    /// </summary>
+    Task<TestModeStatus> GetTestModeStatusAsync();
 }

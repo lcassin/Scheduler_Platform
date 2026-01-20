@@ -315,7 +315,7 @@ public class AdrJobRepositoryQueryTests : IDisposable
             AdrAccountId = 100 + id,
             VMAccountId = 1000 + id,
             VMAccountNumber = $"ACC{id:D4}",
-            VendorCode = "TEST",
+            PrimaryVendorCode = "TEST",
             CredentialId = 100 + id,
             Status = status,
             NextRunDateTime = nextRunDateTime ?? now.AddDays(1),

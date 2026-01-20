@@ -19,8 +19,8 @@
     <MudPaper Class="pa-4 mb-4">
         <MudGrid Spacing="2">
             <MudItem xs="12" md="2">
-                <MudTextField @bind-Value="_searchVendorCode" 
-                              Label="Vendor Code" 
+                <MudTextField @bind-Value="_searchPrimaryVendorCode" 
+                              Label="Primary Vendor Code" 
                               Variant="Variant.Outlined"
                               Margin="Margin.Dense"
                               Immediate="true"
@@ -97,7 +97,7 @@
         <MudTable T="AccountRuleModel" ServerData="@ServerReload" 
                   @ref="_table" Hover="true" Striped="true" Dense="true">
             <HeaderContent>
-                <MudTh><MudTableSortLabel SortLabel="VendorCode" T="AccountRuleModel">Vendor Code</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="PrimaryVendorCode" T="AccountRuleModel">Primary Vendor Code</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="VMAccountNumber" T="AccountRuleModel">Account Number</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="JobTypeId" T="AccountRuleModel">Job Type</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="PeriodType" T="AccountRuleModel">Period Type</MudTableSortLabel></MudTh>
@@ -108,7 +108,7 @@
                 <MudTh>Actions</MudTh>
             </HeaderContent>
             <RowTemplate>
-                <MudTd DataLabel="Vendor Code">@context.VendorCode</MudTd>
+                <MudTd DataLabel="Primary Vendor Code">@context.PrimaryVendorCode</MudTd>
                 <MudTd DataLabel="Account Number">@context.VMAccountNumber</MudTd>
                 <MudTd DataLabel="Job Type">
                     <MudChip T="string" Size="Size.Small" Color="@GetJobTypeColor(context.JobTypeId)">
@@ -192,7 +192,7 @@
     private bool _loading = true;
     private bool _isExporting = false;
     
-    private string? _searchVendorCode;
+    private string? _searchPrimaryVendorCode;
     private string? _searchAccountNumber;
     private bool? _filterEnabled = true;
     private bool? _filterOverridden;
@@ -211,7 +211,7 @@
             var pageSize = state.PageSize;
 
             var sortDescending = state.SortDirection == SortDirection.Descending;
-            var sortColumn = string.IsNullOrEmpty(state.SortLabel) ? "VendorCode" : state.SortLabel;
+            var sortColumn = string.IsNullOrEmpty(state.SortLabel) ? "PrimaryVendorCode" : state.SortLabel;
 
             var queryParams = new List<string>
             {
@@ -221,8 +221,8 @@
                 $"sortDescending={sortDescending}"
             };
             
-            if (!string.IsNullOrWhiteSpace(_searchVendorCode))
-                queryParams.Add($"vendorCode={Uri.EscapeDataString(_searchVendorCode)}");
+            if (!string.IsNullOrWhiteSpace(_searchPrimaryVendorCode))
+                queryParams.Add($"primaryVendorCode={Uri.EscapeDataString(_searchPrimaryVendorCode)}");
             if (!string.IsNullOrWhiteSpace(_searchAccountNumber))
                 queryParams.Add($"accountNumber={Uri.EscapeDataString(_searchAccountNumber)}");
             if (_filterEnabled.HasValue)
@@ -267,7 +267,7 @@
 
     private async Task ClearFilters()
     {
-        _searchVendorCode = null;
+        _searchPrimaryVendorCode = null;
         _searchAccountNumber = null;
         _filterEnabled = true;
         _filterOverridden = null;
@@ -341,8 +341,8 @@
         {
             var queryParams = new List<string> { $"format={format}" };
             
-            if (!string.IsNullOrWhiteSpace(_searchVendorCode))
-                queryParams.Add($"vendorCode={Uri.EscapeDataString(_searchVendorCode)}");
+            if (!string.IsNullOrWhiteSpace(_searchPrimaryVendorCode))
+                queryParams.Add($"primaryVendorCode={Uri.EscapeDataString(_searchPrimaryVendorCode)}");
             if (!string.IsNullOrWhiteSpace(_searchAccountNumber))
                 queryParams.Add($"accountNumber={Uri.EscapeDataString(_searchAccountNumber)}");
             if (_filterEnabled.HasValue)
@@ -400,7 +400,7 @@
     {
         public int Id { get; set; }
         public int AdrAccountId { get; set; }
-        public string? VendorCode { get; set; }
+        public string? PrimaryVendorCode { get; set; }
         public string? VMAccountNumber { get; set; }
         public int JobTypeId { get; set; }
         public string? PeriodType { get; set; }

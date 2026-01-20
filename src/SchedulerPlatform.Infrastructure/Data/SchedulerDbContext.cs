@@ -283,7 +283,8 @@ public class SchedulerDbContext : DbContext
             entity.Property(e => e.VMAccountNumber).IsRequired().HasMaxLength(128);
             entity.Property(e => e.InterfaceAccountId).HasMaxLength(128);
             entity.Property(e => e.ClientName).HasMaxLength(128);
-            entity.Property(e => e.VendorCode).HasMaxLength(128);
+            entity.Property(e => e.PrimaryVendorCode).HasMaxLength(128);
+            entity.Property(e => e.MasterVendorCode).HasMaxLength(128);
             entity.Property(e => e.PeriodType).HasMaxLength(13);
             entity.Property(e => e.NextRunStatus).HasMaxLength(10);
             entity.Property(e => e.HistoricalBillingStatus).HasMaxLength(10);
@@ -309,7 +310,8 @@ public class SchedulerDbContext : DbContext
             // Performance indexes for paged queries
             entity.HasIndex(e => e.NextRunDateTime);
             entity.HasIndex(e => e.InterfaceAccountId);
-            entity.HasIndex(e => e.VendorCode);
+            entity.HasIndex(e => e.PrimaryVendorCode);
+            entity.HasIndex(e => e.MasterVendorCode);
             // Composite indexes for common filter + sort patterns
             entity.HasIndex(e => new { e.IsDeleted, e.NextRunStatus, e.NextRunDateTime });
             entity.HasIndex(e => new { e.IsDeleted, e.HistoricalBillingStatus });
@@ -324,7 +326,8 @@ public class SchedulerDbContext : DbContext
             entity.Property(e => e.Id).HasColumnName("AdrJobId");
             
             entity.Property(e => e.VMAccountNumber).IsRequired().HasMaxLength(128);
-            entity.Property(e => e.VendorCode).HasMaxLength(128);
+            entity.Property(e => e.PrimaryVendorCode).HasMaxLength(128);
+            entity.Property(e => e.MasterVendorCode).HasMaxLength(128);
             entity.Property(e => e.PeriodType).HasMaxLength(13);
             entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
             entity.Property(e => e.AdrStatusDescription).HasMaxLength(100);
@@ -350,7 +353,8 @@ public class SchedulerDbContext : DbContext
             
             // Performance indexes for paged queries and search
             entity.HasIndex(e => e.VMAccountNumber);
-            entity.HasIndex(e => e.VendorCode);
+            entity.HasIndex(e => e.PrimaryVendorCode);
+            entity.HasIndex(e => e.MasterVendorCode);
             entity.HasIndex(e => e.ModifiedDateTime);
             // Composite indexes for common filter + sort patterns
             entity.HasIndex(e => new { e.IsDeleted, e.Status });
@@ -422,20 +426,23 @@ public class SchedulerDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).HasColumnName("AdrAccountBlacklistId");
             
-            entity.Property(e => e.VendorCode).HasMaxLength(128);
+            entity.Property(e => e.PrimaryVendorCode).HasMaxLength(128);
+            entity.Property(e => e.MasterVendorCode).HasMaxLength(128);
             entity.Property(e => e.VMAccountNumber).HasMaxLength(128);
             entity.Property(e => e.ExclusionType).IsRequired().HasMaxLength(20);
             entity.Property(e => e.Reason).IsRequired().HasMaxLength(500);
             entity.Property(e => e.BlacklistedBy).HasMaxLength(200);
             entity.Property(e => e.Notes).HasColumnType("nvarchar(max)");
             
-            entity.HasIndex(e => e.VendorCode);
+            entity.HasIndex(e => e.PrimaryVendorCode);
+            entity.HasIndex(e => e.MasterVendorCode);
             entity.HasIndex(e => e.VMAccountId);
             entity.HasIndex(e => e.VMAccountNumber);
             entity.HasIndex(e => e.CredentialId);
             entity.HasIndex(e => e.IsActive);
             entity.HasIndex(e => new { e.IsDeleted, e.IsActive });
-            entity.HasIndex(e => new { e.VendorCode, e.VMAccountId, e.CredentialId });
+            entity.HasIndex(e => new { e.PrimaryVendorCode, e.VMAccountId, e.CredentialId });
+            entity.HasIndex(e => new { e.MasterVendorCode, e.VMAccountId, e.CredentialId });
         });
 
         // ADR Job Type entity configuration (replaces hardcoded AdrRequestType enum)
@@ -463,7 +470,8 @@ public class SchedulerDbContext : DbContext
             entity.HasKey(e => e.AdrJobArchiveId);
             
             entity.Property(e => e.VMAccountNumber).IsRequired().HasMaxLength(128);
-            entity.Property(e => e.VendorCode).HasMaxLength(128);
+            entity.Property(e => e.PrimaryVendorCode).HasMaxLength(128);
+            entity.Property(e => e.MasterVendorCode).HasMaxLength(128);
             entity.Property(e => e.PeriodType).HasMaxLength(13);
             entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
             entity.Property(e => e.AdrStatusDescription).HasMaxLength(100);

@@ -1,0 +1,450 @@
+@page "/admin/logs"
+@using SchedulerPlatform.UI.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject AuthenticatedHttpClientService HttpClient
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IPermissionService PermissionService
+@inject IJSRuntime JSRuntime
+
+<PageTitle>API Logs</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <MudText Typo="Typo.h4">API Logs</MudText>
+        @if (_hasAccess && _isSuperAdmin)
+        {
+            <MudButton Variant="Variant.Outlined" 
+                       Color="Color.Warning" 
+                       StartIcon="@Icons.Material.Filled.DeleteSweep"
+                       OnClick="CleanupOldLogs">
+                Cleanup Old Logs
+            </MudButton>
+        }
+    </div>
+
+    @if (!_hasAccess)
+    {
+        <MudAlert Severity="Severity.Warning">
+            You do not have permission to access this page. Only Admin and Super Admin users can view API logs.
+        </MudAlert>
+    }
+    else if (_loading)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else
+    {
+        <MudGrid>
+            <MudItem xs="12" md="4">
+                <MudPaper Class="pa-4" Style="height: calc(100vh - 200px); overflow-y: auto;">
+                    <MudText Typo="Typo.h6" Class="mb-3">Log Files</MudText>
+                    
+                    @if (_logFiles.Count == 0)
+                    {
+                        <MudText Color="Color.Secondary">No log files found.</MudText>
+                    }
+                    else
+                    {
+                        <MudList T="LogFileInfo" Dense="true" @bind-SelectedValue="_selectedFile">
+                            @foreach (var file in _logFiles)
+                            {
+                                <MudListItem Value="@file" 
+                                             OnClick="@(() => SelectFile(file))"
+                                             Class="@(file == _selectedFile ? "mud-primary-text" : "")">
+                                    <div class="d-flex flex-column">
+                                        <MudText Typo="Typo.body2" Class="font-weight-bold">
+                                            @file.FileName
+                                        </MudText>
+                                        <div class="d-flex gap-2">
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                @file.SizeFormatted
+                                            </MudText>
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                @file.LastModifiedUtc.ToLocalTime().ToString("g")
+                                            </MudText>
+                                        </div>
+                                    </div>
+                                </MudListItem>
+                            }
+                        </MudList>
+                    }
+                </MudPaper>
+            </MudItem>
+            
+            <MudItem xs="12" md="8">
+                <MudPaper Class="pa-4" Style="height: calc(100vh - 200px); display: flex; flex-direction: column;">
+                    @if (_selectedFile == null)
+                    {
+                        <div class="d-flex align-center justify-center" style="height: 100%;">
+                            <MudText Color="Color.Secondary">Select a log file to view its contents</MudText>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="d-flex justify-space-between align-center mb-2">
+                            <div>
+                                <MudText Typo="Typo.subtitle1" Class="font-weight-bold">@_selectedFile.FileName</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @_selectedFile.SizeFormatted | Last modified: @_selectedFile.LastModifiedUtc.ToLocalTime().ToString("g")
+                                </MudText>
+                            </div>
+                            <div class="d-flex gap-2 align-center">
+                                <MudNumericField @bind-Value="_linesToShow" 
+                                                 Label="Lines" 
+                                                 Variant="Variant.Outlined"
+                                                 Min="100" Max="10000"
+                                                 Style="width: 100px;"
+                                                 Margin="Margin.Dense" />
+                                <MudButton Variant="Variant.Outlined" 
+                                           Color="Color.Primary" 
+                                           StartIcon="@Icons.Material.Filled.Refresh"
+                                           OnClick="@(() => LoadFileContent(_selectedFile))"
+                                           Disabled="@_loadingContent"
+                                           Size="Size.Small">
+                                    Refresh
+                                </MudButton>
+                                <MudButton Variant="Variant.Outlined" 
+                                           Color="Color.Secondary" 
+                                           StartIcon="@Icons.Material.Filled.Download"
+                                           OnClick="@(() => DownloadFile(_selectedFile))"
+                                           Disabled="@_downloading"
+                                           Size="Size.Small">
+                                    Download
+                                </MudButton>
+                            </div>
+                        </div>
+                        
+                        <div class="d-flex gap-2 align-center mb-2">
+                            <MudTextField @bind-Value="_searchTerm"
+                                          Placeholder="Search term..."
+                                          Variant="Variant.Outlined"
+                                          Adornment="Adornment.Start"
+                                          AdornmentIcon="@Icons.Material.Filled.Search"
+                                          Margin="Margin.Dense"
+                                          Style="flex: 1;"
+                                          Immediate="true"
+                                          OnKeyDown="@OnSearchKeyDown" />
+                            <MudButton Variant="Variant.Filled" 
+                                       Color="Color.Primary" 
+                                       OnClick="SearchEntireFile"
+                                       Disabled="@(_searching || string.IsNullOrWhiteSpace(_searchTerm))"
+                                       Size="Size.Small">
+                                @if (_searching)
+                                {
+                                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                }
+                                Search File
+                            </MudButton>
+                        </div>
+                        
+                        @if (_searchResults != null)
+                        {
+                            <MudAlert Severity="@(_searchResults.TotalMatches > 0 ? Severity.Success : Severity.Info)" 
+                                      Dense="true" 
+                                      Class="mb-2"
+                                      ShowCloseIcon="true"
+                                      CloseIconClicked="ClearSearchResults">
+                                @if (_searchResults.TotalMatches > 0)
+                                {
+                                    <text>Found @_searchResults.TotalMatches matches in @_searchResults.TotalLinesScanned.ToString("N0") lines</text>
+                                    @if (_searchResults.MaxResultsReached)
+                                    {
+                                        <text> (showing first @_searchResults.TotalMatches, more may exist)</text>
+                                    }
+                                }
+                                else
+                                {
+                                    <text>No matches found for "@_searchResults.SearchTerm" in @_searchResults.TotalLinesScanned.ToString("N0") lines</text>
+                                }
+                            </MudAlert>
+                        }
+                        
+                        @if (_loadingContent || _searching)
+                        {
+                            <div class="d-flex align-center justify-center" style="flex: 1;">
+                                <MudProgressCircular Indeterminate="true" />
+                            </div>
+                        }
+                        else if (!string.IsNullOrEmpty(_fileContent))
+                        {
+                            <div style="flex: 1; overflow-y: auto; background-color: #1e1e1e; border-radius: 4px; padding: 8px 12px; min-height: 0;">
+                                <pre style="margin: 0; white-space: pre-wrap; word-wrap: break-word; font-family: 'Consolas', 'Monaco', monospace; font-size: 12px; color: #d4d4d4; line-height: 1.4;">@GetFilteredContent()</pre>
+                            </div>
+                            
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                                Showing @_totalLines lines (most recent)
+                                @if (!string.IsNullOrEmpty(_searchTerm))
+                                {
+                                    <text> | Filtered by: "@_searchTerm"</text>
+                                }
+                            </MudText>
+                        }
+                        else
+                        {
+                            <div class="d-flex align-center justify-center" style="flex: 1;">
+                                <MudText Color="Color.Secondary">Log file is empty</MudText>
+                            </div>
+                        }
+                    }
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    private List<LogFileInfo> _logFiles = new();
+    private LogFileInfo? _selectedFile;
+    private string _fileContent = string.Empty;
+    private string _searchTerm = string.Empty;
+    private int _linesToShow = 500;
+    private int _totalLines = 0;
+    private bool _loading = true;
+    private bool _loadingContent = false;
+    private bool _downloading = false;
+    private bool _searching = false;
+    private bool _hasAccess = false;
+    private bool _isSuperAdmin = false;
+    private LogSearchResult? _searchResults;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _hasAccess = await PermissionService.IsSystemAdminAsync() || 
+                     await PermissionService.CanUpdateAsync("admin");
+        _isSuperAdmin = await PermissionService.IsSystemAdminAsync();
+        
+        if (_hasAccess)
+        {
+            await LoadLogFiles();
+        }
+        else
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadLogFiles()
+    {
+        _loading = true;
+        try
+        {
+            var response = await HttpClient.GetAsync("logs");
+            response.EnsureSuccessStatusCode();
+            _logFiles = await response.Content.ReadFromJsonAsync<List<LogFileInfo>>() ?? new();
+            
+            if (_logFiles.Count > 0 && _selectedFile == null)
+            {
+                await SelectFile(_logFiles.First());
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading log files: {ex.Message}", Severity.Error);
+            _logFiles = new();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SelectFile(LogFileInfo file)
+    {
+        _selectedFile = file;
+        _searchTerm = string.Empty;
+        _searchResults = null;
+        await LoadFileContent(file);
+    }
+
+    private async Task LoadFileContent(LogFileInfo file)
+    {
+        _loadingContent = true;
+        StateHasChanged();
+        
+        try
+        {
+            var response = await HttpClient.GetAsync($"logs/{file.FileName}?lines={_linesToShow}");
+            response.EnsureSuccessStatusCode();
+            var content = await response.Content.ReadFromJsonAsync<LogFileContent>();
+            
+            if (content != null)
+            {
+                _fileContent = content.Content;
+                _totalLines = content.TotalLines;
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading log file: {ex.Message}", Severity.Error);
+            _fileContent = string.Empty;
+        }
+        finally
+        {
+            _loadingContent = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DownloadFile(LogFileInfo file)
+    {
+        _downloading = true;
+        StateHasChanged();
+        
+        try
+        {
+            var response = await HttpClient.GetAsync($"logs/{file.FileName}/download");
+            response.EnsureSuccessStatusCode();
+            
+            var bytes = await response.Content.ReadAsByteArrayAsync();
+            var base64 = Convert.ToBase64String(bytes);
+            
+            await JSRuntime.InvokeVoidAsync("eval", $@"
+                var link = document.createElement('a');
+                link.href = 'data:text/plain;base64,{base64}';
+                link.download = '{file.FileName}';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            ");
+            
+            Snackbar.Add("Log file downloaded", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error downloading log file: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _downloading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CleanupOldLogs()
+    {
+        var result = await DialogService.ShowMessageBox(
+            "Cleanup Old Logs",
+            "This will delete log files older than 30 days. This action cannot be undone. Continue?",
+            yesText: "Delete",
+            cancelText: "Cancel");
+        
+        if (result == true)
+        {
+            try
+            {
+                var response = await HttpClient.DeleteAsync("logs/cleanup?olderThanDays=30");
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    var responseContent = await response.Content.ReadAsStringAsync();
+                    Snackbar.Add("Old log files cleaned up successfully", Severity.Success);
+                    await LoadLogFiles();
+                }
+                else
+                {
+                    var error = await response.Content.ReadAsStringAsync();
+                    Snackbar.Add($"Error cleaning up logs: {error}", Severity.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error cleaning up logs: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private string GetFilteredContent()
+    {
+        // If we have search results from server-side search, show those instead
+        if (_searchResults != null && _searchResults.Matches.Count > 0)
+        {
+            return string.Join('\n', _searchResults.Matches.Select(m => $"[Line {m.LineNumber}] {m.Content}"));
+        }
+        
+        // Otherwise show loaded content (optionally filtered client-side)
+        if (string.IsNullOrEmpty(_searchTerm) || _searchResults != null)
+        {
+            return _fileContent;
+        }
+        
+        var lines = _fileContent.Split('\n');
+        var filteredLines = lines.Where(l => l.Contains(_searchTerm, StringComparison.OrdinalIgnoreCase));
+        return string.Join('\n', filteredLines);
+    }
+
+    private async Task OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(_searchTerm))
+        {
+            await SearchEntireFile();
+        }
+    }
+
+    private async Task SearchEntireFile()
+    {
+        if (_selectedFile == null || string.IsNullOrWhiteSpace(_searchTerm))
+            return;
+
+        _searching = true;
+        _searchResults = null;
+        StateHasChanged();
+
+        try
+        {
+            var response = await HttpClient.GetAsync($"logs/{_selectedFile.FileName}/search?term={Uri.EscapeDataString(_searchTerm)}&maxResults=500");
+            response.EnsureSuccessStatusCode();
+            _searchResults = await response.Content.ReadFromJsonAsync<LogSearchResult>();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error searching log file: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _searching = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ClearSearchResults()
+    {
+        _searchResults = null;
+        StateHasChanged();
+    }
+
+    private class LogFileInfo
+    {
+        public string FileName { get; set; } = string.Empty;
+        public long SizeBytes { get; set; }
+        public string SizeFormatted { get; set; } = string.Empty;
+        public DateTime LastModifiedUtc { get; set; }
+        public DateTime CreatedUtc { get; set; }
+    }
+
+    private class LogFileContent
+    {
+        public string FileName { get; set; } = string.Empty;
+        public string Content { get; set; } = string.Empty;
+        public long SizeBytes { get; set; }
+        public DateTime LastModifiedUtc { get; set; }
+        public int TotalLines { get; set; }
+    }
+
+    private class LogSearchResult
+    {
+        public string FileName { get; set; } = string.Empty;
+        public string SearchTerm { get; set; } = string.Empty;
+        public List<LogSearchMatch> Matches { get; set; } = new();
+        public int TotalMatches { get; set; }
+        public int TotalLinesScanned { get; set; }
+        public bool MaxResultsReached { get; set; }
+    }
+
+    private class LogSearchMatch
+    {
+        public int LineNumber { get; set; }
+        public string Content { get; set; } = string.Empty;
+    }
+}

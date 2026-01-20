@@ -25,3 +25,5 @@
 /src/SchedulerPlatform.API/appsettings.AzureDev.json
 /src/SchedulerPlatform.UI/appsettings.AzureDev.json
 /SchedulerPlatform.DB
+/src/SchedulerPlatform.UI/appsettings.json
+/src/SchedulerPlatform.API/appsettings.Staging.json

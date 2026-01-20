@@ -11,12 +11,19 @@
 
 <MudText Typo="Typo.h4" Class="mb-4">ADR Jobs</MudText>
 
+@if (_testModeStatus?.IsEnabled == true)
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4" Icon="@Icons.Material.Filled.Warning">
+        <strong>TEST MODE IS ENABLED</strong> - ADR requests and credential checks are limited to @_testModeStatus.MaxScrapingJobs and @_testModeStatus.MaxCredentialChecks jobs respectively per orchestration run.
+    </MudAlert>
+}
+
 <MudPaper Class="pa-4">
         <MudGrid Class="mb-4" Spacing="2">
             <MudItem xs="12" md="2">
-                <MudTextField @bind-Value="_searchVendorCode" 
-                              Label="Vendor Code" 
-                              Placeholder="Enter vendor code"
+                <MudTextField @bind-Value="_searchPrimaryVendorCode" 
+                              Label="Primary Vendor" 
+                              Placeholder="Enter primary vendor"
                               Variant="Variant.Outlined" 
                               Margin="Margin.Dense" 
                               Clearable="true"
@@ -39,12 +46,18 @@
                 <MudSelect T="string" @bind-Value="_selectedStatus" Label="Status" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
                     <MudSelectItem Value="@("")">All</MudSelectItem>
                     <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
+                    <MudSelectItem Value="@("CredentialCheckInProgress")">Credential Check In Progress</MudSelectItem>
                     <MudSelectItem Value="@("CredentialVerified")">Credential Verified</MudSelectItem>
                     <MudSelectItem Value="@("CredentialFailed")">Credential Failed</MudSelectItem>
+                    <MudSelectItem Value="@("ScrapeInProgress")">ADR Request In Progress</MudSelectItem>
                     <MudSelectItem Value="@("ScrapeRequested")">ADR Request Sent</MudSelectItem>
-                    <MudSelectItem Value="@("Failed")">ADR Request Failed</MudSelectItem>
+                    <MudSelectItem Value="@("ScrapeFailed")">ADR Request Failed</MudSelectItem>
+                    <MudSelectItem Value="@("StatusCheckInProgress")">Status Check In Progress</MudSelectItem>
+                    <MudSelectItem Value="@("NoInvoiceFound")">No Invoice Found</MudSelectItem>
+                    <MudSelectItem Value="@("Failed")">Failed</MudSelectItem>
                     <MudSelectItem Value="@("Completed")">Completed</MudSelectItem>
                     <MudSelectItem Value="@("NeedsReview")">Needs Review</MudSelectItem>
+                    <MudSelectItem Value="@("Cancelled")">Cancelled</MudSelectItem>
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" md="2">
@@ -128,7 +141,8 @@
                   MultiSelection="true" @bind-SelectedItems="_selectedJobs">
                         <HeaderContent>
                             <MudTh><MudTableSortLabel SortLabel="Id" T="AdrJob" InitialDirection="SortDirection.Descending">Job ID</MudTableSortLabel></MudTh>
-                            <MudTh><MudTableSortLabel SortLabel="VendorCode" T="AdrJob">Vendor</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="PrimaryVendorCode" T="AdrJob">Primary Vendor</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="MasterVendorCode" T="AdrJob">Master Vendor</MudTableSortLabel></MudTh>
                             <MudTh><MudTableSortLabel SortLabel="VMAccountNumber" T="AdrJob">Account #</MudTableSortLabel></MudTh>
                             <MudTh><MudTableSortLabel SortLabel="BillingPeriodStartDateTime" T="AdrJob">Billing Period</MudTableSortLabel></MudTh>
                             <MudTh><MudTableSortLabel SortLabel="PeriodType" T="AdrJob">Period Type</MudTableSortLabel></MudTh>
@@ -141,10 +155,20 @@
                         </HeaderContent>
                         <RowTemplate>
                             <MudTd DataLabel="Job ID">@context.Id</MudTd>
-                            <MudTd DataLabel="Vendor">
-                                @if (!string.IsNullOrEmpty(context.VendorCode))
+                            <MudTd DataLabel="Primary Vendor">
+                                @if (!string.IsNullOrEmpty(context.PrimaryVendorCode))
                                 {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary">@context.VendorCode</MudChip>
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Primary">@context.PrimaryVendorCode</MudChip>
+                                }
+                                else
+                                {
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">N/A</MudText>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Master Vendor">
+                                @if (!string.IsNullOrEmpty(context.MasterVendorCode))
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info">@context.MasterVendorCode</MudChip>
                                 }
                                 else
                                 {
@@ -262,10 +286,7 @@
                                                                         }
                                                                         <MudMenuItem Icon="@Icons.Material.Filled.AccountBalance" OnClick="() => ViewAccount(context)">View Account</MudMenuItem>
                                                                         <MudMenuItem Icon="@Icons.Material.Filled.Replay" OnClick="() => RefireJob(context)">Refire Job</MudMenuItem>
-                                                                        @if (context.IsManualRequest && (context.Status == "ScrapeRequested" || context.Status == "ScrapeInProgress"))
-                                                                        {
-                                                                            <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="() => CheckJobStatus(context)">Check Status</MudMenuItem>
-                                                                        }
+                                                                        <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="() => CheckJobStatus(context)">Check Status</MudMenuItem>
                                                                     </MudMenu>
                                                                 </MudTd>
             </RowTemplate>
@@ -274,7 +295,7 @@
                                 <MudIcon Icon="@Icons.Material.Filled.Work" Size="Size.Large" Class="mb-2" />
                                 <MudText Typo="Typo.h6">No jobs found</MudText>
                                 <MudText Typo="Typo.body2" Class="mb-4">
-                                    @if (!string.IsNullOrEmpty(_filterVendorCode) || !string.IsNullOrEmpty(_filterAccountNumber) || !string.IsNullOrEmpty(_filterStatus))
+                                    @if (!string.IsNullOrEmpty(_filterPrimaryVendorCode) || !string.IsNullOrEmpty(_filterAccountNumber) || !string.IsNullOrEmpty(_filterStatus))
                                     {
                                         <span>Try adjusting your filters.</span>
                                     }
@@ -297,12 +318,12 @@
     private bool _isExporting = false;
     private bool _isRefiring = false;
     private bool _forceRefire = false;
-    private string? _searchVendorCode;
+    private string? _searchPrimaryVendorCode;
     private string? _searchAccountNumber;
     private string _selectedStatus = "";
     private string _selectedBlacklistStatus = "";
     private string? _searchInterfaceAccountId;
-    private string? _filterVendorCode;
+    private string? _filterPrimaryVendorCode;
     private string? _filterAccountNumber;
     private string? _filterStatus;
     private string? _filterBlacklistStatus;
@@ -310,10 +331,11 @@
     private bool _showLatestPerAccount = true;
     private bool _showManualJobs = false;
     private HashSet<AdrJob> _selectedJobs = new();
+    private TestModeStatus? _testModeStatus;
 
     [Parameter]
-    [SupplyParameterFromQuery(Name = "vendorCode")]
-    public string? VendorCodeParam { get; set; }
+    [SupplyParameterFromQuery(Name = "primaryVendorCode")]
+    public string? PrimaryVendorCodeParam { get; set; }
 
     [Parameter]
     [SupplyParameterFromQuery(Name = "accountNumber")]
@@ -331,12 +353,15 @@
     [SupplyParameterFromQuery(Name = "blacklistStatus")]
     public string? BlacklistStatusParam { get; set; }
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
-        if (!string.IsNullOrEmpty(VendorCodeParam))
+        // Load test mode status for banner display
+        _testModeStatus = await AdrService.GetTestModeStatusAsync();
+        
+        if (!string.IsNullOrEmpty(PrimaryVendorCodeParam))
         {
-            _searchVendorCode = VendorCodeParam;
-            _filterVendorCode = VendorCodeParam;
+            _searchPrimaryVendorCode = PrimaryVendorCodeParam;
+            _filterPrimaryVendorCode = PrimaryVendorCodeParam;
         }
         if (!string.IsNullOrEmpty(AccountNumberParam))
         {
@@ -381,7 +406,7 @@
                 pageSize,
                 null, // adrAccountId - no longer used for filtering
                 _filterStatus,
-                _filterVendorCode,
+                _filterPrimaryVendorCode,
                 _filterAccountNumber,
                 _showLatestPerAccount,
                 null, // vmAccountId - not used for filtering
@@ -425,7 +450,7 @@
 
     private async Task ApplyFilters()
     {
-        _filterVendorCode = string.IsNullOrWhiteSpace(_searchVendorCode) ? null : _searchVendorCode;
+        _filterPrimaryVendorCode = string.IsNullOrWhiteSpace(_searchPrimaryVendorCode) ? null : _searchPrimaryVendorCode;
         _filterAccountNumber = string.IsNullOrWhiteSpace(_searchAccountNumber) ? null : _searchAccountNumber;
         _filterStatus = string.IsNullOrEmpty(_selectedStatus) ? null : _selectedStatus;
         _filterBlacklistStatus = string.IsNullOrEmpty(_selectedBlacklistStatus) ? null : _selectedBlacklistStatus;
@@ -435,13 +460,13 @@
 
     private async Task ClearFilters()
     {
-        _searchVendorCode = null;
+        _searchPrimaryVendorCode = null;
         _searchAccountNumber = null;
         _selectedStatus = "";
         _selectedBlacklistStatus = "";
         _searchInterfaceAccountId = null;
         _showManualJobs = false;
-        _filterVendorCode = null;
+        _filterPrimaryVendorCode = null;
         _filterAccountNumber = null;
         _filterStatus = null;
         _filterBlacklistStatus = null;
@@ -642,20 +667,20 @@
     private void ViewJobHistory(AdrJob job)
     {
         // Turn off "Latest per Account" mode and filter by the specific account's account number
-        // VendorCode filter is only applied if it's not null/empty to avoid filtering issues
+        // PrimaryVendorCode filter is only applied if it's not null/empty to avoid filtering issues
         _showLatestPerAccount = false;
         _searchAccountNumber = job.VMAccountNumber;
         _filterAccountNumber = job.VMAccountNumber;
         
-        if (!string.IsNullOrWhiteSpace(job.VendorCode))
+        if (!string.IsNullOrWhiteSpace(job.PrimaryVendorCode))
         {
-            _searchVendorCode = job.VendorCode;
-            _filterVendorCode = job.VendorCode;
+            _searchPrimaryVendorCode = job.PrimaryVendorCode;
+            _filterPrimaryVendorCode = job.PrimaryVendorCode;
         }
         else
         {
-            _searchVendorCode = null;
-            _filterVendorCode = null;
+            _searchPrimaryVendorCode = null;
+            _filterPrimaryVendorCode = null;
         }
         
         _table.ReloadServerData();
@@ -669,7 +694,7 @@
         {
             var bytes = await AdrService.DownloadJobsExportAsync(
                 _filterStatus,
-                _filterVendorCode,
+                _filterPrimaryVendorCode,
                 _filterAccountNumber,
                 _showLatestPerAccount,
                 format);

@@ -60,9 +60,9 @@ public class UsersController : ControllerBase
     /// <response code="500">An error occurred while retrieving users.</response>
     [HttpGet]
     [Authorize(Policy = "Users.Manage.Read")]
-    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PagedResponse<UserListItemResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<object>> GetUsers(
+    public async Task<ActionResult<PagedResponse<UserListItemResponse>>> GetUsers(
         [FromQuery] string? searchTerm = null,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 50,
@@ -137,13 +137,7 @@ public class UsersController : ControllerBase
                             });
                         }
 
-            return Ok(new
-            {
-                items = userResponses,
-                totalCount = totalCount,
-                pageNumber = pageNumber,
-                pageSize = pageSize
-            });
+            return Ok(new PagedResponse<UserListItemResponse>(userResponses, totalCount, pageNumber, pageSize));
         }
         catch (Exception ex)
         {

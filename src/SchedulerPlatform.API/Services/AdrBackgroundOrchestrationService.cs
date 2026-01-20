@@ -493,7 +493,13 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                     statusResult = await orchestratorService.CheckAllScrapedStatusesAsync(
                         (progress, total) => _queue.UpdateStatus(request.RequestId, s => 
                         {
-                            if (progress < 0)
+                            if (progress < -1000000)
+                            {
+                                // Values < -1000000 indicate "Updating database" phase
+                                s.CurrentStepPhase = "Updating database";
+                                s.CurrentStepProgress = Math.Abs(progress + 1000000);
+                            }
+                            else if (progress < 0)
                             {
                                 s.CurrentStepPhase = "Preparing";
                                 s.CurrentStepProgress = Math.Abs(progress);
@@ -512,7 +518,13 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                     statusResult = await orchestratorService.CheckPendingStatusesAsync(
                         (progress, total) => _queue.UpdateStatus(request.RequestId, s => 
                         {
-                            if (progress < 0)
+                            if (progress < -1000000)
+                            {
+                                // Values < -1000000 indicate "Updating database" phase
+                                s.CurrentStepPhase = "Updating database";
+                                s.CurrentStepProgress = Math.Abs(progress + 1000000);
+                            }
+                            else if (progress < 0)
                             {
                                 s.CurrentStepPhase = "Preparing";
                                 s.CurrentStepProgress = Math.Abs(progress);

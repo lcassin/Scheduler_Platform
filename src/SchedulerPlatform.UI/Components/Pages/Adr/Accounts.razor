@@ -13,6 +13,13 @@
 
 <MudText Typo="Typo.h4" Class="mb-4">ADR Accounts</MudText>
 
+@if (_testModeStatus?.IsEnabled == true)
+{
+    <MudAlert Severity="Severity.Warning" Class="mb-4" Icon="@Icons.Material.Filled.Warning">
+        <strong>TEST MODE IS ENABLED</strong> - ADR requests and credential checks are limited to @_testModeStatus.MaxScrapingJobs and @_testModeStatus.MaxCredentialChecks jobs respectively per orchestration run.
+    </MudAlert>
+}
+
 <MudPaper Class="pa-4">
     <MudGrid Class="mb-4" Spacing="2">
         <MudItem xs="12" md="3">
@@ -67,14 +74,20 @@
         <MudItem xs="12" md="2">
             <MudSelect T="string" @bind-Value="_selectedJobStatus" Label="Job Status" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
                 <MudSelectItem Value="@("")">All</MudSelectItem>
+                <MudSelectItem Value="@("NoJob")">No Job</MudSelectItem>
                 <MudSelectItem Value="@("Pending")">Pending</MudSelectItem>
+                <MudSelectItem Value="@("CredentialCheckInProgress")">Credential Check In Progress</MudSelectItem>
                 <MudSelectItem Value="@("CredentialVerified")">Credential Verified</MudSelectItem>
                 <MudSelectItem Value="@("CredentialFailed")">Credential Failed</MudSelectItem>
-                <MudSelectItem Value="@("ScrapeRequested")">Request Sent</MudSelectItem>
+                <MudSelectItem Value="@("ScrapeInProgress")">ADR Request In Progress</MudSelectItem>
+                <MudSelectItem Value="@("ScrapeRequested")">ADR Request Sent</MudSelectItem>
+                <MudSelectItem Value="@("ScrapeFailed")">ADR Request Failed</MudSelectItem>
+                <MudSelectItem Value="@("StatusCheckInProgress")">Status Check In Progress</MudSelectItem>
+                <MudSelectItem Value="@("NoInvoiceFound")">No Invoice Found</MudSelectItem>
+                <MudSelectItem Value="@("Failed")">Failed</MudSelectItem>
                 <MudSelectItem Value="@("Completed")">Completed</MudSelectItem>
-                <MudSelectItem Value="@("Failed")">ADR Request Failed</MudSelectItem>
                 <MudSelectItem Value="@("NeedsReview")">Needs Review</MudSelectItem>
-                <MudSelectItem Value="@("NoJob")">No Job</MudSelectItem>
+                <MudSelectItem Value="@("Cancelled")">Cancelled</MudSelectItem>
             </MudSelect>
         </MudItem>
         <MudItem xs="12" md="2">
@@ -129,7 +142,8 @@
                 <MudTh><MudTableSortLabel SortLabel="VMAccountNumber" T="AdrAccount">Account #</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="InterfaceAccountId" T="AdrAccount">Interface Account ID</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="ClientName" T="AdrAccount">Client</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortLabel="VendorCode" T="AdrAccount">Vendor Code</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="PrimaryVendorCode" T="AdrAccount">Primary Vendor</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="MasterVendorCode" T="AdrAccount">Master Vendor</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="PeriodType" T="AdrAccount">Period Type</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="NextRunDateTime" T="AdrAccount" InitialDirection="SortDirection.Ascending">Next Run</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="NextRunStatus" T="AdrAccount">Run Status</MudTableSortLabel></MudTh>
@@ -171,7 +185,8 @@
                 </MudTd>
                 <MudTd DataLabel="Interface Account ID">@(context.InterfaceAccountId ?? "N/A")</MudTd>
                 <MudTd DataLabel="Client">@(context.ClientName ?? "N/A")</MudTd>
-                <MudTd DataLabel="Vendor Code">@(context.VendorCode ?? "N/A")</MudTd>
+                <MudTd DataLabel="Primary Vendor">@(context.PrimaryVendorCode ?? "N/A")</MudTd>
+                <MudTd DataLabel="Master Vendor">@(context.MasterVendorCode ?? "N/A")</MudTd>
                 <MudTd DataLabel="Period Type">
                     @if (!string.IsNullOrEmpty(context.PeriodType))
                     {
@@ -304,6 +319,7 @@
     private bool? _filterIsOverridden;
     private string? _filterJobStatus;
     private string? _filterBlacklistStatus;
+    private TestModeStatus? _testModeStatus;
 
     [Parameter]
     [SupplyParameterFromQuery(Name = "accountNumber")]
@@ -321,6 +337,9 @@
     {
         try
         {
+            // Load test mode status for banner display
+            _testModeStatus = await AdrService.GetTestModeStatusAsync();
+            
             // Apply query parameters if provided (e.g., from "View Account" action on Jobs page or Dashboard chart click)
             if (!string.IsNullOrEmpty(AccountNumberParam))
             {
@@ -542,9 +561,9 @@
     {
         // Navigate to Jobs page with account number filter and disable "Latest per Account" to show all jobs
         var url = $"/adr/jobs?accountNumber={Uri.EscapeDataString(account.VMAccountNumber ?? "")}";
-        if (!string.IsNullOrWhiteSpace(account.VendorCode))
+        if (!string.IsNullOrWhiteSpace(account.PrimaryVendorCode))
         {
-            url += $"&vendorCode={Uri.EscapeDataString(account.VendorCode)}";
+            url += $"&primaryVendorCode={Uri.EscapeDataString(account.PrimaryVendorCode)}";
         }
         url += "&latestPerAccount=false";
         Navigation.NavigateTo(url);

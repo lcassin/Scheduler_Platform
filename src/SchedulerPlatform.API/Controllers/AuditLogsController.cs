@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using SchedulerPlatform.API.Models;
 using SchedulerPlatform.Core.Domain.Interfaces;
 using SchedulerPlatform.Infrastructure.Data;
 
@@ -41,10 +42,10 @@ public class AuditLogsController : ControllerBase
     /// <response code="404">The schedule was not found.</response>
     /// <response code="500">An error occurred while retrieving audit logs.</response>
     [HttpGet("schedules/{scheduleId}")]
-    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PagedResponse<AuditLogResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<object>> GetScheduleAuditLogs(
+    public async Task<ActionResult<PagedResponse<AuditLogResponse>>> GetScheduleAuditLogs(
         int scheduleId,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 50,
@@ -90,32 +91,25 @@ public class AuditLogsController : ControllerBase
                 .OrderByDescending(a => a.TimestampDateTime)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
-                .Select(a => new
+                .Select(a => new AuditLogResponse
                 {
-                    a.Id,
-                    a.EventType,
-                    a.EntityType,
-                    a.EntityId,
-                    a.Action,
-                    a.UserName,
-                    a.ClientId,
-                    a.IpAddress,
-                    a.UserAgent,
+                    Id = a.Id,
+                    EventType = a.EventType,
+                    EntityType = a.EntityType,
+                    EntityId = a.EntityId,
+                    Action = a.Action,
+                    UserName = a.UserName,
+                    ClientId = a.ClientId,
+                    IpAddress = a.IpAddress,
+                    UserAgent = a.UserAgent,
                     TimestampDateTime = a.TimestampDateTime,
-                    a.OldValues,
-                    a.NewValues,
-                    a.AdditionalData
+                    OldValues = a.OldValues,
+                    NewValues = a.NewValues,
+                    AdditionalData = a.AdditionalData
                 })
                 .ToListAsync();
 
-            return Ok(new
-            {
-                items = auditLogs,
-                totalCount = totalCount,
-                pageNumber = pageNumber,
-                pageSize = pageSize,
-                totalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
-            });
+            return Ok(new PagedResponse<AuditLogResponse>(auditLogs, totalCount, pageNumber, pageSize));
         }
         catch (Exception ex)
         {
@@ -141,9 +135,9 @@ public class AuditLogsController : ControllerBase
     /// <response code="500">An error occurred while retrieving audit logs.</response>
     [HttpGet]
     [Authorize(Policy = "Users.Manage.Read")]
-    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(PagedResponse<AuditLogResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<object>> GetAuditLogs(
+    public async Task<ActionResult<PagedResponse<AuditLogResponse>>> GetAuditLogs(
         [FromQuery] string? entityType = null,
         [FromQuery] int? entityId = null,
         [FromQuery] string? eventType = null,
@@ -199,32 +193,25 @@ public class AuditLogsController : ControllerBase
                 .OrderByDescending(a => a.TimestampDateTime)
                 .Skip((pageNumber - 1) * pageSize)
                 .Take(pageSize)
-                .Select(a => new
+                .Select(a => new AuditLogResponse
                 {
-                    a.Id,
-                    a.EventType,
-                    a.EntityType,
-                    a.EntityId,
-                    a.Action,
-                    a.UserName,
-                    a.ClientId,
-                    a.IpAddress,
-                    a.UserAgent,
+                    Id = a.Id,
+                    EventType = a.EventType,
+                    EntityType = a.EntityType,
+                    EntityId = a.EntityId,
+                    Action = a.Action,
+                    UserName = a.UserName,
+                    ClientId = a.ClientId,
+                    IpAddress = a.IpAddress,
+                    UserAgent = a.UserAgent,
                     TimestampDateTime = a.TimestampDateTime,
-                    a.OldValues,
-                    a.NewValues,
-                    a.AdditionalData
+                    OldValues = a.OldValues,
+                    NewValues = a.NewValues,
+                    AdditionalData = a.AdditionalData
                 })
                 .ToListAsync();
 
-            return Ok(new
-            {
-                items = auditLogs,
-                totalCount = totalCount,
-                pageNumber = pageNumber,
-                pageSize = pageSize,
-                totalPages = (int)Math.Ceiling(totalCount / (double)pageSize)
-            });
+            return Ok(new PagedResponse<AuditLogResponse>(auditLogs, totalCount, pageNumber, pageSize));
         }
         catch (Exception ex)
         {

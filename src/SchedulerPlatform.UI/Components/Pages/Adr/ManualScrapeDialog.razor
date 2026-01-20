@@ -85,7 +85,8 @@
 
             <MudAlert Severity="Severity.Info" Class="mt-4">
                 <strong>Account Details:</strong><br />
-                Vendor: @(Account.VendorCode ?? "N/A") | 
+                Primary Vendor: @(Account.PrimaryVendorCode ?? "N/A") | 
+                Master Vendor: @(Account.MasterVendorCode ?? "N/A") | 
                 Credential ID: @(Account.CredentialId > 0 ? Account.CredentialId.ToString() : "N/A") | 
                 Period Type: @(Account.PeriodType ?? "N/A")
             </MudAlert>

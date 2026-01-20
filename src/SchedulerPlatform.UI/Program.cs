@@ -10,8 +10,36 @@ using System.Security.Claims;
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Determine the log path based on environment
+// Azure App Service: Use %HOME%\LogFiles\Application\ which persists across deployments
+// Local development: Use relative logs/ folder
+var azureHome = Environment.GetEnvironmentVariable("HOME");
+var isAzureAppService = !string.IsNullOrEmpty(azureHome) && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WEBSITE_SITE_NAME"));
+var logPath = isAzureAppService 
+    ? Path.Combine(azureHome!, "LogFiles", "Application", "scheduler-ui-.txt")
+    : "logs/scheduler-ui-.txt";
+
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft", Serilog.Events.LogEventLevel.Warning)
+    .MinimumLevel.Override("System", Serilog.Events.LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .WriteTo.Console()
+    .WriteTo.File(
+        logPath, 
+        rollingInterval: RollingInterval.Day,
+        rollOnFileSizeLimit: true,
+        fileSizeLimitBytes: 30 * 1024 * 1024,  // 30MB
+        retainedFileCountLimit: 31)
+    .CreateLogger();
+
+builder.Host.UseSerilog();
+
+Log.Information("UI Log path configured: {LogPath} (Azure: {IsAzure})", logPath, isAzureAppService);
 
 // Add Azure Key Vault configuration for non-Development environments
 // Set KeyVault:VaultUri in appsettings.json or environment variable to enable

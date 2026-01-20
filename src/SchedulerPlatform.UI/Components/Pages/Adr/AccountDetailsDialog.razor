@@ -42,8 +42,12 @@
                     <MudText Typo="Typo.body1">@(Account.ClientName ?? "N/A")</MudText>
                 </MudItem>
                 <MudItem xs="6">
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Vendor Code</MudText>
-                    <MudText Typo="Typo.body1">@(Account.VendorCode ?? "N/A")</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Primary Vendor Code</MudText>
+                    <MudText Typo="Typo.body1">@(Account.PrimaryVendorCode ?? "N/A")</MudText>
+                </MudItem>
+                <MudItem xs="6">
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Master Vendor Code</MudText>
+                    <MudText Typo="Typo.body1">@(Account.MasterVendorCode ?? "N/A")</MudText>
                 </MudItem>
 
                 <MudItem xs="12">
