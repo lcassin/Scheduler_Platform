@@ -121,9 +121,13 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
 
-                    b.Property<string>("VendorCode")
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
+                    b.Property<string>("PrimaryVendorCode")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("MasterVendorCode")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
 
                     b.HasKey("Id");
 
@@ -138,6 +142,10 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                     b.HasIndex("VMAccountId");
 
                     b.HasIndex("VMAccountNumber");
+
+                    b.HasIndex("PrimaryVendorCode");
+
+                    b.HasIndex("MasterVendorCode");
 
                     b.HasIndex("VMAccountId", "VMAccountNumber");
 
@@ -233,8 +241,13 @@ namespace SchedulerPlatform.Infrastructure.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
 
-                    b.Property<string>("VendorCode")
-                        .HasColumnType("nvarchar(max)");
+                    b.Property<string>("PrimaryVendorCode")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<string>("MasterVendorCode")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
 
                     b.HasKey("Id");
 
@@ -248,7 +261,15 @@ namespace SchedulerPlatform.Infrastructure.Migrations
 
                     b.HasIndex("VMAccountId");
 
+                    b.HasIndex("PrimaryVendorCode");
+
+                    b.HasIndex("MasterVendorCode");
+
                     b.HasIndex("AdrAccountId", "BillingPeriodStartDateTime", "BillingPeriodEndDateTime");
+
+                    b.HasIndex("PrimaryVendorCode", "VMAccountId", "CredentialId");
+
+                    b.HasIndex("MasterVendorCode", "VMAccountId", "CredentialId");
 
                     b.ToTable("AdrJob", (string)null);
                 });
