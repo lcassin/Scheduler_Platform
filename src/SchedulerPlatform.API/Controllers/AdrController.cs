@@ -3662,7 +3662,36 @@ public class AdrController : ControllerBase
 
         #endregion
 
-        #region AdrConfiguration Endpoints (Admin/Super Admin only)
+        #region AdrConfiguration Endpoints
+
+    /// <summary>
+    /// Gets the current test mode status. This endpoint is accessible to all authenticated users
+    /// so that the test mode warning banner can be displayed on all ADR pages.
+    /// </summary>
+    /// <returns>The current test mode status.</returns>
+    /// <response code="200">Returns the test mode status.</response>
+    [HttpGet("configuration/test-mode-status")]
+    [ProducesResponseType(typeof(TestModeStatusResponse), StatusCodes.Status200OK)]
+    public async Task<ActionResult<TestModeStatusResponse>> GetTestModeStatus()
+    {
+        try
+        {
+            var configs = await _unitOfWork.AdrConfigurations.FindAsync(c => !c.IsDeleted);
+            var config = configs.FirstOrDefault();
+            
+            return Ok(new TestModeStatusResponse
+            {
+                TestModeEnabled = config?.TestModeEnabled ?? false,
+                TestModeMaxScrapingJobs = config?.TestModeMaxScrapingJobs ?? 50,
+                TestModeMaxCredentialChecks = config?.TestModeMaxCredentialChecks ?? 50
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving test mode status");
+            return Ok(new TestModeStatusResponse { TestModeEnabled = false, TestModeMaxScrapingJobs = 50, TestModeMaxCredentialChecks = 50 });
+        }
+    }
 
     /// <summary>
     /// Retrieves the current ADR configuration settings.
@@ -5135,6 +5164,28 @@ public class BlacklistCountsResult
     /// Count of future blacklist entries (will become active in the future)
     /// </summary>
     public int FutureCount { get; set; }
+}
+
+/// <summary>
+/// Response containing test mode status information.
+/// This is a lightweight response that can be accessed by all authenticated users.
+/// </summary>
+public class TestModeStatusResponse
+{
+    /// <summary>
+    /// Whether test mode is currently enabled.
+    /// </summary>
+    public bool TestModeEnabled { get; set; }
+    
+    /// <summary>
+    /// Maximum number of ADR requests per orchestration run when test mode is enabled.
+    /// </summary>
+    public int TestModeMaxScrapingJobs { get; set; }
+    
+    /// <summary>
+    /// Maximum number of credential checks per orchestration run when test mode is enabled.
+    /// </summary>
+    public int TestModeMaxCredentialChecks { get; set; }
 }
 
 #endregion
