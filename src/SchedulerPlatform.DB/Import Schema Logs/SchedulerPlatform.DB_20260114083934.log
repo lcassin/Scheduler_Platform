@@ -1,0 +1,91 @@
+1/14/2026 3:39:34 PM	This log contains information about the import schema operation into project 'SchedulerPlatform.DB' on computer 'GVL-HHJV4M2' by user 'LCassin'.
+1/14/2026 3:39:34 PM	Import of database schema has started.
+1/14/2026 3:39:37 PM	Gathering database credentials
+1/14/2026 3:39:37 PM	Gathering database options
+1/14/2026 3:39:37 PM	Gathering generic database scoped configuration option
+1/14/2026 3:39:37 PM	Gathering users
+1/14/2026 3:39:37 PM	Gathering roles
+1/14/2026 3:39:37 PM	Gathering application roles
+1/14/2026 3:39:37 PM	Gathering role memberships
+1/14/2026 3:39:37 PM	Gathering filegroups
+1/14/2026 3:39:38 PM	Gathering files
+1/14/2026 3:39:38 PM	Gathering full-text catalogs
+1/14/2026 3:39:38 PM	Gathering assemblies
+1/14/2026 3:39:38 PM	Gathering certificates
+1/14/2026 3:39:38 PM	Gathering asymmetric keys
+1/14/2026 3:39:38 PM	Gathering symmetric keys
+1/14/2026 3:39:38 PM	Gathering encrypted symmetric keys
+1/14/2026 3:39:38 PM	Gathering database encryption keys
+1/14/2026 3:39:38 PM	Gathering schemas
+1/14/2026 3:39:38 PM	Gathering XML schema collections
+1/14/2026 3:39:38 PM	Gathering user-defined data types
+1/14/2026 3:39:38 PM	Gathering user-defined types
+1/14/2026 3:39:38 PM	Gathering table types
+1/14/2026 3:39:38 PM	Gathering unique keys for table types
+1/14/2026 3:39:38 PM	Gathering primary keys for table types
+1/14/2026 3:39:38 PM	Gathering indexes for table types
+1/14/2026 3:39:38 PM	Gathering check constraints for table types
+1/14/2026 3:39:38 PM	Gathering default constraints for table types
+1/14/2026 3:39:38 PM	Gathering partition functions
+1/14/2026 3:39:38 PM	Gathering partition schemes
+1/14/2026 3:39:38 PM	Gathering functions
+1/14/2026 3:39:38 PM	Gathering encrypted functions
+1/14/2026 3:39:38 PM	Gathering aggregates
+1/14/2026 3:39:38 PM	Gathering procedures
+1/14/2026 3:39:38 PM	Gathering encrypted procedures
+1/14/2026 3:39:38 PM	Gathering tables
+1/14/2026 3:39:38 PM	Gathering primary keys
+1/14/2026 3:39:38 PM	Gathering unique constraints
+1/14/2026 3:39:38 PM	Gathering foreign keys
+1/14/2026 3:39:38 PM	Gathering default constraints
+1/14/2026 3:39:38 PM	Gathering check constraints
+1/14/2026 3:39:38 PM	Gathering views
+1/14/2026 3:39:38 PM	Gathering encrypted views
+1/14/2026 3:39:38 PM	Gathering indexes
+1/14/2026 3:39:38 PM	Gathering statistics
+1/14/2026 3:39:38 PM	Gathering full-text index stoplists
+1/14/2026 3:39:38 PM	Gathering search property lists
+1/14/2026 3:39:38 PM	Gathering search properties
+1/14/2026 3:39:38 PM	Gathering full-text indexes
+1/14/2026 3:39:38 PM	Gathering column store indexes
+1/14/2026 3:39:38 PM	Gathering spatial indexes
+1/14/2026 3:39:38 PM	Gathering XML indexes
+1/14/2026 3:39:38 PM	Gathering Selective XML indexes
+1/14/2026 3:39:38 PM	Gathering encrypted triggers
+1/14/2026 3:39:38 PM	Gathering triggers
+1/14/2026 3:39:38 PM	Gathering encrypted and clr ddl triggers
+1/14/2026 3:39:38 PM	Gathering ddl triggers
+1/14/2026 3:39:38 PM	Creating edge constraints
+1/14/2026 3:39:38 PM	Gathering synonyms
+1/14/2026 3:39:38 PM	Gathering defaults
+1/14/2026 3:39:38 PM	Gathering data constraint uddt bindings
+1/14/2026 3:39:38 PM	Gathering rules
+1/14/2026 3:39:38 PM	Gathering data constraint uddt bindings
+1/14/2026 3:39:38 PM	Gathering message types
+1/14/2026 3:39:38 PM	Gathering queues
+1/14/2026 3:39:38 PM	Gathering contracts
+1/14/2026 3:39:38 PM	Gathering services
+1/14/2026 3:39:38 PM	Gathering routes
+1/14/2026 3:39:38 PM	Gathering event notifications
+1/14/2026 3:39:38 PM	Gathering remote service bindings
+1/14/2026 3:39:38 PM	Gathering broker priorities
+1/14/2026 3:39:38 PM	Gathering database audit specifications
+1/14/2026 3:39:38 PM	Gathering signatures
+1/14/2026 3:39:38 PM	Gathering compression options
+1/14/2026 3:39:38 PM	Gathering sequence types
+1/14/2026 3:39:38 PM	Gathering security policies
+1/14/2026 3:39:38 PM	Gather column encryption keys
+1/14/2026 3:39:38 PM	Gathering column master keys
+1/14/2026 3:39:38 PM	Gathering external data sources
+1/14/2026 3:39:38 PM	Gathering external file formats
+1/14/2026 3:39:38 PM	Gathering external tables
+1/14/2026 3:39:38 PM	Gathering extended properties
+1/14/2026 3:39:38 PM	Gathering assemblies
+1/14/2026 3:39:38 PM	Gathering credentials
+1/14/2026 3:39:38 PM	Gathering logins
+1/14/2026 3:39:38 PM	Gathering server audits
+1/14/2026 3:39:39 PM	Scanning project for duplicate elements
+1/14/2026 3:39:39 PM	Finished duplicate element processing
+1/14/2026 3:39:40 PM	Finished importing database.
+1/14/2026 3:39:40 PM	A summary of the import was saved to the following location: C:\Cass\Azure\Telecom\Repos\AdrServices\Scheduler\src\SchedulerPlatform.DB\Import Schema Logs\SchedulerPlatform.DB_20260114083934.log
+1/14/2026 3:39:40 PM	Click Finish to continue...
