@@ -310,6 +310,8 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient("SchedulerAPI", client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["API:BaseUrl"]!);
+    // Increase timeout to 10 minutes for large exports (170K+ accounts)
+    client.Timeout = TimeSpan.FromMinutes(10);
 })
 .AddHttpMessageHandler<AuthTokenHandler>();
 
@@ -317,6 +319,8 @@ builder.Services.AddHttpClient("SchedulerAPI", client =>
 builder.Services.AddHttpClient("SchedulerApi", client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["API:BaseUrl"]!);
+    // Increase timeout to 10 minutes for large exports (170K+ accounts)
+    client.Timeout = TimeSpan.FromMinutes(10);
 })
 .AddHttpMessageHandler<AuthTokenHandler>();
 

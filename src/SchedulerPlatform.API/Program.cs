@@ -317,6 +317,10 @@ builder.Services.AddScoped<SchedulerPlatform.API.Services.IAdrOrchestratorServic
 builder.Services.AddSingleton<SchedulerPlatform.API.Services.IAdrOrchestrationQueue, SchedulerPlatform.API.Services.AdrOrchestrationQueue>();
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.AdrBackgroundOrchestrationService>();
 
+// Background Export Service - processes large exports asynchronously
+builder.Services.AddSingleton<SchedulerPlatform.API.Services.IBackgroundExportQueue, SchedulerPlatform.API.Services.BackgroundExportQueue>();
+builder.Services.AddHostedService<SchedulerPlatform.API.Services.BackgroundExportService>();
+
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.StartupRecoveryService>();
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.ScheduleHydrationService>();
 builder.Services.AddHostedService<SchedulerPlatform.API.Services.MissedSchedulesProcessor>();
