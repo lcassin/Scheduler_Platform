@@ -891,8 +891,8 @@ SELECT [RecId]
       ,[BillId]
       ,[InvoiceDate]
       ,AD.[AccountNumber]
-      ,AD.[VendorCode] AS PrimaryVendorCode
-      ,MV.[VendorCode] AS MasterVendorCode
+      ,AD.[PrimaryVendorCode] AS PrimaryVendorCode
+      ,MV.[PrimaryVendorCode] AS MasterVendorCode
       ,[VCAccountId] AS AccountId
       ,C.[CredentialId]
       ,C.ExpirationDate
@@ -904,7 +904,7 @@ FROM [dbo].[ADRInvoiceAccountData] AD
     LEFT OUTER JOIN Client CL ON A.ClientId = CL.ClientId
     INNER JOIN CredentialAccount CA ON AD.VCAccountId = CA.AccountId
     INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId
-    LEFT OUTER JOIN Vendor V ON AD.VendorCode = V.VendorCode
+    LEFT OUTER JOIN Vendor V ON AD.PrimaryVendorCode = V.PrimaryVendorCode
     LEFT OUTER JOIN VendorXRef VX ON V.VendorId = VX.PrimaryVendorId
     LEFT OUTER JOIN Vendor MV ON VX.MasterVendorId = MV.VendorId;
 
