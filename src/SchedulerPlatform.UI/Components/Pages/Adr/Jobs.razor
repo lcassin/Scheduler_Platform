@@ -21,6 +21,17 @@
 <MudPaper Class="pa-4">
         <MudGrid Class="mb-4" Spacing="2">
             <MudItem xs="12" md="2">
+                <MudTextField @bind-Value="_searchMasterVendorCode" 
+                              Label="Master Vendor" 
+                              Placeholder="Enter master vendor"
+                              Variant="Variant.Outlined" 
+                              Margin="Margin.Dense" 
+                              Clearable="true"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Business"
+                              OnKeyDown="@OnSearchKeyDown" />
+            </MudItem>
+            <MudItem xs="12" md="2">
                 <MudTextField @bind-Value="_searchPrimaryVendorCode" 
                               Label="Primary Vendor" 
                               Placeholder="Enter primary vendor"
@@ -28,7 +39,7 @@
                               Margin="Margin.Dense" 
                               Clearable="true"
                               Adornment="Adornment.Start"
-                              AdornmentIcon="@Icons.Material.Filled.Business"
+                              AdornmentIcon="@Icons.Material.Filled.Store"
                               OnKeyDown="@OnSearchKeyDown" />
             </MudItem>
             <MudItem xs="12" md="2">
@@ -318,11 +329,13 @@
     private bool _isExporting = false;
     private bool _isRefiring = false;
     private bool _forceRefire = false;
+    private string? _searchMasterVendorCode;
     private string? _searchPrimaryVendorCode;
     private string? _searchAccountNumber;
     private string _selectedStatus = "";
     private string _selectedBlacklistStatus = "";
     private string? _searchInterfaceAccountId;
+    private string? _filterMasterVendorCode;
     private string? _filterPrimaryVendorCode;
     private string? _filterAccountNumber;
     private string? _filterStatus;
@@ -407,6 +420,7 @@
                 null, // adrAccountId - no longer used for filtering
                 _filterStatus,
                 _filterPrimaryVendorCode,
+                _filterMasterVendorCode,
                 _filterAccountNumber,
                 _showLatestPerAccount,
                 null, // vmAccountId - not used for filtering
@@ -450,6 +464,7 @@
 
     private async Task ApplyFilters()
     {
+        _filterMasterVendorCode = string.IsNullOrWhiteSpace(_searchMasterVendorCode) ? null : _searchMasterVendorCode;
         _filterPrimaryVendorCode = string.IsNullOrWhiteSpace(_searchPrimaryVendorCode) ? null : _searchPrimaryVendorCode;
         _filterAccountNumber = string.IsNullOrWhiteSpace(_searchAccountNumber) ? null : _searchAccountNumber;
         _filterStatus = string.IsNullOrEmpty(_selectedStatus) ? null : _selectedStatus;
@@ -460,12 +475,14 @@
 
     private async Task ClearFilters()
     {
+        _searchMasterVendorCode = null;
         _searchPrimaryVendorCode = null;
         _searchAccountNumber = null;
         _selectedStatus = "";
         _selectedBlacklistStatus = "";
         _searchInterfaceAccountId = null;
         _showManualJobs = false;
+        _filterMasterVendorCode = null;
         _filterPrimaryVendorCode = null;
         _filterAccountNumber = null;
         _filterStatus = null;
