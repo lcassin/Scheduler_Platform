@@ -3456,6 +3456,7 @@ public class AdrController : ControllerBase
                     .ThenBy(r => r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : "")
                     .Select(r => new
                     {
+                        MasterVendorCode = r.AdrAccount != null ? r.AdrAccount.MasterVendorCode : null,
                         PrimaryVendorCode = r.AdrAccount != null ? r.AdrAccount.PrimaryVendorCode : null,
                         VMAccountNumber = r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : null,
                         r.JobTypeId,
@@ -3471,14 +3472,14 @@ public class AdrController : ControllerBase
                     })
                     .ToListAsync();
 
-                var headers = new[] { "Primary Vendor Code", "Account Number", "Job Type", "Period Type", "Period Days", "Next Run", "Search Window Start", "Search Window End", "Enabled", "Overridden", "Overridden By", "Overridden Date" };
+                var headers = new[] { "Master Vendor Code", "Primary Vendor Code", "Account Number", "Job Type", "Period Type", "Period Days", "Next Run", "Search Window Start", "Search Window End", "Enabled", "Overridden", "Overridden By", "Overridden Date" };
 
                 if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
                 {
                     var csvBytes = ExcelExportHelper.CreateCsvExport(
                         string.Join(",", headers),
                         rules,
-                        r => $"{ExcelExportHelper.CsvEscape(r.PrimaryVendorCode)},{ExcelExportHelper.CsvEscape(r.VMAccountNumber)},{r.JobTypeId},{ExcelExportHelper.CsvEscape(r.PeriodType)},{r.PeriodDays},{r.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeStartDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? ""},{(r.IsEnabled ? "Yes" : "No")},{(r.IsManuallyOverridden ? "Yes" : "No")},{ExcelExportHelper.CsvEscape(r.OverriddenBy)},{r.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""}");
+                        r => $"{ExcelExportHelper.CsvEscape(r.MasterVendorCode)},{ExcelExportHelper.CsvEscape(r.PrimaryVendorCode)},{ExcelExportHelper.CsvEscape(r.VMAccountNumber)},{r.JobTypeId},{ExcelExportHelper.CsvEscape(r.PeriodType)},{r.PeriodDays},{r.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeStartDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? ""},{(r.IsEnabled ? "Yes" : "No")},{(r.IsManuallyOverridden ? "Yes" : "No")},{ExcelExportHelper.CsvEscape(r.OverriddenBy)},{r.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""}");
                     return File(csvBytes, "text/csv", $"adr_rules_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
                 }
 
@@ -3490,6 +3491,7 @@ public class AdrController : ControllerBase
                     rules,
                     r => new object?[]
                     {
+                        r.MasterVendorCode ?? "",
                         r.PrimaryVendorCode ?? "",
                         r.VMAccountNumber ?? "",
                         r.JobTypeId,
