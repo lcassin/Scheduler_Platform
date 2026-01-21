@@ -15,8 +15,13 @@ public interface IAdrService
         bool? isOverridden = null,
         string? jobStatus = null,
         string? blacklistStatus = null,
+        string? primaryVendorCode = null,
+        string? masterVendorCode = null,
         string? sortColumn = null,
         bool sortDescending = false);
+    
+    Task<List<string>> GetPrimaryVendorCodesAsync(string? searchTerm = null, int limit = 50);
+    Task<List<string>> GetMasterVendorCodesAsync(string? searchTerm = null, int limit = 50);
     Task<AdrAccount?> GetAccountAsync(int id);
     Task<AdrAccount?> GetAccountByVMAccountIdAsync(long vmAccountId);
     Task<AdrAccountStats> GetAccountStatsAsync();
