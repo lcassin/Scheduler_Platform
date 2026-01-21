@@ -24,6 +24,8 @@ public class AdrService : IAdrService
         bool? isOverridden = null,
         string? jobStatus = null,
         string? blacklistStatus = null,
+        string? primaryVendorCode = null,
+        string? masterVendorCode = null,
         string? sortColumn = null,
         bool sortDescending = false)
     {
@@ -54,6 +56,12 @@ public class AdrService : IAdrService
         if (!string.IsNullOrWhiteSpace(blacklistStatus))
             queryParams.Add($"blacklistStatus={Uri.EscapeDataString(blacklistStatus)}");
 
+        if (!string.IsNullOrWhiteSpace(primaryVendorCode))
+            queryParams.Add($"primaryVendorCode={Uri.EscapeDataString(primaryVendorCode)}");
+
+        if (!string.IsNullOrWhiteSpace(masterVendorCode))
+            queryParams.Add($"masterVendorCode={Uri.EscapeDataString(masterVendorCode)}");
+
         if (!string.IsNullOrWhiteSpace(sortColumn))
             queryParams.Add($"sortColumn={Uri.EscapeDataString(sortColumn)}");
 
@@ -71,6 +79,34 @@ public class AdrService : IAdrService
             PageNumber = pageNumber,
             PageSize = pageSize
         };
+    }
+
+    public async Task<List<string>> GetPrimaryVendorCodesAsync(string? searchTerm = null, int limit = 50)
+    {
+        var queryParams = new List<string> { $"limit={limit}" };
+        
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+            queryParams.Add($"searchTerm={Uri.EscapeDataString(searchTerm)}");
+
+        var query = "?" + string.Join("&", queryParams);
+        var response = await _httpClient.GetAsync($"adr/accounts/vendors/primary{query}");
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<List<string>>();
+        return result ?? new List<string>();
+    }
+
+    public async Task<List<string>> GetMasterVendorCodesAsync(string? searchTerm = null, int limit = 50)
+    {
+        var queryParams = new List<string> { $"limit={limit}" };
+        
+        if (!string.IsNullOrWhiteSpace(searchTerm))
+            queryParams.Add($"searchTerm={Uri.EscapeDataString(searchTerm)}");
+
+        var query = "?" + string.Join("&", queryParams);
+        var response = await _httpClient.GetAsync($"adr/accounts/vendors/master{query}");
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<List<string>>();
+        return result ?? new List<string>();
     }
 
     public async Task<AdrAccount?> GetAccountAsync(int id)

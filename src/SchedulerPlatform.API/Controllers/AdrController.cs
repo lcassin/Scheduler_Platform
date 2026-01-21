@@ -62,6 +62,9 @@ public class AdrController : ControllerBase
     /// <param name="historicalBillingStatus">Optional historical billing status filter.</param>
     /// <param name="isOverridden">Optional filter for manually overridden accounts.</param>
     /// <param name="jobStatus">Optional filter by current job status.</param>
+    /// <param name="blacklistStatus">Optional filter by blacklist status (current, future, any).</param>
+    /// <param name="primaryVendorCode">Optional filter by primary vendor code (exact match).</param>
+    /// <param name="masterVendorCode">Optional filter by master vendor code (exact match).</param>
     /// <param name="pageNumber">Page number for pagination (default: 1).</param>
     /// <param name="pageSize">Number of items per page (default: 20).</param>
     /// <param name="sortColumn">Column name to sort by.</param>
@@ -81,6 +84,8 @@ public class AdrController : ControllerBase
         [FromQuery] bool? isOverridden = null,
         [FromQuery] string? jobStatus = null,
         [FromQuery] string? blacklistStatus = null,
+        [FromQuery] string? primaryVendorCode = null,
+        [FromQuery] string? masterVendorCode = null,
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20,
         [FromQuery] string? sortColumn = null,
@@ -217,7 +222,9 @@ public class AdrController : ControllerBase
                 isOverridden,
                 sortColumn,
                 sortDescending,
-                combinedAccountIds);
+                combinedAccountIds,
+                primaryVendorCode,
+                masterVendorCode);
 
             // Get account IDs from the current page
             var accountIds = items.Select(a => a.Id).ToList();
@@ -546,6 +553,90 @@ public class AdrController : ControllerBase
         {
             _logger.LogError(ex, "Error retrieving ADR account stats");
             return StatusCode(500, "An error occurred while retrieving ADR account stats");
+        }
+    }
+
+    /// <summary>
+    /// Retrieves a list of distinct primary vendor codes for type-ahead search functionality.
+    /// Returns vendor codes that match the search term, limited to a maximum number of results.
+    /// </summary>
+    /// <param name="searchTerm">Optional search term to filter vendor codes (case-insensitive).</param>
+    /// <param name="limit">Maximum number of results to return (default: 50).</param>
+    /// <returns>A list of distinct primary vendor codes matching the search criteria.</returns>
+    /// <response code="200">Returns the list of vendor codes.</response>
+    /// <response code="500">An error occurred while retrieving vendor codes.</response>
+    [HttpGet("accounts/vendors/primary")]
+    [ProducesResponseType(typeof(List<string>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<List<string>>> GetPrimaryVendorCodes(
+        [FromQuery] string? searchTerm = null,
+        [FromQuery] int limit = 50)
+    {
+        try
+        {
+            var query = _dbContext.AdrAccounts
+                .Where(a => !a.IsDeleted && !string.IsNullOrEmpty(a.PrimaryVendorCode))
+                .Select(a => a.PrimaryVendorCode!)
+                .Distinct();
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                query = query.Where(v => v.Contains(searchTerm));
+            }
+
+            var vendorCodes = await query
+                .OrderBy(v => v)
+                .Take(limit)
+                .ToListAsync();
+
+            return Ok(vendorCodes);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving primary vendor codes");
+            return StatusCode(500, "An error occurred while retrieving primary vendor codes");
+        }
+    }
+
+    /// <summary>
+    /// Retrieves a list of distinct master vendor codes for type-ahead search functionality.
+    /// Returns vendor codes that match the search term, limited to a maximum number of results.
+    /// </summary>
+    /// <param name="searchTerm">Optional search term to filter vendor codes (case-insensitive).</param>
+    /// <param name="limit">Maximum number of results to return (default: 50).</param>
+    /// <returns>A list of distinct master vendor codes matching the search criteria.</returns>
+    /// <response code="200">Returns the list of vendor codes.</response>
+    /// <response code="500">An error occurred while retrieving vendor codes.</response>
+    [HttpGet("accounts/vendors/master")]
+    [ProducesResponseType(typeof(List<string>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<List<string>>> GetMasterVendorCodes(
+        [FromQuery] string? searchTerm = null,
+        [FromQuery] int limit = 50)
+    {
+        try
+        {
+            var query = _dbContext.AdrAccounts
+                .Where(a => !a.IsDeleted && !string.IsNullOrEmpty(a.MasterVendorCode))
+                .Select(a => a.MasterVendorCode!)
+                .Distinct();
+
+            if (!string.IsNullOrWhiteSpace(searchTerm))
+            {
+                query = query.Where(v => v.Contains(searchTerm));
+            }
+
+            var vendorCodes = await query
+                .OrderBy(v => v)
+                .Take(limit)
+                .ToListAsync();
+
+            return Ok(vendorCodes);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving master vendor codes");
+            return StatusCode(500, "An error occurred while retrieving master vendor codes");
         }
     }
 
