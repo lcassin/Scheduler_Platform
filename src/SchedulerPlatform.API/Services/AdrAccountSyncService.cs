@@ -884,179 +884,179 @@ WHERE CL.ClientId IS NOT NULL";
     private static string GetAccountSyncQuery()
     {
         return @"
-DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
+		DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
 
-SELECT [RecId]
-      ,AD.[InterfaceAccountId]
-      ,[BillId]
-      ,[InvoiceDate]
-      ,AD.[AccountNumber]
-      ,AD.[PrimaryVendorCode] AS PrimaryVendorCode
-      ,MV.[PrimaryVendorCode] AS MasterVendorCode
-      ,[VCAccountId] AS AccountId
-      ,C.[CredentialId]
-      ,C.ExpirationDate
-      ,CL.ClientId
-      ,CL.ClientName
-INTO #tmpCredentialAccountBilling
-FROM [dbo].[ADRInvoiceAccountData] AD
-    LEFT OUTER JOIN Account A ON AD.VCAccountId = A.AccountId
-    LEFT OUTER JOIN Client CL ON A.ClientId = CL.ClientId
-    INNER JOIN CredentialAccount CA ON AD.VCAccountId = CA.AccountId
-    INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId
-    LEFT OUTER JOIN Vendor V ON AD.PrimaryVendorCode = V.PrimaryVendorCode
-    LEFT OUTER JOIN VendorXRef VX ON V.VendorId = VX.PrimaryVendorId
-    LEFT OUTER JOIN Vendor MV ON VX.MasterVendorId = MV.VendorId;
+		SELECT [RecId]
+			  ,AD.[InterfaceAccountId]
+			  ,[BillId]
+			  ,[InvoiceDate]
+			  ,AD.[AccountNumber]
+			  ,AD.[VendorCode] AS PrimaryVendorCode
+			  ,MV.[PrimaryVendorCode] AS MasterVendorCode
+			  ,[VCAccountId] AS AccountId
+			  ,C.[CredentialId]
+			  ,C.ExpirationDate
+			  ,CL.ClientId
+			  ,CL.ClientName
+		INTO #tmpCredentialAccountBilling
+		FROM [dbo].[ADRInvoiceAccountData] AD
+			LEFT OUTER JOIN Account A ON AD.VCAccountId = A.AccountId
+			LEFT OUTER JOIN Client CL ON A.ClientId = CL.ClientId
+			INNER JOIN CredentialAccount CA ON AD.VCAccountId = CA.AccountId
+			INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId
+			LEFT OUTER JOIN Vendor V ON AD.VendorCode = V.PrimaryVendorCode
+			LEFT OUTER JOIN VendorXRef VX ON V.VendorId = VX.PrimaryVendorId
+			LEFT OUTER JOIN Vendor MV ON VX.MasterVendorId = MV.VendorId;
 
-;WITH AccountStats AS (
-    SELECT AccountId,
-           MAX(InvoiceDate) AS LastInvoiceDate,
-           COUNT(*) AS InvoiceCount
-    FROM #tmpCredentialAccountBilling
-    GROUP BY AccountId
-),
-InvoiceIntervals AS (
-    SELECT AccountId,
-           DATEDIFF(DAY, LAG(InvoiceDate) OVER (PARTITION BY AccountId ORDER BY InvoiceDate), InvoiceDate) AS DaysBetween
-    FROM #tmpCredentialAccountBilling
-),
-IntervalStats AS (
-    SELECT DISTINCT
-        AccountId,
-        PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY DaysBetween) 
-            OVER (PARTITION BY AccountId) AS MedianDays
-    FROM InvoiceIntervals
-    WHERE DaysBetween IS NOT NULL AND DaysBetween > 0
-),
-AccountPeriods AS (
-    SELECT 
-        a.AccountId,
-        a.LastInvoiceDate,
-        a.InvoiceCount,
-        COALESCE(i.MedianDays, 30) AS MedianDays,
-        CASE 
-            WHEN i.MedianDays >= 7 AND i.MedianDays <= 21 THEN 'Bi-Weekly'
-            WHEN i.MedianDays >= 22 AND i.MedianDays <= 45 THEN 'Monthly'
-            WHEN i.MedianDays >= 46 AND i.MedianDays <= 75 THEN 'Bi-Monthly'
-            WHEN i.MedianDays >= 76 AND i.MedianDays <= 135 THEN 'Quarterly'
-            WHEN i.MedianDays >= 136 AND i.MedianDays <= 270 THEN 'Semi-Annually'
-            WHEN i.MedianDays >= 271 THEN 'Annually'
-            ELSE 'Monthly'
-        END AS PeriodType,
-        CASE 
-            WHEN i.MedianDays >= 7 AND i.MedianDays <= 21 THEN 14
-            WHEN i.MedianDays >= 22 AND i.MedianDays <= 45 THEN 30
-            WHEN i.MedianDays >= 46 AND i.MedianDays <= 75 THEN 60
-            WHEN i.MedianDays >= 76 AND i.MedianDays <= 135 THEN 90
-            WHEN i.MedianDays >= 136 AND i.MedianDays <= 270 THEN 180
-            WHEN i.MedianDays >= 271 THEN 365
-            ELSE 30
-        END AS PeriodDays,
-        CASE 
-            WHEN i.MedianDays >= 7 AND i.MedianDays <= 21 THEN 3
-            WHEN i.MedianDays >= 22 AND i.MedianDays <= 45 THEN 5
-            WHEN i.MedianDays >= 46 AND i.MedianDays <= 75 THEN 7
-            WHEN i.MedianDays >= 76 AND i.MedianDays <= 135 THEN 10
-            WHEN i.MedianDays >= 136 AND i.MedianDays <= 270 THEN 14
-            WHEN i.MedianDays >= 271 THEN 21
-            ELSE 5
-        END AS WindowDays,
-        DATEADD(DAY, CAST(COALESCE(i.MedianDays, 30) AS INT), a.LastInvoiceDate) AS ExpectedNextDate
-    FROM AccountStats a
-    LEFT JOIN IntervalStats i ON i.AccountId = a.AccountId
-),
-NextRunCalc AS (
-    SELECT ap.*,
-        CASE 
-            WHEN ap.ExpectedNextDate >= CAST(GETDATE() AS DATE) THEN ap.ExpectedNextDate
-            ELSE DATEADD(DAY, ((DATEDIFF(DAY, ap.ExpectedNextDate, CAST(GETDATE() AS DATE)) / ap.PeriodDays) + 1) * ap.PeriodDays, ap.ExpectedNextDate)
-        END AS NextRunDate
-    FROM AccountPeriods ap
-),
-Combined AS (
-    SELECT DISTINCT 
-        cab.AccountId AS VMAccountId, 
-        cab.CredentialId, 
-        cab.ClientId,
-        cab.ClientName,
-        cab.PrimaryVendorCode,
-        cab.MasterVendorCode,
-        cab.AccountNumber AS VMAccountNumber,
-        cab.InterfaceAccountId,
-        nr.PeriodType,
-        nr.PeriodDays,
-        nr.MedianDays,
-        nr.InvoiceCount,
-        nr.LastInvoiceDate,
-        DATEADD(DAY, -nr.WindowDays, nr.ExpectedNextDate) AS ExpectedRangeStart,
-        nr.ExpectedNextDate,
-        DATEADD(DAY, nr.WindowDays, nr.ExpectedNextDate) AS ExpectedRangeEnd,
-        DATEADD(DAY, -nr.WindowDays, nr.NextRunDate) AS NextRangeStart,
-        nr.NextRunDate,
-        DATEADD(DAY, nr.WindowDays, nr.NextRunDate) AS NextRangeEnd,
-        DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) AS DaysUntilNextRun,
-        -- Calculate HistoricalBillingStatus first (based on ExpectedNextDate)
-        CASE 
-            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) < -(nr.PeriodDays * 2) THEN 'Missing'
-            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) < -nr.WindowDays THEN 'Overdue'
-            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) < 0 THEN 'Due Now'
-            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) <= nr.WindowDays THEN 'Due Soon'
-            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) <= 30 THEN 'Upcoming'
-            ELSE 'Future'
-        END AS HistoricalBillingStatus,
-        -- NextRunStatus: If HistoricalBillingStatus is Missing, NextRunStatus should also be Missing
-        -- Otherwise calculate based on NextRunDate
-        CASE 
-            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) < -(nr.PeriodDays * 2) THEN 'Missing'
-            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) <= 0 THEN 'Run Now'
-            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) <= nr.WindowDays THEN 'Due Soon'
-            WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) <= 30 THEN 'Upcoming'
-            ELSE 'Future'
-        END AS NextRunStatus
-    FROM #tmpCredentialAccountBilling cab
-    INNER JOIN NextRunCalc nr ON nr.AccountId = cab.AccountId
-),
-MaxCred AS (
-    SELECT VMAccountId, VMAccountNumber, ExpectedNextDate, MAX(CredentialId) AS MaxCredentialId
-    FROM Combined
-    GROUP BY VMAccountId, VMAccountNumber, ExpectedNextDate
-),
-Filtered AS (
-    SELECT c.*
-    FROM Combined c
-    JOIN MaxCred m ON m.VMAccountId = c.VMAccountId
-                  AND m.VMAccountNumber = c.VMAccountNumber
-                  AND m.ExpectedNextDate = c.ExpectedNextDate
-                  AND m.MaxCredentialId = c.CredentialId
-)
-SELECT DISTINCT
-    VMAccountId,
-    CredentialId,
-    ClientId,
-    ClientName,
-    PrimaryVendorCode,
-    MasterVendorCode,
-    VMAccountNumber,
-    InterfaceAccountId,
-    PeriodType,
-    PeriodDays,
-    MedianDays,
-    InvoiceCount,
-    LastInvoiceDate,
-    ExpectedRangeStart,
-    ExpectedNextDate,
-    ExpectedRangeEnd,
-    NextRangeStart,
-    NextRunDate,
-    NextRangeEnd,
-    DaysUntilNextRun,
-    NextRunStatus,
-    HistoricalBillingStatus
-FROM Filtered
-ORDER BY VMAccountId;
+		;WITH AccountStats AS (
+			SELECT AccountId,
+				   MAX(InvoiceDate) AS LastInvoiceDate,
+				   COUNT(*) AS InvoiceCount
+			FROM #tmpCredentialAccountBilling
+			GROUP BY AccountId
+		),
+		InvoiceIntervals AS (
+			SELECT AccountId,
+				   DATEDIFF(DAY, LAG(InvoiceDate) OVER (PARTITION BY AccountId ORDER BY InvoiceDate), InvoiceDate) AS DaysBetween
+			FROM #tmpCredentialAccountBilling
+		),
+		IntervalStats AS (
+			SELECT DISTINCT
+				AccountId,
+				PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY DaysBetween) 
+					OVER (PARTITION BY AccountId) AS MedianDays
+			FROM InvoiceIntervals
+			WHERE DaysBetween IS NOT NULL AND DaysBetween > 0
+		),
+		AccountPeriods AS (
+			SELECT 
+				a.AccountId,
+				a.LastInvoiceDate,
+				a.InvoiceCount,
+				COALESCE(i.MedianDays, 30) AS MedianDays,
+				CASE 
+					WHEN i.MedianDays >= 7 AND i.MedianDays <= 21 THEN 'Bi-Weekly'
+					WHEN i.MedianDays >= 22 AND i.MedianDays <= 45 THEN 'Monthly'
+					WHEN i.MedianDays >= 46 AND i.MedianDays <= 75 THEN 'Bi-Monthly'
+					WHEN i.MedianDays >= 76 AND i.MedianDays <= 135 THEN 'Quarterly'
+					WHEN i.MedianDays >= 136 AND i.MedianDays <= 270 THEN 'Semi-Annually'
+					WHEN i.MedianDays >= 271 THEN 'Annually'
+					ELSE 'Monthly'
+				END AS PeriodType,
+				CASE 
+					WHEN i.MedianDays >= 7 AND i.MedianDays <= 21 THEN 14
+					WHEN i.MedianDays >= 22 AND i.MedianDays <= 45 THEN 30
+					WHEN i.MedianDays >= 46 AND i.MedianDays <= 75 THEN 60
+					WHEN i.MedianDays >= 76 AND i.MedianDays <= 135 THEN 90
+					WHEN i.MedianDays >= 136 AND i.MedianDays <= 270 THEN 180
+					WHEN i.MedianDays >= 271 THEN 365
+					ELSE 30
+				END AS PeriodDays,
+				CASE 
+					WHEN i.MedianDays >= 7 AND i.MedianDays <= 21 THEN 3
+					WHEN i.MedianDays >= 22 AND i.MedianDays <= 45 THEN 5
+					WHEN i.MedianDays >= 46 AND i.MedianDays <= 75 THEN 7
+					WHEN i.MedianDays >= 76 AND i.MedianDays <= 135 THEN 10
+					WHEN i.MedianDays >= 136 AND i.MedianDays <= 270 THEN 14
+					WHEN i.MedianDays >= 271 THEN 21
+					ELSE 5
+				END AS WindowDays,
+				DATEADD(DAY, CAST(COALESCE(i.MedianDays, 30) AS INT), a.LastInvoiceDate) AS ExpectedNextDate
+			FROM AccountStats a
+			LEFT JOIN IntervalStats i ON i.AccountId = a.AccountId
+		),
+		NextRunCalc AS (
+			SELECT ap.*,
+				CASE 
+					WHEN ap.ExpectedNextDate >= CAST(GETDATE() AS DATE) THEN ap.ExpectedNextDate
+					ELSE DATEADD(DAY, ((DATEDIFF(DAY, ap.ExpectedNextDate, CAST(GETDATE() AS DATE)) / ap.PeriodDays) + 1) * ap.PeriodDays, ap.ExpectedNextDate)
+				END AS NextRunDate
+			FROM AccountPeriods ap
+		),
+		Combined AS (
+			SELECT DISTINCT 
+				cab.AccountId AS VMAccountId, 
+				cab.CredentialId, 
+				cab.ClientId,
+				cab.ClientName,
+				cab.PrimaryVendorCode,
+				cab.MasterVendorCode,
+				cab.AccountNumber AS VMAccountNumber,
+				cab.InterfaceAccountId,
+				nr.PeriodType,
+				nr.PeriodDays,
+				nr.MedianDays,
+				nr.InvoiceCount,
+				nr.LastInvoiceDate,
+				DATEADD(DAY, -nr.WindowDays, nr.ExpectedNextDate) AS ExpectedRangeStart,
+				nr.ExpectedNextDate,
+				DATEADD(DAY, nr.WindowDays, nr.ExpectedNextDate) AS ExpectedRangeEnd,
+				DATEADD(DAY, -nr.WindowDays, nr.NextRunDate) AS NextRangeStart,
+				nr.NextRunDate,
+				DATEADD(DAY, nr.WindowDays, nr.NextRunDate) AS NextRangeEnd,
+				DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) AS DaysUntilNextRun,
+				-- Calculate HistoricalBillingStatus first (based on ExpectedNextDate)
+				CASE 
+					WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) < -(nr.PeriodDays * 2) THEN 'Missing'
+					WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) < -nr.WindowDays THEN 'Overdue'
+					WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) < 0 THEN 'Due Now'
+					WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) <= nr.WindowDays THEN 'Due Soon'
+					WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) <= 30 THEN 'Upcoming'
+					ELSE 'Future'
+				END AS HistoricalBillingStatus,
+				-- NextRunStatus: If HistoricalBillingStatus is Missing, NextRunStatus should also be Missing
+				-- Otherwise calculate based on NextRunDate
+				CASE 
+					WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.ExpectedNextDate) < -(nr.PeriodDays * 2) THEN 'Missing'
+					WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) <= 0 THEN 'Run Now'
+					WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) <= nr.WindowDays THEN 'Due Soon'
+					WHEN DATEDIFF(DAY, CAST(GETDATE() AS DATE), nr.NextRunDate) <= 30 THEN 'Upcoming'
+					ELSE 'Future'
+				END AS NextRunStatus
+			FROM #tmpCredentialAccountBilling cab
+			INNER JOIN NextRunCalc nr ON nr.AccountId = cab.AccountId
+		),
+		MaxCred AS (
+			SELECT VMAccountId, VMAccountNumber, ExpectedNextDate, MAX(CredentialId) AS MaxCredentialId
+			FROM Combined
+			GROUP BY VMAccountId, VMAccountNumber, ExpectedNextDate
+		),
+		Filtered AS (
+			SELECT c.*
+			FROM Combined c
+			JOIN MaxCred m ON m.VMAccountId = c.VMAccountId
+						  AND m.VMAccountNumber = c.VMAccountNumber
+						  AND m.ExpectedNextDate = c.ExpectedNextDate
+						  AND m.MaxCredentialId = c.CredentialId
+		)
+		SELECT DISTINCT
+			VMAccountId,
+			CredentialId,
+			ClientId,
+			ClientName,
+			PrimaryVendorCode,
+			MasterVendorCode,
+			VMAccountNumber,
+			InterfaceAccountId,
+			PeriodType,
+			PeriodDays,
+			MedianDays,
+			InvoiceCount,
+			LastInvoiceDate,
+			ExpectedRangeStart,
+			ExpectedNextDate,
+			ExpectedRangeEnd,
+			NextRangeStart,
+			NextRunDate,
+			NextRangeEnd,
+			DaysUntilNextRun,
+			NextRunStatus,
+			HistoricalBillingStatus
+		FROM Filtered
+		ORDER BY VMAccountId;
 
-DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
-";
+		DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
+		";
     }
 
     /// <summary>
