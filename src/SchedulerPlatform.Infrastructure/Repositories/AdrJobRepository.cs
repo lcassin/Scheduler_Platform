@@ -183,6 +183,7 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             DateTime? billingPeriodStart = null,
             DateTime? billingPeriodEnd = null,
             string? vendorCode = null,
+            string? masterVendorCode = null,
             string? vmAccountNumber = null,
             bool latestPerAccount = false,
             long? vmAccountId = null,
@@ -242,12 +243,18 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
 
             if (!string.IsNullOrWhiteSpace(vendorCode))
             {
-                // Check both job's PrimaryVendorCode/MasterVendorCode and fallback to AdrAccount's codes
+                // Filter by Primary Vendor Code - check job's PrimaryVendorCode with fallback to AdrAccount's code
                 query = query.Where(j => 
                     (j.PrimaryVendorCode != null && j.PrimaryVendorCode.Contains(vendorCode)) ||
-                    (j.MasterVendorCode != null && j.MasterVendorCode.Contains(vendorCode)) ||
-                    (j.PrimaryVendorCode == null && j.AdrAccount != null && j.AdrAccount.PrimaryVendorCode != null && j.AdrAccount.PrimaryVendorCode.Contains(vendorCode)) ||
-                    (j.MasterVendorCode == null && j.AdrAccount != null && j.AdrAccount.MasterVendorCode != null && j.AdrAccount.MasterVendorCode.Contains(vendorCode)));
+                    (j.PrimaryVendorCode == null && j.AdrAccount != null && j.AdrAccount.PrimaryVendorCode != null && j.AdrAccount.PrimaryVendorCode.Contains(vendorCode)));
+            }
+
+            if (!string.IsNullOrWhiteSpace(masterVendorCode))
+            {
+                // Filter by Master Vendor Code - check job's MasterVendorCode with fallback to AdrAccount's code
+                query = query.Where(j => 
+                    (j.MasterVendorCode != null && j.MasterVendorCode.Contains(masterVendorCode)) ||
+                    (j.MasterVendorCode == null && j.AdrAccount != null && j.AdrAccount.MasterVendorCode != null && j.AdrAccount.MasterVendorCode.Contains(masterVendorCode)));
             }
 
             if (!string.IsNullOrWhiteSpace(vmAccountNumber))
