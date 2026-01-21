@@ -207,6 +207,7 @@ public class AdrService : IAdrService
         int? adrAccountId = null,
         string? status = null,
         string? vendorCode = null,
+        string? masterVendorCode = null,
         string? vmAccountNumber = null,
         bool latestPerAccount = false,
         long? vmAccountId = null,
@@ -231,6 +232,9 @@ public class AdrService : IAdrService
 
         if (!string.IsNullOrWhiteSpace(vendorCode))
             queryParams.Add($"vendorCode={Uri.EscapeDataString(vendorCode)}");
+
+        if (!string.IsNullOrWhiteSpace(masterVendorCode))
+            queryParams.Add($"masterVendorCode={Uri.EscapeDataString(masterVendorCode)}");
 
         if (!string.IsNullOrWhiteSpace(vmAccountNumber))
             queryParams.Add($"vmAccountNumber={Uri.EscapeDataString(vmAccountNumber)}");

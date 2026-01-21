@@ -11,23 +11,24 @@ public interface IAdrJobRepository : IRepository<AdrJob>
     Task<IEnumerable<AdrJob>> GetJobsReadyForScrapingAsync(DateTime currentDate);
     Task<IEnumerable<AdrJob>> GetJobsNeedingStatusCheckAsync(DateTime currentDate, int followUpDelayDays = 5);
     Task<IEnumerable<AdrJob>> GetJobsForRetryAsync(DateTime currentDate, int maxRetries = 5);
-        Task<(IEnumerable<AdrJob> items, int totalCount)> GetPagedAsync(
-            int pageNumber,
-            int pageSize,
-            int? adrAccountId = null,
-            string? status = null,
-            DateTime? billingPeriodStart = null,
-            DateTime? billingPeriodEnd = null,
-            string? vendorCode = null,
-            string? vmAccountNumber = null,
-            bool latestPerAccount = false,
-            long? vmAccountId = null,
-            string? interfaceAccountId = null,
-            int? credentialId = null,
-            bool? isManualRequest = null,
-            string? sortColumn = null,
-            bool sortDescending = true,
-            List<int>? jobIds = null);
+            Task<(IEnumerable<AdrJob> items, int totalCount)> GetPagedAsync(
+                int pageNumber,
+                int pageSize,
+                int? adrAccountId = null,
+                string? status = null,
+                DateTime? billingPeriodStart = null,
+                DateTime? billingPeriodEnd = null,
+                string? vendorCode = null,
+                string? masterVendorCode = null,
+                string? vmAccountNumber = null,
+                bool latestPerAccount = false,
+                long? vmAccountId = null,
+                string? interfaceAccountId = null,
+                int? credentialId = null,
+                bool? isManualRequest = null,
+                string? sortColumn = null,
+                bool sortDescending = true,
+                List<int>? jobIds = null);
     Task<int> GetTotalCountAsync(int? adrAccountId = null);
     Task<int> GetCountByStatusAsync(string status);
     Task<int> GetCountByStatusAndIdsAsync(string status, HashSet<int> jobIds);

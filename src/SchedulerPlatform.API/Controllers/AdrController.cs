@@ -1571,6 +1571,7 @@ public class AdrController : ControllerBase
         [FromQuery] DateTime? billingPeriodStart = null,
         [FromQuery] DateTime? billingPeriodEnd = null,
         [FromQuery] string? vendorCode = null,
+        [FromQuery] string? masterVendorCode = null,
         [FromQuery] string? vmAccountNumber = null,
         [FromQuery] bool latestPerAccount = false,
         [FromQuery] int pageNumber = 1,
@@ -1666,6 +1667,7 @@ public class AdrController : ControllerBase
                     billingPeriodStart,
                     billingPeriodEnd,
                     vendorCode,
+                    masterVendorCode,
                     vmAccountNumber,
                     latestPerAccount,
                     vmAccountId,
@@ -2123,7 +2125,7 @@ public class AdrController : ControllerBase
         {
             // Get all jobs matching the filters (no pagination for export)
             var (jobs, _) = await _unitOfWork.AdrJobs.GetPagedAsync(
-                1, int.MaxValue, null, status, null, null, vendorCode, vmAccountNumber, latestPerAccount,
+                1, int.MaxValue, null, status, null, null, vendorCode, null, vmAccountNumber, latestPerAccount,
                 null, null, null, isManualRequest, sortColumn, sortDescending);
 
             // Get blacklist status for each job (single query)
@@ -3274,6 +3276,7 @@ public class AdrController : ControllerBase
         public async Task<ActionResult<PagedResponse<AccountRuleDto>>> GetRules(
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 20,
+            [FromQuery] string? masterVendorCode = null,
             [FromQuery] string? vendorCode = null,
             [FromQuery] string? accountNumber = null,
             [FromQuery] bool? isEnabled = null,
@@ -3287,6 +3290,12 @@ public class AdrController : ControllerBase
                 var query = _dbContext.AdrAccountRules
                     .Include(r => r.AdrAccount)
                     .Where(r => !r.IsDeleted && r.AdrAccount != null && !r.AdrAccount.IsDeleted);
+            
+                if (!string.IsNullOrWhiteSpace(masterVendorCode))
+                {
+                    query = query.Where(r => r.AdrAccount != null && r.AdrAccount.MasterVendorCode != null && 
+                        r.AdrAccount.MasterVendorCode.Contains(masterVendorCode));
+                }
             
                 if (!string.IsNullOrWhiteSpace(vendorCode))
                 {
@@ -3367,6 +3376,7 @@ public class AdrController : ControllerBase
                     {
                         Id = r.Id,
                         AdrAccountId = r.AdrAccountId,
+                        MasterVendorCode = r.AdrAccount != null ? r.AdrAccount.MasterVendorCode : null,
                         PrimaryVendorCode = r.AdrAccount != null ? r.AdrAccount.PrimaryVendorCode : null,
                         VMAccountNumber = r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : null,
                         JobTypeId = r.JobTypeId,
@@ -5219,6 +5229,7 @@ public class AccountRuleDto
 {
     public int Id { get; set; }
     public int AdrAccountId { get; set; }
+    public string? MasterVendorCode { get; set; }
     public string? PrimaryVendorCode { get; set; }
     public string? VMAccountNumber { get; set; }
     public int JobTypeId { get; set; }

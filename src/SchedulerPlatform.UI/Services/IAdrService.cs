@@ -42,6 +42,7 @@ public interface IAdrService
             int? adrAccountId = null,
             string? status = null,
             string? vendorCode = null,
+            string? masterVendorCode = null,
             string? vmAccountNumber = null,
             bool latestPerAccount = false,
             long? vmAccountId = null,
