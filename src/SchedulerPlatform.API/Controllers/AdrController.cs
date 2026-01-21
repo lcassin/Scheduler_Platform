@@ -3923,10 +3923,11 @@ public class AdrController : ControllerBase
     /// <param name="pageNumber">Page number for pagination (default: 1).</param>
     /// <param name="pageSize">Number of items per page (default: 50).</param>
     /// <param name="status">Filter by status: "current" (active now), "future" (starts in future), "expired" (end date passed), "inactive" (manually disabled), "all" (default).</param>
-    /// <param name="vendorCode">Optional filter by vendor code.</param>
+    /// <param name="masterVendorCode">Optional filter by master vendor code.</param>
+    /// <param name="primaryVendorCode">Optional filter by primary vendor code.</param>
     /// <param name="accountNumber">Optional filter by account number.</param>
     /// <param name="isActive">Optional filter by active status.</param>
-    /// <param name="sortColumn">Column to sort by: VendorCode, VMAccountNumber, EffectiveStartDate, EffectiveEndDate, CreatedDateTime, IsActive (default: EffectiveEndDate).</param>
+    /// <param name="sortColumn">Column to sort by: MasterVendorCode, PrimaryVendorCode, VMAccountNumber, EffectiveStartDate, EffectiveEndDate, CreatedDateTime, IsActive (default: EffectiveEndDate).</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
     /// <returns>A paginated list of blacklist entries.</returns>
     /// <response code="200">Returns the list of blacklist entries.</response>
@@ -3939,7 +3940,8 @@ public class AdrController : ControllerBase
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 50,
         [FromQuery] string? status = null,
-        [FromQuery] string? vendorCode = null,
+        [FromQuery] string? masterVendorCode = null,
+        [FromQuery] string? primaryVendorCode = null,
         [FromQuery] string? accountNumber = null,
         [FromQuery] bool? isActive = null,
         [FromQuery] string sortColumn = "EffectiveEndDate",
@@ -3984,9 +3986,13 @@ public class AdrController : ControllerBase
             }
             
             // Apply additional filters
-            if (!string.IsNullOrWhiteSpace(vendorCode))
+            if (!string.IsNullOrWhiteSpace(masterVendorCode))
             {
-                query = query.Where(b => b.PrimaryVendorCode != null && b.PrimaryVendorCode.Contains(vendorCode));
+                query = query.Where(b => b.MasterVendorCode != null && b.MasterVendorCode.Contains(masterVendorCode));
+            }
+            if (!string.IsNullOrWhiteSpace(primaryVendorCode))
+            {
+                query = query.Where(b => b.PrimaryVendorCode != null && b.PrimaryVendorCode.Contains(primaryVendorCode));
             }
             if (!string.IsNullOrWhiteSpace(accountNumber))
             {
@@ -4102,6 +4108,9 @@ public class AdrController : ControllerBase
             {
                 var matchingBlacklists = allBlacklists.Where(b =>
                 {
+                    // Match by MasterVendorCode
+                    if (!string.IsNullOrEmpty(b.MasterVendorCode) && b.MasterVendorCode == item.MasterVendorCode)
+                        return true;
                     // Match by PrimaryVendorCode
                     if (!string.IsNullOrEmpty(b.PrimaryVendorCode) && b.PrimaryVendorCode == item.PrimaryVendorCode)
                         return true;
@@ -4127,6 +4136,7 @@ public class AdrController : ControllerBase
                         ExclusionType = b.ExclusionType,
                         EffectiveStartDate = b.EffectiveStartDate,
                         EffectiveEndDate = b.EffectiveEndDate,
+                        MasterVendorCode = b.MasterVendorCode,
                         PrimaryVendorCode = b.PrimaryVendorCode,
                         VMAccountId = b.VMAccountId,
                         VMAccountNumber = b.VMAccountNumber,
@@ -4143,6 +4153,7 @@ public class AdrController : ControllerBase
                         ExclusionType = b.ExclusionType,
                         EffectiveStartDate = b.EffectiveStartDate,
                         EffectiveEndDate = b.EffectiveEndDate,
+                        MasterVendorCode = b.MasterVendorCode,
                         PrimaryVendorCode = b.PrimaryVendorCode,
                         VMAccountId = b.VMAccountId,
                         VMAccountNumber = b.VMAccountNumber,
@@ -4229,12 +4240,13 @@ public class AdrController : ControllerBase
             }
             
             // At least one exclusion criteria must be provided
-            if (string.IsNullOrWhiteSpace(request.PrimaryVendorCode) && 
+            if (string.IsNullOrWhiteSpace(request.MasterVendorCode) &&
+                string.IsNullOrWhiteSpace(request.PrimaryVendorCode) && 
                 !request.VMAccountId.HasValue && 
                 string.IsNullOrWhiteSpace(request.VMAccountNumber) && 
                 !request.CredentialId.HasValue)
             {
-                return BadRequest("At least one exclusion criteria (PrimaryVendorCode, VMAccountId, VMAccountNumber, or CredentialId) must be provided");
+                return BadRequest("At least one exclusion criteria (MasterVendorCode, PrimaryVendorCode, VMAccountId, VMAccountNumber, or CredentialId) must be provided");
             }
             
             // Both effective dates are required
@@ -4257,6 +4269,7 @@ public class AdrController : ControllerBase
             
             var entry = new AdrAccountBlacklist
             {
+                MasterVendorCode = request.MasterVendorCode,
                 PrimaryVendorCode = request.PrimaryVendorCode,
                 VMAccountId = request.VMAccountId,
                 VMAccountNumber = request.VMAccountNumber,
@@ -4278,8 +4291,8 @@ public class AdrController : ControllerBase
             await _unitOfWork.AdrAccountBlacklists.AddAsync(entry);
             await _unitOfWork.SaveChangesAsync();
             
-            _logger.LogInformation("Blacklist entry {Id} created by {User}. PrimaryVendorCode: {PrimaryVendorCode}, VMAccountId: {VMAccountId}, Reason: {Reason}",
-                entry.Id, username, request.PrimaryVendorCode, request.VMAccountId, request.Reason);
+            _logger.LogInformation("Blacklist entry {Id} created by {User}. MasterVendorCode: {MasterVendorCode}, PrimaryVendorCode: {PrimaryVendorCode}, VMAccountId: {VMAccountId}, Reason: {Reason}",
+                entry.Id, username, request.MasterVendorCode, request.PrimaryVendorCode, request.VMAccountId, request.Reason);
             
             return CreatedAtAction(nameof(GetBlacklistEntry), new { id = entry.Id }, entry);
         }
@@ -4320,6 +4333,7 @@ public class AdrController : ControllerBase
             var username = User.Identity?.Name ?? "System Created";
             
             // Update fields if provided
+            if (request.MasterVendorCode != null) entry.MasterVendorCode = request.MasterVendorCode;
             if (request.PrimaryVendorCode != null) entry.PrimaryVendorCode = request.PrimaryVendorCode;
             if (request.VMAccountId.HasValue) entry.VMAccountId = request.VMAccountId;
             if (request.VMAccountNumber != null) entry.VMAccountNumber = request.VMAccountNumber;
@@ -4332,12 +4346,13 @@ public class AdrController : ControllerBase
             if (request.Notes != null) entry.Notes = request.Notes;
             
             // Validate at least one exclusion criteria exists after update
-            if (string.IsNullOrWhiteSpace(entry.PrimaryVendorCode) && 
+            if (string.IsNullOrWhiteSpace(entry.MasterVendorCode) &&
+                string.IsNullOrWhiteSpace(entry.PrimaryVendorCode) && 
                 !entry.VMAccountId.HasValue && 
                 string.IsNullOrWhiteSpace(entry.VMAccountNumber) && 
                 !entry.CredentialId.HasValue)
             {
-                return BadRequest("At least one exclusion criteria (PrimaryVendorCode, VMAccountId, VMAccountNumber, or CredentialId) must be provided");
+                return BadRequest("At least one exclusion criteria (MasterVendorCode, PrimaryVendorCode, VMAccountId, VMAccountNumber, or CredentialId) must be provided");
             }
             
             // Validate both effective dates are set
@@ -4422,7 +4437,8 @@ public class AdrController : ControllerBase
     /// Only Admin and Super Admin users can access this endpoint.
     /// </summary>
     /// <param name="status">Filter by status: "current", "future", "expired", "inactive", or "all" (default).</param>
-    /// <param name="vendorCode">Optional filter by vendor code.</param>
+    /// <param name="masterVendorCode">Optional filter by master vendor code.</param>
+    /// <param name="primaryVendorCode">Optional filter by primary vendor code.</param>
     /// <param name="accountNumber">Optional filter by account number.</param>
     /// <returns>Excel file containing blacklist entries.</returns>
     /// <response code="200">Returns the Excel file.</response>
@@ -4433,7 +4449,8 @@ public class AdrController : ControllerBase
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult> ExportBlacklist(
         [FromQuery] string? status = null,
-        [FromQuery] string? vendorCode = null,
+        [FromQuery] string? masterVendorCode = null,
+        [FromQuery] string? primaryVendorCode = null,
         [FromQuery] string? accountNumber = null)
     {
         try
@@ -4464,9 +4481,13 @@ public class AdrController : ControllerBase
             }
             
             // Apply additional filters
-            if (!string.IsNullOrWhiteSpace(vendorCode))
+            if (!string.IsNullOrWhiteSpace(masterVendorCode))
             {
-                query = query.Where(b => b.PrimaryVendorCode != null && b.PrimaryVendorCode.Contains(vendorCode));
+                query = query.Where(b => b.MasterVendorCode != null && b.MasterVendorCode.Contains(masterVendorCode));
+            }
+            if (!string.IsNullOrWhiteSpace(primaryVendorCode))
+            {
+                query = query.Where(b => b.PrimaryVendorCode != null && b.PrimaryVendorCode.Contains(primaryVendorCode));
             }
             if (!string.IsNullOrWhiteSpace(accountNumber))
             {
@@ -4479,7 +4500,7 @@ public class AdrController : ControllerBase
             
             var headers = new[]
             {
-                "ID", "Primary Vendor Code", "VM Account ID", "Account Number", "Credential ID",
+                "ID", "Master Vendor Code", "Primary Vendor Code", "VM Account ID", "Account Number", "Credential ID",
                 "Exclusion Type", "Reason", "Is Active", "Effective Start", "Effective End",
                 "Blacklisted By", "Blacklisted Date", "Notes", "Created By", "Created Date"
             };
@@ -4492,6 +4513,7 @@ public class AdrController : ControllerBase
                 entry => new object?[]
                 {
                     entry.Id,
+                    entry.MasterVendorCode,
                     entry.PrimaryVendorCode,
                     entry.VMAccountId,
                     entry.VMAccountNumber,
@@ -4993,6 +5015,7 @@ public class UpdateAdrConfigurationRequest
 /// </summary>
 public class CreateBlacklistEntryRequest
 {
+    public string? MasterVendorCode { get; set; }
     public string? PrimaryVendorCode { get; set; }
     public long? VMAccountId { get; set; }
     public string? VMAccountNumber { get; set; }
@@ -5009,6 +5032,7 @@ public class CreateBlacklistEntryRequest
 /// </summary>
 public class UpdateBlacklistEntryRequest
 {
+    public string? MasterVendorCode { get; set; }
     public string? PrimaryVendorCode { get; set; }
     public long? VMAccountId { get; set; }
     public string? VMAccountNumber { get; set; }
@@ -5046,6 +5070,11 @@ public class BlacklistCheckItem
     /// Job ID (for job-based checks)
     /// </summary>
     public int? JobId { get; set; }
+    
+    /// <summary>
+    /// Master vendor code to match against blacklist entries
+    /// </summary>
+    public string? MasterVendorCode { get; set; }
     
     /// <summary>
     /// Primary vendor code to match against blacklist entries
@@ -5124,6 +5153,7 @@ public class BlacklistSummary
     public string ExclusionType { get; set; } = string.Empty;
     public DateTime? EffectiveStartDate { get; set; }
     public DateTime? EffectiveEndDate { get; set; }
+    public string? MasterVendorCode { get; set; }
     public string? PrimaryVendorCode { get; set; }
     public long? VMAccountId { get; set; }
     public string? VMAccountNumber { get; set; }
