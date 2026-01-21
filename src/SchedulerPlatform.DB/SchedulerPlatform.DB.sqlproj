@@ -57,4 +57,43 @@
   <ItemGroup>
     <Folder Include="Properties" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="SchedulerPlatform.DB.dbmdl" />
+    <None Include="SchedulerPlatform.DB.jfm" />
+  </ItemGroup>
+  <ItemGroup>
+    <Build Include="__EFMigrationsHistory.sql" />
+    <Build Include="AdrAccount.sql" />
+    <Build Include="AdrAccountBlacklist.sql" />
+    <Build Include="AdrAccountRule.sql" />
+    <Build Include="AdrConfiguration.sql" />
+    <Build Include="AdrJob.sql" />
+    <Build Include="AdrJobArchive.sql" />
+    <Build Include="AdrJobExecution.sql" />
+    <Build Include="AdrJobExecutionArchive.sql" />
+    <Build Include="AdrJobType.sql" />
+    <Build Include="AdrOrchestrationRun.sql" />
+    <Build Include="AuditLog.sql" />
+    <Build Include="AuditLogArchive.sql" />
+    <Build Include="Client.sql" />
+    <Build Include="JobExecution.sql" />
+    <Build Include="JobExecutionArchive.sql" />
+    <Build Include="JobParameter.sql" />
+    <Build Include="NotificationSetting.sql" />
+    <Build Include="PasswordHistory.sql" />
+    <Build Include="QRTZ_BLOB_TRIGGERS.sql" />
+    <Build Include="QRTZ_CALENDARS.sql" />
+    <Build Include="QRTZ_CRON_TRIGGERS.sql" />
+    <Build Include="QRTZ_FIRED_TRIGGERS.sql" />
+    <Build Include="QRTZ_JOB_DETAILS.sql" />
+    <Build Include="QRTZ_LOCKS.sql" />
+    <Build Include="QRTZ_PAUSED_TRIGGER_GRPS.sql" />
+    <Build Include="QRTZ_SCHEDULER_STATE.sql" />
+    <Build Include="QRTZ_SIMPLE_TRIGGERS.sql" />
+    <Build Include="QRTZ_SIMPROP_TRIGGERS.sql" />
+    <Build Include="QRTZ_TRIGGERS.sql" />
+    <Build Include="Schedule.sql" />
+    <Build Include="User.sql" />
+    <Build Include="UserPermission.sql" />
+  </ItemGroup>
 </Project>

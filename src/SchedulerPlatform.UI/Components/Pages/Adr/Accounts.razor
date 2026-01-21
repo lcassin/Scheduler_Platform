@@ -48,6 +48,34 @@
                              AdornmentColor="Color.Primary" />
         </MudItem>
         <MudItem xs="12" md="2">
+            <MudAutocomplete T="string" 
+                             Label="Primary Vendor" 
+                             @bind-Value="_selectedPrimaryVendorCode"
+                             SearchFunc="SearchPrimaryVendors"
+                             Variant="Variant.Outlined" 
+                             Margin="Margin.Dense" 
+                             Clearable="true"
+                             ResetValueOnEmptyText="true"
+                             CoerceText="false"
+                             Placeholder="Type to search..."
+                             AdornmentIcon="@Icons.Material.Filled.Store"
+                             AdornmentColor="Color.Primary" />
+        </MudItem>
+        <MudItem xs="12" md="2">
+            <MudAutocomplete T="string" 
+                             Label="Master Vendor" 
+                             @bind-Value="_selectedMasterVendorCode"
+                             SearchFunc="SearchMasterVendors"
+                             Variant="Variant.Outlined" 
+                             Margin="Margin.Dense" 
+                             Clearable="true"
+                             ResetValueOnEmptyText="true"
+                             CoerceText="false"
+                             Placeholder="Type to search..."
+                             AdornmentIcon="@Icons.Material.Filled.Business"
+                             AdornmentColor="Color.Primary" />
+        </MudItem>
+        <MudItem xs="12" md="2">
             <MudSelect T="string" @bind-Value="_selectedNextRunStatus" Label="Next Run Status" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
                 <MudSelectItem Value="@("")">All</MudSelectItem>
                 <MudSelectItem Value="@("Run Now")">Run Now</MudSelectItem>
@@ -56,19 +84,19 @@
                 <MudSelectItem Value="@("Future")">Future</MudSelectItem>
             </MudSelect>
         </MudItem>
+        <MudItem xs="12" md="1">
+            <MudSelect T="string" @bind-Value="_selectedOverrideFilter" Label="Override" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                <MudSelectItem Value="@("")">All</MudSelectItem>
+                <MudSelectItem Value="@("true")">Overridden</MudSelectItem>
+                <MudSelectItem Value="@("false")">Not Overridden</MudSelectItem>
+            </MudSelect>
+        </MudItem>
         <MudItem xs="12" md="2">
             <MudSelect T="string" @bind-Value="_selectedHistoricalStatus" Label="Historical Status" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
                 <MudSelectItem Value="@("")">All</MudSelectItem>
                 <MudSelectItem Value="@("Missing")">Missing</MudSelectItem>
                 <MudSelectItem Value="@("Overdue")">Overdue</MudSelectItem>
                 <MudSelectItem Value="@("Due Now")">Due Now</MudSelectItem>
-            </MudSelect>
-        </MudItem>
-        <MudItem xs="12" md="1">
-            <MudSelect T="string" @bind-Value="_selectedOverrideFilter" Label="Override" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
-                <MudSelectItem Value="@("")">All</MudSelectItem>
-                <MudSelectItem Value="@("true")">Overridden</MudSelectItem>
-                <MudSelectItem Value="@("false")">Not Overridden</MudSelectItem>
             </MudSelect>
         </MudItem>
         <MudItem xs="12" md="2">
@@ -98,7 +126,7 @@
                 <MudSelectItem Value="@("any")">Any Blacklist</MudSelectItem>
             </MudSelect>
         </MudItem>
-        <MudItem xs="12" md="10" Class="d-flex align-center justify-end gap-2">
+        <MudItem xs="12" md="6" Class="d-flex align-center justify-end gap-2">
             <SchedulerPlatform.UI.Components.Shared.IconLegend ShowBlacklistIcons="true" ShowOverrideIcon="true" ShowWarningIcon="true" />
             <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters" StartIcon="@Icons.Material.Filled.FilterAlt">
                 Apply
@@ -140,16 +168,16 @@
                   @ref="_table" Hover="true" Breakpoint="Breakpoint.Sm" Dense="true">
             <HeaderContent>
                 <MudTh><MudTableSortLabel SortLabel="VMAccountNumber" T="AdrAccount">Account #</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortLabel="InterfaceAccountId" T="AdrAccount">Interface Account ID</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="ClientName" T="AdrAccount">Client</MudTableSortLabel></MudTh>
-                <MudTh><MudTableSortLabel SortLabel="PrimaryVendorCode" T="AdrAccount">Primary Vendor</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="MasterVendorCode" T="AdrAccount">Master Vendor</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="PrimaryVendorCode" T="AdrAccount">Primary Vendor</MudTableSortLabel></MudTh>
+                <MudTh><MudTableSortLabel SortLabel="InterfaceAccountId" T="AdrAccount">Interface Account ID</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="PeriodType" T="AdrAccount">Period Type</MudTableSortLabel></MudTh>
+                <MudTh>Last Completed</MudTh>
+                <MudTh><MudTableSortLabel SortLabel="HistoricalBillingStatus" T="AdrAccount">Historical Status</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="NextRunDateTime" T="AdrAccount" InitialDirection="SortDirection.Ascending">Next Run</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="NextRunStatus" T="AdrAccount">Run Status</MudTableSortLabel></MudTh>
                 <MudTh>Job Status</MudTh>
-                <MudTh>Last Completed</MudTh>
-                <MudTh><MudTableSortLabel SortLabel="HistoricalBillingStatus" T="AdrAccount">Historical Status</MudTableSortLabel></MudTh>
                 <MudTh>Actions</MudTh>
             </HeaderContent>
             <RowTemplate>
@@ -183,10 +211,10 @@
                         }
                     </div>
                 </MudTd>
-                <MudTd DataLabel="Interface Account ID">@(context.InterfaceAccountId ?? "N/A")</MudTd>
                 <MudTd DataLabel="Client">@(context.ClientName ?? "N/A")</MudTd>
-                <MudTd DataLabel="Primary Vendor">@(context.PrimaryVendorCode ?? "N/A")</MudTd>
                 <MudTd DataLabel="Master Vendor">@(context.MasterVendorCode ?? "N/A")</MudTd>
+                <MudTd DataLabel="Primary Vendor">@(context.PrimaryVendorCode ?? "N/A")</MudTd>
+                <MudTd DataLabel="Interface Account ID">@(context.InterfaceAccountId ?? "N/A")</MudTd>
                 <MudTd DataLabel="Period Type">
                     @if (!string.IsNullOrEmpty(context.PeriodType))
                     {
@@ -195,6 +223,24 @@
                     else
                     {
                         <MudText Typo="Typo.body2" Color="Color.Secondary">N/A</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Last Completed">
+                    @if (context.LastCompletedDateTime.HasValue)
+                    {
+                        <text>@context.LastCompletedDateTime.Value.ToString("MM/dd/yyyy")</text>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">N/A</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Historical Status">
+                    @if (!string.IsNullOrEmpty(context.HistoricalBillingStatus))
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="@GetHistoricalStatusColor(context.HistoricalBillingStatus)">
+                            @context.HistoricalBillingStatus
+                        </MudChip>
                     }
                 </MudTd>
                 <MudTd DataLabel="Next Run">
@@ -233,24 +279,6 @@
                     else
                     {
                         <MudText Typo="Typo.body2" Color="Color.Secondary">No Job</MudText>
-                    }
-                </MudTd>
-                <MudTd DataLabel="Last Completed">
-                    @if (context.LastCompletedDateTime.HasValue)
-                    {
-                        <text>@context.LastCompletedDateTime.Value.ToString("MM/dd/yyyy")</text>
-                    }
-                    else
-                    {
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">N/A</MudText>
-                    }
-                </MudTd>
-                <MudTd DataLabel="Historical Status">
-                    @if (!string.IsNullOrEmpty(context.HistoricalBillingStatus))
-                    {
-                        <MudChip T="string" Size="Size.Small" Color="@GetHistoricalStatusColor(context.HistoricalBillingStatus)">
-                            @context.HistoricalBillingStatus
-                        </MudChip>
                     }
                 </MudTd>
                                 <MudTd DataLabel="Actions">
@@ -314,11 +342,15 @@
     private string _selectedOverrideFilter = "";
     private string _selectedJobStatus = "";
     private string _selectedBlacklistStatus = "";
+    private string? _selectedPrimaryVendorCode;
+    private string? _selectedMasterVendorCode;
     private string? _filterNextRunStatus;
     private string? _filterHistoricalStatus;
     private bool? _filterIsOverridden;
     private string? _filterJobStatus;
     private string? _filterBlacklistStatus;
+    private string? _filterPrimaryVendorCode;
+    private string? _filterMasterVendorCode;
     private TestModeStatus? _testModeStatus;
 
     [Parameter]
@@ -397,6 +429,8 @@
                 _filterIsOverridden,
                 _filterJobStatus,
                 _filterBlacklistStatus,
+                _filterPrimaryVendorCode,
+                _filterMasterVendorCode,
                 sortColumn,
                 sortDescending);
 
@@ -446,6 +480,8 @@
         _filterIsOverridden = string.IsNullOrEmpty(_selectedOverrideFilter) ? null : bool.Parse(_selectedOverrideFilter);
         _filterJobStatus = string.IsNullOrEmpty(_selectedJobStatus) ? null : _selectedJobStatus;
         _filterBlacklistStatus = string.IsNullOrEmpty(_selectedBlacklistStatus) ? null : _selectedBlacklistStatus;
+        _filterPrimaryVendorCode = string.IsNullOrEmpty(_selectedPrimaryVendorCode) ? null : _selectedPrimaryVendorCode;
+        _filterMasterVendorCode = string.IsNullOrEmpty(_selectedMasterVendorCode) ? null : _selectedMasterVendorCode;
         await _table.ReloadServerData();
     }
 
@@ -458,12 +494,46 @@
         _selectedOverrideFilter = "";
         _selectedJobStatus = "";
         _selectedBlacklistStatus = "";
+        _selectedPrimaryVendorCode = null;
+        _selectedMasterVendorCode = null;
         _filterNextRunStatus = null;
         _filterHistoricalStatus = null;
         _filterIsOverridden = null;
         _filterJobStatus = null;
         _filterBlacklistStatus = null;
+        _filterPrimaryVendorCode = null;
+        _filterMasterVendorCode = null;
         await _table.ReloadServerData();
+    }
+
+    private async Task<IEnumerable<string>> SearchPrimaryVendors(string value, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(value))
+            return new List<string>();
+
+        try
+        {
+            return await AdrService.GetPrimaryVendorCodesAsync(value, 50);
+        }
+        catch
+        {
+            return new List<string>();
+        }
+    }
+
+    private async Task<IEnumerable<string>> SearchMasterVendors(string value, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(value))
+            return new List<string>();
+
+        try
+        {
+            return await AdrService.GetMasterVendorCodesAsync(value, 50);
+        }
+        catch
+        {
+            return new List<string>();
+        }
     }
 
     private Color GetNextRunStatusColor(string status) => status switch
