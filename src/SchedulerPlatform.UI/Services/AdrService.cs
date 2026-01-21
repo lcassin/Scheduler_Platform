@@ -608,7 +608,8 @@ public class AdrService : IAdrService
     {
         try
         {
-            var response = await _httpClient.GetAsync("adr/configuration");
+            // Use the dedicated test mode status endpoint that doesn't require admin permissions
+            var response = await _httpClient.GetAsync("adr/configuration/test-mode-status");
             response.EnsureSuccessStatusCode();
             var config = await response.Content.ReadFromJsonAsync<AdrConfigurationResponse>();
             return new TestModeStatus
