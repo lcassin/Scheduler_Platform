@@ -48,7 +48,9 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
         bool? isOverridden = null,
         string? sortColumn = null,
         bool sortDescending = false,
-        List<int>? accountIdsFilter = null)
+        List<int>? accountIdsFilter = null,
+        string? primaryVendorCode = null,
+        string? masterVendorCode = null)
     {
         var query = _dbSet.Where(a => !a.IsDeleted);
 
@@ -81,6 +83,16 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
         if (isOverridden.HasValue)
         {
             query = query.Where(a => a.IsManuallyOverridden == isOverridden.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(primaryVendorCode))
+        {
+            query = query.Where(a => a.PrimaryVendorCode == primaryVendorCode);
+        }
+
+        if (!string.IsNullOrWhiteSpace(masterVendorCode))
+        {
+            query = query.Where(a => a.MasterVendorCode == masterVendorCode);
         }
 
         if (!string.IsNullOrWhiteSpace(searchTerm))

@@ -18,7 +18,9 @@ public interface IAdrAccountRepository : IRepository<AdrAccount>
         bool? isOverridden = null,
         string? sortColumn = null,
         bool sortDescending = false,
-        List<int>? accountIdsFilter = null);
+        List<int>? accountIdsFilter = null,
+        string? primaryVendorCode = null,
+        string? masterVendorCode = null);
     Task<int> GetTotalCountAsync(int? clientId = null);
     Task<int> GetCountByNextRunStatusAsync(string status, int? clientId = null);
     Task<int> GetCountByHistoricalStatusAsync(string status, int? clientId = null);
