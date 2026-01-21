@@ -48,6 +48,34 @@
                              AdornmentColor="Color.Primary" />
         </MudItem>
         <MudItem xs="12" md="2">
+            <MudAutocomplete T="string" 
+                             Label="Primary Vendor" 
+                             @bind-Value="_selectedPrimaryVendorCode"
+                             SearchFunc="SearchPrimaryVendors"
+                             Variant="Variant.Outlined" 
+                             Margin="Margin.Dense" 
+                             Clearable="true"
+                             ResetValueOnEmptyText="true"
+                             CoerceText="false"
+                             Placeholder="Type to search..."
+                             AdornmentIcon="@Icons.Material.Filled.Store"
+                             AdornmentColor="Color.Primary" />
+        </MudItem>
+        <MudItem xs="12" md="2">
+            <MudAutocomplete T="string" 
+                             Label="Master Vendor" 
+                             @bind-Value="_selectedMasterVendorCode"
+                             SearchFunc="SearchMasterVendors"
+                             Variant="Variant.Outlined" 
+                             Margin="Margin.Dense" 
+                             Clearable="true"
+                             ResetValueOnEmptyText="true"
+                             CoerceText="false"
+                             Placeholder="Type to search..."
+                             AdornmentIcon="@Icons.Material.Filled.Business"
+                             AdornmentColor="Color.Primary" />
+        </MudItem>
+        <MudItem xs="12" md="2">
             <MudSelect T="string" @bind-Value="_selectedNextRunStatus" Label="Next Run Status" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
                 <MudSelectItem Value="@("")">All</MudSelectItem>
                 <MudSelectItem Value="@("Run Now")">Run Now</MudSelectItem>
@@ -56,19 +84,19 @@
                 <MudSelectItem Value="@("Future")">Future</MudSelectItem>
             </MudSelect>
         </MudItem>
+        <MudItem xs="12" md="1">
+            <MudSelect T="string" @bind-Value="_selectedOverrideFilter" Label="Override" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                <MudSelectItem Value="@("")">All</MudSelectItem>
+                <MudSelectItem Value="@("true")">Overridden</MudSelectItem>
+                <MudSelectItem Value="@("false")">Not Overridden</MudSelectItem>
+            </MudSelect>
+        </MudItem>
         <MudItem xs="12" md="2">
             <MudSelect T="string" @bind-Value="_selectedHistoricalStatus" Label="Historical Status" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
                 <MudSelectItem Value="@("")">All</MudSelectItem>
                 <MudSelectItem Value="@("Missing")">Missing</MudSelectItem>
                 <MudSelectItem Value="@("Overdue")">Overdue</MudSelectItem>
                 <MudSelectItem Value="@("Due Now")">Due Now</MudSelectItem>
-            </MudSelect>
-        </MudItem>
-        <MudItem xs="12" md="1">
-            <MudSelect T="string" @bind-Value="_selectedOverrideFilter" Label="Override" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
-                <MudSelectItem Value="@("")">All</MudSelectItem>
-                <MudSelectItem Value="@("true")">Overridden</MudSelectItem>
-                <MudSelectItem Value="@("false")">Not Overridden</MudSelectItem>
             </MudSelect>
         </MudItem>
         <MudItem xs="12" md="2">
@@ -97,34 +125,6 @@
                 <MudSelectItem Value="@("future")">Future Blacklist</MudSelectItem>
                 <MudSelectItem Value="@("any")">Any Blacklist</MudSelectItem>
             </MudSelect>
-        </MudItem>
-        <MudItem xs="12" md="2">
-            <MudAutocomplete T="string" 
-                             Label="Primary Vendor" 
-                             @bind-Value="_selectedPrimaryVendorCode"
-                             SearchFunc="SearchPrimaryVendors"
-                             Variant="Variant.Outlined" 
-                             Margin="Margin.Dense" 
-                             Clearable="true"
-                             ResetValueOnEmptyText="true"
-                             CoerceText="false"
-                             Placeholder="Type to search..."
-                             AdornmentIcon="@Icons.Material.Filled.Store"
-                             AdornmentColor="Color.Primary" />
-        </MudItem>
-        <MudItem xs="12" md="2">
-            <MudAutocomplete T="string" 
-                             Label="Master Vendor" 
-                             @bind-Value="_selectedMasterVendorCode"
-                             SearchFunc="SearchMasterVendors"
-                             Variant="Variant.Outlined" 
-                             Margin="Margin.Dense" 
-                             Clearable="true"
-                             ResetValueOnEmptyText="true"
-                             CoerceText="false"
-                             Placeholder="Type to search..."
-                             AdornmentIcon="@Icons.Material.Filled.Business"
-                             AdornmentColor="Color.Primary" />
         </MudItem>
         <MudItem xs="12" md="6" Class="d-flex align-center justify-end gap-2">
             <SchedulerPlatform.UI.Components.Shared.IconLegend ShowBlacklistIcons="true" ShowOverrideIcon="true" ShowWarningIcon="true" />

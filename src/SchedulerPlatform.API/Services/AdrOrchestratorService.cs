@@ -2356,7 +2356,47 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             rule.ModifiedDateTime = DateTime.UtcNow;
             rule.ModifiedBy = "System Created";
 
-            // Note: No UpdateAsync call here - the rule is already tracked by EF and will be saved
+            // IMPORTANT: Also update the AdrAccount's scheduling fields to keep them in sync with the rule
+            // This ensures the UI displays the correct NextRunDateTime and NextRunStatus
+            // The Account fields were previously only updated during sync from VendorCred, causing stale data
+            if (job.AdrAccount != null)
+            {
+                var today = DateTime.UtcNow.Date;
+                var daysUntilNextRun = (int)(nextRunDate - today).TotalDays;
+                
+                // Update scheduling fields on the account
+                job.AdrAccount.NextRunDateTime = nextRunDate;
+                job.AdrAccount.NextRangeStartDateTime = nextRangeStart;
+                job.AdrAccount.NextRangeEndDateTime = nextRangeEnd;
+                job.AdrAccount.DaysUntilNextRun = daysUntilNextRun;
+                
+                // Recalculate NextRunStatus based on the new dates
+                // Use the same logic as in AdrAccountSyncService
+                if (job.AdrAccount.HistoricalBillingStatus == "Missing")
+                {
+                    job.AdrAccount.NextRunStatus = "Missing";
+                }
+                else
+                {
+                    if (daysUntilNextRun <= 0)
+                        job.AdrAccount.NextRunStatus = "Run Now";
+                    else if (daysUntilNextRun <= windowBefore)
+                        job.AdrAccount.NextRunStatus = "Due Soon";
+                    else if (daysUntilNextRun <= 30)
+                        job.AdrAccount.NextRunStatus = "Upcoming";
+                    else
+                        job.AdrAccount.NextRunStatus = "Future";
+                }
+                
+                job.AdrAccount.ModifiedDateTime = DateTime.UtcNow;
+                job.AdrAccount.ModifiedBy = "System Created";
+                
+                _logger.LogDebug(
+                    "Updated account {AccountId} scheduling fields: NextRunDateTime={NextRun}, NextRunStatus={Status}, DaysUntilNextRun={Days}",
+                    job.AdrAccount.Id, nextRunDate, job.AdrAccount.NextRunStatus, daysUntilNextRun);
+            }
+
+            // Note: No UpdateAsync call here - the rule and account are already tracked by EF and will be saved
             // in the batch SaveChangesAsync call in the calling method
 
             _logger.LogInformation(
