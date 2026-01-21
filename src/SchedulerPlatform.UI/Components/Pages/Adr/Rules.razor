@@ -19,6 +19,15 @@
     <MudPaper Class="pa-4 mb-4">
         <MudGrid Spacing="2">
             <MudItem xs="12" md="2">
+                <MudTextField @bind-Value="_searchMasterVendorCode" 
+                              Label="Master Vendor Code" 
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              Immediate="true"
+                              Adornment="Adornment.End"
+                              AdornmentIcon="@Icons.Material.Filled.Search" />
+            </MudItem>
+            <MudItem xs="12" md="2">
                 <MudTextField @bind-Value="_searchPrimaryVendorCode" 
                               Label="Primary Vendor Code" 
                               Variant="Variant.Outlined"
@@ -97,6 +106,7 @@
         <MudTable T="AccountRuleModel" ServerData="@ServerReload" 
                   @ref="_table" Hover="true" Striped="true" Dense="true">
             <HeaderContent>
+                <MudTh><MudTableSortLabel SortLabel="MasterVendorCode" T="AccountRuleModel">Master Vendor Code</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="PrimaryVendorCode" T="AccountRuleModel">Primary Vendor Code</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="VMAccountNumber" T="AccountRuleModel">Account Number</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="JobTypeId" T="AccountRuleModel">Job Type</MudTableSortLabel></MudTh>
@@ -108,6 +118,7 @@
                 <MudTh>Actions</MudTh>
             </HeaderContent>
             <RowTemplate>
+                <MudTd DataLabel="Master Vendor Code">@context.MasterVendorCode</MudTd>
                 <MudTd DataLabel="Primary Vendor Code">@context.PrimaryVendorCode</MudTd>
                 <MudTd DataLabel="Account Number">@context.VMAccountNumber</MudTd>
                 <MudTd DataLabel="Job Type">
@@ -192,6 +203,7 @@
     private bool _loading = true;
     private bool _isExporting = false;
     
+    private string? _searchMasterVendorCode;
     private string? _searchPrimaryVendorCode;
     private string? _searchAccountNumber;
     private bool? _filterEnabled = true;
@@ -221,8 +233,10 @@
                 $"sortDescending={sortDescending}"
             };
             
+            if (!string.IsNullOrWhiteSpace(_searchMasterVendorCode))
+                queryParams.Add($"masterVendorCode={Uri.EscapeDataString(_searchMasterVendorCode)}");
             if (!string.IsNullOrWhiteSpace(_searchPrimaryVendorCode))
-                queryParams.Add($"primaryVendorCode={Uri.EscapeDataString(_searchPrimaryVendorCode)}");
+                queryParams.Add($"vendorCode={Uri.EscapeDataString(_searchPrimaryVendorCode)}");
             if (!string.IsNullOrWhiteSpace(_searchAccountNumber))
                 queryParams.Add($"accountNumber={Uri.EscapeDataString(_searchAccountNumber)}");
             if (_filterEnabled.HasValue)
@@ -267,6 +281,7 @@
 
     private async Task ClearFilters()
     {
+        _searchMasterVendorCode = null;
         _searchPrimaryVendorCode = null;
         _searchAccountNumber = null;
         _filterEnabled = true;
@@ -341,8 +356,10 @@
         {
             var queryParams = new List<string> { $"format={format}" };
             
+            if (!string.IsNullOrWhiteSpace(_searchMasterVendorCode))
+                queryParams.Add($"masterVendorCode={Uri.EscapeDataString(_searchMasterVendorCode)}");
             if (!string.IsNullOrWhiteSpace(_searchPrimaryVendorCode))
-                queryParams.Add($"primaryVendorCode={Uri.EscapeDataString(_searchPrimaryVendorCode)}");
+                queryParams.Add($"vendorCode={Uri.EscapeDataString(_searchPrimaryVendorCode)}");
             if (!string.IsNullOrWhiteSpace(_searchAccountNumber))
                 queryParams.Add($"accountNumber={Uri.EscapeDataString(_searchAccountNumber)}");
             if (_filterEnabled.HasValue)
@@ -400,6 +417,7 @@
     {
         public int Id { get; set; }
         public int AdrAccountId { get; set; }
+        public string? MasterVendorCode { get; set; }
         public string? PrimaryVendorCode { get; set; }
         public string? VMAccountNumber { get; set; }
         public int JobTypeId { get; set; }

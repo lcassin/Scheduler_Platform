@@ -94,9 +94,7 @@
                 <MudSwitch @bind-Value="_showLatestPerAccount" Color="Color.Primary" Label="Latest per Account" />
                 <MudSwitch @bind-Value="_showManualJobs" Color="Color.Secondary" Label="Show Manual Jobs" />
             </MudItem>
-        </MudGrid>
-        <MudGrid Class="mb-4" Spacing="2">
-            <MudItem xs="12" Class="d-flex align-center justify-end gap-2">
+            <MudItem xs="12" md="6" Class="d-flex align-center justify-end gap-2">
                 <SchedulerPlatform.UI.Components.Shared.IconLegend ShowBlacklistIcons="true" ShowOverrideIcon="false" ShowManualRequestIcon="true" />
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters" StartIcon="@Icons.Material.Filled.FilterAlt">
                     Apply
