@@ -34,6 +34,3 @@ CREATE NONCLUSTERED INDEX [IX_PowerBiReport_Category_DisplayOrder]
 GO
 CREATE NONCLUSTERED INDEX [IX_PowerBiReport_IsDeleted_IsActive_Category_DisplayOrder]
     ON [dbo].[PowerBiReport]([IsDeleted] ASC, [IsActive] ASC, [Category] ASC, [DisplayOrder] ASC);
-
-
-GO
