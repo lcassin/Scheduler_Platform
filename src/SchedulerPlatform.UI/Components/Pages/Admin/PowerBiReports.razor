@@ -1,0 +1,380 @@
+@page "/admin/power-bi-reports"
+@using SchedulerPlatform.UI.Services
+@using Microsoft.AspNetCore.Authorization
+@attribute [Authorize]
+@inject IPowerBiReportService PowerBiReportService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@inject IPermissionService PermissionService
+
+<PageTitle>Power BI Reports</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <div class="d-flex justify-space-between align-center mb-4">
+        <MudText Typo="Typo.h4">Power BI Reports</MudText>
+        @if (_hasAccess)
+        {
+            <MudButton Variant="Variant.Filled" 
+                       Color="Color.Primary" 
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="OpenCreateDialog">
+                Add Report
+            </MudButton>
+        }
+    </div>
+
+    @if (!_hasAccess)
+    {
+        <MudAlert Severity="Severity.Warning">
+            You do not have permission to access this page. Only Admin and Super Admin users can manage Power BI reports.
+        </MudAlert>
+    }
+    else if (_loading)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else
+    {
+        <MudPaper Class="pa-4">
+            <MudSwitch Value="_includeInactive" 
+                       ValueChanged="@(async (bool val) => { _includeInactive = val; await LoadReports(); })"
+                       Label="Show Inactive Reports" 
+                       Color="Color.Primary"
+                       Class="mb-4"
+                       T="bool" />
+            
+            <MudTable Items="@_filteredReports" Hover="true" Striped="true" Dense="true">
+                <HeaderContent>
+                    <MudTh>Name</MudTh>
+                    <MudTh>URL</MudTh>
+                    <MudTh>Category</MudTh>
+                    <MudTh>Display Order</MudTh>
+                    <MudTh>Open in New Tab</MudTh>
+                    <MudTh>Active</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Name">@context.Name</MudTd>
+                    <MudTd DataLabel="URL">
+                        <MudTooltip Text="@context.Url">
+                            <MudLink Href="@context.Url" Target="_blank" Typo="Typo.body2" Class="text-truncate" Style="max-width: 300px; display: block;">
+                                @(context.Url.Length > 50 ? context.Url.Substring(0, 50) + "..." : context.Url)
+                            </MudLink>
+                        </MudTooltip>
+                    </MudTd>
+                    <MudTd DataLabel="Category">
+                        <MudChip T="string" Size="Size.Small" Color="Color.Primary">@context.Category</MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Display Order">@context.DisplayOrder</MudTd>
+                    <MudTd DataLabel="Open in New Tab">
+                        @if (context.OpenInNewTab)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Color="Color.Info" Size="Size.Small" />
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Tab" Color="Color.Default" Size="Size.Small" />
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Active">
+                        @if (context.IsActive)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" Size="Size.Small" />
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" 
+                                       Size="Size.Small" 
+                                       Color="Color.Primary"
+                                       OnClick="@(() => OpenEditDialog(context))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" 
+                                       Size="Size.Small" 
+                                       Color="Color.Error"
+                                       OnClick="@(() => DeleteReport(context))" />
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <MudText>No Power BI reports found. Click "Add Report" to create one.</MudText>
+                </NoRecordsContent>
+            </MudTable>
+        </MudPaper>
+    }
+</MudContainer>
+
+<MudDialog @bind-Visible="_dialogVisible" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">@(_editingReport?.Id > 0 ? "Edit Report" : "Add Report")</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_editingReport != null)
+        {
+            <MudForm @ref="_form">
+                <MudGrid>
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_editingReport.Name" 
+                                      Label="Report Name" 
+                                      Variant="Variant.Outlined"
+                                      Required="true"
+                                      RequiredError="Report name is required"
+                                      HelperText="Display name shown in the navigation menu" />
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_editingReport.Category" 
+                                      Label="Category" 
+                                      Variant="Variant.Outlined"
+                                      Required="true"
+                                      RequiredError="Category is required"
+                                      HelperText="Category for grouping reports (e.g., ADR)" />
+                    </MudItem>
+                    
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_editingReport.Url" 
+                                      Label="Report URL" 
+                                      Variant="Variant.Outlined"
+                                      Required="true"
+                                      RequiredError="Report URL is required"
+                                      HelperText="Full URL to the Power BI report" />
+                    </MudItem>
+                    
+                    <MudItem xs="12">
+                        <MudTextField @bind-Value="_editingReport.Description" 
+                                      Label="Description (Optional)" 
+                                      Variant="Variant.Outlined"
+                                      Lines="2"
+                                      HelperText="Optional description of what this report shows" />
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6">
+                        <MudNumericField @bind-Value="_editingReport.DisplayOrder" 
+                                         Label="Display Order" 
+                                         Variant="Variant.Outlined"
+                                         Min="0" Max="100"
+                                         HelperText="Order in which reports are displayed (lower = first)" />
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6">
+                        <div class="d-flex flex-column gap-2 mt-2">
+                            <MudSwitch @bind-Value="_editingReport.IsActive" 
+                                       Label="Active" 
+                                       Color="Color.Primary" />
+                            <MudSwitch @bind-Value="_editingReport.OpenInNewTab" 
+                                       Label="Open in New Tab" 
+                                       Color="Color.Info" />
+                        </div>
+                    </MudItem>
+                </MudGrid>
+            </MudForm>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="CloseDialog">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" 
+                   Color="Color.Primary" 
+                   OnClick="SaveReport"
+                   Disabled="@_saving">
+            @if (_saving)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Save
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private MudForm? _form;
+    private List<PowerBiReportAdminDto> _reports = new();
+    private PowerBiReportEditModel? _editingReport;
+    private bool _loading = true;
+    private bool _saving = false;
+    private bool _hasAccess = false;
+    private bool _includeInactive = false;
+    private bool _dialogVisible = false;
+
+    private IEnumerable<PowerBiReportAdminDto> _filteredReports => _includeInactive 
+        ? _reports 
+        : _reports.Where(r => r.IsActive);
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Check if user has admin access (Admin or Super Admin only)
+        _hasAccess = await PermissionService.IsSystemAdminAsync() || 
+                     await PermissionService.CanUpdateAsync("admin");
+        
+        if (_hasAccess)
+        {
+            await LoadReports();
+        }
+        else
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task LoadReports()
+    {
+        _loading = true;
+        try
+        {
+            _reports = await PowerBiReportService.GetAllReportsAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading reports: {ex.Message}", Severity.Error);
+            _reports = new();
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private void OpenCreateDialog()
+    {
+        _editingReport = new PowerBiReportEditModel
+        {
+            Category = "ADR",
+            IsActive = true,
+            OpenInNewTab = true,
+            DisplayOrder = _reports.Count > 0 ? _reports.Max(r => r.DisplayOrder) + 1 : 1
+        };
+        _dialogVisible = true;
+    }
+
+    private void OpenEditDialog(PowerBiReportAdminDto report)
+    {
+        _editingReport = new PowerBiReportEditModel
+        {
+            Id = report.Id,
+            Name = report.Name,
+            Url = report.Url,
+            Description = report.Description,
+            Category = report.Category,
+            DisplayOrder = report.DisplayOrder,
+            IsActive = report.IsActive,
+            OpenInNewTab = report.OpenInNewTab
+        };
+        _dialogVisible = true;
+    }
+
+    private void CloseDialog()
+    {
+        _dialogVisible = false;
+        _editingReport = null;
+    }
+
+    private async Task SaveReport()
+    {
+        if (_editingReport == null) return;
+        
+        if (string.IsNullOrWhiteSpace(_editingReport.Name) || string.IsNullOrWhiteSpace(_editingReport.Url))
+        {
+            Snackbar.Add("Report name and URL are required", Severity.Warning);
+            return;
+        }
+        
+        _saving = true;
+        try
+        {
+            PowerBiReportAdminDto? result;
+            
+            if (_editingReport.Id > 0)
+            {
+                // Update existing
+                var updateRequest = new UpdatePowerBiReportDto
+                {
+                    Name = _editingReport.Name,
+                    Url = _editingReport.Url,
+                    Description = _editingReport.Description,
+                    Category = _editingReport.Category,
+                    DisplayOrder = _editingReport.DisplayOrder,
+                    IsActive = _editingReport.IsActive,
+                    OpenInNewTab = _editingReport.OpenInNewTab
+                };
+                result = await PowerBiReportService.UpdateReportAsync(_editingReport.Id, updateRequest);
+            }
+            else
+            {
+                // Create new
+                var createRequest = new CreatePowerBiReportDto
+                {
+                    Name = _editingReport.Name,
+                    Url = _editingReport.Url,
+                    Description = _editingReport.Description,
+                    Category = _editingReport.Category,
+                    DisplayOrder = _editingReport.DisplayOrder,
+                    IsActive = _editingReport.IsActive,
+                    OpenInNewTab = _editingReport.OpenInNewTab
+                };
+                result = await PowerBiReportService.CreateReportAsync(createRequest);
+            }
+            
+            if (result != null)
+            {
+                Snackbar.Add(_editingReport.Id > 0 ? "Report updated successfully" : "Report created successfully", Severity.Success);
+                CloseDialog();
+                await LoadReports();
+            }
+            else
+            {
+                Snackbar.Add("Error saving report. Please try again.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error saving report: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteReport(PowerBiReportAdminDto report)
+    {
+        var result = await DialogService.ShowMessageBox(
+            "Delete Report",
+            $"Are you sure you want to delete the report '{report.Name}'? This action cannot be undone.",
+            yesText: "Delete",
+            cancelText: "Cancel");
+        
+        if (result == true)
+        {
+            try
+            {
+                var success = await PowerBiReportService.DeleteReportAsync(report.Id);
+                
+                if (success)
+                {
+                    Snackbar.Add("Report deleted successfully", Severity.Success);
+                    await LoadReports();
+                }
+                else
+                {
+                    Snackbar.Add("Error deleting report. Please try again.", Severity.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error deleting report: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private class PowerBiReportEditModel
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string Url { get; set; } = string.Empty;
+        public string? Description { get; set; }
+        public string Category { get; set; } = "ADR";
+        public int DisplayOrder { get; set; }
+        public bool IsActive { get; set; } = true;
+        public bool OpenInNewTab { get; set; } = true;
+    }
+}

@@ -337,6 +337,7 @@ builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<IAdrService, AdrService>();
 builder.Services.AddScoped<IUserTimeZoneService, UserTimeZoneService>();
+builder.Services.AddScoped<IPowerBiReportService, PowerBiReportService>();
 
 builder.Services.AddAuthorization();
 builder.Services.AddCascadingAuthenticationState();

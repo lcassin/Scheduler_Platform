@@ -31,6 +31,9 @@ public class SchedulerDbContext : DbContext
         public DbSet<AdrJobExecution> AdrJobExecutions { get; set; }
         public DbSet<AdrOrchestrationRun> AdrOrchestrationRuns { get; set; }
         
+        // Power BI Reports configuration
+        public DbSet<PowerBiReport> PowerBiReports { get; set; }
+        
         // Archive tables for data retention
         public DbSet<AdrJobArchive> AdrJobArchives { get; set; }
         public DbSet<AdrJobExecutionArchive> AdrJobExecutionArchives { get; set; }
@@ -461,6 +464,24 @@ public class SchedulerDbContext : DbContext
             entity.HasIndex(e => e.Code).IsUnique();
             entity.HasIndex(e => e.IsActive);
             entity.HasIndex(e => e.AdrRequestTypeId);
+        });
+
+        // Power BI Report entity configuration
+        modelBuilder.Entity<PowerBiReport>(entity =>
+        {
+            entity.ToTable("PowerBiReport");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("PowerBiReportId");
+            
+            entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.Url).IsRequired().HasMaxLength(2000);
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.Category).IsRequired().HasMaxLength(50);
+            
+            entity.HasIndex(e => e.Category);
+            entity.HasIndex(e => e.IsActive);
+            entity.HasIndex(e => new { e.Category, e.DisplayOrder });
+            entity.HasIndex(e => new { e.IsDeleted, e.IsActive, e.Category, e.DisplayOrder });
         });
 
         // Archive table configurations

@@ -297,6 +297,10 @@ public class BackgroundExportService : BackgroundService
         if (!string.IsNullOrWhiteSpace(masterVendorCode))
             query = query.Where(a => a.MasterVendorCode == masterVendorCode);
 
+        // Get count first so progress shows total while data is loading
+        var totalCount = await query.CountAsync(cancellationToken);
+        _queue.UpdateStatus(request.RequestId, s => s.TotalRecords = totalCount);
+
         // Get accounts with correlated subqueries for job status and rule info
         var exportData = await query
             .Select(a => new
@@ -329,8 +333,6 @@ public class BackgroundExportService : BackgroundService
                     .FirstOrDefault()
             })
             .ToListAsync(cancellationToken);
-
-        _queue.UpdateStatus(request.RequestId, s => s.TotalRecords = exportData.Count);
 
         // Get blacklist status
         var today = DateTime.UtcNow.Date;
@@ -497,9 +499,11 @@ public class BackgroundExportService : BackgroundService
                 .Select(g => g.OrderByDescending(j => j.Id).First());
         }
 
-        var jobs = await query.OrderByDescending(j => j.Id).ToListAsync(cancellationToken);
+        // Get count first so progress shows total while data is loading
+        var totalCount = await query.CountAsync(cancellationToken);
+        _queue.UpdateStatus(request.RequestId, s => s.TotalRecords = totalCount);
 
-        _queue.UpdateStatus(request.RequestId, s => s.TotalRecords = jobs.Count);
+        var jobs = await query.OrderByDescending(j => j.Id).ToListAsync(cancellationToken);
 
         var headers = new[] { "Job ID", "Account #", "VM Account ID", "Interface Account ID", "Client", "Master Vendor Code", "Primary Vendor Code", "Period Type", "Next Run", "Range Start", "Range End", "Status", "Is Manual", "Manual Reason", "Created", "Modified" };
 
@@ -594,9 +598,11 @@ public class BackgroundExportService : BackgroundService
         if (!string.IsNullOrWhiteSpace(periodType))
             query = query.Where(r => r.PeriodType == periodType);
 
-        var rules = await query.ToListAsync(cancellationToken);
+        // Get count first so progress shows total while data is loading
+        var totalCount = await query.CountAsync(cancellationToken);
+        _queue.UpdateStatus(request.RequestId, s => s.TotalRecords = totalCount);
 
-        _queue.UpdateStatus(request.RequestId, s => s.TotalRecords = rules.Count);
+        var rules = await query.ToListAsync(cancellationToken);
 
         var headers = new[] { "Rule ID", "Account #", "VM Account ID", "Interface Account ID", "Client", "Master Vendor Code", "Primary Vendor Code", "Period Type", "Period Days", "Next Run", "Range Start", "Range End", "Is Enabled", "Is Overridden", "Overridden By", "Overridden Date" };
 
@@ -675,9 +681,11 @@ public class BackgroundExportService : BackgroundService
         if (!string.IsNullOrWhiteSpace(masterVendorCode))
             query = query.Where(b => b.MasterVendorCode == masterVendorCode);
 
-        var entries = await query.ToListAsync(cancellationToken);
+        // Get count first so progress shows total while data is loading
+        var totalCount = await query.CountAsync(cancellationToken);
+        _queue.UpdateStatus(request.RequestId, s => s.TotalRecords = totalCount);
 
-        _queue.UpdateStatus(request.RequestId, s => s.TotalRecords = entries.Count);
+        var entries = await query.ToListAsync(cancellationToken);
 
         var headers = new[] { "ID", "VM Account ID", "VM Account Number", "Credential ID", "Master Vendor Code", "Primary Vendor Code", "Reason", "Is Active", "Effective Start", "Effective End", "Created By", "Created Date" };
 
