@@ -4559,7 +4559,7 @@ public class AdrController : ControllerBase
     /// <response code="400">Invalid export type or format.</response>
     /// <response code="500">An error occurred while queuing the export.</response>
     [HttpPost("export/start")]
-    [Authorize(Policy = "Adr.Read")]
+    [Authorize]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
@@ -4610,7 +4610,7 @@ public class AdrController : ControllerBase
     /// <response code="200">Returns the export status.</response>
     /// <response code="404">Export request not found.</response>
     [HttpGet("export/status/{requestId}")]
-    [Authorize(Policy = "Adr.Read")]
+    [Authorize]
     [ProducesResponseType(typeof(ExportStatus), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public IActionResult GetExportStatus(string requestId)
@@ -4632,7 +4632,7 @@ public class AdrController : ControllerBase
     /// <response code="200">Returns the exported file.</response>
     /// <response code="404">Export request not found or not completed.</response>
     [HttpGet("export/download/{requestId}")]
-    [Authorize(Policy = "Adr.Read")]
+    [Authorize]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public IActionResult DownloadExport(string requestId)
