@@ -27,6 +27,9 @@ public class UnitOfWork : IUnitOfWork
     public IRepository<AdrConfiguration> AdrConfigurations { get; }
     public IRepository<AdrAccountBlacklist> AdrAccountBlacklists { get; }
     public IRepository<AdrAccountRule> AdrAccountRules { get; }
+    
+    // Power BI Reports
+    public IRepository<PowerBiReport> PowerBiReports { get; }
 
     public UnitOfWork(SchedulerDbContext context)
     {
@@ -48,6 +51,9 @@ public class UnitOfWork : IUnitOfWork
         AdrConfigurations = new Repository<AdrConfiguration>(_context);
         AdrAccountBlacklists = new Repository<AdrAccountBlacklist>(_context);
         AdrAccountRules = new Repository<AdrAccountRule>(_context);
+        
+        // Power BI Reports
+        PowerBiReports = new Repository<PowerBiReport>(_context);
     }
 
     public Task<int> SaveChangesAsync()
