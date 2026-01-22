@@ -667,6 +667,41 @@ public class AdrService : IAdrService
     }
 
     #endregion
+
+    #region Background Export Operations
+
+    public async Task<BackgroundExportStartResult> StartBackgroundExportAsync(string exportType, string format = "excel", Dictionary<string, string?>? filters = null)
+    {
+        var request = new
+        {
+            ExportType = exportType,
+            Format = format,
+            Filters = filters ?? new Dictionary<string, string?>()
+        };
+
+        var response = await _httpClient.PostAsJsonAsync("adr/export/start", request);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<BackgroundExportStartResult>();
+        return result ?? new BackgroundExportStartResult();
+    }
+
+    public async Task<BackgroundExportStatus?> GetBackgroundExportStatusAsync(string requestId)
+    {
+        var response = await _httpClient.GetAsync($"adr/export/status/{Uri.EscapeDataString(requestId)}");
+        if (!response.IsSuccessStatusCode)
+            return null;
+        return await response.Content.ReadFromJsonAsync<BackgroundExportStatus>();
+    }
+
+    public async Task<byte[]?> DownloadBackgroundExportAsync(string requestId)
+    {
+        var response = await _httpClient.GetAsync($"adr/export/download/{Uri.EscapeDataString(requestId)}");
+        if (!response.IsSuccessStatusCode)
+            return null;
+        return await response.Content.ReadAsByteArrayAsync();
+    }
+
+    #endregion
 }
 
 internal class AdrConfigurationResponse

@@ -25,6 +25,7 @@ public class AdrController : ControllerBase
     private readonly IAdrAccountSyncService _syncService;
     private readonly IAdrOrchestratorService _orchestratorService;
     private readonly IAdrOrchestrationQueue _orchestrationQueue;
+    private readonly IBackgroundExportQueue _backgroundExportQueue;
     private readonly SchedulerDbContext _dbContext;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
@@ -35,6 +36,7 @@ public class AdrController : ControllerBase
         IAdrAccountSyncService syncService,
         IAdrOrchestratorService orchestratorService,
         IAdrOrchestrationQueue orchestrationQueue,
+        IBackgroundExportQueue backgroundExportQueue,
         SchedulerDbContext dbContext,
         IHttpClientFactory httpClientFactory,
         IConfiguration configuration,
@@ -44,6 +46,7 @@ public class AdrController : ControllerBase
         _syncService = syncService;
         _orchestratorService = orchestratorService;
         _orchestrationQueue = orchestrationQueue;
+        _backgroundExportQueue = backgroundExportQueue;
         _dbContext = dbContext;
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
@@ -3456,6 +3459,7 @@ public class AdrController : ControllerBase
                     .ThenBy(r => r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : "")
                     .Select(r => new
                     {
+                        MasterVendorCode = r.AdrAccount != null ? r.AdrAccount.MasterVendorCode : null,
                         PrimaryVendorCode = r.AdrAccount != null ? r.AdrAccount.PrimaryVendorCode : null,
                         VMAccountNumber = r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : null,
                         r.JobTypeId,
@@ -3471,14 +3475,14 @@ public class AdrController : ControllerBase
                     })
                     .ToListAsync();
 
-                var headers = new[] { "Primary Vendor Code", "Account Number", "Job Type", "Period Type", "Period Days", "Next Run", "Search Window Start", "Search Window End", "Enabled", "Overridden", "Overridden By", "Overridden Date" };
+                var headers = new[] { "Master Vendor Code", "Primary Vendor Code", "Account Number", "Job Type", "Period Type", "Period Days", "Next Run", "Search Window Start", "Search Window End", "Enabled", "Overridden", "Overridden By", "Overridden Date" };
 
                 if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
                 {
                     var csvBytes = ExcelExportHelper.CreateCsvExport(
                         string.Join(",", headers),
                         rules,
-                        r => $"{ExcelExportHelper.CsvEscape(r.PrimaryVendorCode)},{ExcelExportHelper.CsvEscape(r.VMAccountNumber)},{r.JobTypeId},{ExcelExportHelper.CsvEscape(r.PeriodType)},{r.PeriodDays},{r.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeStartDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? ""},{(r.IsEnabled ? "Yes" : "No")},{(r.IsManuallyOverridden ? "Yes" : "No")},{ExcelExportHelper.CsvEscape(r.OverriddenBy)},{r.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""}");
+                        r => $"{ExcelExportHelper.CsvEscape(r.MasterVendorCode)},{ExcelExportHelper.CsvEscape(r.PrimaryVendorCode)},{ExcelExportHelper.CsvEscape(r.VMAccountNumber)},{r.JobTypeId},{ExcelExportHelper.CsvEscape(r.PeriodType)},{r.PeriodDays},{r.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeStartDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? ""},{(r.IsEnabled ? "Yes" : "No")},{(r.IsManuallyOverridden ? "Yes" : "No")},{ExcelExportHelper.CsvEscape(r.OverriddenBy)},{r.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""}");
                     return File(csvBytes, "text/csv", $"adr_rules_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
                 }
 
@@ -3490,6 +3494,7 @@ public class AdrController : ControllerBase
                     rules,
                     r => new object?[]
                     {
+                        r.MasterVendorCode ?? "",
                         r.PrimaryVendorCode ?? "",
                         r.VMAccountNumber ?? "",
                         r.JobTypeId,
@@ -4542,6 +4547,115 @@ public class AdrController : ControllerBase
 
         #endregion
 
+        #region Background Export Endpoints
+
+    /// <summary>
+    /// Starts a background export for large datasets. Returns immediately with a request ID
+    /// that can be used to check status and download the completed export.
+    /// </summary>
+    /// <param name="request">The export request parameters.</param>
+    /// <returns>The request ID for tracking the export.</returns>
+    /// <response code="200">Export queued successfully.</response>
+    /// <response code="400">Invalid export type or format.</response>
+    /// <response code="500">An error occurred while queuing the export.</response>
+    [HttpPost("export/start")]
+    [Authorize(Policy = "Adr.Read")]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> StartBackgroundExport([FromBody] BackgroundExportRequest request)
+    {
+        try
+        {
+            var validTypes = new[] { "accounts", "jobs", "rules", "blacklist" };
+            if (!validTypes.Contains(request.ExportType?.ToLowerInvariant()))
+            {
+                return BadRequest($"Invalid export type. Valid types are: {string.Join(", ", validTypes)}");
+            }
+
+            var validFormats = new[] { "excel", "csv" };
+            if (!validFormats.Contains(request.Format?.ToLowerInvariant()))
+            {
+                return BadRequest($"Invalid format. Valid formats are: {string.Join(", ", validFormats)}");
+            }
+
+            var exportRequest = new ExportRequest
+            {
+                ExportType = request.ExportType!.ToLowerInvariant(),
+                Format = request.Format!.ToLowerInvariant(),
+                Filters = request.Filters ?? new Dictionary<string, string?>(),
+                RequestedBy = User.GetEmail() ?? "Unknown",
+                RequestedAt = DateTime.UtcNow
+            };
+
+            var requestId = await _backgroundExportQueue.QueueAsync(exportRequest);
+
+            _logger.LogInformation("Background export queued: {RequestId} for {ExportType} by {User}",
+                requestId, request.ExportType, exportRequest.RequestedBy);
+
+            return Ok(new { requestId, message = "Export queued successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error starting background export");
+            return StatusCode(500, "An error occurred while starting the export");
+        }
+    }
+
+    /// <summary>
+    /// Gets the status of a background export request.
+    /// </summary>
+    /// <param name="requestId">The export request ID.</param>
+    /// <returns>The current status of the export.</returns>
+    /// <response code="200">Returns the export status.</response>
+    /// <response code="404">Export request not found.</response>
+    [HttpGet("export/status/{requestId}")]
+    [Authorize(Policy = "Adr.Read")]
+    [ProducesResponseType(typeof(ExportStatus), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public IActionResult GetExportStatus(string requestId)
+    {
+        var status = _backgroundExportQueue.GetStatus(requestId);
+        if (status == null)
+        {
+            return NotFound("Export request not found");
+        }
+
+        return Ok(status);
+    }
+
+    /// <summary>
+    /// Downloads a completed background export.
+    /// </summary>
+    /// <param name="requestId">The export request ID.</param>
+    /// <returns>The exported file.</returns>
+    /// <response code="200">Returns the exported file.</response>
+    /// <response code="404">Export request not found or not completed.</response>
+    [HttpGet("export/download/{requestId}")]
+    [Authorize(Policy = "Adr.Read")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public IActionResult DownloadExport(string requestId)
+    {
+        var (data, status) = _backgroundExportQueue.GetExportData(requestId);
+        
+        if (status == null)
+        {
+            return NotFound("Export request not found");
+        }
+
+        if (status.Status != "Completed" || data == null)
+        {
+            return NotFound($"Export not ready. Current status: {status.Status}");
+        }
+
+        _backgroundExportQueue.MarkDownloaded(requestId);
+
+        return File(data, status.ContentType ?? "application/octet-stream", status.FileName ?? "export");
+    }
+
+        #endregion
+
         #region AdrJobType Endpoints (Admin/Super Admin only)
 
         /// <summary>
@@ -4900,6 +5014,27 @@ public class BackgroundOrchestrationRequest
     /// regardless of timing criteria. Used by the "Check Statuses Only" button.
     /// </summary>
     public bool CheckAllScrapedStatuses { get; set; } = false;
+}
+
+/// <summary>
+/// Request to start a background export operation.
+/// </summary>
+public class BackgroundExportRequest
+{
+    /// <summary>
+    /// Type of export: accounts, jobs, rules, blacklist
+    /// </summary>
+    public string? ExportType { get; set; }
+    
+    /// <summary>
+    /// Export format: excel or csv
+    /// </summary>
+    public string? Format { get; set; } = "excel";
+    
+    /// <summary>
+    /// Optional filters to apply to the export (same as query parameters for the list endpoints)
+    /// </summary>
+    public Dictionary<string, string?>? Filters { get; set; }
 }
 
 public class UpdateAccountBillingRequest
