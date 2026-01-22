@@ -3,6 +3,7 @@
 @using Microsoft.AspNetCore.Authorization
 @attribute [Authorize]
 @inject AuthenticatedHttpClientService HttpClientService
+@inject IAdrService AdrService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IPermissionService PermissionService
@@ -19,22 +20,32 @@
     <MudPaper Class="pa-4 mb-4">
         <MudGrid Spacing="2">
             <MudItem xs="12" md="2">
-                <MudTextField @bind-Value="_searchMasterVendorCode" 
-                              Label="Master Vendor Code" 
-                              Variant="Variant.Outlined"
-                              Margin="Margin.Dense"
-                              Immediate="true"
-                              Adornment="Adornment.End"
-                              AdornmentIcon="@Icons.Material.Filled.Search" />
+                <MudAutocomplete T="string" 
+                                 Label="Master Vendor Code" 
+                                 @bind-Value="_searchMasterVendorCode"
+                                 SearchFunc="SearchMasterVendors"
+                                 Variant="Variant.Outlined" 
+                                 Margin="Margin.Dense" 
+                                 Clearable="true"
+                                 ResetValueOnEmptyText="true"
+                                 CoerceValue="true"
+                                 Placeholder="Type to search..."
+                                 AdornmentIcon="@Icons.Material.Filled.Business"
+                                 AdornmentColor="Color.Primary" />
             </MudItem>
             <MudItem xs="12" md="2">
-                <MudTextField @bind-Value="_searchPrimaryVendorCode" 
-                              Label="Primary Vendor Code" 
-                              Variant="Variant.Outlined"
-                              Margin="Margin.Dense"
-                              Immediate="true"
-                              Adornment="Adornment.End"
-                              AdornmentIcon="@Icons.Material.Filled.Search" />
+                <MudAutocomplete T="string" 
+                                 Label="Primary Vendor Code" 
+                                 @bind-Value="_searchPrimaryVendorCode"
+                                 SearchFunc="SearchPrimaryVendors"
+                                 Variant="Variant.Outlined" 
+                                 Margin="Margin.Dense" 
+                                 Clearable="true"
+                                 ResetValueOnEmptyText="true"
+                                 CoerceValue="true"
+                                 Placeholder="Type to search..."
+                                 AdornmentIcon="@Icons.Material.Filled.Store"
+                                 AdornmentColor="Color.Primary" />
             </MudItem>
             <MudItem xs="12" md="2">
                 <MudTextField @bind-Value="_searchAccountNumber" 
@@ -45,7 +56,7 @@
                               Adornment="Adornment.End"
                               AdornmentIcon="@Icons.Material.Filled.Search" />
             </MudItem>
-            <MudItem xs="12" md="2">
+            <MudItem xs="12" md="1">
                 <MudSelect @bind-Value="_filterEnabled" 
                            Label="Status" 
                            Variant="Variant.Outlined"
@@ -55,7 +66,7 @@
                     <MudSelectItem Value="@((bool?)false)">Disabled</MudSelectItem>
                 </MudSelect>
             </MudItem>
-            <MudItem xs="12" md="2">
+            <MudItem xs="12" md="1">
                 <MudSelect @bind-Value="_filterOverridden" 
                            Label="Override" 
                            Variant="Variant.Outlined"
@@ -390,6 +401,36 @@
         finally
         {
             _isExporting = false;
+        }
+    }
+
+    private async Task<IEnumerable<string>> SearchPrimaryVendors(string value, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(value))
+            return new List<string>();
+
+        try
+        {
+            return await AdrService.GetPrimaryVendorCodesAsync(value, 50);
+        }
+        catch
+        {
+            return new List<string>();
+        }
+    }
+
+    private async Task<IEnumerable<string>> SearchMasterVendors(string value, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrEmpty(value))
+            return new List<string>();
+
+        try
+        {
+            return await AdrService.GetMasterVendorCodesAsync(value, 50);
+        }
+        catch
+        {
+            return new List<string>();
         }
     }
 
