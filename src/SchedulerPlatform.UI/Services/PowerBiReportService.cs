@@ -24,7 +24,7 @@ public class PowerBiReportService : IPowerBiReportService
     {
         try
         {
-            var url = "api/powerbi-reports";
+            var url = "powerbi-reports";
             if (!string.IsNullOrEmpty(category))
             {
                 url += $"?category={Uri.EscapeDataString(category)}";
@@ -53,7 +53,7 @@ public class PowerBiReportService : IPowerBiReportService
     {
         try
         {
-            var response = await _httpClient.GetAsync("api/powerbi-reports/all");
+            var response = await _httpClient.GetAsync("powerbi-reports/all");
             
             if (response.IsSuccessStatusCode)
             {
@@ -76,7 +76,7 @@ public class PowerBiReportService : IPowerBiReportService
     {
         try
         {
-            var response = await _httpClient.GetAsync($"api/powerbi-reports/{id}");
+            var response = await _httpClient.GetAsync($"powerbi-reports/{id}");
             
             if (response.IsSuccessStatusCode)
             {
@@ -103,7 +103,7 @@ public class PowerBiReportService : IPowerBiReportService
     {
         try
         {
-            var response = await _httpClient.PostAsJsonAsync("api/powerbi-reports", request);
+            var response = await _httpClient.PostAsJsonAsync("powerbi-reports", request);
             
             if (response.IsSuccessStatusCode)
             {
@@ -126,7 +126,7 @@ public class PowerBiReportService : IPowerBiReportService
     {
         try
         {
-            var response = await _httpClient.PutAsJsonAsync($"api/powerbi-reports/{id}", request);
+            var response = await _httpClient.PutAsJsonAsync($"powerbi-reports/{id}", request);
             
             if (response.IsSuccessStatusCode)
             {
@@ -149,7 +149,7 @@ public class PowerBiReportService : IPowerBiReportService
     {
         try
         {
-            var response = await _httpClient.DeleteAsync($"api/powerbi-reports/{id}");
+            var response = await _httpClient.DeleteAsync($"powerbi-reports/{id}");
             
             if (response.IsSuccessStatusCode)
             {
