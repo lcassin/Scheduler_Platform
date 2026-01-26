@@ -82,7 +82,7 @@ The ADR Process is a comprehensive automated invoice scraping system that retrie
 
 **Key Features:**
 - **Account Synchronization**: Syncs ~200k accounts from external VendorCredNewUAT database with billing pattern analysis
-- **4-Step Orchestration**: Automated workflow (Sync Accounts → Create Jobs → Verify Credentials → Process Scraping → Check Statuses)
+- **6-Step Orchestration**: Automated workflow (Sync Accounts → Create Jobs → Verify Credentials → Send ADR Requests → Check Statuses → Cleanup Stale Jobs)
 - **Idempotency**: Prevents duplicate API calls for paid external services by tracking execution history
 - **Manual Override Support**: Allows operators to correct billing dates/frequencies when historical data is incorrect
 - **Real-Time Monitoring**: Job Monitor page with progress tracking, step timeline, and auto-refresh
@@ -111,6 +111,34 @@ For detailed technical documentation, see:
 - [API README - ADR API Endpoints](src/SchedulerPlatform.API/README.md#adr-api)
 - [UI README - ADR UI Pages](src/SchedulerPlatform.UI/README.md#adr-ui-pages)
 - [ADR Diagrams](Documents/Technical/diagrams/) - ER diagram, workflow, and sequence diagrams
+
+### December 2025 Enhancements
+
+**UI & User Experience:**
+- **Blacklist Status Indicators**: Accounts and Jobs pages show visual indicators for blacklisted items with tooltips showing date ranges
+- **Chart Click Events**: ADR Monitor page charts are now clickable - clicking a status segment navigates to the Jobs page filtered by that status
+- **Sortable Grid Headers**: All ADR grids (Accounts, Jobs, Users, Blacklist) now support sortable column headers
+- **User Timezone Preference**: Users can set their preferred timezone for consistent date/time display across the application
+- **Excel/CSV Export**: All ADR pages (Accounts, Jobs, Missing) now support exporting data to Excel and CSV formats
+- **Export Loading Indicator**: Visual feedback when export operations are in progress
+- **Dashboard ADR Metrics**: Dashboard now includes ADR-specific metrics and charts showing job pipeline status
+
+**Performance & Database:**
+- **Database Indexes**: Added comprehensive indexes on AdrAccount and AdrJob tables for improved query performance with large datasets
+- **Batched Processing**: ADR sync and orchestration services use batched database operations for handling 200k+ accounts
+- **EF Core Retry-on-Failure**: Added automatic retry logic for Azure SQL transient failures
+- **O(N²) Performance Fix**: Fixed quadratic performance issue in orchestration setup loops
+
+**Security & Authentication:**
+- **API Key Authentication**: Added API key authentication for scheduler-to-API calls (SOC2 compliant service account pattern)
+- **System Schedule Protection**: Critical system schedules (like ADR sync) are protected from deletion and have restricted editing
+- **Client Sync**: ADR account sync now includes client synchronization with ExternalClientId mapping
+
+**Reliability & Monitoring:**
+- **In-Progress Status Pattern**: Jobs track in-progress state to prevent double-billing on crashes or restarts
+- **Session Expiry Handling**: Graceful handling of session expiration in ADR UI pages with redirect to login
+- **Progress Logging**: Detailed progress logging during parallel API calls for ADR orchestration
+- **Fast Progress Polling**: Monitor page polls every 5 seconds during active orchestration for real-time updates
 
 ### ADR Enhancements (January 2026)
 
@@ -150,6 +178,29 @@ For detailed technical documentation, see:
 - **Optimized Status Checks**: Pre-loaded account rules during status check phase for better performance with large datasets.
 - **Auto-Refresh Indicator**: ADR Monitor page now shows stale data warning when auto-refresh hasn't updated recently.
 - **Duplicate Orchestration Prevention**: Fixed issue where multiple orchestrations could be triggered simultaneously.
+- **Stale Pending Jobs Finalization**: Orchestration now includes a cleanup phase to finalize jobs stuck in Pending/CredentialCheckInProgress past their billing window.
+- **Orchestration Recovery**: Startup recovery service detects and resumes orphaned orchestration runs after application restart.
+- **Configurable Timeouts**: Added configurable orchestration timeout and database command timeout settings.
+
+**UI Improvements:**
+- **User Profile Dropdown**: New profile dropdown menu in header showing user name, email, role, and logout option.
+- **Custom Favicon**: Added custom invoice/document favicon for browser tabs.
+- **Step Duration Display**: ADR Monitor now shows duration for each completed orchestration step.
+- **Sub-Step Progress**: Detailed sub-step progress tracking during orchestration phases.
+- **Check Status Button**: Check Status action now available for all jobs in the dropdown menu.
+- **User Management Enhancements**: Added Edit button for editing user email, name, and timezone preferences.
+
+**Authentication & Session Management:**
+- **Token Refresh Improvements**: Automatic token refresh with keepalive mechanism during long Blazor circuits.
+- **Session Expiry Handling**: Improved session expiry warnings and graceful redirect to login.
+- **UI Permission Caching**: Permissions cached in UI with keepalive refresh every 2 minutes.
+- **Claims Enrichment**: External identity provider claims enriched with application-specific permissions.
+- **Multiple Audience Support**: JWT validation now supports multiple audiences for Duende IdentityServer.
+
+**Code Quality & Refactoring:**
+- **Generic PagedResponse<T>**: Standardized pagination responses across all API endpoints.
+- **ClaimsPrincipalExtensions**: Centralized authorization check helpers.
+- **Quartz Retry Fix**: Fixed retry trigger collision by making scheduling idempotent.
 
 ## Architecture Overview
 
