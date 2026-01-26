@@ -47,9 +47,11 @@ BEGIN
     ALTER TABLE [dbo].[AdrConfiguration] ADD [OrchestrationNotificationRecipients] NVARCHAR(500) NULL;
     PRINT 'Added OrchestrationNotificationRecipients column';
 END
+GO
 
 -- Set default recipients for existing configuration row(s)
 -- Update these email addresses as needed for your environment
+-- NOTE: This runs in a separate batch (after GO) so the columns exist
 UPDATE [dbo].[AdrConfiguration]
 SET [ErrorNotificationRecipients] = 'lcassin@cassinfo.com;jwilson@cassinfo.com',
     [OrchestrationNotificationRecipients] = 'lcassin@cassinfo.com;jwilson@cassinfo.com;dmiller@cassinfo.com'
@@ -57,3 +59,4 @@ WHERE [ErrorNotificationRecipients] IS NULL
    OR [OrchestrationNotificationRecipients] IS NULL;
 
 PRINT 'Migration completed successfully';
+GO
