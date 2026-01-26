@@ -358,4 +358,174 @@ public class EmailService : IEmailService
         sb.AppendLine("</div></div></body></html>");
         return sb.ToString();
     }
+
+    public async Task SendOrchestrationSummaryNotificationAsync(
+        string orchestrationName,
+        string requestId,
+        DateTime startedAt,
+        DateTime completedAt,
+        int syncAccountsInserted,
+        int syncAccountsUpdated,
+        int jobsCreated,
+        int jobsSkipped,
+        int credentialsVerified,
+        int credentialsFailed,
+        int scrapesRequested,
+        int scrapesFailed,
+        int statusesChecked,
+        int statusesFailed,
+        List<string> errorMessages)
+    {
+        try
+        {
+            // Check if notifications are enabled
+            var enabledStr = _configuration["OrchestrationNotifications:Enabled"];
+            var enabled = string.IsNullOrEmpty(enabledStr) || bool.Parse(enabledStr);
+            if (!enabled)
+            {
+                _logger.LogDebug("Orchestration notifications are disabled");
+                return;
+            }
+
+            // Use OrchestrationNotifications recipients (includes dmiller)
+            var recipients = ParseEmailRecipients(_configuration["OrchestrationNotifications:Recipients"]);
+            if (!recipients.Any())
+            {
+                _logger.LogWarning("No orchestration notification recipients configured");
+                return;
+            }
+
+            // Determine if there were any failures
+            var totalFailures = credentialsFailed + scrapesFailed + statusesFailed + errorMessages.Count;
+            if (totalFailures == 0)
+            {
+                _logger.LogDebug("Orchestration completed with no failures, skipping notification");
+                return;
+            }
+
+            var environment = _configuration["ASPNETCORE_ENVIRONMENT"] ?? Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Unknown";
+            var duration = completedAt - startedAt;
+            var subject = $"[{environment}] ADR Orchestration Summary - {totalFailures} Issue(s) Detected";
+
+            var body = BuildOrchestrationSummaryEmailBody(
+                orchestrationName, requestId, startedAt, completedAt, duration, environment,
+                syncAccountsInserted, syncAccountsUpdated, jobsCreated, jobsSkipped,
+                credentialsVerified, credentialsFailed, scrapesRequested, scrapesFailed,
+                statusesChecked, statusesFailed, errorMessages);
+
+            // Build attachment with detailed error messages if any
+            string? attachmentContent = null;
+            string? attachmentFileName = null;
+            if (errorMessages.Any())
+            {
+                var attachmentSb = new StringBuilder();
+                attachmentSb.AppendLine($"ADR Orchestration Summary - Error Details");
+                attachmentSb.AppendLine(new string('=', 80));
+                attachmentSb.AppendLine($"Orchestration: {orchestrationName}");
+                attachmentSb.AppendLine($"Request ID: {requestId}");
+                attachmentSb.AppendLine($"Started: {startedAt:yyyy-MM-dd HH:mm:ss} UTC");
+                attachmentSb.AppendLine($"Completed: {completedAt:yyyy-MM-dd HH:mm:ss} UTC");
+                attachmentSb.AppendLine($"Duration: {duration.TotalMinutes:F1} minutes");
+                attachmentSb.AppendLine(new string('=', 80));
+                attachmentSb.AppendLine();
+                attachmentSb.AppendLine($"Total Errors: {errorMessages.Count}");
+                attachmentSb.AppendLine(new string('-', 80));
+                attachmentSb.AppendLine();
+                
+                for (int i = 0; i < errorMessages.Count; i++)
+                {
+                    attachmentSb.AppendLine($"[{i + 1}] {errorMessages[i]}");
+                    attachmentSb.AppendLine();
+                }
+
+                attachmentContent = attachmentSb.ToString();
+                attachmentFileName = $"orchestration_summary_{requestId}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.txt";
+            }
+
+            await SendEmailWithAttachmentAsync(recipients, subject, body, attachmentContent, attachmentFileName);
+            _logger.LogInformation("Orchestration summary notification sent for {OrchestrationName} (RequestId: {RequestId}) with {FailureCount} failures", 
+                orchestrationName, requestId, totalFailures);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send orchestration summary notification for {OrchestrationName}", orchestrationName);
+        }
+    }
+
+    private static string BuildOrchestrationSummaryEmailBody(
+        string orchestrationName, string requestId, DateTime startedAt, DateTime completedAt, TimeSpan duration, string environment,
+        int syncAccountsInserted, int syncAccountsUpdated, int jobsCreated, int jobsSkipped,
+        int credentialsVerified, int credentialsFailed, int scrapesRequested, int scrapesFailed,
+        int statusesChecked, int statusesFailed, List<string> errorMessages)
+    {
+        var totalFailures = credentialsFailed + scrapesFailed + statusesFailed + errorMessages.Count;
+        var headerColor = totalFailures > 0 ? "#ff9800" : "#4CAF50"; // Orange for warnings, green for success
+        
+        var sb = new StringBuilder();
+        sb.AppendLine("<!DOCTYPE html><html><head><style>");
+        sb.AppendLine("body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }");
+        sb.AppendLine(".container { max-width: 700px; margin: 0 auto; padding: 20px; }");
+        sb.AppendLine($".header {{ background: {headerColor}; color: white; padding: 20px; border-radius: 5px 5px 0 0; }}");
+        sb.AppendLine(".content { background: #f9f9f9; padding: 20px; border-radius: 0 0 5px 5px; }");
+        sb.AppendLine(".detail { margin: 10px 0; }");
+        sb.AppendLine(".label { font-weight: bold; }");
+        sb.AppendLine(".stats-table { width: 100%; border-collapse: collapse; margin: 15px 0; }");
+        sb.AppendLine(".stats-table th, .stats-table td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }");
+        sb.AppendLine(".stats-table th { background: #f5f5f5; }");
+        sb.AppendLine(".success { color: #4CAF50; }");
+        sb.AppendLine(".failure { color: #d32f2f; }");
+        sb.AppendLine(".warning { color: #ff9800; }");
+        sb.AppendLine(".error-list { background: #fff; padding: 15px; border-left: 4px solid #ff9800; margin: 15px 0; max-height: 300px; overflow-y: auto; }");
+        sb.AppendLine(".error-item { margin: 5px 0; padding: 5px; background: #fff3e0; border-radius: 3px; font-size: 13px; }");
+        sb.AppendLine("</style></head><body>");
+        sb.AppendLine("<div class='container'>");
+        sb.AppendLine($"<div class='header'><h2>ADR Orchestration Summary</h2><p style='margin: 5px 0 0 0;'>{environment} - {totalFailures} Issue(s) Detected</p></div>");
+        sb.AppendLine("<div class='content'>");
+        
+        // Basic info
+        sb.AppendLine($"<div class='detail'><span class='label'>Orchestration:</span> {System.Net.WebUtility.HtmlEncode(orchestrationName)}</div>");
+        sb.AppendLine($"<div class='detail'><span class='label'>Request ID:</span> {System.Net.WebUtility.HtmlEncode(requestId)}</div>");
+        sb.AppendLine($"<div class='detail'><span class='label'>Started:</span> {startedAt:yyyy-MM-dd HH:mm:ss} UTC</div>");
+        sb.AppendLine($"<div class='detail'><span class='label'>Completed:</span> {completedAt:yyyy-MM-dd HH:mm:ss} UTC</div>");
+        sb.AppendLine($"<div class='detail'><span class='label'>Duration:</span> {duration.TotalMinutes:F1} minutes</div>");
+        
+        // Stats table
+        sb.AppendLine("<table class='stats-table'>");
+        sb.AppendLine("<tr><th>Step</th><th>Success</th><th>Failed/Skipped</th></tr>");
+        
+        sb.AppendLine($"<tr><td>Account Sync</td><td class='success'>{syncAccountsInserted + syncAccountsUpdated} synced</td><td>-</td></tr>");
+        sb.AppendLine($"<tr><td>Job Creation</td><td class='success'>{jobsCreated} created</td><td>{jobsSkipped} skipped</td></tr>");
+        
+        var credFailClass = credentialsFailed > 0 ? "failure" : "";
+        sb.AppendLine($"<tr><td>Credential Verification</td><td class='success'>{credentialsVerified} verified</td><td class='{credFailClass}'>{credentialsFailed} failed</td></tr>");
+        
+        var scrapeFailClass = scrapesFailed > 0 ? "failure" : "";
+        sb.AppendLine($"<tr><td>ADR Requests</td><td class='success'>{scrapesRequested} requested</td><td class='{scrapeFailClass}'>{scrapesFailed} failed</td></tr>");
+        
+        var statusFailClass = statusesFailed > 0 ? "warning" : "";
+        sb.AppendLine($"<tr><td>Status Checks</td><td class='success'>{statusesChecked} checked</td><td class='{statusFailClass}'>{statusesFailed} needs review</td></tr>");
+        
+        sb.AppendLine("</table>");
+        
+        // Error messages (show first 10 in email, rest in attachment)
+        if (errorMessages.Any())
+        {
+            var displayCount = Math.Min(errorMessages.Count, 10);
+            sb.AppendLine($"<div class='detail'><span class='label'>Error Messages ({errorMessages.Count} total):</span></div>");
+            sb.AppendLine("<div class='error-list'>");
+            for (int i = 0; i < displayCount; i++)
+            {
+                sb.AppendLine($"<div class='error-item'>{System.Net.WebUtility.HtmlEncode(errorMessages[i])}</div>");
+            }
+            if (errorMessages.Count > 10)
+            {
+                sb.AppendLine($"<div class='error-item' style='font-style: italic;'>... and {errorMessages.Count - 10} more errors (see attachment for full list)</div>");
+            }
+            sb.AppendLine("</div>");
+        }
+        
+        sb.AppendLine("<p style='color: #666; font-size: 12px;'>Full error details are attached as a text file if available.</p>");
+        sb.AppendLine("</div></div></body></html>");
+        return sb.ToString();
+    }
 }

@@ -600,6 +600,13 @@ public class AdrBackgroundOrchestrationService : BackgroundService
             
             // Save final results to database
             await SaveOrchestrationResultAsync(request.RequestId, dbRunId, "Completed", null, CancellationToken.None);
+            
+            // Send consolidated summary notification if there were any failures during the run
+            var finalStatus = _queue.GetStatus(request.RequestId);
+            if (finalStatus != null)
+            {
+                await SendOrchestrationSummaryEmailAsync(request.RequestId, finalStatus);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -733,6 +740,63 @@ public class AdrBackgroundOrchestrationService : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Request {RequestId}: Failed to send orchestration failure email notification", requestId);
+        }
+    }
+    
+    private async Task SendOrchestrationSummaryEmailAsync(string requestId, AdrOrchestrationStatus status)
+    {
+        try
+        {
+            // Collect all error messages from each step
+            var allErrorMessages = new List<string>();
+            
+            if (status.SyncResult?.ErrorMessages != null)
+                allErrorMessages.AddRange(status.SyncResult.ErrorMessages);
+            if (status.JobCreationResult?.ErrorMessages != null)
+                allErrorMessages.AddRange(status.JobCreationResult.ErrorMessages);
+            if (status.CredentialVerificationResult?.ErrorMessages != null)
+                allErrorMessages.AddRange(status.CredentialVerificationResult.ErrorMessages);
+            if (status.ScrapeResult?.ErrorMessages != null)
+                allErrorMessages.AddRange(status.ScrapeResult.ErrorMessages);
+            if (status.StatusCheckResult?.ErrorMessages != null)
+                allErrorMessages.AddRange(status.StatusCheckResult.ErrorMessages);
+            
+            // Calculate totals
+            var credentialsFailed = status.CredentialVerificationResult?.CredentialsFailed ?? 0;
+            var scrapesFailed = status.ScrapeResult?.ScrapesFailed ?? 0;
+            var statusesFailed = status.StatusCheckResult?.JobsNeedingReview ?? 0;
+            
+            // Only send if there were failures
+            var totalFailures = credentialsFailed + scrapesFailed + statusesFailed + allErrorMessages.Count;
+            if (totalFailures == 0)
+            {
+                _logger.LogDebug("Request {RequestId}: No failures detected, skipping summary notification", requestId);
+                return;
+            }
+            
+            using var scope = _scopeFactory.CreateScope();
+            var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
+            
+            await emailService.SendOrchestrationSummaryNotificationAsync(
+                "ADR Full Cycle",
+                requestId,
+                status.StartedAt ?? status.RequestedAt,
+                status.CompletedAt ?? DateTime.UtcNow,
+                status.SyncResult?.AccountsInserted ?? 0,
+                status.SyncResult?.AccountsUpdated ?? 0,
+                status.JobCreationResult?.JobsCreated ?? 0,
+                status.JobCreationResult?.JobsSkipped ?? 0,
+                status.CredentialVerificationResult?.CredentialsVerified ?? 0,
+                credentialsFailed,
+                status.ScrapeResult?.ScrapesRequested ?? 0,
+                scrapesFailed,
+                status.StatusCheckResult?.JobsChecked ?? 0,
+                statusesFailed,
+                allErrorMessages);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Request {RequestId}: Failed to send orchestration summary email notification", requestId);
         }
     }
     
