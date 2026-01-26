@@ -9,6 +9,15 @@
 - **JobExecution CancelledBy**: Added CancelledBy property to track who cancelled running executions
 - **Schedule TimeoutMinutes**: Added TimeoutMinutes property for job execution timeouts
 
+## Recent Updates (January 2026)
+
+- **AdrConfiguration Email Settings**: Added `ErrorNotificationsEnabled`, `ErrorNotificationRecipients`, `OrchestrationNotificationsEnabled`, `OrchestrationNotificationRecipients` properties for database-configurable email notifications
+- **AdrConfiguration Test Mode**: Added `TestModeEnabled`, `TestModeMaxScrapingJobs`, `TestModeMaxCredentialChecks` properties for limiting ADR requests during testing
+- **AdrAccountBlacklist Entity**: New entity for excluding specific vendors, accounts, or credentials from ADR processing with flexible date ranges
+- **AdrAccountRule Entity**: New entity for account-level scheduling rules per job type
+- **AdrAccount Vendor Code Refactoring**: Renamed `VendorCode` to `PrimaryVendorCode` and added `MasterVendorCode` to support vendor hierarchy
+- **AdrJob Vendor Code Updates**: Added `PrimaryVendorCode` and `MasterVendorCode` fields (denormalized for queries)
+
 ## Business Overview
 
 The Core project is the heart of the SchedulerPlatform, containing the fundamental business entities and rules that define what the system can do. Think of it as the "dictionary" of the application - it defines what a Schedule is, what a Job Execution means, and what types of jobs we can run.
@@ -345,6 +354,87 @@ For the complete ER diagram, see [ADR ER Diagram](../../../Documents/Technical/d
 - Only one orchestration can run at a time
 - Progress is updated in real-time and persisted to database
 - History is preserved for auditing and troubleshooting
+
+#### AdrConfiguration
+**Purpose**: Stores global configuration settings for the ADR orchestration process. Single-row table that replaces hardcoded values in appsettings.json. Only Admin and Super Admin users can modify these settings.
+
+**Properties:**
+- `CredentialCheckLeadDays` (int): Days before NextRunDateTime to start credential verification (default: 7)
+- `MaxRetries` (int): Maximum scrape retry attempts before marking job as failed (default: 5)
+- `FinalStatusCheckDelayDays` (int): Days after billing window ends to perform final status check (default: 5)
+- `DailyStatusCheckDelayDays` (int): Days to wait between status checks (default: 1)
+- `MaxParallelRequests` (int): Maximum parallel API requests during orchestration (default: 8)
+- `BatchSize` (int): Batch size for processing jobs during orchestration (default: 1000)
+- `DefaultWindowDaysBefore` (int): Days before expected invoice date to start looking (default: 5)
+- `DefaultWindowDaysAfter` (int): Days after expected invoice date to keep looking (default: 5)
+- `IsOrchestrationEnabled` (bool): Whether orchestration process is enabled (default: true)
+
+**Test Mode Settings:**
+- `TestModeEnabled` (bool): Whether test mode is enabled (default: false)
+- `TestModeMaxScrapingJobs` (int): Maximum ADR requests per run when test mode enabled (default: 50)
+- `TestModeMaxCredentialChecks` (int): Maximum credential checks per run when test mode enabled (default: 50)
+
+**Email Notification Settings:**
+- `ErrorNotificationsEnabled` (bool): Whether 500 error email notifications are enabled (default: true)
+- `ErrorNotificationRecipients` (string?): Semicolon-separated email addresses for 500 error notifications
+- `OrchestrationNotificationsEnabled` (bool): Whether orchestration failure notifications are enabled (default: true)
+- `OrchestrationNotificationRecipients` (string?): Semicolon-separated email addresses for orchestration notifications
+
+**Data Retention Settings:**
+- `JobRetentionMonths` (int): Months to keep AdrJob records before archiving (default: 12)
+- `JobExecutionRetentionMonths` (int): Months to keep AdrJobExecution records (default: 12)
+- `AuditLogRetentionDays` (int): Days to keep AuditLog records (default: 90)
+- `ArchiveRetentionYears` (int): Years to keep archived records before permanent deletion (default: 7)
+
+#### AdrAccountBlacklist
+**Purpose**: Stores blacklist entries for ADR accounts that should be excluded from job creation. Allows excluding specific vendors, accounts, or credentials from the orchestration process. Only Admin and Super Admin users can modify blacklist entries.
+
+**Properties:**
+- `PrimaryVendorCode` (string?): Primary vendor code to exclude (all accounts for this vendor)
+- `MasterVendorCode` (string?): Master vendor code to exclude (all accounts under this master vendor)
+- `VMAccountId` (long?): Specific VM Account ID to exclude
+- `VMAccountNumber` (string?): Account number to exclude
+- `CredentialId` (int?): Credential ID to exclude (all accounts using this credential)
+- `ExclusionType` (string): Type of exclusion - "All", "CredentialCheck", or "Download" (default: "All")
+- `Reason` (string): Required reason for blacklisting (for audit purposes)
+- `IsActive` (bool): Whether this blacklist entry is currently active (default: true)
+- `EffectiveStartDate` (DateTime?): Optional start date for the exclusion
+- `EffectiveEndDate` (DateTime?): Optional end date for automatic expiration
+- `BlacklistedBy` (string?): User who created/modified this entry
+- `BlacklistedDateTime` (DateTime?): When this entry was blacklisted
+- `Notes` (string?): Optional notes about this blacklist entry
+
+**Business Rules:**
+- Blacklist does NOT affect manual ADR requests (only orchestrator calls)
+- Blacklist does NOT affect Vendor Sync (accounts still sync even if blacklisted)
+- Exclusion types allow fine-grained control: exclude from all operations, credential checks only, or downloads only
+- Date ranges allow temporary exclusions that automatically expire
+
+#### AdrAccountRule
+**Purpose**: Defines scheduling rules for ADR accounts per job type. Separates scheduling configuration from account identity data.
+
+**Properties:**
+- `AdrAccountId` (int): FK to AdrAccount table
+- `AdrJobTypeId` (int): FK to AdrJobType table (credential check or download)
+- `NextRunDateTime` (DateTime?): When to run next for this rule
+- `NextRangeStartDateTime` (DateTime?): Search window start
+- `NextRangeEndDateTime` (DateTime?): Search window end
+- `PeriodType` (string?): Billing frequency (Monthly, Quarterly, etc.)
+- `PeriodDays` (int?): Days between runs
+- `IsEnabled` (bool): Whether this rule is active (default: true)
+- `IsManuallyOverridden` (bool): Whether dates/frequency have been manually overridden
+- `OverriddenBy` (string?): User who made the override
+- `OverriddenDateTime` (DateTime?): When the override was made
+
+**Navigation Properties:**
+- `AdrAccount`: The account this rule belongs to
+- `AdrJobType`: The job type this rule applies to
+
+**Business Rules:**
+- Each account can have multiple rules (one per job type)
+- Orchestration reads from Rules (not Accounts) when creating jobs
+- Jobs track which rule created them via `AdrJob.AdrAccountRuleId`
+- Manual overrides on rules persist separately from account overrides
 
 ### Enumerations
 

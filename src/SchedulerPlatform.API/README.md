@@ -10,6 +10,16 @@
 - **NextRunDateTime Calculation Fix**: Manual schedule triggers no longer incorrectly advance NextRunDateTime
 - **Deleted Schedule Filtering**: Soft-deleted schedules are properly filtered and no longer execute
 
+## Recent Updates (January 2026)
+
+- **Global Exception Handler Middleware**: New middleware catches all unhandled exceptions and sends email notifications with stack trace attachments to configurable recipients
+- **Orchestration Summary Notifications**: Consolidated email sent at end of each orchestration run summarizing all failures across all phases
+- **Database-Configurable Notification Recipients**: Email recipients for 500 errors and orchestration failures are now stored in AdrConfiguration and managed via Admin UI
+- **Health Endpoint**: Added `/health` endpoint returning "Healthy" to eliminate Azure health probe 404 errors
+- **Test Mode Public Endpoint**: New `GET /api/adr/configuration/test-mode-status` endpoint (no auth required) for test mode banner visibility
+- **ADR Account Rules Endpoints**: New endpoints for managing account-level scheduling rules
+- **PrimaryVendorCode/MasterVendorCode Support**: All ADR endpoints now support filtering by both Primary and Master Vendor Codes
+
 ## Business Overview
 
 The API project is the "control center" of the SchedulerPlatform - it provides the web interface that allows users and applications to manage schedules, monitor job executions, and configure system settings. Think of it as the front door through which all external interactions happen.
@@ -867,6 +877,29 @@ classDiagram
 
 #### Filters & Middleware
 
+##### GlobalExceptionHandlerMiddleware
+**Purpose**: Catches all unhandled exceptions and sends email notifications with detailed error information.
+
+**Key Features:**
+- Catches any unhandled exception in the request pipeline
+- Sends HTML-formatted email with error details (error ID, timestamp, request info, exception message)
+- Attaches full stack trace as a .txt file
+- Recipients configurable via Admin > ADR Configuration page (stored in database)
+- Falls back to appsettings.json if database config not available
+- Logs all errors with unique error ID for correlation
+
+**Configuration (AdrConfiguration table):**
+- `ErrorNotificationsEnabled`: Toggle email notifications on/off
+- `ErrorNotificationRecipients`: Semicolon-separated email addresses (e.g., "user1@example.com;user2@example.com")
+
+**Email Content:**
+- Error ID (GUID for correlation with logs)
+- Timestamp (UTC)
+- Request method and path
+- Exception type and message
+- Stack trace preview (first 500 chars in email body)
+- Full stack trace as attachment
+
 ```mermaid
 classDiagram
     class IActionFilter {
@@ -879,6 +912,15 @@ classDiagram
         -ILogger~ModelStateLoggingFilter~ _logger
         +OnActionExecuting(ActionExecutingContext context) void
         +OnActionExecuted(ActionExecutedContext context) void
+    }
+    
+    class GlobalExceptionHandlerMiddleware {
+        -RequestDelegate _next
+        -ILogger~GlobalExceptionHandlerMiddleware~ _logger
+        -IServiceProvider _serviceProvider
+        +InvokeAsync(HttpContext context) Task
+        -SendErrorNotificationEmail(Exception ex, HttpContext context) Task
+        -GetRecipientsFromDatabase() Task~List~string~~
     }
     
     IActionFilter <|.. ModelStateLoggingFilter
