@@ -9,6 +9,17 @@
 - **OIDC Logout Fix**: Proper logout flow that clears session and redirects to home page
 - **HttpClient Authentication Fix**: API calls now properly include JWT tokens in Authorization header
 
+## Recent Updates (January 2026)
+
+- **ADR Configuration Email Settings**: New "Email Notification Settings" section in Admin > ADR Configuration page for configuring 500 error and orchestration notification recipients
+- **Test Mode Warning Banners**: When test mode is enabled, warning banners appear on ADR Monitor, Jobs, and Accounts pages alerting users that limits are in effect
+- **ADR Account Rules Page**: New `/adr/rules` page for managing account-level scheduling rules per job type
+- **PrimaryVendorCode/MasterVendorCode Filters**: All ADR pages now support filtering by both Primary and Master Vendor Codes
+- **Blacklist Status Indicators**: Accounts and Jobs pages show visual indicators for blacklisted items (current and future blacklist periods)
+- **Serilog File Logging**: Added file-based logging with environment-aware paths for Azure App Service
+- **Server-Side Log Search**: New Admin > API Logs page with search capability and file locking handling for active logs
+- **Auto-Refresh Stale Warning**: ADR Monitor page shows warning when auto-refresh hasn't updated recently
+
 ## Business Overview
 
 The UI project is the "front door" of the SchedulerPlatform - it's the web application that users interact with to manage schedules, monitor job executions, and configure the system. Built with Blazor Server and MudBlazor components, it provides a modern, responsive interface that works seamlessly on desktop and mobile devices.

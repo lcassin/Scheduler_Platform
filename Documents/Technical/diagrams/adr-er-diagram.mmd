@@ -1,7 +1,12 @@
 erDiagram
     Client ||--o{ AdrAccount : "has many"
     AdrAccount ||--o{ AdrJob : "has many"
+    AdrAccount ||--o{ AdrAccountRule : "has many"
     AdrJob ||--o{ AdrJobExecution : "has many"
+    AdrAccountRule ||--o{ AdrJob : "creates"
+    AdrJobType ||--o{ AdrAccountRule : "defines"
+    AdrConfiguration ||--|| AdrOrchestrationRun : "configures"
+    AdrAccountBlacklist }o--o| AdrAccount : "excludes"
     
     AdrAccount {
         int AdrAccountId PK
@@ -11,7 +16,8 @@ erDiagram
         int ClientId FK
         string ClientName "Denormalized"
         int CredentialId "Active credential"
-        string VendorCode
+        string PrimaryVendorCode "Primary vendor"
+        string MasterVendorCode "Master vendor"
         string PeriodType "Billing frequency"
         int PeriodDays "Days between invoices"
         double MedianDays "Calculated median"
@@ -40,9 +46,12 @@ erDiagram
     AdrJob {
         int AdrJobId PK
         int AdrAccountId FK
+        int AdrAccountRuleId FK "Rule that created this job"
+        int AdrJobTypeId FK "Job type (cred check or download)"
         long VMAccountId "Denormalized"
         string VMAccountNumber "Denormalized"
-        string VendorCode "Denormalized"
+        string PrimaryVendorCode "Denormalized"
+        string MasterVendorCode "Denormalized"
         int CredentialId
         string PeriodType
         DateTime BillingPeriodStartDateTime "Period start"
@@ -118,4 +127,88 @@ erDiagram
         string CreatedBy
         string ModifiedBy
         bool IsDeleted
+    }
+    
+    AdrAccountRule {
+        int AdrAccountRuleId PK
+        int AdrAccountId FK
+        int AdrJobTypeId FK
+        DateTime NextRunDateTime
+        DateTime NextRangeStartDateTime
+        DateTime NextRangeEndDateTime
+        string PeriodType
+        int PeriodDays
+        bool IsEnabled
+        bool IsManuallyOverridden
+        string OverriddenBy
+        DateTime OverriddenDateTime
+        DateTime CreatedDateTime
+        DateTime ModifiedDateTime
+        string CreatedBy
+        string ModifiedBy
+        bool IsDeleted
+    }
+    
+    AdrJobType {
+        int AdrJobTypeId PK
+        string Code "CredentialCheck or Download"
+        string Name
+        string Description
+        int AdrRequestTypeId "1=Login, 2=Download"
+        string EndpointUrl
+        bool IsEnabled
+        DateTime CreatedDateTime
+        DateTime ModifiedDateTime
+        string CreatedBy
+        string ModifiedBy
+    }
+    
+    AdrAccountBlacklist {
+        int AdrAccountBlacklistId PK
+        string PrimaryVendorCode "Vendor to exclude"
+        string MasterVendorCode "Master vendor to exclude"
+        long VMAccountId "Account to exclude"
+        string VMAccountNumber
+        int CredentialId "Credential to exclude"
+        string ExclusionType "All, CredentialCheck, Download"
+        string Reason "Required"
+        bool IsActive
+        DateTime EffectiveStartDate
+        DateTime EffectiveEndDate
+        string BlacklistedBy
+        DateTime BlacklistedDateTime
+        string Notes
+        DateTime CreatedDateTime
+        DateTime ModifiedDateTime
+        string CreatedBy
+        string ModifiedBy
+        bool IsDeleted
+    }
+    
+    AdrConfiguration {
+        int AdrConfigurationId PK
+        int CredentialCheckLeadDays "Default 7"
+        int MaxRetries "Default 5"
+        int FinalStatusCheckDelayDays "Default 5"
+        int DailyStatusCheckDelayDays "Default 1"
+        int MaxParallelRequests "Default 8"
+        int BatchSize "Default 1000"
+        int DefaultWindowDaysBefore "Default 5"
+        int DefaultWindowDaysAfter "Default 5"
+        bool IsOrchestrationEnabled "Default true"
+        bool TestModeEnabled "Default false"
+        int TestModeMaxScrapingJobs "Default 50"
+        int TestModeMaxCredentialChecks "Default 50"
+        bool ErrorNotificationsEnabled "Default true"
+        string ErrorNotificationRecipients
+        bool OrchestrationNotificationsEnabled "Default true"
+        string OrchestrationNotificationRecipients
+        int JobRetentionMonths "Default 12"
+        int JobExecutionRetentionMonths "Default 12"
+        int AuditLogRetentionDays "Default 90"
+        int ArchiveRetentionYears "Default 7"
+        DateTime CreatedDateTime
+        DateTime ModifiedDateTime
+        string CreatedBy
+        string ModifiedBy
     }

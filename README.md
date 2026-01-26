@@ -112,6 +112,45 @@ For detailed technical documentation, see:
 - [UI README - ADR UI Pages](src/SchedulerPlatform.UI/README.md#adr-ui-pages)
 - [ADR Diagrams](Documents/Technical/diagrams/) - ER diagram, workflow, and sequence diagrams
 
+### ADR Enhancements (January 2026)
+
+**Vendor Code Refactoring:**
+- **PrimaryVendorCode/MasterVendorCode**: Renamed `VendorCode` to `PrimaryVendorCode` throughout the system to align with the VendorCred database schema. Added `MasterVendorCode` field to support vendor hierarchy (Master vendors can have multiple Primary vendors underneath).
+- **Filter Updates**: All ADR pages (Accounts, Jobs, Account Rules) now support filtering by both Primary and Master Vendor Codes.
+
+**Test Mode:**
+- **Test Mode Settings**: New configuration options in Admin > ADR Configuration to limit ADR requests during testing phases:
+  - `TestModeEnabled`: Toggle to enable/disable test mode
+  - `TestModeMaxScrapingJobs`: Maximum ADR requests per orchestration run (default: 50)
+  - `TestModeMaxCredentialChecks`: Maximum credential checks per run (default: 50)
+- **Warning Banners**: When test mode is enabled, warning banners appear on Monitor, Jobs, and Accounts pages to alert users that limits are in effect.
+
+**Email Notifications:**
+- **500 Error Notifications**: Global exception handler now sends email notifications for all unhandled 500 errors with stack trace attachments. Recipients: configurable via Admin UI.
+- **Orchestration Summary Notifications**: Single consolidated email sent at the end of each orchestration run summarizing all failures across all phases. Includes stats table and detailed error list attachment.
+- **Database-Configurable Recipients**: Notification recipients are now stored in `AdrConfiguration` table and managed through Admin > ADR Configuration page (no code changes needed to update recipients).
+- **Separate Recipient Lists**: 500 error notifications and orchestration notifications have separate recipient configurations.
+
+**ADR Account Rules:**
+- **Account-Level Scheduling Rules**: New `AdrAccountRule` entity allows defining custom scheduling rules per account and job type (credential check vs download).
+- **Rules UI Page**: New `/adr/rules` page under the ADR menu for managing account-level scheduling rules.
+- **Rule Evaluation**: Orchestration now evaluates account rules when creating jobs, allowing fine-grained control over when specific accounts are processed.
+
+**Blacklist Functionality:**
+- **AdrAccountBlacklist Entity**: New entity for excluding specific vendors, accounts, or credentials from ADR processing.
+- **Flexible Exclusions**: Support for vendor-level, account-level, and credential-level blocking with optional date ranges.
+- **Exclusion Types**: Can exclude from all job types, credential checks only, or downloads only.
+
+**Logging & Diagnostics:**
+- **Serilog File Logging**: Added file-based logging to UI project with environment-aware paths for Azure App Service.
+- **Server-Side Log Search**: New log viewer in Admin section with search capability and file locking handling for active logs.
+- **Health Endpoint**: Added `/health` endpoint to eliminate Azure health probe 404 errors.
+
+**Performance & Reliability:**
+- **Optimized Status Checks**: Pre-loaded account rules during status check phase for better performance with large datasets.
+- **Auto-Refresh Indicator**: ADR Monitor page now shows stale data warning when auto-refresh hasn't updated recently.
+- **Duplicate Orchestration Prevention**: Fixed issue where multiple orchestrations could be triggered simultaneously.
+
 ## Architecture Overview
 
 ```mermaid

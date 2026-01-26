@@ -10,6 +10,15 @@
 - **CancelledBy Tracking**: JobExecutions table now tracks who cancelled running executions
 - **SQL_Database_Creation.sql Updated**: Production creation script includes all latest migrations and user seeding
 
+## Recent Updates (January 2026)
+
+- **AdrConfiguration Table Updates**: Added email notification settings (ErrorNotificationsEnabled, ErrorNotificationRecipients, OrchestrationNotificationsEnabled, OrchestrationNotificationRecipients) and test mode settings (TestModeEnabled, TestModeMaxScrapingJobs, TestModeMaxCredentialChecks)
+- **AdrAccountBlacklist Table**: New table for excluding vendors, accounts, or credentials from ADR processing with flexible date ranges and exclusion types
+- **AdrAccountRule Table**: New table for account-level scheduling rules per job type, separating scheduling configuration from account identity
+- **PrimaryVendorCode/MasterVendorCode Columns**: Renamed VendorCode to PrimaryVendorCode and added MasterVendorCode across AdrAccount and AdrJob tables
+- **EmailService Enhancements**: Added methods for sending error notifications with attachments and orchestration summary emails
+- **SQL Migration Scripts**: Added `SQL_Migration_NotificationRecipients.sql` for adding email notification columns to AdrConfiguration
+
 ## Business Overview
 
 The Infrastructure project is the "data warehouse" of the SchedulerPlatform - it handles all interactions with the SQL Server database and external services like email. When the application needs to save a schedule, retrieve job execution history, or send an email notification, this project does the work.
