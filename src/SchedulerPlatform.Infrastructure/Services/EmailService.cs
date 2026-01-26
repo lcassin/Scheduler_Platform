@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using System.Net;
 using System.Net.Mail;
+using System.Net.Mime;
 using System.Text;
 
 namespace SchedulerPlatform.Infrastructure.Services;
@@ -33,6 +34,11 @@ public class EmailService : IEmailService
     }
 
     public async Task SendEmailAsync(IEnumerable<string> recipients, string subject, string body, bool isHtml = true)
+    {
+        await SendEmailWithAttachmentAsync(recipients, subject, body, null, null, isHtml);
+    }
+
+    public async Task SendEmailWithAttachmentAsync(IEnumerable<string> recipients, string subject, string body, string? attachmentContent, string? attachmentFileName, bool isHtml = true)
     {
         try
         {
@@ -68,6 +74,14 @@ public class EmailService : IEmailService
                 {
                     mailMessage.To.Add(recipient.Trim());
                 }
+            }
+
+            if (!string.IsNullOrEmpty(attachmentContent) && !string.IsNullOrEmpty(attachmentFileName))
+            {
+                var attachmentBytes = Encoding.UTF8.GetBytes(attachmentContent);
+                var attachmentStream = new MemoryStream(attachmentBytes);
+                var attachment = new Attachment(attachmentStream, attachmentFileName, MediaTypeNames.Text.Plain);
+                mailMessage.Attachments.Add(attachment);
             }
 
             if (mailMessage.To.Count > 0)
@@ -205,6 +219,142 @@ public class EmailService : IEmailService
             sb.AppendLine($"<div class='output'>{System.Net.WebUtility.HtmlEncode(jobExecution.Output)}</div>");
         }
 
+        sb.AppendLine("</div></div></body></html>");
+        return sb.ToString();
+    }
+
+    public async Task SendOrchestrationFailureNotificationAsync(string orchestrationName, string requestId, string errorMessage, string? stackTrace, string? currentStep)
+    {
+        try
+        {
+            var recipients = ParseEmailRecipients(_configuration["ErrorNotifications:Recipients"]);
+            if (!recipients.Any())
+            {
+                _logger.LogWarning("No error notification recipients configured for orchestration failure");
+                return;
+            }
+
+            var environment = _configuration["ASPNETCORE_ENVIRONMENT"] ?? Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Unknown";
+            var subject = $"[{environment}] ADR Orchestration Failed: {orchestrationName}";
+
+            var body = BuildOrchestrationFailureEmailBody(orchestrationName, requestId, errorMessage, currentStep, environment);
+
+            string? attachmentContent = null;
+            string? attachmentFileName = null;
+            if (!string.IsNullOrWhiteSpace(stackTrace))
+            {
+                attachmentContent = $"ADR Orchestration Failure - Stack Trace\n" +
+                    $"{'='.ToString().PadRight(80, '=')}\n" +
+                    $"Orchestration: {orchestrationName}\n" +
+                    $"Request ID: {requestId}\n" +
+                    $"Current Step: {currentStep ?? "Unknown"}\n" +
+                    $"Timestamp: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC\n" +
+                    $"{'='.ToString().PadRight(80, '=')}\n\n" +
+                    $"Error Message:\n{errorMessage}\n\n" +
+                    $"Stack Trace:\n{stackTrace}";
+                attachmentFileName = $"orchestration_error_{requestId}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.txt";
+            }
+
+            await SendEmailWithAttachmentAsync(recipients, subject, body, attachmentContent, attachmentFileName);
+            _logger.LogInformation("Orchestration failure notification sent for {OrchestrationName} (RequestId: {RequestId})", orchestrationName, requestId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send orchestration failure notification for {OrchestrationName}", orchestrationName);
+        }
+    }
+
+    public async Task SendSystemScheduleFailureNotificationAsync(string scheduleName, int scheduleId, string errorMessage, string? stackTrace)
+    {
+        try
+        {
+            var recipients = ParseEmailRecipients(_configuration["ErrorNotifications:Recipients"]);
+            if (!recipients.Any())
+            {
+                _logger.LogWarning("No error notification recipients configured for system schedule failure");
+                return;
+            }
+
+            var environment = _configuration["ASPNETCORE_ENVIRONMENT"] ?? Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Unknown";
+            var subject = $"[{environment}] System Schedule Failed: {scheduleName}";
+
+            var body = BuildSystemScheduleFailureEmailBody(scheduleName, scheduleId, errorMessage, environment);
+
+            string? attachmentContent = null;
+            string? attachmentFileName = null;
+            if (!string.IsNullOrWhiteSpace(stackTrace))
+            {
+                attachmentContent = $"System Schedule Failure - Stack Trace\n" +
+                    $"{'='.ToString().PadRight(80, '=')}\n" +
+                    $"Schedule: {scheduleName}\n" +
+                    $"Schedule ID: {scheduleId}\n" +
+                    $"Timestamp: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC\n" +
+                    $"{'='.ToString().PadRight(80, '=')}\n\n" +
+                    $"Error Message:\n{errorMessage}\n\n" +
+                    $"Stack Trace:\n{stackTrace}";
+                attachmentFileName = $"schedule_error_{scheduleId}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.txt";
+            }
+
+            await SendEmailWithAttachmentAsync(recipients, subject, body, attachmentContent, attachmentFileName);
+            _logger.LogInformation("System schedule failure notification sent for {ScheduleName} (Id: {ScheduleId})", scheduleName, scheduleId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send system schedule failure notification for {ScheduleName}", scheduleName);
+        }
+    }
+
+    private static string BuildOrchestrationFailureEmailBody(string orchestrationName, string requestId, string errorMessage, string? currentStep, string environment)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("<!DOCTYPE html><html><head><style>");
+        sb.AppendLine("body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }");
+        sb.AppendLine(".container { max-width: 600px; margin: 0 auto; padding: 20px; }");
+        sb.AppendLine(".header { background: #d32f2f; color: white; padding: 20px; border-radius: 5px 5px 0 0; }");
+        sb.AppendLine(".content { background: #f9f9f9; padding: 20px; border-radius: 0 0 5px 5px; }");
+        sb.AppendLine(".detail { margin: 10px 0; }");
+        sb.AppendLine(".label { font-weight: bold; }");
+        sb.AppendLine(".error-box { background: #fff; padding: 15px; border-left: 4px solid #d32f2f; margin: 15px 0; font-family: monospace; white-space: pre-wrap; word-wrap: break-word; }");
+        sb.AppendLine(".info-box { background: #fff3e0; padding: 10px; border-radius: 4px; margin: 10px 0; }");
+        sb.AppendLine("</style></head><body>");
+        sb.AppendLine("<div class='container'>");
+        sb.AppendLine($"<div class='header'><h2>ADR Orchestration Failed</h2><p style='margin: 5px 0 0 0;'>{environment}</p></div>");
+        sb.AppendLine("<div class='content'>");
+        sb.AppendLine($"<div class='detail'><span class='label'>Orchestration:</span> {System.Net.WebUtility.HtmlEncode(orchestrationName)}</div>");
+        sb.AppendLine($"<div class='detail'><span class='label'>Request ID:</span> {System.Net.WebUtility.HtmlEncode(requestId)}</div>");
+        sb.AppendLine($"<div class='detail'><span class='label'>Timestamp:</span> {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC</div>");
+        if (!string.IsNullOrWhiteSpace(currentStep))
+        {
+            sb.AppendLine($"<div class='detail'><span class='label'>Failed During Step:</span> {System.Net.WebUtility.HtmlEncode(currentStep)}</div>");
+        }
+        sb.AppendLine("<div class='detail'><span class='label'>Error Message:</span></div>");
+        sb.AppendLine($"<div class='error-box'>{System.Net.WebUtility.HtmlEncode(errorMessage)}</div>");
+        sb.AppendLine("<p style='color: #666; font-size: 12px;'>Full stack trace is attached as a text file if available.</p>");
+        sb.AppendLine("</div></div></body></html>");
+        return sb.ToString();
+    }
+
+    private static string BuildSystemScheduleFailureEmailBody(string scheduleName, int scheduleId, string errorMessage, string environment)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("<!DOCTYPE html><html><head><style>");
+        sb.AppendLine("body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }");
+        sb.AppendLine(".container { max-width: 600px; margin: 0 auto; padding: 20px; }");
+        sb.AppendLine(".header { background: #d32f2f; color: white; padding: 20px; border-radius: 5px 5px 0 0; }");
+        sb.AppendLine(".content { background: #f9f9f9; padding: 20px; border-radius: 0 0 5px 5px; }");
+        sb.AppendLine(".detail { margin: 10px 0; }");
+        sb.AppendLine(".label { font-weight: bold; }");
+        sb.AppendLine(".error-box { background: #fff; padding: 15px; border-left: 4px solid #d32f2f; margin: 15px 0; font-family: monospace; white-space: pre-wrap; word-wrap: break-word; }");
+        sb.AppendLine("</style></head><body>");
+        sb.AppendLine("<div class='container'>");
+        sb.AppendLine($"<div class='header'><h2>System Schedule Failed</h2><p style='margin: 5px 0 0 0;'>{environment}</p></div>");
+        sb.AppendLine("<div class='content'>");
+        sb.AppendLine($"<div class='detail'><span class='label'>Schedule:</span> {System.Net.WebUtility.HtmlEncode(scheduleName)}</div>");
+        sb.AppendLine($"<div class='detail'><span class='label'>Schedule ID:</span> {scheduleId}</div>");
+        sb.AppendLine($"<div class='detail'><span class='label'>Timestamp:</span> {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC</div>");
+        sb.AppendLine("<div class='detail'><span class='label'>Error Message:</span></div>");
+        sb.AppendLine($"<div class='error-box'>{System.Net.WebUtility.HtmlEncode(errorMessage)}</div>");
+        sb.AppendLine("<p style='color: #666; font-size: 12px;'>Full stack trace is attached as a text file if available.</p>");
         sb.AppendLine("</div></div></body></html>");
         return sb.ToString();
     }

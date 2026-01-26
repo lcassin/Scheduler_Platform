@@ -630,6 +630,9 @@ public class AdrBackgroundOrchestrationService : BackgroundService
             // Build detailed error message including inner exceptions for debugging
             var errorMessage = BuildDetailedErrorMessage(ex);
             
+            // Get current step for email notification
+            var currentStep = _queue.GetStatus(request.RequestId)?.CurrentStep;
+            
             _queue.UpdateStatus(request.RequestId, s =>
             {
                 s.Status = "Failed";
@@ -637,6 +640,9 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                 s.CompletedAt = DateTime.UtcNow;
             });
             await SaveOrchestrationResultAsync(request.RequestId, dbRunId, "Failed", errorMessage, CancellationToken.None);
+            
+            // Send email notification for orchestration failure
+            await SendOrchestrationFailureEmailAsync(request.RequestId, errorMessage, ex.StackTrace, currentStep);
         }
         finally
         {
@@ -707,6 +713,26 @@ public class AdrBackgroundOrchestrationService : BackgroundService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Request {RequestId}: Failed to save orchestration results to database", requestId);
+        }
+    }
+    
+    private async Task SendOrchestrationFailureEmailAsync(string requestId, string errorMessage, string? stackTrace, string? currentStep)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
+            
+            await emailService.SendOrchestrationFailureNotificationAsync(
+                "ADR Full Cycle",
+                requestId,
+                errorMessage,
+                stackTrace,
+                currentStep);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Request {RequestId}: Failed to send orchestration failure email notification", requestId);
         }
     }
     

@@ -370,6 +370,9 @@ if (app.Environment.IsDevelopment() ||
 
 app.UseSerilogRequestLogging();
 
+// Global exception handler - catches unhandled exceptions and sends email notifications for 500 errors
+app.UseMiddleware<SchedulerPlatform.API.Middleware.GlobalExceptionHandlerMiddleware>();
+
 // Request body logging middleware - ONLY in Development to prevent logging sensitive data
 if (app.Environment.IsDevelopment())
 {
