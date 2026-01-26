@@ -2,6 +2,7 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using SchedulerPlatform.Core.Domain.Interfaces;
+using SchedulerPlatform.Core.Domain.Entities;
 
 namespace SchedulerPlatform.API.Middleware;
 
@@ -82,21 +83,36 @@ public class GlobalExceptionHandlerMiddleware
 
     private async Task SendErrorNotificationEmailAsync(Exception exception, string method, string path, string errorId, DateTime timestamp)
     {
-        var recipients = _configuration["ErrorNotifications:Recipients"];
-        if (string.IsNullOrWhiteSpace(recipients))
+        using var scope = _scopeFactory.CreateScope();
+        
+        // Get notification settings from database
+        var adrConfigRepo = scope.ServiceProvider.GetRequiredService<IRepository<AdrConfiguration>>();
+        AdrConfiguration? config = null;
+        try
         {
-            _logger.LogWarning("No error notification recipients configured. Set ErrorNotifications:Recipients in appsettings.json");
-            return;
+            var configs = await adrConfigRepo.FindAsync(c => !c.IsDeleted);
+            config = configs.FirstOrDefault();
         }
-
-        var enabled = _configuration.GetValue<bool>("ErrorNotifications:Enabled", true);
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load ADR configuration from database for error notifications");
+        }
+        
+        // Use database config if available, otherwise fall back to appsettings
+        var enabled = config?.ErrorNotificationsEnabled ?? _configuration.GetValue<bool>("ErrorNotifications:Enabled", true);
         if (!enabled)
         {
             _logger.LogDebug("Error notifications are disabled");
             return;
         }
+        
+        var recipients = config?.ErrorNotificationRecipients ?? _configuration["ErrorNotifications:Recipients"];
+        if (string.IsNullOrWhiteSpace(recipients))
+        {
+            _logger.LogWarning("No error notification recipients configured. Configure in Admin > ADR Configuration page.");
+            return;
+        }
 
-        using var scope = _scopeFactory.CreateScope();
         var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
 
         var recipientList = recipients

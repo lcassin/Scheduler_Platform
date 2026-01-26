@@ -15,17 +15,37 @@ public class EmailService : IEmailService
     private readonly ILogger<EmailService> _logger;
     private readonly IJobExecutionRepository _jobExecutionRepository;
     private readonly IScheduleRepository _scheduleRepository;
+    private readonly IRepository<AdrConfiguration> _adrConfigurationRepository;
 
     public EmailService(
         IConfiguration configuration,
         ILogger<EmailService> logger,
         IJobExecutionRepository jobExecutionRepository,
-        IScheduleRepository scheduleRepository)
+        IScheduleRepository scheduleRepository,
+        IRepository<AdrConfiguration> adrConfigurationRepository)
     {
         _configuration = configuration;
         _logger = logger;
         _jobExecutionRepository = jobExecutionRepository;
         _scheduleRepository = scheduleRepository;
+        _adrConfigurationRepository = adrConfigurationRepository;
+    }
+    
+    /// <summary>
+    /// Gets the ADR configuration from the database, falling back to defaults if not found.
+    /// </summary>
+    private async Task<AdrConfiguration> GetAdrConfigurationAsync()
+    {
+        try
+        {
+            var configs = await _adrConfigurationRepository.FindAsync(c => !c.IsDeleted);
+            return configs.FirstOrDefault() ?? new AdrConfiguration();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load ADR configuration from database, using defaults");
+            return new AdrConfiguration();
+        }
     }
 
     public async Task SendEmailAsync(string to, string subject, string body, bool isHtml = true)
@@ -227,10 +247,18 @@ public class EmailService : IEmailService
     {
         try
         {
-            var recipients = ParseEmailRecipients(_configuration["ErrorNotifications:Recipients"]);
+            // Get notification settings from database
+            var config = await GetAdrConfigurationAsync();
+            if (!config.OrchestrationNotificationsEnabled)
+            {
+                _logger.LogDebug("Orchestration notifications are disabled in configuration");
+                return;
+            }
+            
+            var recipients = ParseEmailRecipients(config.OrchestrationNotificationRecipients);
             if (!recipients.Any())
             {
-                _logger.LogWarning("No error notification recipients configured for orchestration failure");
+                _logger.LogWarning("No orchestration notification recipients configured for orchestration failure");
                 return;
             }
 
@@ -268,10 +296,18 @@ public class EmailService : IEmailService
     {
         try
         {
-            var recipients = ParseEmailRecipients(_configuration["ErrorNotifications:Recipients"]);
+            // Get notification settings from database
+            var config = await GetAdrConfigurationAsync();
+            if (!config.OrchestrationNotificationsEnabled)
+            {
+                _logger.LogDebug("Orchestration notifications are disabled in configuration");
+                return;
+            }
+            
+            var recipients = ParseEmailRecipients(config.OrchestrationNotificationRecipients);
             if (!recipients.Any())
             {
-                _logger.LogWarning("No error notification recipients configured for system schedule failure");
+                _logger.LogWarning("No orchestration notification recipients configured for system schedule failure");
                 return;
             }
 
@@ -378,17 +414,15 @@ public class EmailService : IEmailService
     {
         try
         {
-            // Check if notifications are enabled
-            var enabledStr = _configuration["OrchestrationNotifications:Enabled"];
-            var enabled = string.IsNullOrEmpty(enabledStr) || bool.Parse(enabledStr);
-            if (!enabled)
+            // Get notification settings from database
+            var config = await GetAdrConfigurationAsync();
+            if (!config.OrchestrationNotificationsEnabled)
             {
-                _logger.LogDebug("Orchestration notifications are disabled");
+                _logger.LogDebug("Orchestration notifications are disabled in configuration");
                 return;
             }
 
-            // Use OrchestrationNotifications recipients (includes dmiller)
-            var recipients = ParseEmailRecipients(_configuration["OrchestrationNotifications:Recipients"]);
+            var recipients = ParseEmailRecipients(config.OrchestrationNotificationRecipients);
             if (!recipients.Any())
             {
                 _logger.LogWarning("No orchestration notification recipients configured");
