@@ -1119,8 +1119,10 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             }
 
             // Step 1: Mark all jobs as "InProgress" in batches (for idempotency)
+            // Store original status before changing it (needed to determine if this is a credential job later)
             const int setupBatchSize = 500;
             var jobsToProcess = new List<int>();
+            var originalStatusByJobId = new Dictionary<int, string>();
             int markedCount = 0;
             int setupProcessedSinceLastSave = 0;
             var startTime = DateTime.UtcNow;
@@ -1132,6 +1134,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             {
                 try
                 {
+                    // Store original status before changing it (needed to determine if this is a credential job later)
+                    originalStatusByJobId[job.Id] = job.Status;
+                    
                     // Update job properties directly - no need to call UpdateAsync since
                     // the entity is already tracked by EF (loaded from same DbContext)
                     // Calling UpdateAsync would scan all tracked entities on each iteration = O(N²)
@@ -1288,7 +1293,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.AdrStatusDescription = statusResult.StatusDescription;
 
                     // Determine if this is a credential verification job or a scraping job
-                    var isCredentialJob = job.Status == "CredentialCheckInProgress" || job.Status == "CredentialFailed";
+                    // Use the original status (before we changed it to StatusCheckInProgress)
+                    var originalStatus = originalStatusByJobId.TryGetValue(jobId, out var origStatus) ? origStatus : job.Status;
+                    var isCredentialJob = originalStatus == "CredentialCheckInProgress" || originalStatus == "CredentialFailed";
                     
                     if (isCredentialJob)
                     {
@@ -1464,8 +1471,10 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             }
 
             // Step 1: Mark all jobs as "InProgress" in batches (for idempotency)
+            // Store original status before changing it (needed to determine if this is a credential job later)
             const int setupBatchSize = 500;
             var jobsToProcess = new List<int>();
+            var originalStatusByJobId = new Dictionary<int, string>();
             int markedCount = 0;
             int setupProcessedSinceLastSave = 0;
             var startTime = DateTime.UtcNow;
@@ -1477,6 +1486,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             {
                 try
                 {
+                    // Store original status before changing it (needed to determine if this is a credential job later)
+                    originalStatusByJobId[job.Id] = job.Status;
+                    
                     // Update job properties directly - no need to call UpdateAsync since
                     // the entity is already tracked by EF (loaded from same DbContext)
                     job.Status = "StatusCheckInProgress";
@@ -1666,7 +1678,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.LastStatusCheckDateTime = DateTime.UtcNow;
 
                     // Determine if this is a credential verification job or a scraping job
-                    var isCredentialJob = job.Status == "CredentialCheckInProgress" || job.Status == "CredentialFailed";
+                    // Use the original status (before we changed it to StatusCheckInProgress)
+                    var originalStatus = originalStatusByJobId.TryGetValue(jobId, out var origStatus) ? origStatus : job.Status;
+                    var isCredentialJob = originalStatus == "CredentialCheckInProgress" || originalStatus == "CredentialFailed";
                     
                     if (isCredentialJob)
                     {
