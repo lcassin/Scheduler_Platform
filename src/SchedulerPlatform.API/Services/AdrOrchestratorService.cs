@@ -10,7 +10,7 @@ namespace SchedulerPlatform.API.Services;
 
 public interface IAdrOrchestratorService
 {
-    Task<JobCreationResult> CreateJobsForDueAccountsAsync(CancellationToken cancellationToken = default);
+    Task<JobCreationResult> CreateJobsForDueAccountsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
     Task<CredentialVerificationResult> VerifyCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
     Task<ScrapeResult> ProcessScrapingAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
     Task<StatusCheckResult> CheckPendingStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
@@ -280,7 +280,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
     #region Step 2: Job Creation
 
-    public async Task<JobCreationResult> CreateJobsForDueAccountsAsync(CancellationToken cancellationToken = default)
+    public async Task<JobCreationResult> CreateJobsForDueAccountsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
     {
         var result = new JobCreationResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -307,9 +307,14 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             int processedSinceLastSave = 0;
             int batchNumber = 1;
             int blacklistedCount = 0;
+            int totalProcessed = 0;
             var dueAccountsList = dueAccounts.ToList();
+            var totalAccounts = dueAccountsList.Count;
             var batchSize = config.BatchSize;
-            _logger.LogInformation("Processing {Count} due accounts in batches of {BatchSize}", dueAccountsList.Count, batchSize);
+            _logger.LogInformation("Processing {Count} due accounts in batches of {BatchSize}", totalAccounts, batchSize);
+
+            // Report initial progress (0 of total)
+            progressCallback?.Invoke(0, totalAccounts);
 
             // PERFORMANCE OPTIMIZATION: Load blacklist entries once instead of N database queries
             var blacklistEntries = await LoadBlacklistEntriesAsync("Download");
@@ -390,6 +395,10 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             batchNumber, result.JobsCreated);
                         processedSinceLastSave = 0;
                         batchNumber++;
+                        
+                        // Report progress after each batch save
+                        totalProcessed = result.JobsCreated + result.JobsSkipped;
+                        progressCallback?.Invoke(totalProcessed, totalAccounts);
                     }
                 }
                 catch (Exception ex)
@@ -397,6 +406,15 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     _logger.LogError(ex, "Error creating job for account {AccountId}", account.Id);
                     result.Errors++;
                     result.ErrorMessages.Add($"Account {account.Id}: {ex.Message}");
+                }
+                
+                // Track total processed for progress (created + skipped)
+                totalProcessed = result.JobsCreated + result.JobsSkipped;
+                
+                // Report progress every 1000 accounts or at the end
+                if (totalProcessed % 1000 == 0 || totalProcessed == totalAccounts)
+                {
+                    progressCallback?.Invoke(totalProcessed, totalAccounts);
                 }
             }
 
