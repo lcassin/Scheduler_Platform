@@ -1,0 +1,40 @@
+flowchart TB
+    subgraph "Daily Orchestration - What Happens Each Day"
+        Start([Orchestration Starts]) --> Step1
+        
+        Step1[1. Check Status<br/>Check results from yesterday's requests] --> Step1Q{Invoice Found?}
+        Step1Q -->|Yes| Step1A[Mark Job Complete<br/>Advance to next billing cycle]
+        Step1Q -->|No| Step1B[Job stays in queue<br/>Will retry today]
+        
+        Step1A --> Step2
+        Step1B --> Step2
+        
+        Step2[2. Send ADR Requests<br/>For jobs where today >= Next Run Date] --> Step2Q{Within billing window?}
+        Step2Q -->|Yes| Step2A[Send request to retrieve invoice]
+        Step2Q -->|No - Past window| Step2B[Mark as Needs Review]
+        
+        Step2A --> Step3
+        Step2B --> Step3
+        
+        Step3[3. Verify Credentials<br/>For jobs due in next 7 days] --> Step3Q{Credentials valid?}
+        Step3Q -->|Yes| Step3A[Mark Credential Verified]
+        Step3Q -->|No| Step3B[Create helpdesk ticket<br/>Mark Credential Failed]
+        
+        Step3A --> Step4
+        Step3B --> Step4
+        
+        Step4[4. Create Jobs<br/>For accounts due soon] --> Step5
+        
+        Step5[5. Sync Accounts<br/>Import updates from source] --> Step6
+        
+        Step6[6. Cleanup<br/>Finalize stale jobs] --> End([Orchestration Complete])
+    end
+    
+    style Start fill:#4CAF50,color:white
+    style End fill:#4CAF50,color:white
+    style Step1 fill:#fce4ec
+    style Step2 fill:#e8f5e9
+    style Step3 fill:#f3e5f5
+    style Step4 fill:#fff3e0
+    style Step5 fill:#e3f2fd
+    style Step6 fill:#f5f5f5

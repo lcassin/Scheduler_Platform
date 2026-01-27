@@ -9,6 +9,41 @@
 - **OIDC Logout Fix**: Proper logout flow that clears session and redirects to home page
 - **HttpClient Authentication Fix**: API calls now properly include JWT tokens in Authorization header
 
+## Recent Updates (December 2025)
+
+- **ADR Monitor Page**: New `/adr/monitor` page with real-time orchestration monitoring, progress bars, and step timeline
+- **ADR Accounts Page**: New `/adr/accounts` page for account management with search, filters, and manual override capability
+- **ADR Jobs Page**: New `/adr/jobs` page for job tracking with status filters and "Latest per Account" toggle
+- **ADR Missing Report**: New `/adr/missing` page showing accounts with missing billing history
+- **Chart Click Events**: ADR Monitor page charts are now clickable - clicking a status segment navigates to the Jobs page filtered by that status
+- **Sortable Grid Headers**: All ADR grids (Accounts, Jobs, Users, Blacklist) now support sortable column headers
+- **User Timezone Preference**: Users can set their preferred timezone for consistent date/time display across the application
+- **Excel/CSV Export**: All ADR pages (Accounts, Jobs, Missing) now support exporting data to Excel and CSV formats
+- **Export Loading Indicator**: Visual feedback when export operations are in progress
+- **Dashboard ADR Metrics**: Dashboard now includes ADR-specific metrics and charts showing job pipeline status
+- **Session Expiry Handling**: Graceful handling of session expiration in ADR UI pages with redirect to login
+- **Fast Progress Polling**: Monitor page polls every 5 seconds during active orchestration for real-time updates
+
+## Recent Updates (January 2026)
+
+- **ADR Configuration Email Settings**: New "Email Notification Settings" section in Admin > ADR Configuration page for configuring 500 error and orchestration notification recipients
+- **Test Mode Warning Banners**: When test mode is enabled, warning banners appear on ADR Monitor, Jobs, and Accounts pages alerting users that limits are in effect
+- **ADR Account Rules Page**: New `/adr/rules` page for managing account-level scheduling rules per job type
+- **PrimaryVendorCode/MasterVendorCode Filters**: All ADR pages now support filtering by both Primary and Master Vendor Codes
+- **Blacklist Status Indicators**: Accounts and Jobs pages show visual indicators for blacklisted items (current and future blacklist periods)
+- **Serilog File Logging**: Added file-based logging with environment-aware paths for Azure App Service
+- **Server-Side Log Search**: New Admin > API Logs page with search capability and file locking handling for active logs
+- **Auto-Refresh Stale Warning**: ADR Monitor page shows warning when auto-refresh hasn't updated recently
+- **User Profile Dropdown**: New profile dropdown menu in header showing user name, email, role, and logout option
+- **Custom Favicon**: Added custom invoice/document favicon for browser tabs
+- **Step Duration Display**: ADR Monitor now shows duration for each completed orchestration step
+- **Sub-Step Progress**: Detailed sub-step progress tracking during orchestration phases
+- **Check Status Button**: Check Status action now available for all jobs in the dropdown menu
+- **User Management Enhancements**: Added Edit button for editing user email, name, and timezone preferences
+- **Token Refresh Improvements**: Automatic token refresh with keepalive mechanism during long Blazor circuits
+- **Session Expiry Warnings**: Improved session expiry warnings with countdown and graceful redirect to login
+- **UI Permission Caching**: Permissions cached in UI with keepalive refresh every 2 minutes
+
 ## Business Overview
 
 The UI project is the "front door" of the SchedulerPlatform - it's the web application that users interact with to manage schedules, monitor job executions, and configure the system. Built with Blazor Server and MudBlazor components, it provides a modern, responsive interface that works seamlessly on desktop and mobile devices.

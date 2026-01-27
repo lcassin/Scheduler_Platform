@@ -1,0 +1,21 @@
+flowchart TB
+    subgraph "How Billing Dates Are Calculated"
+        A[Last Invoice Date] --> B[Add Billing Period<br/>Monthly = 30 days<br/>Bi-weekly = 14 days<br/>Quarterly = 90 days]
+        B --> C[Next Run Date<br/>When invoice becomes available]
+        C --> D[Billing Window End<br/>Next Run Date + 5 days]
+    end
+    
+    subgraph "Example: Monthly Account"
+        E[Last Invoice: Dec 15] --> F[Add 30 days]
+        F --> G[Next Run Date: Jan 14]
+        G --> H[Window End: Jan 19]
+    end
+    
+    style A fill:#e3f2fd
+    style B fill:#fff3e0
+    style C fill:#4CAF50,color:white
+    style D fill:#f3e5f5
+    style E fill:#e3f2fd
+    style F fill:#fff3e0
+    style G fill:#4CAF50,color:white
+    style H fill:#f3e5f5

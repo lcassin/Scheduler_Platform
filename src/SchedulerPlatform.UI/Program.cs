@@ -310,6 +310,8 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient("SchedulerAPI", client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["API:BaseUrl"]!);
+    // Increase timeout to 10 minutes for large exports (170K+ accounts)
+    client.Timeout = TimeSpan.FromMinutes(10);
 })
 .AddHttpMessageHandler<AuthTokenHandler>();
 
@@ -317,6 +319,8 @@ builder.Services.AddHttpClient("SchedulerAPI", client =>
 builder.Services.AddHttpClient("SchedulerApi", client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["API:BaseUrl"]!);
+    // Increase timeout to 10 minutes for large exports (170K+ accounts)
+    client.Timeout = TimeSpan.FromMinutes(10);
 })
 .AddHttpMessageHandler<AuthTokenHandler>();
 
@@ -333,6 +337,7 @@ builder.Services.AddScoped<IUserManagementService, UserManagementService>();
 builder.Services.AddScoped<IPermissionService, PermissionService>();
 builder.Services.AddScoped<IAdrService, AdrService>();
 builder.Services.AddScoped<IUserTimeZoneService, UserTimeZoneService>();
+builder.Services.AddScoped<IPowerBiReportService, PowerBiReportService>();
 
 builder.Services.AddAuthorization();
 builder.Services.AddCascadingAuthenticationState();

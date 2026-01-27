@@ -2,6 +2,9 @@
 @inject IPermissionService PermissionService
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject UserPermissionCacheService PermissionCacheService
+@inject IPowerBiReportService PowerBiReportService
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
 @implements IDisposable
 
 <MudNavMenu>
@@ -17,6 +20,22 @@
                     <MudNavLink Href="/adr/rules" Icon="@Icons.Material.Filled.Rule">Account Rules</MudNavLink>
                     <MudNavLink Href="/adr/jobs" Icon="@Icons.Material.Filled.Work">Jobs</MudNavLink>
                     <MudNavLink Href="/adr/missing-accounts" Icon="@Icons.Material.Filled.Warning">Missing Accounts</MudNavLink>
+                    @if (_powerBiReports.Any())
+                    {
+                        <MudNavGroup Title="Power BI Reports" Icon="@Icons.Material.Filled.BarChart" Expanded="false">
+                            @foreach (var report in _powerBiReports)
+                            {
+                                @if (report.OpenInNewTab)
+                                {
+                                    <MudNavLink Icon="@Icons.Material.Filled.OpenInNew" OnClick="@(() => OpenReportInNewTab(report.Url))">@report.Name</MudNavLink>
+                                }
+                                else
+                                {
+                                    <MudNavLink Href="@report.Url" Icon="@Icons.Material.Filled.Assessment">@report.Name</MudNavLink>
+                                }
+                            }
+                        </MudNavGroup>
+                    }
                 </MudNavGroup>
     
         @if (_canManageUsers)
@@ -26,6 +45,7 @@
                             <MudNavLink Href="/admin/adr-configuration" Icon="@Icons.Material.Filled.Settings">ADR Configuration</MudNavLink>
                             <MudNavLink Href="/admin/adr-blacklist" Icon="@Icons.Material.Filled.Block">ADR Blacklist</MudNavLink>
                             <MudNavLink Href="/admin/adr-job-types" Icon="@Icons.Material.Filled.Category">ADR Job Types</MudNavLink>
+                            <MudNavLink Href="/admin/power-bi-reports" Icon="@Icons.Material.Filled.BarChart">Power BI Reports</MudNavLink>
                             <MudNavLink Href="/admin/logs" Icon="@Icons.Material.Filled.Article">API Logs</MudNavLink>
                         </MudNavGroup>
         }
@@ -33,10 +53,12 @@
 
 @code {
     private bool _canManageUsers = false;
+    private List<PowerBiReportDto> _powerBiReports = new();
 
     protected override async Task OnInitializedAsync()
     {
         await LoadPermissionsAsync();
+        await LoadPowerBiReportsAsync();
         AuthenticationStateProvider.AuthenticationStateChanged += OnAuthenticationStateChanged;
         // Subscribe to permission cache refresh events to update menu when permissions are loaded
         PermissionCacheService.OnPermissionsRefreshed += OnPermissionsRefreshed;
@@ -47,9 +69,29 @@
         _canManageUsers = await PermissionService.CanReadAsync("users:manage");
     }
 
+    private async Task LoadPowerBiReportsAsync()
+    {
+        try
+        {
+            // Load active Power BI reports for the ADR category
+            _powerBiReports = await PowerBiReportService.GetActiveReportsAsync("ADR");
+        }
+        catch
+        {
+            // Silently fail - reports are optional
+            _powerBiReports = new List<PowerBiReportDto>();
+        }
+    }
+
+    private async Task OpenReportInNewTab(string url)
+    {
+        await JSRuntime.InvokeVoidAsync("open", url, "_blank");
+    }
+
     private async void OnAuthenticationStateChanged(Task<AuthenticationState> task)
     {
         await LoadPermissionsAsync();
+        await LoadPowerBiReportsAsync();
         await InvokeAsync(StateHasChanged);
     }
 
@@ -57,6 +99,7 @@
     {
         // Permissions were refreshed from the API, reload and update UI
         await LoadPermissionsAsync();
+        await LoadPowerBiReportsAsync();
         await InvokeAsync(StateHasChanged);
     }
 

@@ -25,6 +25,7 @@ public class AdrController : ControllerBase
     private readonly IAdrAccountSyncService _syncService;
     private readonly IAdrOrchestratorService _orchestratorService;
     private readonly IAdrOrchestrationQueue _orchestrationQueue;
+    private readonly IBackgroundExportQueue _backgroundExportQueue;
     private readonly SchedulerDbContext _dbContext;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IConfiguration _configuration;
@@ -35,6 +36,7 @@ public class AdrController : ControllerBase
         IAdrAccountSyncService syncService,
         IAdrOrchestratorService orchestratorService,
         IAdrOrchestrationQueue orchestrationQueue,
+        IBackgroundExportQueue backgroundExportQueue,
         SchedulerDbContext dbContext,
         IHttpClientFactory httpClientFactory,
         IConfiguration configuration,
@@ -44,6 +46,7 @@ public class AdrController : ControllerBase
         _syncService = syncService;
         _orchestratorService = orchestratorService;
         _orchestrationQueue = orchestrationQueue;
+        _backgroundExportQueue = backgroundExportQueue;
         _dbContext = dbContext;
         _httpClientFactory = httpClientFactory;
         _configuration = configuration;
@@ -3456,6 +3459,7 @@ public class AdrController : ControllerBase
                     .ThenBy(r => r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : "")
                     .Select(r => new
                     {
+                        MasterVendorCode = r.AdrAccount != null ? r.AdrAccount.MasterVendorCode : null,
                         PrimaryVendorCode = r.AdrAccount != null ? r.AdrAccount.PrimaryVendorCode : null,
                         VMAccountNumber = r.AdrAccount != null ? r.AdrAccount.VMAccountNumber : null,
                         r.JobTypeId,
@@ -3471,14 +3475,14 @@ public class AdrController : ControllerBase
                     })
                     .ToListAsync();
 
-                var headers = new[] { "Primary Vendor Code", "Account Number", "Job Type", "Period Type", "Period Days", "Next Run", "Search Window Start", "Search Window End", "Enabled", "Overridden", "Overridden By", "Overridden Date" };
+                var headers = new[] { "Master Vendor Code", "Primary Vendor Code", "Account Number", "Job Type", "Period Type", "Period Days", "Next Run", "Search Window Start", "Search Window End", "Enabled", "Overridden", "Overridden By", "Overridden Date" };
 
                 if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
                 {
                     var csvBytes = ExcelExportHelper.CreateCsvExport(
                         string.Join(",", headers),
                         rules,
-                        r => $"{ExcelExportHelper.CsvEscape(r.PrimaryVendorCode)},{ExcelExportHelper.CsvEscape(r.VMAccountNumber)},{r.JobTypeId},{ExcelExportHelper.CsvEscape(r.PeriodType)},{r.PeriodDays},{r.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeStartDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? ""},{(r.IsEnabled ? "Yes" : "No")},{(r.IsManuallyOverridden ? "Yes" : "No")},{ExcelExportHelper.CsvEscape(r.OverriddenBy)},{r.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""}");
+                        r => $"{ExcelExportHelper.CsvEscape(r.MasterVendorCode)},{ExcelExportHelper.CsvEscape(r.PrimaryVendorCode)},{ExcelExportHelper.CsvEscape(r.VMAccountNumber)},{r.JobTypeId},{ExcelExportHelper.CsvEscape(r.PeriodType)},{r.PeriodDays},{r.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeStartDateTime?.ToString("MM/dd/yyyy") ?? ""},{r.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? ""},{(r.IsEnabled ? "Yes" : "No")},{(r.IsManuallyOverridden ? "Yes" : "No")},{ExcelExportHelper.CsvEscape(r.OverriddenBy)},{r.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""}");
                     return File(csvBytes, "text/csv", $"adr_rules_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
                 }
 
@@ -3490,6 +3494,7 @@ public class AdrController : ControllerBase
                     rules,
                     r => new object?[]
                     {
+                        r.MasterVendorCode ?? "",
                         r.PrimaryVendorCode ?? "",
                         r.VMAccountNumber ?? "",
                         r.JobTypeId,
@@ -3896,6 +3901,19 @@ public class AdrController : ControllerBase
             config.TestModeEnabled = request.TestModeEnabled ?? config.TestModeEnabled;
             config.TestModeMaxScrapingJobs = request.TestModeMaxScrapingJobs ?? config.TestModeMaxScrapingJobs;
             config.TestModeMaxCredentialChecks = request.TestModeMaxCredentialChecks ?? config.TestModeMaxCredentialChecks;
+            // Data Retention Settings
+            config.JobRetentionMonths = request.JobRetentionMonths ?? config.JobRetentionMonths;
+            config.JobExecutionRetentionMonths = request.JobExecutionRetentionMonths ?? config.JobExecutionRetentionMonths;
+            config.AuditLogRetentionDays = request.AuditLogRetentionDays ?? config.AuditLogRetentionDays;
+            config.IsArchivalEnabled = request.IsArchivalEnabled ?? config.IsArchivalEnabled;
+            config.ArchivalBatchSize = request.ArchivalBatchSize ?? config.ArchivalBatchSize;
+            config.ArchiveRetentionYears = request.ArchiveRetentionYears ?? config.ArchiveRetentionYears;
+            config.LogRetentionDays = request.LogRetentionDays ?? config.LogRetentionDays;
+            // Email Notification Settings
+            config.ErrorNotificationsEnabled = request.ErrorNotificationsEnabled ?? config.ErrorNotificationsEnabled;
+            config.ErrorNotificationRecipients = request.ErrorNotificationRecipients ?? config.ErrorNotificationRecipients;
+            config.OrchestrationNotificationsEnabled = request.OrchestrationNotificationsEnabled ?? config.OrchestrationNotificationsEnabled;
+            config.OrchestrationNotificationRecipients = request.OrchestrationNotificationRecipients ?? config.OrchestrationNotificationRecipients;
             config.ModifiedDateTime = DateTime.UtcNow;
             config.ModifiedBy = username;
             
@@ -3923,10 +3941,11 @@ public class AdrController : ControllerBase
     /// <param name="pageNumber">Page number for pagination (default: 1).</param>
     /// <param name="pageSize">Number of items per page (default: 50).</param>
     /// <param name="status">Filter by status: "current" (active now), "future" (starts in future), "expired" (end date passed), "inactive" (manually disabled), "all" (default).</param>
-    /// <param name="vendorCode">Optional filter by vendor code.</param>
+    /// <param name="masterVendorCode">Optional filter by master vendor code.</param>
+    /// <param name="primaryVendorCode">Optional filter by primary vendor code.</param>
     /// <param name="accountNumber">Optional filter by account number.</param>
     /// <param name="isActive">Optional filter by active status.</param>
-    /// <param name="sortColumn">Column to sort by: VendorCode, VMAccountNumber, EffectiveStartDate, EffectiveEndDate, CreatedDateTime, IsActive (default: EffectiveEndDate).</param>
+    /// <param name="sortColumn">Column to sort by: MasterVendorCode, PrimaryVendorCode, VMAccountNumber, EffectiveStartDate, EffectiveEndDate, CreatedDateTime, IsActive (default: EffectiveEndDate).</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
     /// <returns>A paginated list of blacklist entries.</returns>
     /// <response code="200">Returns the list of blacklist entries.</response>
@@ -3939,7 +3958,8 @@ public class AdrController : ControllerBase
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 50,
         [FromQuery] string? status = null,
-        [FromQuery] string? vendorCode = null,
+        [FromQuery] string? masterVendorCode = null,
+        [FromQuery] string? primaryVendorCode = null,
         [FromQuery] string? accountNumber = null,
         [FromQuery] bool? isActive = null,
         [FromQuery] string sortColumn = "EffectiveEndDate",
@@ -3984,9 +4004,13 @@ public class AdrController : ControllerBase
             }
             
             // Apply additional filters
-            if (!string.IsNullOrWhiteSpace(vendorCode))
+            if (!string.IsNullOrWhiteSpace(masterVendorCode))
             {
-                query = query.Where(b => b.PrimaryVendorCode != null && b.PrimaryVendorCode.Contains(vendorCode));
+                query = query.Where(b => b.MasterVendorCode != null && b.MasterVendorCode.Contains(masterVendorCode));
+            }
+            if (!string.IsNullOrWhiteSpace(primaryVendorCode))
+            {
+                query = query.Where(b => b.PrimaryVendorCode != null && b.PrimaryVendorCode.Contains(primaryVendorCode));
             }
             if (!string.IsNullOrWhiteSpace(accountNumber))
             {
@@ -4102,6 +4126,9 @@ public class AdrController : ControllerBase
             {
                 var matchingBlacklists = allBlacklists.Where(b =>
                 {
+                    // Match by MasterVendorCode
+                    if (!string.IsNullOrEmpty(b.MasterVendorCode) && b.MasterVendorCode == item.MasterVendorCode)
+                        return true;
                     // Match by PrimaryVendorCode
                     if (!string.IsNullOrEmpty(b.PrimaryVendorCode) && b.PrimaryVendorCode == item.PrimaryVendorCode)
                         return true;
@@ -4127,6 +4154,7 @@ public class AdrController : ControllerBase
                         ExclusionType = b.ExclusionType,
                         EffectiveStartDate = b.EffectiveStartDate,
                         EffectiveEndDate = b.EffectiveEndDate,
+                        MasterVendorCode = b.MasterVendorCode,
                         PrimaryVendorCode = b.PrimaryVendorCode,
                         VMAccountId = b.VMAccountId,
                         VMAccountNumber = b.VMAccountNumber,
@@ -4143,6 +4171,7 @@ public class AdrController : ControllerBase
                         ExclusionType = b.ExclusionType,
                         EffectiveStartDate = b.EffectiveStartDate,
                         EffectiveEndDate = b.EffectiveEndDate,
+                        MasterVendorCode = b.MasterVendorCode,
                         PrimaryVendorCode = b.PrimaryVendorCode,
                         VMAccountId = b.VMAccountId,
                         VMAccountNumber = b.VMAccountNumber,
@@ -4229,12 +4258,13 @@ public class AdrController : ControllerBase
             }
             
             // At least one exclusion criteria must be provided
-            if (string.IsNullOrWhiteSpace(request.PrimaryVendorCode) && 
+            if (string.IsNullOrWhiteSpace(request.MasterVendorCode) &&
+                string.IsNullOrWhiteSpace(request.PrimaryVendorCode) && 
                 !request.VMAccountId.HasValue && 
                 string.IsNullOrWhiteSpace(request.VMAccountNumber) && 
                 !request.CredentialId.HasValue)
             {
-                return BadRequest("At least one exclusion criteria (PrimaryVendorCode, VMAccountId, VMAccountNumber, or CredentialId) must be provided");
+                return BadRequest("At least one exclusion criteria (MasterVendorCode, PrimaryVendorCode, VMAccountId, VMAccountNumber, or CredentialId) must be provided");
             }
             
             // Both effective dates are required
@@ -4257,6 +4287,7 @@ public class AdrController : ControllerBase
             
             var entry = new AdrAccountBlacklist
             {
+                MasterVendorCode = request.MasterVendorCode,
                 PrimaryVendorCode = request.PrimaryVendorCode,
                 VMAccountId = request.VMAccountId,
                 VMAccountNumber = request.VMAccountNumber,
@@ -4278,8 +4309,8 @@ public class AdrController : ControllerBase
             await _unitOfWork.AdrAccountBlacklists.AddAsync(entry);
             await _unitOfWork.SaveChangesAsync();
             
-            _logger.LogInformation("Blacklist entry {Id} created by {User}. PrimaryVendorCode: {PrimaryVendorCode}, VMAccountId: {VMAccountId}, Reason: {Reason}",
-                entry.Id, username, request.PrimaryVendorCode, request.VMAccountId, request.Reason);
+            _logger.LogInformation("Blacklist entry {Id} created by {User}. MasterVendorCode: {MasterVendorCode}, PrimaryVendorCode: {PrimaryVendorCode}, VMAccountId: {VMAccountId}, Reason: {Reason}",
+                entry.Id, username, request.MasterVendorCode, request.PrimaryVendorCode, request.VMAccountId, request.Reason);
             
             return CreatedAtAction(nameof(GetBlacklistEntry), new { id = entry.Id }, entry);
         }
@@ -4320,6 +4351,7 @@ public class AdrController : ControllerBase
             var username = User.Identity?.Name ?? "System Created";
             
             // Update fields if provided
+            if (request.MasterVendorCode != null) entry.MasterVendorCode = request.MasterVendorCode;
             if (request.PrimaryVendorCode != null) entry.PrimaryVendorCode = request.PrimaryVendorCode;
             if (request.VMAccountId.HasValue) entry.VMAccountId = request.VMAccountId;
             if (request.VMAccountNumber != null) entry.VMAccountNumber = request.VMAccountNumber;
@@ -4332,12 +4364,13 @@ public class AdrController : ControllerBase
             if (request.Notes != null) entry.Notes = request.Notes;
             
             // Validate at least one exclusion criteria exists after update
-            if (string.IsNullOrWhiteSpace(entry.PrimaryVendorCode) && 
+            if (string.IsNullOrWhiteSpace(entry.MasterVendorCode) &&
+                string.IsNullOrWhiteSpace(entry.PrimaryVendorCode) && 
                 !entry.VMAccountId.HasValue && 
                 string.IsNullOrWhiteSpace(entry.VMAccountNumber) && 
                 !entry.CredentialId.HasValue)
             {
-                return BadRequest("At least one exclusion criteria (PrimaryVendorCode, VMAccountId, VMAccountNumber, or CredentialId) must be provided");
+                return BadRequest("At least one exclusion criteria (MasterVendorCode, PrimaryVendorCode, VMAccountId, VMAccountNumber, or CredentialId) must be provided");
             }
             
             // Validate both effective dates are set
@@ -4422,7 +4455,8 @@ public class AdrController : ControllerBase
     /// Only Admin and Super Admin users can access this endpoint.
     /// </summary>
     /// <param name="status">Filter by status: "current", "future", "expired", "inactive", or "all" (default).</param>
-    /// <param name="vendorCode">Optional filter by vendor code.</param>
+    /// <param name="masterVendorCode">Optional filter by master vendor code.</param>
+    /// <param name="primaryVendorCode">Optional filter by primary vendor code.</param>
     /// <param name="accountNumber">Optional filter by account number.</param>
     /// <returns>Excel file containing blacklist entries.</returns>
     /// <response code="200">Returns the Excel file.</response>
@@ -4433,7 +4467,8 @@ public class AdrController : ControllerBase
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult> ExportBlacklist(
         [FromQuery] string? status = null,
-        [FromQuery] string? vendorCode = null,
+        [FromQuery] string? masterVendorCode = null,
+        [FromQuery] string? primaryVendorCode = null,
         [FromQuery] string? accountNumber = null)
     {
         try
@@ -4464,9 +4499,13 @@ public class AdrController : ControllerBase
             }
             
             // Apply additional filters
-            if (!string.IsNullOrWhiteSpace(vendorCode))
+            if (!string.IsNullOrWhiteSpace(masterVendorCode))
             {
-                query = query.Where(b => b.PrimaryVendorCode != null && b.PrimaryVendorCode.Contains(vendorCode));
+                query = query.Where(b => b.MasterVendorCode != null && b.MasterVendorCode.Contains(masterVendorCode));
+            }
+            if (!string.IsNullOrWhiteSpace(primaryVendorCode))
+            {
+                query = query.Where(b => b.PrimaryVendorCode != null && b.PrimaryVendorCode.Contains(primaryVendorCode));
             }
             if (!string.IsNullOrWhiteSpace(accountNumber))
             {
@@ -4479,7 +4518,7 @@ public class AdrController : ControllerBase
             
             var headers = new[]
             {
-                "ID", "Primary Vendor Code", "VM Account ID", "Account Number", "Credential ID",
+                "ID", "Master Vendor Code", "Primary Vendor Code", "VM Account ID", "Account Number", "Credential ID",
                 "Exclusion Type", "Reason", "Is Active", "Effective Start", "Effective End",
                 "Blacklisted By", "Blacklisted Date", "Notes", "Created By", "Created Date"
             };
@@ -4492,6 +4531,7 @@ public class AdrController : ControllerBase
                 entry => new object?[]
                 {
                     entry.Id,
+                    entry.MasterVendorCode,
                     entry.PrimaryVendorCode,
                     entry.VMAccountId,
                     entry.VMAccountNumber,
@@ -4516,6 +4556,115 @@ public class AdrController : ControllerBase
             _logger.LogError(ex, "Error exporting ADR blacklist entries");
             return StatusCode(500, "An error occurred while exporting ADR blacklist entries");
         }
+    }
+
+        #endregion
+
+        #region Background Export Endpoints
+
+    /// <summary>
+    /// Starts a background export for large datasets. Returns immediately with a request ID
+    /// that can be used to check status and download the completed export.
+    /// </summary>
+    /// <param name="request">The export request parameters.</param>
+    /// <returns>The request ID for tracking the export.</returns>
+    /// <response code="200">Export queued successfully.</response>
+    /// <response code="400">Invalid export type or format.</response>
+    /// <response code="500">An error occurred while queuing the export.</response>
+    [HttpPost("export/start")]
+    [Authorize]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<IActionResult> StartBackgroundExport([FromBody] BackgroundExportRequest request)
+    {
+        try
+        {
+            var validTypes = new[] { "accounts", "jobs", "rules", "blacklist" };
+            if (!validTypes.Contains(request.ExportType?.ToLowerInvariant()))
+            {
+                return BadRequest($"Invalid export type. Valid types are: {string.Join(", ", validTypes)}");
+            }
+
+            var validFormats = new[] { "excel", "csv" };
+            if (!validFormats.Contains(request.Format?.ToLowerInvariant()))
+            {
+                return BadRequest($"Invalid format. Valid formats are: {string.Join(", ", validFormats)}");
+            }
+
+            var exportRequest = new ExportRequest
+            {
+                ExportType = request.ExportType!.ToLowerInvariant(),
+                Format = request.Format!.ToLowerInvariant(),
+                Filters = request.Filters ?? new Dictionary<string, string?>(),
+                RequestedBy = User.GetEmail() ?? "Unknown",
+                RequestedAt = DateTime.UtcNow
+            };
+
+            var requestId = await _backgroundExportQueue.QueueAsync(exportRequest);
+
+            _logger.LogInformation("Background export queued: {RequestId} for {ExportType} by {User}",
+                requestId, request.ExportType, exportRequest.RequestedBy);
+
+            return Ok(new { requestId, message = "Export queued successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error starting background export");
+            return StatusCode(500, "An error occurred while starting the export");
+        }
+    }
+
+    /// <summary>
+    /// Gets the status of a background export request.
+    /// </summary>
+    /// <param name="requestId">The export request ID.</param>
+    /// <returns>The current status of the export.</returns>
+    /// <response code="200">Returns the export status.</response>
+    /// <response code="404">Export request not found.</response>
+    [HttpGet("export/status/{requestId}")]
+    [Authorize]
+    [ProducesResponseType(typeof(ExportStatus), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public IActionResult GetExportStatus(string requestId)
+    {
+        var status = _backgroundExportQueue.GetStatus(requestId);
+        if (status == null)
+        {
+            return NotFound("Export request not found");
+        }
+
+        return Ok(status);
+    }
+
+    /// <summary>
+    /// Downloads a completed background export.
+    /// </summary>
+    /// <param name="requestId">The export request ID.</param>
+    /// <returns>The exported file.</returns>
+    /// <response code="200">Returns the exported file.</response>
+    /// <response code="404">Export request not found or not completed.</response>
+    [HttpGet("export/download/{requestId}")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public IActionResult DownloadExport(string requestId)
+    {
+        var (data, status) = _backgroundExportQueue.GetExportData(requestId);
+        
+        if (status == null)
+        {
+            return NotFound("Export request not found");
+        }
+
+        if (status.Status != "Completed" || data == null)
+        {
+            return NotFound($"Export not ready. Current status: {status.Status}");
+        }
+
+        _backgroundExportQueue.MarkDownloaded(requestId);
+
+        return File(data, status.ContentType ?? "application/octet-stream", status.FileName ?? "export");
     }
 
         #endregion
@@ -4880,6 +5029,27 @@ public class BackgroundOrchestrationRequest
     public bool CheckAllScrapedStatuses { get; set; } = false;
 }
 
+/// <summary>
+/// Request to start a background export operation.
+/// </summary>
+public class BackgroundExportRequest
+{
+    /// <summary>
+    /// Type of export: accounts, jobs, rules, blacklist
+    /// </summary>
+    public string? ExportType { get; set; }
+    
+    /// <summary>
+    /// Export format: excel or csv
+    /// </summary>
+    public string? Format { get; set; } = "excel";
+    
+    /// <summary>
+    /// Optional filters to apply to the export (same as query parameters for the list endpoints)
+    /// </summary>
+    public Dictionary<string, string?>? Filters { get; set; }
+}
+
 public class UpdateAccountBillingRequest
 {
     /// <summary>
@@ -4986,6 +5156,19 @@ public class UpdateAdrConfigurationRequest
     public bool? TestModeEnabled { get; set; }
     public int? TestModeMaxScrapingJobs { get; set; }
     public int? TestModeMaxCredentialChecks { get; set; }
+    // Data Retention Settings
+    public int? JobRetentionMonths { get; set; }
+    public int? JobExecutionRetentionMonths { get; set; }
+    public int? AuditLogRetentionDays { get; set; }
+    public bool? IsArchivalEnabled { get; set; }
+    public int? ArchivalBatchSize { get; set; }
+    public int? ArchiveRetentionYears { get; set; }
+    public int? LogRetentionDays { get; set; }
+    // Email Notification Settings
+    public bool? ErrorNotificationsEnabled { get; set; }
+    public string? ErrorNotificationRecipients { get; set; }
+    public bool? OrchestrationNotificationsEnabled { get; set; }
+    public string? OrchestrationNotificationRecipients { get; set; }
 }
 
 /// <summary>
@@ -4993,6 +5176,7 @@ public class UpdateAdrConfigurationRequest
 /// </summary>
 public class CreateBlacklistEntryRequest
 {
+    public string? MasterVendorCode { get; set; }
     public string? PrimaryVendorCode { get; set; }
     public long? VMAccountId { get; set; }
     public string? VMAccountNumber { get; set; }
@@ -5009,6 +5193,7 @@ public class CreateBlacklistEntryRequest
 /// </summary>
 public class UpdateBlacklistEntryRequest
 {
+    public string? MasterVendorCode { get; set; }
     public string? PrimaryVendorCode { get; set; }
     public long? VMAccountId { get; set; }
     public string? VMAccountNumber { get; set; }
@@ -5046,6 +5231,11 @@ public class BlacklistCheckItem
     /// Job ID (for job-based checks)
     /// </summary>
     public int? JobId { get; set; }
+    
+    /// <summary>
+    /// Master vendor code to match against blacklist entries
+    /// </summary>
+    public string? MasterVendorCode { get; set; }
     
     /// <summary>
     /// Primary vendor code to match against blacklist entries
@@ -5124,6 +5314,7 @@ public class BlacklistSummary
     public string ExclusionType { get; set; } = string.Empty;
     public DateTime? EffectiveStartDate { get; set; }
     public DateTime? EffectiveEndDate { get; set; }
+    public string? MasterVendorCode { get; set; }
     public string? PrimaryVendorCode { get; set; }
     public long? VMAccountId { get; set; }
     public string? VMAccountNumber { get; set; }
