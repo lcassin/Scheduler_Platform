@@ -1,0 +1,19 @@
+flowchart TB
+    subgraph "Job Types"
+        Schedule([Schedule]) --> Type{Job Type}
+        Type --> SQL[SQL Job<br/>Run database queries]
+        Type --> HTTP[HTTP Job<br/>Call web APIs]
+        Type --> PS[PowerShell Job<br/>Run scripts]
+        
+        SQL --> DB[(Database)]
+        HTTP --> API[External API]
+        PS --> Server[Server]
+    end
+    
+    style Schedule fill:#4CAF50,color:white
+    style SQL fill:#e3f2fd
+    style HTTP fill:#fff3e0
+    style PS fill:#f3e5f5
+    style DB fill:#2196F3,color:white
+    style API fill:#ff9800,color:white
+    style Server fill:#9c27b0,color:white

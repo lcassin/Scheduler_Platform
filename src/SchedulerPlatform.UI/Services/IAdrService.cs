@@ -118,4 +118,27 @@ public interface IAdrService
     /// Gets the current test mode status from the ADR configuration.
     /// </summary>
     Task<TestModeStatus> GetTestModeStatusAsync();
+    
+    /// <summary>
+    /// Starts a background export operation for large datasets.
+    /// </summary>
+    /// <param name="exportType">Type of export: accounts, jobs, rules, blacklist</param>
+    /// <param name="format">Export format: excel or csv</param>
+    /// <param name="filters">Optional filters to apply</param>
+    /// <returns>The request ID for tracking the export</returns>
+    Task<BackgroundExportStartResult> StartBackgroundExportAsync(string exportType, string format = "excel", Dictionary<string, string?>? filters = null);
+    
+    /// <summary>
+    /// Gets the status of a background export operation.
+    /// </summary>
+    /// <param name="requestId">The export request ID</param>
+    /// <returns>The current status of the export</returns>
+    Task<BackgroundExportStatus?> GetBackgroundExportStatusAsync(string requestId);
+    
+    /// <summary>
+    /// Downloads a completed background export.
+    /// </summary>
+    /// <param name="requestId">The export request ID</param>
+    /// <returns>The exported file bytes</returns>
+    Task<byte[]?> DownloadBackgroundExportAsync(string requestId);
 }

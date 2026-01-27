@@ -48,9 +48,20 @@ public class LogsController : ControllerBase
     {
         try
         {
+            // Debug logging for intermittent 403 issues
+            var isSystemAdmin = User.IsSystemAdmin();
+            var isAdmin = User.IsAdmin();
+            var role = User.FindFirst("role")?.Value;
+            var email = User.GetEmail();
+            var isSystemAdminClaim = User.FindFirst("is_system_admin")?.Value;
+            
+            _logger.LogDebug("LogsController.GetLogFiles auth check - Email: {Email}, Role: {Role}, is_system_admin claim: {IsSystemAdminClaim}, IsSystemAdmin(): {IsSystemAdmin}, IsAdmin(): {IsAdmin}",
+                email, role, isSystemAdminClaim, isSystemAdmin, isAdmin);
+            
             if (!User.IsAdminOrAbove())
             {
-                _logger.LogWarning("Non-admin user attempted to access log files");
+                _logger.LogWarning("Non-admin user attempted to access log files. Email: {Email}, Role: {Role}, is_system_admin: {IsSystemAdminClaim}, All claims: {Claims}",
+                    email, role, isSystemAdminClaim, string.Join(", ", User.Claims.Select(c => $"{c.Type}={c.Value}")));
                 return Forbid();
             }
 

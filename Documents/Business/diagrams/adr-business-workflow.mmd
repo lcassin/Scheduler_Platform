@@ -1,0 +1,25 @@
+flowchart TB
+    subgraph "ADR Process Overview"
+        Start([Daily Orchestration Starts]) --> Sync
+        
+        Sync[Sync Accounts<br/>Import vendor accounts from source system] --> CreateJobs
+        
+        CreateJobs[Create Jobs<br/>Identify accounts due for invoice retrieval] --> CredCheck
+        
+        CredCheck[Verify Credentials<br/>Check login credentials 7 days before due date] --> SendRequests
+        
+        SendRequests[Send ADR Requests<br/>Request invoice documents on due date] --> CheckStatus
+        
+        CheckStatus[Check Status<br/>Monitor request completion] --> Cleanup
+        
+        Cleanup[Cleanup<br/>Finalize stale jobs] --> End([Orchestration Complete])
+    end
+    
+    style Start fill:#4CAF50,color:white
+    style End fill:#4CAF50,color:white
+    style Sync fill:#e3f2fd
+    style CreateJobs fill:#fff3e0
+    style CredCheck fill:#f3e5f5
+    style SendRequests fill:#e8f5e9
+    style CheckStatus fill:#fce4ec
+    style Cleanup fill:#f5f5f5

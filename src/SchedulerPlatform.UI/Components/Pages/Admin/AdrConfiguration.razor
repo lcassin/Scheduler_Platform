@@ -261,6 +261,43 @@
                     
                     <MudItem xs="12">
                         <MudDivider Class="my-4" />
+                        <MudText Typo="Typo.h6" Class="mb-2">Email Notification Settings</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-2">
+                            Configure email recipients for error and orchestration notifications. 
+                            Separate multiple email addresses with semicolons (;).
+                        </MudText>
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6">
+                        <MudSwitch @bind-Value="_config.ErrorNotificationsEnabled" 
+                                   Label="500 Error Notifications Enabled" 
+                                   Color="Color.Primary" />
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_config.ErrorNotificationRecipients" 
+                                      Label="500 Error Notification Recipients" 
+                                      Variant="Variant.Outlined"
+                                      Disabled="@(!_config.ErrorNotificationsEnabled)"
+                                      HelperText="Email addresses for 500 error notifications (semicolon-separated)" />
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6">
+                        <MudSwitch @bind-Value="_config.OrchestrationNotificationsEnabled" 
+                                   Label="Orchestration Notifications Enabled" 
+                                   Color="Color.Primary" />
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_config.OrchestrationNotificationRecipients" 
+                                      Label="Orchestration Notification Recipients" 
+                                      Variant="Variant.Outlined"
+                                      Disabled="@(!_config.OrchestrationNotificationsEnabled)"
+                                      HelperText="Email addresses for orchestration failure/summary notifications (semicolon-separated)" />
+                    </MudItem>
+                    
+                    <MudItem xs="12">
+                        <MudDivider Class="my-4" />
                         <MudText Typo="Typo.h6" Class="mb-2">Notes</MudText>
                     </MudItem>
                     
@@ -408,6 +445,11 @@
         public bool TestModeEnabled { get; set; } = false;
         public int TestModeMaxScrapingJobs { get; set; } = 50;
         public int TestModeMaxCredentialChecks { get; set; } = 50;
+        // Email Notification Settings
+        public bool ErrorNotificationsEnabled { get; set; } = true;
+        public string? ErrorNotificationRecipients { get; set; }
+        public bool OrchestrationNotificationsEnabled { get; set; } = true;
+        public string? OrchestrationNotificationRecipients { get; set; }
         public string? ModifiedBy { get; set; }
         public DateTime? ModifiedDateTime { get; set; }
     }

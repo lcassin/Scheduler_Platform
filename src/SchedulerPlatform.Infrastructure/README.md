@@ -10,6 +10,34 @@
 - **CancelledBy Tracking**: JobExecutions table now tracks who cancelled running executions
 - **SQL_Database_Creation.sql Updated**: Production creation script includes all latest migrations and user seeding
 
+## Recent Updates (December 2025)
+
+- **AdrAccount Table**: New table for vendor accounts synced from VendorCredNewUAT with billing patterns and scrape schedules
+- **AdrJob Table**: New table for individual scraping jobs per account/billing period with unique filtered index
+- **AdrJobExecution Table**: New table for execution history (credential checks, scrape requests) supporting idempotency
+- **AdrOrchestrationRun Table**: New table for orchestration run history with step-by-step progress tracking
+- **AdrConfiguration Table**: New table for global ADR settings (parallel workers, timeouts, etc.)
+- **Database Indexes**: Added comprehensive indexes on AdrAccount and AdrJob tables for improved query performance with large datasets
+- **EF Core Retry-on-Failure**: Added automatic retry logic for Azure SQL transient failures
+- **Batched Processing**: ADR sync and orchestration services use batched database operations for handling 200k+ accounts
+- **Client ExternalClientId Column**: Added ExternalClientId column to Clients table for external system mapping
+- **User TimeZone Column**: Added TimeZone column to Users table for timezone preference
+
+## Recent Updates (January 2026)
+
+- **AdrConfiguration Table Updates**: Added email notification settings (ErrorNotificationsEnabled, ErrorNotificationRecipients, OrchestrationNotificationsEnabled, OrchestrationNotificationRecipients) and test mode settings (TestModeEnabled, TestModeMaxScrapingJobs, TestModeMaxCredentialChecks)
+- **AdrAccountBlacklist Table**: New table for excluding vendors, accounts, or credentials from ADR processing with flexible date ranges and exclusion types
+- **AdrAccountRule Table**: New table for account-level scheduling rules per job type, separating scheduling configuration from account identity
+- **AdrJobType Table**: New table for database-driven job type definitions (credential check, document download)
+- **PrimaryVendorCode/MasterVendorCode Columns**: Renamed VendorCode to PrimaryVendorCode and added MasterVendorCode across AdrAccount and AdrJob tables
+- **AdrJob Rule Tracking**: Added AdrAccountRuleId column to AdrJob table for tracking which rule created each job
+- **AdrJob Manual Request Columns**: Added IsManualRequest and IsHighPriority columns for manual ADR requests
+- **AdrOrchestrationRun Step Tracking**: Added step duration and sub-step progress columns
+- **EmailService Enhancements**: Added methods for sending error notifications with attachments and orchestration summary emails
+- **SQL Migration Scripts**: Added `SQL_Migration_NotificationRecipients.sql` for adding email notification columns to AdrConfiguration
+- **Archive Tables**: Added AdrJobArchive, AdrJobExecutionArchive, JobExecutionArchive, AuditLogArchive tables for data archival
+- **AuditLogInterceptor**: EF Core SaveChanges interceptor automatically logging all entity changes
+
 ## Business Overview
 
 The Infrastructure project is the "data warehouse" of the SchedulerPlatform - it handles all interactions with the SQL Server database and external services like email. When the application needs to save a schedule, retrieve job execution history, or send an email notification, this project does the work.

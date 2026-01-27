@@ -20,6 +20,9 @@ public interface IUnitOfWork : IDisposable
     IRepository<Entities.AdrAccountBlacklist> AdrAccountBlacklists { get; }
     IRepository<Entities.AdrAccountRule> AdrAccountRules { get; }
     
+    // Power BI Reports
+    IRepository<Entities.PowerBiReport> PowerBiReports { get; }
+    
     Task<int> SaveChangesAsync();
     Task BeginTransactionAsync();
     Task CommitTransactionAsync();
