@@ -3896,6 +3896,19 @@ public class AdrController : ControllerBase
             config.TestModeEnabled = request.TestModeEnabled ?? config.TestModeEnabled;
             config.TestModeMaxScrapingJobs = request.TestModeMaxScrapingJobs ?? config.TestModeMaxScrapingJobs;
             config.TestModeMaxCredentialChecks = request.TestModeMaxCredentialChecks ?? config.TestModeMaxCredentialChecks;
+            // Data Retention Settings
+            config.JobRetentionMonths = request.JobRetentionMonths ?? config.JobRetentionMonths;
+            config.JobExecutionRetentionMonths = request.JobExecutionRetentionMonths ?? config.JobExecutionRetentionMonths;
+            config.AuditLogRetentionDays = request.AuditLogRetentionDays ?? config.AuditLogRetentionDays;
+            config.IsArchivalEnabled = request.IsArchivalEnabled ?? config.IsArchivalEnabled;
+            config.ArchivalBatchSize = request.ArchivalBatchSize ?? config.ArchivalBatchSize;
+            config.ArchiveRetentionYears = request.ArchiveRetentionYears ?? config.ArchiveRetentionYears;
+            config.LogRetentionDays = request.LogRetentionDays ?? config.LogRetentionDays;
+            // Email Notification Settings
+            config.ErrorNotificationsEnabled = request.ErrorNotificationsEnabled ?? config.ErrorNotificationsEnabled;
+            config.ErrorNotificationRecipients = request.ErrorNotificationRecipients ?? config.ErrorNotificationRecipients;
+            config.OrchestrationNotificationsEnabled = request.OrchestrationNotificationsEnabled ?? config.OrchestrationNotificationsEnabled;
+            config.OrchestrationNotificationRecipients = request.OrchestrationNotificationRecipients ?? config.OrchestrationNotificationRecipients;
             config.ModifiedDateTime = DateTime.UtcNow;
             config.ModifiedBy = username;
             
@@ -4986,6 +4999,19 @@ public class UpdateAdrConfigurationRequest
     public bool? TestModeEnabled { get; set; }
     public int? TestModeMaxScrapingJobs { get; set; }
     public int? TestModeMaxCredentialChecks { get; set; }
+    // Data Retention Settings
+    public int? JobRetentionMonths { get; set; }
+    public int? JobExecutionRetentionMonths { get; set; }
+    public int? AuditLogRetentionDays { get; set; }
+    public bool? IsArchivalEnabled { get; set; }
+    public int? ArchivalBatchSize { get; set; }
+    public int? ArchiveRetentionYears { get; set; }
+    public int? LogRetentionDays { get; set; }
+    // Email Notification Settings
+    public bool? ErrorNotificationsEnabled { get; set; }
+    public string? ErrorNotificationRecipients { get; set; }
+    public bool? OrchestrationNotificationsEnabled { get; set; }
+    public string? OrchestrationNotificationRecipients { get; set; }
 }
 
 /// <summary>
