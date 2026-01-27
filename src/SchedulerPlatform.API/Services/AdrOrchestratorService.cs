@@ -1313,8 +1313,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         }
                         else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
                         {
+                            // Don't set ScrapingCompletedDateTime - NeedsReview can be fixed downstream
+                            // and the job should be re-checked daily until it's resolved or window expires
                             job.Status = "NeedsReview";
-                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
                             result.JobsNeedingReview++;
                         }
                     }
@@ -1658,8 +1659,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
                         {
                             // StatusId 9: Needs Human Review
+                            // Don't set ScrapingCompletedDateTime - NeedsReview can be fixed downstream
+                            // and the job should be re-checked daily until it's resolved or window expires
                             job.Status = "NeedsReview";
-                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
                             result.JobsNeedingReview++;
                         }
                         else if (statusResult.StatusId == 3 || statusResult.StatusId == 4 || statusResult.StatusId == 5 ||

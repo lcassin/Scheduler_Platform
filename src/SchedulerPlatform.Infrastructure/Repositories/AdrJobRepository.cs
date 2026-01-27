@@ -150,11 +150,12 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
     {
                 // Include "StatusCheckInProgress" to recover jobs that were interrupted mid-step
                 // These jobs already had the API called but the process crashed before updating status
+                // Include "NeedsReview" because the status can be fixed downstream and should be re-checked daily
                 var checkDate = currentDate.AddDays(-followUpDelayDays);
                 return await _dbSet
                     .Where(j => !j.IsDeleted && 
                                 !j.IsManualRequest && // Exclude manual jobs from orchestration
-                                (j.Status == "ScrapeRequested" || j.Status == "StatusCheckInProgress") &&
+                                (j.Status == "ScrapeRequested" || j.Status == "StatusCheckInProgress" || j.Status == "NeedsReview") &&
                                 j.AdrStatusId.HasValue &&
                                 !j.ScrapingCompletedDateTime.HasValue &&
                                 j.ModifiedDateTime <= checkDate)
@@ -471,11 +472,13 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
         // Manual status check: Get ALL jobs that have been through scraping, regardless of timing
         // This is used by the "Check Statuses Only" button to check status for all scraped jobs
         // Since there's no cost to check status, we can check all of them
+        // Include "NeedsReview" because the status can be fixed downstream and should be re-checked
         return await _dbSet
             .Where(j => !j.IsDeleted &&
                         // Include all jobs that have been scraped or are in scrape-related statuses
                         (j.Status == "ScrapeRequested" || 
-                         j.Status == "StatusCheckInProgress"))
+                         j.Status == "StatusCheckInProgress" ||
+                         j.Status == "NeedsReview"))
             .Include(j => j.AdrAccount)
             .ToListAsync();
     }
