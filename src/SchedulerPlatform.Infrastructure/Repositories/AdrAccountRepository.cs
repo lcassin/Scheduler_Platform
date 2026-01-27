@@ -192,24 +192,36 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
         return await query.CountAsync();
     }
 
-    public async Task<IEnumerable<AdrAccount>> GetDueAccountsWithRulesAsync()
+    public async Task<IEnumerable<AdrAccount>> GetDueAccountsWithRulesAsync(int credentialCheckLeadDays = 7)
     {
         // Now query based on RULE scheduling data, not account data
         // Rules drive the orchestrator per BRD requirements
+        //
+        // TIMING FIX: Jobs must be created BEFORE NextRunDate so credential verification can happen
+        // in the 7-day window leading up to NextRunDate. Previously, jobs were only created when
+        // NextRunDate <= today, which meant they never qualified for credential verification
+        // (which requires NextRunDate > today).
+        //
+        // Now jobs are created when NextRunDate is within the credential check window:
+        // - NextRunDate <= today + credentialCheckLeadDays (within the window or already due)
+        // This allows:
+        // - Day 1-7 before NextRunDate: Job exists, credential verification can run
+        // - On NextRunDate: Scraping begins
         var today = DateTime.UtcNow.Date;
+        var credentialCheckCutoff = today.AddDays(credentialCheckLeadDays);
         
         return await _dbSet
             .Include(a => a.AdrAccountRules.Where(r => !r.IsDeleted && r.IsEnabled))
             .Where(a =>
                 !a.IsDeleted &&
                 a.HistoricalBillingStatus != "Missing" &&
-                // Account must have at least one enabled rule that is due
+                // Account must have at least one enabled rule that is due or within credential check window
                 a.AdrAccountRules.Any(r => 
                     !r.IsDeleted && 
                     r.IsEnabled &&
                     r.JobTypeId == 2 && // DownloadInvoice
                     r.NextRunDateTime.HasValue &&
-                    r.NextRunDateTime.Value.Date <= today &&
+                    r.NextRunDateTime.Value.Date <= credentialCheckCutoff &&
                     r.NextRangeStartDateTime.HasValue &&
                     r.NextRangeEndDateTime.HasValue))
             .ToListAsync();

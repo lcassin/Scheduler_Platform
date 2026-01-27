@@ -300,7 +300,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             }
 
             // Use the new method that includes AdrAccountRules for rule tracking per BRD requirements
-            var dueAccounts = await _unitOfWork.AdrAccounts.GetDueAccountsWithRulesAsync();
+            // Pass credentialCheckLeadDays so jobs are created BEFORE NextRunDate, allowing credential verification
+            var credentialCheckLeadDays = GetCredentialCheckLeadDays();
+            var dueAccounts = await _unitOfWork.AdrAccounts.GetDueAccountsWithRulesAsync(credentialCheckLeadDays);
 
             int processedSinceLastSave = 0;
             int batchNumber = 1;
