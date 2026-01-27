@@ -1287,7 +1287,41 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.AdrStatusId = statusResult.StatusId;
                     job.AdrStatusDescription = statusResult.StatusDescription;
 
-                    if (statusResult.IsFinal)
+                    // Determine if this is a credential verification job or a scraping job
+                    var isCredentialJob = job.Status == "CredentialCheckInProgress" || job.Status == "CredentialFailed";
+                    
+                    if (isCredentialJob)
+                    {
+                        // Handle credential verification status check
+                        if (statusResult.StatusId == (int)AdrStatus.LoginAttemptSucceeded)
+                        {
+                            // Credential verification succeeded
+                            job.Status = "CredentialVerified";
+                            job.CredentialVerifiedDateTime = DateTime.UtcNow;
+                            result.JobsCompleted++;
+                            _logger.LogInformation(
+                                "Job {JobId}: Credential verification succeeded (StatusId 12)",
+                                job.Id);
+                        }
+                        else if (statusResult.IsError || statusResult.StatusId == 3 || statusResult.StatusId == 4 || 
+                                 statusResult.StatusId == 5 || statusResult.StatusId == 7 || statusResult.StatusId == 8)
+                        {
+                            // Credential verification failed - mark as CredentialFailed but keep checking daily
+                            // (helpdesk may fix the credentials and we should re-check)
+                            job.Status = "CredentialFailed";
+                            result.JobsNeedingReview++;
+                            _logger.LogInformation(
+                                "Job {JobId}: Credential verification failed (StatusId {StatusId}: {Description}), will re-check daily",
+                                job.Id, statusResult.StatusId, statusResult.StatusDescription);
+                        }
+                        else
+                        {
+                            // Still processing - keep as CredentialCheckInProgress
+                            job.Status = "CredentialCheckInProgress";
+                            result.JobsStillProcessing++;
+                        }
+                    }
+                    else if (statusResult.IsFinal)
                     {
                         if (statusResult.StatusId == (int)AdrStatus.Complete)
                         {
@@ -1631,7 +1665,41 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.LastStatusCheckResponse = TruncateResponse(statusResult.RawResponse, 1000);
                     job.LastStatusCheckDateTime = DateTime.UtcNow;
 
-                    if (statusResult.IsFinal)
+                    // Determine if this is a credential verification job or a scraping job
+                    var isCredentialJob = job.Status == "CredentialCheckInProgress" || job.Status == "CredentialFailed";
+                    
+                    if (isCredentialJob)
+                    {
+                        // Handle credential verification status check
+                        if (statusResult.StatusId == (int)AdrStatus.LoginAttemptSucceeded)
+                        {
+                            // Credential verification succeeded
+                            job.Status = "CredentialVerified";
+                            job.CredentialVerifiedDateTime = DateTime.UtcNow;
+                            result.JobsCompleted++;
+                            _logger.LogInformation(
+                                "Job {JobId}: Credential verification succeeded (StatusId 12)",
+                                job.Id);
+                        }
+                        else if (statusResult.IsError || statusResult.StatusId == 3 || statusResult.StatusId == 4 || 
+                                 statusResult.StatusId == 5 || statusResult.StatusId == 7 || statusResult.StatusId == 8)
+                        {
+                            // Credential verification failed - mark as CredentialFailed but keep checking daily
+                            // (helpdesk may fix the credentials and we should re-check)
+                            job.Status = "CredentialFailed";
+                            result.JobsNeedingReview++;
+                            _logger.LogInformation(
+                                "Job {JobId}: Credential verification failed (StatusId {StatusId}: {Description}), will re-check daily",
+                                job.Id, statusResult.StatusId, statusResult.StatusDescription);
+                        }
+                        else
+                        {
+                            // Still processing - keep as CredentialCheckInProgress
+                            job.Status = "CredentialCheckInProgress";
+                            result.JobsStillProcessing++;
+                        }
+                    }
+                    else if (statusResult.IsFinal)
                     {
                         if (statusResult.StatusId == (int)AdrStatus.Complete)
                         {
