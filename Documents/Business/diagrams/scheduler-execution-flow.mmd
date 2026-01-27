@@ -1,0 +1,22 @@
+flowchart TB
+    subgraph "Job Execution Flow"
+        Trigger([Schedule Triggers]) --> Check{Job Enabled?}
+        Check -->|No| Skip[Skip Execution]
+        Check -->|Yes| Execute[Execute Job]
+        Execute --> Result{Success?}
+        Result -->|Yes| Success[Record Success<br/>Send success email]
+        Result -->|No| Retry{Retries left?}
+        Retry -->|Yes| Wait[Wait & Retry]
+        Wait --> Execute
+        Retry -->|No| Fail[Record Failure<br/>Send failure email]
+        Success --> Next[Calculate Next Run Time]
+        Fail --> Next
+        Next --> Done([Wait for Next Trigger])
+    end
+    
+    style Trigger fill:#4CAF50,color:white
+    style Done fill:#4CAF50,color:white
+    style Execute fill:#2196F3,color:white
+    style Success fill:#4CAF50,color:white
+    style Fail fill:#f44336,color:white
+    style Skip fill:#9e9e9e,color:white
