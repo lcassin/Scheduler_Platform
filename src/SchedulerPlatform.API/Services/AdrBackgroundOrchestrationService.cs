@@ -418,10 +418,21 @@ public class AdrBackgroundOrchestrationService : BackgroundService
             // Step 2: Create jobs
             if (request.RunCreateJobs)
             {
-                _queue.UpdateStatus(request.RequestId, s => s.CurrentStep = "Creating jobs");
+                _queue.UpdateStatus(request.RequestId, s => 
+                {
+                    s.CurrentStep = "Creating jobs";
+                    s.CurrentStepProgress = 0;
+                    s.CurrentStepTotal = 0;
+                });
                 _logger.LogInformation("Request {RequestId}: Starting job creation", request.RequestId);
                 
-                var jobResult = await orchestratorService.CreateJobsForDueAccountsAsync(token);
+                var jobResult = await orchestratorService.CreateJobsForDueAccountsAsync(
+                    (progress, total) => _queue.UpdateStatus(request.RequestId, s => 
+                    {
+                        s.CurrentStepProgress = progress;
+                        s.CurrentStepTotal = total;
+                    }),
+                    token);
                 _queue.UpdateStatus(request.RequestId, s => s.JobCreationResult = jobResult);
                 
                 _logger.LogInformation(
