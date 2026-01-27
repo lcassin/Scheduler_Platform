@@ -462,7 +462,14 @@
                                 <MudTimelineItem Color="@GetStepColor("Creating jobs", _currentStatus.Status)" Icon="@GetStepIcon("Creating jobs", _currentStatus.Status)">
                                     <ItemContent>
                                         <MudText Typo="Typo.body2">Create Jobs</MudText>
-                                        @if (_currentStatus.Status.JobCreationResult != null)
+                                        @if (_currentStatus.Status.CurrentStep == "Creating jobs" && _currentStatus.Status.CurrentStepTotal > 0)
+                                        {
+                                            <MudText Typo="Typo.caption" Color="Color.Info">
+                                                Processing: @_currentStatus.Status.CurrentStepProgress.ToString("N0") / @_currentStatus.Status.CurrentStepTotal.ToString("N0") (@((_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal).ToString("F1"))%)
+                                            </MudText>
+                                            <MudProgressLinear Color="Color.Info" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
+                                        }
+                                        else if (_currentStatus.Status.JobCreationResult != null)
                                         {
                                             <MudText Typo="Typo.caption" Color="Color.Secondary">
                                                 @_currentStatus.Status.JobCreationResult.JobsCreated created, @_currentStatus.Status.JobCreationResult.JobsSkipped skipped

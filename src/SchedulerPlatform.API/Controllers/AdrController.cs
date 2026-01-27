@@ -2792,7 +2792,7 @@ public class AdrController : ControllerBase
         try
         {
             _logger.LogInformation("Manual job creation triggered by {User}", User.Identity?.Name ?? "Unknown");
-            var result = await _orchestratorService.CreateJobsForDueAccountsAsync(cancellationToken);
+            var result = await _orchestratorService.CreateJobsForDueAccountsAsync(null, cancellationToken);
             return Ok(result);
         }
         catch (Exception ex)
@@ -2904,7 +2904,7 @@ public class AdrController : ControllerBase
             var syncResult = await _syncService.SyncAccountsAsync(null, null, cancellationToken);
             
             // Step 2: Create jobs for accounts due for processing
-            var jobCreationResult = await _orchestratorService.CreateJobsForDueAccountsAsync(cancellationToken);
+            var jobCreationResult = await _orchestratorService.CreateJobsForDueAccountsAsync(null, cancellationToken);
             
             // Step 3: Verify credentials for jobs approaching their NextRunDate
             var credentialResult = await _orchestratorService.VerifyCredentialsAsync(null, cancellationToken);
