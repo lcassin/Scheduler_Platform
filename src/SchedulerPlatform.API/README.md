@@ -10,6 +10,18 @@
 - **NextRunDateTime Calculation Fix**: Manual schedule triggers no longer incorrectly advance NextRunDateTime
 - **Deleted Schedule Filtering**: Soft-deleted schedules are properly filtered and no longer execute
 
+## Recent Updates (December 2025)
+
+- **ADR Orchestration API**: Complete orchestration endpoints for automated invoice scraping workflow (sync accounts, create jobs, verify credentials, process scraping, check statuses)
+- **API Key Authentication**: Added API key authentication for scheduler-to-API calls (SOC2 compliant service account pattern)
+- **System Schedule Protection**: Critical system schedules (like ADR sync) are protected from deletion and have restricted editing
+- **EF Core Retry-on-Failure**: Added automatic retry logic for Azure SQL transient failures
+- **Database Indexes**: Added comprehensive indexes on AdrAccount and AdrJob tables for improved query performance
+- **Batched Processing**: ADR sync and orchestration services use batched database operations for handling 200k+ accounts
+- **In-Progress Status Pattern**: Jobs track in-progress state to prevent double-billing on crashes or restarts
+- **Progress Logging**: Detailed progress logging during parallel API calls for ADR orchestration
+- **Client Sync**: ADR account sync now includes client synchronization with ExternalClientId mapping
+
 ## Recent Updates (January 2026)
 
 - **Global Exception Handler Middleware**: New middleware catches all unhandled exceptions and sends email notifications with stack trace attachments to configurable recipients
@@ -19,6 +31,14 @@
 - **Test Mode Public Endpoint**: New `GET /api/adr/configuration/test-mode-status` endpoint (no auth required) for test mode banner visibility
 - **ADR Account Rules Endpoints**: New endpoints for managing account-level scheduling rules
 - **PrimaryVendorCode/MasterVendorCode Support**: All ADR endpoints now support filtering by both Primary and Master Vendor Codes
+- **Stale Pending Jobs Finalization**: Orchestration cleanup phase finalizes jobs stuck in Pending/CredentialCheckInProgress past their billing window
+- **Orchestration Recovery**: StartupRecoveryService detects and resumes orphaned orchestration runs after application restart
+- **Configurable Timeouts**: Added configurable orchestration timeout and database command timeout settings
+- **Concurrent Orchestration Prevention**: Fixed issue where multiple orchestrations could be triggered simultaneously
+- **Generic PagedResponse<T>**: Standardized pagination responses across all API endpoints
+- **Claims Enrichment**: External identity provider claims enriched with application-specific permissions
+- **Multiple Audience Support**: JWT validation now supports multiple audiences for Duende IdentityServer
+- **Quartz Retry Fix**: Fixed retry trigger collision by making scheduling idempotent
 
 ## Business Overview
 

@@ -9,14 +9,31 @@
 - **JobExecution CancelledBy**: Added CancelledBy property to track who cancelled running executions
 - **Schedule TimeoutMinutes**: Added TimeoutMinutes property for job execution timeouts
 
+## Recent Updates (December 2025)
+
+- **AdrAccount Entity**: New entity for vendor accounts synced from VendorCredNewUAT database with billing patterns and scrape schedules
+- **AdrJob Entity**: New entity for individual scraping jobs per account/billing period with unique constraint
+- **AdrJobExecution Entity**: New entity for execution history (credential checks, scrape requests) supporting idempotency
+- **AdrOrchestrationRun Entity**: New entity for orchestration run history with step-by-step progress tracking
+- **AdrConfiguration Entity**: New entity for global ADR settings (parallel workers, timeouts, etc.)
+- **System Schedule Protection**: Added IsSystemSchedule flag to Schedule entity for protecting critical schedules
+- **Client ExternalClientId**: Added ExternalClientId property to Client entity for external system mapping
+- **User Timezone Preference**: Added TimeZone property to User entity for consistent date/time display
+
 ## Recent Updates (January 2026)
 
 - **AdrConfiguration Email Settings**: Added `ErrorNotificationsEnabled`, `ErrorNotificationRecipients`, `OrchestrationNotificationsEnabled`, `OrchestrationNotificationRecipients` properties for database-configurable email notifications
 - **AdrConfiguration Test Mode**: Added `TestModeEnabled`, `TestModeMaxScrapingJobs`, `TestModeMaxCredentialChecks` properties for limiting ADR requests during testing
 - **AdrAccountBlacklist Entity**: New entity for excluding specific vendors, accounts, or credentials from ADR processing with flexible date ranges
-- **AdrAccountRule Entity**: New entity for account-level scheduling rules per job type
+- **AdrAccountRule Entity**: New entity for account-level scheduling rules per job type, separating scheduling configuration from account identity
+- **AdrJobType Entity**: New entity for database-driven job type definitions (credential check, document download) replacing hardcoded enum
 - **AdrAccount Vendor Code Refactoring**: Renamed `VendorCode` to `PrimaryVendorCode` and added `MasterVendorCode` to support vendor hierarchy
 - **AdrJob Vendor Code Updates**: Added `PrimaryVendorCode` and `MasterVendorCode` fields (denormalized for queries)
+- **AdrJob Rule Tracking**: Added `AdrAccountRuleId` to track which rule created each job
+- **AdrJob Manual Request Support**: Added `IsManualRequest` and `IsHighPriority` flags for manual ADR requests
+- **AdrOrchestrationRun Step Tracking**: Added step duration tracking and sub-step progress fields
+- **Generic PagedResponse<T>**: New generic class for standardized pagination responses
+- **ClaimsPrincipalExtensions**: Centralized authorization check helpers for permission evaluation
 
 ## Business Overview
 
