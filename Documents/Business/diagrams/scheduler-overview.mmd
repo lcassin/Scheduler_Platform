@@ -1,0 +1,21 @@
+flowchart TB
+    subgraph "Scheduler Platform Overview"
+        User([User]) --> Create[Create Schedule]
+        Create --> Config[Configure Job<br/>SQL, HTTP, or PowerShell]
+        Config --> Timing[Set Timing<br/>Cron Expression]
+        Timing --> Enable[Enable Schedule]
+        Enable --> Quartz[Quartz Scheduler<br/>Monitors timing]
+        Quartz --> Execute[Execute Job<br/>At scheduled time]
+        Execute --> Record[Record Results<br/>Success or Failure]
+        Record --> Notify[Send Notifications<br/>Email on completion]
+    end
+    
+    style User fill:#4CAF50,color:white
+    style Create fill:#e3f2fd
+    style Config fill:#fff3e0
+    style Timing fill:#f3e5f5
+    style Enable fill:#e8f5e9
+    style Quartz fill:#2196F3,color:white
+    style Execute fill:#fce4ec
+    style Record fill:#e1f5fe
+    style Notify fill:#f3e5f5
