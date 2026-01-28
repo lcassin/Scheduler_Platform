@@ -46,14 +46,20 @@ public class Schedule
     
     public int? TimeoutMinutes { get; set; }
     
+    // Audit fields - ignored during serialization as they are set server-side
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public DateTime CreatedDateTime { get; set; }
     
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public string? CreatedBy { get; set; }
     
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public DateTime? ModifiedDateTime { get; set; }
     
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public string? ModifiedBy { get; set; }
     
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool IsDeleted { get; set; } = false;
     
     public NotificationSetting? NotificationSetting { get; set; }

@@ -606,7 +606,24 @@ public class MaintenanceJob : IJob
 
         try
         {
-            var logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
+            // Determine the log path based on environment
+            // Azure App Service sets WEBSITE_SITE_NAME environment variable
+            var isAzureAppService = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("WEBSITE_SITE_NAME"));
+            
+            string logPath;
+            if (isAzureAppService)
+            {
+                // Azure App Service persistent log folder
+                logPath = @"C:\home\LogFiles\Application";
+                _logger.LogInformation("Detected Azure App Service environment, using log path: {Path}", logPath);
+            }
+            else
+            {
+                // Local development - use app base directory
+                logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
+                _logger.LogInformation("Using local log path: {Path}", logPath);
+            }
+            
             if (!Directory.Exists(logPath))
             {
                 _logger.LogInformation("Log directory does not exist at {Path}, skipping log cleanup", logPath);
