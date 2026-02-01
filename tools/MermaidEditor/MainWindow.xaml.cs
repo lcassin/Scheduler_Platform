@@ -29,6 +29,7 @@ public partial class MainWindow : Window
     private bool _webViewInitialized;
     private CompletionWindow? _completionWindow;
     private RenderMode _currentRenderMode = RenderMode.Mermaid;
+    private TaskCompletionSource<string>? _pngExportTcs;
 
     private const string DefaultMermaidCode = @"flowchart TD
     A[Start] --> B{Is it working?}
@@ -437,13 +438,13 @@ Console.WriteLine(""Hello, World!"");
         }};
         
         window.exportPngHighRes = function(scale) {{
-            return new Promise((resolve, reject) => {{
-                const svg = document.querySelector('#diagram svg');
-                if (!svg) {{
-                    reject('No SVG found');
-                    return;
-                }}
-                
+            const svg = document.querySelector('#diagram svg');
+            if (!svg) {{
+                window.chrome.webview.postMessage({{ type: 'pngExportError', error: 'No SVG found' }});
+                return;
+            }}
+            
+            try {{
                 // Get the SVG dimensions
                 const bbox = svg.getBBox();
                 const svgWidth = svg.width.baseVal.value || bbox.width + 40;
@@ -470,16 +471,18 @@ Console.WriteLine(""Hello, World!"");
                     ctx.drawImage(img, 0, 0);
                     URL.revokeObjectURL(url);
                     
-                    // Convert to base64 PNG
+                    // Convert to base64 PNG and send via postMessage
                     const pngData = canvas.toDataURL('image/png');
-                    resolve(pngData);
+                    window.chrome.webview.postMessage({{ type: 'pngExport', data: pngData }});
                 }};
                 img.onerror = function() {{
                     URL.revokeObjectURL(url);
-                    reject('Failed to load SVG as image');
+                    window.chrome.webview.postMessage({{ type: 'pngExportError', error: 'Failed to load SVG as image' }});
                 }};
                 img.src = url;
-            }});
+            }} catch (e) {{
+                window.chrome.webview.postMessage({{ type: 'pngExportError', error: e.message }});
+            }}
         }};
     </script>
 </body>
@@ -589,12 +592,25 @@ Console.WriteLine(""Hello, World!"");
         try
         {
             var message = System.Text.Json.JsonDocument.Parse(e.WebMessageAsJson);
-            if (message.RootElement.TryGetProperty("type", out var typeElement) &&
-                typeElement.GetString() == "zoom" &&
-                message.RootElement.TryGetProperty("level", out var levelElement))
+            if (message.RootElement.TryGetProperty("type", out var typeElement))
             {
-                _currentZoom = levelElement.GetDouble();
-                ZoomLevelText.Text = $"{_currentZoom * 100:F0}%";
+                var messageType = typeElement.GetString();
+                
+                if (messageType == "zoom" && message.RootElement.TryGetProperty("level", out var levelElement))
+                {
+                    _currentZoom = levelElement.GetDouble();
+                    ZoomLevelText.Text = $"{_currentZoom * 100:F0}%";
+                }
+                else if (messageType == "pngExport" && message.RootElement.TryGetProperty("data", out var dataElement))
+                {
+                    var data = dataElement.GetString();
+                    _pngExportTcs?.TrySetResult(data ?? "");
+                }
+                else if (messageType == "pngExportError" && message.RootElement.TryGetProperty("error", out var errorElement))
+                {
+                    var error = errorElement.GetString();
+                    _pngExportTcs?.TrySetException(new Exception(error ?? "Unknown error"));
+                }
             }
         }
         catch
@@ -763,30 +779,32 @@ Console.WriteLine(""Hello, World!"");
                 
                 // Export at 3x scale for high resolution
                 var scale = 3;
-                var result = await PreviewWebView.CoreWebView2.ExecuteScriptAsync(
-                    $"window.exportPngHighRes({scale}).then(data => data).catch(err => 'ERROR:' + err)");
                 
-                if (result != "null" && !string.IsNullOrEmpty(result))
+                // Create a TaskCompletionSource to await the callback
+                _pngExportTcs = new TaskCompletionSource<string>();
+                
+                // Trigger the export (result comes via postMessage callback)
+                await PreviewWebView.CoreWebView2.ExecuteScriptAsync($"window.exportPngHighRes({scale})");
+                
+                // Wait for the callback with a timeout
+                var timeoutTask = Task.Delay(30000); // 30 second timeout
+                var completedTask = await Task.WhenAny(_pngExportTcs.Task, timeoutTask);
+                
+                if (completedTask == timeoutTask)
                 {
-                    var dataUrl = System.Text.Json.JsonSerializer.Deserialize<string>(result);
-                    
-                    if (dataUrl != null && dataUrl.StartsWith("data:image/png;base64,"))
-                    {
-                        var base64Data = dataUrl.Substring("data:image/png;base64,".Length);
-                        var imageBytes = Convert.FromBase64String(base64Data);
-                        await File.WriteAllBytesAsync(dialog.FileName, imageBytes);
-                        StatusText.Text = "Exported as PNG (3x resolution)";
-                        MessageBox.Show($"PNG exported successfully at {scale}x resolution!\n\nThe full diagram has been exported at high resolution for crisp viewing.", 
-                            "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
-                    }
-                    else if (dataUrl != null && dataUrl.StartsWith("ERROR:"))
-                    {
-                        throw new Exception(dataUrl.Substring(6));
-                    }
-                    else
-                    {
-                        throw new Exception("Invalid response from export function");
-                    }
+                    throw new Exception("Export timed out");
+                }
+                
+                var dataUrl = await _pngExportTcs.Task;
+                
+                if (!string.IsNullOrEmpty(dataUrl) && dataUrl.StartsWith("data:image/png;base64,"))
+                {
+                    var base64Data = dataUrl.Substring("data:image/png;base64,".Length);
+                    var imageBytes = Convert.FromBase64String(base64Data);
+                    await File.WriteAllBytesAsync(dialog.FileName, imageBytes);
+                    StatusText.Text = "Exported as PNG (3x resolution)";
+                    MessageBox.Show($"PNG exported successfully at {scale}x resolution!\n\nThe full diagram has been exported at high resolution for crisp viewing.", 
+                        "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
                 else
                 {
@@ -798,6 +816,10 @@ Console.WriteLine(""Hello, World!"");
             {
                 MessageBox.Show($"Failed to export PNG: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 StatusText.Text = "Export failed";
+            }
+            finally
+            {
+                _pngExportTcs = null;
             }
         }
     }
