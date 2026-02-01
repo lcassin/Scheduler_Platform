@@ -483,10 +483,15 @@ Console.WriteLine(""Hello, World!"");
             panzoomInstance = panzoom(diagram, {{
                 maxZoom: 10,
                 minZoom: 0.1,
-                initialZoom: currentZoom,
+                initialZoom: 1,
                 bounds: false,
                 boundsPadding: 0.1
             }});
+            
+            // Reset position to top-left after initialization
+            panzoomInstance.moveTo(0, 0);
+            panzoomInstance.zoomAbs(0, 0, 1);
+            currentZoom = 1;
             
             panzoomInstance.on('zoom', function(e) {{
                 currentZoom = e.getTransform().scale;
@@ -515,12 +520,24 @@ Console.WriteLine(""Hello, World!"");
             if (panzoomInstance) {{
                 const diagram = document.getElementById('diagram');
                 const container = document.getElementById('container');
-                const scaleX = container.clientWidth / diagram.scrollWidth;
-                const scaleY = container.clientHeight / diagram.scrollHeight;
-                const scale = Math.min(scaleX, scaleY, 1) * 0.9;
+                
+                // First reset to get accurate measurements
                 panzoomInstance.moveTo(0, 0);
-                panzoomInstance.zoomAbs(window.innerWidth / 2, window.innerHeight / 2, scale);
-                currentZoom = scale;
+                panzoomInstance.zoomAbs(0, 0, 1);
+                
+                // Use setTimeout to ensure DOM has updated
+                setTimeout(() => {{
+                    const diagramRect = diagram.getBoundingClientRect();
+                    const containerRect = container.getBoundingClientRect();
+                    
+                    const scaleX = (containerRect.width - 40) / diagramRect.width;
+                    const scaleY = (containerRect.height - 40) / diagramRect.height;
+                    const scale = Math.min(scaleX, scaleY, 1) * 0.95;
+                    
+                    panzoomInstance.zoomAbs(0, 0, scale);
+                    currentZoom = scale;
+                    window.chrome.webview.postMessage({{ type: 'zoom', level: currentZoom }});
+                }}, 10);
             }}
         }};
         
@@ -1320,6 +1337,10 @@ Console.WriteLine(""Hello, World!"");
                     bounds: false,
                     boundsPadding: 0.1
                 }});
+                
+                // Reset position to top-left after initialization
+                window.panzoomInstance.moveTo(0, 0);
+                window.panzoomInstance.zoomAbs(0, 0, 1);
             }}
         }});
     </script>
