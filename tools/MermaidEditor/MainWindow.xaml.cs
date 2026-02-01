@@ -445,10 +445,17 @@ Console.WriteLine(""Hello, World!"");
             }}
             
             try {{
+                // Clone the SVG to avoid modifying the original
+                const svgClone = svg.cloneNode(true);
+                
                 // Get the SVG dimensions
                 const bbox = svg.getBBox();
                 const svgWidth = svg.width.baseVal.value || bbox.width + 40;
                 const svgHeight = svg.height.baseVal.value || bbox.height + 40;
+                
+                // Set explicit dimensions on the clone
+                svgClone.setAttribute('width', svgWidth);
+                svgClone.setAttribute('height', svgHeight);
                 
                 // Create a canvas with scaled dimensions
                 const canvas = document.createElement('canvas');
@@ -460,26 +467,24 @@ Console.WriteLine(""Hello, World!"");
                 ctx.fillStyle = 'white';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 
-                // Create an image from the SVG
-                const svgData = new XMLSerializer().serializeToString(svg);
-                const svgBlob = new Blob([svgData], {{ type: 'image/svg+xml;charset=utf-8' }});
-                const url = URL.createObjectURL(svgBlob);
+                // Serialize SVG to string and create a data URL (more reliable than blob URL)
+                const svgData = new XMLSerializer().serializeToString(svgClone);
+                const svgBase64 = btoa(unescape(encodeURIComponent(svgData)));
+                const dataUrl = 'data:image/svg+xml;base64,' + svgBase64;
                 
                 const img = new Image();
                 img.onload = function() {{
                     ctx.scale(scale, scale);
                     ctx.drawImage(img, 0, 0);
-                    URL.revokeObjectURL(url);
                     
                     // Convert to base64 PNG and send via postMessage
                     const pngData = canvas.toDataURL('image/png');
                     window.chrome.webview.postMessage({{ type: 'pngExport', data: pngData }});
                 }};
-                img.onerror = function() {{
-                    URL.revokeObjectURL(url);
-                    window.chrome.webview.postMessage({{ type: 'pngExportError', error: 'Failed to load SVG as image' }});
+                img.onerror = function(e) {{
+                    window.chrome.webview.postMessage({{ type: 'pngExportError', error: 'Failed to load SVG as image: ' + (e.message || 'unknown error') }});
                 }};
-                img.src = url;
+                img.src = dataUrl;
             }} catch (e) {{
                 window.chrome.webview.postMessage({{ type: 'pngExportError', error: e.message }});
             }}
