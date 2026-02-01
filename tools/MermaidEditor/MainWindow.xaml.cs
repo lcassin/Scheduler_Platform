@@ -14,6 +14,12 @@ using System.Xml;
 
 namespace MermaidEditor;
 
+public enum RenderMode
+{
+    Mermaid,
+    Markdown
+}
+
 public partial class MainWindow : Window
 {
     private string? _currentFilePath;
@@ -22,12 +28,33 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _renderTimer;
     private bool _webViewInitialized;
     private CompletionWindow? _completionWindow;
+    private RenderMode _currentRenderMode = RenderMode.Mermaid;
 
     private const string DefaultMermaidCode = @"flowchart TD
     A[Start] --> B{Is it working?}
     B -->|Yes| C[Great!]
     B -->|No| D[Debug]
     D --> B";
+
+    private const string DefaultMarkdownCode = @"# Welcome to Markdown Editor
+
+This is a **live preview** markdown editor.
+
+## Features
+
+- Headers and text formatting
+- Code blocks with syntax highlighting
+- Tables and lists
+- And more!
+
+```csharp
+Console.WriteLine(""Hello, World!"");
+```
+
+| Column 1 | Column 2 |
+|----------|----------|
+| Value 1  | Value 2  |
+";
 
     public ICommand NewCommand { get; }
     public ICommand OpenCommand { get; }
@@ -281,7 +308,19 @@ public partial class MainWindow : Window
     private void RenderTimer_Tick(object? sender, EventArgs e)
     {
         _renderTimer.Stop();
-        RenderMermaid();
+        RenderPreview();
+    }
+
+    private void RenderPreview()
+    {
+        if (_currentRenderMode == RenderMode.Markdown)
+        {
+            RenderMarkdown();
+        }
+        else
+        {
+            RenderMermaid();
+        }
     }
 
     private void RenderMermaid()
@@ -403,7 +442,100 @@ public partial class MainWindow : Window
         PreviewWebView.NavigateToString(html);
         PreviewWebView.WebMessageReceived -= PreviewWebView_WebMessageReceived;
         PreviewWebView.WebMessageReceived += PreviewWebView_WebMessageReceived;
-        StatusText.Text = "Rendered";
+        StatusText.Text = "Mermaid rendered";
+    }
+
+    private void RenderMarkdown()
+    {
+        if (!_webViewInitialized) return;
+
+        var markdownCode = CodeEditor.Text;
+        var escapedCode = System.Text.Json.JsonSerializer.Serialize(markdownCode);
+
+        var html = $@"<!DOCTYPE html>
+<html>
+<head>
+    <meta charset=""UTF-8"">
+    <script src=""https://cdn.jsdelivr.net/npm/marked/marked.min.js""></script>
+    <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-light.min.css"">
+    <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github.min.css"">
+    <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/core.min.js""></script>
+    <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/javascript.min.js""></script>
+    <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/csharp.min.js""></script>
+    <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/python.min.js""></script>
+    <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/bash.min.js""></script>
+    <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/xml.min.js""></script>
+    <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/json.min.js""></script>
+    <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/sql.min.js""></script>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        html, body {{ 
+            width: 100%; 
+            height: 100%; 
+            overflow: auto;
+            background: #ffffff;
+        }}
+        .markdown-body {{
+            padding: 20px 32px;
+            max-width: 980px;
+            margin: 0 auto;
+        }}
+        .markdown-body pre {{
+            background-color: #f6f8fa;
+            border-radius: 6px;
+            padding: 16px;
+            overflow: auto;
+        }}
+        .markdown-body code {{
+            background-color: #f6f8fa;
+            border-radius: 3px;
+            padding: 0.2em 0.4em;
+            font-size: 85%;
+        }}
+        .markdown-body pre code {{
+            background-color: transparent;
+            padding: 0;
+        }}
+        .markdown-body table {{
+            border-collapse: collapse;
+            width: 100%;
+            margin: 16px 0;
+        }}
+        .markdown-body table th,
+        .markdown-body table td {{
+            border: 1px solid #d0d7de;
+            padding: 6px 13px;
+        }}
+        .markdown-body table tr:nth-child(2n) {{
+            background-color: #f6f8fa;
+        }}
+    </style>
+</head>
+<body>
+    <article class=""markdown-body"" id=""content""></article>
+    <script>
+        const markdownContent = {escapedCode};
+        
+        marked.setOptions({{
+            highlight: function(code, lang) {{
+                if (lang && hljs.getLanguage(lang)) {{
+                    try {{
+                        return hljs.highlight(code, {{ language: lang }}).value;
+                    }} catch (e) {{}}
+                }}
+                return code;
+            }},
+            breaks: true,
+            gfm: true
+        }});
+        
+        document.getElementById('content').innerHTML = marked.parse(markdownContent);
+    </script>
+</body>
+</html>";
+
+        PreviewWebView.NavigateToString(html);
+        StatusText.Text = "Markdown rendered";
     }
 
     private void PreviewWebView_WebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
@@ -427,8 +559,25 @@ public partial class MainWindow : Window
     private void UpdateTitle()
     {
         var fileName = string.IsNullOrEmpty(_currentFilePath) ? "Untitled" : System.IO.Path.GetFileName(_currentFilePath);
-        Title = $"{fileName}{(_isDirty ? "*" : "")} - Mermaid Editor";
+        var modeIndicator = _currentRenderMode == RenderMode.Markdown ? " [Markdown]" : " [Mermaid]";
+        Title = $"{fileName}{(_isDirty ? "*" : "")}{modeIndicator} - Mermaid Editor";
         FilePathText.Text = _currentFilePath ?? "Untitled";
+    }
+
+    private void SetRenderModeFromFile(string filePath)
+    {
+        var ext = Path.GetExtension(filePath).ToLowerInvariant();
+        _currentRenderMode = ext == ".md" ? RenderMode.Markdown : RenderMode.Mermaid;
+        
+        // Update syntax highlighting based on mode
+        if (_currentRenderMode == RenderMode.Markdown)
+        {
+            CodeEditor.SyntaxHighlighting = null; // Use default for Markdown
+        }
+        else
+        {
+            CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
+        }
     }
 
     private void New_Click(object sender, RoutedEventArgs e)
@@ -483,8 +632,10 @@ public partial class MainWindow : Window
             {
                 CodeEditor.Text = File.ReadAllText(dialog.FileName);
                 _currentFilePath = dialog.FileName;
+                SetRenderModeFromFile(dialog.FileName);
                 _isDirty = false;
                 UpdateTitle();
+                RenderPreview();
                 StatusText.Text = "File opened";
             }
             catch (Exception ex)
@@ -655,16 +806,19 @@ public partial class MainWindow : Window
     private void About_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show(
-            "Mermaid Editor v1.1\n\n" +
-            "A simple IDE for editing Mermaid diagrams.\n\n" +
+            "Mermaid Editor v1.2\n\n" +
+            "A simple IDE for editing Mermaid diagrams and Markdown files.\n\n" +
             "Features:\n" +
             "- Live preview as you type\n" +
-            "- Syntax highlighting\n" +
-            "- IntelliSense autocomplete\n" +
-            "- Pan and zoom support\n" +
+            "- Mermaid diagram rendering with pan/zoom\n" +
+            "- Markdown rendering with GitHub styling\n" +
+            "- Syntax highlighting and IntelliSense\n" +
             "- Export to PNG and SVG\n" +
             "- File open/save support\n" +
             "- Drag and drop file support\n\n" +
+            "Supported file types:\n" +
+            "- .mmd, .mermaid - Mermaid diagrams\n" +
+            "- .md - Markdown files\n\n" +
             "Built with WPF, AvalonEdit, and WebView2",
             "About Mermaid Editor",
             MessageBoxButton.OK,
@@ -722,8 +876,10 @@ public partial class MainWindow : Window
                     {
                         CodeEditor.Text = File.ReadAllText(filePath);
                         _currentFilePath = filePath;
+                        SetRenderModeFromFile(filePath);
                         _isDirty = false;
                         UpdateTitle();
+                        RenderPreview();
                         StatusText.Text = "File opened via drag and drop";
                     }
                     catch (Exception ex)
@@ -740,7 +896,7 @@ public partial class MainWindow : Window
     }
 }
 
-public class MermaidCompletionData : ICompletionData
+public class MermaidCompletionData: ICompletionData
 {
     public MermaidCompletionData(string text, string description)
     {
