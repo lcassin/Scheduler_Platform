@@ -86,7 +86,7 @@
                 </Grid.RowDefinitions>
                 
                 <Border Grid.Row="0" Background="#2D2D30" Padding="8,4">
-                    <TextBlock Text="Mermaid Code" Foreground="White" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="EditorHeaderText" Text="Mermaid Code" Foreground="White" FontWeight="SemiBold"/>
                 </Border>
                 
                 <avalon:TextEditor x:Name="CodeEditor" 
