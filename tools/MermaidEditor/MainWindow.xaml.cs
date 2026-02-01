@@ -1,0 +1,505 @@
+using System.IO;
+using System.Text;
+using System.Windows;
+using System.Windows.Input;
+using System.Windows.Threading;
+using Microsoft.Web.WebView2.Core;
+using Microsoft.Win32;
+
+namespace MermaidEditor;
+
+public partial class MainWindow : Window
+{
+    private string? _currentFilePath;
+    private bool _isDirty;
+    private double _currentZoom = 1.0;
+    private readonly DispatcherTimer _renderTimer;
+    private bool _webViewInitialized;
+
+    private const string DefaultMermaidCode = @"flowchart TD
+    A[Start] --> B{Is it working?}
+    B -->|Yes| C[Great!]
+    B -->|No| D[Debug]
+    D --> B";
+
+    public ICommand NewCommand { get; }
+    public ICommand OpenCommand { get; }
+    public ICommand SaveCommand { get; }
+    public ICommand SaveAsCommand { get; }
+
+    public MainWindow()
+    {
+        InitializeComponent();
+        DataContext = this;
+
+        NewCommand = new RelayCommand(_ => New_Click(this, new RoutedEventArgs()));
+        OpenCommand = new RelayCommand(_ => Open_Click(this, new RoutedEventArgs()));
+        SaveCommand = new RelayCommand(_ => Save_Click(this, new RoutedEventArgs()));
+        SaveAsCommand = new RelayCommand(_ => SaveAs_Click(this, new RoutedEventArgs()));
+
+        _renderTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(500)
+        };
+        _renderTimer.Tick += RenderTimer_Tick;
+
+        Loaded += MainWindow_Loaded;
+        Closing += MainWindow_Closing;
+
+        CodeEditor.Text = DefaultMermaidCode;
+    }
+
+    private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await PreviewWebView.EnsureCoreWebView2Async();
+            _webViewInitialized = true;
+            RenderMermaid();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Failed to initialize WebView2: {ex.Message}\n\nMake sure WebView2 Runtime is installed.",
+                "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        if (_isDirty)
+        {
+            var result = MessageBox.Show("You have unsaved changes. Do you want to save before closing?",
+                "Unsaved Changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+
+            switch (result)
+            {
+                case MessageBoxResult.Yes:
+                    Save_Click(this, new RoutedEventArgs());
+                    break;
+                case MessageBoxResult.Cancel:
+                    e.Cancel = true;
+                    break;
+            }
+        }
+    }
+
+    private void CodeEditor_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    {
+        _isDirty = true;
+        UpdateTitle();
+        _renderTimer.Stop();
+        _renderTimer.Start();
+    }
+
+    private void RenderTimer_Tick(object? sender, EventArgs e)
+    {
+        _renderTimer.Stop();
+        RenderMermaid();
+    }
+
+    private void RenderMermaid()
+    {
+        if (!_webViewInitialized) return;
+
+        var mermaidCode = CodeEditor.Text;
+        var escapedCode = System.Text.Json.JsonSerializer.Serialize(mermaidCode);
+
+        var html = $@"<!DOCTYPE html>
+<html>
+<head>
+    <meta charset=""UTF-8"">
+    <script src=""https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js""></script>
+    <script src=""https://cdn.jsdelivr.net/npm/panzoom@9.4.3/dist/panzoom.min.js""></script>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        html, body {{ 
+            width: 100%; 
+            height: 100%; 
+            overflow: hidden;
+            background: #f5f5f5;
+        }}
+        #container {{
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }}
+        #diagram {{
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }}
+        .error {{
+            color: #d32f2f;
+            padding: 20px;
+            font-family: Consolas, monospace;
+            white-space: pre-wrap;
+            background: #ffebee;
+            border-radius: 8px;
+        }}
+    </style>
+</head>
+<body>
+    <div id=""container"">
+        <div id=""diagram"">
+            <pre class=""mermaid"">{System.Web.HttpUtility.HtmlEncode(mermaidCode)}</pre>
+        </div>
+    </div>
+    <script>
+        let panzoomInstance = null;
+        let currentZoom = {_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)};
+        
+        mermaid.initialize({{ 
+            startOnLoad: true,
+            theme: 'default',
+            securityLevel: 'loose'
+        }});
+        
+        mermaid.run().then(() => {{
+            const container = document.getElementById('container');
+            const diagram = document.getElementById('diagram');
+            
+            panzoomInstance = panzoom(diagram, {{
+                maxZoom: 10,
+                minZoom: 0.1,
+                initialZoom: currentZoom,
+                bounds: false,
+                boundsPadding: 0.1
+            }});
+            
+            panzoomInstance.on('zoom', function(e) {{
+                currentZoom = e.getTransform().scale;
+                window.chrome.webview.postMessage({{ type: 'zoom', level: currentZoom }});
+            }});
+        }}).catch(err => {{
+            document.getElementById('diagram').innerHTML = '<div class=""error"">Error: ' + err.message + '</div>';
+        }});
+        
+        window.setZoom = function(level) {{
+            if (panzoomInstance) {{
+                panzoomInstance.zoomAbs(window.innerWidth / 2, window.innerHeight / 2, level);
+                currentZoom = level;
+            }}
+        }};
+        
+        window.resetView = function() {{
+            if (panzoomInstance) {{
+                panzoomInstance.moveTo(0, 0);
+                panzoomInstance.zoomAbs(window.innerWidth / 2, window.innerHeight / 2, 1);
+                currentZoom = 1;
+            }}
+        }};
+        
+        window.fitToWindow = function() {{
+            if (panzoomInstance) {{
+                const diagram = document.getElementById('diagram');
+                const container = document.getElementById('container');
+                const scaleX = container.clientWidth / diagram.scrollWidth;
+                const scaleY = container.clientHeight / diagram.scrollHeight;
+                const scale = Math.min(scaleX, scaleY, 1) * 0.9;
+                panzoomInstance.moveTo(0, 0);
+                panzoomInstance.zoomAbs(window.innerWidth / 2, window.innerHeight / 2, scale);
+                currentZoom = scale;
+            }}
+        }};
+        
+        window.getSvgContent = function() {{
+            const svg = document.querySelector('#diagram svg');
+            return svg ? svg.outerHTML : null;
+        }};
+    </script>
+</body>
+</html>";
+
+        PreviewWebView.NavigateToString(html);
+        PreviewWebView.WebMessageReceived -= PreviewWebView_WebMessageReceived;
+        PreviewWebView.WebMessageReceived += PreviewWebView_WebMessageReceived;
+        StatusText.Text = "Rendered";
+    }
+
+    private void PreviewWebView_WebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+    {
+        try
+        {
+            var message = System.Text.Json.JsonDocument.Parse(e.WebMessageAsJson);
+            if (message.RootElement.TryGetProperty("type", out var typeElement) &&
+                typeElement.GetString() == "zoom" &&
+                message.RootElement.TryGetProperty("level", out var levelElement))
+            {
+                _currentZoom = levelElement.GetDouble();
+                ZoomLevelText.Text = $"{_currentZoom * 100:F0}%";
+            }
+        }
+        catch
+        {
+        }
+    }
+
+    private void UpdateTitle()
+    {
+        var fileName = string.IsNullOrEmpty(_currentFilePath) ? "Untitled" : System.IO.Path.GetFileName(_currentFilePath);
+        Title = $"{fileName}{(_isDirty ? "*" : "")} - Mermaid Editor";
+        FilePathText.Text = _currentFilePath ?? "Untitled";
+    }
+
+    private void New_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isDirty)
+        {
+            var result = MessageBox.Show("You have unsaved changes. Do you want to save first?",
+                "Unsaved Changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                Save_Click(sender, e);
+            }
+            else if (result == MessageBoxResult.Cancel)
+            {
+                return;
+            }
+        }
+
+        CodeEditor.Text = DefaultMermaidCode;
+        _currentFilePath = null;
+        _isDirty = false;
+        UpdateTitle();
+    }
+
+    private void Open_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isDirty)
+        {
+            var result = MessageBox.Show("You have unsaved changes. Do you want to save first?",
+                "Unsaved Changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+
+            if (result == MessageBoxResult.Yes)
+            {
+                Save_Click(sender, e);
+            }
+            else if (result == MessageBoxResult.Cancel)
+            {
+                return;
+            }
+        }
+
+        var dialog = new OpenFileDialog
+        {
+            Filter = "Mermaid Files (*.mmd;*.mermaid)|*.mmd;*.mermaid|Markdown Files (*.md)|*.md|All Files (*.*)|*.*",
+            Title = "Open Mermaid File"
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            try
+            {
+                CodeEditor.Text = File.ReadAllText(dialog.FileName);
+                _currentFilePath = dialog.FileName;
+                _isDirty = false;
+                UpdateTitle();
+                StatusText.Text = "File opened";
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to open file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+    }
+
+    private void Save_Click(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrEmpty(_currentFilePath))
+        {
+            SaveAs_Click(sender, e);
+            return;
+        }
+
+        try
+        {
+            File.WriteAllText(_currentFilePath, CodeEditor.Text);
+            _isDirty = false;
+            UpdateTitle();
+            StatusText.Text = "File saved";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Failed to save file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void SaveAs_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Filter = "Mermaid Files (*.mmd)|*.mmd|Markdown Files (*.md)|*.md|All Files (*.*)|*.*",
+            Title = "Save Mermaid File",
+            DefaultExt = ".mmd"
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            _currentFilePath = dialog.FileName;
+            Save_Click(sender, e);
+        }
+    }
+
+    private async void ExportPng_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_webViewInitialized) return;
+
+        var dialog = new SaveFileDialog
+        {
+            Filter = "PNG Image (*.png)|*.png",
+            Title = "Export as PNG",
+            DefaultExt = ".png"
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            try
+            {
+                using var stream = new MemoryStream();
+                await PreviewWebView.CoreWebView2.CapturePreviewAsync(
+                    CoreWebView2CapturePreviewImageFormat.Png, stream);
+                
+                await File.WriteAllBytesAsync(dialog.FileName, stream.ToArray());
+                StatusText.Text = "Exported as PNG";
+                MessageBox.Show("PNG exported successfully!", "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to export PNG: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+    }
+
+    private async void ExportSvg_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_webViewInitialized) return;
+
+        var dialog = new SaveFileDialog
+        {
+            Filter = "SVG Image (*.svg)|*.svg",
+            Title = "Export as SVG",
+            DefaultExt = ".svg"
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            try
+            {
+                var svgContent = await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.getSvgContent()");
+                
+                if (svgContent != "null" && !string.IsNullOrEmpty(svgContent))
+                {
+                    var svg = System.Text.Json.JsonSerializer.Deserialize<string>(svgContent);
+                    if (svg != null)
+                    {
+                        await File.WriteAllTextAsync(dialog.FileName, svg);
+                        StatusText.Text = "Exported as SVG";
+                        MessageBox.Show("SVG exported successfully!", "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                }
+                else
+                {
+                    MessageBox.Show("No diagram to export. Make sure the diagram is rendered correctly.", 
+                        "Export Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to export SVG: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+    }
+
+    private void Exit_Click(object sender, RoutedEventArgs e)
+    {
+        Close();
+    }
+
+    private async void ZoomIn_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_webViewInitialized) return;
+        _currentZoom = Math.Min(_currentZoom * 1.25, 10);
+        await PreviewWebView.CoreWebView2.ExecuteScriptAsync($"window.setZoom({_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)})");
+        ZoomLevelText.Text = $"{_currentZoom * 100:F0}%";
+    }
+
+    private async void ZoomOut_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_webViewInitialized) return;
+        _currentZoom = Math.Max(_currentZoom / 1.25, 0.1);
+        await PreviewWebView.CoreWebView2.ExecuteScriptAsync($"window.setZoom({_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)})");
+        ZoomLevelText.Text = $"{_currentZoom * 100:F0}%";
+    }
+
+    private async void ResetZoom_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_webViewInitialized) return;
+        _currentZoom = 1.0;
+        await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.resetView()");
+        ZoomLevelText.Text = "100%";
+    }
+
+    private async void FitToWindow_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_webViewInitialized) return;
+        await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.fitToWindow()");
+    }
+
+    private void SyntaxHelp_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "https://mermaid.js.org/intro/syntax-reference.html",
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Failed to open browser: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void About_Click(object sender, RoutedEventArgs e)
+    {
+        MessageBox.Show(
+            "Mermaid Editor v1.0\n\n" +
+            "A simple IDE for editing Mermaid diagrams.\n\n" +
+            "Features:\n" +
+            "- Live preview as you type\n" +
+            "- Pan and zoom support\n" +
+            "- Export to PNG and SVG\n" +
+            "- File open/save support\n\n" +
+            "Built with WPF and WebView2",
+            "About Mermaid Editor",
+            MessageBoxButton.OK,
+            MessageBoxImage.Information);
+    }
+}
+
+public class RelayCommand : ICommand
+{
+    private readonly Action<object?> _execute;
+    private readonly Func<object?, bool>? _canExecute;
+
+    public RelayCommand(Action<object?> execute, Func<object?, bool>? canExecute = null)
+    {
+        _execute = execute ?? throw new ArgumentNullException(nameof(execute));
+        _canExecute = canExecute;
+    }
+
+    public event EventHandler? CanExecuteChanged
+    {
+        add => CommandManager.RequerySuggested += value;
+        remove => CommandManager.RequerySuggested -= value;
+    }
+
+    public bool CanExecute(object? parameter) => _canExecute?.Invoke(parameter) ?? true;
+
+    public void Execute(object? parameter) => _execute(parameter);
+}
