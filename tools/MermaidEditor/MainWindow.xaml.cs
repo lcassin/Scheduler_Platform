@@ -394,14 +394,23 @@ Console.WriteLine(""Hello, World!"");
             width: 100%;
             height: 100%;
             display: flex;
-            align-items: center;
-            justify-content: center;
+            align-items: flex-start;
+            justify-content: flex-start;
+            padding: 20px;
         }}
         #diagram {{
             background: white;
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: inline-block;
+            min-width: max-content;
+        }}
+        #diagram svg {{
+            display: block;
+            max-width: none !important;
+            width: auto !important;
+            height: auto !important;
         }}
         .error {{
             color: #d32f2f;
@@ -1191,21 +1200,49 @@ Console.WriteLine(""Hello, World!"");
     <script src=""https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js""></script>
     <script src=""https://cdn.jsdelivr.net/npm/panzoom@9.4.3/dist/panzoom.min.js""></script>
     <style>
-        body {{ margin: 0; padding: 20px; background: #1e1e1e; overflow: hidden; }}
-        #diagram {{ width: 100%; height: calc(100vh - 40px); display: flex; justify-content: center; align-items: flex-start; }}
-        #diagram svg {{ max-width: none !important; }}
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        html, body {{ 
+            width: 100%; 
+            height: 100%; 
+            overflow: hidden;
+            background: #f5f5f5;
+        }}
+        #container {{
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: flex-start;
+            justify-content: flex-start;
+            padding: 20px;
+        }}
+        #diagram {{
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: inline-block;
+            min-width: max-content;
+        }}
+        #diagram svg {{
+            display: block;
+            max-width: none !important;
+            width: auto !important;
+            height: auto !important;
+        }}
     </style>
 </head>
 <body>
-    <div id=""diagram"">
-        <pre class=""mermaid"">{System.Web.HttpUtility.HtmlEncode(code)}</pre>
+    <div id=""container"">
+        <div id=""diagram"">
+            <pre class=""mermaid"">{System.Web.HttpUtility.HtmlEncode(code)}</pre>
+        </div>
     </div>
     <script>
-        mermaid.initialize({{ startOnLoad: true, theme: 'default' }});
+        mermaid.initialize({{ startOnLoad: true, theme: 'default', securityLevel: 'loose' }});
         mermaid.run().then(() => {{
-            const svg = document.querySelector('#diagram svg');
-            if (svg) {{
-                window.panzoomInstance = panzoom(svg, {{
+            const diagram = document.getElementById('diagram');
+            if (diagram) {{
+                window.panzoomInstance = panzoom(diagram, {{
                     maxZoom: 10,
                     minZoom: 0.1,
                     bounds: false,
