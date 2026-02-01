@@ -78,28 +78,69 @@
                 <ColumnDefinition Width="*" MinWidth="200"/>
             </Grid.ColumnDefinitions>
             
-            <!-- Left Panel - Code Editor -->
-            <Grid Grid.Column="0">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
+            <!-- Left Panel - Tabbed Code Editor / File Browser -->
+            <TabControl x:Name="LeftPanelTabs" Grid.Column="0" Background="#2D2D30">
+                <!-- Code Tab -->
+                <TabItem x:Name="CodeTab">
+                    <TabItem.Header>
+                        <TextBlock x:Name="EditorHeaderText" Text="Code" Padding="8,2"/>
+                    </TabItem.Header>
+                    <avalon:TextEditor x:Name="CodeEditor" 
+                             FontFamily="Consolas"
+                             FontSize="14"
+                             Background="#1E1E1E"
+                             Foreground="#D4D4D4"
+                             ShowLineNumbers="True"
+                             WordWrap="False"
+                             HorizontalScrollBarVisibility="Auto"
+                             VerticalScrollBarVisibility="Auto"/>
+                </TabItem>
                 
-                <Border Grid.Row="0" Background="#2D2D30" Padding="8,4">
-                    <TextBlock x:Name="EditorHeaderText" Text="Mermaid Code" Foreground="White" FontWeight="SemiBold"/>
-                </Border>
-                
-                <avalon:TextEditor x:Name="CodeEditor" 
-                         Grid.Row="1"
-                         FontFamily="Consolas"
-                         FontSize="14"
-                         Background="#1E1E1E"
-                         Foreground="#D4D4D4"
-                         ShowLineNumbers="True"
-                         WordWrap="False"
-                         HorizontalScrollBarVisibility="Auto"
-                         VerticalScrollBarVisibility="Auto"/>
-            </Grid>
+                <!-- Files Tab -->
+                <TabItem Header="Files" Padding="8,2">
+                    <Grid Background="#1E1E1E">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        
+                        <!-- Path Bar -->
+                        <Grid Grid.Row="0" Background="#2D2D30">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Button x:Name="BrowseFolderButton" Content="..." Grid.Column="0" 
+                                    Click="BrowseFolder_Click" ToolTip="Browse for folder"
+                                    Padding="8,4" Margin="2"/>
+                            <Button x:Name="ParentFolderButton" Content="Up" Grid.Column="1" 
+                                    Click="ParentFolder_Click" ToolTip="Go to parent folder"
+                                    Padding="8,4" Margin="2"/>
+                            <TextBox x:Name="CurrentPathTextBox" Grid.Column="2" 
+                                     Background="#3E3E42" Foreground="#D4D4D4" 
+                                     BorderThickness="0" Padding="4" Margin="2"
+                                     IsReadOnly="True"/>
+                        </Grid>
+                        
+                        <!-- File List -->
+                        <ListBox x:Name="FileListBox" Grid.Row="1" 
+                                 Background="#1E1E1E" Foreground="#D4D4D4"
+                                 BorderThickness="0"
+                                 SelectionChanged="FileListBox_SelectionChanged"
+                                 MouseDoubleClick="FileListBox_MouseDoubleClick">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Margin="4,2">
+                                        <TextBlock Text="{Binding Icon}" Width="20" FontFamily="Segoe UI Symbol"/>
+                                        <TextBlock Text="{Binding Name}" Margin="4,0,0,0"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </TabItem>
+            </TabControl>
             
             <!-- Splitter -->
             <GridSplitter Grid.Column="1" 

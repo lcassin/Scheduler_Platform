@@ -11,6 +11,11 @@ using ICSharpCode.AvalonEdit.Highlighting.Xshd;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
 using System.Xml;
+using MessageBox = System.Windows.MessageBox;
+using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
+using SaveFileDialog = Microsoft.Win32.SaveFileDialog;
+using DataFormats = System.Windows.DataFormats;
+using DragDropEffects = System.Windows.DragDropEffects;
 
 namespace MermaidEditor;
 
@@ -30,6 +35,8 @@ public partial class MainWindow : Window
     private CompletionWindow? _completionWindow;
     private RenderMode _currentRenderMode = RenderMode.Mermaid;
     private TaskCompletionSource<string>? _pngExportTcs;
+    private string _currentBrowserPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+    private bool _isBrowsingFiles;
 
     private const string DefaultMermaidCode = @"flowchart TD
     A[Start] --> B{Is it working?}
@@ -107,6 +114,13 @@ Console.WriteLine(""Hello, World!"");
             SetRenderModeFromFile(filePath);
             _isDirty = false;
             UpdateTitle();
+            
+            // Navigate file browser to the file's folder
+            var folder = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(folder))
+            {
+                NavigateBrowserToFolder(folder);
+            }
         }
         catch (Exception ex)
         {
@@ -1013,7 +1027,230 @@ Console.WriteLine(""Hello, World!"");
             MessageBoxImage.Information);
     }
 
-    private void Window_DragOver(object sender, DragEventArgs e)
+    // File Browser Methods
+    private void RefreshFileList()
+    {
+        try
+        {
+            var items = new List<FileListItem>();
+            
+            // Add directories
+            foreach (var dir in Directory.GetDirectories(_currentBrowserPath))
+            {
+                var dirInfo = new DirectoryInfo(dir);
+                items.Add(new FileListItem
+                {
+                    Name = dirInfo.Name,
+                    FullPath = dir,
+                    IsDirectory = true,
+                    Icon = "\uD83D\uDCC1" // Folder icon
+                });
+            }
+            
+            // Add .mmd, .mermaid, and .md files
+            var extensions = new[] { "*.mmd", "*.mermaid", "*.md" };
+            foreach (var ext in extensions)
+            {
+                foreach (var file in Directory.GetFiles(_currentBrowserPath, ext))
+                {
+                    var fileInfo = new FileInfo(file);
+                    items.Add(new FileListItem
+                    {
+                        Name = fileInfo.Name,
+                        FullPath = file,
+                        IsDirectory = false,
+                        Icon = fileInfo.Extension.ToLower() == ".md" ? "\uD83D\uDCC4" : "\uD83D\uDCC8" // Document or chart icon
+                    });
+                }
+            }
+            
+            // Sort: directories first, then files alphabetically
+            items = items.OrderBy(x => !x.IsDirectory).ThenBy(x => x.Name).ToList();
+            
+            FileListBox.ItemsSource = items;
+            CurrentPathTextBox.Text = _currentBrowserPath;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Failed to read directory: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private void BrowseFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new System.Windows.Forms.FolderBrowserDialog
+        {
+            SelectedPath = _currentBrowserPath,
+            Description = "Select a folder to browse"
+        };
+        
+        if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+        {
+            _currentBrowserPath = dialog.SelectedPath;
+            RefreshFileList();
+        }
+    }
+
+    private void ParentFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var parent = Directory.GetParent(_currentBrowserPath);
+        if (parent != null)
+        {
+            _currentBrowserPath = parent.FullName;
+            RefreshFileList();
+        }
+    }
+
+    private void FileListBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (FileListBox.SelectedItem is FileListItem item && !item.IsDirectory)
+        {
+            // Preview the file without fully opening it for editing
+            _isBrowsingFiles = true;
+            try
+            {
+                var content = File.ReadAllText(item.FullPath);
+                var ext = Path.GetExtension(item.FullPath).ToLowerInvariant();
+                
+                // Set render mode based on file type
+                if (ext == ".md")
+                {
+                    _currentRenderMode = RenderMode.Markdown;
+                }
+                else
+                {
+                    _currentRenderMode = RenderMode.Mermaid;
+                }
+                
+                // Render preview directly without changing the editor
+                if (_webViewInitialized)
+                {
+                    if (_currentRenderMode == RenderMode.Mermaid)
+                    {
+                        RenderMermaidPreview(content);
+                    }
+                    else
+                    {
+                        RenderMarkdownPreview(content);
+                    }
+                }
+                
+                StatusText.Text = $"Previewing: {item.Name}";
+            }
+            catch (Exception ex)
+            {
+                StatusText.Text = $"Error previewing file: {ex.Message}";
+            }
+            finally
+            {
+                _isBrowsingFiles = false;
+            }
+        }
+    }
+
+    private void FileListBox_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (FileListBox.SelectedItem is FileListItem item)
+        {
+            if (item.IsDirectory)
+            {
+                // Navigate into directory
+                _currentBrowserPath = item.FullPath;
+                RefreshFileList();
+            }
+            else
+            {
+                // Open file for editing
+                if (_isDirty)
+                {
+                    var result = MessageBox.Show("You have unsaved changes. Do you want to save first?",
+                        "Unsaved Changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        Save_Click(this, new RoutedEventArgs());
+                    }
+                    else if (result == MessageBoxResult.Cancel)
+                    {
+                        return;
+                    }
+                }
+                
+                LoadFile(item.FullPath);
+                LeftPanelTabs.SelectedItem = CodeTab; // Switch to Code tab
+                StatusText.Text = "File opened from browser";
+            }
+        }
+    }
+
+    private void RenderMermaidPreview(string code)
+    {
+        var html = $@"<!DOCTYPE html>
+<html>
+<head>
+    <script src=""https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js""></script>
+    <script src=""https://cdn.jsdelivr.net/npm/panzoom@9.4.3/dist/panzoom.min.js""></script>
+    <style>
+        body {{ margin: 0; padding: 20px; background: #1e1e1e; overflow: hidden; }}
+        #diagram {{ width: 100%; height: calc(100vh - 40px); display: flex; justify-content: center; align-items: flex-start; }}
+        #diagram svg {{ max-width: none !important; }}
+    </style>
+</head>
+<body>
+    <div id=""diagram"">
+        <pre class=""mermaid"">{System.Web.HttpUtility.HtmlEncode(code)}</pre>
+    </div>
+    <script>
+        mermaid.initialize({{ startOnLoad: true, theme: 'default' }});
+        mermaid.run().then(() => {{
+            const svg = document.querySelector('#diagram svg');
+            if (svg) {{
+                window.panzoomInstance = panzoom(svg, {{
+                    maxZoom: 10,
+                    minZoom: 0.1,
+                    bounds: false,
+                    boundsPadding: 0.1
+                }});
+            }}
+        }});
+    </script>
+</body>
+</html>";
+        PreviewWebView.NavigateToString(html);
+    }
+
+    private void RenderMarkdownPreview(string code)
+    {
+        var html = $@"<!DOCTYPE html>
+<html>
+<head>
+    <script src=""https://cdn.jsdelivr.net/npm/marked/marked.min.js""></script>
+    <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-light.min.css"">
+    <style>
+        body {{ margin: 0; padding: 20px; background: #ffffff; }}
+        .markdown-body {{ box-sizing: border-box; min-width: 200px; max-width: 980px; margin: 0 auto; }}
+    </style>
+</head>
+<body>
+    <div id=""content"" class=""markdown-body""></div>
+    <script>
+        document.getElementById('content').innerHTML = marked.parse({System.Text.Json.JsonSerializer.Serialize(code)});
+    </script>
+</body>
+</html>";
+        PreviewWebView.NavigateToString(html);
+    }
+
+    private void NavigateBrowserToFolder(string folderPath)
+    {
+        if (Directory.Exists(folderPath))
+        {
+            _currentBrowserPath = folderPath;
+            RefreshFileList();
+        }
+    }
+
+    private void Window_DragOver(object sender, System.Windows.DragEventArgs e)
     {
         if (e.Data.GetDataPresent(DataFormats.FileDrop))
         {
@@ -1033,7 +1270,7 @@ Console.WriteLine(""Hello, World!"");
         e.Handled = true;
     }
 
-    private void Window_Drop(object sender, DragEventArgs e)
+    private void Window_Drop(object sender, System.Windows.DragEventArgs e)
     {
         if (e.Data.GetDataPresent(DataFormats.FileDrop))
         {
@@ -1102,6 +1339,14 @@ public class MermaidCompletionData: ICompletionData
     {
         textArea.Document.Replace(completionSegment, Text);
     }
+}
+
+public class FileListItem
+{
+    public string Name { get; set; } = "";
+    public string FullPath { get; set; } = "";
+    public bool IsDirectory { get; set; }
+    public string Icon { get; set; } = "";
 }
 
 public class RelayCommand : ICommand
