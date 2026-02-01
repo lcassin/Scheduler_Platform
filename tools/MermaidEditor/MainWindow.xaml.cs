@@ -404,11 +404,12 @@ Console.WriteLine(""Hello, World!"");
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             display: inline-block;
-            min-width: max-content;
+            min-width: 2000px;
         }}
         #diagram svg {{
             display: block;
             max-width: none !important;
+            min-width: 100% !important;
         }}
         .error {{
             color: #d32f2f;
@@ -1249,11 +1250,12 @@ Console.WriteLine(""Hello, World!"");
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             display: inline-block;
-            min-width: max-content;
+            min-width: 2000px;
         }}
         #diagram svg {{
             display: block;
             max-width: none !important;
+            min-width: 100% !important;
         }}
     </style>
 </head>
