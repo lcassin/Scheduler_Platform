@@ -409,8 +409,6 @@ Console.WriteLine(""Hello, World!"");
         #diagram svg {{
             display: block;
             max-width: none !important;
-            width: auto !important;
-            height: auto !important;
         }}
         .error {{
             color: #d32f2f;
@@ -1226,8 +1224,6 @@ Console.WriteLine(""Hello, World!"");
         #diagram svg {{
             display: block;
             max-width: none !important;
-            width: auto !important;
-            height: auto !important;
         }}
     </style>
 </head>
