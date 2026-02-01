@@ -769,10 +769,25 @@ Console.WriteLine(""Hello, World!"");
 
     private async Task ExportMermaidPng()
     {
+        // Ask user for scale factor
+        var scaleResult = MessageBox.Show(
+            "Choose export resolution:\n\n" +
+            "Click YES for 4x (recommended for most diagrams)\n" +
+            "Click NO for 6x (for very detailed/wide diagrams)\n" +
+            "Click CANCEL to abort",
+            "Export Resolution",
+            MessageBoxButton.YesNoCancel,
+            MessageBoxImage.Question);
+
+        if (scaleResult == MessageBoxResult.Cancel)
+            return;
+
+        var scale = scaleResult == MessageBoxResult.Yes ? 4 : 6;
+
         var dialog = new SaveFileDialog
         {
             Filter = "PNG Image (*.png)|*.png",
-            Title = "Export as PNG (High Resolution)",
+            Title = $"Export as PNG ({scale}x Resolution)",
             DefaultExt = ".png"
         };
 
@@ -780,10 +795,7 @@ Console.WriteLine(""Hello, World!"");
         {
             try
             {
-                StatusText.Text = "Exporting high-resolution PNG...";
-                
-                // Export at 3x scale for high resolution
-                var scale = 3;
+                StatusText.Text = $"Exporting {scale}x resolution PNG...";
                 
                 // Create a TaskCompletionSource to await the callback
                 _pngExportTcs = new TaskCompletionSource<string>();
@@ -807,7 +819,7 @@ Console.WriteLine(""Hello, World!"");
                     var base64Data = dataUrl.Substring("data:image/png;base64,".Length);
                     var imageBytes = Convert.FromBase64String(base64Data);
                     await File.WriteAllBytesAsync(dialog.FileName, imageBytes);
-                    StatusText.Text = "Exported as PNG (3x resolution)";
+                    StatusText.Text = $"Exported as PNG ({scale}x resolution)";
                     MessageBox.Show($"PNG exported successfully at {scale}x resolution!\n\nThe full diagram has been exported at high resolution for crisp viewing.", 
                         "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
