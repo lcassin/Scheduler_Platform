@@ -439,6 +439,36 @@ Console.WriteLine(""Hello, World!"");
         mermaid.run().then(() => {{
             const container = document.getElementById('container');
             const diagram = document.getElementById('diagram');
+            const svg = document.querySelector('#diagram svg');
+            
+            // Fix SVG dimensions - ensure it renders at natural size
+            if (svg) {{
+                // Get the viewBox dimensions if available
+                const viewBox = svg.getAttribute('viewBox');
+                if (viewBox) {{
+                    const parts = viewBox.split(' ');
+                    if (parts.length === 4) {{
+                        const vbWidth = parseFloat(parts[2]);
+                        const vbHeight = parseFloat(parts[3]);
+                        // Set explicit dimensions based on viewBox
+                        svg.style.width = vbWidth + 'px';
+                        svg.style.height = vbHeight + 'px';
+                        svg.style.minWidth = vbWidth + 'px';
+                        svg.style.minHeight = vbHeight + 'px';
+                    }}
+                }} else {{
+                    // No viewBox, try to get dimensions from getBBox
+                    try {{
+                        const bbox = svg.getBBox();
+                        if (bbox.width > 0 && bbox.height > 0) {{
+                            svg.style.width = (bbox.width + 40) + 'px';
+                            svg.style.height = (bbox.height + 40) + 'px';
+                            svg.style.minWidth = (bbox.width + 40) + 'px';
+                            svg.style.minHeight = (bbox.height + 40) + 'px';
+                        }}
+                    }} catch (e) {{ }}
+                }}
+            }}
             
             panzoomInstance = panzoom(diagram, {{
                 maxZoom: 10,
@@ -1237,6 +1267,34 @@ Console.WriteLine(""Hello, World!"");
         mermaid.initialize({{ startOnLoad: true, theme: 'default', securityLevel: 'loose' }});
         mermaid.run().then(() => {{
             const diagram = document.getElementById('diagram');
+            const svg = document.querySelector('#diagram svg');
+            
+            // Fix SVG dimensions - ensure it renders at natural size
+            if (svg) {{
+                const viewBox = svg.getAttribute('viewBox');
+                if (viewBox) {{
+                    const parts = viewBox.split(' ');
+                    if (parts.length === 4) {{
+                        const vbWidth = parseFloat(parts[2]);
+                        const vbHeight = parseFloat(parts[3]);
+                        svg.style.width = vbWidth + 'px';
+                        svg.style.height = vbHeight + 'px';
+                        svg.style.minWidth = vbWidth + 'px';
+                        svg.style.minHeight = vbHeight + 'px';
+                    }}
+                }} else {{
+                    try {{
+                        const bbox = svg.getBBox();
+                        if (bbox.width > 0 && bbox.height > 0) {{
+                            svg.style.width = (bbox.width + 40) + 'px';
+                            svg.style.height = (bbox.height + 40) + 'px';
+                            svg.style.minWidth = (bbox.width + 40) + 'px';
+                            svg.style.minHeight = (bbox.height + 40) + 'px';
+                        }}
+                    }} catch (e) {{ }}
+                }}
+            }}
+            
             if (diagram) {{
                 window.panzoomInstance = panzoom(diagram, {{
                     maxZoom: 10,
