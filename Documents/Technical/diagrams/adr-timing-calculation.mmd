@@ -1,0 +1,29 @@
+flowchart TB
+    subgraph "How Billing Dates Are Calculated"
+        A[Last Invoice Date] --> B[Add Billing Period<br/>Monthly = 1 calendar month<br/>Bi-weekly = 14 days<br/>Quarterly = 3 calendar months]
+        B --> C[Next Run Date<br/>When invoice becomes available]
+        C --> D[Billing Window End<br/>Next Run Date + 5 days]
+    end
+    
+    subgraph "Example: Monthly Account"
+        E[Last Invoice: Dec 15] --> F[Add 1 month]
+        F --> G[Next Run Date: Jan 15]
+        G --> H[Window End: Jan 20]
+    end
+    
+    subgraph "Calendar-Based Calculation Benefits"
+        I[Prevents Date Drift] --> J[Dec 15 + 1 month = Jan 15<br/>NOT Dec 15 + 30 days = Jan 14]
+        J --> K[Handles Short Months<br/>Jan 31 -> Feb 28 -> Mar 31<br/>Anchor day preserved]
+    end
+    
+    style A fill:#e3f2fd
+    style B fill:#fff3e0
+    style C fill:#4CAF50,color:white
+    style D fill:#f3e5f5
+    style E fill:#e3f2fd
+    style F fill:#fff3e0
+    style G fill:#4CAF50,color:white
+    style H fill:#f3e5f5
+    style I fill:#e8f5e9
+    style J fill:#e8f5e9
+    style K fill:#e8f5e9
