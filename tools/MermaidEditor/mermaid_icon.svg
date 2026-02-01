@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="tailGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00CED1;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#20B2AA;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#008B8B;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="finGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#40E0D0;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00CED1;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle -->
+  <circle cx="128" cy="128" r="120" fill="#1E3A5F" />
+  
+  <!-- Mermaid tail body -->
+  <path d="M 80 60 
+           Q 100 80, 90 120 
+           Q 80 160, 100 190 
+           Q 120 220, 128 230
+           Q 136 220, 156 190
+           Q 176 160, 166 120
+           Q 156 80, 176 60
+           Q 150 70, 128 65
+           Q 106 70, 80 60 Z" 
+        fill="url(#tailGradient)" />
+  
+  <!-- Tail fin left -->
+  <path d="M 100 190 
+           Q 60 210, 45 240
+           Q 80 230, 110 215
+           Q 120 220, 128 230 Z" 
+        fill="url(#finGradient)" />
+  
+  <!-- Tail fin right -->
+  <path d="M 156 190 
+           Q 196 210, 211 240
+           Q 176 230, 146 215
+           Q 136 220, 128 230 Z" 
+        fill="url(#finGradient)" />
+  
+  <!-- Scale details -->
+  <ellipse cx="110" cy="100" rx="12" ry="8" fill="#008B8B" opacity="0.5" />
+  <ellipse cx="146" cy="100" rx="12" ry="8" fill="#008B8B" opacity="0.5" />
+  <ellipse cx="128" cy="130" rx="12" ry="8" fill="#008B8B" opacity="0.5" />
+  <ellipse cx="105" cy="150" rx="10" ry="6" fill="#008B8B" opacity="0.5" />
+  <ellipse cx="151" cy="150" rx="10" ry="6" fill="#008B8B" opacity="0.5" />
+  <ellipse cx="128" cy="170" rx="10" ry="6" fill="#008B8B" opacity="0.5" />
+  
+  <!-- Highlight -->
+  <path d="M 95 75 Q 105 85, 100 100" stroke="#5FFFD7" stroke-width="3" fill="none" opacity="0.6" />
+</svg>
