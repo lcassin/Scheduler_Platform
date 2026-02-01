@@ -23,6 +23,7 @@ AllowNoIcons=yes
 OutputDir=..\bin\Installer
 OutputBaseFilename=MermaidEditorSetup-{#MyAppVersion}
 SetupIconFile=..\app.ico
+UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
@@ -36,6 +37,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 Name: "associatemmd"; Description: "Associate .mmd files with Mermaid Editor"; GroupDescription: "File associations:"
 Name: "associatemermaid"; Description: "Associate .mermaid files with Mermaid Editor"; GroupDescription: "File associations:"
+Name: "associatemd"; Description: "Associate .md files with Mermaid Editor"; GroupDescription: "File associations:"; Flags: unchecked
 
 [Files]
 ; Include all files from the publish output directory
@@ -59,6 +61,12 @@ Root: HKA; Subkey: "Software\Classes\.mermaid"; ValueType: string; ValueName: ""
 Root: HKA; Subkey: "Software\Classes\MermaidEditor.mermaid"; ValueType: string; ValueName: ""; ValueData: "Mermaid Diagram File"; Flags: uninsdeletekey; Tasks: associatemermaid
 Root: HKA; Subkey: "Software\Classes\MermaidEditor.mermaid\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"; Tasks: associatemermaid
 Root: HKA; Subkey: "Software\Classes\MermaidEditor.mermaid\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associatemermaid
+
+; File associations for .md files (Markdown)
+Root: HKA; Subkey: "Software\Classes\.md"; ValueType: string; ValueName: ""; ValueData: "MermaidEditor.md"; Flags: uninsdeletevalue; Tasks: associatemd
+Root: HKA; Subkey: "Software\Classes\MermaidEditor.md"; ValueType: string; ValueName: ""; ValueData: "Markdown File"; Flags: uninsdeletekey; Tasks: associatemd
+Root: HKA; Subkey: "Software\Classes\MermaidEditor.md\DefaultIcon"; ValueType: string; ValueName: ""; ValueData: "{app}\{#MyAppExeName},0"; Tasks: associatemd
+Root: HKA; Subkey: "Software\Classes\MermaidEditor.md\shell\open\command"; ValueType: string; ValueName: ""; ValueData: """{app}\{#MyAppExeName}"" ""%1"""; Tasks: associatemd
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent

@@ -82,7 +82,38 @@ Console.WriteLine(""Hello, World!"");
         Closing += MainWindow_Closing;
 
         SetupCodeEditor();
-        CodeEditor.Text = DefaultMermaidCode;
+        
+        // Check for command-line arguments (file passed via file association)
+        var args = Environment.GetCommandLineArgs();
+        if (args.Length > 1 && File.Exists(args[1]))
+        {
+            // Load the file passed as argument
+            LoadFile(args[1]);
+        }
+        else
+        {
+            // Load default content (not dirty)
+            CodeEditor.Text = DefaultMermaidCode;
+            _isDirty = false;
+        }
+    }
+
+    private void LoadFile(string filePath)
+    {
+        try
+        {
+            CodeEditor.Text = File.ReadAllText(filePath);
+            _currentFilePath = filePath;
+            SetRenderModeFromFile(filePath);
+            _isDirty = false;
+            UpdateTitle();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Failed to open file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            CodeEditor.Text = DefaultMermaidCode;
+            _isDirty = false;
+        }
     }
 
     private void SetupCodeEditor()
