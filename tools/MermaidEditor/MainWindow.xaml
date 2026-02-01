@@ -4,6 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        xmlns:avalon="http://icsharpcode.net/sharpdevelop/avalonedit"
         xmlns:local="clr-namespace:MermaidEditor"
         mc:Ignorable="d"
         Title="Mermaid Editor" Height="700" Width="1200"
@@ -88,20 +89,16 @@
                     <TextBlock Text="Mermaid Code" Foreground="White" FontWeight="SemiBold"/>
                 </Border>
                 
-                <TextBox x:Name="CodeEditor" 
+                <avalon:TextEditor x:Name="CodeEditor" 
                          Grid.Row="1"
-                         AcceptsReturn="True" 
-                         AcceptsTab="True"
-                         TextWrapping="NoWrap"
-                         VerticalScrollBarVisibility="Auto"
-                         HorizontalScrollBarVisibility="Auto"
                          FontFamily="Consolas"
                          FontSize="14"
                          Background="#1E1E1E"
                          Foreground="#D4D4D4"
-                         CaretBrush="White"
-                         Padding="8"
-                         TextChanged="CodeEditor_TextChanged"/>
+                         ShowLineNumbers="True"
+                         WordWrap="False"
+                         HorizontalScrollBarVisibility="Auto"
+                         VerticalScrollBarVisibility="Auto"/>
             </Grid>
             
             <!-- Splitter -->

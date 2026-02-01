@@ -1,10 +1,16 @@
 using System.IO;
-using System.Text;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
+using ICSharpCode.AvalonEdit.CodeCompletion;
+using ICSharpCode.AvalonEdit.Document;
+using ICSharpCode.AvalonEdit.Editing;
+using ICSharpCode.AvalonEdit.Highlighting;
+using ICSharpCode.AvalonEdit.Highlighting.Xshd;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
+using System.Xml;
 
 namespace MermaidEditor;
 
@@ -15,6 +21,7 @@ public partial class MainWindow : Window
     private double _currentZoom = 1.0;
     private readonly DispatcherTimer _renderTimer;
     private bool _webViewInitialized;
+    private CompletionWindow? _completionWindow;
 
     private const string DefaultMermaidCode = @"flowchart TD
     A[Start] --> B{Is it working?}
@@ -46,7 +53,187 @@ public partial class MainWindow : Window
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
 
+        SetupCodeEditor();
         CodeEditor.Text = DefaultMermaidCode;
+    }
+
+    private void SetupCodeEditor()
+    {
+        CodeEditor.TextArea.TextEntering += TextArea_TextEntering;
+        CodeEditor.TextArea.TextEntered += TextArea_TextEntered;
+        CodeEditor.TextChanged += CodeEditor_TextChanged;
+        
+        CodeEditor.TextArea.Caret.PositionChanged += (s, e) =>
+        {
+            StatusText.Text = $"Line {CodeEditor.TextArea.Caret.Line}, Col {CodeEditor.TextArea.Caret.Column}";
+        };
+
+        RegisterMermaidSyntaxHighlighting();
+    }
+
+    private void RegisterMermaidSyntaxHighlighting()
+    {
+        var xshd = "<?xml version=\"1.0\"?>" +
+            "<SyntaxDefinition name=\"Mermaid\" xmlns=\"http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008\">" +
+            "<Color name=\"Comment\" foreground=\"#6A9955\" />" +
+            "<Color name=\"Keyword\" foreground=\"#569CD6\" fontWeight=\"bold\" />" +
+            "<Color name=\"DiagramType\" foreground=\"#C586C0\" fontWeight=\"bold\" />" +
+            "<RuleSet>" +
+            "<Span color=\"Comment\" begin=\"%%\" />" +
+            "<Keywords color=\"DiagramType\">" +
+            "<Word>flowchart</Word><Word>graph</Word><Word>sequenceDiagram</Word>" +
+            "<Word>classDiagram</Word><Word>stateDiagram</Word><Word>erDiagram</Word>" +
+            "<Word>journey</Word><Word>gantt</Word><Word>pie</Word><Word>mindmap</Word>" +
+            "<Word>timeline</Word><Word>gitGraph</Word><Word>quadrantChart</Word>" +
+            "</Keywords>" +
+            "<Keywords color=\"Keyword\">" +
+            "<Word>subgraph</Word><Word>end</Word><Word>direction</Word>" +
+            "<Word>participant</Word><Word>actor</Word><Word>activate</Word><Word>deactivate</Word>" +
+            "<Word>Note</Word><Word>note</Word><Word>loop</Word><Word>alt</Word><Word>else</Word>" +
+            "<Word>opt</Word><Word>par</Word><Word>critical</Word><Word>break</Word><Word>rect</Word>" +
+            "<Word>class</Word><Word>state</Word><Word>section</Word><Word>title</Word>" +
+            "<Word>TB</Word><Word>TD</Word><Word>BT</Word><Word>RL</Word><Word>LR</Word>" +
+            "</Keywords>" +
+            "</RuleSet>" +
+            "</SyntaxDefinition>";
+
+        try
+        {
+            using var reader = new XmlTextReader(new StringReader(xshd));
+            var definition = HighlightingLoader.Load(reader, HighlightingManager.Instance);
+            HighlightingManager.Instance.RegisterHighlighting("Mermaid", new[] { ".mmd", ".mermaid" }, definition);
+            CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
+        }
+        catch
+        {
+            // If syntax highlighting fails, continue without it
+        }
+    }
+
+    private void TextArea_TextEntering(object sender, TextCompositionEventArgs e)
+    {
+        if (e.Text.Length > 0 && _completionWindow != null)
+        {
+            if (!char.IsLetterOrDigit(e.Text[0]))
+            {
+                _completionWindow.CompletionList.RequestInsertion(e);
+            }
+        }
+    }
+
+    private void TextArea_TextEntered(object sender, TextCompositionEventArgs e)
+    {
+        if (e.Text.Length == 1 && (char.IsLetter(e.Text[0]) || e.Text[0] == '-'))
+        {
+            ShowCompletionWindow();
+        }
+    }
+
+    private void ShowCompletionWindow()
+    {
+        var wordStart = GetWordStart();
+        var currentWord = GetCurrentWord(wordStart);
+        
+        if (string.IsNullOrEmpty(currentWord) || currentWord.Length < 1)
+            return;
+
+        var completionData = GetCompletionData(currentWord);
+        if (completionData.Count == 0)
+            return;
+
+        _completionWindow = new CompletionWindow(CodeEditor.TextArea);
+        var data = _completionWindow.CompletionList.CompletionData;
+        
+        foreach (var item in completionData)
+        {
+            data.Add(item);
+        }
+
+        _completionWindow.StartOffset = wordStart;
+        _completionWindow.Show();
+        _completionWindow.Closed += (s, e) => _completionWindow = null;
+    }
+
+    private int GetWordStart()
+    {
+        var offset = CodeEditor.CaretOffset;
+        var text = CodeEditor.Text;
+        
+        while (offset > 0 && (char.IsLetterOrDigit(text[offset - 1]) || text[offset - 1] == '-'))
+        {
+            offset--;
+        }
+        
+        return offset;
+    }
+
+    private string GetCurrentWord(int wordStart)
+    {
+        var offset = CodeEditor.CaretOffset;
+        return CodeEditor.Text.Substring(wordStart, offset - wordStart);
+    }
+
+    private List<MermaidCompletionData> GetCompletionData(string prefix)
+    {
+        var allKeywords = new List<(string keyword, string description)>
+        {
+            ("flowchart", "Flowchart diagram"),
+            ("graph", "Graph diagram (alias for flowchart)"),
+            ("sequenceDiagram", "Sequence diagram"),
+            ("classDiagram", "Class diagram"),
+            ("stateDiagram", "State diagram"),
+            ("stateDiagram-v2", "State diagram v2"),
+            ("erDiagram", "Entity Relationship diagram"),
+            ("journey", "User journey diagram"),
+            ("gantt", "Gantt chart"),
+            ("pie", "Pie chart"),
+            ("quadrantChart", "Quadrant chart"),
+            ("requirementDiagram", "Requirement diagram"),
+            ("gitGraph", "Git graph"),
+            ("mindmap", "Mind map"),
+            ("timeline", "Timeline diagram"),
+            ("zenuml", "ZenUML sequence diagram"),
+            ("sankey-beta", "Sankey diagram (beta)"),
+            ("xychart-beta", "XY chart (beta)"),
+            ("block-beta", "Block diagram (beta)"),
+            
+            ("subgraph", "Define a subgraph"),
+            ("end", "End subgraph/block"),
+            ("direction", "Set direction (TB, TD, BT, RL, LR)"),
+            ("participant", "Define a participant"),
+            ("actor", "Define an actor"),
+            ("activate", "Activate a participant"),
+            ("deactivate", "Deactivate a participant"),
+            ("Note", "Add a note"),
+            ("note", "Add a note"),
+            ("loop", "Loop block"),
+            ("alt", "Alternative block"),
+            ("else", "Else branch"),
+            ("opt", "Optional block"),
+            ("par", "Parallel block"),
+            ("critical", "Critical section"),
+            ("break", "Break block"),
+            ("rect", "Rectangle highlight"),
+            ("class", "Define a class"),
+            ("state", "Define a state"),
+            ("section", "Define a section"),
+            ("title", "Set diagram title"),
+            ("dateFormat", "Set date format (Gantt)"),
+            ("axisFormat", "Set axis format (Gantt)"),
+            ("excludes", "Exclude dates (Gantt)"),
+            ("todayMarker", "Today marker (Gantt)"),
+            
+            ("TB", "Top to Bottom direction"),
+            ("TD", "Top Down direction"),
+            ("BT", "Bottom to Top direction"),
+            ("RL", "Right to Left direction"),
+            ("LR", "Left to Right direction"),
+        };
+
+        return allKeywords
+            .Where(k => k.keyword.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .Select(k => new MermaidCompletionData(k.keyword, k.description))
+            .ToList();
     }
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
@@ -83,7 +270,7 @@ public partial class MainWindow : Window
         }
     }
 
-    private void CodeEditor_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    private void CodeEditor_TextChanged(object? sender, EventArgs e)
     {
         _isDirty = true;
         UpdateTitle();
@@ -468,15 +655,17 @@ public partial class MainWindow : Window
     private void About_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show(
-            "Mermaid Editor v1.0\n\n" +
+            "Mermaid Editor v1.1\n\n" +
             "A simple IDE for editing Mermaid diagrams.\n\n" +
             "Features:\n" +
             "- Live preview as you type\n" +
+            "- Syntax highlighting\n" +
+            "- IntelliSense autocomplete\n" +
             "- Pan and zoom support\n" +
             "- Export to PNG and SVG\n" +
             "- File open/save support\n" +
             "- Drag and drop file support\n\n" +
-            "Built with WPF and WebView2",
+            "Built with WPF, AvalonEdit, and WebView2",
             "About Mermaid Editor",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
@@ -548,6 +737,26 @@ public partial class MainWindow : Window
                 }
             }
         }
+    }
+}
+
+public class MermaidCompletionData : ICompletionData
+{
+    public MermaidCompletionData(string text, string description)
+    {
+        Text = text;
+        Description = description;
+    }
+
+    public ImageSource? Image => null;
+    public string Text { get; }
+    public object Content => Text;
+    public object Description { get; }
+    public double Priority => 0;
+
+    public void Complete(TextArea textArea, ISegment completionSegment, EventArgs insertionRequestEventArgs)
+    {
+        textArea.Document.Replace(completionSegment, Text);
     }
 }
 
