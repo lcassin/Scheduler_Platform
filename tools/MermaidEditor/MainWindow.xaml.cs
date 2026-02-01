@@ -442,42 +442,56 @@ Console.WriteLine(""Hello, World!"");
             const diagram = document.getElementById('diagram');
             const svg = document.querySelector('#diagram svg');
             
-            // Fix SVG dimensions - ensure it renders at natural size
+            // Fix SVG and container dimensions after render
             if (svg) {{
-                // Get the viewBox dimensions if available
+                // Get actual SVG dimensions
+                let svgWidth = 0;
+                let svgHeight = 0;
+                
+                // Try viewBox first
                 const viewBox = svg.getAttribute('viewBox');
                 if (viewBox) {{
                     const parts = viewBox.split(' ');
                     if (parts.length === 4) {{
-                        const vbWidth = parseFloat(parts[2]);
-                        const vbHeight = parseFloat(parts[3]);
-                        // Set explicit dimensions based on viewBox
-                        svg.style.width = vbWidth + 'px';
-                        svg.style.height = vbHeight + 'px';
-                        svg.style.minWidth = vbWidth + 'px';
-                        svg.style.minHeight = vbHeight + 'px';
+                        svgWidth = parseFloat(parts[2]);
+                        svgHeight = parseFloat(parts[3]);
                     }}
-                }} else {{
-                    // No viewBox, try to get dimensions from getBBox
+                }}
+                
+                // Fall back to getBBox
+                if (svgWidth === 0 || svgHeight === 0) {{
                     try {{
                         const bbox = svg.getBBox();
-                        if (bbox.width > 0 && bbox.height > 0) {{
-                            svg.style.width = (bbox.width + 40) + 'px';
-                            svg.style.height = (bbox.height + 40) + 'px';
-                            svg.style.minWidth = (bbox.width + 40) + 'px';
-                            svg.style.minHeight = (bbox.height + 40) + 'px';
-                        }}
+                        svgWidth = bbox.width + 40;
+                        svgHeight = bbox.height + 40;
                     }} catch (e) {{ }}
+                }}
+                
+                // Set SVG dimensions
+                if (svgWidth > 0 && svgHeight > 0) {{
+                    svg.style.width = svgWidth + 'px';
+                    svg.style.height = svgHeight + 'px';
+                    svg.style.minWidth = svgWidth + 'px';
+                    svg.style.minHeight = svgHeight + 'px';
+                    
+                    // Shrink container to fit SVG (remove the large min-width)
+                    diagram.style.minWidth = 'auto';
+                    diagram.style.width = 'auto';
                 }}
             }}
             
             panzoomInstance = panzoom(diagram, {{
                 maxZoom: 10,
                 minZoom: 0.1,
-                initialZoom: currentZoom,
+                initialZoom: 1,
                 bounds: false,
                 boundsPadding: 0.1
             }});
+            
+            // Reset position to top-left after initialization
+            panzoomInstance.moveTo(0, 0);
+            panzoomInstance.zoomAbs(0, 0, 1);
+            currentZoom = 1;
             
             panzoomInstance.on('zoom', function(e) {{
                 currentZoom = e.getTransform().scale;
@@ -506,12 +520,24 @@ Console.WriteLine(""Hello, World!"");
             if (panzoomInstance) {{
                 const diagram = document.getElementById('diagram');
                 const container = document.getElementById('container');
-                const scaleX = container.clientWidth / diagram.scrollWidth;
-                const scaleY = container.clientHeight / diagram.scrollHeight;
-                const scale = Math.min(scaleX, scaleY, 1) * 0.9;
+                
+                // First reset to get accurate measurements
                 panzoomInstance.moveTo(0, 0);
-                panzoomInstance.zoomAbs(window.innerWidth / 2, window.innerHeight / 2, scale);
-                currentZoom = scale;
+                panzoomInstance.zoomAbs(0, 0, 1);
+                
+                // Use setTimeout to ensure DOM has updated
+                setTimeout(() => {{
+                    const diagramRect = diagram.getBoundingClientRect();
+                    const containerRect = container.getBoundingClientRect();
+                    
+                    const scaleX = (containerRect.width - 40) / diagramRect.width;
+                    const scaleY = (containerRect.height - 40) / diagramRect.height;
+                    const scale = Math.min(scaleX, scaleY, 1) * 0.95;
+                    
+                    panzoomInstance.zoomAbs(0, 0, scale);
+                    currentZoom = scale;
+                    window.chrome.webview.postMessage({{ type: 'zoom', level: currentZoom }});
+                }}, 10);
             }}
         }};
         
@@ -1271,29 +1297,36 @@ Console.WriteLine(""Hello, World!"");
             const diagram = document.getElementById('diagram');
             const svg = document.querySelector('#diagram svg');
             
-            // Fix SVG dimensions - ensure it renders at natural size
+            // Fix SVG and container dimensions after render
             if (svg) {{
+                let svgWidth = 0;
+                let svgHeight = 0;
+                
                 const viewBox = svg.getAttribute('viewBox');
                 if (viewBox) {{
                     const parts = viewBox.split(' ');
                     if (parts.length === 4) {{
-                        const vbWidth = parseFloat(parts[2]);
-                        const vbHeight = parseFloat(parts[3]);
-                        svg.style.width = vbWidth + 'px';
-                        svg.style.height = vbHeight + 'px';
-                        svg.style.minWidth = vbWidth + 'px';
-                        svg.style.minHeight = vbHeight + 'px';
+                        svgWidth = parseFloat(parts[2]);
+                        svgHeight = parseFloat(parts[3]);
                     }}
-                }} else {{
+                }}
+                
+                if (svgWidth === 0 || svgHeight === 0) {{
                     try {{
                         const bbox = svg.getBBox();
-                        if (bbox.width > 0 && bbox.height > 0) {{
-                            svg.style.width = (bbox.width + 40) + 'px';
-                            svg.style.height = (bbox.height + 40) + 'px';
-                            svg.style.minWidth = (bbox.width + 40) + 'px';
-                            svg.style.minHeight = (bbox.height + 40) + 'px';
-                        }}
+                        svgWidth = bbox.width + 40;
+                        svgHeight = bbox.height + 40;
                     }} catch (e) {{ }}
+                }}
+                
+                if (svgWidth > 0 && svgHeight > 0) {{
+                    svg.style.width = svgWidth + 'px';
+                    svg.style.height = svgHeight + 'px';
+                    svg.style.minWidth = svgWidth + 'px';
+                    svg.style.minHeight = svgHeight + 'px';
+                    
+                    diagram.style.minWidth = 'auto';
+                    diagram.style.width = 'auto';
                 }}
             }}
             
@@ -1304,6 +1337,10 @@ Console.WriteLine(""Hello, World!"");
                     bounds: false,
                     boundsPadding: 0.1
                 }});
+                
+                // Reset position to top-left after initialization
+                window.panzoomInstance.moveTo(0, 0);
+                window.panzoomInstance.zoomAbs(0, 0, 1);
             }}
         }});
     </script>
