@@ -474,11 +474,80 @@ public partial class MainWindow : Window
             "- Live preview as you type\n" +
             "- Pan and zoom support\n" +
             "- Export to PNG and SVG\n" +
-            "- File open/save support\n\n" +
+            "- File open/save support\n" +
+            "- Drag and drop file support\n\n" +
             "Built with WPF and WebView2",
             "About Mermaid Editor",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
+    }
+
+    private void Window_DragOver(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            var files = (string[])e.Data.GetData(DataFormats.FileDrop);
+            if (files != null && files.Length > 0)
+            {
+                var ext = Path.GetExtension(files[0]).ToLowerInvariant();
+                if (ext == ".mmd" || ext == ".mermaid" || ext == ".md")
+                {
+                    e.Effects = DragDropEffects.Copy;
+                    e.Handled = true;
+                    return;
+                }
+            }
+        }
+        e.Effects = DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void Window_Drop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            var files = (string[])e.Data.GetData(DataFormats.FileDrop);
+            if (files != null && files.Length > 0)
+            {
+                var filePath = files[0];
+                var ext = Path.GetExtension(filePath).ToLowerInvariant();
+                
+                if (ext == ".mmd" || ext == ".mermaid" || ext == ".md")
+                {
+                    if (_isDirty)
+                    {
+                        var result = MessageBox.Show("You have unsaved changes. Do you want to save first?",
+                            "Unsaved Changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+
+                        if (result == MessageBoxResult.Yes)
+                        {
+                            Save_Click(this, new RoutedEventArgs());
+                        }
+                        else if (result == MessageBoxResult.Cancel)
+                        {
+                            return;
+                        }
+                    }
+
+                    try
+                    {
+                        CodeEditor.Text = File.ReadAllText(filePath);
+                        _currentFilePath = filePath;
+                        _isDirty = false;
+                        UpdateTitle();
+                        StatusText.Text = "File opened via drag and drop";
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"Failed to open file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                }
+                else
+                {
+                    MessageBox.Show("Please drop a .mmd, .mermaid, or .md file.", "Invalid File Type", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+        }
     }
 }
 
