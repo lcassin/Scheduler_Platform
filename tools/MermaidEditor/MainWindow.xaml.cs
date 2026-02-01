@@ -1305,6 +1305,14 @@ Console.WriteLine(""Hello, World!"");
                         _isDirty = false;
                         UpdateTitle();
                         RenderPreview();
+                        
+                        // Navigate file browser to the file's folder
+                        var folder = Path.GetDirectoryName(filePath);
+                        if (!string.IsNullOrEmpty(folder))
+                        {
+                            NavigateBrowserToFolder(folder);
+                        }
+                        
                         StatusText.Text = "File opened via drag and drop";
                     }
                     catch (Exception ex)
