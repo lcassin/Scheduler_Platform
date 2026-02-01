@@ -569,13 +569,15 @@ Console.WriteLine(""Hello, World!"");
         var ext = Path.GetExtension(filePath).ToLowerInvariant();
         _currentRenderMode = ext == ".md" ? RenderMode.Markdown : RenderMode.Mermaid;
         
-        // Update syntax highlighting based on mode
+        // Update header text and syntax highlighting based on mode
         if (_currentRenderMode == RenderMode.Markdown)
         {
+            EditorHeaderText.Text = "Markdown Code";
             CodeEditor.SyntaxHighlighting = null; // Use default for Markdown
         }
         else
         {
+            EditorHeaderText.Text = "Mermaid Code";
             CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
         }
     }
