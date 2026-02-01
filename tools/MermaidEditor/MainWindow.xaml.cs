@@ -435,6 +435,52 @@ Console.WriteLine(""Hello, World!"");
             const svg = document.querySelector('#diagram svg');
             return svg ? svg.outerHTML : null;
         }};
+        
+        window.exportPngHighRes = function(scale) {{
+            return new Promise((resolve, reject) => {{
+                const svg = document.querySelector('#diagram svg');
+                if (!svg) {{
+                    reject('No SVG found');
+                    return;
+                }}
+                
+                // Get the SVG dimensions
+                const bbox = svg.getBBox();
+                const svgWidth = svg.width.baseVal.value || bbox.width + 40;
+                const svgHeight = svg.height.baseVal.value || bbox.height + 40;
+                
+                // Create a canvas with scaled dimensions
+                const canvas = document.createElement('canvas');
+                canvas.width = svgWidth * scale;
+                canvas.height = svgHeight * scale;
+                const ctx = canvas.getContext('2d');
+                
+                // Fill with white background
+                ctx.fillStyle = 'white';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Create an image from the SVG
+                const svgData = new XMLSerializer().serializeToString(svg);
+                const svgBlob = new Blob([svgData], {{ type: 'image/svg+xml;charset=utf-8' }});
+                const url = URL.createObjectURL(svgBlob);
+                
+                const img = new Image();
+                img.onload = function() {{
+                    ctx.scale(scale, scale);
+                    ctx.drawImage(img, 0, 0);
+                    URL.revokeObjectURL(url);
+                    
+                    // Convert to base64 PNG
+                    const pngData = canvas.toDataURL('image/png');
+                    resolve(pngData);
+                }};
+                img.onerror = function() {{
+                    URL.revokeObjectURL(url);
+                    reject('Failed to load SVG as image');
+                }};
+                img.src = url;
+            }});
+        }};
     </script>
 </body>
 </html>";
@@ -688,6 +734,76 @@ Console.WriteLine(""Hello, World!"");
     {
         if (!_webViewInitialized) return;
 
+        // For Mermaid diagrams, use high-resolution SVG-to-canvas export
+        // For Markdown, fall back to viewport capture
+        if (_currentRenderMode == RenderMode.Mermaid)
+        {
+            await ExportMermaidPng();
+        }
+        else
+        {
+            await ExportViewportPng();
+        }
+    }
+
+    private async Task ExportMermaidPng()
+    {
+        var dialog = new SaveFileDialog
+        {
+            Filter = "PNG Image (*.png)|*.png",
+            Title = "Export as PNG (High Resolution)",
+            DefaultExt = ".png"
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            try
+            {
+                StatusText.Text = "Exporting high-resolution PNG...";
+                
+                // Export at 3x scale for high resolution
+                var scale = 3;
+                var result = await PreviewWebView.CoreWebView2.ExecuteScriptAsync(
+                    $"window.exportPngHighRes({scale}).then(data => data).catch(err => 'ERROR:' + err)");
+                
+                if (result != "null" && !string.IsNullOrEmpty(result))
+                {
+                    var dataUrl = System.Text.Json.JsonSerializer.Deserialize<string>(result);
+                    
+                    if (dataUrl != null && dataUrl.StartsWith("data:image/png;base64,"))
+                    {
+                        var base64Data = dataUrl.Substring("data:image/png;base64,".Length);
+                        var imageBytes = Convert.FromBase64String(base64Data);
+                        await File.WriteAllBytesAsync(dialog.FileName, imageBytes);
+                        StatusText.Text = "Exported as PNG (3x resolution)";
+                        MessageBox.Show($"PNG exported successfully at {scale}x resolution!\n\nThe full diagram has been exported at high resolution for crisp viewing.", 
+                            "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                    else if (dataUrl != null && dataUrl.StartsWith("ERROR:"))
+                    {
+                        throw new Exception(dataUrl.Substring(6));
+                    }
+                    else
+                    {
+                        throw new Exception("Invalid response from export function");
+                    }
+                }
+                else
+                {
+                    MessageBox.Show("No diagram to export. Make sure the diagram is rendered correctly.", 
+                        "Export Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to export PNG: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                StatusText.Text = "Export failed";
+            }
+        }
+    }
+
+    private async Task ExportViewportPng()
+    {
         var dialog = new SaveFileDialog
         {
             Filter = "PNG Image (*.png)|*.png",
