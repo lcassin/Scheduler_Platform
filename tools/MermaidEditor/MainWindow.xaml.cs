@@ -632,11 +632,25 @@ Console.WriteLine(""Hello, World!"");
 
         var markdownCode = CodeEditor.Text;
         var escapedCode = System.Text.Json.JsonSerializer.Serialize(markdownCode);
+        
+        // Get base URL for resolving relative image paths
+        var baseUrl = "";
+        if (!string.IsNullOrEmpty(_currentFilePath))
+        {
+            var directory = Path.GetDirectoryName(_currentFilePath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                // Convert to file:// URL format with forward slashes
+                baseUrl = "file:///" + directory.Replace("\\", "/") + "/";
+            }
+        }
+        var baseTag = string.IsNullOrEmpty(baseUrl) ? "" : $@"<base href=""{baseUrl}"">";
 
         var html = $@"<!DOCTYPE html>
 <html>
 <head>
     <meta charset=""UTF-8"">
+    {baseTag}
     <script src=""https://cdn.jsdelivr.net/npm/marked/marked.min.js""></script>
     <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-light.min.css"">
     <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github.min.css"">
@@ -1600,7 +1614,7 @@ Console.WriteLine(""Hello, World!"");
                     }
                     else
                     {
-                        RenderMarkdownPreview(content);
+                        RenderMarkdownPreview(content, item.FullPath);
                     }
                 }
                 
@@ -1754,11 +1768,24 @@ Console.WriteLine(""Hello, World!"");
         PreviewWebView.NavigateToString(html);
     }
 
-    private void RenderMarkdownPreview(string code)
+    private void RenderMarkdownPreview(string code, string? filePath = null)
     {
+        // Get base URL for resolving relative image paths
+        var baseUrl = "";
+        if (!string.IsNullOrEmpty(filePath))
+        {
+            var directory = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                baseUrl = "file:///" + directory.Replace("\\", "/") + "/";
+            }
+        }
+        var baseTag = string.IsNullOrEmpty(baseUrl) ? "" : $@"<base href=""{baseUrl}"">";
+        
         var html = $@"<!DOCTYPE html>
 <html>
 <head>
+    {baseTag}
     <script src=""https://cdn.jsdelivr.net/npm/marked/marked.min.js""></script>
     <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-light.min.css"">
     <style>
