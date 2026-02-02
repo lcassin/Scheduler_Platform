@@ -32,6 +32,10 @@
     [TestModeMaxScrapingJobs]         INT            DEFAULT ((50)) NOT NULL,
     [TestModeMaxCredentialChecks]     INT            DEFAULT ((50)) NOT NULL,
     [EnableDetailedLogging]           BIT            DEFAULT ((0)) NOT NULL,
+    [ErrorNotificationsEnabled]       BIT            DEFAULT ((1)) NOT NULL,
+    [ErrorNotificationRecipients]     NVARCHAR (500) NULL,
+    [OrchestrationNotificationsEnabled] BIT          DEFAULT ((1)) NOT NULL,
+    [OrchestrationNotificationRecipients] NVARCHAR (500) NULL,
     CONSTRAINT [PK_AdrConfiguration] PRIMARY KEY CLUSTERED ([AdrConfigurationId] ASC)
 );
 
