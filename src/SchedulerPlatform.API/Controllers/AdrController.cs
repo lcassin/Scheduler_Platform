@@ -3901,6 +3901,8 @@ public class AdrController : ControllerBase
             config.TestModeEnabled = request.TestModeEnabled ?? config.TestModeEnabled;
             config.TestModeMaxScrapingJobs = request.TestModeMaxScrapingJobs ?? config.TestModeMaxScrapingJobs;
             config.TestModeMaxCredentialChecks = request.TestModeMaxCredentialChecks ?? config.TestModeMaxCredentialChecks;
+            // Logging Settings
+            config.EnableDetailedLogging = request.EnableDetailedLogging ?? config.EnableDetailedLogging;
             // Data Retention Settings
             config.JobRetentionMonths = request.JobRetentionMonths ?? config.JobRetentionMonths;
             config.JobExecutionRetentionMonths = request.JobExecutionRetentionMonths ?? config.JobExecutionRetentionMonths;
@@ -5156,6 +5158,8 @@ public class UpdateAdrConfigurationRequest
     public bool? TestModeEnabled { get; set; }
     public int? TestModeMaxScrapingJobs { get; set; }
     public int? TestModeMaxCredentialChecks { get; set; }
+    // Logging Settings
+    public bool? EnableDetailedLogging { get; set; }
     // Data Retention Settings
     public int? JobRetentionMonths { get; set; }
     public int? JobExecutionRetentionMonths { get; set; }

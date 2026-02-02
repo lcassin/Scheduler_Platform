@@ -132,7 +132,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             
             if (_cachedConfig != null)
             {
-                _logger.LogInformation("Loaded ADR configuration from database (ConfigId: {ConfigId})", _cachedConfig.Id);
+                _logger.LogDebug("Loaded ADR configuration from database (ConfigId: {ConfigId})", _cachedConfig.Id);
                 return _cachedConfig;
             }
         }
@@ -154,7 +154,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             IsOrchestrationEnabled = true
         };
         
-        _logger.LogInformation("Using default ADR configuration (database config not found)");
+        _logger.LogDebug("Using default ADR configuration (database config not found)");
         return _cachedConfig;
     }
 
@@ -335,7 +335,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
             // PERFORMANCE OPTIMIZATION: Load blacklist entries once instead of N database queries
             var blacklistEntries = await LoadBlacklistEntriesAsync("Download");
-            _logger.LogInformation("Loaded {Count} active blacklist entries for job creation", blacklistEntries.Count);
+            _logger.LogDebug("Loaded {Count} active blacklist entries for job creation", blacklistEntries.Count);
 
             foreach (var account in dueAccountsList)
             {
@@ -408,7 +408,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     if (processedSinceLastSave >= batchSize)
                     {
                         await _unitOfWork.SaveChangesAsync();
-                        _logger.LogInformation("Job creation batch {BatchNumber} saved: {Count} jobs created so far", 
+                        _logger.LogDebug("Job creation batch {BatchNumber} saved: {Count} jobs created so far", 
                             batchNumber, result.JobsCreated);
                         processedSinceLastSave = 0;
                         batchNumber++;
@@ -512,7 +512,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             int setupProcessedSinceLastSave = 0;
             var startTime = DateTime.UtcNow;
             
-            _logger.LogInformation("Starting to mark {Count} jobs as in-progress (batch size: {BatchSize})", 
+            _logger.LogDebug("Starting to mark {Count} jobs as in-progress (batch size: {BatchSize})", 
                 jobsNeedingVerification.Count, setupBatchSize);
             
             // Store execution objects (not IDs) since IDs aren't assigned until SaveChangesAsync
@@ -538,7 +538,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     // Save in batches to reduce database round-trips
                     if (setupProcessedSinceLastSave >= setupBatchSize)
                     {
-                        _logger.LogInformation("About to save credential-check setup batch: {Marked}/{Total} jobs", 
+                        _logger.LogDebug("About to save credential-check setup batch: {Marked}/{Total} jobs", 
                             markedCount, jobsNeedingVerification.Count);
                         
                         var batchSaveStart = DateTime.UtcNow;
@@ -546,7 +546,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         var batchSaveDuration = (DateTime.UtcNow - batchSaveStart).TotalSeconds;
                         
                         setupProcessedSinceLastSave = 0;
-                        _logger.LogInformation("Saved credential-check setup batch: {Marked}/{Total} jobs in {Duration:F1} seconds", 
+                        _logger.LogDebug("Saved credential-check setup batch: {Marked}/{Total} jobs in {Duration:F1} seconds", 
                             markedCount, jobsNeedingVerification.Count, batchSaveDuration);
                         
                         // Report progress during setup phase (use negative values to indicate setup)
@@ -585,7 +585,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             }
             
             var setupDuration = DateTime.UtcNow - startTime;
-            _logger.LogInformation("Marked {Count} jobs as in-progress in {Duration:F1} seconds, starting parallel API calls", 
+            _logger.LogDebug("Marked {Count} jobs as in-progress in {Duration:F1} seconds, starting parallel API calls", 
                 jobsToProcess.Count, setupDuration.TotalSeconds);
 
             // Step 2: Call ADR API in parallel with semaphore to limit concurrency
@@ -619,7 +619,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     }
                     if (count % 500 == 0 || count == totalApiCalls)
                     {
-                        _logger.LogInformation(
+                        _logger.LogDebug(
                             "Credential verification API calls: {Completed}/{Total} completed ({Percent:F1}%)",
                             count, totalApiCalls, (double)count / totalApiCalls * 100);
                     }
@@ -653,7 +653,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
             await Task.WhenAll(tasks);
 
-            _logger.LogInformation("Completed {Count} parallel API calls, updating job statuses", apiResults.Count);
+            _logger.LogDebug("Completed {Count} parallel API calls, updating job statuses", apiResults.Count);
 
             // Step 3: Update job statuses sequentially (EF DbContext is not thread-safe)
             // Use the job and execution objects we already have from the setup phase - no need to re-fetch
@@ -735,7 +735,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     if (processedSinceLastSave >= GetBatchSize())
                     {
                         await _unitOfWork.SaveChangesAsync();
-                        _logger.LogInformation("Credential verification batch {BatchNumber} saved: {Count} jobs processed so far", 
+                        _logger.LogDebug("Credential verification batch {BatchNumber} saved: {Count} jobs processed so far", 
                             batchNumber, result.JobsProcessed);
                         processedSinceLastSave = 0;
                         batchNumber++;
@@ -824,7 +824,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             int setupProcessedSinceLastSave = 0;
             var startTime = DateTime.UtcNow;
             
-            _logger.LogInformation("Starting to mark {Count} jobs as in-progress for scraping (batch size: {BatchSize})", 
+            _logger.LogDebug("Starting to mark {Count} jobs as in-progress for scraping (batch size: {BatchSize})", 
                 jobsReadyForScraping.Count, setupBatchSize);
             
             foreach (var job in jobsReadyForScraping)
@@ -849,7 +849,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     {
                         await _unitOfWork.SaveChangesAsync();
                         setupProcessedSinceLastSave = 0;
-                        _logger.LogInformation("Marked {Marked}/{Total} jobs as in-progress for scraping (batch saved)", 
+                        _logger.LogDebug("Marked {Marked}/{Total} jobs as in-progress for scraping (batch saved)", 
                             markedCount, jobsReadyForScraping.Count);
                         
                         // Report progress during setup phase (use negative values to indicate setup)
@@ -887,7 +887,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             }
             
             var setupDuration = DateTime.UtcNow - startTime;
-            _logger.LogInformation("Marked {Count} jobs as in-progress for scraping in {Duration:F1} seconds, starting parallel API calls", 
+            _logger.LogDebug("Marked {Count} jobs as in-progress for scraping in {Duration:F1} seconds, starting parallel API calls", 
                 jobsToProcess.Count, setupDuration.TotalSeconds);
 
             // Step 2: Call ADR API in parallel with semaphore to limit concurrency
@@ -955,7 +955,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
             await Task.WhenAll(tasks);
 
-            _logger.LogInformation("Completed {Count} parallel API calls, updating job statuses", apiResults.Count);
+            _logger.LogDebug("Completed {Count} parallel API calls, updating job statuses", apiResults.Count);
 
             // Step 3: Update job statuses sequentially (EF DbContext is not thread-safe)
             // Use the job and execution objects we already have from the setup phase - no need to re-fetch
@@ -1043,7 +1043,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     if (processedSinceLastSave >= GetBatchSize())
                     {
                         await _unitOfWork.SaveChangesAsync();
-                        _logger.LogInformation("Scraping batch {BatchNumber} saved: {Count} jobs processed so far", 
+                        _logger.LogDebug("Scraping batch {BatchNumber} saved: {Count} jobs processed so far", 
                             batchNumber, result.JobsProcessed);
                         processedSinceLastSave = 0;
                         batchNumber++;
@@ -1144,7 +1144,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             int setupProcessedSinceLastSave = 0;
             var startTime = DateTime.UtcNow;
             
-            _logger.LogInformation("Starting to mark {Count} jobs as in-progress for status check (batch size: {BatchSize})", 
+            _logger.LogDebug("Starting to mark {Count} jobs as in-progress for status check (batch size: {BatchSize})", 
                 jobsNeedingStatusCheck.Count, setupBatchSize);
             
             foreach (var job in jobsNeedingStatusCheck)
@@ -1170,7 +1170,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     {
                         await _unitOfWork.SaveChangesAsync();
                         setupProcessedSinceLastSave = 0;
-                        _logger.LogInformation("Marked {Marked}/{Total} jobs as in-progress for status check (batch saved)", 
+                        _logger.LogDebug("Marked {Marked}/{Total} jobs as in-progress for status check (batch saved)", 
                             markedCount, jobsNeedingStatusCheck.Count);
                         
                         // Report progress during setup phase (use negative values to indicate setup)
@@ -1199,7 +1199,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             }
             
             var setupDuration = DateTime.UtcNow - startTime;
-            _logger.LogInformation("Marked {Count} jobs as in-progress for status check in {Duration:F1} seconds, starting parallel status checks", 
+            _logger.LogDebug("Marked {Count} jobs as in-progress for status check in {Duration:F1} seconds, starting parallel status checks", 
                 jobsToProcess.Count, setupDuration.TotalSeconds);
 
             // Step 2: Check status in parallel with semaphore to limit concurrency
@@ -1261,7 +1261,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 .Distinct()
                 .ToList();
             
-            _logger.LogInformation("Pre-loading {Count} rules for potential advancement", ruleIdsToLoad.Count);
+            _logger.LogDebug("Pre-loading {Count} rules for potential advancement", ruleIdsToLoad.Count);
             var rulesById = new Dictionary<int, AdrAccountRule>();
             
             // Load rules in batches to avoid huge IN clauses
@@ -1275,7 +1275,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     rulesById[rule.Id] = rule;
                 }
             }
-            _logger.LogInformation("Pre-loaded {Count} rules for advancement", rulesById.Count);
+            _logger.LogDebug("Pre-loaded {Count} rules for advancement", rulesById.Count);
 
             // Step 4: Update job statuses sequentially (EF DbContext is not thread-safe)
             // Use the job objects we already have from the setup phase - no need to re-fetch
@@ -1415,7 +1415,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     if (processedSinceLastSave >= GetBatchSize())
                     {
                         await _unitOfWork.SaveChangesAsync();
-                        _logger.LogInformation("Status check batch {BatchNumber} saved: {Count} jobs checked so far", 
+                        _logger.LogDebug("Status check batch {BatchNumber} saved: {Count} jobs checked so far", 
                             batchNumber, result.JobsChecked);
                         processedSinceLastSave = 0;
                         batchNumber++;
@@ -1496,7 +1496,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             int setupProcessedSinceLastSave = 0;
             var startTime = DateTime.UtcNow;
             
-            _logger.LogInformation("Starting to mark {Count} jobs as in-progress for manual status check (batch size: {BatchSize})", 
+            _logger.LogDebug("Starting to mark {Count} jobs as in-progress for manual status check (batch size: {BatchSize})", 
                 jobsNeedingStatusCheck.Count, setupBatchSize);
             
             foreach (var job in jobsNeedingStatusCheck)
@@ -1521,7 +1521,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     {
                         await _unitOfWork.SaveChangesAsync();
                         setupProcessedSinceLastSave = 0;
-                        _logger.LogInformation("Marked {Marked}/{Total} jobs as in-progress for manual status check (batch saved)", 
+                        _logger.LogDebug("Marked {Marked}/{Total} jobs as in-progress for manual status check (batch saved)", 
                             markedCount, jobsNeedingStatusCheck.Count);
                         
                         // Report progress during setup phase (use negative values to indicate setup)
@@ -1550,7 +1550,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             }
             
             var setupDuration = DateTime.UtcNow - startTime;
-            _logger.LogInformation("Marked {Count} jobs as in-progress for manual status check in {Duration:F1} seconds, starting parallel status checks", 
+            _logger.LogDebug("Marked {Count} jobs as in-progress for manual status check in {Duration:F1} seconds, starting parallel status checks", 
                 jobsToProcess.Count, setupDuration.TotalSeconds);
 
             // Step 2: Check status in parallel with semaphore to limit concurrency
@@ -1613,7 +1613,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 .OrderByDescending(x => x.Count)
                 .ToList();
             
-            _logger.LogInformation("=== STATUS CHECK DISTRIBUTION SUMMARY ===");
+            _logger.LogDebug("=== STATUS CHECK DISTRIBUTION SUMMARY ===");
             _logger.LogInformation("Expected Complete StatusId = {CompleteId}, NeedsReview StatusId = {NeedsReviewId}", 
                 (int)AdrStatus.Complete, (int)AdrStatus.NeedsHumanReview);
             foreach (var entry in statusSummary)
@@ -1641,7 +1641,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 .Distinct()
                 .ToList();
             
-            _logger.LogInformation("Pre-loading {Count} rules for potential advancement", ruleIdsToLoad.Count);
+            _logger.LogDebug("Pre-loading {Count} rules for potential advancement", ruleIdsToLoad.Count);
             var rulesById = new Dictionary<int, AdrAccountRule>();
             
             // Load rules in batches to avoid huge IN clauses
@@ -1655,7 +1655,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     rulesById[rule.Id] = rule;
                 }
             }
-            _logger.LogInformation("Pre-loaded {Count} rules for advancement", rulesById.Count);
+            _logger.LogDebug("Pre-loaded {Count} rules for advancement", rulesById.Count);
 
             // Step 4: Update job statuses sequentially (EF DbContext is not thread-safe)
             int processedSinceLastSave = 0;
@@ -1828,7 +1828,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     if (processedSinceLastSave >= GetBatchSize())
                     {
                         await _unitOfWork.SaveChangesAsync();
-                        _logger.LogInformation("Manual status check batch {BatchNumber} saved: {Count} jobs checked so far", 
+                        _logger.LogDebug("Manual status check batch {BatchNumber} saved: {Count} jobs checked so far", 
                             batchNumber, result.JobsChecked);
                         
                         // Report progress for database update phase
@@ -1950,7 +1950,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     if (processedSinceLastSave >= batchSize)
                     {
                         await _unitOfWork.SaveChangesAsync();
-                        _logger.LogInformation("Stale job finalization batch saved: {Count}/{Total} jobs processed", 
+                        _logger.LogDebug("Stale job finalization batch saved: {Count}/{Total} jobs processed", 
                             processedCount, staleJobs.Count);
                         processedSinceLastSave = 0;
                         
