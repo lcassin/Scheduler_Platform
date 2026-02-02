@@ -124,7 +124,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             // Mark duplicates as deleted
             if (duplicatesToDelete.Count > 0)
             {
-                _logger.LogInformation("Marking {Count} duplicate AdrAccount rows as deleted", duplicatesToDelete.Count);
+                _logger.LogDebug("Marking {Count} duplicate AdrAccount rows as deleted", duplicatesToDelete.Count);
                 foreach (var duplicate in duplicatesToDelete)
                 {
                     duplicate.IsDeleted = true;
@@ -133,15 +133,15 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                 }
                 await _dbContext.SaveChangesAsync(cancellationToken);
                 result.DuplicatesMarkedDeleted = duplicatesToDelete.Count;
-                _logger.LogInformation("Duplicate cleanup complete: {Count} rows marked as deleted", duplicatesToDelete.Count);
+                _logger.LogDebug("Duplicate cleanup complete: {Count} rows marked as deleted", duplicatesToDelete.Count);
             }
 
-            _logger.LogInformation("Loaded {Count} unique accounts from local database", existingAccounts.Count);
+            _logger.LogDebug("Loaded {Count} unique accounts from local database", existingAccounts.Count);
 
             // Use local database count for progress reporting
             // This includes both accounts to sync AND accounts to mark as deleted
             var totalAccountCount = existingAccounts.Count;
-            _logger.LogInformation("Total accounts for progress tracking: {Count}", totalAccountCount);
+            _logger.LogDebug("Total accounts for progress tracking: {Count}", totalAccountCount);
             
             // Report initial progress (0 of total)
             progressCallback?.Invoke(0, totalAccountCount);
@@ -154,7 +154,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             int totalProcessed = 0; // Track total for progress (sync + deletions)
 
             // Step 2: Stream external accounts and process in batches
-            _logger.LogInformation("Streaming and processing accounts in batches of {BatchSize}", batchSize);
+            _logger.LogDebug("Streaming and processing accounts in batches of {BatchSize}", batchSize);
 
             await using var connection = new SqlConnection(externalConnectionString);
             await connection.OpenAsync(cancellationToken);
@@ -211,7 +211,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                     if (processedSinceLastSave >= batchSize)
                     {
                         await _dbContext.SaveChangesAsync(cancellationToken);
-                        _logger.LogInformation("Batch {BatchNumber} saved: {Count} accounts processed so far", 
+                        _logger.LogDebug("Batch {BatchNumber} saved: {Count} accounts processed so far", 
                             batchNumber, result.TotalAccountsProcessed);
                         
                         progressCallback?.Invoke(totalProcessed, totalAccountCount);
@@ -257,7 +257,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                     if (deletedSinceLastSave >= batchSize)
                     {
                         await _dbContext.SaveChangesAsync(cancellationToken);
-                        _logger.LogInformation("Deletion batch saved: {Count} accounts marked deleted so far", 
+                        _logger.LogDebug("Deletion batch saved: {Count} accounts marked deleted so far", 
                             result.AccountsMarkedDeleted);
                         
                         progressCallback?.Invoke(totalProcessed, totalAccountCount);
@@ -269,7 +269,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
 
             // Final save for any remaining changes
             await _dbContext.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation("Final batch saved. Total batches: {BatchCount}", batchNumber);
+            _logger.LogDebug("Final batch saved. Total batches: {BatchCount}", batchNumber);
             
             progressCallback?.Invoke(totalAccountCount, totalAccountCount);
 
@@ -280,7 +280,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             {
                 _dbContext.Entry(account).State = EntityState.Detached;
             }
-            _logger.LogInformation("Detached {Count} account entities from change tracker before rule sync", accountsList.Count);
+            _logger.LogDebug("Detached {Count} account entities from change tracker before rule sync", accountsList.Count);
             
             await SyncAccountRulesOptimizedAsync(accountsList, schedulingDataLookup, result, subStepCallback, cancellationToken);
 
@@ -373,7 +373,7 @@ WHERE CL.ClientId IS NOT NULL";
             uniqueClients.Add((clientId, clientName));
         }
 
-        _logger.LogInformation("Found {Count} unique clients in external data", uniqueClients.Count);
+        _logger.LogDebug("Found {Count} unique clients in external data", uniqueClients.Count);
 
         // Load existing clients by ExternalClientId
         var externalClientIds = uniqueClients.Select(c => c.ExternalClientId).ToList();
@@ -548,7 +548,7 @@ WHERE CL.ClientId IS NOT NULL";
         CancellationToken cancellationToken)
     {
         var accountsToSync = accounts.Where(a => !a.IsDeleted).ToList();
-        _logger.LogInformation("Starting optimized rule sync for {Count} accounts", accountsToSync.Count);
+        _logger.LogDebug("Starting optimized rule sync for {Count} accounts", accountsToSync.Count);
         
         // Report sub-step start
         subStepCallback?.Invoke("Syncing rules", 0, accountsToSync.Count);
@@ -625,7 +625,7 @@ WHERE CL.ClientId IS NOT NULL";
                 if (processedSinceLastSave >= batchSize)
                 {
                     await _dbContext.SaveChangesAsync(cancellationToken);
-                    _logger.LogInformation("Rule sync batch {BatchNumber} saved: {Created} created, {Updated} updated, {Skipped} skipped so far",
+                    _logger.LogDebug("Rule sync batch {BatchNumber} saved: {Created} created, {Updated} updated, {Skipped} skipped so far",
                         batchNumber, result.RulesCreated, result.RulesUpdated, result.RulesSkippedOverridden);
                     
                     // Report sub-step progress after each batch
@@ -672,7 +672,7 @@ WHERE CL.ClientId IS NOT NULL";
             .Select(g => new { ExternalClientId = g.Key, ClientName = g.First().ClientName ?? $"Client {g.Key}" })
             .ToList();
 
-        _logger.LogInformation("Found {Count} unique clients in external data", uniqueClients.Count);
+        _logger.LogDebug("Found {Count} unique clients in external data", uniqueClients.Count);
 
         // Load existing clients by ExternalClientId
         // Use ToListAsync + GroupBy to handle potential duplicates gracefully
@@ -702,7 +702,7 @@ WHERE CL.ClientId IS NOT NULL";
                         .First();
                 });
 
-        _logger.LogInformation("Found {Count} existing clients by ExternalClientId", existingClients.Count);
+        _logger.LogDebug("Found {Count} existing clients by ExternalClientId", existingClients.Count);
 
         var now = DateTime.UtcNow;
 
@@ -1072,7 +1072,7 @@ WHERE CL.ClientId IS NOT NULL";
         CancellationToken cancellationToken)
     {
         var accountsToSync = accounts.Where(a => !a.IsDeleted).ToList();
-        _logger.LogInformation("Starting rule sync for {Count} accounts", accountsToSync.Count);
+        _logger.LogDebug("Starting rule sync for {Count} accounts", accountsToSync.Count);
         
         // Report sub-step start
         subStepCallback?.Invoke("Syncing rules", 0, accountsToSync.Count);
@@ -1165,7 +1165,7 @@ WHERE CL.ClientId IS NOT NULL";
                 if (processedSinceLastSave >= batchSize)
                 {
                     await _dbContext.SaveChangesAsync(cancellationToken);
-                    _logger.LogInformation("Rule sync batch {BatchNumber} saved: {Created} created, {Updated} updated, {Skipped} skipped so far",
+                    _logger.LogDebug("Rule sync batch {BatchNumber} saved: {Created} created, {Updated} updated, {Skipped} skipped so far",
                         batchNumber, result.RulesCreated, result.RulesUpdated, result.RulesSkippedOverridden);
                     
                     // Report sub-step progress after each batch

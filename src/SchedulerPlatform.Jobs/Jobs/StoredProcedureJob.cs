@@ -325,7 +325,7 @@ public class StoredProcedureJob : IJob
             if (!connectionString.Contains("Encrypt=", StringComparison.OrdinalIgnoreCase))
             {
                 connectionString += ";Encrypt=True;TrustServerCertificate=False";
-                _logger.LogInformation("Added secure encryption settings to connection string");
+                _logger.LogDebug("Added secure encryption settings to connection string");
             }
         }
         else
