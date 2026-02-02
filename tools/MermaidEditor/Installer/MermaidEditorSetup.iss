@@ -6,10 +6,11 @@
 #define MyAppPublisher "Scheduler Platform"
 #define MyAppURL "https://github.com/lcassin/Scheduler_Platform"
 #define MyAppExeName "MermaidEditor.exe"
+#define MyAppId "8F3E4A2B-1C5D-4E6F-9A8B-7C2D3E4F5A6B"
 
 [Setup]
 ; NOTE: The value of AppId uniquely identifies this application.
-AppId={{8F3E4A2B-1C5D-4E6F-9A8B-7C2D3E4F5A6B}
+AppId={{{#MyAppId}}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
@@ -29,6 +30,10 @@ SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
+; Close running application before install/uninstall
+CloseApplications=yes
+CloseApplicationsFilter=*.exe
+RestartApplications=yes
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -70,3 +75,84 @@ Root: HKA; Subkey: "Software\Classes\MermaidEditor.md\shell\open\command"; Value
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+// Check if a previous version is installed and return the uninstall string
+function GetUninstallString(): String;
+var
+  sUnInstPath: String;
+  sUnInstallString: String;
+begin
+  sUnInstPath := ExpandConstant('Software\Microsoft\Windows\CurrentVersion\Uninstall\{#emit SetupSetting("AppId")}_is1');
+  sUnInstallString := '';
+  // Check current user first (for per-user installs)
+  if not RegQueryStringValue(HKCU, sUnInstPath, 'UninstallString', sUnInstallString) then
+    // Then check local machine (for all-users installs)
+    RegQueryStringValue(HKLM, sUnInstPath, 'UninstallString', sUnInstallString);
+  Result := sUnInstallString;
+end;
+
+// Check if a previous version is installed
+function IsUpgrade(): Boolean;
+begin
+  Result := (GetUninstallString() <> '');
+end;
+
+// Get the version of the previously installed application
+function GetInstalledVersion(): String;
+var
+  sUnInstPath: String;
+  sVersion: String;
+begin
+  sUnInstPath := ExpandConstant('Software\Microsoft\Windows\CurrentVersion\Uninstall\{#emit SetupSetting("AppId")}_is1');
+  sVersion := '';
+  if not RegQueryStringValue(HKCU, sUnInstPath, 'DisplayVersion', sVersion) then
+    RegQueryStringValue(HKLM, sUnInstPath, 'DisplayVersion', sVersion);
+  Result := sVersion;
+end;
+
+// Uninstall the previous version silently
+function UnInstallOldVersion(): Integer;
+var
+  sUnInstallString: String;
+  iResultCode: Integer;
+begin
+  Result := 0;
+  sUnInstallString := GetUninstallString();
+  if sUnInstallString <> '' then begin
+    sUnInstallString := RemoveQuotes(sUnInstallString);
+    if Exec(sUnInstallString, '/SILENT /NORESTART /SUPPRESSMSGBOXES', '', SW_HIDE, ewWaitUntilTerminated, iResultCode) then
+      Result := 3
+    else
+      Result := 2;
+  end else
+    Result := 1;
+end;
+
+// Called during setup initialization
+function InitializeSetup(): Boolean;
+var
+  sVersion: String;
+  iResultCode: Integer;
+begin
+  Result := True;
+  
+  if IsUpgrade() then begin
+    sVersion := GetInstalledVersion();
+    if MsgBox('Version ' + sVersion + ' of {#MyAppName} is already installed. ' +
+              'The previous version will be uninstalled before installing the new version.' + #13#10#13#10 +
+              'Do you want to continue?', mbConfirmation, MB_YESNO) = IDNO then begin
+      Result := False;
+    end;
+  end;
+end;
+
+// Called just before installation begins
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssInstall then begin
+    if IsUpgrade() then begin
+      UnInstallOldVersion();
+    end;
+  end;
+end;
