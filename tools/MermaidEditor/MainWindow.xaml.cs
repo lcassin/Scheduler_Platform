@@ -1127,6 +1127,9 @@ Console.WriteLine(""Hello, World!"");
                     var svg = System.Text.Json.JsonSerializer.Deserialize<string>(svgContent);
                     if (svg != null)
                     {
+                        // Sanitize SVG for XML parsing - Mermaid generates HTML elements that aren't valid XML
+                        svg = SanitizeSvgForXml(svg);
+                        
                         // Parse the SVG using Svg.NET
                         var svgDocument = Svg.SvgDocument.FromSvg<Svg.SvgDocument>(svg);
                         
@@ -1393,6 +1396,27 @@ Console.WriteLine(""Hello, World!"");
         ExportSvgMenuItem.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
         ExportEmfMenuItem.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
         ExportWordMenuItem.Visibility = isMermaid ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private string SanitizeSvgForXml(string svg)
+    {
+        // Mermaid generates SVG with HTML elements that aren't valid XML
+        // Fix common issues:
+        
+        // 1. Convert self-closing HTML tags to XML-compliant format
+        svg = Regex.Replace(svg, @"<br\s*>", "<br/>", RegexOptions.IgnoreCase);
+        svg = Regex.Replace(svg, @"<hr\s*>", "<hr/>", RegexOptions.IgnoreCase);
+        
+        // 2. Remove foreignObject elements which contain HTML that Svg.NET can't parse
+        svg = Regex.Replace(svg, @"<foreignObject[^>]*>.*?</foreignObject>", "", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+        
+        // 3. Remove any remaining HTML tags that might cause issues
+        svg = Regex.Replace(svg, @"<span[^>]*>", "", RegexOptions.IgnoreCase);
+        svg = Regex.Replace(svg, @"</span>", "", RegexOptions.IgnoreCase);
+        svg = Regex.Replace(svg, @"<div[^>]*>", "", RegexOptions.IgnoreCase);
+        svg = Regex.Replace(svg, @"</div>", "", RegexOptions.IgnoreCase);
+        
+        return svg;
     }
 
     private void Exit_Click(object sender, RoutedEventArgs e)
