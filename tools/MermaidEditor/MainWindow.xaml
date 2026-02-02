@@ -37,11 +37,16 @@
                 <MenuItem Header="_Save" Click="Save_Click" InputGestureText="Ctrl+S"/>
                 <MenuItem Header="Save _As..." Click="SaveAs_Click" InputGestureText="Ctrl+Shift+S"/>
                 <Separator/>
-                <MenuItem Header="E_xport as PNG..." Click="ExportPng_Click"/>
-                <MenuItem Header="Export as _SVG..." Click="ExportSvg_Click"/>
-                <MenuItem Header="Export as E_MF..." Click="ExportEmf_Click"/>
+                <MenuItem x:Name="ExportPngMenuItem" Header="E_xport as PNG..." Click="ExportPng_Click"/>
+                <MenuItem x:Name="ExportSvgMenuItem" Header="Export as _SVG..." Click="ExportSvg_Click"/>
+                <MenuItem x:Name="ExportEmfMenuItem" Header="Export as E_MF..." Click="ExportEmf_Click"/>
+                <MenuItem x:Name="ExportWordMenuItem" Header="Export as _Word..." Click="ExportWord_Click"/>
                 <Separator/>
                 <MenuItem Header="E_xit" Click="Exit_Click" InputGestureText="Alt+F4"/>
+            </MenuItem>
+            <MenuItem Header="_Edit">
+                <MenuItem Header="_Undo" Click="Undo_Click" InputGestureText="Ctrl+Z"/>
+                <MenuItem Header="_Redo" Click="Redo_Click" InputGestureText="Ctrl+Y"/>
             </MenuItem>
             <MenuItem Header="_View">
                 <MenuItem Header="Zoom _In" Click="ZoomIn_Click" InputGestureText="Ctrl++"/>
