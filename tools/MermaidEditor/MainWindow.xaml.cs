@@ -540,9 +540,79 @@ Console.WriteLine(""Hello, World!"");
                 currentZoom = e.getTransform().scale;
                 window.chrome.webview.postMessage({{ type: 'zoom', level: currentZoom }});
             }});
+            
+            // Add click handlers to diagram nodes for click-to-highlight feature
+            setupNodeClickHandlers(svg);
         }}).catch(err => {{
             document.getElementById('diagram').innerHTML = '<div class=""error"">Error: ' + err.message + '</div>';
         }});
+        
+        function setupNodeClickHandlers(svg) {{
+            // Find all clickable elements in the SVG (nodes, edges, labels)
+            const clickableElements = svg.querySelectorAll('[id*=""flowchart-""], [id*=""stateDiagram-""], [id*=""classDiagram-""], [id*=""sequenceDiagram-""], .node, .cluster, .actor, .messageText, .labelText, .edgeLabel, .nodeLabel, g[class*=""node""]');
+            
+            clickableElements.forEach(el => {{
+                el.style.cursor = 'pointer';
+                el.addEventListener('click', function(e) {{
+                    e.stopPropagation();
+                    
+                    // Try to extract the node ID from the element
+                    let nodeId = '';
+                    let textContent = '';
+                    
+                    // Get the element's ID
+                    const elId = el.id || el.getAttribute('id') || '';
+                    
+                    // Try to extract node ID from Mermaid's ID format (e.g., 'flowchart-A-0')
+                    if (elId) {{
+                        const parts = elId.split('-');
+                        if (parts.length >= 2) {{
+                            nodeId = parts[1]; // Get the node name (e.g., 'A' from 'flowchart-A-0')
+                        }}
+                    }}
+                    
+                    // Also get text content from the element or its children
+                    const textEl = el.querySelector('text, .nodeLabel, span, foreignObject') || el;
+                    textContent = (textEl.textContent || textEl.innerText || '').trim();
+                    
+                    // If no nodeId found, try to use the class name
+                    if (!nodeId && el.classList) {{
+                        el.classList.forEach(cls => {{
+                            if (cls.startsWith('node-')) {{
+                                nodeId = cls.replace('node-', '');
+                            }}
+                        }});
+                    }}
+                    
+                    if (nodeId || textContent) {{
+                        window.chrome.webview.postMessage({{ 
+                            type: 'nodeClick', 
+                            nodeId: nodeId,
+                            text: textContent
+                        }});
+                    }}
+                }});
+            }});
+            
+            // Also handle clicks on text elements directly
+            const textElements = svg.querySelectorAll('text, .nodeLabel');
+            textElements.forEach(el => {{
+                if (!el.closest('[id*=""flowchart-""]')) {{ // Don't double-handle
+                    el.style.cursor = 'pointer';
+                    el.addEventListener('click', function(e) {{
+                        e.stopPropagation();
+                        const textContent = (el.textContent || el.innerText || '').trim();
+                        if (textContent) {{
+                            window.chrome.webview.postMessage({{ 
+                                type: 'nodeClick', 
+                                nodeId: '',
+                                text: textContent
+                            }});
+                        }}
+                    }});
+                }}
+            }});
+        }}
         
         window.setZoom = function(level) {{
             if (panzoomInstance) {{
@@ -749,6 +819,113 @@ Console.WriteLine(""Hello, World!"");
         }});
         
         document.getElementById('content').innerHTML = marked.parse(markdownContent);
+        
+        // Add click handlers for click-to-highlight feature
+        setupClickHandlers();
+        
+        function setupClickHandlers() {{
+            const content = document.getElementById('content');
+            
+            // Add click handlers to headings
+            content.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach(el => {{
+                el.style.cursor = 'pointer';
+                el.addEventListener('click', function(e) {{
+                    e.stopPropagation();
+                    const text = el.textContent.trim();
+                    if (text) {{
+                        window.chrome.webview.postMessage({{ 
+                            type: 'elementClick', 
+                            text: text,
+                            elementType: 'heading'
+                        }});
+                    }}
+                }});
+            }});
+            
+            // Add click handlers to code blocks
+            content.querySelectorAll('pre code').forEach(el => {{
+                el.style.cursor = 'pointer';
+                el.addEventListener('click', function(e) {{
+                    e.stopPropagation();
+                    // Get first line of code for matching
+                    const text = el.textContent.split('\\n')[0].trim();
+                    if (text) {{
+                        window.chrome.webview.postMessage({{ 
+                            type: 'elementClick', 
+                            text: text,
+                            elementType: 'code'
+                        }});
+                    }}
+                }});
+            }});
+            
+            // Add click handlers to inline code
+            content.querySelectorAll('code:not(pre code)').forEach(el => {{
+                el.style.cursor = 'pointer';
+                el.addEventListener('click', function(e) {{
+                    e.stopPropagation();
+                    const text = el.textContent.trim();
+                    if (text) {{
+                        window.chrome.webview.postMessage({{ 
+                            type: 'elementClick', 
+                            text: text,
+                            elementType: 'code'
+                        }});
+                    }}
+                }});
+            }});
+            
+            // Add click handlers to list items
+            content.querySelectorAll('li').forEach(el => {{
+                el.style.cursor = 'pointer';
+                el.addEventListener('click', function(e) {{
+                    e.stopPropagation();
+                    const text = el.textContent.trim();
+                    if (text) {{
+                        window.chrome.webview.postMessage({{ 
+                            type: 'elementClick', 
+                            text: text,
+                            elementType: 'listitem'
+                        }});
+                    }}
+                }});
+            }});
+            
+            // Add click handlers to table cells
+            content.querySelectorAll('td, th').forEach(el => {{
+                el.style.cursor = 'pointer';
+                el.addEventListener('click', function(e) {{
+                    e.stopPropagation();
+                    const text = el.textContent.trim();
+                    if (text) {{
+                        window.chrome.webview.postMessage({{ 
+                            type: 'elementClick', 
+                            text: text,
+                            elementType: 'table'
+                        }});
+                    }}
+                }});
+            }});
+            
+            // Add click handlers to paragraphs (but not if they contain other clickable elements)
+            content.querySelectorAll('p').forEach(el => {{
+                if (!el.querySelector('code')) {{
+                    el.style.cursor = 'pointer';
+                    el.addEventListener('click', function(e) {{
+                        if (e.target === el) {{
+                            const text = el.textContent.trim().substring(0, 50); // First 50 chars
+                            if (text) {{
+                                window.chrome.webview.postMessage({{ 
+                                    type: 'elementClick', 
+                                    text: text,
+                                    elementType: 'paragraph'
+                                }});
+                            }}
+                        }}
+                    }});
+                }}
+            }});
+        }}
     </script>
 </body>
 </html>";
@@ -781,10 +958,212 @@ Console.WriteLine(""Hello, World!"");
                     var error = errorElement.GetString();
                     _pngExportTcs?.TrySetException(new Exception(error ?? "Unknown error"));
                 }
+                else if (messageType == "nodeClick")
+                {
+                    var nodeId = message.RootElement.TryGetProperty("nodeId", out var nodeIdElement) ? nodeIdElement.GetString() : "";
+                    var text = message.RootElement.TryGetProperty("text", out var textElement) ? textElement.GetString() : "";
+                    FindAndHighlightInEditor(nodeId, text);
+                }
+                else if (messageType == "elementClick")
+                {
+                    var text = message.RootElement.TryGetProperty("text", out var textElement) ? textElement.GetString() : "";
+                    var elementType = message.RootElement.TryGetProperty("elementType", out var typeEl) ? typeEl.GetString() : "";
+                    FindAndHighlightInEditor("", text, elementType);
+                }
             }
         }
         catch
         {
+        }
+    }
+
+    private void FindAndHighlightInEditor(string? nodeId, string? text, string? elementType = null)
+    {
+        if (string.IsNullOrEmpty(nodeId) && string.IsNullOrEmpty(text)) return;
+        
+        var sourceCode = CodeEditor.Text;
+        var lines = sourceCode.Split('\n');
+        int bestLineIndex = -1;
+        int bestMatchStart = -1;
+        int bestMatchLength = 0;
+        
+        // First, try to find by node ID (for Mermaid diagrams)
+        if (!string.IsNullOrEmpty(nodeId))
+        {
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var line = lines[i];
+                
+                // Look for node definitions like "A[text]", "A{text}", "A((text))", "A-->B", etc.
+                // Also look for node ID at the start of arrows or in brackets
+                var patterns = new[]
+                {
+                    $@"\b{System.Text.RegularExpressions.Regex.Escape(nodeId)}\s*[\[\(\{{\<]",  // A[, A(, A{, A<
+                    $@"\b{System.Text.RegularExpressions.Regex.Escape(nodeId)}\s*-->",          // A-->
+                    $@"\b{System.Text.RegularExpressions.Regex.Escape(nodeId)}\s*---",          // A---
+                    $@"\b{System.Text.RegularExpressions.Regex.Escape(nodeId)}\s*-\.\-",        // A-.-
+                    $@"-->\s*{System.Text.RegularExpressions.Regex.Escape(nodeId)}\b",          // -->A
+                    $@"---\s*{System.Text.RegularExpressions.Regex.Escape(nodeId)}\b",          // ---A
+                    $@"^\s*{System.Text.RegularExpressions.Regex.Escape(nodeId)}\s*:",          // A: (for state diagrams)
+                    $@"state\s+{System.Text.RegularExpressions.Regex.Escape(nodeId)}\b",        // state A
+                };
+                
+                foreach (var pattern in patterns)
+                {
+                    var match = System.Text.RegularExpressions.Regex.Match(line, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                    if (match.Success)
+                    {
+                        bestLineIndex = i;
+                        bestMatchStart = match.Index;
+                        bestMatchLength = nodeId.Length;
+                        break;
+                    }
+                }
+                
+                if (bestLineIndex >= 0) break;
+            }
+        }
+        
+        // If no match by nodeId, try to find by text content
+        if (bestLineIndex < 0 && !string.IsNullOrEmpty(text))
+        {
+            // For Markdown, handle different element types
+            if (!string.IsNullOrEmpty(elementType))
+            {
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    var line = lines[i];
+                    
+                    if (elementType == "heading")
+                    {
+                        // Look for heading markers followed by the text
+                        if (line.TrimStart().StartsWith("#") && line.Contains(text, StringComparison.OrdinalIgnoreCase))
+                        {
+                            bestLineIndex = i;
+                            var idx = line.IndexOf(text, StringComparison.OrdinalIgnoreCase);
+                            if (idx >= 0)
+                            {
+                                bestMatchStart = idx;
+                                bestMatchLength = text.Length;
+                            }
+                            break;
+                        }
+                    }
+                    else if (elementType == "code")
+                    {
+                        // Look for code blocks or inline code
+                        if (line.Contains(text))
+                        {
+                            bestLineIndex = i;
+                            var idx = line.IndexOf(text);
+                            if (idx >= 0)
+                            {
+                                bestMatchStart = idx;
+                                bestMatchLength = text.Length;
+                            }
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        // Generic text search
+                        if (line.Contains(text, StringComparison.OrdinalIgnoreCase))
+                        {
+                            bestLineIndex = i;
+                            var idx = line.IndexOf(text, StringComparison.OrdinalIgnoreCase);
+                            if (idx >= 0)
+                            {
+                                bestMatchStart = idx;
+                                bestMatchLength = text.Length;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            else
+            {
+                // For Mermaid, search for the text in brackets or quotes
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    var line = lines[i];
+                    
+                    // Look for text in brackets: [text], (text), {text}, "text"
+                    var bracketPatterns = new[]
+                    {
+                        $@"\[{System.Text.RegularExpressions.Regex.Escape(text)}\]",
+                        $@"\({System.Text.RegularExpressions.Regex.Escape(text)}\)",
+                        $@"\{{{System.Text.RegularExpressions.Regex.Escape(text)}\}}",
+                        $@"""{System.Text.RegularExpressions.Regex.Escape(text)}""",
+                        $@"'{System.Text.RegularExpressions.Regex.Escape(text)}'",
+                    };
+                    
+                    foreach (var pattern in bracketPatterns)
+                    {
+                        var match = System.Text.RegularExpressions.Regex.Match(line, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        if (match.Success)
+                        {
+                            bestLineIndex = i;
+                            bestMatchStart = match.Index + 1; // Skip the opening bracket
+                            bestMatchLength = text.Length;
+                            break;
+                        }
+                    }
+                    
+                    if (bestLineIndex >= 0) break;
+                    
+                    // Also try plain text search as fallback
+                    if (line.Contains(text, StringComparison.OrdinalIgnoreCase))
+                    {
+                        bestLineIndex = i;
+                        var idx = line.IndexOf(text, StringComparison.OrdinalIgnoreCase);
+                        if (idx >= 0)
+                        {
+                            bestMatchStart = idx;
+                            bestMatchLength = text.Length;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // If we found a match, scroll to it and highlight
+        if (bestLineIndex >= 0)
+        {
+            // Calculate the offset in the document
+            int offset = 0;
+            for (int i = 0; i < bestLineIndex; i++)
+            {
+                offset += lines[i].Length + 1; // +1 for newline
+            }
+            
+            if (bestMatchStart >= 0)
+            {
+                offset += bestMatchStart;
+            }
+            
+            // Scroll to the line and select the text
+            CodeEditor.ScrollToLine(bestLineIndex + 1); // Lines are 1-indexed
+            
+            if (bestMatchLength > 0 && bestMatchStart >= 0)
+            {
+                CodeEditor.Select(offset, bestMatchLength);
+            }
+            else
+            {
+                // Just move the caret to the line
+                CodeEditor.TextArea.Caret.Offset = offset;
+            }
+            
+            // Focus the editor
+            CodeEditor.Focus();
+            
+            StatusText.Text = $"Found at line {bestLineIndex + 1}";
+        }
+        else
+        {
+            StatusText.Text = "Element not found in source";
         }
     }
 
