@@ -1,8 +1,12 @@
 using System.IO;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using DocumentFormat.OpenXml;
+using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Wordprocessing;
 using ICSharpCode.AvalonEdit.CodeCompletion;
 using ICSharpCode.AvalonEdit.Document;
 using ICSharpCode.AvalonEdit.Editing;
@@ -16,6 +20,11 @@ using OpenFileDialog = Microsoft.Win32.OpenFileDialog;
 using SaveFileDialog = Microsoft.Win32.SaveFileDialog;
 using DataFormats = System.Windows.DataFormats;
 using DragDropEffects = System.Windows.DragDropEffects;
+using Paragraph = DocumentFormat.OpenXml.Wordprocessing.Paragraph;
+using Run = DocumentFormat.OpenXml.Wordprocessing.Run;
+using Text = DocumentFormat.OpenXml.Wordprocessing.Text;
+using Bold = DocumentFormat.OpenXml.Wordprocessing.Bold;
+using Italic = DocumentFormat.OpenXml.Wordprocessing.Italic;
 
 namespace MermaidEditor;
 
@@ -37,6 +46,7 @@ public partial class MainWindow : Window
     private TaskCompletionSource<string>? _pngExportTcs;
     private string _currentBrowserPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
     private bool _isBrowsingFiles;
+    private string? _lastExportDirectory;
 
     private const string DefaultMermaidCode = @"flowchart TD
     A[Start] --> B{Is it working?}
@@ -68,6 +78,10 @@ Console.WriteLine(""Hello, World!"");
     public ICommand OpenCommand { get; }
     public ICommand SaveCommand { get; }
     public ICommand SaveAsCommand { get; }
+    public ICommand ExportPngCommand { get; }
+    public ICommand ExportSvgCommand { get; }
+    public ICommand ExportEmfCommand { get; }
+    public ICommand ExportWordCommand { get; }
 
     public MainWindow()
     {
@@ -78,6 +92,10 @@ Console.WriteLine(""Hello, World!"");
         OpenCommand = new RelayCommand(_ => Open_Click(this, new RoutedEventArgs()));
         SaveCommand = new RelayCommand(_ => Save_Click(this, new RoutedEventArgs()));
         SaveAsCommand = new RelayCommand(_ => SaveAs_Click(this, new RoutedEventArgs()));
+        ExportPngCommand = new RelayCommand(_ => ExportPng_Click(this, new RoutedEventArgs()));
+        ExportSvgCommand = new RelayCommand(_ => ExportSvg_Click(this, new RoutedEventArgs()));
+        ExportEmfCommand = new RelayCommand(_ => ExportEmf_Click(this, new RoutedEventArgs()));
+        ExportWordCommand = new RelayCommand(_ => ExportWord_Click(this, new RoutedEventArgs()));
 
         _renderTimer = new DispatcherTimer
         {
@@ -115,11 +133,11 @@ Console.WriteLine(""Hello, World!"");
             _isDirty = false;
             UpdateTitle();
             
-            // Navigate file browser to the file's folder
+            // Navigate file browser to the file's folder and select the file
             var folder = Path.GetDirectoryName(filePath);
             if (!string.IsNullOrEmpty(folder))
             {
-                NavigateBrowserToFolder(folder);
+                NavigateBrowserToFolder(folder, filePath);
             }
         }
         catch (Exception ex)
@@ -614,11 +632,25 @@ Console.WriteLine(""Hello, World!"");
 
         var markdownCode = CodeEditor.Text;
         var escapedCode = System.Text.Json.JsonSerializer.Serialize(markdownCode);
+        
+        // Get base URL for resolving relative image paths
+        var baseUrl = "";
+        if (!string.IsNullOrEmpty(_currentFilePath))
+        {
+            var directory = Path.GetDirectoryName(_currentFilePath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                // Convert to file:// URL format with forward slashes
+                baseUrl = "file:///" + directory.Replace("\\", "/") + "/";
+            }
+        }
+        var baseTag = string.IsNullOrEmpty(baseUrl) ? "" : $@"<base href=""{baseUrl}"">";
 
         var html = $@"<!DOCTYPE html>
 <html>
 <head>
     <meta charset=""UTF-8"">
+    {baseTag}
     <script src=""https://cdn.jsdelivr.net/npm/marked/marked.min.js""></script>
     <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-light.min.css"">
     <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github.min.css"">
@@ -756,6 +788,9 @@ Console.WriteLine(""Hello, World!"");
             EditorHeaderText.Text = "Mermaid Code";
             CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
         }
+        
+        // Update export menu visibility based on file type
+        UpdateExportMenuVisibility();
     }
 
     private void New_Click(object sender, RoutedEventArgs e)
@@ -778,6 +813,10 @@ Console.WriteLine(""Hello, World!"");
         CodeEditor.Text = DefaultMermaidCode;
         _currentFilePath = null;
         _isDirty = false;
+        _currentRenderMode = RenderMode.Mermaid;
+        EditorHeaderText.Text = "Mermaid Code";
+        CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
+        UpdateExportMenuVisibility();
         UpdateTitle();
     }
 
@@ -856,7 +895,65 @@ Console.WriteLine(""Hello, World!"");
         if (dialog.ShowDialog() == true)
         {
             _currentFilePath = dialog.FileName;
+            // Update export directory to match where the file was saved
+            UpdateLastExportDirectory(dialog.FileName);
             Save_Click(sender, e);
+        }
+    }
+
+    private string GetExportDefaultPath(string extension)
+    {
+        // Use last export directory if set, otherwise use current file's directory
+        var directory = _lastExportDirectory;
+        
+        if (string.IsNullOrEmpty(directory) && !string.IsNullOrEmpty(_currentFilePath))
+        {
+            directory = Path.GetDirectoryName(_currentFilePath);
+        }
+        
+        if (string.IsNullOrEmpty(directory))
+        {
+            directory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        }
+        
+        // Use current file's name with new extension, or default name
+        var filename = "diagram" + extension;
+        if (!string.IsNullOrEmpty(_currentFilePath))
+        {
+            var baseName = Path.GetFileNameWithoutExtension(_currentFilePath);
+            if (!string.IsNullOrEmpty(baseName))
+            {
+                filename = baseName + extension;
+            }
+        }
+        
+        // Return full path - this works more reliably with SaveFileDialog than setting
+        // InitialDirectory and FileName separately
+        return Path.Combine(directory!, filename);
+    }
+
+    private void UpdateLastExportDirectory(string filePath)
+    {
+        var directory = Path.GetDirectoryName(filePath);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            _lastExportDirectory = directory;
+        }
+    }
+
+    private void Undo_Click(object sender, RoutedEventArgs e)
+    {
+        if (CodeEditor.CanUndo)
+        {
+            CodeEditor.Undo();
+        }
+    }
+
+    private void Redo_Click(object sender, RoutedEventArgs e)
+    {
+        if (CodeEditor.CanRedo)
+        {
+            CodeEditor.Redo();
         }
     }
 
@@ -897,13 +994,15 @@ Console.WriteLine(""Hello, World!"");
         {
             Filter = "PNG Image (*.png)|*.png",
             Title = $"Export as PNG ({scale}x Resolution)",
-            DefaultExt = ".png"
+            DefaultExt = ".png",
+            FileName = GetExportDefaultPath(".png")
         };
 
         if (dialog.ShowDialog() == true)
         {
             try
             {
+                UpdateLastExportDirectory(dialog.FileName);
                 StatusText.Text = $"Exporting {scale}x resolution PNG...";
                 
                 // Create a TaskCompletionSource to await the callback
@@ -956,13 +1055,15 @@ Console.WriteLine(""Hello, World!"");
         {
             Filter = "PNG Image (*.png)|*.png",
             Title = "Export as PNG",
-            DefaultExt = ".png"
+            DefaultExt = ".png",
+            FileName = GetExportDefaultPath(".png")
         };
 
         if (dialog.ShowDialog() == true)
         {
             try
             {
+                UpdateLastExportDirectory(dialog.FileName);
                 using var stream = new MemoryStream();
                 await PreviewWebView.CoreWebView2.CapturePreviewAsync(
                     CoreWebView2CapturePreviewImageFormat.Png, stream);
@@ -986,13 +1087,15 @@ Console.WriteLine(""Hello, World!"");
         {
             Filter = "SVG Image (*.svg)|*.svg",
             Title = "Export as SVG",
-            DefaultExt = ".svg"
+            DefaultExt = ".svg",
+            FileName = GetExportDefaultPath(".svg")
         };
 
         if (dialog.ShowDialog() == true)
         {
             try
             {
+                UpdateLastExportDirectory(dialog.FileName);
                 var svgContent = await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.getSvgContent()");
                 
                 if (svgContent != "null" && !string.IsNullOrEmpty(svgContent))
@@ -1016,6 +1119,322 @@ Console.WriteLine(""Hello, World!"");
                 MessageBox.Show($"Failed to export SVG: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+    }
+
+    private async void ExportEmf_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_webViewInitialized) return;
+
+        var dialog = new SaveFileDialog
+        {
+            Filter = "Enhanced Metafile (*.emf)|*.emf",
+            Title = "Export as EMF",
+            DefaultExt = ".emf",
+            FileName = GetExportDefaultPath(".emf")
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            try
+            {
+                UpdateLastExportDirectory(dialog.FileName);
+                StatusText.Text = "Exporting EMF...";
+                
+                var svgContent = await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.getSvgContent()");
+                
+                if (svgContent != "null" && !string.IsNullOrEmpty(svgContent))
+                {
+                    var svg = System.Text.Json.JsonSerializer.Deserialize<string>(svgContent);
+                    if (svg != null)
+                    {
+                        // Sanitize SVG for XML parsing - Mermaid generates HTML elements that aren't valid XML
+                        svg = SanitizeSvgForXml(svg);
+                        
+                        // Parse the SVG using Svg.NET
+                        var svgDocument = Svg.SvgDocument.FromSvg<Svg.SvgDocument>(svg);
+                        
+                        // Get the SVG dimensions
+                        var width = (int)Math.Ceiling(svgDocument.Width.Value);
+                        var height = (int)Math.Ceiling(svgDocument.Height.Value);
+                        
+                        // If dimensions are 0 or invalid, try to get from viewBox
+                        if (width <= 0 || height <= 0)
+                        {
+                            if (svgDocument.ViewBox.Width > 0 && svgDocument.ViewBox.Height > 0)
+                            {
+                                width = (int)Math.Ceiling(svgDocument.ViewBox.Width);
+                                height = (int)Math.Ceiling(svgDocument.ViewBox.Height);
+                            }
+                            else
+                            {
+                                // Default fallback dimensions
+                                width = 800;
+                                height = 600;
+                            }
+                        }
+                        
+                        // Create the EMF file
+                        using var tempBitmap = new System.Drawing.Bitmap(width, height);
+                        using var tempGraphics = System.Drawing.Graphics.FromImage(tempBitmap);
+                        var hdc = tempGraphics.GetHdc();
+                        
+                        try
+                        {
+                            using var stream = new FileStream(dialog.FileName, FileMode.Create, FileAccess.Write);
+                            using var metafile = new System.Drawing.Imaging.Metafile(
+                                stream, 
+                                hdc, 
+                                new System.Drawing.RectangleF(0, 0, width, height),
+                                System.Drawing.Imaging.MetafileFrameUnit.Pixel,
+                                System.Drawing.Imaging.EmfType.EmfPlusDual);
+                            
+                            using var graphics = System.Drawing.Graphics.FromImage(metafile);
+                            graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                            graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                            graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
+                            
+                            // Render the SVG to the metafile graphics
+                            svgDocument.Draw(graphics);
+                        }
+                        finally
+                        {
+                            tempGraphics.ReleaseHdc(hdc);
+                        }
+                        
+                        StatusText.Text = "Exported as EMF";
+                        MessageBox.Show("EMF exported successfully!\n\nThe diagram has been exported as a vector EMF file that can be imported into Word, PowerPoint, and other applications.", 
+                            "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                }
+                else
+                {
+                    MessageBox.Show("No diagram to export. Make sure the diagram is rendered correctly.", 
+                        "Export Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to export EMF: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                StatusText.Text = "Export failed";
+            }
+        }
+    }
+
+    private void ExportWord_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Filter = "Word Document (*.docx)|*.docx",
+            Title = "Export as Word Document",
+            DefaultExt = ".docx",
+            FileName = GetExportDefaultPath(".docx")
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            try
+            {
+                UpdateLastExportDirectory(dialog.FileName);
+                StatusText.Text = "Exporting Word document...";
+                
+                var markdown = CodeEditor.Text;
+                ConvertMarkdownToWord(markdown, dialog.FileName);
+                
+                StatusText.Text = "Exported as Word document";
+                MessageBox.Show("Word document exported successfully!", "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to export Word document: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                StatusText.Text = "Export failed";
+            }
+        }
+    }
+
+    private void ConvertMarkdownToWord(string markdown, string outputPath)
+    {
+        using var document = WordprocessingDocument.Create(outputPath, WordprocessingDocumentType.Document);
+        var mainPart = document.AddMainDocumentPart();
+        mainPart.Document = new Document();
+        var body = mainPart.Document.AppendChild(new Body());
+
+        var lines = markdown.Split('\n');
+        var inCodeBlock = false;
+        var codeBlockContent = new List<string>();
+
+        foreach (var line in lines)
+        {
+            var trimmedLine = line.TrimEnd('\r');
+
+            // Handle code blocks
+            if (trimmedLine.StartsWith("```"))
+            {
+                if (inCodeBlock)
+                {
+                    // End code block - add accumulated content
+                    foreach (var codeLine in codeBlockContent)
+                    {
+                        var codePara = new Paragraph(
+                            new ParagraphProperties(
+                                new Shading { Val = ShadingPatternValues.Clear, Fill = "E8E8E8" }
+                            ),
+                            new Run(
+                                new RunProperties(
+                                    new RunFonts { Ascii = "Consolas", HighAnsi = "Consolas" },
+                                    new FontSize { Val = "20" }
+                                ),
+                                new Text(codeLine) { Space = SpaceProcessingModeValues.Preserve }
+                            )
+                        );
+                        body.AppendChild(codePara);
+                    }
+                    codeBlockContent.Clear();
+                    inCodeBlock = false;
+                }
+                else
+                {
+                    inCodeBlock = true;
+                }
+                continue;
+            }
+
+            if (inCodeBlock)
+            {
+                codeBlockContent.Add(trimmedLine);
+                continue;
+            }
+
+            // Handle headers
+            if (trimmedLine.StartsWith("# "))
+            {
+                AddHeading(body, trimmedLine.Substring(2), "28", true);
+            }
+            else if (trimmedLine.StartsWith("## "))
+            {
+                AddHeading(body, trimmedLine.Substring(3), "26", true);
+            }
+            else if (trimmedLine.StartsWith("### "))
+            {
+                AddHeading(body, trimmedLine.Substring(4), "24", true);
+            }
+            else if (trimmedLine.StartsWith("#### "))
+            {
+                AddHeading(body, trimmedLine.Substring(5), "22", true);
+            }
+            else if (string.IsNullOrWhiteSpace(trimmedLine))
+            {
+                // Empty paragraph
+                body.AppendChild(new Paragraph());
+            }
+            else
+            {
+                // Regular paragraph with inline formatting
+                AddFormattedParagraph(body, trimmedLine);
+            }
+        }
+    }
+
+    private void AddHeading(Body body, string text, string fontSize, bool bold)
+    {
+        var para = new Paragraph();
+        var run = new Run();
+        var runProps = new RunProperties();
+        
+        runProps.AppendChild(new FontSize { Val = fontSize });
+        if (bold)
+        {
+            runProps.AppendChild(new Bold());
+        }
+        
+        run.AppendChild(runProps);
+        run.AppendChild(new Text(text));
+        para.AppendChild(run);
+        body.AppendChild(para);
+    }
+
+    private void AddFormattedParagraph(Body body, string text)
+    {
+        var para = new Paragraph();
+        
+        // Parse inline formatting (bold, italic, code)
+        var pattern = @"(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`|([^*`]+))";
+        var matches = Regex.Matches(text, pattern);
+
+        foreach (Match match in matches)
+        {
+            var run = new Run();
+            var runProps = new RunProperties();
+            string content;
+
+            if (match.Groups[2].Success) // Bold + Italic (***text***)
+            {
+                content = match.Groups[2].Value;
+                runProps.AppendChild(new Bold());
+                runProps.AppendChild(new Italic());
+            }
+            else if (match.Groups[3].Success) // Bold (**text**)
+            {
+                content = match.Groups[3].Value;
+                runProps.AppendChild(new Bold());
+            }
+            else if (match.Groups[4].Success) // Italic (*text*)
+            {
+                content = match.Groups[4].Value;
+                runProps.AppendChild(new Italic());
+            }
+            else if (match.Groups[5].Success) // Code (`text`)
+            {
+                content = match.Groups[5].Value;
+                runProps.AppendChild(new RunFonts { Ascii = "Consolas", HighAnsi = "Consolas" });
+                runProps.AppendChild(new Shading { Val = ShadingPatternValues.Clear, Fill = "E8E8E8" });
+            }
+            else // Plain text
+            {
+                content = match.Groups[6].Value;
+            }
+
+            if (runProps.HasChildren)
+            {
+                run.AppendChild(runProps);
+            }
+            run.AppendChild(new Text(content) { Space = SpaceProcessingModeValues.Preserve });
+            para.AppendChild(run);
+        }
+
+        body.AppendChild(para);
+    }
+
+    private void UpdateExportMenuVisibility()
+    {
+        // Show diagram exports only for Mermaid files
+        // Show Word export only for Markdown files
+        var isMermaid = _currentRenderMode == RenderMode.Mermaid;
+        
+        ExportPngMenuItem.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
+        ExportSvgMenuItem.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
+        ExportEmfMenuItem.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
+        ExportWordMenuItem.Visibility = isMermaid ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private string SanitizeSvgForXml(string svg)
+    {
+        // Mermaid generates SVG with HTML elements that aren't valid XML
+        // Fix common issues:
+        
+        // 1. Convert self-closing HTML tags to XML-compliant format
+        svg = Regex.Replace(svg, @"<br\s*>", "<br/>", RegexOptions.IgnoreCase);
+        svg = Regex.Replace(svg, @"<hr\s*>", "<hr/>", RegexOptions.IgnoreCase);
+        
+        // 2. Remove foreignObject elements which contain HTML that Svg.NET can't parse
+        svg = Regex.Replace(svg, @"<foreignObject[^>]*>.*?</foreignObject>", "", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+        
+        // 3. Remove any remaining HTML tags that might cause issues
+        svg = Regex.Replace(svg, @"<span[^>]*>", "", RegexOptions.IgnoreCase);
+        svg = Regex.Replace(svg, @"</span>", "", RegexOptions.IgnoreCase);
+        svg = Regex.Replace(svg, @"<div[^>]*>", "", RegexOptions.IgnoreCase);
+        svg = Regex.Replace(svg, @"</div>", "", RegexOptions.IgnoreCase);
+        
+        return svg;
     }
 
     private void Exit_Click(object sender, RoutedEventArgs e)
@@ -1072,7 +1491,7 @@ Console.WriteLine(""Hello, World!"");
     private void About_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show(
-            "Mermaid Editor v1.2\n\n" +
+            "Mermaid Editor v1.5\n\n" +
             "A simple IDE for editing Mermaid diagrams and Markdown files.\n\n" +
             "Features:\n" +
             "- Live preview as you type\n" +
@@ -1195,7 +1614,7 @@ Console.WriteLine(""Hello, World!"");
                     }
                     else
                     {
-                        RenderMarkdownPreview(content);
+                        RenderMarkdownPreview(content, item.FullPath);
                     }
                 }
                 
@@ -1349,11 +1768,24 @@ Console.WriteLine(""Hello, World!"");
         PreviewWebView.NavigateToString(html);
     }
 
-    private void RenderMarkdownPreview(string code)
+    private void RenderMarkdownPreview(string code, string? filePath = null)
     {
+        // Get base URL for resolving relative image paths
+        var baseUrl = "";
+        if (!string.IsNullOrEmpty(filePath))
+        {
+            var directory = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(directory))
+            {
+                baseUrl = "file:///" + directory.Replace("\\", "/") + "/";
+            }
+        }
+        var baseTag = string.IsNullOrEmpty(baseUrl) ? "" : $@"<base href=""{baseUrl}"">";
+        
         var html = $@"<!DOCTYPE html>
 <html>
 <head>
+    {baseTag}
     <script src=""https://cdn.jsdelivr.net/npm/marked/marked.min.js""></script>
     <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-light.min.css"">
     <style>
@@ -1371,12 +1803,23 @@ Console.WriteLine(""Hello, World!"");
         PreviewWebView.NavigateToString(html);
     }
 
-    private void NavigateBrowserToFolder(string folderPath)
+    private void NavigateBrowserToFolder(string folderPath, string? selectFilePath = null)
     {
         if (Directory.Exists(folderPath))
         {
             _currentBrowserPath = folderPath;
             RefreshFileList();
+            
+            // Select the specified file in the list if provided
+            if (!string.IsNullOrEmpty(selectFilePath) && FileListBox.ItemsSource is List<FileListItem> items)
+            {
+                var fileItem = items.FirstOrDefault(x => x.FullPath.Equals(selectFilePath, StringComparison.OrdinalIgnoreCase));
+                if (fileItem != null)
+                {
+                    FileListBox.SelectedItem = fileItem;
+                    FileListBox.ScrollIntoView(fileItem);
+                }
+            }
         }
     }
 
@@ -1436,11 +1879,11 @@ Console.WriteLine(""Hello, World!"");
                         UpdateTitle();
                         RenderPreview();
                         
-                        // Navigate file browser to the file's folder
+                        // Navigate file browser to the file's folder and select the file
                         var folder = Path.GetDirectoryName(filePath);
                         if (!string.IsNullOrEmpty(folder))
                         {
-                            NavigateBrowserToFolder(folder);
+                            NavigateBrowserToFolder(folder, filePath);
                         }
                         
                         StatusText.Text = "File opened via drag and drop";

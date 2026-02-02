@@ -8,7 +8,7 @@ The Automated Data Retrieval (ADR) system automates the process of retrieving bi
 
 The ADR process runs daily and follows a 6-step workflow:
 
-![ADR Process Overview](diagrams/adr-business-workflow.png)
+![ADR Process Overview](/diagrams/adr-business-workflow.png)
 
 ## Timing and Scheduling
 
