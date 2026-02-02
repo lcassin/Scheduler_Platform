@@ -125,11 +125,11 @@ Console.WriteLine(""Hello, World!"");
             _isDirty = false;
             UpdateTitle();
             
-            // Navigate file browser to the file's folder
+            // Navigate file browser to the file's folder and select the file
             var folder = Path.GetDirectoryName(filePath);
             if (!string.IsNullOrEmpty(folder))
             {
-                NavigateBrowserToFolder(folder);
+                NavigateBrowserToFolder(folder, filePath);
             }
         }
         catch (Exception ex)
@@ -1768,12 +1768,23 @@ Console.WriteLine(""Hello, World!"");
         PreviewWebView.NavigateToString(html);
     }
 
-    private void NavigateBrowserToFolder(string folderPath)
+    private void NavigateBrowserToFolder(string folderPath, string? selectFilePath = null)
     {
         if (Directory.Exists(folderPath))
         {
             _currentBrowserPath = folderPath;
             RefreshFileList();
+            
+            // Select the specified file in the list if provided
+            if (!string.IsNullOrEmpty(selectFilePath) && FileListBox.ItemsSource is List<FileListItem> items)
+            {
+                var fileItem = items.FirstOrDefault(x => x.FullPath.Equals(selectFilePath, StringComparison.OrdinalIgnoreCase));
+                if (fileItem != null)
+                {
+                    FileListBox.SelectedItem = fileItem;
+                    FileListBox.ScrollIntoView(fileItem);
+                }
+            }
         }
     }
 
@@ -1833,11 +1844,11 @@ Console.WriteLine(""Hello, World!"");
                         UpdateTitle();
                         RenderPreview();
                         
-                        // Navigate file browser to the file's folder
+                        // Navigate file browser to the file's folder and select the file
                         var folder = Path.GetDirectoryName(filePath);
                         if (!string.IsNullOrEmpty(folder))
                         {
-                            NavigateBrowserToFolder(folder);
+                            NavigateBrowserToFolder(folder, filePath);
                         }
                         
                         StatusText.Text = "File opened via drag and drop";
