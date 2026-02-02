@@ -898,10 +898,14 @@ Console.WriteLine(""Hello, World!"");
         var filename = "diagram" + extension;
         if (!string.IsNullOrEmpty(_currentFilePath))
         {
-            filename = Path.GetFileNameWithoutExtension(_currentFilePath) + extension;
+            var baseName = Path.GetFileNameWithoutExtension(_currentFilePath);
+            if (!string.IsNullOrEmpty(baseName))
+            {
+                filename = baseName + extension;
+            }
         }
         
-        return (directory, filename);
+        return (directory!, filename);
     }
 
     private void UpdateLastExportDirectory(string filePath)
