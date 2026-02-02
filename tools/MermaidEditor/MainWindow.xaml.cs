@@ -78,6 +78,10 @@ Console.WriteLine(""Hello, World!"");
     public ICommand OpenCommand { get; }
     public ICommand SaveCommand { get; }
     public ICommand SaveAsCommand { get; }
+    public ICommand ExportPngCommand { get; }
+    public ICommand ExportSvgCommand { get; }
+    public ICommand ExportEmfCommand { get; }
+    public ICommand ExportWordCommand { get; }
 
     public MainWindow()
     {
@@ -88,6 +92,10 @@ Console.WriteLine(""Hello, World!"");
         OpenCommand = new RelayCommand(_ => Open_Click(this, new RoutedEventArgs()));
         SaveCommand = new RelayCommand(_ => Save_Click(this, new RoutedEventArgs()));
         SaveAsCommand = new RelayCommand(_ => SaveAs_Click(this, new RoutedEventArgs()));
+        ExportPngCommand = new RelayCommand(_ => ExportPng_Click(this, new RoutedEventArgs()));
+        ExportSvgCommand = new RelayCommand(_ => ExportSvg_Click(this, new RoutedEventArgs()));
+        ExportEmfCommand = new RelayCommand(_ => ExportEmf_Click(this, new RoutedEventArgs()));
+        ExportWordCommand = new RelayCommand(_ => ExportWord_Click(this, new RoutedEventArgs()));
 
         _renderTimer = new DispatcherTimer
         {

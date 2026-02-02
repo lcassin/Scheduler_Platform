@@ -18,6 +18,10 @@
         <KeyBinding Gesture="Ctrl+O" Command="{Binding OpenCommand}" />
         <KeyBinding Gesture="Ctrl+S" Command="{Binding SaveCommand}" />
         <KeyBinding Gesture="Ctrl+Shift+S" Command="{Binding SaveAsCommand}" />
+        <KeyBinding Gesture="Ctrl+Shift+P" Command="{Binding ExportPngCommand}" />
+        <KeyBinding Gesture="Ctrl+Shift+G" Command="{Binding ExportSvgCommand}" />
+        <KeyBinding Gesture="Ctrl+Shift+E" Command="{Binding ExportEmfCommand}" />
+        <KeyBinding Gesture="Ctrl+Shift+W" Command="{Binding ExportWordCommand}" />
     </Window.InputBindings>
     
     <Grid>
@@ -31,49 +35,165 @@
         <!-- Menu Bar -->
         <Menu Grid.Row="0">
             <MenuItem Header="_File">
-                <MenuItem Header="_New" Click="New_Click" InputGestureText="Ctrl+N"/>
-                <MenuItem Header="_Open..." Click="Open_Click" InputGestureText="Ctrl+O"/>
+                <MenuItem Header="_New" Click="New_Click" InputGestureText="Ctrl+N">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="_Open..." Click="Open_Click" InputGestureText="Ctrl+O">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE8E5;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
                 <Separator/>
-                <MenuItem Header="_Save" Click="Save_Click" InputGestureText="Ctrl+S"/>
-                <MenuItem Header="Save _As..." Click="SaveAs_Click" InputGestureText="Ctrl+Shift+S"/>
+                <MenuItem Header="_Save" Click="Save_Click" InputGestureText="Ctrl+S">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Save _As..." Click="SaveAs_Click" InputGestureText="Ctrl+Shift+S">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE792;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
                 <Separator/>
-                <MenuItem x:Name="ExportPngMenuItem" Header="E_xport as PNG..." Click="ExportPng_Click"/>
-                <MenuItem x:Name="ExportSvgMenuItem" Header="Export as _SVG..." Click="ExportSvg_Click"/>
-                <MenuItem x:Name="ExportEmfMenuItem" Header="Export as E_MF..." Click="ExportEmf_Click"/>
-                <MenuItem x:Name="ExportWordMenuItem" Header="Export as _Word..." Click="ExportWord_Click"/>
+                <MenuItem x:Name="ExportPngMenuItem" Header="E_xport as PNG..." Click="ExportPng_Click" InputGestureText="Ctrl+Shift+P">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE91B;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem x:Name="ExportSvgMenuItem" Header="Export as _SVG..." Click="ExportSvg_Click" InputGestureText="Ctrl+Shift+G">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE91B;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem x:Name="ExportEmfMenuItem" Header="Export as E_MF..." Click="ExportEmf_Click" InputGestureText="Ctrl+Shift+E">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE91B;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem x:Name="ExportWordMenuItem" Header="Export as _Word..." Click="ExportWord_Click" InputGestureText="Ctrl+Shift+W">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
                 <Separator/>
-                <MenuItem Header="E_xit" Click="Exit_Click" InputGestureText="Alt+F4"/>
+                <MenuItem Header="E_xit" Click="Exit_Click" InputGestureText="Alt+F4">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
             <MenuItem Header="_Edit">
-                <MenuItem Header="_Undo" Click="Undo_Click" InputGestureText="Ctrl+Z"/>
-                <MenuItem Header="_Redo" Click="Redo_Click" InputGestureText="Ctrl+Y"/>
+                <MenuItem Header="_Undo" Click="Undo_Click" InputGestureText="Ctrl+Z">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE7A7;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="_Redo" Click="Redo_Click" InputGestureText="Ctrl+Y">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE7A6;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
             <MenuItem Header="_View">
-                <MenuItem Header="Zoom _In" Click="ZoomIn_Click" InputGestureText="Ctrl++"/>
-                <MenuItem Header="Zoom _Out" Click="ZoomOut_Click" InputGestureText="Ctrl+-"/>
-                <MenuItem Header="_Reset Zoom" Click="ResetZoom_Click" InputGestureText="Ctrl+0"/>
+                <MenuItem Header="Zoom _In" Click="ZoomIn_Click" InputGestureText="Ctrl++">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE8A3;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Zoom _Out" Click="ZoomOut_Click" InputGestureText="Ctrl+-">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE71F;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="_Reset Zoom" Click="ResetZoom_Click" InputGestureText="Ctrl+0">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
                 <Separator/>
-                <MenuItem Header="_Fit to Window" Click="FitToWindow_Click" InputGestureText="Ctrl+F"/>
+                <MenuItem Header="_Fit to Window" Click="FitToWindow_Click" InputGestureText="Ctrl+F">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE9A6;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
             <MenuItem Header="_Help">
-                <MenuItem Header="Mermaid _Syntax Reference" Click="SyntaxHelp_Click"/>
-                <MenuItem Header="_About" Click="About_Click"/>
+                <MenuItem Header="Mermaid _Syntax Reference" Click="SyntaxHelp_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE897;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="_About" Click="About_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE946;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
         </Menu>
         
         <!-- Toolbar -->
         <ToolBar Grid.Row="1">
-            <Button Content="New" Click="New_Click" ToolTip="New (Ctrl+N)" Padding="8,2"/>
-            <Button Content="Open" Click="Open_Click" ToolTip="Open (Ctrl+O)" Padding="8,2"/>
-            <Button Content="Save" Click="Save_Click" ToolTip="Save (Ctrl+S)" Padding="8,2"/>
+            <Button Click="New_Click" ToolTip="New (Ctrl+N)" Padding="6,4">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                    <TextBlock Text="New" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Button Click="Open_Click" ToolTip="Open (Ctrl+O)" Padding="6,4">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE8E5;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                    <TextBlock Text="Open" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Button Click="Save_Click" ToolTip="Save (Ctrl+S)" Padding="6,4">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                    <TextBlock Text="Save" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
             <Separator/>
-            <Button Content="Zoom In" Click="ZoomIn_Click" ToolTip="Zoom In (Ctrl++)" Padding="8,2"/>
-            <Button Content="Zoom Out" Click="ZoomOut_Click" ToolTip="Zoom Out (Ctrl+-)" Padding="8,2"/>
-            <Button Content="Reset" Click="ResetZoom_Click" ToolTip="Reset Zoom (Ctrl+0)" Padding="8,2"/>
-            <Button Content="Fit" Click="FitToWindow_Click" ToolTip="Fit to Window (Ctrl+F)" Padding="8,2"/>
+            <Button Click="Undo_Click" ToolTip="Undo (Ctrl+Z)" Padding="6,4">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE7A7;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                    <TextBlock Text="Undo" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Button Click="Redo_Click" ToolTip="Redo (Ctrl+Y)" Padding="6,4">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE7A6;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                    <TextBlock Text="Redo" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
             <Separator/>
-            <Label Content="Zoom:" VerticalAlignment="Center"/>
-            <TextBlock x:Name="ZoomLevelText" Text="100%" VerticalAlignment="Center" Width="50"/>
+            <Button Click="ZoomIn_Click" ToolTip="Zoom In (Ctrl++)" Padding="6,4">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE8A3;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                    <TextBlock Text="Zoom In" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Button Click="ZoomOut_Click" ToolTip="Zoom Out (Ctrl+-)" Padding="6,4">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE71F;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                    <TextBlock Text="Zoom Out" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Button Click="ResetZoom_Click" ToolTip="Reset Zoom (Ctrl+0)" Padding="6,4">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                    <TextBlock Text="Reset" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Button Click="FitToWindow_Click" ToolTip="Fit to Window (Ctrl+F)" Padding="6,4">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE9A6;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                    <TextBlock Text="Fit" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Separator/>
+            <TextBlock Text="&#xE71E;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center" Margin="4,0,0,0"/>
+            <TextBlock x:Name="ZoomLevelText" Text="100%" VerticalAlignment="Center" Width="50" Margin="4,0,0,0"/>
         </ToolBar>
         
         <!-- Main Content - Split View -->
@@ -89,7 +209,10 @@
                 <!-- Code Tab -->
                 <TabItem x:Name="CodeTab">
                     <TabItem.Header>
-                        <TextBlock x:Name="EditorHeaderText" Text="Code" Padding="8,2"/>
+                        <StackPanel Orientation="Horizontal" Margin="4,2">
+                            <TextBlock Text="&#xE943;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock x:Name="EditorHeaderText" Text="Code" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
                     </TabItem.Header>
                     <avalon:TextEditor x:Name="CodeEditor" 
                              FontFamily="Consolas"
@@ -103,7 +226,13 @@
                 </TabItem>
                 
                 <!-- Files Tab -->
-                <TabItem Header="Files" Padding="8,2">
+                <TabItem>
+                    <TabItem.Header>
+                        <StackPanel Orientation="Horizontal" Margin="4,2">
+                            <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="Files" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </TabItem.Header>
                     <Grid Background="#1E1E1E">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
@@ -117,12 +246,16 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <Button x:Name="BrowseFolderButton" Content="..." Grid.Column="0" 
+                            <Button x:Name="BrowseFolderButton" Grid.Column="0" 
                                     Click="BrowseFolder_Click" ToolTip="Browse for folder"
-                                    Padding="8,4" Margin="2"/>
-                            <Button x:Name="ParentFolderButton" Content="Up" Grid.Column="1" 
+                                    Padding="8,4" Margin="2">
+                                <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="12"/>
+                            </Button>
+                            <Button x:Name="ParentFolderButton" Grid.Column="1" 
                                     Click="ParentFolder_Click" ToolTip="Go to parent folder"
-                                    Padding="8,4" Margin="2"/>
+                                    Padding="8,4" Margin="2">
+                                <TextBlock Text="&#xE74A;" FontFamily="Segoe MDL2 Assets" FontSize="12"/>
+                            </Button>
                             <TextBox x:Name="CurrentPathTextBox" Grid.Column="2" 
                                      Background="#3E3E42" Foreground="#D4D4D4" 
                                      BorderThickness="0" Padding="4" Margin="2"
@@ -163,7 +296,10 @@
                 </Grid.RowDefinitions>
                 
                 <Border Grid.Row="0" Background="#2D2D30" Padding="8,4">
-                    <TextBlock Text="Preview" Foreground="White" FontWeight="SemiBold"/>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE8FF;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="White" VerticalAlignment="Center"/>
+                        <TextBlock Text="Preview" Foreground="White" FontWeight="SemiBold" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
                 </Border>
                 
                 <wv2:WebView2 x:Name="PreviewWebView" 
