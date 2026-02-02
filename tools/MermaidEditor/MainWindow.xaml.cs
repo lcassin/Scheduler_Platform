@@ -879,7 +879,7 @@ Console.WriteLine(""Hello, World!"");
         }
     }
 
-    private (string directory, string filename) GetExportDefaults(string extension)
+    private string GetExportDefaultPath(string extension)
     {
         // Use last export directory if set, otherwise use current file's directory
         var directory = _lastExportDirectory;
@@ -905,7 +905,9 @@ Console.WriteLine(""Hello, World!"");
             }
         }
         
-        return (directory!, filename);
+        // Return full path - this works more reliably with SaveFileDialog than setting
+        // InitialDirectory and FileName separately
+        return Path.Combine(directory!, filename);
     }
 
     private void UpdateLastExportDirectory(string filePath)
@@ -966,14 +968,12 @@ Console.WriteLine(""Hello, World!"");
 
         var scale = scaleResult == MessageBoxResult.Yes ? 4 : 6;
 
-        var (directory, filename) = GetExportDefaults(".png");
         var dialog = new SaveFileDialog
         {
             Filter = "PNG Image (*.png)|*.png",
             Title = $"Export as PNG ({scale}x Resolution)",
             DefaultExt = ".png",
-            InitialDirectory = directory,
-            FileName = filename
+            FileName = GetExportDefaultPath(".png")
         };
 
         if (dialog.ShowDialog() == true)
@@ -1029,14 +1029,12 @@ Console.WriteLine(""Hello, World!"");
 
     private async Task ExportViewportPng()
     {
-        var (directory, filename) = GetExportDefaults(".png");
         var dialog = new SaveFileDialog
         {
             Filter = "PNG Image (*.png)|*.png",
             Title = "Export as PNG",
             DefaultExt = ".png",
-            InitialDirectory = directory,
-            FileName = filename
+            FileName = GetExportDefaultPath(".png")
         };
 
         if (dialog.ShowDialog() == true)
@@ -1063,14 +1061,12 @@ Console.WriteLine(""Hello, World!"");
     {
         if (!_webViewInitialized) return;
 
-        var (directory, filename) = GetExportDefaults(".svg");
         var dialog = new SaveFileDialog
         {
             Filter = "SVG Image (*.svg)|*.svg",
             Title = "Export as SVG",
             DefaultExt = ".svg",
-            InitialDirectory = directory,
-            FileName = filename
+            FileName = GetExportDefaultPath(".svg")
         };
 
         if (dialog.ShowDialog() == true)
@@ -1107,14 +1103,12 @@ Console.WriteLine(""Hello, World!"");
     {
         if (!_webViewInitialized) return;
 
-        var (directory, filename) = GetExportDefaults(".emf");
         var dialog = new SaveFileDialog
         {
             Filter = "Enhanced Metafile (*.emf)|*.emf",
             Title = "Export as EMF",
             DefaultExt = ".emf",
-            InitialDirectory = directory,
-            FileName = filename
+            FileName = GetExportDefaultPath(".emf")
         };
 
         if (dialog.ShowDialog() == true)
@@ -1206,14 +1200,12 @@ Console.WriteLine(""Hello, World!"");
 
     private void ExportWord_Click(object sender, RoutedEventArgs e)
     {
-        var (directory, filename) = GetExportDefaults(".docx");
         var dialog = new SaveFileDialog
         {
             Filter = "Word Document (*.docx)|*.docx",
             Title = "Export as Word Document",
             DefaultExt = ".docx",
-            InitialDirectory = directory,
-            FileName = filename
+            FileName = GetExportDefaultPath(".docx")
         };
 
         if (dialog.ShowDialog() == true)
