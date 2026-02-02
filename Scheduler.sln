@@ -21,7 +21,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{E27A2B02
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SchedulerPlatform.Tests", "tests\SchedulerPlatform.Tests\SchedulerPlatform.Tests.csproj", "{1D9BBF27-52A6-459E-ACFE-1DF3FAE7A1F4}"
 EndProject
-Project("{00D1A9C2-B5F0-4AF3-8072-F6C62B433612}") = "SchedulerPlatform.DB", "..\..\..\..\..\Cass\Azure\Telecom\Repos\AdrServices\Scheduler\src\SchedulerPlatform.DB\SchedulerPlatform.DB.sqlproj", "{3D7F5124-11A0-4210-BD5F-6CDFC5797210}"
+Project("{00D1A9C2-B5F0-4AF3-8072-F6C62B433612}") = "SchedulerPlatform.DB", "src\SchedulerPlatform.DB\SchedulerPlatform.DB.sqlproj", "{3D7F5124-11A0-4210-BD5F-6CDFC5797210}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

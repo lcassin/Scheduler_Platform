@@ -27,3 +27,5 @@
 /SchedulerPlatform.DB
 /src/SchedulerPlatform.UI/appsettings.json
 /src/SchedulerPlatform.API/appsettings.Staging.json
+/src/SchedulerPlatform.DB/SchedulerPlatform.DB.dbmdl
+/src/SchedulerPlatform.DB/SchedulerPlatform.DB.jfm

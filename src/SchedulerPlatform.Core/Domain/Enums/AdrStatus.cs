@@ -58,7 +58,27 @@ public enum AdrStatus
     /// <summary>
     /// Successfully completed (IsFinal = true)
     /// </summary>
-    Complete = 11
+    Complete = 11,
+    
+    /// <summary>
+    /// Credential verification succeeded (used for credential checks, not scraping)
+    /// </summary>
+    LoginAttemptSucceeded = 12,
+    
+    /// <summary>
+    /// No documents found for this scrape attempt (NOT final - retry next day)
+    /// </summary>
+    NoDocumentsFound = 13,
+    
+    /// <summary>
+    /// Partial failure - some documents may have succeeded but others failed (IsError = true, IsFinal = true)
+    /// </summary>
+    FailedToProcessAllDocuments = 14,
+    
+    /// <summary>
+    /// No documents processed - status meaning TBD (NOT final)
+    /// </summary>
+    NoDocumentsProcessed = 15
 }
 
 /// <summary>
@@ -79,6 +99,7 @@ public static class AdrStatusExtensions
             AdrStatus.CannotConnectToAi => true,
             AdrStatus.CannotSaveResult => true,
             AdrStatus.NeedsHumanReview => true,
+            AdrStatus.FailedToProcessAllDocuments => true,
             _ => false
         };
     }
@@ -92,6 +113,9 @@ public static class AdrStatusExtensions
         {
             AdrStatus.NeedsHumanReview => true,
             AdrStatus.Complete => true,
+            AdrStatus.FailedToProcessAllDocuments => true,
+            // Note: LoginAttemptSucceeded (12) is NOT final for scraping context
+            // Note: NoDocumentsFound (13) is NOT final - retry next day
             _ => false
         };
     }
@@ -114,6 +138,10 @@ public static class AdrStatusExtensions
             AdrStatus.NeedsHumanReview => "Needs Human Review",
             AdrStatus.ReceivedFromAi => "Received From AI",
             AdrStatus.Complete => "Complete",
+            AdrStatus.LoginAttemptSucceeded => "Login Attempt Succeeded",
+            AdrStatus.NoDocumentsFound => "No Documents Found",
+            AdrStatus.FailedToProcessAllDocuments => "Failed To Process All Documents",
+            AdrStatus.NoDocumentsProcessed => "No Documents Processed",
             _ => "Unknown"
         };
     }

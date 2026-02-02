@@ -24,5 +24,11 @@ public interface IAdrAccountRepository : IRepository<AdrAccount>
     Task<int> GetTotalCountAsync(int? clientId = null);
     Task<int> GetCountByNextRunStatusAsync(string status, int? clientId = null);
     Task<int> GetCountByHistoricalStatusAsync(string status, int? clientId = null);
-    Task<IEnumerable<AdrAccount>> GetDueAccountsWithRulesAsync();
+    /// <summary>
+    /// Gets accounts with rules that are due for job creation.
+    /// Jobs are created when NextRunDateTime is within the credential check window (credentialCheckLeadDays in the future)
+    /// or has already arrived/passed. This allows credential verification to happen before NextRunDate.
+    /// </summary>
+    /// <param name="credentialCheckLeadDays">Number of days before NextRunDate to start creating jobs (default: 7)</param>
+    Task<IEnumerable<AdrAccount>> GetDueAccountsWithRulesAsync(int credentialCheckLeadDays = 7);
 }

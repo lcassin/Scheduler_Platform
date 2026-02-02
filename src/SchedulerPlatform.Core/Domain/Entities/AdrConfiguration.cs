@@ -195,4 +195,31 @@ public class AdrConfiguration : BaseEntity
     /// Default: false (to keep log files manageable)
     /// </summary>
     public bool EnableDetailedLogging { get; set; } = false;
+    
+    // Email Notification Settings
+    
+    /// <summary>
+    /// Whether email notifications are enabled for 500 errors.
+    /// Default: true
+    /// </summary>
+    public bool ErrorNotificationsEnabled { get; set; } = true;
+    
+    /// <summary>
+    /// Semicolon-separated list of email addresses to receive 500 error notifications.
+    /// Example: "user1@example.com;user2@example.com"
+    /// </summary>
+    public string? ErrorNotificationRecipients { get; set; }
+    
+    /// <summary>
+    /// Whether email notifications are enabled for orchestration failures/summaries.
+    /// Default: true
+    /// </summary>
+    public bool OrchestrationNotificationsEnabled { get; set; } = true;
+    
+    /// <summary>
+    /// Semicolon-separated list of email addresses to receive orchestration failure notifications.
+    /// This includes both immediate failure notifications and end-of-run summary notifications.
+    /// Example: "user1@example.com;user2@example.com;user3@example.com"
+    /// </summary>
+    public string? OrchestrationNotificationRecipients { get; set; }
 }
