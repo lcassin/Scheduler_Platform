@@ -41,7 +41,7 @@ Name: "associatemd"; Description: "Associate .md files with Mermaid Editor"; Gro
 
 [Files]
 ; Include all files from the publish output directory
-Source: "..\bin\Release\net10.0-windows\publish\win-x64\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\bin\Release\net10.0-windows\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 ; NOTE: Don't use "Flags: ignoreversion" on any shared system files
 
 [Icons]
