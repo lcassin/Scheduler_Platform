@@ -1018,6 +1018,100 @@ Console.WriteLine(""Hello, World!"");
         }
     }
 
+    private async void ExportEmf_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_webViewInitialized) return;
+
+        var dialog = new SaveFileDialog
+        {
+            Filter = "Enhanced Metafile (*.emf)|*.emf",
+            Title = "Export as EMF",
+            DefaultExt = ".emf"
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            try
+            {
+                StatusText.Text = "Exporting EMF...";
+                
+                var svgContent = await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.getSvgContent()");
+                
+                if (svgContent != "null" && !string.IsNullOrEmpty(svgContent))
+                {
+                    var svg = System.Text.Json.JsonSerializer.Deserialize<string>(svgContent);
+                    if (svg != null)
+                    {
+                        // Parse the SVG using Svg.NET
+                        var svgDocument = Svg.SvgDocument.FromSvg<Svg.SvgDocument>(svg);
+                        
+                        // Get the SVG dimensions
+                        var width = (int)Math.Ceiling(svgDocument.Width.Value);
+                        var height = (int)Math.Ceiling(svgDocument.Height.Value);
+                        
+                        // If dimensions are 0 or invalid, try to get from viewBox
+                        if (width <= 0 || height <= 0)
+                        {
+                            if (svgDocument.ViewBox.Width > 0 && svgDocument.ViewBox.Height > 0)
+                            {
+                                width = (int)Math.Ceiling(svgDocument.ViewBox.Width);
+                                height = (int)Math.Ceiling(svgDocument.ViewBox.Height);
+                            }
+                            else
+                            {
+                                // Default fallback dimensions
+                                width = 800;
+                                height = 600;
+                            }
+                        }
+                        
+                        // Create the EMF file
+                        using var tempBitmap = new System.Drawing.Bitmap(width, height);
+                        using var tempGraphics = System.Drawing.Graphics.FromImage(tempBitmap);
+                        var hdc = tempGraphics.GetHdc();
+                        
+                        try
+                        {
+                            using var stream = new FileStream(dialog.FileName, FileMode.Create, FileAccess.Write);
+                            using var metafile = new System.Drawing.Imaging.Metafile(
+                                stream, 
+                                hdc, 
+                                new System.Drawing.RectangleF(0, 0, width, height),
+                                System.Drawing.Imaging.MetafileFrameUnit.Pixel,
+                                System.Drawing.Imaging.EmfType.EmfPlusDual);
+                            
+                            using var graphics = System.Drawing.Graphics.FromImage(metafile);
+                            graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                            graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                            graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
+                            
+                            // Render the SVG to the metafile graphics
+                            svgDocument.Draw(graphics);
+                        }
+                        finally
+                        {
+                            tempGraphics.ReleaseHdc(hdc);
+                        }
+                        
+                        StatusText.Text = "Exported as EMF";
+                        MessageBox.Show("EMF exported successfully!\n\nThe diagram has been exported as a vector EMF file that can be imported into Word, PowerPoint, and other applications.", 
+                            "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                    }
+                }
+                else
+                {
+                    MessageBox.Show("No diagram to export. Make sure the diagram is rendered correctly.", 
+                        "Export Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to export EMF: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                StatusText.Text = "Export failed";
+            }
+        }
+    }
+
     private void Exit_Click(object sender, RoutedEventArgs e)
     {
         Close();
