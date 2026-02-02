@@ -432,10 +432,11 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
         var today = currentDate.Date;
         var finalThreshold = currentDate.AddDays(-finalDelayDays).Date;
 
-        return await _dbSet
+        // Get scraping-related jobs that need status check
+        var scrapingJobs = await _dbSet
             .Where(j => !j.IsDeleted &&
                         !j.IsManualRequest &&
-                        (j.Status == "ScrapeRequested" || j.Status == "StatusCheckInProgress") &&
+                        (j.Status == "ScrapeRequested" || j.Status == "StatusCheckInProgress" || j.Status == "NeedsReview") &&
                         !j.ScrapingCompletedDateTime.HasValue &&
                         // At least delayDays since last modification
                         j.ModifiedDateTime <= checkDate &&
@@ -447,6 +448,25 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                         j.NextRangeEndDateTime.Value.Date >= finalThreshold)
             .Include(j => j.AdrAccount)
             .ToListAsync();
+
+        // Get credential verification jobs that need status check
+        // These are jobs where credential check was sent but we need to re-check if credentials were fixed
+        // Only include jobs where NextRunDateTime > today (scraping phase hasn't begun yet)
+        var credentialJobs = await _dbSet
+            .Where(j => !j.IsDeleted &&
+                        !j.IsManualRequest &&
+                        (j.Status == "CredentialCheckInProgress" || j.Status == "CredentialFailed") &&
+                        // At least delayDays since last modification
+                        j.ModifiedDateTime <= checkDate &&
+                        // Only check credential status if scraping phase hasn't begun
+                        // (NextRunDateTime > today means we're still in credential verification window)
+                        j.NextRunDateTime.HasValue &&
+                        j.NextRunDateTime.Value.Date > today)
+            .Include(j => j.AdrAccount)
+            .ToListAsync();
+
+        // Combine and return all jobs needing status check
+        return scrapingJobs.Concat(credentialJobs);
     }
 
     public async Task<IEnumerable<AdrJob>> GetJobsNeedingFinalStatusCheckAsync(DateTime currentDate, int finalDelayDays = 5)
@@ -469,16 +489,20 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
 
     public async Task<IEnumerable<AdrJob>> GetAllJobsForManualStatusCheckAsync()
     {
-        // Manual status check: Get ALL jobs that have been through scraping, regardless of timing
-        // This is used by the "Check Statuses Only" button to check status for all scraped jobs
+        // Manual status check: Get ALL jobs that need status checking, regardless of timing
+        // This is used by the "Check Statuses Only" button to check status for all jobs
         // Since there's no cost to check status, we can check all of them
         // Include "NeedsReview" because the status can be fixed downstream and should be re-checked
+        // Include "CredentialCheckInProgress" and "CredentialFailed" to check credential verification status
+        // (credentials can be fixed by helpdesk and should be re-checked daily until NextRunDate arrives)
         return await _dbSet
             .Where(j => !j.IsDeleted &&
-                        // Include all jobs that have been scraped or are in scrape-related statuses
+                        // Include all jobs that need status checking
                         (j.Status == "ScrapeRequested" || 
                          j.Status == "StatusCheckInProgress" ||
-                         j.Status == "NeedsReview"))
+                         j.Status == "NeedsReview" ||
+                         j.Status == "CredentialCheckInProgress" ||
+                         j.Status == "CredentialFailed"))
             .Include(j => j.AdrAccount)
             .ToListAsync();
     }
