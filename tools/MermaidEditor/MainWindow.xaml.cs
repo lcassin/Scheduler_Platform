@@ -47,6 +47,8 @@ public partial class MainWindow : Window
     private string _currentBrowserPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
     private bool _isBrowsingFiles;
     private string? _lastExportDirectory;
+    private string? _currentVirtualHostFolder;
+    private const string VirtualHostName = "localfiles.mermaideditor";
 
     private const string DefaultMermaidCode = @"flowchart TD
     A[Start] --> B{Is it working?}
@@ -342,6 +344,29 @@ Console.WriteLine(""Hello, World!"");
         }
     }
 
+    private void UpdateVirtualHostMapping(string? folderPath)
+    {
+        if (!_webViewInitialized || PreviewWebView.CoreWebView2 == null) return;
+        if (string.IsNullOrEmpty(folderPath)) return;
+        
+        // Only update if the folder has changed
+        if (_currentVirtualHostFolder == folderPath) return;
+        
+        // Clear previous mapping if exists
+        if (!string.IsNullOrEmpty(_currentVirtualHostFolder))
+        {
+            PreviewWebView.CoreWebView2.ClearVirtualHostNameToFolderMapping(VirtualHostName);
+        }
+        
+        // Set new mapping
+        PreviewWebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
+            VirtualHostName,
+            folderPath,
+            CoreWebView2HostResourceAccessKind.Allow);
+        
+        _currentVirtualHostFolder = folderPath;
+    }
+
     private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         if (_isDirty)
@@ -633,18 +658,17 @@ Console.WriteLine(""Hello, World!"");
         var markdownCode = CodeEditor.Text;
         var escapedCode = System.Text.Json.JsonSerializer.Serialize(markdownCode);
         
-        // Get base URL for resolving relative image paths
-        var baseUrl = "";
+        // Set up virtual host mapping for resolving relative image paths
+        var baseTag = "";
         if (!string.IsNullOrEmpty(_currentFilePath))
         {
             var directory = Path.GetDirectoryName(_currentFilePath);
             if (!string.IsNullOrEmpty(directory))
             {
-                // Convert to file:// URL format with forward slashes
-                baseUrl = "file:///" + directory.Replace("\\", "/") + "/";
+                UpdateVirtualHostMapping(directory);
+                baseTag = $@"<base href=""https://{VirtualHostName}/"">";
             }
         }
-        var baseTag = string.IsNullOrEmpty(baseUrl) ? "" : $@"<base href=""{baseUrl}"">";
 
         var html = $@"<!DOCTYPE html>
 <html>
@@ -1770,17 +1794,17 @@ Console.WriteLine(""Hello, World!"");
 
     private void RenderMarkdownPreview(string code, string? filePath = null)
     {
-        // Get base URL for resolving relative image paths
-        var baseUrl = "";
+        // Set up virtual host mapping for resolving relative image paths
+        var baseTag = "";
         if (!string.IsNullOrEmpty(filePath))
         {
             var directory = Path.GetDirectoryName(filePath);
             if (!string.IsNullOrEmpty(directory))
             {
-                baseUrl = "file:///" + directory.Replace("\\", "/") + "/";
+                UpdateVirtualHostMapping(directory);
+                baseTag = $@"<base href=""https://{VirtualHostName}/"">";
             }
         }
-        var baseTag = string.IsNullOrEmpty(baseUrl) ? "" : $@"<base href=""{baseUrl}"">";
         
         var html = $@"<!DOCTYPE html>
 <html>
