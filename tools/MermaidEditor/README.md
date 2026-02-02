@@ -80,7 +80,7 @@ The project includes an Inno Setup script to create a standalone Windows install
 
 4. Click Build > Compile (or press Ctrl+F9)
 
-5. The installer will be created at `bin\Installer\MermaidEditorSetup-1.2.exe`
+5. The installer will be created at `bin\Installer\MermaidEditorSetup-1.3.exe`
 
 ### Installer Features
 

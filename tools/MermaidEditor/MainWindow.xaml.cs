@@ -1491,7 +1491,7 @@ Console.WriteLine(""Hello, World!"");
     private void About_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show(
-            "Mermaid Editor v1.2\n\n" +
+            "Mermaid Editor v1.5\n\n" +
             "A simple IDE for editing Mermaid diagrams and Markdown files.\n\n" +
             "Features:\n" +
             "- Live preview as you type\n" +
