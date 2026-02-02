@@ -185,4 +185,14 @@ public class AdrConfiguration : BaseEntity
     /// Default: 50 jobs
     /// </summary>
     public int TestModeMaxCredentialChecks { get; set; } = 50;
+    
+    // Logging Settings
+    
+    /// <summary>
+    /// Whether to enable detailed per-record logging during orchestration.
+    /// When false, only logs step start/end and errors.
+    /// When true, logs detailed information for each record processed.
+    /// Default: false (to keep log files manageable)
+    /// </summary>
+    public bool EnableDetailedLogging { get; set; } = false;
 }

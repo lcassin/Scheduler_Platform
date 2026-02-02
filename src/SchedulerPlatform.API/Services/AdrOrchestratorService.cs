@@ -225,7 +225,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
             if (matches)
             {
-                _logger.LogInformation(
+                LogDetailedInfo(
                     "Account {AccountId} (VMAccountId: {VMAccountId}, PrimaryVendorCode: {PrimaryVendorCode}) is blacklisted. Reason: {Reason}",
                     account.Id, account.VMAccountId, account.PrimaryVendorCode, entry.Reason);
                 return true;
@@ -276,6 +276,23 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     private int GetTestModeMaxCredentialChecks()
     {
         return _cachedConfig?.TestModeMaxCredentialChecks ?? 50;
+    }
+
+    private bool IsDetailedLoggingEnabled()
+    {
+        return _cachedConfig?.EnableDetailedLogging ?? false;
+    }
+
+    /// <summary>
+    /// Logs a message at Information level only if detailed logging is enabled.
+    /// Use this for per-record logging that would otherwise bloat log files.
+    /// </summary>
+    private void LogDetailedInfo(string message, params object[] args)
+    {
+        if (IsDetailedLoggingEnabled())
+        {
+            _logger.LogInformation(message, args);
+        }
     }
 
     #region Step 2: Job Creation
@@ -2021,7 +2038,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                                 result.IsSuccess = true;
                                 result.IsError = apiResponse.IsError;
                                 result.IsFinal = apiResponse.IsFinal;
-                                _logger.LogInformation("ADR API returned array response for job {JobId}, using first element", jobId);
+                                LogDetailedInfo("ADR API returned array response for job {JobId}, using first element", jobId);
                             }
                             else
                             {
@@ -2037,7 +2054,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             result.IsSuccess = true;
                             result.IsError = false;
                             result.StatusDescription = "Request submitted successfully";
-                            _logger.LogInformation("ADR API returned IndexId {IndexId} for job {JobId}", indexId, jobId);
+                            LogDetailedInfo("ADR API returned IndexId {IndexId} for job {JobId}", indexId, jobId);
                         }
                         else
                         {

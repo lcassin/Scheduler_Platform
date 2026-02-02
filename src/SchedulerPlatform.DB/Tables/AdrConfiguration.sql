@@ -28,6 +28,10 @@
     [LogRetentionDays]                INT            DEFAULT ((30)) NOT NULL,
     [MaxOrchestrationDurationMinutes] INT            DEFAULT ((240)) NOT NULL,
     [DatabaseCommandTimeoutSeconds]   INT            DEFAULT ((600)) NOT NULL,
+    [TestModeEnabled]                 BIT            DEFAULT ((0)) NOT NULL,
+    [TestModeMaxScrapingJobs]         INT            DEFAULT ((50)) NOT NULL,
+    [TestModeMaxCredentialChecks]     INT            DEFAULT ((50)) NOT NULL,
+    [EnableDetailedLogging]           BIT            DEFAULT ((0)) NOT NULL,
     CONSTRAINT [PK_AdrConfiguration] PRIMARY KEY CLUSTERED ([AdrConfigurationId] ASC)
 );
 
