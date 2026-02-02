@@ -82,8 +82,17 @@ public class AuditLogInterceptor : SaveChangesInterceptor
         }
     }
 
+    /// <summary>
+    /// Determines which entities should be audited.
+    /// Only audit user-initiated configuration changes, not bulk automated operations.
+    /// Entities processed in bulk during orchestration (AdrAccount, AdrAccountRule, AdrJob, etc.)
+    /// are excluded to prevent OutOfMemoryException when syncing 170k+ records.
+    /// </summary>
     private bool ShouldAudit(object entity)
     {
+        // Only audit user-initiated configuration changes
+        // Excludes: AdrAccountRule, AdrAccount, AdrJob, AdrJobExecution, AdrOrchestrationRun
+        // These are processed in bulk during orchestration and would cause memory issues
         return entity is Schedule ||
                entity is JobParameter ||
                entity is NotificationSetting ||
@@ -93,7 +102,7 @@ public class AuditLogInterceptor : SaveChangesInterceptor
                entity is AdrConfiguration ||
                entity is AdrAccountBlacklist ||
                entity is AdrJobType ||
-               entity is AdrAccountRule;
+               entity is PowerBiReport;
     }
 
     private int? GetEntityId(object entity)
