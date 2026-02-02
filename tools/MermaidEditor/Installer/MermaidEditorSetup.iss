@@ -2,7 +2,7 @@
 ; This script creates a Windows installer for the Mermaid Editor application
 
 #define MyAppName "Mermaid Editor"
-#define MyAppVersion "1.5"
+#define MyAppVersion "1.6"
 #define MyAppPublisher "Lee Cassin"
 #define MyAppURL "https://github.com/lcassin/Scheduler_Platform"
 #define MyAppExeName "MermaidEditor.exe"
