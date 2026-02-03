@@ -1,6 +1,7 @@
 @using SchedulerPlatform.UI.Models
 @using SchedulerPlatform.UI.Services
 @inject IAdrService AdrService
+@inject IUserTimeZoneService TimeZoneService
 
 <MudDialog>
     <TitleContent>
@@ -160,14 +161,14 @@
                                 @(rule.IsEnabled ? "Yes" : "No")
                             </MudChip>
                         </MudItem>
-                        @if (rule.IsManuallyOverridden)
-                        {
-                            <MudItem xs="12">
-                                <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-1">
-                                    Rule manually overridden by @rule.OverriddenBy on @(rule.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? "N/A")
-                                </MudAlert>
-                            </MudItem>
-                        }
+                                                @if (rule.IsManuallyOverridden)
+                                                {
+                                                    <MudItem xs="12">
+                                                        <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-1">
+                                                            Rule manually overridden by @rule.OverriddenBy on @(_ruleOverriddenDateFormatted.TryGetValue(rule.Id, out var overriddenDate) ? overriddenDate : rule.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? "N/A")
+                                                        </MudAlert>
+                                                    </MudItem>
+                                                }
                     }
                 }
                 else
@@ -204,10 +205,10 @@
                         <MudText Typo="Typo.body2" Color="Color.Secondary">Billing Period</MudText>
                         <MudText Typo="Typo.body1">@_latestJob.BillingPeriodStartDateTime.ToString("MM/dd/yyyy") - @_latestJob.BillingPeriodEndDateTime.ToString("MM/dd/yyyy")</MudText>
                     </MudItem>
-                    <MudItem xs="6">
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Last Completed</MudText>
-                        <MudText Typo="Typo.body1">@(_latestJob.ScrapingCompletedDateTime?.ToString("MM/dd/yyyy HH:mm") ?? "N/A")</MudText>
-                    </MudItem>
+                                        <MudItem xs="6">
+                                            <MudText Typo="Typo.body2" Color="Color.Secondary">Last Completed</MudText>
+                                            <MudText Typo="Typo.body1">@(_latestJob.ScrapingCompletedDateTime.HasValue ? _scrapingCompletedFormatted : "N/A")</MudText>
+                                        </MudItem>
                     @if (!string.IsNullOrEmpty(_latestJob.ErrorMessage))
                     {
                         <MudItem xs="12">
@@ -236,14 +237,14 @@
                     <MudDivider Class="my-2" />
                     <MudText Typo="Typo.subtitle1" Class="mb-2"><strong>Sync Information</strong></MudText>
                 </MudItem>
-                <MudItem xs="6">
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Last Synced</MudText>
-                    <MudText Typo="Typo.body1">@(Account.LastSyncedDateTime?.ToString("MM/dd/yyyy HH:mm") ?? "N/A")</MudText>
-                </MudItem>
-                <MudItem xs="6">
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Created</MudText>
-                    <MudText Typo="Typo.body1">@Account.CreatedDateTime.ToString("MM/dd/yyyy HH:mm")</MudText>
-                </MudItem>
+                                <MudItem xs="6">
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">Last Synced</MudText>
+                                    <MudText Typo="Typo.body1">@(Account.LastSyncedDateTime.HasValue ? _lastSyncedFormatted : "N/A")</MudText>
+                                </MudItem>
+                                <MudItem xs="6">
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">Created</MudText>
+                                    <MudText Typo="Typo.body1">@_createdFormatted</MudText>
+                                </MudItem>
             </MudGrid>
         }
     </DialogContent>
@@ -259,23 +260,44 @@
     [Parameter]
     public AdrAccount? Account { get; set; }
 
-    private AdrJob? _latestJob;
-    private bool _loadingJob = true;
-    private List<AccountRuleDto>? _rules;
-    private bool _loadingRules = true;
+        private AdrJob? _latestJob;
+        private bool _loadingJob = true;
+        private List<AccountRuleDto>? _rules;
+        private bool _loadingRules = true;
+    
+        private string _lastSyncedFormatted = "";
+        private string _createdFormatted = "";
+        private string _scrapingCompletedFormatted = "";
+        private Dictionary<int, string> _ruleOverriddenDateFormatted = new();
 
-    protected override async Task OnInitializedAsync()
-    {
-        if (Account != null)
+        protected override async Task OnInitializedAsync()
         {
-            // Load jobs and rules in parallel
-            var jobsTask = LoadJobsAsync();
-            var rulesTask = LoadRulesAsync();
-            await Task.WhenAll(jobsTask, rulesTask);
+            if (Account != null)
+            {
+                // Load jobs and rules in parallel
+                var jobsTask = LoadJobsAsync();
+                var rulesTask = LoadRulesAsync();
+                await Task.WhenAll(jobsTask, rulesTask);
+            
+                // Format dates with user's timezone
+                if (Account.LastSyncedDateTime.HasValue)
+                    _lastSyncedFormatted = await TimeZoneService.FormatDateTimeAsync(Account.LastSyncedDateTime.Value);
+                _createdFormatted = await TimeZoneService.FormatDateTimeAsync(Account.CreatedDateTime);
+                if (_latestJob?.ScrapingCompletedDateTime.HasValue == true)
+                    _scrapingCompletedFormatted = await TimeZoneService.FormatDateTimeAsync(_latestJob.ScrapingCompletedDateTime.Value);
+            
+                // Format rule override dates
+                if (_rules != null)
+                {
+                    foreach (var rule in _rules.Where(r => r.IsManuallyOverridden && r.OverriddenDateTime.HasValue))
+                    {
+                        _ruleOverriddenDateFormatted[rule.Id] = await TimeZoneService.FormatDateTimeAsync(rule.OverriddenDateTime!.Value);
+                    }
+                }
+            }
+            _loadingJob = false;
+            _loadingRules = false;
         }
-        _loadingJob = false;
-        _loadingRules = false;
-    }
 
     private async Task LoadJobsAsync()
     {

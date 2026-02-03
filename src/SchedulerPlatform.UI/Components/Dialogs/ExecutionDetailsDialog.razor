@@ -1,6 +1,8 @@
 @using MudBlazor
 @using SchedulerPlatform.Core.Domain.Enums
 @using SchedulerPlatform.UI.Models
+@using SchedulerPlatform.UI.Services
+@inject IUserTimeZoneService TimeZoneService
 
 <MudDialog>
     <DialogContent>
@@ -52,17 +54,17 @@
                 </MudText>
             </MudItem>
             
-            <MudItem xs="12" md="6">
-                <MudText Typo="Typo.subtitle2" Class="mb-1">Start Time</MudText>
-                <MudText Typo="Typo.body2">@($"{Execution.StartDateTime.ToLocalTime():g} ({GetLocalTimeZoneAbbreviation()})")</MudText>
-            </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudText Typo="Typo.subtitle2" Class="mb-1">Start Time</MudText>
+                            <MudText Typo="Typo.body2">@_startTimeFormatted</MudText>
+                        </MudItem>
             
-            <MudItem xs="12" md="6">
-                <MudText Typo="Typo.subtitle2" Class="mb-1">End Time</MudText>
-                <MudText Typo="Typo.body2">
-                    @(Execution.EndDateTime.HasValue ? $"{Execution.EndDateTime.Value.ToLocalTime():g} ({GetLocalTimeZoneAbbreviation()})" : "N/A")
-                </MudText>
-            </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudText Typo="Typo.subtitle2" Class="mb-1">End Time</MudText>
+                            <MudText Typo="Typo.body2">
+                                @(Execution.EndDateTime.HasValue ? _endTimeFormatted : "N/A")
+                            </MudText>
+                        </MudItem>
             
             <MudItem xs="12" md="6">
                 <MudText Typo="Typo.subtitle2" Class="mb-1">Retry Count</MudText>
@@ -112,30 +114,15 @@
     
     [Parameter] public JobExecution Execution { get; set; } = null!;
     
-    private void Close() => MudDialog.Close();
+    private string _startTimeFormatted = "";
+    private string _endTimeFormatted = "";
     
-    private string GetLocalTimeZoneAbbreviation()
+    protected override async Task OnInitializedAsync()
     {
-        var localTimeZone = TimeZoneInfo.Local;
-        var timeZoneId = localTimeZone.Id;
-        
-        var tzMap = new Dictionary<string, string>
-        {
-            { "Eastern Standard Time", "ET" },
-            { "Central Standard Time", "CT" },
-            { "Mountain Standard Time", "MT" },
-            { "Pacific Standard Time", "PT" },
-            { "US Mountain Standard Time", "MST" },
-            { "Alaskan Standard Time", "AKT" },
-            { "Hawaiian Standard Time", "HST" },
-            { "US Eastern Standard Time", "ET" }
-        };
-        
-        if (tzMap.TryGetValue(timeZoneId, out var abbr))
-            return abbr;
-        
-        return localTimeZone.IsDaylightSavingTime(DateTime.Now) 
-            ? localTimeZone.DaylightName 
-            : localTimeZone.StandardName;
+        _startTimeFormatted = await TimeZoneService.FormatDateTimeAsync(Execution.StartDateTime);
+        if (Execution.EndDateTime.HasValue)
+            _endTimeFormatted = await TimeZoneService.FormatDateTimeAsync(Execution.EndDateTime.Value);
     }
+    
+    private void Close() => MudDialog.Close();
 }

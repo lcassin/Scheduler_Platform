@@ -1,6 +1,8 @@
 @using MudBlazor
 @using SchedulerPlatform.Core.Domain.Enums
 @using SchedulerPlatform.UI.Models
+@using SchedulerPlatform.UI.Services
+@inject IUserTimeZoneService TimeZoneService
 
 <MudDialog>
     <DialogContent>
@@ -40,26 +42,26 @@
                 <MudText Typo="Typo.body2">@(Schedule.TimeZone ?? "N/A")</MudText>
             </MudItem>
             
-            <MudItem xs="12" md="6">
-                <MudText Typo="Typo.subtitle2" Class="mb-1">Next Run Time</MudText>
-                <MudText Typo="Typo.body2">
-                    @if (Schedule.NextRunDateTime.HasValue)
-                    {
-                        <text>@Schedule.NextRunDateTime.Value.ToString("g")</text>
-                    }
-                    else
-                    {
-                        <text>N/A</text>
-                    }
-                </MudText>
-            </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudText Typo="Typo.subtitle2" Class="mb-1">Next Run Time</MudText>
+                            <MudText Typo="Typo.body2">
+                                @if (Schedule.NextRunDateTime.HasValue)
+                                {
+                                    <text>@_nextRunFormatted</text>
+                                }
+                                else
+                                {
+                                    <text>N/A</text>
+                                }
+                            </MudText>
+                        </MudItem>
             
-            <MudItem xs="12" md="6">
-                <MudText Typo="Typo.subtitle2" Class="mb-1">Last Run Time</MudText>
-                <MudText Typo="Typo.body2">
-                    @(Schedule.LastRunDateTime.HasValue ? Schedule.LastRunDateTime.Value.ToString("g") : "N/A")
-                </MudText>
-            </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudText Typo="Typo.subtitle2" Class="mb-1">Last Run Time</MudText>
+                            <MudText Typo="Typo.body2">
+                                @(Schedule.LastRunDateTime.HasValue ? _lastRunFormatted : "N/A")
+                            </MudText>
+                        </MudItem>
             
             <MudItem xs="12" md="6">
                 <MudText Typo="Typo.subtitle2" Class="mb-1">Status</MudText>
@@ -107,22 +109,22 @@
                 </MudItem>
             }
             
-            <MudItem xs="12" md="6">
-                <MudText Typo="Typo.subtitle2" Class="mb-1">Created At</MudText>
-                <MudText Typo="Typo.body2">@Schedule.CreatedDateTime.ToString("g")</MudText>
-            </MudItem>
+                        <MudItem xs="12" md="6">
+                            <MudText Typo="Typo.subtitle2" Class="mb-1">Created At</MudText>
+                            <MudText Typo="Typo.body2">@_createdAtFormatted</MudText>
+                        </MudItem>
             
             <MudItem xs="12" md="6">
                 <MudText Typo="Typo.subtitle2" Class="mb-1">Created By</MudText>
                 <MudText Typo="Typo.body2">@(Schedule.CreatedBy ?? "System")</MudText>
             </MudItem>
             
-            @if (Schedule.ModifiedDateTime.HasValue)
-            {
-                <MudItem xs="12" md="6">
-                    <MudText Typo="Typo.subtitle2" Class="mb-1">Updated At</MudText>
-                    <MudText Typo="Typo.body2">@Schedule.ModifiedDateTime.Value.ToString("g")</MudText>
-                </MudItem>
+                        @if (Schedule.ModifiedDateTime.HasValue)
+                        {
+                            <MudItem xs="12" md="6">
+                                <MudText Typo="Typo.subtitle2" Class="mb-1">Updated At</MudText>
+                                <MudText Typo="Typo.body2">@_updatedAtFormatted</MudText>
+                            </MudItem>
                 
                 <MudItem xs="12" md="6">
                     <MudText Typo="Typo.subtitle2" Class="mb-1">Updated By</MudText>
@@ -141,6 +143,22 @@
     private IMudDialogInstance MudDialog { get; set; } = null!;
     
     [Parameter] public Schedule Schedule { get; set; } = null!;
+    
+    private string _nextRunFormatted = "";
+    private string _lastRunFormatted = "";
+    private string _createdAtFormatted = "";
+    private string _updatedAtFormatted = "";
+    
+    protected override async Task OnInitializedAsync()
+    {
+        if (Schedule.NextRunDateTime.HasValue)
+            _nextRunFormatted = await TimeZoneService.FormatDateTimeAsync(Schedule.NextRunDateTime.Value);
+        if (Schedule.LastRunDateTime.HasValue)
+            _lastRunFormatted = await TimeZoneService.FormatDateTimeAsync(Schedule.LastRunDateTime.Value);
+        _createdAtFormatted = await TimeZoneService.FormatDateTimeAsync(Schedule.CreatedDateTime);
+        if (Schedule.ModifiedDateTime.HasValue)
+            _updatedAtFormatted = await TimeZoneService.FormatDateTimeAsync(Schedule.ModifiedDateTime.Value);
+    }
     
     private void Close() => MudDialog.Close();
     
