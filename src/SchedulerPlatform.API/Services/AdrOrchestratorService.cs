@@ -22,6 +22,18 @@ public interface IAdrOrchestratorService
     /// This does NOT call any ADR APIs (no cost incurred).
     /// </summary>
     Task<StalePendingJobsResult> FinalizeStalePendingJobsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
+    
+    /// <summary>
+    /// Runs credential verification (AttemptLogin) for ALL active accounts in the system.
+    /// This is a one-time bulk operation to check all existing credentials ahead of time.
+    /// Unlike VerifyCredentialsAsync which only checks jobs approaching their NextRunDate,
+    /// this method checks ALL accounts with valid CredentialIds regardless of scheduling.
+    /// Note: This does NOT respect test mode limits as it's intended for one-time bulk operations.
+    /// </summary>
+    /// <param name="progressCallback">Optional callback to report progress (current, total)</param>
+    /// <param name="cancellationToken">Cancellation token for the operation</param>
+    /// <returns>Results of the bulk credential verification operation</returns>
+    Task<BulkCredentialVerificationResult> VerifyAllAccountCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
 }
 
 #region Result Classes
@@ -75,6 +87,42 @@ public class StalePendingJobsResult
     public int RulesAdvanced { get; set; }
     public int Errors { get; set; }
     public List<string> ErrorMessages { get; set; } = new();
+    public TimeSpan Duration { get; set; }
+}
+
+/// <summary>
+/// Result of bulk credential verification for all accounts.
+/// </summary>
+public class BulkCredentialVerificationResult
+{
+    /// <summary>
+    /// Total number of accounts processed.
+    /// </summary>
+    public int AccountsProcessed { get; set; }
+    
+    /// <summary>
+    /// Number of accounts where credentials were verified successfully.
+    /// </summary>
+    public int CredentialsVerified { get; set; }
+    
+    /// <summary>
+    /// Number of accounts where credential verification failed.
+    /// </summary>
+    public int CredentialsFailed { get; set; }
+    
+    /// <summary>
+    /// Number of errors encountered during processing.
+    /// </summary>
+    public int Errors { get; set; }
+    
+    /// <summary>
+    /// Detailed error messages for troubleshooting.
+    /// </summary>
+    public List<string> ErrorMessages { get; set; } = new();
+    
+    /// <summary>
+    /// Total duration of the bulk verification operation.
+    /// </summary>
     public TimeSpan Duration { get; set; }
 }
 
@@ -1994,6 +2042,166 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             _logger.LogError(ex, "Stale pending jobs finalization failed");
             result.Errors++;
             result.ErrorMessages.Add($"Stale pending jobs finalization failed: {ex.Message}");
+            throw;
+        }
+    }
+
+    #endregion
+
+    #region Bulk Credential Verification
+
+    /// <summary>
+    /// Runs credential verification (AttemptLogin) for ALL active accounts in the system.
+    /// This is a one-time bulk operation to check all existing credentials ahead of time.
+    /// Unlike VerifyCredentialsAsync which only checks jobs approaching their NextRunDate,
+    /// this method checks ALL accounts with valid CredentialIds regardless of scheduling.
+    /// Note: This does NOT respect test mode limits as it's intended for one-time bulk operations.
+    /// </summary>
+    public async Task<BulkCredentialVerificationResult> VerifyAllAccountCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    {
+        var result = new BulkCredentialVerificationResult();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var maxParallel = GetMaxParallelRequests();
+
+        try
+        {
+            _logger.LogInformation("Starting BULK credential verification for ALL accounts with {MaxParallel} parallel workers", maxParallel);
+
+            // Get ALL active accounts with valid credentials (not limited by scheduling or test mode)
+            var allAccounts = (await _unitOfWork.AdrAccounts.GetAllActiveAccountsForCredentialCheckAsync()).ToList();
+            var totalAccounts = allAccounts.Count;
+            
+            _logger.LogInformation("Found {Count} active accounts with valid credentials for bulk verification", totalAccounts);
+
+            // Report initial progress (0 of total)
+            progressCallback?.Invoke(0, totalAccounts);
+
+            if (!allAccounts.Any())
+            {
+                stopwatch.Stop();
+                result.Duration = stopwatch.Elapsed;
+                return result;
+            }
+
+            // Build list of accounts to process with their credential info
+            var accountsToProcess = allAccounts
+                .Select(a => (AccountId: a.Id, CredentialId: a.CredentialId, VMAccountId: a.VMAccountId, InterfaceAccountId: a.InterfaceAccountId))
+                .ToList();
+
+            _logger.LogInformation("Starting parallel API calls for {Count} accounts", accountsToProcess.Count);
+
+            // Call ADR API in parallel with semaphore to limit concurrency
+            var apiResults = new ConcurrentDictionary<int, AdrApiResult>();
+            using var semaphore = new SemaphoreSlim(maxParallel, maxParallel);
+            int completedApiCalls = 0;
+            var totalApiCalls = accountsToProcess.Count;
+
+            var tasks = accountsToProcess.Select(async accountInfo =>
+            {
+                await semaphore.WaitAsync(cancellationToken);
+                try
+                {
+                    // Call ADR API with AttemptLogin request type
+                    // Note: We pass 0 for jobId since this is a bulk check not tied to a specific job
+                    var apiResult = await CallAdrApiAsync(
+                        AdrRequestType.AttemptLogin,
+                        accountInfo.CredentialId,
+                        null, // No date range for credential check
+                        null,
+                        0, // No job ID - this is a bulk account check
+                        accountInfo.VMAccountId,
+                        accountInfo.InterfaceAccountId,
+                        cancellationToken);
+
+                    apiResults[accountInfo.AccountId] = apiResult;
+
+                    // Log and report progress every 100 completions or at the end
+                    var count = Interlocked.Increment(ref completedApiCalls);
+                    if (count % 100 == 0 || count == totalApiCalls)
+                    {
+                        progressCallback?.Invoke(count, totalApiCalls);
+                    }
+                    if (count % 1000 == 0 || count == totalApiCalls)
+                    {
+                        _logger.LogInformation(
+                            "Bulk credential verification API calls: {Completed}/{Total} completed ({Percent:F1}%)",
+                            count, totalApiCalls, (double)count / totalApiCalls * 100);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error calling ADR API for account {AccountId}", accountInfo.AccountId);
+                    apiResults[accountInfo.AccountId] = new AdrApiResult
+                    {
+                        IsSuccess = false,
+                        IsError = true,
+                        ErrorMessage = ex.Message
+                    };
+
+                    var count = Interlocked.Increment(ref completedApiCalls);
+                    if (count % 100 == 0 || count == totalApiCalls)
+                    {
+                        progressCallback?.Invoke(count, totalApiCalls);
+                    }
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks);
+
+            _logger.LogInformation("Completed {Count} parallel API calls, tallying results", apiResults.Count);
+
+            // Tally results (no database updates needed - this is just a verification check)
+            foreach (var accountInfo in accountsToProcess)
+            {
+                result.AccountsProcessed++;
+
+                if (!apiResults.TryGetValue(accountInfo.AccountId, out var apiResult))
+                {
+                    result.Errors++;
+                    result.ErrorMessages.Add($"Account {accountInfo.AccountId}: No API result found");
+                    continue;
+                }
+
+                if (apiResult.IsSuccess)
+                {
+                    result.CredentialsVerified++;
+                }
+                else if (apiResult.IsError)
+                {
+                    result.Errors++;
+                    if (result.ErrorMessages.Count < 100) // Limit error messages to prevent huge response
+                    {
+                        result.ErrorMessages.Add($"Account {accountInfo.AccountId} (CredentialId: {accountInfo.CredentialId}): {apiResult.ErrorMessage}");
+                    }
+                }
+                else
+                {
+                    result.CredentialsFailed++;
+                }
+            }
+
+            stopwatch.Stop();
+            result.Duration = stopwatch.Elapsed;
+
+            _logger.LogInformation(
+                "BULK credential verification completed in {Duration}. Processed: {Processed}, Verified: {Verified}, Failed: {Failed}, Errors: {Errors}",
+                result.Duration, result.AccountsProcessed, result.CredentialsVerified, result.CredentialsFailed, result.Errors);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Bulk credential verification failed");
+            result.Errors++;
+            result.ErrorMessages.Add($"Bulk credential verification failed: {ex.Message}");
             throw;
         }
     }

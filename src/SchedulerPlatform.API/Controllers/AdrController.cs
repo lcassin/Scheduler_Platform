@@ -2829,6 +2829,37 @@ public class AdrController : ControllerBase
     }
 
     /// <summary>
+    /// Triggers bulk credential verification for ALL active accounts in the system.
+    /// This is a one-time operation to check all existing credentials ahead of time,
+    /// regardless of scheduling or test mode limits. Use this to identify credential
+    /// issues before they affect scheduled jobs.
+    /// WARNING: This will call the ADR API for every active account with a valid CredentialId.
+    /// For large systems (170k+ accounts), this operation may take several hours.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token for the operation.</param>
+    /// <returns>The bulk credential verification result including counts of verified and failed credentials.</returns>
+    /// <response code="200">Returns the bulk credential verification result.</response>
+    /// <response code="500">An error occurred during bulk credential verification.</response>
+    [HttpPost("orchestrate/verify-all-credentials")]
+    [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    [ProducesResponseType(typeof(BulkCredentialVerificationResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<BulkCredentialVerificationResult>> VerifyAllCredentials(CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("BULK credential verification for ALL accounts triggered by {User}", User.Identity?.Name ?? "Unknown");
+            var result = await _orchestratorService.VerifyAllAccountCredentialsAsync(null, cancellationToken);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during bulk credential verification");
+            return StatusCode(500, new { error = "An error occurred during bulk credential verification", message = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Triggers manual ADR request processing for jobs that are ready (credential verified and at NextRunDate).
     /// </summary>
     /// <param name="cancellationToken">Cancellation token for the operation.</param>
