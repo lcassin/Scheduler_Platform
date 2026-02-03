@@ -927,38 +927,68 @@ public class AdrController : ControllerBase
                 var isCredentialCheck = requestType == 1;
                 var initialStatus = isCredentialCheck ? "CredentialCheckInProgress" : "ScrapeInProgress";
 
-                // Step 1: Create a real AdrJob record with IsManualRequest = true
-                // This job is excluded from orchestration but visible in Jobs UI
-                var job = new AdrJob
+                // Step 1: Check if a job already exists for this account and billing period
+                // The unique index UX_AdrJob_Account_BillingPeriod prevents duplicates
+                var existingJob = (await _unitOfWork.AdrJobs.FindAsync(j => 
+                    j.AdrAccountId == account.Id && 
+                    j.BillingPeriodStartDateTime == rangeStart && 
+                    j.BillingPeriodEndDateTime == rangeEnd))
+                    .FirstOrDefault();
+
+                AdrJob job;
+
+                if (existingJob != null)
                 {
-                    AdrAccountId = account.Id,
-                    VMAccountId = account.VMAccountId,
-                    VMAccountNumber = account.VMAccountNumber,
-                    PrimaryVendorCode = account.PrimaryVendorCode,
-                    MasterVendorCode = account.MasterVendorCode,
-                    CredentialId = account.CredentialId,
-                    PeriodType = account.PeriodType,
-                    BillingPeriodStartDateTime = rangeStart,
-                    BillingPeriodEndDateTime = rangeEnd,
-                    NextRunDateTime = DateTime.UtcNow,
-                    NextRangeStartDateTime = rangeStart,
-                    NextRangeEndDateTime = rangeEnd,
-                    Status = initialStatus,
-                    IsMissing = false,
-                    IsManualRequest = true,
-                    ManualRequestReason = request.Reason,
-                    CreatedDateTime = DateTime.UtcNow,
-                    CreatedBy = username,
-                    ModifiedDateTime = DateTime.UtcNow,
-                    ModifiedBy = username
-                };
+                    // Use the existing job - update its status and mark as manual request
+                    job = existingJob;
+                    job.Status = initialStatus;
+                    job.IsManualRequest = true;
+                    job.ManualRequestReason = request.Reason;
+                    job.ModifiedDateTime = DateTime.UtcNow;
+                    job.ModifiedBy = username;
+                    
+                    await _unitOfWork.AdrJobs.UpdateAsync(job);
+                    await _unitOfWork.SaveChangesAsync();
 
-                await _unitOfWork.AdrJobs.AddAsync(job);
-                await _unitOfWork.SaveChangesAsync();
+                    _logger.LogInformation(
+                        "Using existing AdrJob {JobId} for manual request on account {AccountId} ({VMAccountNumber}). Range: {RangeStart} to {RangeEnd}",
+                        job.Id, id, account.VMAccountNumber, rangeStart, rangeEnd);
+                }
+                else
+                {
+                    // Create a new AdrJob record with IsManualRequest = true
+                    // This job is excluded from orchestration but visible in Jobs UI
+                    job = new AdrJob
+                    {
+                        AdrAccountId = account.Id,
+                        VMAccountId = account.VMAccountId,
+                        VMAccountNumber = account.VMAccountNumber,
+                        PrimaryVendorCode = account.PrimaryVendorCode,
+                        MasterVendorCode = account.MasterVendorCode,
+                        CredentialId = account.CredentialId,
+                        PeriodType = account.PeriodType,
+                        BillingPeriodStartDateTime = rangeStart,
+                        BillingPeriodEndDateTime = rangeEnd,
+                        NextRunDateTime = DateTime.UtcNow,
+                        NextRangeStartDateTime = rangeStart,
+                        NextRangeEndDateTime = rangeEnd,
+                        Status = initialStatus,
+                        IsMissing = false,
+                        IsManualRequest = true,
+                        ManualRequestReason = request.Reason,
+                        CreatedDateTime = DateTime.UtcNow,
+                        CreatedBy = username,
+                        ModifiedDateTime = DateTime.UtcNow,
+                        ModifiedBy = username
+                    };
 
-                _logger.LogInformation(
-                    "Created manual AdrJob {JobId} for account {AccountId} ({VMAccountNumber}). Range: {RangeStart} to {RangeEnd}",
-                    job.Id, id, account.VMAccountNumber, rangeStart, rangeEnd);
+                    await _unitOfWork.AdrJobs.AddAsync(job);
+                    await _unitOfWork.SaveChangesAsync();
+
+                    _logger.LogInformation(
+                        "Created manual AdrJob {JobId} for account {AccountId} ({VMAccountNumber}). Range: {RangeStart} to {RangeEnd}",
+                        job.Id, id, account.VMAccountNumber, rangeStart, rangeEnd);
+                }
 
                 // Step 2: Create an AdrJobExecution linked to the job
                 var execution = new AdrJobExecution
