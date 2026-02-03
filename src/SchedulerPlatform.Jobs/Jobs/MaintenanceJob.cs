@@ -615,13 +615,13 @@ public class MaintenanceJob : IJob
             {
                 // Azure App Service persistent log folder
                 logPath = @"C:\home\LogFiles\Application";
-                _logger.LogInformation("Detected Azure App Service environment, using log path: {Path}", logPath);
+                _logger.LogDebug("Detected Azure App Service environment, using log path: {Path}", logPath);
             }
             else
             {
                 // Local development - use app base directory
                 logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "logs");
-                _logger.LogInformation("Using local log path: {Path}", logPath);
+                _logger.LogDebug("Using local log path: {Path}", logPath);
             }
             
             if (!Directory.Exists(logPath))

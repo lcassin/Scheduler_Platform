@@ -927,38 +927,68 @@ public class AdrController : ControllerBase
                 var isCredentialCheck = requestType == 1;
                 var initialStatus = isCredentialCheck ? "CredentialCheckInProgress" : "ScrapeInProgress";
 
-                // Step 1: Create a real AdrJob record with IsManualRequest = true
-                // This job is excluded from orchestration but visible in Jobs UI
-                var job = new AdrJob
+                // Step 1: Check if a job already exists for this account and billing period
+                // The unique index UX_AdrJob_Account_BillingPeriod prevents duplicates
+                var existingJob = (await _unitOfWork.AdrJobs.FindAsync(j => 
+                    j.AdrAccountId == account.Id && 
+                    j.BillingPeriodStartDateTime == rangeStart && 
+                    j.BillingPeriodEndDateTime == rangeEnd))
+                    .FirstOrDefault();
+
+                AdrJob job;
+
+                if (existingJob != null)
                 {
-                    AdrAccountId = account.Id,
-                    VMAccountId = account.VMAccountId,
-                    VMAccountNumber = account.VMAccountNumber,
-                    PrimaryVendorCode = account.PrimaryVendorCode,
-                    MasterVendorCode = account.MasterVendorCode,
-                    CredentialId = account.CredentialId,
-                    PeriodType = account.PeriodType,
-                    BillingPeriodStartDateTime = rangeStart,
-                    BillingPeriodEndDateTime = rangeEnd,
-                    NextRunDateTime = DateTime.UtcNow,
-                    NextRangeStartDateTime = rangeStart,
-                    NextRangeEndDateTime = rangeEnd,
-                    Status = initialStatus,
-                    IsMissing = false,
-                    IsManualRequest = true,
-                    ManualRequestReason = request.Reason,
-                    CreatedDateTime = DateTime.UtcNow,
-                    CreatedBy = username,
-                    ModifiedDateTime = DateTime.UtcNow,
-                    ModifiedBy = username
-                };
+                    // Use the existing job - update its status and mark as manual request
+                    job = existingJob;
+                    job.Status = initialStatus;
+                    job.IsManualRequest = true;
+                    job.ManualRequestReason = request.Reason;
+                    job.ModifiedDateTime = DateTime.UtcNow;
+                    job.ModifiedBy = username;
+                    
+                    await _unitOfWork.AdrJobs.UpdateAsync(job);
+                    await _unitOfWork.SaveChangesAsync();
 
-                await _unitOfWork.AdrJobs.AddAsync(job);
-                await _unitOfWork.SaveChangesAsync();
+                    _logger.LogInformation(
+                        "Using existing AdrJob {JobId} for manual request on account {AccountId} ({VMAccountNumber}). Range: {RangeStart} to {RangeEnd}",
+                        job.Id, id, account.VMAccountNumber, rangeStart, rangeEnd);
+                }
+                else
+                {
+                    // Create a new AdrJob record with IsManualRequest = true
+                    // This job is excluded from orchestration but visible in Jobs UI
+                    job = new AdrJob
+                    {
+                        AdrAccountId = account.Id,
+                        VMAccountId = account.VMAccountId,
+                        VMAccountNumber = account.VMAccountNumber,
+                        PrimaryVendorCode = account.PrimaryVendorCode,
+                        MasterVendorCode = account.MasterVendorCode,
+                        CredentialId = account.CredentialId,
+                        PeriodType = account.PeriodType,
+                        BillingPeriodStartDateTime = rangeStart,
+                        BillingPeriodEndDateTime = rangeEnd,
+                        NextRunDateTime = DateTime.UtcNow,
+                        NextRangeStartDateTime = rangeStart,
+                        NextRangeEndDateTime = rangeEnd,
+                        Status = initialStatus,
+                        IsMissing = false,
+                        IsManualRequest = true,
+                        ManualRequestReason = request.Reason,
+                        CreatedDateTime = DateTime.UtcNow,
+                        CreatedBy = username,
+                        ModifiedDateTime = DateTime.UtcNow,
+                        ModifiedBy = username
+                    };
 
-                _logger.LogInformation(
-                    "Created manual AdrJob {JobId} for account {AccountId} ({VMAccountNumber}). Range: {RangeStart} to {RangeEnd}",
-                    job.Id, id, account.VMAccountNumber, rangeStart, rangeEnd);
+                    await _unitOfWork.AdrJobs.AddAsync(job);
+                    await _unitOfWork.SaveChangesAsync();
+
+                    _logger.LogInformation(
+                        "Created manual AdrJob {JobId} for account {AccountId} ({VMAccountNumber}). Range: {RangeStart} to {RangeEnd}",
+                        job.Id, id, account.VMAccountNumber, rangeStart, rangeEnd);
+                }
 
                 // Step 2: Create an AdrJobExecution linked to the job
                 var execution = new AdrJobExecution
@@ -2829,6 +2859,37 @@ public class AdrController : ControllerBase
     }
 
     /// <summary>
+    /// Triggers bulk credential verification for ALL active accounts in the system.
+    /// This is a one-time operation to check all existing credentials ahead of time,
+    /// regardless of scheduling or test mode limits. Use this to identify credential
+    /// issues before they affect scheduled jobs.
+    /// WARNING: This will call the ADR API for every active account with a valid CredentialId.
+    /// For large systems (170k+ accounts), this operation may take several hours.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token for the operation.</param>
+    /// <returns>The bulk credential verification result including counts of verified and failed credentials.</returns>
+    /// <response code="200">Returns the bulk credential verification result.</response>
+    /// <response code="500">An error occurred during bulk credential verification.</response>
+    [HttpPost("orchestrate/verify-all-credentials")]
+    [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    [ProducesResponseType(typeof(BulkCredentialVerificationResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<BulkCredentialVerificationResult>> VerifyAllCredentials(CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("BULK credential verification for ALL accounts triggered by {User}", User.Identity?.Name ?? "Unknown");
+            var result = await _orchestratorService.VerifyAllAccountCredentialsAsync(null, cancellationToken);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during bulk credential verification");
+            return StatusCode(500, new { error = "An error occurred during bulk credential verification", message = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Triggers manual ADR request processing for jobs that are ready (credential verified and at NextRunDate).
     /// </summary>
     /// <param name="cancellationToken">Cancellation token for the operation.</param>
@@ -3901,6 +3962,8 @@ public class AdrController : ControllerBase
             config.TestModeEnabled = request.TestModeEnabled ?? config.TestModeEnabled;
             config.TestModeMaxScrapingJobs = request.TestModeMaxScrapingJobs ?? config.TestModeMaxScrapingJobs;
             config.TestModeMaxCredentialChecks = request.TestModeMaxCredentialChecks ?? config.TestModeMaxCredentialChecks;
+            // Logging Settings
+            config.EnableDetailedLogging = request.EnableDetailedLogging ?? config.EnableDetailedLogging;
             // Data Retention Settings
             config.JobRetentionMonths = request.JobRetentionMonths ?? config.JobRetentionMonths;
             config.JobExecutionRetentionMonths = request.JobExecutionRetentionMonths ?? config.JobExecutionRetentionMonths;
@@ -5156,6 +5219,8 @@ public class UpdateAdrConfigurationRequest
     public bool? TestModeEnabled { get; set; }
     public int? TestModeMaxScrapingJobs { get; set; }
     public int? TestModeMaxCredentialChecks { get; set; }
+    // Logging Settings
+    public bool? EnableDetailedLogging { get; set; }
     // Data Retention Settings
     public int? JobRetentionMonths { get; set; }
     public int? JobExecutionRetentionMonths { get; set; }

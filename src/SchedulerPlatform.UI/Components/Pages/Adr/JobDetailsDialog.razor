@@ -1,6 +1,7 @@
 @using SchedulerPlatform.UI.Models
 @using SchedulerPlatform.UI.Services
 @inject AuthenticatedHttpClientService HttpService
+@inject IUserTimeZoneService TimeZoneService
 
 <MudDialog>
     <TitleContent>
@@ -93,22 +94,22 @@
                     <MudDivider Class="my-2" />
                     <MudText Typo="Typo.subtitle1" Class="mb-2"><strong>Timestamps</strong></MudText>
                 </MudItem>
-                <MudItem xs="6">
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Credential Verified</MudText>
-                    <MudText Typo="Typo.body1">@(Job.CredentialVerifiedDateTime?.ToString("MM/dd/yyyy HH:mm") ?? "N/A")</MudText>
-                </MudItem>
-                <MudItem xs="6">
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Scraping Completed</MudText>
-                    <MudText Typo="Typo.body1">@(Job.ScrapingCompletedDateTime?.ToString("MM/dd/yyyy HH:mm") ?? "N/A")</MudText>
-                </MudItem>
-                <MudItem xs="6">
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Created</MudText>
-                    <MudText Typo="Typo.body1">@Job.CreatedDateTime.ToString("MM/dd/yyyy HH:mm")</MudText>
-                </MudItem>
-                <MudItem xs="6">
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">Modified</MudText>
-                    <MudText Typo="Typo.body1">@(Job.ModifiedDateTime?.ToString("MM/dd/yyyy HH:mm") ?? "N/A")</MudText>
-                </MudItem>
+                                <MudItem xs="6">
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">Credential Verified</MudText>
+                                    <MudText Typo="Typo.body1">@(Job.CredentialVerifiedDateTime.HasValue ? _credentialVerifiedFormatted : "N/A")</MudText>
+                                </MudItem>
+                                <MudItem xs="6">
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">ADR Request Completed</MudText>
+                                    <MudText Typo="Typo.body1">@(Job.ScrapingCompletedDateTime.HasValue ? _scrapingCompletedFormatted : "N/A")</MudText>
+                                </MudItem>
+                                <MudItem xs="6">
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">Created</MudText>
+                                    <MudText Typo="Typo.body1">@_createdFormatted</MudText>
+                                </MudItem>
+                                <MudItem xs="6">
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">Modified</MudText>
+                                    <MudText Typo="Typo.body1">@(Job.ModifiedDateTime.HasValue ? _modifiedFormatted : "N/A")</MudText>
+                                </MudItem>
 
                 @if (!string.IsNullOrEmpty(Job.ErrorMessage))
                 {
@@ -146,10 +147,10 @@
                         <MudText Typo="Typo.body2" Color="Color.Secondary">HTTP Status</MudText>
                         <MudText Typo="Typo.body1">@(_latestExecution.HttpStatusCode?.ToString() ?? "N/A")</MudText>
                     </MudItem>
-                    <MudItem xs="6">
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Start Time</MudText>
-                        <MudText Typo="Typo.body1">@_latestExecution.StartDateTime.ToString("MM/dd/yyyy HH:mm:ss")</MudText>
-                    </MudItem>
+                                        <MudItem xs="6">
+                                            <MudText Typo="Typo.body2" Color="Color.Secondary">Start Time</MudText>
+                                            <MudText Typo="Typo.body1">@_executionStartFormatted</MudText>
+                                        </MudItem>
 
                     @if (!string.IsNullOrEmpty(_latestExecution.RequestPayload))
                     {
@@ -200,16 +201,33 @@
     [Parameter]
     public AdrJob? Job { get; set; }
 
-    private AdrJobExecution? _latestExecution;
-    private bool _loadingExecutions = true;
+        private AdrJobExecution? _latestExecution;
+        private bool _loadingExecutions = true;
+    
+        private string _credentialVerifiedFormatted = "";
+        private string _scrapingCompletedFormatted = "";
+        private string _createdFormatted = "";
+        private string _modifiedFormatted = "";
+        private string _executionStartFormatted = "";
 
-    protected override async Task OnInitializedAsync()
-    {
-        if (Job != null)
+        protected override async Task OnInitializedAsync()
         {
-            await LoadLatestExecutionAsync();
+            if (Job != null)
+            {
+                await LoadLatestExecutionAsync();
+            
+                // Format dates with user's timezone
+                if (Job.CredentialVerifiedDateTime.HasValue)
+                    _credentialVerifiedFormatted = await TimeZoneService.FormatDateTimeAsync(Job.CredentialVerifiedDateTime.Value);
+                if (Job.ScrapingCompletedDateTime.HasValue)
+                    _scrapingCompletedFormatted = await TimeZoneService.FormatDateTimeAsync(Job.ScrapingCompletedDateTime.Value);
+                _createdFormatted = await TimeZoneService.FormatDateTimeAsync(Job.CreatedDateTime);
+                if (Job.ModifiedDateTime.HasValue)
+                    _modifiedFormatted = await TimeZoneService.FormatDateTimeAsync(Job.ModifiedDateTime.Value);
+                if (_latestExecution != null)
+                    _executionStartFormatted = await TimeZoneService.FormatDateTimeAsync(_latestExecution.StartDateTime);
+            }
         }
-    }
 
     private async Task LoadLatestExecutionAsync()
     {

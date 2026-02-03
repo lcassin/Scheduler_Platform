@@ -181,15 +181,18 @@ public class SchedulerService : ISchedulerService
                     }
                 }
                 
+                var now = DateTime.UtcNow;
                 var nextOccurrence = cronExpression.GetNextValidTimeAfter(DateTimeOffset.UtcNow);
                 schedule.NextRunDateTime = nextOccurrence?.UtcDateTime;
-                schedule.ModifiedDateTime = DateTime.UtcNow;
+                schedule.LastRunDateTime = now; // Update LastRunDateTime when job completes
+                schedule.ModifiedDateTime = now;
+                schedule.ModifiedBy = "System";
                 
                 await _unitOfWork.Schedules.UpdateAsync(schedule);
                 await _unitOfWork.SaveChangesAsync();
 
-                _logger.LogInformation("Updated NextRunDateTime for schedule {ScheduleId} to {NextRunDateTime} (calculated from cron expression)", 
-                    scheduleId, schedule.NextRunDateTime?.ToString("o") ?? "null");
+                _logger.LogInformation("Updated schedule {ScheduleId}: LastRunDateTime={LastRunDateTime}, NextRunDateTime={NextRunDateTime}", 
+                    scheduleId, schedule.LastRunDateTime?.ToString("o") ?? "null", schedule.NextRunDateTime?.ToString("o") ?? "null");
             }
             catch (Exception cronEx)
             {

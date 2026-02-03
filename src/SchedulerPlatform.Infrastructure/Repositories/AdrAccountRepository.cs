@@ -226,4 +226,11 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
                     r.NextRangeEndDateTime.HasValue))
             .ToListAsync();
     }
+
+    public async Task<IEnumerable<AdrAccount>> GetAllActiveAccountsForCredentialCheckAsync()
+    {
+        return await _dbSet
+            .Where(a => !a.IsDeleted && a.CredentialId > 0)
+            .ToListAsync();
+    }
 }
