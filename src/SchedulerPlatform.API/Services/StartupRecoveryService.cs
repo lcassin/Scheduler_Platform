@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using SchedulerPlatform.API.Configuration;
 using SchedulerPlatform.Core.Domain.Enums;
+using SchedulerPlatform.Core.Domain.Interfaces;
 using SchedulerPlatform.Infrastructure.Data;
 
 namespace SchedulerPlatform.API.Services
@@ -93,7 +94,9 @@ namespace SchedulerPlatform.API.Services
 
         /// <summary>
         /// Recovers orphaned ADR orchestration runs that were left in "Running" status after an app restart.
-        /// This marks the old run as failed and queues a new orchestration request if no orchestration is currently running.
+        /// This marks the old run as interrupted and sends a notification to administrators.
+        /// Orchestrations are NOT automatically restarted to prevent issues with cancelled runs being restarted
+        /// and to ensure testing limits are consciously considered before restarting.
         /// </summary>
         private async Task RecoverOrphanedOrchestrationsAsync(SchedulerDbContext dbContext, DateTime now, CancellationToken cancellationToken)
         {
@@ -147,64 +150,71 @@ namespace SchedulerPlatform.API.Services
                 }
 
                 _logger.LogWarning(
-                    "StartupRecoveryService: found {Count} orphaned ADR orchestration run(s) to recover",
+                    "StartupRecoveryService: found {Count} orphaned ADR orchestration run(s)",
                     orphanedRuns.Count);
 
-                var mostRecentOrphan = orphanedRuns.First();
-                
                 foreach (var orphan in orphanedRuns)
                 {
-                    var isRecoveryCandidate = orphan == mostRecentOrphan;
-                    orphan.Status = "Failed";
+                    // Mark as "Interrupted" instead of "Failed" to distinguish from actual failures
+                    orphan.Status = "Interrupted";
                     orphan.CompletedDateTime = now;
-                    orphan.ErrorMessage = isRecoveryCandidate
-                        ? "Application restarted while orchestration was running. A new orchestration has been queued to continue processing."
-                        : "Application restarted while orchestration was running. Marked as failed by startup recovery.";
+                    orphan.ErrorMessage = "Application restarted while orchestration was running. Please manually restart the orchestration if needed.";
                     orphan.ModifiedDateTime = now;
                     orphan.ModifiedBy = "StartupRecovery";
                     
                     _logger.LogWarning(
-                        "StartupRecoveryService: marking orphaned orchestration {RequestId} (started {StartedAt}) as Failed",
-                        orphan.RequestId, orphan.StartedDateTime);
+                        "StartupRecoveryService: marking orphaned orchestration {RequestId} (started {StartedAt}, requested by {RequestedBy}) as Interrupted",
+                        orphan.RequestId, orphan.StartedDateTime, orphan.RequestedBy);
                 }
 
                 await dbContext.SaveChangesAsync(cancellationToken);
 
-                var recentRunsInLastHour = await dbContext.AdrOrchestrationRuns
-                    .Where(r => !r.IsDeleted 
-                             && r.Status == "Completed" 
-                             && r.CompletedDateTime.HasValue 
-                             && r.CompletedDateTime > now.AddHours(-1))
-                    .AnyAsync(cancellationToken);
-
-                if (recentRunsInLastHour)
-                {
-                    _logger.LogInformation(
-                        "StartupRecoveryService: a completed orchestration run exists within the last hour, skipping re-queue to avoid duplicate processing");
-                    return;
-                }
-
-                var newRequest = new AdrOrchestrationRequest
-                {
-                    RequestId = Guid.NewGuid().ToString(),
-                    RequestedBy = "StartupRecovery",
-                    RequestedAt = now,
-                    RunSync = true,
-                    RunCreateJobs = true,
-                    RunCredentialVerification = true,
-                    RunScraping = true,
-                    RunStatusCheck = true
-                };
-
-                await _orchestrationQueue.QueueAsync(newRequest, cancellationToken);
-
-                _logger.LogWarning(
-                    "StartupRecoveryService: queued new orchestration {NewRequestId} to recover from orphaned run {OldRequestId}",
-                    newRequest.RequestId, mostRecentOrphan.RequestId);
+                // Send notification email instead of auto-restarting
+                // This allows administrators to decide whether to restart (considering testing limits, etc.)
+                var mostRecentOrphan = orphanedRuns.First();
+                await SendOrchestrationInterruptedNotificationAsync(mostRecentOrphan, orphanedRuns.Count);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "StartupRecoveryService: error during ADR orchestration recovery");
+            }
+        }
+        
+        /// <summary>
+        /// Sends a notification email when an orchestration was interrupted by an app restart.
+        /// </summary>
+        private async Task SendOrchestrationInterruptedNotificationAsync(
+            SchedulerPlatform.Core.Domain.Entities.AdrOrchestrationRun orphanedRun, 
+            int totalOrphanedCount)
+        {
+            try
+            {
+                using var scope = _serviceProvider.CreateScope();
+                var emailService = scope.ServiceProvider.GetRequiredService<IEmailService>();
+                
+                var errorMessage = $"The ADR orchestration was interrupted when the application restarted.\n\n" +
+                    $"Request ID: {orphanedRun.RequestId}\n" +
+                    $"Requested By: {orphanedRun.RequestedBy}\n" +
+                    $"Started At: {orphanedRun.StartedDateTime:yyyy-MM-dd HH:mm:ss} UTC\n" +
+                    $"Total Interrupted Runs: {totalOrphanedCount}\n\n" +
+                    $"The orchestration has been marked as 'Interrupted' and was NOT automatically restarted.\n" +
+                    $"Please manually restart the orchestration from the ADR Monitor page if needed.\n\n" +
+                    $"Note: If this orchestration was intentionally cancelled, no action is required.";
+                
+                await emailService.SendOrchestrationFailureNotificationAsync(
+                    "ADR Full Cycle",
+                    orphanedRun.RequestId,
+                    errorMessage,
+                    null, // No stack trace for interruption
+                    "Application Restart");
+                    
+                _logger.LogInformation(
+                    "StartupRecoveryService: sent notification email for interrupted orchestration {RequestId}",
+                    orphanedRun.RequestId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "StartupRecoveryService: failed to send notification email for interrupted orchestration");
             }
         }
 
