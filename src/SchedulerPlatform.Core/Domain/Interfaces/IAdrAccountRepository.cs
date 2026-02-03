@@ -31,4 +31,11 @@ public interface IAdrAccountRepository : IRepository<AdrAccount>
     /// </summary>
     /// <param name="credentialCheckLeadDays">Number of days before NextRunDate to start creating jobs (default: 7)</param>
     Task<IEnumerable<AdrAccount>> GetDueAccountsWithRulesAsync(int credentialCheckLeadDays = 7);
+    
+    /// <summary>
+    /// Gets all active accounts with valid credential IDs for bulk credential verification.
+    /// This is used for one-time bulk operations to check all existing credentials.
+    /// </summary>
+    /// <returns>All non-deleted accounts with CredentialId > 0</returns>
+    Task<IEnumerable<AdrAccount>> GetAllActiveAccountsForCredentialCheckAsync();
 }

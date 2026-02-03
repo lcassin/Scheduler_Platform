@@ -359,7 +359,7 @@ public class AdrBackgroundOrchestrationService : BackgroundService
             initDb.AdrOrchestrationRuns.Add(dbRun);
             await initDb.SaveChangesAsync(token);
             dbRunId = dbRun.Id;
-            _logger.LogInformation("Request {RequestId}: Created database record with ID {DbRunId}", request.RequestId, dbRunId);
+            _logger.LogDebug("Request {RequestId}: Created database record with ID {DbRunId}", request.RequestId, dbRunId);
         }
         catch (Exception ex)
         {
@@ -726,7 +726,7 @@ public class AdrBackgroundOrchestrationService : BackgroundService
             }
             
             await db.SaveChangesAsync(cancellationToken);
-            _logger.LogInformation("Request {RequestId}: Saved orchestration results to database", requestId);
+            _logger.LogDebug("Request {RequestId}: Saved orchestration results to database", requestId);
         }
         catch (Exception ex)
         {

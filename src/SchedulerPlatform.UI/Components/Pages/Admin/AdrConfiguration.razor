@@ -202,6 +202,23 @@
                     
                     <MudItem xs="12">
                         <MudDivider Class="my-4" />
+                        <MudText Typo="Typo.h6" Class="mb-2">Logging Settings</MudText>
+                        <MudText Typo="Typo.body2" Class="mb-2">
+                            Control the verbosity of orchestration logging. Enable detailed logging only when debugging issues.
+                        </MudText>
+                    </MudItem>
+                    
+                    <MudItem xs="12" sm="6" md="4">
+                        <MudSwitch @bind-Value="_config.EnableDetailedLogging" 
+                                   Label="Enable Detailed Logging" 
+                                   Color="Color.Primary" />
+                        <MudText Typo="Typo.caption" Class="mt-1">
+                            When enabled, logs detailed per-record information during orchestration. Keep disabled to reduce log file sizes.
+                        </MudText>
+                    </MudItem>
+                    
+                    <MudItem xs="12">
+                        <MudDivider Class="my-4" />
                         <MudText Typo="Typo.h6" Class="mb-2">Data Retention Settings</MudText>
                     </MudItem>
                     
@@ -445,6 +462,8 @@
         public bool TestModeEnabled { get; set; } = false;
         public int TestModeMaxScrapingJobs { get; set; } = 50;
         public int TestModeMaxCredentialChecks { get; set; } = 50;
+        // Logging Settings
+        public bool EnableDetailedLogging { get; set; } = false;
         // Email Notification Settings
         public bool ErrorNotificationsEnabled { get; set; } = true;
         public string? ErrorNotificationRecipients { get; set; }

@@ -11,6 +11,7 @@
 @inject ISnackbar Snackbar
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JSRuntime
+@inject IUserTimeZoneService TimeZoneService
 @implements IDisposable
 
 <PageTitle>Dashboard</PageTitle>
@@ -322,7 +323,7 @@
                         <MudTh>ADR Requests</MudTh>
                     </HeaderContent>
                     <RowTemplate>
-                        <MudTd DataLabel="Date">@context.RequestedAt.ToString("MM/dd hh:mm tt")</MudTd>
+                        <MudTd DataLabel="Date">@(_orchestrationHistoryFormattedDates.TryGetValue(context.RequestId, out var formattedDate) ? formattedDate : context.RequestedAt.ToString("MM/dd hh:mm tt"))</MudTd>
                         <MudTd DataLabel="Status">
                             <MudChip T="string" Size="Size.Small" Color="@GetOrchestrationHistoryStatusColor(context.Status)">@context.Status</MudChip>
                         </MudTd>
@@ -702,8 +703,9 @@
                 private BlacklistCountsResult? _blacklistCounts;
                 private OrchestrationCurrentResponse? _orchestrationStatus;
                 private bool _orchestrationLoading;
-                private List<AdrOrchestrationStatus>? _orchestrationHistory;
-                private bool _orchestrationHistoryLoading;
+                                private List<AdrOrchestrationStatus>? _orchestrationHistory;
+                                private bool _orchestrationHistoryLoading;
+                                private Dictionary<string, string> _orchestrationHistoryFormattedDates = new();
                 
                 private double[] _adrAccountChartData = Array.Empty<double>();
                 private string[] _adrAccountChartLabels = Array.Empty<string>();
@@ -1158,25 +1160,35 @@
             return Color.Success;
         }
 
-        private async Task LoadOrchestrationHistoryAsync()
-        {
-            if (_orchestrationHistoryLoading) return;
-            _orchestrationHistoryLoading = true;
-            try
-            {
-                _orchestrationHistory = await AdrService.GetOrchestrationHistoryAsync(5);
-            }
-            catch (Exception ex)
-            {
-                // Orchestration history is optional - don't show error to user if ADR is not configured
-                Console.WriteLine($"Error loading orchestration history: {ex.Message}");
-            }
-            finally
-            {
-                _orchestrationHistoryLoading = false;
-                await InvokeAsync(StateHasChanged);
-            }
-        }
+                private async Task LoadOrchestrationHistoryAsync()
+                {
+                    if (_orchestrationHistoryLoading) return;
+                    _orchestrationHistoryLoading = true;
+                    try
+                    {
+                        _orchestrationHistory = await AdrService.GetOrchestrationHistoryAsync(5);
+                
+                        // Pre-format dates with user's timezone
+                        _orchestrationHistoryFormattedDates.Clear();
+                        if (_orchestrationHistory != null)
+                        {
+                            foreach (var item in _orchestrationHistory)
+                            {
+                                _orchestrationHistoryFormattedDates[item.RequestId] = await TimeZoneService.FormatDateTimeAsync(item.RequestedAt, "MM/dd hh:mm tt");
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        // Orchestration history is optional - don't show error to user if ADR is not configured
+                        Console.WriteLine($"Error loading orchestration history: {ex.Message}");
+                    }
+                    finally
+                    {
+                        _orchestrationHistoryLoading = false;
+                        await InvokeAsync(StateHasChanged);
+                    }
+                }
 
         private Color GetOrchestrationHistoryStatusColor(string status) => status switch
         {
@@ -1205,6 +1217,12 @@
     }
     
     private string FormatNumber(int value) => value.ToString("N0");
+    
+    private string _formattedOrchestrationDate = "";
+    private async Task<string> FormatDateTimeWithTimezoneAsync(DateTime utcDateTime)
+    {
+        return await TimeZoneService.FormatDateTimeAsync(utcDateTime, "MM/dd hh:mm tt");
+    }
     
     private void NavigateToMissedSchedules()
     {

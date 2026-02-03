@@ -22,6 +22,18 @@ public interface IAdrOrchestratorService
     /// This does NOT call any ADR APIs (no cost incurred).
     /// </summary>
     Task<StalePendingJobsResult> FinalizeStalePendingJobsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
+    
+    /// <summary>
+    /// Runs credential verification (AttemptLogin) for ALL active accounts in the system.
+    /// This is a one-time bulk operation to check all existing credentials ahead of time.
+    /// Unlike VerifyCredentialsAsync which only checks jobs approaching their NextRunDate,
+    /// this method checks ALL accounts with valid CredentialIds regardless of scheduling.
+    /// Note: This does NOT respect test mode limits as it's intended for one-time bulk operations.
+    /// </summary>
+    /// <param name="progressCallback">Optional callback to report progress (current, total)</param>
+    /// <param name="cancellationToken">Cancellation token for the operation</param>
+    /// <returns>Results of the bulk credential verification operation</returns>
+    Task<BulkCredentialVerificationResult> VerifyAllAccountCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
 }
 
 #region Result Classes
@@ -75,6 +87,42 @@ public class StalePendingJobsResult
     public int RulesAdvanced { get; set; }
     public int Errors { get; set; }
     public List<string> ErrorMessages { get; set; } = new();
+    public TimeSpan Duration { get; set; }
+}
+
+/// <summary>
+/// Result of bulk credential verification for all accounts.
+/// </summary>
+public class BulkCredentialVerificationResult
+{
+    /// <summary>
+    /// Total number of accounts processed.
+    /// </summary>
+    public int AccountsProcessed { get; set; }
+    
+    /// <summary>
+    /// Number of accounts where credentials were verified successfully.
+    /// </summary>
+    public int CredentialsVerified { get; set; }
+    
+    /// <summary>
+    /// Number of accounts where credential verification failed.
+    /// </summary>
+    public int CredentialsFailed { get; set; }
+    
+    /// <summary>
+    /// Number of errors encountered during processing.
+    /// </summary>
+    public int Errors { get; set; }
+    
+    /// <summary>
+    /// Detailed error messages for troubleshooting.
+    /// </summary>
+    public List<string> ErrorMessages { get; set; } = new();
+    
+    /// <summary>
+    /// Total duration of the bulk verification operation.
+    /// </summary>
     public TimeSpan Duration { get; set; }
 }
 
@@ -132,7 +180,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             
             if (_cachedConfig != null)
             {
-                _logger.LogInformation("Loaded ADR configuration from database (ConfigId: {ConfigId})", _cachedConfig.Id);
+                _logger.LogDebug("Loaded ADR configuration from database (ConfigId: {ConfigId})", _cachedConfig.Id);
                 return _cachedConfig;
             }
         }
@@ -154,7 +202,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             IsOrchestrationEnabled = true
         };
         
-        _logger.LogInformation("Using default ADR configuration (database config not found)");
+        _logger.LogDebug("Using default ADR configuration (database config not found)");
         return _cachedConfig;
     }
 
@@ -225,7 +273,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
             if (matches)
             {
-                _logger.LogInformation(
+                LogDetailedInfo(
                     "Account {AccountId} (VMAccountId: {VMAccountId}, PrimaryVendorCode: {PrimaryVendorCode}) is blacklisted. Reason: {Reason}",
                     account.Id, account.VMAccountId, account.PrimaryVendorCode, entry.Reason);
                 return true;
@@ -278,6 +326,23 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         return _cachedConfig?.TestModeMaxCredentialChecks ?? 50;
     }
 
+    private bool IsDetailedLoggingEnabled()
+    {
+        return _cachedConfig?.EnableDetailedLogging ?? false;
+    }
+
+    /// <summary>
+    /// Logs a message at Information level only if detailed logging is enabled.
+    /// Use this for per-record logging that would otherwise bloat log files.
+    /// </summary>
+    private void LogDetailedInfo(string message, params object[] args)
+    {
+        if (IsDetailedLoggingEnabled())
+        {
+            _logger.LogInformation(message, args);
+        }
+    }
+
     #region Step 2: Job Creation
 
     public async Task<JobCreationResult> CreateJobsForDueAccountsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
@@ -318,7 +383,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
             // PERFORMANCE OPTIMIZATION: Load blacklist entries once instead of N database queries
             var blacklistEntries = await LoadBlacklistEntriesAsync("Download");
-            _logger.LogInformation("Loaded {Count} active blacklist entries for job creation", blacklistEntries.Count);
+            _logger.LogDebug("Loaded {Count} active blacklist entries for job creation", blacklistEntries.Count);
 
             foreach (var account in dueAccountsList)
             {
@@ -391,7 +456,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     if (processedSinceLastSave >= batchSize)
                     {
                         await _unitOfWork.SaveChangesAsync();
-                        _logger.LogInformation("Job creation batch {BatchNumber} saved: {Count} jobs created so far", 
+                        _logger.LogDebug("Job creation batch {BatchNumber} saved: {Count} jobs created so far", 
                             batchNumber, result.JobsCreated);
                         processedSinceLastSave = 0;
                         batchNumber++;
@@ -495,7 +560,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             int setupProcessedSinceLastSave = 0;
             var startTime = DateTime.UtcNow;
             
-            _logger.LogInformation("Starting to mark {Count} jobs as in-progress (batch size: {BatchSize})", 
+            _logger.LogDebug("Starting to mark {Count} jobs as in-progress (batch size: {BatchSize})", 
                 jobsNeedingVerification.Count, setupBatchSize);
             
             // Store execution objects (not IDs) since IDs aren't assigned until SaveChangesAsync
@@ -521,7 +586,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     // Save in batches to reduce database round-trips
                     if (setupProcessedSinceLastSave >= setupBatchSize)
                     {
-                        _logger.LogInformation("About to save credential-check setup batch: {Marked}/{Total} jobs", 
+                        _logger.LogDebug("About to save credential-check setup batch: {Marked}/{Total} jobs", 
                             markedCount, jobsNeedingVerification.Count);
                         
                         var batchSaveStart = DateTime.UtcNow;
@@ -529,7 +594,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         var batchSaveDuration = (DateTime.UtcNow - batchSaveStart).TotalSeconds;
                         
                         setupProcessedSinceLastSave = 0;
-                        _logger.LogInformation("Saved credential-check setup batch: {Marked}/{Total} jobs in {Duration:F1} seconds", 
+                        _logger.LogDebug("Saved credential-check setup batch: {Marked}/{Total} jobs in {Duration:F1} seconds", 
                             markedCount, jobsNeedingVerification.Count, batchSaveDuration);
                         
                         // Report progress during setup phase (use negative values to indicate setup)
@@ -568,7 +633,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             }
             
             var setupDuration = DateTime.UtcNow - startTime;
-            _logger.LogInformation("Marked {Count} jobs as in-progress in {Duration:F1} seconds, starting parallel API calls", 
+            _logger.LogDebug("Marked {Count} jobs as in-progress in {Duration:F1} seconds, starting parallel API calls", 
                 jobsToProcess.Count, setupDuration.TotalSeconds);
 
             // Step 2: Call ADR API in parallel with semaphore to limit concurrency
@@ -602,7 +667,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     }
                     if (count % 500 == 0 || count == totalApiCalls)
                     {
-                        _logger.LogInformation(
+                        _logger.LogDebug(
                             "Credential verification API calls: {Completed}/{Total} completed ({Percent:F1}%)",
                             count, totalApiCalls, (double)count / totalApiCalls * 100);
                     }
@@ -636,7 +701,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
             await Task.WhenAll(tasks);
 
-            _logger.LogInformation("Completed {Count} parallel API calls, updating job statuses", apiResults.Count);
+            _logger.LogDebug("Completed {Count} parallel API calls, updating job statuses", apiResults.Count);
 
             // Step 3: Update job statuses sequentially (EF DbContext is not thread-safe)
             // Use the job and execution objects we already have from the setup phase - no need to re-fetch
@@ -718,7 +783,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     if (processedSinceLastSave >= GetBatchSize())
                     {
                         await _unitOfWork.SaveChangesAsync();
-                        _logger.LogInformation("Credential verification batch {BatchNumber} saved: {Count} jobs processed so far", 
+                        _logger.LogDebug("Credential verification batch {BatchNumber} saved: {Count} jobs processed so far", 
                             batchNumber, result.JobsProcessed);
                         processedSinceLastSave = 0;
                         batchNumber++;
@@ -807,7 +872,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             int setupProcessedSinceLastSave = 0;
             var startTime = DateTime.UtcNow;
             
-            _logger.LogInformation("Starting to mark {Count} jobs as in-progress for scraping (batch size: {BatchSize})", 
+            _logger.LogDebug("Starting to mark {Count} jobs as in-progress for scraping (batch size: {BatchSize})", 
                 jobsReadyForScraping.Count, setupBatchSize);
             
             foreach (var job in jobsReadyForScraping)
@@ -832,7 +897,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     {
                         await _unitOfWork.SaveChangesAsync();
                         setupProcessedSinceLastSave = 0;
-                        _logger.LogInformation("Marked {Marked}/{Total} jobs as in-progress for scraping (batch saved)", 
+                        _logger.LogDebug("Marked {Marked}/{Total} jobs as in-progress for scraping (batch saved)", 
                             markedCount, jobsReadyForScraping.Count);
                         
                         // Report progress during setup phase (use negative values to indicate setup)
@@ -870,7 +935,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             }
             
             var setupDuration = DateTime.UtcNow - startTime;
-            _logger.LogInformation("Marked {Count} jobs as in-progress for scraping in {Duration:F1} seconds, starting parallel API calls", 
+            _logger.LogDebug("Marked {Count} jobs as in-progress for scraping in {Duration:F1} seconds, starting parallel API calls", 
                 jobsToProcess.Count, setupDuration.TotalSeconds);
 
             // Step 2: Call ADR API in parallel with semaphore to limit concurrency
@@ -938,7 +1003,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
             await Task.WhenAll(tasks);
 
-            _logger.LogInformation("Completed {Count} parallel API calls, updating job statuses", apiResults.Count);
+            _logger.LogDebug("Completed {Count} parallel API calls, updating job statuses", apiResults.Count);
 
             // Step 3: Update job statuses sequentially (EF DbContext is not thread-safe)
             // Use the job and execution objects we already have from the setup phase - no need to re-fetch
@@ -1026,7 +1091,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     if (processedSinceLastSave >= GetBatchSize())
                     {
                         await _unitOfWork.SaveChangesAsync();
-                        _logger.LogInformation("Scraping batch {BatchNumber} saved: {Count} jobs processed so far", 
+                        _logger.LogDebug("Scraping batch {BatchNumber} saved: {Count} jobs processed so far", 
                             batchNumber, result.JobsProcessed);
                         processedSinceLastSave = 0;
                         batchNumber++;
@@ -1127,7 +1192,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             int setupProcessedSinceLastSave = 0;
             var startTime = DateTime.UtcNow;
             
-            _logger.LogInformation("Starting to mark {Count} jobs as in-progress for status check (batch size: {BatchSize})", 
+            _logger.LogDebug("Starting to mark {Count} jobs as in-progress for status check (batch size: {BatchSize})", 
                 jobsNeedingStatusCheck.Count, setupBatchSize);
             
             foreach (var job in jobsNeedingStatusCheck)
@@ -1153,7 +1218,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     {
                         await _unitOfWork.SaveChangesAsync();
                         setupProcessedSinceLastSave = 0;
-                        _logger.LogInformation("Marked {Marked}/{Total} jobs as in-progress for status check (batch saved)", 
+                        _logger.LogDebug("Marked {Marked}/{Total} jobs as in-progress for status check (batch saved)", 
                             markedCount, jobsNeedingStatusCheck.Count);
                         
                         // Report progress during setup phase (use negative values to indicate setup)
@@ -1182,7 +1247,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             }
             
             var setupDuration = DateTime.UtcNow - startTime;
-            _logger.LogInformation("Marked {Count} jobs as in-progress for status check in {Duration:F1} seconds, starting parallel status checks", 
+            _logger.LogDebug("Marked {Count} jobs as in-progress for status check in {Duration:F1} seconds, starting parallel status checks", 
                 jobsToProcess.Count, setupDuration.TotalSeconds);
 
             // Step 2: Check status in parallel with semaphore to limit concurrency
@@ -1244,7 +1309,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 .Distinct()
                 .ToList();
             
-            _logger.LogInformation("Pre-loading {Count} rules for potential advancement", ruleIdsToLoad.Count);
+            _logger.LogDebug("Pre-loading {Count} rules for potential advancement", ruleIdsToLoad.Count);
             var rulesById = new Dictionary<int, AdrAccountRule>();
             
             // Load rules in batches to avoid huge IN clauses
@@ -1258,7 +1323,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     rulesById[rule.Id] = rule;
                 }
             }
-            _logger.LogInformation("Pre-loaded {Count} rules for advancement", rulesById.Count);
+            _logger.LogDebug("Pre-loaded {Count} rules for advancement", rulesById.Count);
 
             // Step 4: Update job statuses sequentially (EF DbContext is not thread-safe)
             // Use the job objects we already have from the setup phase - no need to re-fetch
@@ -1398,7 +1463,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     if (processedSinceLastSave >= GetBatchSize())
                     {
                         await _unitOfWork.SaveChangesAsync();
-                        _logger.LogInformation("Status check batch {BatchNumber} saved: {Count} jobs checked so far", 
+                        _logger.LogDebug("Status check batch {BatchNumber} saved: {Count} jobs checked so far", 
                             batchNumber, result.JobsChecked);
                         processedSinceLastSave = 0;
                         batchNumber++;
@@ -1479,7 +1544,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             int setupProcessedSinceLastSave = 0;
             var startTime = DateTime.UtcNow;
             
-            _logger.LogInformation("Starting to mark {Count} jobs as in-progress for manual status check (batch size: {BatchSize})", 
+            _logger.LogDebug("Starting to mark {Count} jobs as in-progress for manual status check (batch size: {BatchSize})", 
                 jobsNeedingStatusCheck.Count, setupBatchSize);
             
             foreach (var job in jobsNeedingStatusCheck)
@@ -1504,7 +1569,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     {
                         await _unitOfWork.SaveChangesAsync();
                         setupProcessedSinceLastSave = 0;
-                        _logger.LogInformation("Marked {Marked}/{Total} jobs as in-progress for manual status check (batch saved)", 
+                        _logger.LogDebug("Marked {Marked}/{Total} jobs as in-progress for manual status check (batch saved)", 
                             markedCount, jobsNeedingStatusCheck.Count);
                         
                         // Report progress during setup phase (use negative values to indicate setup)
@@ -1533,7 +1598,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             }
             
             var setupDuration = DateTime.UtcNow - startTime;
-            _logger.LogInformation("Marked {Count} jobs as in-progress for manual status check in {Duration:F1} seconds, starting parallel status checks", 
+            _logger.LogDebug("Marked {Count} jobs as in-progress for manual status check in {Duration:F1} seconds, starting parallel status checks", 
                 jobsToProcess.Count, setupDuration.TotalSeconds);
 
             // Step 2: Check status in parallel with semaphore to limit concurrency
@@ -1596,7 +1661,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 .OrderByDescending(x => x.Count)
                 .ToList();
             
-            _logger.LogInformation("=== STATUS CHECK DISTRIBUTION SUMMARY ===");
+            _logger.LogDebug("=== STATUS CHECK DISTRIBUTION SUMMARY ===");
             _logger.LogInformation("Expected Complete StatusId = {CompleteId}, NeedsReview StatusId = {NeedsReviewId}", 
                 (int)AdrStatus.Complete, (int)AdrStatus.NeedsHumanReview);
             foreach (var entry in statusSummary)
@@ -1624,7 +1689,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 .Distinct()
                 .ToList();
             
-            _logger.LogInformation("Pre-loading {Count} rules for potential advancement", ruleIdsToLoad.Count);
+            _logger.LogDebug("Pre-loading {Count} rules for potential advancement", ruleIdsToLoad.Count);
             var rulesById = new Dictionary<int, AdrAccountRule>();
             
             // Load rules in batches to avoid huge IN clauses
@@ -1638,7 +1703,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     rulesById[rule.Id] = rule;
                 }
             }
-            _logger.LogInformation("Pre-loaded {Count} rules for advancement", rulesById.Count);
+            _logger.LogDebug("Pre-loaded {Count} rules for advancement", rulesById.Count);
 
             // Step 4: Update job statuses sequentially (EF DbContext is not thread-safe)
             int processedSinceLastSave = 0;
@@ -1811,7 +1876,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     if (processedSinceLastSave >= GetBatchSize())
                     {
                         await _unitOfWork.SaveChangesAsync();
-                        _logger.LogInformation("Manual status check batch {BatchNumber} saved: {Count} jobs checked so far", 
+                        _logger.LogDebug("Manual status check batch {BatchNumber} saved: {Count} jobs checked so far", 
                             batchNumber, result.JobsChecked);
                         
                         // Report progress for database update phase
@@ -1933,7 +1998,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     if (processedSinceLastSave >= batchSize)
                     {
                         await _unitOfWork.SaveChangesAsync();
-                        _logger.LogInformation("Stale job finalization batch saved: {Count}/{Total} jobs processed", 
+                        _logger.LogDebug("Stale job finalization batch saved: {Count}/{Total} jobs processed", 
                             processedCount, staleJobs.Count);
                         processedSinceLastSave = 0;
                         
@@ -1977,6 +2042,166 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             _logger.LogError(ex, "Stale pending jobs finalization failed");
             result.Errors++;
             result.ErrorMessages.Add($"Stale pending jobs finalization failed: {ex.Message}");
+            throw;
+        }
+    }
+
+    #endregion
+
+    #region Bulk Credential Verification
+
+    /// <summary>
+    /// Runs credential verification (AttemptLogin) for ALL active accounts in the system.
+    /// This is a one-time bulk operation to check all existing credentials ahead of time.
+    /// Unlike VerifyCredentialsAsync which only checks jobs approaching their NextRunDate,
+    /// this method checks ALL accounts with valid CredentialIds regardless of scheduling.
+    /// Note: This does NOT respect test mode limits as it's intended for one-time bulk operations.
+    /// </summary>
+    public async Task<BulkCredentialVerificationResult> VerifyAllAccountCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    {
+        var result = new BulkCredentialVerificationResult();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var maxParallel = GetMaxParallelRequests();
+
+        try
+        {
+            _logger.LogInformation("Starting BULK credential verification for ALL accounts with {MaxParallel} parallel workers", maxParallel);
+
+            // Get ALL active accounts with valid credentials (not limited by scheduling or test mode)
+            var allAccounts = (await _unitOfWork.AdrAccounts.GetAllActiveAccountsForCredentialCheckAsync()).ToList();
+            var totalAccounts = allAccounts.Count;
+            
+            _logger.LogInformation("Found {Count} active accounts with valid credentials for bulk verification", totalAccounts);
+
+            // Report initial progress (0 of total)
+            progressCallback?.Invoke(0, totalAccounts);
+
+            if (!allAccounts.Any())
+            {
+                stopwatch.Stop();
+                result.Duration = stopwatch.Elapsed;
+                return result;
+            }
+
+            // Build list of accounts to process with their credential info
+            var accountsToProcess = allAccounts
+                .Select(a => (AccountId: a.Id, CredentialId: a.CredentialId, VMAccountId: a.VMAccountId, InterfaceAccountId: a.InterfaceAccountId))
+                .ToList();
+
+            _logger.LogInformation("Starting parallel API calls for {Count} accounts", accountsToProcess.Count);
+
+            // Call ADR API in parallel with semaphore to limit concurrency
+            var apiResults = new ConcurrentDictionary<int, AdrApiResult>();
+            using var semaphore = new SemaphoreSlim(maxParallel, maxParallel);
+            int completedApiCalls = 0;
+            var totalApiCalls = accountsToProcess.Count;
+
+            var tasks = accountsToProcess.Select(async accountInfo =>
+            {
+                await semaphore.WaitAsync(cancellationToken);
+                try
+                {
+                    // Call ADR API with AttemptLogin request type
+                    // Note: We pass 0 for jobId since this is a bulk check not tied to a specific job
+                    var apiResult = await CallAdrApiAsync(
+                        AdrRequestType.AttemptLogin,
+                        accountInfo.CredentialId,
+                        null, // No date range for credential check
+                        null,
+                        0, // No job ID - this is a bulk account check
+                        accountInfo.VMAccountId,
+                        accountInfo.InterfaceAccountId,
+                        cancellationToken);
+
+                    apiResults[accountInfo.AccountId] = apiResult;
+
+                    // Log and report progress every 100 completions or at the end
+                    var count = Interlocked.Increment(ref completedApiCalls);
+                    if (count % 100 == 0 || count == totalApiCalls)
+                    {
+                        progressCallback?.Invoke(count, totalApiCalls);
+                    }
+                    if (count % 1000 == 0 || count == totalApiCalls)
+                    {
+                        _logger.LogInformation(
+                            "Bulk credential verification API calls: {Completed}/{Total} completed ({Percent:F1}%)",
+                            count, totalApiCalls, (double)count / totalApiCalls * 100);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error calling ADR API for account {AccountId}", accountInfo.AccountId);
+                    apiResults[accountInfo.AccountId] = new AdrApiResult
+                    {
+                        IsSuccess = false,
+                        IsError = true,
+                        ErrorMessage = ex.Message
+                    };
+
+                    var count = Interlocked.Increment(ref completedApiCalls);
+                    if (count % 100 == 0 || count == totalApiCalls)
+                    {
+                        progressCallback?.Invoke(count, totalApiCalls);
+                    }
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks);
+
+            _logger.LogInformation("Completed {Count} parallel API calls, tallying results", apiResults.Count);
+
+            // Tally results (no database updates needed - this is just a verification check)
+            foreach (var accountInfo in accountsToProcess)
+            {
+                result.AccountsProcessed++;
+
+                if (!apiResults.TryGetValue(accountInfo.AccountId, out var apiResult))
+                {
+                    result.Errors++;
+                    result.ErrorMessages.Add($"Account {accountInfo.AccountId}: No API result found");
+                    continue;
+                }
+
+                if (apiResult.IsSuccess)
+                {
+                    result.CredentialsVerified++;
+                }
+                else if (apiResult.IsError)
+                {
+                    result.Errors++;
+                    if (result.ErrorMessages.Count < 100) // Limit error messages to prevent huge response
+                    {
+                        result.ErrorMessages.Add($"Account {accountInfo.AccountId} (CredentialId: {accountInfo.CredentialId}): {apiResult.ErrorMessage}");
+                    }
+                }
+                else
+                {
+                    result.CredentialsFailed++;
+                }
+            }
+
+            stopwatch.Stop();
+            result.Duration = stopwatch.Elapsed;
+
+            _logger.LogInformation(
+                "BULK credential verification completed in {Duration}. Processed: {Processed}, Verified: {Verified}, Failed: {Failed}, Errors: {Errors}",
+                result.Duration, result.AccountsProcessed, result.CredentialsVerified, result.CredentialsFailed, result.Errors);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Bulk credential verification failed");
+            result.Errors++;
+            result.ErrorMessages.Add($"Bulk credential verification failed: {ex.Message}");
             throw;
         }
     }
@@ -2125,7 +2350,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                                 result.IsSuccess = true;
                                 result.IsError = apiResponse.IsError;
                                 result.IsFinal = apiResponse.IsFinal;
-                                _logger.LogInformation("ADR API returned array response for job {JobId}, using first element", jobId);
+                                LogDetailedInfo("ADR API returned array response for job {JobId}, using first element", jobId);
                             }
                             else
                             {
@@ -2141,7 +2366,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             result.IsSuccess = true;
                             result.IsError = false;
                             result.StatusDescription = "Request submitted successfully";
-                            _logger.LogInformation("ADR API returned IndexId {IndexId} for job {JobId}", indexId, jobId);
+                            LogDetailedInfo("ADR API returned IndexId {IndexId} for job {JobId}", indexId, jobId);
                         }
                         else
                         {

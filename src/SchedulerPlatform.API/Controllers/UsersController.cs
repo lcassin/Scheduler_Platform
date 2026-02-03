@@ -1068,7 +1068,7 @@ public class UsersController : ControllerBase
                     new() { PermissionName = "scheduler", CanCreate = true, CanRead = true, CanUpdate = true, CanDelete = true },
                     new() { PermissionName = "schedules", CanCreate = true, CanRead = true, CanUpdate = true, CanDelete = true, CanExecute = true },
                     new() { PermissionName = "jobs", CanCreate = true, CanRead = true, CanUpdate = true, CanDelete = true, CanExecute = true },
-                    new() { PermissionName = "users:manage", CanRead = true, CanUpdate = true },
+                    new() { PermissionName = "users:manage", CanCreate = true, CanRead = true, CanUpdate = true },
                     new() { PermissionName = "adr", CanCreate = true, CanRead = true, CanUpdate = true, CanDelete = true, CanExecute = true }
                 }
             },
