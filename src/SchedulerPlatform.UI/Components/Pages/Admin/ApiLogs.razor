@@ -7,6 +7,7 @@
 @inject IDialogService DialogService
 @inject IPermissionService PermissionService
 @inject IJSRuntime JSRuntime
+@inject IUserTimeZoneService TimeZoneService
 
 <PageTitle>API Logs</PageTitle>
 
@@ -61,9 +62,9 @@
                                             <MudText Typo="Typo.caption" Color="Color.Secondary">
                                                 @file.SizeFormatted
                                             </MudText>
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                @file.LastModifiedUtc.ToLocalTime().ToString("g")
-                                            </MudText>
+                                                                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                                                            @(_formattedDates.TryGetValue(file.FileName, out var formattedDate) ? formattedDate : file.LastModifiedUtc.ToString("g"))
+                                                                                        </MudText>
                                         </div>
                                     </div>
                                 </MudListItem>
@@ -87,7 +88,7 @@
                             <div>
                                 <MudText Typo="Typo.subtitle1" Class="font-weight-bold">@_selectedFile.FileName</MudText>
                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                    @_selectedFile.SizeFormatted | Last modified: @_selectedFile.LastModifiedUtc.ToLocalTime().ToString("g")
+                                    @_selectedFile.SizeFormatted | Last modified: @_selectedFileFormattedDate
                                 </MudText>
                             </div>
                             <div class="d-flex gap-2 align-center">
@@ -195,19 +196,21 @@
 </MudContainer>
 
 @code {
-    private List<LogFileInfo> _logFiles = new();
-    private LogFileInfo? _selectedFile;
-    private string _fileContent = string.Empty;
-    private string _searchTerm = string.Empty;
-    private int _linesToShow = 500;
-    private int _totalLines = 0;
-    private bool _loading = true;
-    private bool _loadingContent = false;
-    private bool _downloading = false;
-    private bool _searching = false;
-    private bool _hasAccess = false;
-    private bool _isSuperAdmin = false;
-    private LogSearchResult? _searchResults;
+        private List<LogFileInfo> _logFiles = new();
+        private LogFileInfo? _selectedFile;
+        private string _fileContent = string.Empty;
+        private string _searchTerm = string.Empty;
+        private int _linesToShow = 500;
+        private int _totalLines = 0;
+        private bool _loading = true;
+        private bool _loadingContent = false;
+        private bool _downloading = false;
+        private bool _searching = false;
+        private bool _hasAccess = false;
+        private bool _isSuperAdmin = false;
+        private LogSearchResult? _searchResults;
+        private Dictionary<string, string> _formattedDates = new();
+        private string _selectedFileFormattedDate = "";
 
     protected override async Task OnInitializedAsync()
     {
@@ -225,38 +228,46 @@
         }
     }
 
-    private async Task LoadLogFiles()
-    {
-        _loading = true;
-        try
+        private async Task LoadLogFiles()
         {
-            var response = await HttpClient.GetAsync("logs");
-            response.EnsureSuccessStatusCode();
-            _logFiles = await response.Content.ReadFromJsonAsync<List<LogFileInfo>>() ?? new();
-            
-            if (_logFiles.Count > 0 && _selectedFile == null)
+            _loading = true;
+            try
             {
-                await SelectFile(_logFiles.First());
+                var response = await HttpClient.GetAsync("logs");
+                response.EnsureSuccessStatusCode();
+                _logFiles = await response.Content.ReadFromJsonAsync<List<LogFileInfo>>() ?? new();
+            
+                // Pre-format dates with user's timezone
+                _formattedDates.Clear();
+                foreach (var file in _logFiles)
+                {
+                    _formattedDates[file.FileName] = await TimeZoneService.FormatDateTimeAsync(file.LastModifiedUtc);
+                }
+            
+                if (_logFiles.Count > 0 && _selectedFile == null)
+                {
+                    await SelectFile(_logFiles.First());
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error loading log files: {ex.Message}", Severity.Error);
+                _logFiles = new();
+            }
+            finally
+            {
+                _loading = false;
             }
         }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error loading log files: {ex.Message}", Severity.Error);
-            _logFiles = new();
-        }
-        finally
-        {
-            _loading = false;
-        }
-    }
 
-    private async Task SelectFile(LogFileInfo file)
-    {
-        _selectedFile = file;
-        _searchTerm = string.Empty;
-        _searchResults = null;
-        await LoadFileContent(file);
-    }
+        private async Task SelectFile(LogFileInfo file)
+        {
+            _selectedFile = file;
+            _searchTerm = string.Empty;
+            _searchResults = null;
+            _selectedFileFormattedDate = await TimeZoneService.FormatDateTimeAsync(file.LastModifiedUtc);
+            await LoadFileContent(file);
+        }
 
     private async Task LoadFileContent(LogFileInfo file)
     {

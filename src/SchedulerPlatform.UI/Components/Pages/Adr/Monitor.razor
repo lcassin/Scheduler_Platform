@@ -616,12 +616,12 @@
                            Label="Auto-refresh" 
                            T="bool" />
             </div>
-            @if (_lastRefresh.HasValue)
-            {
-                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    Last refreshed: @_lastRefresh.Value.ToString("hh:mm:ss tt")
-                </MudText>
-            }
+                        @if (_lastRefresh.HasValue)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                Last refreshed: @_lastRefreshFormatted
+                            </MudText>
+                        }
         </MudPaper>
     </MudItem>
 
@@ -1000,8 +1000,9 @@
     private StatusCheckResult? _statusCheckResult = null;
     private bool _autoRefreshEnabled = true;
     private bool _showAllHistory = false;
-    private DateTime? _lastRefresh;
-    private System.Threading.Timer? _refreshTimer;
+        private DateTime? _lastRefresh;
+        private string _lastRefreshFormatted = "";
+        private System.Threading.Timer? _refreshTimer;
     
     // Paging state for history
     private int _historyPageNumber = 1;
@@ -1089,9 +1090,10 @@
             _currentStatus = await statusTask;
             _history = await historyTask;
             _recentHistory = _history; // Keep a copy for the chart (always last 10)
-            _lastRefresh = DateTime.Now;
+                        _lastRefresh = DateTime.UtcNow;
+                        _lastRefreshFormatted = await TimeZoneService.FormatDateTimeAsync(_lastRefresh.Value, "hh:mm:ss tt");
             
-            // Get the most recent completed run from history for display when not running
+                        // Get the most recent completed run from history for display when not running
             _lastCompletedRun = _history?.FirstOrDefault(h => h.Status == "Completed" || h.Status == "Failed");
             
             // Update chart data and load job stats (scoped to last 20 orchestration runs)
@@ -1273,9 +1275,10 @@
     {
         try
         {
-            _currentStatus = await AdrService.GetCurrentOrchestrationAsync();
-            _lastRefresh = DateTime.Now;
-            StateHasChanged();
+                        _currentStatus = await AdrService.GetCurrentOrchestrationAsync();
+                        _lastRefresh = DateTime.UtcNow;
+                        _lastRefreshFormatted = await TimeZoneService.FormatDateTimeAsync(_lastRefresh.Value, "hh:mm:ss tt");
+                        StateHasChanged();
             
             // Stop polling if orchestration completed
             if (_currentStatus?.IsRunning != true)

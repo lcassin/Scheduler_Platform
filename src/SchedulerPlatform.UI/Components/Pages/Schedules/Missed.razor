@@ -2,10 +2,12 @@
 @rendermode InteractiveServer
 @attribute [Authorize]
 @using SchedulerPlatform.UI.Models
+@using SchedulerPlatform.UI.Services
 @inject IScheduleService ScheduleService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject NavigationManager Navigation
+@inject IUserTimeZoneService TimeZoneService
 
 <PageTitle>Missed Schedules</PageTitle>
 
@@ -89,28 +91,28 @@
                 <MudTd DataLabel="Name">
                     <MudText Typo="Typo.body1"><strong>@context.Name</strong></MudText>
                 </MudTd>
-                <MudTd DataLabel="Scheduled Time">
-                    @if (context.NextRunDateTime.HasValue)
-                    {
-                        <text>@context.NextRunDateTime.Value.ToString("g")</text>
-                    }
-                </MudTd>
+                                <MudTd DataLabel="Scheduled Time">
+                                    @if (context.NextRunDateTime.HasValue)
+                                    {
+                                        <text>@(_nextRunFormatted.TryGetValue(context.Id, out var nextRun) ? nextRun : context.NextRunDateTime.Value.ToString("g"))</text>
+                                    }
+                                </MudTd>
                 <MudTd DataLabel="Time Late">
                     <MudChip T="string" Size="Size.Small" Color="@GetLateColor(context.MinutesLate)">
                         @FormatTimeLate(context.MinutesLate)
                     </MudChip>
                 </MudTd>
                 <MudTd DataLabel="Frequency">@context.Frequency</MudTd>
-                <MudTd DataLabel="Last Run">
-                    @if (context.LastRunDateTime.HasValue)
-                    {
-                        <text>@context.LastRunDateTime.Value.ToString("g")</text>
-                    }
-                    else
-                    {
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Never</MudText>
-                    }
-                </MudTd>
+                                <MudTd DataLabel="Last Run">
+                                    @if (context.LastRunDateTime.HasValue)
+                                    {
+                                        <text>@(_lastRunFormatted.TryGetValue(context.Id, out var lastRun) ? lastRun : context.LastRunDateTime.Value.ToString("g"))</text>
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">Never</MudText>
+                                    }
+                                </MudTd>
                 <MudTd DataLabel="Actions">
                     <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small" 
                                    OnClick="@(() => TriggerSingle(context))" 
@@ -125,39 +127,55 @@
 </MudPaper>
 
 @code {
-    private MissedSchedulesResult? _missedSchedules;
-    private bool _loading = true;
-    private int _windowDays = 1;
-    private int _delayMs = 1000;
-    private HashSet<int> _selectedIds = new();
-    private HashSet<MissedScheduleItem> _selectedItems = new();
-    private bool _isBulkTriggering = false;
+        private MissedSchedulesResult? _missedSchedules;
+        private bool _loading = true;
+        private int _windowDays = 1;
+        private int _delayMs = 1000;
+        private HashSet<int> _selectedIds = new();
+        private HashSet<MissedScheduleItem> _selectedItems = new();
+        private bool _isBulkTriggering = false;
+        private Dictionary<int, string> _nextRunFormatted = new();
+        private Dictionary<int, string> _lastRunFormatted = new();
 
-    protected override async Task OnInitializedAsync()
-    {
-        // All authenticated users can trigger missed schedules for recovery purposes
-        await LoadMissedSchedules();
-    }
+        protected override async Task OnInitializedAsync()
+        {
+            // All authenticated users can trigger missed schedules for recovery purposes
+            await LoadMissedSchedules();
+        }
 
-    private async Task LoadMissedSchedules()
-    {
-        _loading = true;
-        _selectedIds.Clear();
-        _selectedItems.Clear();
+        private async Task LoadMissedSchedules()
+        {
+            _loading = true;
+            _selectedIds.Clear();
+            _selectedItems.Clear();
+            _nextRunFormatted.Clear();
+            _lastRunFormatted.Clear();
         
-        try
-        {
-            _missedSchedules = await ScheduleService.GetMissedSchedulesAsync(_windowDays, 1, 500);
+            try
+            {
+                _missedSchedules = await ScheduleService.GetMissedSchedulesAsync(_windowDays, 1, 500);
+            
+                // Pre-format dates with user's timezone
+                if (_missedSchedules?.Items != null)
+                {
+                    foreach (var item in _missedSchedules.Items)
+                    {
+                        if (item.NextRunDateTime.HasValue)
+                            _nextRunFormatted[item.Id] = await TimeZoneService.FormatDateTimeAsync(item.NextRunDateTime.Value);
+                        if (item.LastRunDateTime.HasValue)
+                            _lastRunFormatted[item.Id] = await TimeZoneService.FormatDateTimeAsync(item.LastRunDateTime.Value);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error loading missed schedules: {ex.Message}", Severity.Error);
+            }
+            finally
+            {
+                _loading = false;
+            }
         }
-        catch (Exception ex)
-        {
-            Snackbar.Add($"Error loading missed schedules: {ex.Message}", Severity.Error);
-        }
-        finally
-        {
-            _loading = false;
-        }
-    }
 
     private void SelectAll(bool selected)
     {
