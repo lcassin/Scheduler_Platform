@@ -55,40 +55,72 @@
             <Setter Property="Margin" Value="4,2"/>
         </Style>
         
-        <!-- ToolBar Style -->
+        <!-- ToolBar Style with custom template to style overflow button -->
         <Style TargetType="ToolBar">
             <Setter Property="Background" Value="{StaticResource ToolbarBackgroundBrush}"/>
             <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="4,2"/>
-        </Style>
-        
-        <!-- ToolBar Overflow Button Style -->
-        <Style x:Key="{x:Static ToolBar.ToggleButtonStyleKey}" TargetType="ToggleButton">
-            <Setter Property="Background" Value="{StaticResource ToolbarBackgroundBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
-            <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Template">
                 <Setter.Value>
-                    <ControlTemplate TargetType="ToggleButton">
-                        <Border x:Name="border" 
+                    <ControlTemplate TargetType="ToolBar">
+                        <Border x:Name="Bd" 
                                 Background="{TemplateBinding Background}" 
-                                BorderThickness="0"
-                                Padding="2">
-                            <Grid>
-                                <Path x:Name="arrow" 
-                                      Fill="{StaticResource ForegroundBrush}" 
-                                      Data="M 0 0 L 6 0 L 3 3 Z"
-                                      VerticalAlignment="Center" 
-                                      HorizontalAlignment="Center"/>
-                            </Grid>
+                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="{TemplateBinding BorderThickness}" 
+                                Padding="{TemplateBinding Padding}">
+                            <DockPanel>
+                                <!-- Overflow Button -->
+                                <ToggleButton x:Name="OverflowButton" 
+                                              DockPanel.Dock="Right"
+                                              IsEnabled="{TemplateBinding HasOverflowItems}"
+                                              IsChecked="{Binding IsOverflowOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                              ClickMode="Press"
+                                              Background="{StaticResource ToolbarBackgroundBrush}">
+                                    <ToggleButton.Style>
+                                        <Style TargetType="ToggleButton">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding HasOverflowItems, RelativeSource={RelativeSource AncestorType=ToolBar}}" Value="False">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </ToggleButton.Style>
+                                    <ToggleButton.Template>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Border x:Name="overflowBorder" 
+                                                    Background="{StaticResource ToolbarBackgroundBrush}" 
+                                                    Padding="4,2">
+                                                <Path x:Name="arrow" 
+                                                      Fill="{StaticResource ForegroundBrush}" 
+                                                      Data="M 0 0 L 6 0 L 3 3 Z"
+                                                      VerticalAlignment="Center" 
+                                                      HorizontalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="overflowBorder" Property="Background" Value="{StaticResource HoverBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsChecked" Value="True">
+                                                    <Setter TargetName="overflowBorder" Property="Background" Value="{StaticResource SelectedBrush}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsEnabled" Value="False">
+                                                    <Setter TargetName="arrow" Property="Fill" Value="{StaticResource DisabledForegroundBrush}"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </ToggleButton.Template>
+                                </ToggleButton>
+                                <!-- Main Panel -->
+                                <ToolBarPanel x:Name="PART_ToolBarPanel" 
+                                              IsItemsHost="True" 
+                                              Margin="0,1,2,2"/>
+                            </DockPanel>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource HoverBrush}"/>
-                            </Trigger>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource SelectedBrush}"/>
+                            <Trigger Property="IsOverflowOpen" Value="True">
+                                <Setter TargetName="OverflowButton" Property="IsChecked" Value="True"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -131,14 +163,14 @@
         
         <!-- TabControl Style -->
         <Style TargetType="TabControl">
-            <Setter Property="Background" Value="{StaticResource BackgroundBrush}"/>
+            <Setter Property="Background" Value="{StaticResource ToolbarBackgroundBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="0"/>
         </Style>
         
         <!-- TabItem Style -->
         <Style TargetType="TabItem">
-            <Setter Property="Background" Value="{StaticResource MenuBackgroundBrush}"/>
+            <Setter Property="Background" Value="{StaticResource ToolbarBackgroundBrush}"/>
             <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="12,6"/>
@@ -158,7 +190,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource BackgroundBrush}"/>
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource HoverBrush}"/>
                                 <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
