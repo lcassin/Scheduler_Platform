@@ -321,6 +321,66 @@ Console.WriteLine(""Hello, World!"");
             ("BT", "Bottom to Top direction"),
             ("RL", "Right to Left direction"),
             ("LR", "Left to Right direction"),
+            
+            // Frontmatter config options
+            ("---", "Start/end frontmatter config block"),
+            ("config:", "Configuration section in frontmatter"),
+            ("look:", "Diagram look style (classic, handDrawn)"),
+            ("theme:", "Diagram theme (default, forest, dark, neutral, base)"),
+            ("layout:", "Layout algorithm (dagre, elk)"),
+            ("classic", "Classic look style"),
+            ("handDrawn", "Hand-drawn sketch style"),
+            ("default", "Default theme"),
+            ("forest", "Forest green theme"),
+            ("dark", "Dark theme"),
+            ("neutral", "Neutral gray theme"),
+            ("base", "Base theme for customization"),
+            ("dagre", "Dagre layout algorithm"),
+            ("elk", "ELK layout algorithm"),
+            
+            // Additional config options
+            ("flowchart:", "Flowchart-specific config"),
+            ("sequence:", "Sequence diagram config"),
+            ("gantt:", "Gantt chart config"),
+            ("themeVariables:", "Custom theme variables"),
+            ("htmlLabels:", "Enable HTML labels (true/false)"),
+            ("curve:", "Edge curve style (basis, linear, cardinal)"),
+            ("padding:", "Diagram padding"),
+            ("nodeSpacing:", "Space between nodes"),
+            ("rankSpacing:", "Space between ranks"),
+            ("diagramPadding:", "Padding around diagram"),
+            ("useMaxWidth:", "Use maximum width (true/false)"),
+            ("wrap:", "Enable text wrapping (true/false)"),
+            
+            // More config options from schema
+            ("handDrawnSeed:", "Seed for handDrawn look (0 = random)"),
+            ("darkMode:", "Enable dark mode (true/false)"),
+            ("fontFamily:", "Font family for diagram text"),
+            ("fontSize:", "Font size for diagram text"),
+            ("maxTextSize:", "Maximum text size (default 50000)"),
+            ("maxEdges:", "Maximum number of edges (default 500)"),
+            ("securityLevel:", "Security level (strict, loose, antiscript, sandbox)"),
+            ("themeCSS:", "Custom CSS for theme"),
+            
+            // Diagram-specific config sections
+            ("journey:", "User journey diagram config"),
+            ("timeline:", "Timeline diagram config"),
+            ("class:", "Class diagram config"),
+            ("state:", "State diagram config"),
+            ("er:", "ER diagram config"),
+            ("pie:", "Pie chart config"),
+            ("quadrantChart:", "Quadrant chart config"),
+            ("xyChart:", "XY chart config"),
+            ("mindmap:", "Mindmap config"),
+            ("gitGraph:", "Git graph config"),
+            ("sankey:", "Sankey diagram config"),
+            ("packet:", "Packet diagram config"),
+            ("block:", "Block diagram config"),
+            ("radar:", "Radar diagram config"),
+            ("kanban:", "Kanban diagram config"),
+            ("architecture:", "Architecture diagram config"),
+            ("c4:", "C4 diagram config"),
+            ("requirement:", "Requirement diagram config"),
         };
 
         return allKeywords
@@ -474,9 +534,10 @@ Console.WriteLine(""Hello, World!"");
         let panzoomInstance = null;
         let currentZoom = {_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)};
         
+        // Don't set theme here - let frontmatter config take precedence
+        // Mermaid will parse ---config:--- frontmatter automatically
         mermaid.initialize({{ 
             startOnLoad: true,
-            theme: 'default',
             securityLevel: 'loose'
         }});
         
