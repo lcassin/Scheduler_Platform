@@ -351,6 +351,36 @@ Console.WriteLine(""Hello, World!"");
             ("diagramPadding:", "Padding around diagram"),
             ("useMaxWidth:", "Use maximum width (true/false)"),
             ("wrap:", "Enable text wrapping (true/false)"),
+            
+            // More config options from schema
+            ("handDrawnSeed:", "Seed for handDrawn look (0 = random)"),
+            ("darkMode:", "Enable dark mode (true/false)"),
+            ("fontFamily:", "Font family for diagram text"),
+            ("fontSize:", "Font size for diagram text"),
+            ("maxTextSize:", "Maximum text size (default 50000)"),
+            ("maxEdges:", "Maximum number of edges (default 500)"),
+            ("securityLevel:", "Security level (strict, loose, antiscript, sandbox)"),
+            ("themeCSS:", "Custom CSS for theme"),
+            
+            // Diagram-specific config sections
+            ("journey:", "User journey diagram config"),
+            ("timeline:", "Timeline diagram config"),
+            ("class:", "Class diagram config"),
+            ("state:", "State diagram config"),
+            ("er:", "ER diagram config"),
+            ("pie:", "Pie chart config"),
+            ("quadrantChart:", "Quadrant chart config"),
+            ("xyChart:", "XY chart config"),
+            ("mindmap:", "Mindmap config"),
+            ("gitGraph:", "Git graph config"),
+            ("sankey:", "Sankey diagram config"),
+            ("packet:", "Packet diagram config"),
+            ("block:", "Block diagram config"),
+            ("radar:", "Radar diagram config"),
+            ("kanban:", "Kanban diagram config"),
+            ("architecture:", "Architecture diagram config"),
+            ("c4:", "C4 diagram config"),
+            ("requirement:", "Requirement diagram config"),
         };
 
         return allKeywords
