@@ -57,33 +57,31 @@ public class ScheduleHydrationService : IHostedService
             await Task.Delay(TimeSpan.FromSeconds(_settings.Hydration.DelaySeconds), cancellationToken);
             
             var now = DateTime.UtcNow;
-            var horizonEnd = now.AddHours(_settings.Hydration.HorizonHours);
             
             _logger.LogInformation(
-                "ScheduleHydrationService: Loading schedules with NextRunTime between {Now} and {HorizonEnd} (horizon: {Hours}h)",
-                now.ToString("o"), horizonEnd.ToString("o"), _settings.Hydration.HorizonHours);
+                "ScheduleHydrationService: Loading ALL enabled schedules to ensure Quartz registration");
 
             using var scope = _serviceProvider.CreateScope();
             var unitOfWork = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
             var schedulerService = scope.ServiceProvider.GetRequiredService<ISchedulerService>();
 
-            // Only load future schedules - missed schedules are handled by MissedSchedulesProcessor
-            var schedulesInHorizon = await unitOfWork.Schedules.FindAsync(s =>
+            // Load ALL enabled schedules to ensure they are registered with Quartz
+            // This is critical because Quartz persistent store may not have all jobs after deployment
+            // Missed schedules (NextRunDateTime < now) are handled by MissedSchedulesProcessor
+            var allEnabledSchedules = await unitOfWork.Schedules.FindAsync(s =>
                 s.IsEnabled &&
                 !s.IsDeleted &&
-                s.NextRunDateTime.HasValue &&
-                s.NextRunDateTime.Value >= now &&
-                s.NextRunDateTime.Value <= horizonEnd);
+                !string.IsNullOrEmpty(s.CronExpression));
 
-            var schedulesList = schedulesInHorizon.ToList();
+            var schedulesList = allEnabledSchedules.ToList();
             
             _logger.LogInformation(
-                "ScheduleHydrationService: Found {Count} enabled schedules within {Hours}h horizon",
-                schedulesList.Count, _settings.Hydration.HorizonHours);
+                "ScheduleHydrationService: Found {Count} enabled schedules to register with Quartz",
+                schedulesList.Count);
 
             if (!schedulesList.Any())
             {
-                _logger.LogInformation("ScheduleHydrationService: No schedules to hydrate within horizon");
+                _logger.LogInformation("ScheduleHydrationService: No enabled schedules found to hydrate");
                 return;
             }
 
