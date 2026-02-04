@@ -452,10 +452,11 @@
         </Menu>
         
         <!-- Toolbar -->
-        <Border Grid.Row="1" Background="{StaticResource BackgroundBrush}" Padding="2">
-            <ToolBarTray Background="{StaticResource ToolbarBackgroundBrush}">
-                <ToolBar Band="1" BandIndex="1" Background="{StaticResource ToolbarBackgroundBrush}">
-                <Button Click="New_Click" ToolTip="New (Ctrl+N)" Style="{StaticResource ToolbarButtonStyle}">
+        <Border Grid.Row="1" Background="{StaticResource MenuBackgroundBrush}" Padding="6">
+            <Border Background="{StaticResource ToolbarBackgroundBrush}" CornerRadius="4" HorizontalAlignment="Left">
+                <ToolBarTray Background="Transparent">
+                    <ToolBar Band="1" BandIndex="1" Background="Transparent">
+                    <Button Click="New_Click" ToolTip="New (Ctrl+N)" Style="{StaticResource ToolbarButtonStyle}">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
                         <TextBlock Text="New" Margin="4,0,0,0" VerticalAlignment="Center"/>
@@ -514,8 +515,9 @@
                 <Separator Background="{StaticResource BorderBrush}" Margin="4,4"/>
                 <TextBlock Text="&#xE71E;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{StaticResource ForegroundBrush}" VerticalAlignment="Center" Margin="4,0,0,0"/>
                 <TextBlock x:Name="ZoomLevelText" Text="100%" Foreground="{StaticResource ForegroundBrush}" VerticalAlignment="Center" Width="50" Margin="4,0,0,0"/>
-                </ToolBar>
-            </ToolBarTray>
+                    </ToolBar>
+                </ToolBarTray>
+            </Border>
         </Border>
         
         <!-- Main Content - Split View -->
