@@ -1956,7 +1956,7 @@ Console.WriteLine(""Hello, World!"");
     {
         MessageBox.Show(
 
-            "Mermaid Editor v1.6\n\n" +
+            "Mermaid Editor v1.7\n\n" +
             "A simple IDE for editing Mermaid diagrams and Markdown files.\n\n" +
             "Features:\n" +
             "- Live preview as you type\n" +
