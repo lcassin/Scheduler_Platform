@@ -192,13 +192,13 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         // Return default configuration if database config not available
         _cachedConfig = new AdrConfiguration
         {
-            CredentialCheckLeadDays = _configuration.GetValue<int>("AdrOrchestration:CredentialCheckLeadDays", DefaultCredentialCheckLeadDays),
-            ScrapeRetryDays = _configuration.GetValue<int>("AdrOrchestration:ScrapeRetryDays", DefaultScrapeRetryDays),
-            MaxRetries = _configuration.GetValue<int>("AdrOrchestration:MaxRetries", DefaultMaxRetries),
-            FinalStatusCheckDelayDays = _configuration.GetValue<int>("AdrOrchestration:FinalStatusCheckDelayDays", DefaultFinalStatusCheckDelayDays),
-            DailyStatusCheckDelayDays = _configuration.GetValue<int>("AdrOrchestration:DailyStatusCheckDelayDays", DefaultDailyStatusCheckDelayDays),
-            MaxParallelRequests = _configuration.GetValue<int>("AdrOrchestration:MaxParallelRequests", DefaultMaxParallelRequests),
-            BatchSize = _configuration.GetValue<int>("AdrOrchestration:BatchSize", DefaultBatchSize),
+            CredentialCheckLeadDays = _configuration.GetValue<int>("SchedulerSettings:AdrOrchestration:CredentialCheckLeadDays", DefaultCredentialCheckLeadDays),
+            ScrapeRetryDays = _configuration.GetValue<int>("SchedulerSettings:AdrOrchestration:ScrapeRetryDays", DefaultScrapeRetryDays),
+            MaxRetries = _configuration.GetValue<int>("SchedulerSettings:AdrOrchestration:MaxRetries", DefaultMaxRetries),
+            FinalStatusCheckDelayDays = _configuration.GetValue<int>("SchedulerSettings:AdrOrchestration:FinalStatusCheckDelayDays", DefaultFinalStatusCheckDelayDays),
+            DailyStatusCheckDelayDays = _configuration.GetValue<int>("SchedulerSettings:AdrOrchestration:DailyStatusCheckDelayDays", DefaultDailyStatusCheckDelayDays),
+            MaxParallelRequests = _configuration.GetValue<int>("SchedulerSettings:AdrOrchestration:MaxParallelRequests", DefaultMaxParallelRequests),
+            BatchSize = _configuration.GetValue<int>("SchedulerSettings:AdrOrchestration:BatchSize", DefaultBatchSize),
             IsOrchestrationEnabled = true
         };
         
@@ -287,13 +287,13 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     private int GetMaxParallelRequests()
     {
         return _cachedConfig?.MaxParallelRequests ?? 
-            _configuration.GetValue<int>("AdrOrchestration:MaxParallelRequests", DefaultMaxParallelRequests);
+            _configuration.GetValue<int>("SchedulerSettings:AdrOrchestration:MaxParallelRequests", DefaultMaxParallelRequests);
     }
 
     private int GetCredentialCheckLeadDays()
     {
         return _cachedConfig?.CredentialCheckLeadDays ?? 
-            _configuration.GetValue<int>("AdrOrchestration:CredentialCheckLeadDays", DefaultCredentialCheckLeadDays);
+            _configuration.GetValue<int>("SchedulerSettings:AdrOrchestration:CredentialCheckLeadDays", DefaultCredentialCheckLeadDays);
     }
 
     private int GetBatchSize()

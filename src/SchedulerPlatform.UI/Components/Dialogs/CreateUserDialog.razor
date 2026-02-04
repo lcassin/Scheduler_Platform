@@ -276,18 +276,27 @@
         _saving = true;
         try
         {
-            var customPermissions = _permissionGroupList
-                .Where(g => g.HasAnyPermission())
-                .Select(g => new UserPermissionDto
-                {
-                    PermissionName = g.PermissionName,
-                    CanCreate = g.CanCreate,
-                    CanRead = g.CanRead,
-                    CanUpdate = g.CanUpdate,
-                    CanDelete = g.CanDelete,
-                    CanExecute = g.CanExecute
-                })
-                .ToList();
+            // Check if the current permissions match the selected template exactly
+            // If so, send TemplateName to let the API apply the template (source of truth)
+            // Otherwise, send CustomPermissions for custom configurations
+            var useTemplate = !string.IsNullOrEmpty(_selectedTemplate) && PermissionsMatchTemplate(_selectedTemplate);
+            
+            List<UserPermissionDto>? customPermissions = null;
+            if (!useTemplate)
+            {
+                customPermissions = _permissionGroupList
+                    .Where(g => g.HasAnyPermission())
+                    .Select(g => new UserPermissionDto
+                    {
+                        PermissionName = g.PermissionName,
+                        CanCreate = g.CanCreate,
+                        CanRead = g.CanRead,
+                        CanUpdate = g.CanUpdate,
+                        CanDelete = g.CanDelete,
+                        CanExecute = g.CanExecute
+                    })
+                    .ToList();
+            }
 
             var request = new CreateUserRequest
             {
@@ -296,8 +305,8 @@
                 LastName = _lastName.Trim(),
                 Username = string.IsNullOrWhiteSpace(_username) ? null : _username.Trim(),
                 IsActive = _isActive,
-                CustomPermissions = customPermissions.Any() ? customPermissions : null,
-                TemplateName = customPermissions.Any() ? null : _selectedTemplate
+                CustomPermissions = useTemplate ? null : customPermissions,
+                TemplateName = useTemplate ? _selectedTemplate : null
             };
 
             await UserManagementService.CreateUserAsync(request);
@@ -318,6 +327,39 @@
     private void Cancel()
     {
         MudDialog?.Cancel();
+    }
+
+    private bool PermissionsMatchTemplate(string templateName)
+    {
+        var template = _templates.FirstOrDefault(t => string.Equals(t.Name, templateName, StringComparison.OrdinalIgnoreCase));
+        if (template == null || template.Permissions == null)
+            return false;
+
+        // Get permission groups that have any permission set
+        var activeGroups = _permissionGroupList.Where(g => g.HasAnyPermission()).ToList();
+        
+        // Count must match
+        if (activeGroups.Count != template.Permissions.Count)
+            return false;
+
+        // Each permission must match exactly
+        foreach (var templatePerm in template.Permissions)
+        {
+            var group = activeGroups.FirstOrDefault(g => 
+                string.Equals(g.PermissionName, templatePerm.PermissionName, StringComparison.OrdinalIgnoreCase));
+            
+            if (group == null)
+                return false;
+
+            if (group.CanCreate != templatePerm.CanCreate ||
+                group.CanRead != templatePerm.CanRead ||
+                group.CanUpdate != templatePerm.CanUpdate ||
+                group.CanDelete != templatePerm.CanDelete ||
+                group.CanExecute != templatePerm.CanExecute)
+                return false;
+        }
+
+        return true;
     }
 
     private class PermissionGroup

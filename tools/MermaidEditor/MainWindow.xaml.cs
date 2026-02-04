@@ -321,6 +321,66 @@ Console.WriteLine(""Hello, World!"");
             ("BT", "Bottom to Top direction"),
             ("RL", "Right to Left direction"),
             ("LR", "Left to Right direction"),
+            
+            // Frontmatter config options
+            ("---", "Start/end frontmatter config block"),
+            ("config:", "Configuration section in frontmatter"),
+            ("look:", "Diagram look style (classic, handDrawn)"),
+            ("theme:", "Diagram theme (default, forest, dark, neutral, base)"),
+            ("layout:", "Layout algorithm (dagre, elk)"),
+            ("classic", "Classic look style"),
+            ("handDrawn", "Hand-drawn sketch style"),
+            ("default", "Default theme"),
+            ("forest", "Forest green theme"),
+            ("dark", "Dark theme"),
+            ("neutral", "Neutral gray theme"),
+            ("base", "Base theme for customization"),
+            ("dagre", "Dagre layout algorithm"),
+            ("elk", "ELK layout algorithm"),
+            
+            // Additional config options
+            ("flowchart:", "Flowchart-specific config"),
+            ("sequence:", "Sequence diagram config"),
+            ("gantt:", "Gantt chart config"),
+            ("themeVariables:", "Custom theme variables"),
+            ("htmlLabels:", "Enable HTML labels (true/false)"),
+            ("curve:", "Edge curve style (basis, linear, cardinal)"),
+            ("padding:", "Diagram padding"),
+            ("nodeSpacing:", "Space between nodes"),
+            ("rankSpacing:", "Space between ranks"),
+            ("diagramPadding:", "Padding around diagram"),
+            ("useMaxWidth:", "Use maximum width (true/false)"),
+            ("wrap:", "Enable text wrapping (true/false)"),
+            
+            // More config options from schema
+            ("handDrawnSeed:", "Seed for handDrawn look (0 = random)"),
+            ("darkMode:", "Enable dark mode (true/false)"),
+            ("fontFamily:", "Font family for diagram text"),
+            ("fontSize:", "Font size for diagram text"),
+            ("maxTextSize:", "Maximum text size (default 50000)"),
+            ("maxEdges:", "Maximum number of edges (default 500)"),
+            ("securityLevel:", "Security level (strict, loose, antiscript, sandbox)"),
+            ("themeCSS:", "Custom CSS for theme"),
+            
+            // Diagram-specific config sections
+            ("journey:", "User journey diagram config"),
+            ("timeline:", "Timeline diagram config"),
+            ("class:", "Class diagram config"),
+            ("state:", "State diagram config"),
+            ("er:", "ER diagram config"),
+            ("pie:", "Pie chart config"),
+            ("quadrantChart:", "Quadrant chart config"),
+            ("xyChart:", "XY chart config"),
+            ("mindmap:", "Mindmap config"),
+            ("gitGraph:", "Git graph config"),
+            ("sankey:", "Sankey diagram config"),
+            ("packet:", "Packet diagram config"),
+            ("block:", "Block diagram config"),
+            ("radar:", "Radar diagram config"),
+            ("kanban:", "Kanban diagram config"),
+            ("architecture:", "Architecture diagram config"),
+            ("c4:", "C4 diagram config"),
+            ("requirement:", "Requirement diagram config"),
         };
 
         return allKeywords
@@ -336,12 +396,108 @@ Console.WriteLine(""Hello, World!"");
             await PreviewWebView.EnsureCoreWebView2Async();
             _webViewInitialized = true;
             RenderMermaid();
+            
+            // Style the toolbar overflow button programmatically
+            StyleToolbarOverflowButtons();
         }
         catch (Exception ex)
         {
             MessageBox.Show($"Failed to initialize WebView2: {ex.Message}\n\nMake sure WebView2 Runtime is installed.",
                 "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+    
+    private void StyleToolbarOverflowButtons()
+    {
+        // Use Dispatcher to ensure visual tree is fully built
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
+        {
+            var darkBrush = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2D2D30"));
+            var foregroundBrush = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F1F1F1"));
+            
+            // Find all ToolBars in the visual tree
+            var toolBars = FindVisualChildren<System.Windows.Controls.ToolBar>(this);
+            foreach (var toolBar in toolBars)
+            {
+                // Find the overflow button by looking for ToggleButton in the toolbar
+                var toggleButtons = FindVisualChildren<System.Windows.Controls.Primitives.ToggleButton>(toolBar);
+                foreach (var toggleButton in toggleButtons)
+                {
+                    // Style the toggle button itself
+                    toggleButton.Background = darkBrush;
+                    toggleButton.Foreground = foregroundBrush;
+                    toggleButton.BorderThickness = new Thickness(0);
+                    toggleButton.BorderBrush = darkBrush;
+                    
+                    // Style all Border elements inside the toggle button
+                    var borders = FindVisualChildren<System.Windows.Controls.Border>(toggleButton);
+                    foreach (var border in borders)
+                    {
+                        border.Background = darkBrush;
+                        border.BorderBrush = darkBrush;
+                    }
+                    
+                    // Style all Path elements (arrows) inside
+                    var paths = FindVisualChildren<System.Windows.Shapes.Path>(toggleButton);
+                    foreach (var path in paths)
+                    {
+                        path.Fill = foregroundBrush;
+                    }
+                }
+                
+                // Also find and style any Grid or Panel backgrounds in the toolbar's overflow area
+                var grids = FindVisualChildren<System.Windows.Controls.Grid>(toolBar);
+                foreach (var grid in grids)
+                {
+                    // Only style grids that are small (likely the overflow button container)
+                    if (grid.ActualWidth < 30 && grid.ActualWidth > 0)
+                    {
+                        grid.Background = darkBrush;
+                    }
+                }
+            }
+        }));
+    }
+    
+    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
+    {
+        if (parent == null) yield break;
+        
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T typedChild)
+            {
+                yield return typedChild;
+            }
+            
+            foreach (var descendant in FindVisualChildren<T>(child))
+            {
+                yield return descendant;
+            }
+        }
+    }
+    
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        if (parent == null) return null;
+        
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T typedChild)
+            {
+                return typedChild;
+            }
+            
+            var result = FindVisualChild<T>(child);
+            if (result != null)
+            {
+                return result;
+            }
+        }
+        
+        return null;
     }
 
     private void UpdateVirtualHostMapping(string? folderPath)
@@ -423,7 +579,7 @@ Console.WriteLine(""Hello, World!"");
 <html>
 <head>
     <meta charset=""UTF-8"">
-    <script src=""https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js""></script>
+    <script src=""https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js""></script>
     <script src=""https://cdn.jsdelivr.net/npm/panzoom@9.4.3/dist/panzoom.min.js""></script>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
@@ -440,6 +596,7 @@ Console.WriteLine(""Hello, World!"");
             align-items: flex-start;
             justify-content: flex-start;
             padding: 20px;
+            overflow: auto;
         }}
         #diagram {{
             background: white;
@@ -448,6 +605,10 @@ Console.WriteLine(""Hello, World!"");
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             display: inline-block;
             min-width: 2000px;
+        }}
+        #diagram.has-error {{
+            min-width: auto;
+            max-width: calc(100vw - 60px);
         }}
         #diagram svg {{
             display: block;
@@ -459,8 +620,13 @@ Console.WriteLine(""Hello, World!"");
             padding: 20px;
             font-family: Consolas, monospace;
             white-space: pre-wrap;
+            word-wrap: break-word;
+            word-break: break-word;
+            overflow-wrap: break-word;
             background: #ffebee;
             border-radius: 8px;
+            max-width: 100%;
+            overflow-x: auto;
         }}
     </style>
 </head>
@@ -474,9 +640,10 @@ Console.WriteLine(""Hello, World!"");
         let panzoomInstance = null;
         let currentZoom = {_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)};
         
+        // Don't set theme here - let frontmatter config take precedence
+        // Mermaid will parse ---config:--- frontmatter automatically
         mermaid.initialize({{ 
             startOnLoad: true,
-            theme: 'default',
             securityLevel: 'loose'
         }});
         
@@ -544,7 +711,9 @@ Console.WriteLine(""Hello, World!"");
             // Add click handlers to diagram nodes for click-to-highlight feature
             setupNodeClickHandlers(svg);
         }}).catch(err => {{
-            document.getElementById('diagram').innerHTML = '<div class=""error"">Error: ' + err.message + '</div>';
+            const diagram = document.getElementById('diagram');
+            diagram.classList.add('has-error');
+            diagram.innerHTML = '<div class=""error"">Error: ' + err.message + '</div>';
         }});
         
         function setupNodeClickHandlers(svg) {{
@@ -1895,7 +2064,7 @@ Console.WriteLine(""Hello, World!"");
     {
         MessageBox.Show(
 
-            "Mermaid Editor v1.6\n\n" +
+            "Mermaid Editor v1.7\n\n" +
             "A simple IDE for editing Mermaid diagrams and Markdown files.\n\n" +
             "Features:\n" +
             "- Live preview as you type\n" +
@@ -2075,7 +2244,7 @@ Console.WriteLine(""Hello, World!"");
         var html = $@"<!DOCTYPE html>
 <html>
 <head>
-    <script src=""https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js""></script>
+    <script src=""https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js""></script>
     <script src=""https://cdn.jsdelivr.net/npm/panzoom@9.4.3/dist/panzoom.min.js""></script>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
@@ -2092,6 +2261,7 @@ Console.WriteLine(""Hello, World!"");
             align-items: flex-start;
             justify-content: flex-start;
             padding: 20px;
+            overflow: auto;
         }}
         #diagram {{
             background: white;
@@ -2100,6 +2270,10 @@ Console.WriteLine(""Hello, World!"");
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             display: inline-block;
             min-width: 2000px;
+        }}
+        #diagram.has-error {{
+            min-width: auto;
+            max-width: calc(100vw - 60px);
         }}
         #diagram svg {{
             display: block;
