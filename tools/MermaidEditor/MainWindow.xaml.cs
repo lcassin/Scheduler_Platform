@@ -321,6 +321,36 @@ Console.WriteLine(""Hello, World!"");
             ("BT", "Bottom to Top direction"),
             ("RL", "Right to Left direction"),
             ("LR", "Left to Right direction"),
+            
+            // Frontmatter config options
+            ("---", "Start/end frontmatter config block"),
+            ("config:", "Configuration section in frontmatter"),
+            ("look:", "Diagram look style (classic, handDrawn)"),
+            ("theme:", "Diagram theme (default, forest, dark, neutral, base)"),
+            ("layout:", "Layout algorithm (dagre, elk)"),
+            ("classic", "Classic look style"),
+            ("handDrawn", "Hand-drawn sketch style"),
+            ("default", "Default theme"),
+            ("forest", "Forest green theme"),
+            ("dark", "Dark theme"),
+            ("neutral", "Neutral gray theme"),
+            ("base", "Base theme for customization"),
+            ("dagre", "Dagre layout algorithm"),
+            ("elk", "ELK layout algorithm"),
+            
+            // Additional config options
+            ("flowchart:", "Flowchart-specific config"),
+            ("sequence:", "Sequence diagram config"),
+            ("gantt:", "Gantt chart config"),
+            ("themeVariables:", "Custom theme variables"),
+            ("htmlLabels:", "Enable HTML labels (true/false)"),
+            ("curve:", "Edge curve style (basis, linear, cardinal)"),
+            ("padding:", "Diagram padding"),
+            ("nodeSpacing:", "Space between nodes"),
+            ("rankSpacing:", "Space between ranks"),
+            ("diagramPadding:", "Padding around diagram"),
+            ("useMaxWidth:", "Use maximum width (true/false)"),
+            ("wrap:", "Enable text wrapping (true/false)"),
         };
 
         return allKeywords
@@ -474,9 +504,10 @@ Console.WriteLine(""Hello, World!"");
         let panzoomInstance = null;
         let currentZoom = {_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)};
         
+        // Don't set theme here - let frontmatter config take precedence
+        // Mermaid will parse ---config:--- frontmatter automatically
         mermaid.initialize({{ 
             startOnLoad: true,
-            theme: 'default',
             securityLevel: 'loose'
         }});
         
