@@ -396,12 +396,88 @@ Console.WriteLine(""Hello, World!"");
             await PreviewWebView.EnsureCoreWebView2Async();
             _webViewInitialized = true;
             RenderMermaid();
+            
+            // Style the toolbar overflow button programmatically
+            StyleToolbarOverflowButtons();
         }
         catch (Exception ex)
         {
             MessageBox.Show($"Failed to initialize WebView2: {ex.Message}\n\nMake sure WebView2 Runtime is installed.",
                 "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+    
+    private void StyleToolbarOverflowButtons()
+    {
+        // Find all ToolBars in the visual tree and style their overflow buttons
+        var toolBars = FindVisualChildren<System.Windows.Controls.ToolBar>(this);
+        foreach (var toolBar in toolBars)
+        {
+            toolBar.Loaded += (s, args) =>
+            {
+                // Find the overflow button (ToggleButton) in the toolbar
+                var overflowButton = FindVisualChild<System.Windows.Controls.Primitives.ToggleButton>(toolBar);
+                if (overflowButton != null)
+                {
+                    // Style the overflow button with dark background
+                    var darkBrush = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2D2D30"));
+                    var hoverBrush = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#3E3E42"));
+                    var foregroundBrush = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F1F1F1"));
+                    
+                    overflowButton.Background = darkBrush;
+                    overflowButton.Foreground = foregroundBrush;
+                    overflowButton.BorderThickness = new Thickness(0);
+                    
+                    // Also style any Path elements (arrows) inside
+                    var paths = FindVisualChildren<System.Windows.Shapes.Path>(overflowButton);
+                    foreach (var path in paths)
+                    {
+                        path.Fill = foregroundBrush;
+                    }
+                }
+            };
+        }
+    }
+    
+    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
+    {
+        if (parent == null) yield break;
+        
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T typedChild)
+            {
+                yield return typedChild;
+            }
+            
+            foreach (var descendant in FindVisualChildren<T>(child))
+            {
+                yield return descendant;
+            }
+        }
+    }
+    
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        if (parent == null) return null;
+        
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T typedChild)
+            {
+                return typedChild;
+            }
+            
+            var result = FindVisualChild<T>(child);
+            if (result != null)
+            {
+                return result;
+            }
+        }
+        
+        return null;
     }
 
     private void UpdateVirtualHostMapping(string? folderPath)
