@@ -11,7 +11,326 @@
         WindowStartupLocation="CenterScreen"
         AllowDrop="True"
         Drop="Window_Drop"
-        DragOver="Window_DragOver">
+        DragOver="Window_DragOver"
+        Background="#1E1E1E">
+    
+    <Window.Resources>
+        <!-- VS Dark Theme Colors -->
+        <SolidColorBrush x:Key="BackgroundBrush" Color="#1E1E1E"/>
+        <SolidColorBrush x:Key="MenuBackgroundBrush" Color="#1E1E1E"/>
+        <SolidColorBrush x:Key="ToolbarBackgroundBrush" Color="#2D2D30"/>
+        <SolidColorBrush x:Key="BorderBrush" Color="#3E3E42"/>
+        <SolidColorBrush x:Key="ForegroundBrush" Color="#F1F1F1"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#007ACC"/>
+        <SolidColorBrush x:Key="HoverBrush" Color="#3E3E42"/>
+        <SolidColorBrush x:Key="SelectedBrush" Color="#094771"/>
+        <SolidColorBrush x:Key="DisabledForegroundBrush" Color="#656565"/>
+        
+        <!-- Menu Style -->
+        <Style TargetType="Menu">
+            <Setter Property="Background" Value="{StaticResource MenuBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+        </Style>
+        
+        <!-- MenuItem Style for top-level menu items -->
+        <Style x:Key="TopLevelMenuItemStyle" TargetType="MenuItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Border x:Name="border" 
+                                Background="{TemplateBinding Background}" 
+                                BorderThickness="0"
+                                Padding="{TemplateBinding Padding}">
+                            <Grid>
+                                <ContentPresenter ContentSource="Header" 
+                                                  RecognizesAccessKey="True"
+                                                  VerticalAlignment="Center"/>
+                                <Popup x:Name="PART_Popup"
+                                       IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                                       Placement="Bottom"
+                                       AllowsTransparency="True"
+                                       Focusable="False"
+                                       PopupAnimation="Fade">
+                                    <Border Background="{StaticResource ToolbarBackgroundBrush}"
+                                            BorderBrush="{StaticResource BorderBrush}"
+                                            BorderThickness="1">
+                                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                                    </Border>
+                                </Popup>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource HoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="{StaticResource DisabledForegroundBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- MenuItem Style for submenu items -->
+        <Style TargetType="MenuItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="MenuItem">
+                        <Border x:Name="border" 
+                                Background="{TemplateBinding Background}" 
+                                BorderThickness="0"
+                                Padding="{TemplateBinding Padding}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="Icon"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="Shortcut"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter x:Name="Icon" 
+                                                  Content="{TemplateBinding Icon}" 
+                                                  ContentSource="Icon"
+                                                  VerticalAlignment="Center"
+                                                  Width="16" Height="16"
+                                                  Margin="0,0,8,0"/>
+                                <ContentPresenter Grid.Column="1" 
+                                                  ContentSource="Header" 
+                                                  RecognizesAccessKey="True"
+                                                  VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="2" 
+                                           Text="{TemplateBinding InputGestureText}"
+                                           Foreground="{StaticResource DisabledForegroundBrush}"
+                                           Margin="24,0,0,0"
+                                           VerticalAlignment="Center"/>
+                                <Path x:Name="SubMenuArrow" 
+                                      Grid.Column="3"
+                                      Data="M 0 0 L 4 4 L 0 8 Z"
+                                      Fill="{StaticResource ForegroundBrush}"
+                                      VerticalAlignment="Center"
+                                      Margin="8,0,0,0"
+                                      Visibility="Collapsed"/>
+                                <Popup x:Name="PART_Popup"
+                                       IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                                       Placement="Right"
+                                       AllowsTransparency="True"
+                                       Focusable="False"
+                                       PopupAnimation="Fade">
+                                    <Border Background="{StaticResource ToolbarBackgroundBrush}"
+                                            BorderBrush="{StaticResource BorderBrush}"
+                                            BorderThickness="1">
+                                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                                    </Border>
+                                </Popup>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsHighlighted" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource HoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="{StaticResource DisabledForegroundBrush}"/>
+                            </Trigger>
+                            <Trigger Property="HasItems" Value="True">
+                                <Setter TargetName="SubMenuArrow" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="Icon" Value="{x:Null}">
+                                <Setter TargetName="Icon" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- ContextMenu Style for dark dropdown -->
+        <Style TargetType="ContextMenu">
+            <Setter Property="Background" Value="{StaticResource ToolbarBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        
+        <!-- Separator Style -->
+        <Style TargetType="Separator">
+            <Setter Property="Background" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="Margin" Value="4,2"/>
+        </Style>
+        
+        <!-- ToolBar Style -->
+        <Style TargetType="ToolBar">
+            <Setter Property="Background" Value="{StaticResource ToolbarBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="4,2"/>
+        </Style>
+        
+        <!-- ToolBar Overflow Button Style -->
+        <Style x:Key="{x:Static ToolBar.ToggleButtonStyleKey}" TargetType="ToggleButton">
+            <Setter Property="Background" Value="{StaticResource ToolbarBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" 
+                                Background="{StaticResource ToolbarBackgroundBrush}" 
+                                SnapsToDevicePixels="True"
+                                Padding="4,2">
+                            <Path x:Name="Arrow"
+                                  Fill="{StaticResource ForegroundBrush}"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  Data="M 0,0 L 4,4 L 8,0 Z"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource HoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{StaticResource SelectedBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="Arrow" Property="Fill" Value="{StaticResource DisabledForegroundBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- ToolBar Button Style -->
+        <Style x:Key="ToolbarButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="border" 
+                                Background="{TemplateBinding Background}" 
+                                BorderThickness="0"
+                                CornerRadius="2"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource HoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource SelectedBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="{StaticResource DisabledForegroundBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- TabControl Style -->
+        <Style TargetType="TabControl">
+            <Setter Property="Background" Value="{StaticResource ToolbarBackgroundBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+        </Style>
+        
+        <!-- TabItem Style -->
+        <Style TargetType="TabItem">
+            <Setter Property="Background" Value="{StaticResource ToolbarBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Border x:Name="border" 
+                                Background="{TemplateBinding Background}"
+                                BorderThickness="0,0,0,2"
+                                BorderBrush="Transparent"
+                                CornerRadius="4,4,0,0"
+                                Padding="{TemplateBinding Padding}"
+                                Margin="0,0,1,0">
+                            <ContentPresenter x:Name="contentPresenter"
+                                              ContentSource="Header"
+                                              HorizontalAlignment="Center"
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource HoverBrush}"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource HoverBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- StatusBar Style -->
+        <Style TargetType="StatusBar">
+            <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        
+        <!-- StatusBarItem Style -->
+        <Style TargetType="StatusBarItem">
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="8,2"/>
+        </Style>
+        
+        <!-- GridSplitter Style -->
+        <Style TargetType="GridSplitter">
+            <Setter Property="Background" Value="{StaticResource BorderBrush}"/>
+        </Style>
+        
+        <!-- TextBox Style for path bar -->
+        <Style x:Key="PathTextBoxStyle" TargetType="TextBox">
+            <Setter Property="Background" Value="#3E3E42"/>
+            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="6,4"/>
+            <Setter Property="CaretBrush" Value="{StaticResource ForegroundBrush}"/>
+        </Style>
+        
+        <!-- ListBox Style -->
+        <Style TargetType="ListBox">
+            <Setter Property="Background" Value="#1E1E1E"/>
+            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        
+        <!-- ListBoxItem Style -->
+        <Style TargetType="ListBoxItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
+            <Setter Property="Padding" Value="4,2"/>
+            <Style.Triggers>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{StaticResource SelectedBrush}"/>
+                </Trigger>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="{StaticResource HoverBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
     
     <Window.InputBindings>
         <KeyBinding Gesture="Ctrl+N" Command="{Binding NewCommand}" />
@@ -33,8 +352,8 @@
         </Grid.RowDefinitions>
         
         <!-- Menu Bar -->
-        <Menu Grid.Row="0">
-            <MenuItem Header="_File">
+        <Menu Grid.Row="0" Grid.IsSharedSizeScope="True">
+            <MenuItem Header="_File" Style="{StaticResource TopLevelMenuItemStyle}">
                 <MenuItem Header="_New" Click="New_Click" InputGestureText="Ctrl+N">
                     <MenuItem.Icon>
                         <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
@@ -84,7 +403,7 @@
                     </MenuItem.Icon>
                 </MenuItem>
             </MenuItem>
-            <MenuItem Header="_Edit">
+            <MenuItem Header="_Edit" Style="{StaticResource TopLevelMenuItemStyle}">
                 <MenuItem Header="_Undo" Click="Undo_Click" InputGestureText="Ctrl+Z">
                     <MenuItem.Icon>
                         <TextBlock Text="&#xE7A7;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
@@ -96,7 +415,7 @@
                     </MenuItem.Icon>
                 </MenuItem>
             </MenuItem>
-            <MenuItem Header="_View">
+            <MenuItem Header="_View" Style="{StaticResource TopLevelMenuItemStyle}">
                 <MenuItem Header="Zoom _In" Click="ZoomIn_Click" InputGestureText="Ctrl++">
                     <MenuItem.Icon>
                         <TextBlock Text="&#xE8A3;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
@@ -119,7 +438,7 @@
                     </MenuItem.Icon>
                 </MenuItem>
             </MenuItem>
-            <MenuItem Header="_Help">
+            <MenuItem Header="_Help" Style="{StaticResource TopLevelMenuItemStyle}">
                 <MenuItem Header="Mermaid _Syntax Reference" Click="SyntaxHelp_Click">
                     <MenuItem.Icon>
                         <TextBlock Text="&#xE897;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
@@ -134,67 +453,73 @@
         </Menu>
         
         <!-- Toolbar -->
-        <ToolBar Grid.Row="1">
-            <Button Click="New_Click" ToolTip="New (Ctrl+N)" Padding="6,4">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                    <TextBlock Text="New" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                </StackPanel>
-            </Button>
-            <Button Click="Open_Click" ToolTip="Open (Ctrl+O)" Padding="6,4">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE8E5;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                    <TextBlock Text="Open" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                </StackPanel>
-            </Button>
-            <Button Click="Save_Click" ToolTip="Save (Ctrl+S)" Padding="6,4">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                    <TextBlock Text="Save" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                </StackPanel>
-            </Button>
-            <Separator/>
-            <Button Click="Undo_Click" ToolTip="Undo (Ctrl+Z)" Padding="6,4">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE7A7;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                    <TextBlock Text="Undo" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                </StackPanel>
-            </Button>
-            <Button Click="Redo_Click" ToolTip="Redo (Ctrl+Y)" Padding="6,4">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE7A6;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                    <TextBlock Text="Redo" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                </StackPanel>
-            </Button>
-            <Separator/>
-            <Button Click="ZoomIn_Click" ToolTip="Zoom In (Ctrl++)" Padding="6,4">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE8A3;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                    <TextBlock Text="Zoom In" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                </StackPanel>
-            </Button>
-            <Button Click="ZoomOut_Click" ToolTip="Zoom Out (Ctrl+-)" Padding="6,4">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE71F;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                    <TextBlock Text="Zoom Out" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                </StackPanel>
-            </Button>
-            <Button Click="ResetZoom_Click" ToolTip="Reset Zoom (Ctrl+0)" Padding="6,4">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                    <TextBlock Text="Reset" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                </StackPanel>
-            </Button>
-            <Button Click="FitToWindow_Click" ToolTip="Fit to Window (Ctrl+F)" Padding="6,4">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Text="&#xE9A6;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                    <TextBlock Text="Fit" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                </StackPanel>
-            </Button>
-            <Separator/>
-            <TextBlock Text="&#xE71E;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center" Margin="4,0,0,0"/>
-            <TextBlock x:Name="ZoomLevelText" Text="100%" VerticalAlignment="Center" Width="50" Margin="4,0,0,0"/>
-        </ToolBar>
+        <Border Grid.Row="1" Background="{StaticResource MenuBackgroundBrush}" Padding="6">
+            <Border Background="{StaticResource ToolbarBackgroundBrush}" CornerRadius="4" HorizontalAlignment="Left">
+                <ToolBarTray Background="Transparent">
+                    <ToolBar Band="1" BandIndex="1" Background="Transparent">
+                    <Button Click="New_Click" ToolTip="New (Ctrl+N)" Style="{StaticResource ToolbarButtonStyle}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                        <TextBlock Text="New" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Click="Open_Click" ToolTip="Open (Ctrl+O)" Style="{StaticResource ToolbarButtonStyle}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE8E5;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                        <TextBlock Text="Open" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Click="Save_Click" ToolTip="Save (Ctrl+S)" Style="{StaticResource ToolbarButtonStyle}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                        <TextBlock Text="Save" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Separator Background="{StaticResource BorderBrush}" Margin="4,4"/>
+                <Button Click="Undo_Click" ToolTip="Undo (Ctrl+Z)" Style="{StaticResource ToolbarButtonStyle}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE7A7;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                        <TextBlock Text="Undo" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Click="Redo_Click" ToolTip="Redo (Ctrl+Y)" Style="{StaticResource ToolbarButtonStyle}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE7A6;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                        <TextBlock Text="Redo" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Separator Background="{StaticResource BorderBrush}" Margin="4,4"/>
+                <Button Click="ZoomIn_Click" ToolTip="Zoom In (Ctrl++)" Style="{StaticResource ToolbarButtonStyle}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE8A3;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                        <TextBlock Text="Zoom In" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Click="ZoomOut_Click" ToolTip="Zoom Out (Ctrl+-)" Style="{StaticResource ToolbarButtonStyle}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE71F;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                        <TextBlock Text="Zoom Out" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Click="ResetZoom_Click" ToolTip="Reset Zoom (Ctrl+0)" Style="{StaticResource ToolbarButtonStyle}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                        <TextBlock Text="Reset" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Button Click="FitToWindow_Click" ToolTip="Fit to Window (Ctrl+F)" Style="{StaticResource ToolbarButtonStyle}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE9A6;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                        <TextBlock Text="Fit" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+                <Separator Background="{StaticResource BorderBrush}" Margin="4,4"/>
+                <TextBlock Text="&#xE71E;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{StaticResource ForegroundBrush}" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                <TextBlock x:Name="ZoomLevelText" Text="100%" Foreground="{StaticResource ForegroundBrush}" VerticalAlignment="Center" Width="50" Margin="4,0,0,0"/>
+                    </ToolBar>
+                </ToolBarTray>
+            </Border>
+        </Border>
         
         <!-- Main Content - Split View -->
         <Grid Grid.Row="2">
@@ -248,12 +573,12 @@
                             </Grid.ColumnDefinitions>
                             <Button x:Name="BrowseFolderButton" Grid.Column="0" 
                                     Click="BrowseFolder_Click" ToolTip="Browse for folder"
-                                    Padding="8,4" Margin="2">
+                                    Style="{StaticResource ToolbarButtonStyle}" Margin="2">
                                 <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="12"/>
                             </Button>
                             <Button x:Name="ParentFolderButton" Grid.Column="1" 
                                     Click="ParentFolder_Click" ToolTip="Go to parent folder"
-                                    Padding="8,4" Margin="2">
+                                    Style="{StaticResource ToolbarButtonStyle}" Margin="2">
                                 <TextBlock Text="&#xE74A;" FontFamily="Segoe MDL2 Assets" FontSize="12"/>
                             </Button>
                             <TextBox x:Name="CurrentPathTextBox" Grid.Column="2" 
@@ -281,12 +606,24 @@
                 </TabItem>
             </TabControl>
             
-            <!-- Splitter -->
+            <!-- Splitter with grip indicator -->
             <GridSplitter Grid.Column="1" 
-                          Width="5" 
+                          Width="8" 
                           HorizontalAlignment="Stretch"
                           Background="#3E3E42"
-                          Cursor="SizeWE"/>
+                          Cursor="SizeWE">
+                <GridSplitter.Template>
+                    <ControlTemplate TargetType="GridSplitter">
+                        <Border Background="#3E3E42">
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <Ellipse Width="4" Height="4" Fill="#808080" Margin="0,2"/>
+                                <Ellipse Width="4" Height="4" Fill="#808080" Margin="0,2"/>
+                                <Ellipse Width="4" Height="4" Fill="#808080" Margin="0,2"/>
+                            </StackPanel>
+                        </Border>
+                    </ControlTemplate>
+                </GridSplitter.Template>
+            </GridSplitter>
             
             <!-- Right Panel - Preview -->
             <Grid Grid.Column="2">

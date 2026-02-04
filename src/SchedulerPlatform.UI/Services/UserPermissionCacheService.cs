@@ -112,7 +112,9 @@ public class UserPermissionCacheService
         if (_cachedPermissions.IsSystemAdmin)
             return true;
         
-        return _cachedPermissions.Permissions.Contains(permission);
+        // Use case-insensitive comparison for permission strings
+        return _cachedPermissions.Permissions.Any(p => 
+            string.Equals(p, permission, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

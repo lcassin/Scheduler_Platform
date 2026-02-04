@@ -98,15 +98,15 @@ public class GlobalExceptionHandlerMiddleware
             _logger.LogWarning(ex, "Failed to load ADR configuration from database for error notifications");
         }
         
-        // Use database config if available, otherwise fall back to appsettings
-        var enabled = config?.ErrorNotificationsEnabled ?? _configuration.GetValue<bool>("ErrorNotifications:Enabled", true);
+        // Use database config - error notifications settings are stored in AdrConfiguration table
+        var enabled = config?.ErrorNotificationsEnabled ?? true;
         if (!enabled)
         {
             _logger.LogDebug("Error notifications are disabled");
             return;
         }
         
-        var recipients = config?.ErrorNotificationRecipients ?? _configuration["ErrorNotifications:Recipients"];
+        var recipients = config?.ErrorNotificationRecipients;
         if (string.IsNullOrWhiteSpace(recipients))
         {
             _logger.LogWarning("No error notification recipients configured. Configure in Admin > ADR Configuration page.");
