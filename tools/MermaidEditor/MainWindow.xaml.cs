@@ -559,7 +559,7 @@ Console.WriteLine(""Hello, World!"");
 <html>
 <head>
     <meta charset=""UTF-8"">
-    <script src=""https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js""></script>
+    <script src=""https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js""></script>
     <script src=""https://cdn.jsdelivr.net/npm/panzoom@9.4.3/dist/panzoom.min.js""></script>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
@@ -2224,7 +2224,7 @@ Console.WriteLine(""Hello, World!"");
         var html = $@"<!DOCTYPE html>
 <html>
 <head>
-    <script src=""https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js""></script>
+    <script src=""https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js""></script>
     <script src=""https://cdn.jsdelivr.net/npm/panzoom@9.4.3/dist/panzoom.min.js""></script>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
