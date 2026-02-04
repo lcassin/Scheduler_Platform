@@ -606,12 +606,24 @@
                 </TabItem>
             </TabControl>
             
-            <!-- Splitter -->
+            <!-- Splitter with grip indicator -->
             <GridSplitter Grid.Column="1" 
-                          Width="5" 
+                          Width="6" 
                           HorizontalAlignment="Stretch"
                           Background="#3E3E42"
-                          Cursor="SizeWE"/>
+                          Cursor="SizeWE">
+                <GridSplitter.Template>
+                    <ControlTemplate TargetType="GridSplitter">
+                        <Border Background="#3E3E42">
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <Ellipse Width="3" Height="3" Fill="#808080" Margin="0,2"/>
+                                <Ellipse Width="3" Height="3" Fill="#808080" Margin="0,2"/>
+                                <Ellipse Width="3" Height="3" Fill="#808080" Margin="0,2"/>
+                            </StackPanel>
+                        </Border>
+                    </ControlTemplate>
+                </GridSplitter.Template>
+            </GridSplitter>
             
             <!-- Right Panel - Preview -->
             <Grid Grid.Column="2">
