@@ -165,126 +165,13 @@
             <Setter Property="Margin" Value="4,2"/>
         </Style>
         
-        <!-- ToolBar Style with custom template to style overflow button -->
+        <!-- ToolBar Style - simple styling without custom template -->
         <Style TargetType="ToolBar">
             <Setter Property="Background" Value="{StaticResource ToolbarBackgroundBrush}"/>
             <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="4,2"/>
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="ToolBar">
-                        <Border x:Name="Bd" 
-                                Background="{TemplateBinding Background}" 
-                                BorderBrush="{TemplateBinding BorderBrush}" 
-                                BorderThickness="{TemplateBinding BorderThickness}" 
-                                Padding="{TemplateBinding Padding}">
-                            <DockPanel>
-                                <!-- Overflow Button and Popup -->
-                                <Grid x:Name="OverflowGrid" DockPanel.Dock="Right">
-                                    <ToggleButton x:Name="OverflowButton" 
-                                                  IsEnabled="{TemplateBinding HasOverflowItems}"
-                                                  IsChecked="{Binding IsOverflowOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
-                                                  ClickMode="Press"
-                                                  FocusVisualStyle="{x:Null}">
-                                        <ToggleButton.Style>
-                                            <Style TargetType="ToggleButton">
-                                                <Setter Property="Background" Value="{StaticResource ToolbarBackgroundBrush}"/>
-                                                <Setter Property="Template">
-                                                    <Setter.Value>
-                                                        <ControlTemplate TargetType="ToggleButton">
-                                                            <Border x:Name="overflowBorder" 
-                                                                    Background="{StaticResource ToolbarBackgroundBrush}" 
-                                                                    Padding="6,4"
-                                                                    SnapsToDevicePixels="True">
-                                                                <Grid>
-                                                                    <Path x:Name="arrow" 
-                                                                          Fill="{StaticResource ForegroundBrush}" 
-                                                                          Data="M 0 0 L 6 0 L 3 3 Z"
-                                                                          VerticalAlignment="Bottom" 
-                                                                          HorizontalAlignment="Center"
-                                                                          Margin="0,0,0,2"/>
-                                                                    <ContentPresenter/>
-                                                                </Grid>
-                                                            </Border>
-                                                            <ControlTemplate.Triggers>
-                                                                <Trigger Property="IsMouseOver" Value="True">
-                                                                    <Setter TargetName="overflowBorder" Property="Background" Value="{StaticResource HoverBrush}"/>
-                                                                </Trigger>
-                                                                <Trigger Property="IsChecked" Value="True">
-                                                                    <Setter TargetName="overflowBorder" Property="Background" Value="{StaticResource SelectedBrush}"/>
-                                                                </Trigger>
-                                                                <Trigger Property="IsEnabled" Value="False">
-                                                                    <Setter TargetName="arrow" Property="Fill" Value="{StaticResource DisabledForegroundBrush}"/>
-                                                                    <Setter TargetName="overflowBorder" Property="Visibility" Value="Collapsed"/>
-                                                                </Trigger>
-                                                            </ControlTemplate.Triggers>
-                                                        </ControlTemplate>
-                                                    </Setter.Value>
-                                                </Setter>
-                                            </Style>
-                                        </ToggleButton.Style>
-                                    </ToggleButton>
-                                    <Popup x:Name="OverflowPopup"
-                                           AllowsTransparency="True"
-                                           Placement="Bottom"
-                                           IsOpen="{Binding IsOverflowOpen, RelativeSource={RelativeSource TemplatedParent}}"
-                                           StaysOpen="False"
-                                           Focusable="False"
-                                           PopupAnimation="Slide">
-                                        <Border Background="{StaticResource ToolbarBackgroundBrush}"
-                                                BorderBrush="{StaticResource BorderBrush}"
-                                                BorderThickness="1">
-                                            <ToolBarOverflowPanel x:Name="PART_ToolBarOverflowPanel"
-                                                                  Margin="2"
-                                                                  WrapWidth="200"
-                                                                  Focusable="True"
-                                                                  FocusVisualStyle="{x:Null}"
-                                                                  KeyboardNavigation.TabNavigation="Cycle"
-                                                                  KeyboardNavigation.DirectionalNavigation="Cycle"/>
-                                        </Border>
-                                    </Popup>
-                                </Grid>
-                                <!-- Main Panel -->
-                                <ToolBarPanel x:Name="PART_ToolBarPanel" 
-                                              IsItemsHost="True" 
-                                              Margin="0,1,2,2"/>
-                            </DockPanel>
-                        </Border>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsOverflowOpen" Value="True">
-                                <Setter TargetName="OverflowButton" Property="IsChecked" Value="True"/>
-                            </Trigger>
-                            <Trigger Property="HasOverflowItems" Value="False">
-                                <Setter TargetName="OverflowGrid" Property="Visibility" Value="Collapsed"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        
-        <!-- Thumb style for ToolBar grip -->
-        <Style x:Key="{x:Static ToolBar.ThumbStyleKey}" TargetType="Thumb">
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Thumb">
-                        <Border Background="Transparent" Padding="6,5,1,6" SnapsToDevicePixels="True">
-                            <Rectangle>
-                                <Rectangle.Fill>
-                                    <DrawingBrush TileMode="Tile" Viewbox="0,0,4,4" Viewport="0,0,4,4" ViewportUnits="Absolute" ViewboxUnits="Absolute">
-                                        <DrawingBrush.Drawing>
-                                            <DrawingGroup>
-                                                <GeometryDrawing Brush="{StaticResource BorderBrush}" Geometry="M 1 1 L 1 3 L 3 3 L 3 1 z"/>
-                                            </DrawingGroup>
-                                        </DrawingBrush.Drawing>
-                                    </DrawingBrush>
-                                </Rectangle.Fill>
-                            </Rectangle>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
+            <Setter Property="OverflowMode" Value="Never"/>
         </Style>
         
         <!-- ToolBar Button Style -->
