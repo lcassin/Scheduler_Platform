@@ -500,6 +500,7 @@ Console.WriteLine(""Hello, World!"");
             align-items: flex-start;
             justify-content: flex-start;
             padding: 20px;
+            overflow: auto;
         }}
         #diagram {{
             background: white;
@@ -508,6 +509,10 @@ Console.WriteLine(""Hello, World!"");
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             display: inline-block;
             min-width: 2000px;
+        }}
+        #diagram.has-error {{
+            min-width: auto;
+            max-width: calc(100vw - 60px);
         }}
         #diagram svg {{
             display: block;
@@ -519,8 +524,13 @@ Console.WriteLine(""Hello, World!"");
             padding: 20px;
             font-family: Consolas, monospace;
             white-space: pre-wrap;
+            word-wrap: break-word;
+            word-break: break-word;
+            overflow-wrap: break-word;
             background: #ffebee;
             border-radius: 8px;
+            max-width: 100%;
+            overflow-x: auto;
         }}
     </style>
 </head>
@@ -605,7 +615,9 @@ Console.WriteLine(""Hello, World!"");
             // Add click handlers to diagram nodes for click-to-highlight feature
             setupNodeClickHandlers(svg);
         }}).catch(err => {{
-            document.getElementById('diagram').innerHTML = '<div class=""error"">Error: ' + err.message + '</div>';
+            const diagram = document.getElementById('diagram');
+            diagram.classList.add('has-error');
+            diagram.innerHTML = '<div class=""error"">Error: ' + err.message + '</div>';
         }});
         
         function setupNodeClickHandlers(svg) {{
@@ -2153,6 +2165,7 @@ Console.WriteLine(""Hello, World!"");
             align-items: flex-start;
             justify-content: flex-start;
             padding: 20px;
+            overflow: auto;
         }}
         #diagram {{
             background: white;
@@ -2161,6 +2174,10 @@ Console.WriteLine(""Hello, World!"");
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             display: inline-block;
             min-width: 2000px;
+        }}
+        #diagram.has-error {{
+            min-width: auto;
+            max-width: calc(100vw - 60px);
         }}
         #diagram svg {{
             display: block;
