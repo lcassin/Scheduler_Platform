@@ -409,34 +409,54 @@ Console.WriteLine(""Hello, World!"");
     
     private void StyleToolbarOverflowButtons()
     {
-        // Find all ToolBars in the visual tree and style their overflow buttons
-        var toolBars = FindVisualChildren<System.Windows.Controls.ToolBar>(this);
-        foreach (var toolBar in toolBars)
+        // Use Dispatcher to ensure visual tree is fully built
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
         {
-            toolBar.Loaded += (s, args) =>
+            var darkBrush = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2D2D30"));
+            var foregroundBrush = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F1F1F1"));
+            
+            // Find all ToolBars in the visual tree
+            var toolBars = FindVisualChildren<System.Windows.Controls.ToolBar>(this);
+            foreach (var toolBar in toolBars)
             {
-                // Find the overflow button (ToggleButton) in the toolbar
-                var overflowButton = FindVisualChild<System.Windows.Controls.Primitives.ToggleButton>(toolBar);
-                if (overflowButton != null)
+                // Find the overflow button by looking for ToggleButton in the toolbar
+                var toggleButtons = FindVisualChildren<System.Windows.Controls.Primitives.ToggleButton>(toolBar);
+                foreach (var toggleButton in toggleButtons)
                 {
-                    // Style the overflow button with dark background
-                    var darkBrush = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2D2D30"));
-                    var hoverBrush = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#3E3E42"));
-                    var foregroundBrush = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F1F1F1"));
+                    // Style the toggle button itself
+                    toggleButton.Background = darkBrush;
+                    toggleButton.Foreground = foregroundBrush;
+                    toggleButton.BorderThickness = new Thickness(0);
+                    toggleButton.BorderBrush = darkBrush;
                     
-                    overflowButton.Background = darkBrush;
-                    overflowButton.Foreground = foregroundBrush;
-                    overflowButton.BorderThickness = new Thickness(0);
+                    // Style all Border elements inside the toggle button
+                    var borders = FindVisualChildren<System.Windows.Controls.Border>(toggleButton);
+                    foreach (var border in borders)
+                    {
+                        border.Background = darkBrush;
+                        border.BorderBrush = darkBrush;
+                    }
                     
-                    // Also style any Path elements (arrows) inside
-                    var paths = FindVisualChildren<System.Windows.Shapes.Path>(overflowButton);
+                    // Style all Path elements (arrows) inside
+                    var paths = FindVisualChildren<System.Windows.Shapes.Path>(toggleButton);
                     foreach (var path in paths)
                     {
                         path.Fill = foregroundBrush;
                     }
                 }
-            };
-        }
+                
+                // Also find and style any Grid or Panel backgrounds in the toolbar's overflow area
+                var grids = FindVisualChildren<System.Windows.Controls.Grid>(toolBar);
+                foreach (var grid in grids)
+                {
+                    // Only style grids that are small (likely the overflow button container)
+                    if (grid.ActualWidth < 30 && grid.ActualWidth > 0)
+                    {
+                        grid.Background = darkBrush;
+                    }
+                }
+            }
+        }));
     }
     
     private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
