@@ -2070,14 +2070,14 @@ Console.WriteLine(""Hello, World!"");
             "- Live preview as you type\n" +
             "- Mermaid diagram rendering with pan/zoom\n" +
             "- Markdown rendering with GitHub styling\n" +
-            "- Syntax highlighting and IntelliSense\n" +
-            "- Export to PNG and SVG\n" +
+            "- On Click Syntax highlighting and IntelliSense\n" +
+            "- Export to PNG, SVG, EMF and Word\n" +
             "- File open/save support\n" +
             "- Drag and drop file support\n\n" +
             "Supported file types:\n" +
             "- .mmd, .mermaid - Mermaid diagrams\n" +
             "- .md - Markdown files\n\n" +
-            "Built with WPF, AvalonEdit, and WebView2",
+			"© 2026 Lee Cassin",
             "About Mermaid Editor",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
