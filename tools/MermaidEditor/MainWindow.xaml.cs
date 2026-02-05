@@ -2261,16 +2261,16 @@ Console.WriteLine(""Hello, World!"");
     private Drawing? EmbedImageInWord(MainDocumentPart mainPart, byte[] imageBytes, string imagePath)
     {
         var extension = Path.GetExtension(imagePath).ToLowerInvariant();
-        var contentType = extension switch
+        var imagePartType = extension switch
         {
-            ".png" => "image/png",
-            ".jpg" or ".jpeg" => "image/jpeg",
-            ".gif" => "image/gif",
-            ".bmp" => "image/bmp",
-            _ => "image/png"
+            ".png" => ImagePartType.Png,
+            ".jpg" or ".jpeg" => ImagePartType.Jpeg,
+            ".gif" => ImagePartType.Gif,
+            ".bmp" => ImagePartType.Bmp,
+            _ => ImagePartType.Png
         };
 
-        var imagePart = mainPart.AddNewPart<ImagePart>(contentType, null);
+        var imagePart = mainPart.AddImagePart(imagePartType);
         using (var stream = new MemoryStream(imageBytes))
         {
             imagePart.FeedData(stream);
