@@ -256,14 +256,14 @@ Console.WriteLine(""Hello, World!"");
         
         if (_recentFiles.Count == 0)
         {
-            var emptyItem = new MenuItem { Header = "(No recent files)", IsEnabled = false };
+            var emptyItem = new System.Windows.Controls.MenuItem { Header = "(No recent files)", IsEnabled = false };
             RecentFilesMenuItem.Items.Add(emptyItem);
             return;
         }
         
         foreach (var filePath in _recentFiles)
         {
-            var menuItem = new MenuItem
+            var menuItem = new System.Windows.Controls.MenuItem
             {
                 Header = Path.GetFileName(filePath),
                 ToolTip = filePath
@@ -274,7 +274,7 @@ Console.WriteLine(""Hello, World!"");
         
         RecentFilesMenuItem.Items.Add(new Separator());
         
-        var clearItem = new MenuItem { Header = "Clear Recent Files" };
+        var clearItem = new System.Windows.Controls.MenuItem { Header = "Clear Recent Files" };
         clearItem.Click += (s, e) =>
         {
             _recentFiles.Clear();
