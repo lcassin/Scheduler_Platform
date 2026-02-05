@@ -49,6 +49,7 @@ public partial class MainWindow : Window
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
     
     private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+    private const int DWMWA_CAPTION_COLOR = 35;
     
     private string? _currentFilePath;
     private bool _isDirty;
@@ -183,6 +184,11 @@ Console.WriteLine(""Hello, World!"");
             {
                 int value = 1; // Enable dark mode
                 DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref value, sizeof(int));
+                
+                // Set caption color to dark gray (#1E1E1E) to override Windows accent color
+                // Color format is 0x00BBGGRR (BGR, not RGB)
+                int captionColor = 0x001E1E1E; // #1E1E1E in BGR format
+                DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ref captionColor, sizeof(int));
             }
         }
         catch
