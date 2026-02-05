@@ -22,7 +22,7 @@
         <SolidColorBrush x:Key="BorderBrush" Color="#3E3E42"/>
         <SolidColorBrush x:Key="ForegroundBrush" Color="#F1F1F1"/>
         <SolidColorBrush x:Key="AccentBrush" Color="#007ACC"/>
-        <SolidColorBrush x:Key="PurpleAccentBrush" Color="#68217A"/>
+        <SolidColorBrush x:Key="PurpleAccentBrush" Color="#9184EE"/>
         <SolidColorBrush x:Key="HoverBrush" Color="#3E3E42"/>
         <SolidColorBrush x:Key="SelectedBrush" Color="#094771"/>
         <SolidColorBrush x:Key="DisabledForegroundBrush" Color="#656565"/>
