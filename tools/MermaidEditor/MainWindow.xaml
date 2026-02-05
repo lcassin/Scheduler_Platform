@@ -944,6 +944,11 @@
                 
                 <Border Grid.Row="0" Background="#2D2D30" Padding="8,4">
                     <StackPanel Orientation="Horizontal">
+                        <Button x:Name="PreviewBackButton" Click="PreviewBack_Click" ToolTip="Go Back" 
+                                Style="{StaticResource ToolbarButtonStyle}" Padding="4,2" Margin="0,0,4,0"
+                                IsEnabled="False">
+                            <TextBlock Text="&#xE72B;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                        </Button>
                         <TextBlock Text="&#xE8FF;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="White" VerticalAlignment="Center"/>
                         <TextBlock Text="Preview" Foreground="White" FontWeight="SemiBold" Margin="6,0,0,0" VerticalAlignment="Center"/>
                     </StackPanel>

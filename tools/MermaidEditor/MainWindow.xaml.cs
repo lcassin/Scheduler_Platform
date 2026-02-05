@@ -558,6 +558,10 @@ Console.WriteLine(""Hello, World!"");
         {
             await PreviewWebView.EnsureCoreWebView2Async();
             _webViewInitialized = true;
+            
+            // Set up navigation completed handler to update back button state
+            PreviewWebView.CoreWebView2.NavigationCompleted += CoreWebView2_NavigationCompleted;
+            
             RenderPreview();
             
             // Style the toolbar overflow button programmatically
@@ -570,6 +574,20 @@ Console.WriteLine(""Hello, World!"");
         {
             MessageBox.Show($"Failed to initialize WebView2: {ex.Message}\n\nMake sure WebView2 Runtime is installed.",
                 "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+    
+    private void CoreWebView2_NavigationCompleted(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
+    {
+        // Update back button enabled state based on whether we can go back
+        PreviewBackButton.IsEnabled = PreviewWebView.CoreWebView2.CanGoBack;
+    }
+    
+    private void PreviewBack_Click(object sender, RoutedEventArgs e)
+    {
+        if (PreviewWebView.CoreWebView2?.CanGoBack == true)
+        {
+            PreviewWebView.CoreWebView2.GoBack();
         }
     }
     
