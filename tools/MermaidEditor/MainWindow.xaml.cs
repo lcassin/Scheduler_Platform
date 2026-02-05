@@ -1,9 +1,11 @@
 using System.IO;
 using System.IO.Compression;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using DocumentFormat.OpenXml;
@@ -42,6 +44,12 @@ public enum RenderMode
 
 public partial class MainWindow : Window
 {
+    // P/Invoke for dark title bar
+    [DllImport("dwmapi.dll", PreserveSig = true)]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+    
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+    
     private string? _currentFilePath;
     private bool _isDirty;
     private double _currentZoom = 1.0;
@@ -55,8 +63,13 @@ public partial class MainWindow : Window
     private string? _lastExportDirectory;
     private string? _currentVirtualHostFolder;
     private const string VirtualHostName = "localfiles.mermaideditor";
+    private List<string> _recentFiles = new();
+    private const int MaxRecentFiles = 10;
+    private static readonly string RecentFilesPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "MermaidEditor", "recent.json");
 
-    private const string DefaultMermaidCode = @"flowchart TD
+    private const string DefaultMermaidCode= @"flowchart TD
     A[Start] --> B{Is it working?}
     B -->|Yes| C[Great!]
     B -->|No| D[Debug]
@@ -113,6 +126,7 @@ Console.WriteLine(""Hello, World!"");
 
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
+        SourceInitialized += MainWindow_SourceInitialized;
 
         SetupCodeEditor();
         
@@ -155,6 +169,142 @@ Console.WriteLine(""Hello, World!"");
             CodeEditor.Text = DefaultMermaidCode;
             _isDirty = false;
         }
+        
+        AddToRecentFiles(filePath);
+    }
+
+    private void MainWindow_SourceInitialized(object? sender, EventArgs e)
+    {
+        // Enable dark title bar on Windows 10/11
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd != IntPtr.Zero)
+            {
+                int value = 1; // Enable dark mode
+                DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref value, sizeof(int));
+            }
+        }
+        catch
+        {
+            // Silently fail if DWM API is not available (older Windows versions)
+        }
+    }
+
+    private void LoadRecentFiles()
+    {
+        try
+        {
+            if (File.Exists(RecentFilesPath))
+            {
+                var json = File.ReadAllText(RecentFilesPath);
+                _recentFiles = System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+            }
+        }
+        catch
+        {
+            _recentFiles = new List<string>();
+        }
+        UpdateRecentFilesMenu();
+    }
+
+    private void SaveRecentFiles()
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(RecentFilesPath);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+            var json = System.Text.Json.JsonSerializer.Serialize(_recentFiles);
+            File.WriteAllText(RecentFilesPath, json);
+        }
+        catch
+        {
+            // Silently fail if we can't save recent files
+        }
+    }
+
+    private void AddToRecentFiles(string filePath)
+    {
+        // Remove if already exists (to move to top)
+        _recentFiles.Remove(filePath);
+        
+        // Add to beginning
+        _recentFiles.Insert(0, filePath);
+        
+        // Keep only MaxRecentFiles
+        if (_recentFiles.Count > MaxRecentFiles)
+        {
+            _recentFiles = _recentFiles.Take(MaxRecentFiles).ToList();
+        }
+        
+        SaveRecentFiles();
+        UpdateRecentFilesMenu();
+    }
+
+    private void UpdateRecentFilesMenu()
+    {
+        RecentFilesMenuItem.Items.Clear();
+        
+        if (_recentFiles.Count == 0)
+        {
+            var emptyItem = new MenuItem { Header = "(No recent files)", IsEnabled = false };
+            RecentFilesMenuItem.Items.Add(emptyItem);
+            return;
+        }
+        
+        foreach (var filePath in _recentFiles)
+        {
+            var menuItem = new MenuItem
+            {
+                Header = Path.GetFileName(filePath),
+                ToolTip = filePath
+            };
+            menuItem.Click += (s, e) => OpenRecentFile(filePath);
+            RecentFilesMenuItem.Items.Add(menuItem);
+        }
+        
+        RecentFilesMenuItem.Items.Add(new Separator());
+        
+        var clearItem = new MenuItem { Header = "Clear Recent Files" };
+        clearItem.Click += (s, e) =>
+        {
+            _recentFiles.Clear();
+            SaveRecentFiles();
+            UpdateRecentFilesMenu();
+        };
+        RecentFilesMenuItem.Items.Add(clearItem);
+    }
+
+    private void OpenRecentFile(string filePath)
+    {
+        if (!File.Exists(filePath))
+        {
+            MessageBox.Show($"File not found: {filePath}\n\nIt will be removed from the recent files list.", 
+                "File Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
+            _recentFiles.Remove(filePath);
+            SaveRecentFiles();
+            UpdateRecentFilesMenu();
+            return;
+        }
+        
+        if (_isDirty)
+        {
+            var result = MessageBox.Show("Do you want to save changes?", "Unsaved Changes",
+                MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+            if (result == MessageBoxResult.Yes)
+            {
+                Save_Click(this, new RoutedEventArgs());
+            }
+            else if (result == MessageBoxResult.Cancel)
+            {
+                return;
+            }
+        }
+        
+        LoadFile(filePath);
     }
 
     private void SetupCodeEditor()
@@ -406,6 +556,9 @@ Console.WriteLine(""Hello, World!"");
             
             // Style the toolbar overflow button programmatically
             StyleToolbarOverflowButtons();
+            
+            // Load recent files
+            LoadRecentFiles();
         }
         catch (Exception ex)
         {
@@ -1084,6 +1237,38 @@ Console.WriteLine(""Hello, World!"");
                 }});
             }});
             
+            // Add click handlers to bold text (strong)
+            content.querySelectorAll('strong').forEach(el => {{
+                el.style.cursor = 'pointer';
+                el.addEventListener('click', function(e) {{
+                    e.stopPropagation();
+                    const text = el.textContent.trim();
+                    if (text) {{
+                        window.chrome.webview.postMessage({{ 
+                            type: 'elementClick', 
+                            text: text,
+                            elementType: 'bold'
+                        }});
+                    }}
+                }});
+            }});
+            
+            // Add click handlers to italic text (em)
+            content.querySelectorAll('em').forEach(el => {{
+                el.style.cursor = 'pointer';
+                el.addEventListener('click', function(e) {{
+                    e.stopPropagation();
+                    const text = el.textContent.trim();
+                    if (text) {{
+                        window.chrome.webview.postMessage({{ 
+                            type: 'elementClick', 
+                            text: text,
+                            elementType: 'italic'
+                        }});
+                    }}
+                }});
+            }});
+            
             // Add click handlers to paragraphs (but not if they contain other clickable elements)
             content.querySelectorAll('p').forEach(el => {{
                 if (!el.querySelector('code')) {{
@@ -1240,6 +1425,50 @@ Console.WriteLine(""Hello, World!"");
                                 bestMatchStart = idx;
                                 bestMatchLength = text.Length;
                             }
+                            break;
+                        }
+                    }
+                    else if (elementType == "bold")
+                    {
+                        // Look for bold markers **text** or __text__
+                        var boldPattern1 = $@"\*\*{System.Text.RegularExpressions.Regex.Escape(text)}\*\*";
+                        var boldPattern2 = $@"__{System.Text.RegularExpressions.Regex.Escape(text)}__";
+                        var match1 = System.Text.RegularExpressions.Regex.Match(line, boldPattern1, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        var match2 = System.Text.RegularExpressions.Regex.Match(line, boldPattern2, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        if (match1.Success)
+                        {
+                            bestLineIndex = i;
+                            bestMatchStart = match1.Index;
+                            bestMatchLength = match1.Length;
+                            break;
+                        }
+                        else if (match2.Success)
+                        {
+                            bestLineIndex = i;
+                            bestMatchStart = match2.Index;
+                            bestMatchLength = match2.Length;
+                            break;
+                        }
+                    }
+                    else if (elementType == "italic")
+                    {
+                        // Look for italic markers *text* or _text_
+                        var italicPattern1 = $@"(?<!\*)\*(?!\*){System.Text.RegularExpressions.Regex.Escape(text)}\*(?!\*)";
+                        var italicPattern2 = $@"(?<!_)_(?!_){System.Text.RegularExpressions.Regex.Escape(text)}_(?!_)";
+                        var match1 = System.Text.RegularExpressions.Regex.Match(line, italicPattern1, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        var match2 = System.Text.RegularExpressions.Regex.Match(line, italicPattern2, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        if (match1.Success)
+                        {
+                            bestLineIndex = i;
+                            bestMatchStart = match1.Index;
+                            bestMatchLength = match1.Length;
+                            break;
+                        }
+                        else if (match2.Success)
+                        {
+                            bestLineIndex = i;
+                            bestMatchStart = match2.Index;
+                            bestMatchLength = match2.Length;
                             break;
                         }
                     }
