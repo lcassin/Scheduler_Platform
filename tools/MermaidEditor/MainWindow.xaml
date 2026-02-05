@@ -259,7 +259,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TabItem">
-                        <Grid x:Name="tabGrid" Margin="0,0,0,0">
+                        <Grid x:Name="tabGrid" Margin="0,0,0,1">
                             <Border x:Name="border" 
                                     Background="{TemplateBinding Background}"
                                     BorderThickness="1,1,1,0"
