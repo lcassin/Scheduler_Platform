@@ -2327,27 +2327,37 @@ Console.WriteLine(""Hello, World!"");
         }
 
         // Get image dimensions
-        int widthEmu, heightEmu;
+        long widthEmu, heightEmu;
         using (var stream = new MemoryStream(imageBytes))
         {
             using var bitmap = new System.Drawing.Bitmap(stream);
             // Convert pixels to EMUs (914400 EMUs per inch, assuming 96 DPI)
-            widthEmu = (int)(bitmap.Width * 914400 / 96);
-            heightEmu = (int)(bitmap.Height * 914400 / 96);
+            // Use long to avoid integer overflow with large images
+            widthEmu = (long)bitmap.Width * 914400L / 96L;
+            heightEmu = (long)bitmap.Height * 914400L / 96L;
 
-            // Limit max width to 6 inches
-            var maxWidthEmu = 6 * 914400;
+            // Limit max width to 6 inches (5486400 EMUs)
+            const long maxWidthEmu = 6L * 914400L;
             if (widthEmu > maxWidthEmu)
             {
                 var ratio = (double)maxWidthEmu / widthEmu;
                 widthEmu = maxWidthEmu;
-                heightEmu = (int)(heightEmu * ratio);
+                heightEmu = (long)(heightEmu * ratio);
+            }
+            
+            // Limit max height to 9 inches (8229600 EMUs) to fit on page
+            const long maxHeightEmu = 9L * 914400L;
+            if (heightEmu > maxHeightEmu)
+            {
+                var ratio = (double)maxHeightEmu / heightEmu;
+                heightEmu = maxHeightEmu;
+                widthEmu = (long)(widthEmu * ratio);
             }
         }
 
         var relationshipId = mainPart.GetIdOfPart(imagePart);
         var imageName = Path.GetFileNameWithoutExtension(imagePath);
-        return CreateImageElement(relationshipId, widthEmu, heightEmu, imageName);
+        return CreateImageElement(relationshipId, (int)widthEmu, (int)heightEmu, imageName);
     }
 
     private void UpdateExportMenuVisibility()
