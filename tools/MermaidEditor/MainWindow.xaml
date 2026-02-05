@@ -705,6 +705,7 @@
                                   Grid.Row="0"
                                   Style="{StaticResource NavigationComboBoxStyle}"
                                   BorderThickness="0,0,0,1"
+                                  Margin="0,0,0,4"
                                   SelectionChanged="NavigationDropdown_SelectionChanged"
                                   ToolTip="Jump to section">
                             <ComboBox.ItemTemplate>
