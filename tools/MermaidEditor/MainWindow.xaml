@@ -254,16 +254,17 @@
             <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Margin" Value="0,0,1,-2"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TabItem">
                         <Border x:Name="border" 
                                 Background="{TemplateBinding Background}"
-                                BorderThickness="0,2,0,0"
+                                BorderThickness="2,2,2,0"
                                 BorderBrush="Transparent"
                                 CornerRadius="4,4,0,0"
                                 Padding="{TemplateBinding Padding}"
-                                Margin="0,0,1,0">
+                                Margin="0">
                             <ContentPresenter x:Name="contentPresenter"
                                               ContentSource="Header"
                                               HorizontalAlignment="Center"
@@ -271,7 +272,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource HoverBrush}"/>
+                                <Setter TargetName="border" Property="Background" Value="#1E1E1E"/>
                                 <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource PurpleAccentBrush}"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -645,19 +646,6 @@
                     </ToolBarTray>
                 </Border>
                 
-                <!-- Navigation Dropdown -->
-                <ComboBox x:Name="NavigationDropdown" 
-                          Style="{StaticResource NavigationComboBoxStyle}"
-                          Margin="6,0,0,0"
-                          VerticalAlignment="Center"
-                          SelectionChanged="NavigationDropdown_SelectionChanged"
-                          ToolTip="Jump to section">
-                    <ComboBox.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding DisplayText}" Margin="{Binding IndentMargin}"/>
-                        </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                </ComboBox>
             </StackPanel>
         </Border>
         
@@ -671,6 +659,28 @@
             
             <!-- Left Panel - Tabbed Code Editor / File Browser -->
             <TabControl x:Name="LeftPanelTabs" Grid.Column="0" Background="#2D2D30">
+                <TabControl.Template>
+                    <ControlTemplate TargetType="TabControl">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <!-- Tab Header Panel -->
+                            <TabPanel Grid.Row="0" 
+                                       IsItemsHost="True" 
+                                       Background="#2D2D30"
+                                       Margin="0,0,0,0"/>
+                            <!-- Content area with purple border -->
+                            <Border Grid.Row="1" 
+                                    BorderBrush="{StaticResource PurpleAccentBrush}" 
+                                    BorderThickness="2,2,2,0"
+                                    Background="#1E1E1E">
+                                <ContentPresenter ContentSource="SelectedContent"/>
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </TabControl.Template>
                 <!-- Code Tab -->
                 <TabItem x:Name="CodeTab">
                     <TabItem.Header>
@@ -679,8 +689,32 @@
                             <TextBlock x:Name="EditorHeaderText" Text="Code" Margin="6,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                     </TabItem.Header>
-                    <Border BorderBrush="{StaticResource PurpleAccentBrush}" BorderThickness="2,0,0,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        
+                        <!-- Navigation Dropdown Bar -->
+                        <ComboBox x:Name="NavigationDropdown" 
+                                  Grid.Row="0"
+                                  Background="#2D2D30"
+                                  Foreground="#F1F1F1"
+                                  BorderBrush="#3E3E42"
+                                  BorderThickness="0,0,0,1"
+                                  Padding="8,6"
+                                  SelectionChanged="NavigationDropdown_SelectionChanged"
+                                  ToolTip="Jump to section">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding DisplayText}" Foreground="#F1F1F1" Margin="{Binding IndentMargin}"/>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        
+                        <!-- Code Editor -->
                         <avalon:TextEditor x:Name="CodeEditor" 
+                                 Grid.Row="1"
                                  FontFamily="Consolas"
                                  FontSize="14"
                                  Background="#1E1E1E"
@@ -689,7 +723,7 @@
                                  WordWrap="False"
                                  HorizontalScrollBarVisibility="Auto"
                                  VerticalScrollBarVisibility="Auto"/>
-                    </Border>
+                    </Grid>
                 </TabItem>
                 
                 <!-- Files Tab -->

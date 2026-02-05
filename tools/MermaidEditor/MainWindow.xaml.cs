@@ -2930,19 +2930,61 @@ Console.WriteLine(""Hello, World!"");
         var items = new List<NavigationItem>();
         var lines = CodeEditor.Text.Split('\n');
         
+        // Diagram types to look for
+        var diagramTypes = new[] { "flowchart", "graph", "sequenceDiagram", "classDiagram", 
+            "stateDiagram", "stateDiagram-v2", "erDiagram", "journey", "gantt", "pie", 
+            "quadrantChart", "requirementDiagram", "gitGraph", "mindmap", "timeline",
+            "zenuml", "sankey-beta", "xychart-beta", "block-beta" };
+        
+        bool foundDiagramType = false;
+        
         for (int i = 0; i < lines.Length; i++)
         {
             var line = lines[i].Trim();
+            
+            // Skip frontmatter config lines
+            if (line == "---" || line.StartsWith("config:") || line.StartsWith("look:") || 
+                line.StartsWith("theme:") || line.StartsWith("layout:"))
+                continue;
+            
+            // Check for diagram type declaration
+            if (!foundDiagramType)
+            {
+                foreach (var diagramType in diagramTypes)
+                {
+                    if (line.StartsWith(diagramType, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var displayName = diagramType;
+                        // Extract direction if present (e.g., "flowchart TD" -> "Flowchart (TD)")
+                        var parts = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (parts.Length > 1)
+                        {
+                            displayName = $"{diagramType} ({parts[1]})";
+                        }
+                        
+                        items.Add(new NavigationItem
+                        {
+                            DisplayText = displayName,
+                            RawText = line,
+                            LineNumber = i + 1,
+                            Level = 1,
+                            HeadingId = ""
+                        });
+                        foundDiagramType = true;
+                        break;
+                    }
+                }
+            }
             
             if (line.StartsWith("subgraph ", StringComparison.OrdinalIgnoreCase))
             {
                 var name = line.Substring(9).Trim();
                 items.Add(new NavigationItem
                 {
-                    DisplayText = "Subgraph: " + name,
+                    DisplayText = "  Subgraph: " + name,
                     RawText = line,
                     LineNumber = i + 1,
-                    Level = 1,
+                    Level = 2,
                     HeadingId = ""
                 });
             }
@@ -2953,10 +2995,10 @@ Console.WriteLine(""Hello, World!"");
                 {
                     items.Add(new NavigationItem
                     {
-                        DisplayText = "State: " + match.Groups[1].Value,
+                        DisplayText = "  State: " + match.Groups[1].Value,
                         RawText = line,
                         LineNumber = i + 1,
-                        Level = 1,
+                        Level = 2,
                         HeadingId = ""
                     });
                 }
@@ -2968,7 +3010,7 @@ Console.WriteLine(""Hello, World!"");
                 {
                     items.Add(new NavigationItem
                     {
-                        DisplayText = "// " + comment,
+                        DisplayText = "  // " + comment,
                         RawText = line,
                         LineNumber = i + 1,
                         Level = 2,
