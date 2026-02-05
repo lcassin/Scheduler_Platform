@@ -1,5 +1,5 @@
 using System.IO;
-using System.IO.Packaging;
+using System.IO.Compression;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Input;
@@ -2011,15 +2011,16 @@ Console.WriteLine(""Hello, World!"");
     
     private static void FixWordDocumentContentTypes(string docxPath)
     {
-        // Open the docx as a ZIP package and fix the [Content_Types].xml
-        using var package = Package.Open(docxPath, FileMode.Open, FileAccess.ReadWrite);
+        // Open the docx as a ZIP archive and fix the [Content_Types].xml
+        using var archive = ZipFile.Open(docxPath, ZipArchiveMode.Update);
         
-        // Get the content types part
-        var contentTypesPart = package.GetPart(new Uri("/[Content_Types].xml", UriKind.Relative));
+        // Get the content types entry
+        var contentTypesEntry = archive.GetEntry("[Content_Types].xml");
+        if (contentTypesEntry == null) return;
         
         // Read the current content
         string content;
-        using (var stream = contentTypesPart.GetStream(FileMode.Open, FileAccess.Read))
+        using (var stream = contentTypesEntry.Open())
         using (var reader = new StreamReader(stream))
         {
             content = reader.ReadToEnd();
@@ -2039,9 +2040,11 @@ Console.WriteLine(""Hello, World!"");
                 "</Types>",
                 "<Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\" /></Types>");
             
-            // Write the fixed content back
-            using var stream = contentTypesPart.GetStream(FileMode.Create, FileAccess.Write);
-            using var writer = new StreamWriter(stream);
+            // Delete the old entry and create a new one with the fixed content
+            contentTypesEntry.Delete();
+            var newEntry = archive.CreateEntry("[Content_Types].xml");
+            using var writeStream = newEntry.Open();
+            using var writer = new StreamWriter(writeStream);
             writer.Write(content);
         }
     }
