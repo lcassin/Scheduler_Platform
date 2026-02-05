@@ -481,6 +481,136 @@ quadrantChart
     Task F: [0.9, 0.4]");
     }
 
+    private void Requirement_Click(object sender, RoutedEventArgs e)
+    {
+        SetTemplateAndClose(@"---
+config:
+  theme: default
+---
+requirementDiagram
+
+    requirement User_Authentication {
+        id: REQ-001
+        text: The system shall authenticate users
+        risk: high
+        verifymethod: test
+    }
+
+    requirement Password_Policy {
+        id: REQ-002
+        text: Passwords must be at least 8 characters
+        risk: medium
+        verifymethod: inspection
+    }
+
+    requirement Session_Management {
+        id: REQ-003
+        text: Sessions shall expire after 30 minutes
+        risk: medium
+        verifymethod: test
+    }
+
+    functionalRequirement Login_Page {
+        id: REQ-004
+        text: System shall provide a login page
+        risk: low
+        verifymethod: demonstration
+    }
+
+    performanceRequirement Response_Time {
+        id: REQ-005
+        text: Login shall complete within 2 seconds
+        risk: medium
+        verifymethod: test
+    }
+
+    interfaceRequirement API_Auth {
+        id: REQ-006
+        text: API shall support OAuth 2.0
+        risk: high
+        verifymethod: inspection
+    }
+
+    element Auth_Module {
+        type: module
+        docRef: AUTH-DOC-001
+    }
+
+    element Login_Component {
+        type: component
+        docRef: LOGIN-DOC-001
+    }
+
+    User_Authentication - traces -> Password_Policy
+    User_Authentication - traces -> Session_Management
+    User_Authentication - contains -> Login_Page
+    Login_Page - derives -> Response_Time
+    Auth_Module - satisfies -> User_Authentication
+    Login_Component - satisfies -> Login_Page
+    API_Auth - refines -> User_Authentication
+
+    %% Requirement types:
+    %% requirement - Generic requirement
+    %% functionalRequirement - Functional requirement
+    %% performanceRequirement - Performance requirement
+    %% interfaceRequirement - Interface requirement
+    %% physicalRequirement - Physical requirement
+    %% designConstraint - Design constraint
+
+    %% Relationship types:
+    %% contains - Parent contains child
+    %% copies - Copies another requirement
+    %% derives - Derived from another
+    %% satisfies - Element satisfies requirement
+    %% verifies - Element verifies requirement
+    %% refines - Refines another requirement
+    %% traces - Traces to another requirement");
+    }
+
+    private void C4_Click(object sender, RoutedEventArgs e)
+    {
+        SetTemplateAndClose(@"---
+config:
+  theme: default
+---
+C4Context
+    title System Context Diagram for E-Commerce Platform
+
+    Person(customer, ""Customer"", ""A user who browses and purchases products"")
+    Person(admin, ""Administrator"", ""Manages products and orders"")
+
+    System(ecommerce, ""E-Commerce Platform"", ""Allows customers to browse and purchase products"")
+
+    System_Ext(payment, ""Payment Gateway"", ""Handles payment processing"")
+    System_Ext(shipping, ""Shipping Service"", ""Manages order delivery"")
+    System_Ext(email, ""Email Service"", ""Sends notifications"")
+
+    Rel(customer, ecommerce, ""Browses products, places orders"")
+    Rel(admin, ecommerce, ""Manages inventory, processes orders"")
+    Rel(ecommerce, payment, ""Processes payments"", ""HTTPS"")
+    Rel(ecommerce, shipping, ""Creates shipments"", ""REST API"")
+    Rel(ecommerce, email, ""Sends notifications"", ""SMTP"")
+
+    UpdateLayoutConfig($c4ShapeInRow=""3"", $c4BoundaryInRow=""1"")
+
+    %% C4 Elements:
+    %% Person(alias, label, description) - A person/user
+    %% Person_Ext(alias, label, description) - External person
+    %% System(alias, label, description) - Your system
+    %% System_Ext(alias, label, description) - External system
+    %% SystemDb(alias, label, description) - Database system
+    %% SystemDb_Ext(alias, label, description) - External database
+    %% Container(alias, label, technology, description) - Container
+    %% ContainerDb(alias, label, technology, description) - Database container
+    %% Component(alias, label, technology, description) - Component
+    %% Boundary(alias, label) - Boundary grouping
+
+    %% Relationships:
+    %% Rel(from, to, label) - Relationship
+    %% Rel(from, to, label, technology) - Relationship with tech
+    %% BiRel(from, to, label) - Bidirectional relationship");
+    }
+
     private void Cancel_Click(object sender, RoutedEventArgs e)
     {
         DialogResult = false;

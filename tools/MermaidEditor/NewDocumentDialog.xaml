@@ -166,6 +166,22 @@
                         <TextBlock Text="Four-quadrant analysis chart" Foreground="#808080" FontSize="11"/>
                     </StackPanel>
                 </Button>
+                
+                <TextBlock Text="Requirement Diagrams" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                <Button Style="{StaticResource TemplateButtonStyle}" Click="Requirement_Click">
+                    <StackPanel>
+                        <TextBlock Text="Requirement Diagram" FontWeight="SemiBold"/>
+                        <TextBlock Text="Requirements traceability and relationships" Foreground="#808080" FontSize="11"/>
+                    </StackPanel>
+                </Button>
+                
+                <TextBlock Text="C4 Diagrams" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                <Button Style="{StaticResource TemplateButtonStyle}" Click="C4_Click">
+                    <StackPanel>
+                        <TextBlock Text="C4 Context Diagram" FontWeight="SemiBold"/>
+                        <TextBlock Text="System context with people, systems, and containers" Foreground="#808080" FontSize="11"/>
+                    </StackPanel>
+                </Button>
             </StackPanel>
         </ScrollViewer>
         
