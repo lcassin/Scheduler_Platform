@@ -2457,21 +2457,28 @@ Console.WriteLine(""Hello, World!"");
     private void About_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show(
-
             "Mermaid Editor v1.7\n\n" +
-            "A simple IDE for editing Mermaid diagrams and Markdown files.\n\n" +
+            "A visual IDE for editing Mermaid diagrams and Markdown files.\n\n" +
             "Features:\n" +
             "- Live preview as you type\n" +
             "- Mermaid diagram rendering with pan/zoom\n" +
             "- Markdown rendering with GitHub styling\n" +
-            "- On Click Syntax highlighting and IntelliSense\n" +
-            "- Export to PNG, SVG, EMF and Word\n" +
-            "- File open/save support\n" +
-            "- Drag and drop file support\n\n" +
+            "- Syntax highlighting and IntelliSense\n" +
+            "- Click-to-navigate between preview and code\n" +
+            "- Navigation dropdown for quick section jumping\n" +
+            "- Export to PNG, SVG, EMF, and Word\n" +
+            "- Word export embeds images for Markdown files\n" +
+            "- New document templates for all diagram types\n" +
+            "- File browser with preview on selection\n" +
+            "- Drag and drop file support\n" +
+            "- Undo/Redo support\n\n" +
             "Supported file types:\n" +
             "- .mmd, .mermaid - Mermaid diagrams\n" +
             "- .md - Markdown files\n\n" +
-			"� 2026 Lee Cassin",
+            "\u00A9 2026 Lee Cassin\n\n" +
+            "Licensed under the GNU General Public License v3.0\n" +
+            "This is free software; you are free to change and redistribute it.\n" +
+            "See LICENSE file for details.",
             "About Mermaid Editor",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
@@ -2934,9 +2941,11 @@ Console.WriteLine(""Hello, World!"");
         var diagramTypes = new[] { "flowchart", "graph", "sequenceDiagram", "classDiagram", 
             "stateDiagram", "stateDiagram-v2", "erDiagram", "journey", "gantt", "pie", 
             "quadrantChart", "requirementDiagram", "gitGraph", "mindmap", "timeline",
-            "zenuml", "sankey-beta", "xychart-beta", "block-beta" };
+            "zenuml", "sankey-beta", "xychart-beta", "block-beta", "C4Context", "C4Container", 
+            "C4Component", "C4Dynamic", "C4Deployment" };
         
         bool foundDiagramType = false;
+        string currentDiagramType = "";
         
         for (int i = 0; i < lines.Length; i++)
         {
@@ -2955,6 +2964,7 @@ Console.WriteLine(""Hello, World!"");
                     if (line.StartsWith(diagramType, StringComparison.OrdinalIgnoreCase))
                     {
                         var displayName = diagramType;
+                        currentDiagramType = diagramType.ToLower();
                         // Extract direction if present (e.g., "flowchart TD" -> "Flowchart (TD)")
                         var parts = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
                         if (parts.Length > 1)
@@ -2976,6 +2986,7 @@ Console.WriteLine(""Hello, World!"");
                 }
             }
             
+            // Subgraphs (flowchart/graph)
             if (line.StartsWith("subgraph ", StringComparison.OrdinalIgnoreCase))
             {
                 var name = line.Substring(9).Trim();
@@ -2988,6 +2999,7 @@ Console.WriteLine(""Hello, World!"");
                     HeadingId = ""
                 });
             }
+            // State definitions (stateDiagram)
             else if (line.StartsWith("state ", StringComparison.OrdinalIgnoreCase) && line.Contains("{"))
             {
                 var match = System.Text.RegularExpressions.Regex.Match(line, @"state\s+""?([^""{\s]+)""?\s*\{?");
@@ -3003,14 +3015,419 @@ Console.WriteLine(""Hello, World!"");
                     });
                 }
             }
-            else if (line.StartsWith("%%") && line.Length > 2 && !line.StartsWith("%%{"))
+            // Participants (sequenceDiagram)
+            else if (line.StartsWith("participant ", StringComparison.OrdinalIgnoreCase))
             {
-                var comment = line.Substring(2).Trim();
-                if (!string.IsNullOrWhiteSpace(comment))
+                var participantText = line.Substring(12).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Participant: " + participantText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // Actors (sequenceDiagram)
+            else if (line.StartsWith("actor ", StringComparison.OrdinalIgnoreCase))
+            {
+                var actorText = line.Substring(6).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Actor: " + actorText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // Notes (sequenceDiagram)
+            else if (line.StartsWith("Note ", StringComparison.OrdinalIgnoreCase))
+            {
+                var noteMatch = System.Text.RegularExpressions.Regex.Match(line, @"Note\s+(?:over|left of|right of)\s+([^:]+):\s*(.*)");
+                if (noteMatch.Success)
+                {
+                    var noteText = noteMatch.Groups[2].Value.Trim();
+                    if (noteText.Length > 30) noteText = noteText.Substring(0, 30) + "...";
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  Note: " + noteText,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            // Loop blocks (sequenceDiagram)
+            else if (line.StartsWith("loop ", StringComparison.OrdinalIgnoreCase))
+            {
+                var loopText = line.Substring(5).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Loop: " + loopText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // Alt blocks (sequenceDiagram)
+            else if (line.StartsWith("alt ", StringComparison.OrdinalIgnoreCase))
+            {
+                var altText = line.Substring(4).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Alt: " + altText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // Opt blocks (sequenceDiagram)
+            else if (line.StartsWith("opt ", StringComparison.OrdinalIgnoreCase))
+            {
+                var optText = line.Substring(4).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Opt: " + optText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // Par blocks (sequenceDiagram)
+            else if (line.StartsWith("par ", StringComparison.OrdinalIgnoreCase))
+            {
+                var parText = line.Substring(4).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Par: " + parText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // Critical blocks (sequenceDiagram)
+            else if (line.StartsWith("critical ", StringComparison.OrdinalIgnoreCase))
+            {
+                var criticalText = line.Substring(9).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Critical: " + criticalText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // Break blocks (sequenceDiagram)
+            else if (line.StartsWith("break ", StringComparison.OrdinalIgnoreCase))
+            {
+                var breakText = line.Substring(6).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Break: " + breakText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // Rect blocks (sequenceDiagram - highlight regions)
+            else if (line.StartsWith("rect ", StringComparison.OrdinalIgnoreCase))
+            {
+                var rectText = line.Substring(5).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Rect: " + rectText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // Class definitions (classDiagram)
+            else if (line.StartsWith("class ", StringComparison.OrdinalIgnoreCase) && currentDiagramType == "classdiagram")
+            {
+                var classMatch = System.Text.RegularExpressions.Regex.Match(line, @"class\s+(\w+)");
+                if (classMatch.Success)
                 {
                     items.Add(new NavigationItem
                     {
-                        DisplayText = "  // " + comment,
+                        DisplayText = "  Class: " + classMatch.Groups[1].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            // Sections (gantt, journey, timeline)
+            else if (line.StartsWith("section ", StringComparison.OrdinalIgnoreCase))
+            {
+                var sectionText = line.Substring(8).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Section: " + sectionText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // Title (various diagrams)
+            else if (line.StartsWith("title ", StringComparison.OrdinalIgnoreCase) || line.StartsWith("title:"))
+            {
+                var titleText = line.Contains(":") ? line.Substring(line.IndexOf(':') + 1).Trim() : line.Substring(6).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Title: " + titleText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // gitGraph - branch, checkout, merge
+            else if (line.StartsWith("branch ", StringComparison.OrdinalIgnoreCase))
+            {
+                var branchText = line.Substring(7).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Branch: " + branchText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            else if (line.StartsWith("checkout ", StringComparison.OrdinalIgnoreCase))
+            {
+                var checkoutText = line.Substring(9).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Checkout: " + checkoutText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            else if (line.StartsWith("merge ", StringComparison.OrdinalIgnoreCase))
+            {
+                var mergeText = line.Substring(6).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Merge: " + mergeText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // requirementDiagram - requirement, element
+            else if (line.StartsWith("requirement ", StringComparison.OrdinalIgnoreCase) ||
+                     line.StartsWith("functionalRequirement ", StringComparison.OrdinalIgnoreCase) ||
+                     line.StartsWith("performanceRequirement ", StringComparison.OrdinalIgnoreCase) ||
+                     line.StartsWith("interfaceRequirement ", StringComparison.OrdinalIgnoreCase) ||
+                     line.StartsWith("physicalRequirement ", StringComparison.OrdinalIgnoreCase) ||
+                     line.StartsWith("designConstraint ", StringComparison.OrdinalIgnoreCase))
+            {
+                var reqMatch = System.Text.RegularExpressions.Regex.Match(line, @"^\w+\s+(\w+)\s*\{?");
+                if (reqMatch.Success)
+                {
+                    var reqType = line.Split(' ')[0];
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  Req: " + reqMatch.Groups[1].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            else if (line.StartsWith("element ", StringComparison.OrdinalIgnoreCase))
+            {
+                var elemMatch = System.Text.RegularExpressions.Regex.Match(line, @"element\s+(\w+)\s*\{?");
+                if (elemMatch.Success)
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  Element: " + elemMatch.Groups[1].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            // C4 diagrams - Person, System, Container, Component, Boundary
+            else if (line.StartsWith("Person(", StringComparison.OrdinalIgnoreCase) ||
+                     line.StartsWith("Person_Ext(", StringComparison.OrdinalIgnoreCase))
+            {
+                var c4Match = System.Text.RegularExpressions.Regex.Match(line, @"Person(?:_Ext)?\((\w+),\s*""([^""]+)""");
+                if (c4Match.Success)
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  Person: " + c4Match.Groups[2].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            else if (line.StartsWith("System(", StringComparison.OrdinalIgnoreCase) ||
+                     line.StartsWith("System_Ext(", StringComparison.OrdinalIgnoreCase) ||
+                     line.StartsWith("SystemDb(", StringComparison.OrdinalIgnoreCase) ||
+                     line.StartsWith("SystemDb_Ext(", StringComparison.OrdinalIgnoreCase))
+            {
+                var c4Match = System.Text.RegularExpressions.Regex.Match(line, @"System(?:Db)?(?:_Ext)?\((\w+),\s*""([^""]+)""");
+                if (c4Match.Success)
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  System: " + c4Match.Groups[2].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            else if (line.StartsWith("Container(", StringComparison.OrdinalIgnoreCase) ||
+                     line.StartsWith("ContainerDb(", StringComparison.OrdinalIgnoreCase))
+            {
+                var c4Match = System.Text.RegularExpressions.Regex.Match(line, @"Container(?:Db)?\((\w+),\s*""([^""]+)""");
+                if (c4Match.Success)
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  Container: " + c4Match.Groups[2].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            else if (line.StartsWith("Component(", StringComparison.OrdinalIgnoreCase))
+            {
+                var c4Match = System.Text.RegularExpressions.Regex.Match(line, @"Component\((\w+),\s*""([^""]+)""");
+                if (c4Match.Success)
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  Component: " + c4Match.Groups[2].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            else if (line.StartsWith("Boundary(", StringComparison.OrdinalIgnoreCase))
+            {
+                var c4Match = System.Text.RegularExpressions.Regex.Match(line, @"Boundary\((\w+),\s*""([^""]+)""");
+                if (c4Match.Success)
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  Boundary: " + c4Match.Groups[2].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            // quadrantChart - x-axis, y-axis, quadrant labels
+            else if (line.StartsWith("x-axis ", StringComparison.OrdinalIgnoreCase))
+            {
+                var axisText = line.Substring(7).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  X-Axis: " + axisText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            else if (line.StartsWith("y-axis ", StringComparison.OrdinalIgnoreCase))
+            {
+                var axisText = line.Substring(7).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Y-Axis: " + axisText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            else if (line.StartsWith("quadrant-", StringComparison.OrdinalIgnoreCase))
+            {
+                var quadrantMatch = System.Text.RegularExpressions.Regex.Match(line, @"quadrant-(\d)\s+(.+)");
+                if (quadrantMatch.Success)
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  Quadrant " + quadrantMatch.Groups[1].Value + ": " + quadrantMatch.Groups[2].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            // mindmap - root node (first non-empty line after mindmap declaration)
+            else if (line.StartsWith("root(", StringComparison.OrdinalIgnoreCase))
+            {
+                var rootMatch = System.Text.RegularExpressions.Regex.Match(line, @"root\(\(([^)]+)\)\)");
+                if (rootMatch.Success)
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  Root: " + rootMatch.Groups[1].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            // erDiagram - entity definitions (lines with { that define entities)
+            else if (currentDiagramType == "erdiagram" && line.Contains("{") && !line.StartsWith("%%"))
+            {
+                var entityMatch = System.Text.RegularExpressions.Regex.Match(line, @"^\s*(\w+)\s*\{");
+                if (entityMatch.Success)
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  Entity: " + entityMatch.Groups[1].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            // pie chart - data entries
+            else if (currentDiagramType == "pie" && line.Contains(":") && line.Contains("\""))
+            {
+                var pieMatch = System.Text.RegularExpressions.Regex.Match(line, @"""([^""]+)""\s*:\s*(\d+)");
+                if (pieMatch.Success)
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  " + pieMatch.Groups[1].Value + ": " + pieMatch.Groups[2].Value,
                         RawText = line,
                         LineNumber = i + 1,
                         Level = 2,
