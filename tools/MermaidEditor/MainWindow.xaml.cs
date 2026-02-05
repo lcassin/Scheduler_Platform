@@ -2,6 +2,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
@@ -139,6 +140,7 @@ Console.WriteLine(""Hello, World!"");
             SetRenderModeFromFile(filePath);
             _isDirty = false;
             UpdateTitle();
+            UpdateNavigationDropdown();
             
             // Navigate file browser to the file's folder and select the file
             var folder = Path.GetDirectoryName(filePath);
@@ -559,6 +561,7 @@ Console.WriteLine(""Hello, World!"");
     {
         _renderTimer.Stop();
         RenderPreview();
+        UpdateNavigationDropdown();
     }
 
     private void RenderPreview()
@@ -2869,6 +2872,175 @@ Console.WriteLine(""Hello, World!"");
             }
         }
     }
+
+    private void UpdateNavigationDropdown()
+    {
+        var items = _currentRenderMode == RenderMode.Markdown 
+            ? ExtractMarkdownHeadings() 
+            : ExtractMermaidSections();
+        
+        NavigationDropdown.ItemsSource = items;
+        if (items.Count > 0)
+        {
+            NavigationDropdown.SelectedIndex = 0;
+        }
+    }
+
+    private List<NavigationItem> ExtractMarkdownHeadings()
+    {
+        var items = new List<NavigationItem>();
+        var lines = CodeEditor.Text.Split('\n');
+        
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i].TrimStart();
+            if (line.StartsWith("#"))
+            {
+                int level = 0;
+                while (level < line.Length && line[level] == '#') level++;
+                
+                if (level <= 6 && level < line.Length && line[level] == ' ')
+                {
+                    var headingText = line.Substring(level).Trim();
+                    var headingId = headingText.ToLowerInvariant()
+                        .Replace(" ", "-")
+                        .Replace(".", "")
+                        .Replace(",", "")
+                        .Replace(":", "")
+                        .Replace("'", "")
+                        .Replace("\"", "");
+                    
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = headingText,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = level,
+                        HeadingId = headingId
+                    });
+                }
+            }
+        }
+        
+        return items;
+    }
+
+    private List<NavigationItem> ExtractMermaidSections()
+    {
+        var items = new List<NavigationItem>();
+        var lines = CodeEditor.Text.Split('\n');
+        
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i].Trim();
+            
+            if (line.StartsWith("subgraph ", StringComparison.OrdinalIgnoreCase))
+            {
+                var name = line.Substring(9).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "Subgraph: " + name,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 1,
+                    HeadingId = ""
+                });
+            }
+            else if (line.StartsWith("state ", StringComparison.OrdinalIgnoreCase) && line.Contains("{"))
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(line, @"state\s+""?([^""{\s]+)""?\s*\{?");
+                if (match.Success)
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "State: " + match.Groups[1].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 1,
+                        HeadingId = ""
+                    });
+                }
+            }
+            else if (line.StartsWith("%%") && line.Length > 2 && !line.StartsWith("%%{"))
+            {
+                var comment = line.Substring(2).Trim();
+                if (!string.IsNullOrWhiteSpace(comment))
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "// " + comment,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+        }
+        
+        return items;
+    }
+
+    private bool _isNavigating = false;
+
+    private void NavigationDropdown_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isNavigating) return;
+        
+        if (NavigationDropdown.SelectedItem is NavigationItem item)
+        {
+            _isNavigating = true;
+            try
+            {
+                var line = CodeEditor.Document.GetLineByNumber(item.LineNumber);
+                CodeEditor.ScrollToLine(item.LineNumber);
+                CodeEditor.TextArea.Caret.Offset = line.Offset;
+                CodeEditor.TextArea.Caret.BringCaretToView();
+                CodeEditor.Select(line.Offset, line.Length);
+                
+                if (_currentRenderMode == RenderMode.Markdown && !string.IsNullOrEmpty(item.HeadingId))
+                {
+                    ScrollPreviewToHeading(item.HeadingId);
+                }
+            }
+            finally
+            {
+                _isNavigating = false;
+            }
+        }
+    }
+
+    private async void ScrollPreviewToHeading(string headingId)
+    {
+        if (!_webViewInitialized) return;
+        
+        try
+        {
+            var script = $@"
+                (function() {{
+                    var element = document.getElementById('{headingId}');
+                    if (element) {{
+                        element.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+                        return true;
+                    }}
+                    var headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+                    for (var i = 0; i < headings.length; i++) {{
+                        var h = headings[i];
+                        var text = h.textContent.toLowerCase().replace(/\s+/g, '-').replace(/[.,:'""]/g, '');
+                        if (text === '{headingId}' || h.id === '{headingId}') {{
+                            h.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+                            return true;
+                        }}
+                    }}
+                    return false;
+                }})();
+            ";
+            await PreviewWebView.ExecuteScriptAsync(script);
+        }
+        catch
+        {
+        }
+    }
 }
 
 public class MermaidCompletionData: ICompletionData
@@ -2919,4 +3091,14 @@ public class RelayCommand : ICommand
     public bool CanExecute(object? parameter) => _canExecute?.Invoke(parameter) ?? true;
 
     public void Execute(object? parameter) => _execute(parameter);
+}
+
+public class NavigationItem
+{
+    public string DisplayText { get; set; } = "";
+    public string RawText { get; set; } = "";
+    public int LineNumber { get; set; }
+    public int Level { get; set; }
+    public string HeadingId { get; set; } = "";
+    public Thickness IndentMargin => new Thickness((Level - 1) * 12, 0, 0, 0);
 }

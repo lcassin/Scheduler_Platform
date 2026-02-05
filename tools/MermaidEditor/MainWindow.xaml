@@ -22,6 +22,7 @@
         <SolidColorBrush x:Key="BorderBrush" Color="#3E3E42"/>
         <SolidColorBrush x:Key="ForegroundBrush" Color="#F1F1F1"/>
         <SolidColorBrush x:Key="AccentBrush" Color="#007ACC"/>
+        <SolidColorBrush x:Key="PurpleAccentBrush" Color="#68217A"/>
         <SolidColorBrush x:Key="HoverBrush" Color="#3E3E42"/>
         <SolidColorBrush x:Key="SelectedBrush" Color="#094771"/>
         <SolidColorBrush x:Key="DisabledForegroundBrush" Color="#656565"/>
@@ -258,7 +259,7 @@
                     <ControlTemplate TargetType="TabItem">
                         <Border x:Name="border" 
                                 Background="{TemplateBinding Background}"
-                                BorderThickness="0,0,0,2"
+                                BorderThickness="0,2,0,0"
                                 BorderBrush="Transparent"
                                 CornerRadius="4,4,0,0"
                                 Padding="{TemplateBinding Padding}"
@@ -271,7 +272,7 @@
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="border" Property="Background" Value="{StaticResource HoverBrush}"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource PurpleAccentBrush}"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="border" Property="Background" Value="{StaticResource HoverBrush}"/>
@@ -280,6 +281,96 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+        
+        <!-- ComboBox Style for Navigation Dropdown -->
+        <Style x:Key="NavigationComboBoxStyle" TargetType="ComboBox">
+            <Setter Property="Background" Value="{StaticResource ToolbarBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="MinWidth" Value="200"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="ToggleButton"
+                                          Background="{TemplateBinding Background}"
+                                          BorderBrush="{TemplateBinding BorderBrush}"
+                                          BorderThickness="{TemplateBinding BorderThickness}"
+                                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                          Focusable="False"
+                                          ClickMode="Press">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="Border"
+                                                Background="{TemplateBinding Background}"
+                                                BorderBrush="{TemplateBinding BorderBrush}"
+                                                BorderThickness="{TemplateBinding BorderThickness}"
+                                                CornerRadius="3">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*"/>
+                                                    <ColumnDefinition Width="20"/>
+                                                </Grid.ColumnDefinitions>
+                                                <ContentPresenter Grid.Column="0" 
+                                                                  Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                                                  ContentTemplate="{Binding SelectionBoxItemTemplate, RelativeSource={RelativeSource AncestorType=ComboBox}}"
+                                                                  Margin="8,4"
+                                                                  VerticalAlignment="Center"
+                                                                  HorizontalAlignment="Left"/>
+                                                <Path Grid.Column="1"
+                                                      Data="M 0 0 L 4 4 L 8 0 Z"
+                                                      Fill="{StaticResource ForegroundBrush}"
+                                                      HorizontalAlignment="Center"
+                                                      VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Border" Property="Background" Value="{StaticResource HoverBrush}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                            </ToggleButton>
+                            <Popup x:Name="Popup"
+                                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                                   Placement="Bottom"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   PopupAnimation="Slide">
+                                <Border x:Name="DropDownBorder"
+                                        Background="{StaticResource ToolbarBackgroundBrush}"
+                                        BorderBrush="{StaticResource BorderBrush}"
+                                        BorderThickness="1"
+                                        MinWidth="{TemplateBinding ActualWidth}"
+                                        MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                    <ScrollViewer SnapsToDevicePixels="True">
+                                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                    </ScrollViewer>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- ComboBoxItem Style -->
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Style.Triggers>
+                <Trigger Property="IsHighlighted" Value="True">
+                    <Setter Property="Background" Value="{StaticResource HoverBrush}"/>
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{StaticResource SelectedBrush}"/>
+                </Trigger>
+            </Style.Triggers>
         </Style>
         
         <!-- StatusBar Style -->
@@ -553,6 +644,20 @@
                         </ToolBar>
                     </ToolBarTray>
                 </Border>
+                
+                <!-- Navigation Dropdown -->
+                <ComboBox x:Name="NavigationDropdown" 
+                          Style="{StaticResource NavigationComboBoxStyle}"
+                          Margin="6,0,0,0"
+                          VerticalAlignment="Center"
+                          SelectionChanged="NavigationDropdown_SelectionChanged"
+                          ToolTip="Jump to section">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding DisplayText}" Margin="{Binding IndentMargin}"/>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
             </StackPanel>
         </Border>
         
@@ -574,15 +679,17 @@
                             <TextBlock x:Name="EditorHeaderText" Text="Code" Margin="6,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                     </TabItem.Header>
-                    <avalon:TextEditor x:Name="CodeEditor" 
-                             FontFamily="Consolas"
-                             FontSize="14"
-                             Background="#1E1E1E"
-                             Foreground="#D4D4D4"
-                             ShowLineNumbers="True"
-                             WordWrap="False"
-                             HorizontalScrollBarVisibility="Auto"
-                             VerticalScrollBarVisibility="Auto"/>
+                    <Border BorderBrush="{StaticResource PurpleAccentBrush}" BorderThickness="2,0,0,0">
+                        <avalon:TextEditor x:Name="CodeEditor" 
+                                 FontFamily="Consolas"
+                                 FontSize="14"
+                                 Background="#1E1E1E"
+                                 Foreground="#D4D4D4"
+                                 ShowLineNumbers="True"
+                                 WordWrap="False"
+                                 HorizontalScrollBarVisibility="Auto"
+                                 VerticalScrollBarVisibility="Auto"/>
+                    </Border>
                 </TabItem>
                 
                 <!-- Files Tab -->
