@@ -1108,6 +1108,8 @@ Console.WriteLine(""Hello, World!"");
 </html>";
 
         PreviewWebView.NavigateToString(html);
+        PreviewWebView.WebMessageReceived -= PreviewWebView_WebMessageReceived;
+        PreviewWebView.WebMessageReceived += PreviewWebView_WebMessageReceived;
         StatusText.Text = "Markdown rendered";
     }
 
