@@ -254,16 +254,17 @@
             <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Margin" Value="0,0,1,-2"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TabItem">
                         <Border x:Name="border" 
                                 Background="{TemplateBinding Background}"
-                                BorderThickness="0,2,0,0"
+                                BorderThickness="2,2,2,0"
                                 BorderBrush="Transparent"
                                 CornerRadius="4,4,0,0"
                                 Padding="{TemplateBinding Padding}"
-                                Margin="0,0,1,0">
+                                Margin="0">
                             <ContentPresenter x:Name="contentPresenter"
                                               ContentSource="Header"
                                               HorizontalAlignment="Center"
@@ -271,7 +272,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{StaticResource HoverBrush}"/>
+                                <Setter TargetName="border" Property="Background" Value="#1E1E1E"/>
                                 <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource PurpleAccentBrush}"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -658,6 +659,28 @@
             
             <!-- Left Panel - Tabbed Code Editor / File Browser -->
             <TabControl x:Name="LeftPanelTabs" Grid.Column="0" Background="#2D2D30">
+                <TabControl.Template>
+                    <ControlTemplate TargetType="TabControl">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <!-- Tab Header Panel -->
+                            <TabPanel Grid.Row="0" 
+                                       IsItemsHost="True" 
+                                       Background="#2D2D30"
+                                       Margin="0,0,0,0"/>
+                            <!-- Content area with purple border -->
+                            <Border Grid.Row="1" 
+                                    BorderBrush="{StaticResource PurpleAccentBrush}" 
+                                    BorderThickness="2,2,2,0"
+                                    Background="#1E1E1E">
+                                <ContentPresenter ContentSource="SelectedContent"/>
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </TabControl.Template>
                 <!-- Code Tab -->
                 <TabItem x:Name="CodeTab">
                     <TabItem.Header>
@@ -689,18 +712,17 @@
                             </ComboBox.ItemTemplate>
                         </ComboBox>
                         
-                        <!-- Code Editor with purple accent -->
-                        <Border Grid.Row="1" BorderBrush="{StaticResource PurpleAccentBrush}" BorderThickness="2,0,0,0">
-                            <avalon:TextEditor x:Name="CodeEditor" 
-                                     FontFamily="Consolas"
-                                     FontSize="14"
-                                     Background="#1E1E1E"
-                                     Foreground="#D4D4D4"
-                                     ShowLineNumbers="True"
-                                     WordWrap="False"
-                                     HorizontalScrollBarVisibility="Auto"
-                                     VerticalScrollBarVisibility="Auto"/>
-                        </Border>
+                        <!-- Code Editor -->
+                        <avalon:TextEditor x:Name="CodeEditor" 
+                                 Grid.Row="1"
+                                 FontFamily="Consolas"
+                                 FontSize="14"
+                                 Background="#1E1E1E"
+                                 Foreground="#D4D4D4"
+                                 ShowLineNumbers="True"
+                                 WordWrap="False"
+                                 HorizontalScrollBarVisibility="Auto"
+                                 VerticalScrollBarVisibility="Auto"/>
                     </Grid>
                 </TabItem>
                 
