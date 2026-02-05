@@ -254,26 +254,35 @@
             <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="12,6"/>
-            <Setter Property="Margin" Value="0,0,1,-2"/>
+            <Setter Property="Margin" Value="0,0,1,0"/>
+            <Setter Property="Panel.ZIndex" Value="0"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TabItem">
-                        <Border x:Name="border" 
-                                Background="{TemplateBinding Background}"
-                                BorderThickness="2,2,2,0"
-                                BorderBrush="Transparent"
-                                CornerRadius="4,4,0,0"
-                                Padding="{TemplateBinding Padding}"
-                                Margin="0">
-                            <ContentPresenter x:Name="contentPresenter"
-                                              ContentSource="Header"
-                                              HorizontalAlignment="Center"
-                                              VerticalAlignment="Center"/>
-                        </Border>
+                        <Grid x:Name="tabGrid" Margin="0,0,0,-2">
+                            <Border x:Name="border" 
+                                    Background="{TemplateBinding Background}"
+                                    BorderThickness="0"
+                                    BorderBrush="Transparent"
+                                    CornerRadius="4,4,0,0"
+                                    Padding="{TemplateBinding Padding}">
+                                <ContentPresenter x:Name="contentPresenter"
+                                                  ContentSource="Header"
+                                                  HorizontalAlignment="Center"
+                                                  VerticalAlignment="Center"/>
+                            </Border>
+                            <!-- Purple accent borders for selected tab -->
+                            <Border x:Name="leftBorder" Width="2" HorizontalAlignment="Left" Background="Transparent"/>
+                            <Border x:Name="rightBorder" Width="2" HorizontalAlignment="Right" Background="Transparent"/>
+                            <Border x:Name="topBorder" Height="2" VerticalAlignment="Top" Background="Transparent"/>
+                        </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="border" Property="Background" Value="#1E1E1E"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource PurpleAccentBrush}"/>
+                                <Setter TargetName="leftBorder" Property="Background" Value="{StaticResource PurpleAccentBrush}"/>
+                                <Setter TargetName="rightBorder" Property="Background" Value="{StaticResource PurpleAccentBrush}"/>
+                                <Setter TargetName="topBorder" Property="Background" Value="{StaticResource PurpleAccentBrush}"/>
+                                <Setter Property="Panel.ZIndex" Value="1"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="border" Property="Background" Value="{StaticResource HoverBrush}"/>
@@ -698,11 +707,8 @@
                         <!-- Navigation Dropdown Bar -->
                         <ComboBox x:Name="NavigationDropdown" 
                                   Grid.Row="0"
-                                  Background="#2D2D30"
-                                  Foreground="#F1F1F1"
-                                  BorderBrush="#3E3E42"
+                                  Style="{StaticResource NavigationComboBoxStyle}"
                                   BorderThickness="0,0,0,1"
-                                  Padding="8,6"
                                   SelectionChanged="NavigationDropdown_SelectionChanged"
                                   ToolTip="Jump to section">
                             <ComboBox.ItemTemplate>
@@ -710,6 +716,32 @@
                                     <TextBlock Text="{Binding DisplayText}" Foreground="#F1F1F1" Margin="{Binding IndentMargin}"/>
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
+                            <ComboBox.ItemContainerStyle>
+                                <Style TargetType="ComboBoxItem">
+                                    <Setter Property="Background" Value="#2D2D30"/>
+                                    <Setter Property="Foreground" Value="#F1F1F1"/>
+                                    <Setter Property="Padding" Value="8,4"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ComboBoxItem">
+                                                <Border x:Name="Bd" 
+                                                        Background="{TemplateBinding Background}" 
+                                                        Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsHighlighted" Value="True">
+                                                        <Setter TargetName="Bd" Property="Background" Value="#3E3E42"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsSelected" Value="True">
+                                                        <Setter TargetName="Bd" Property="Background" Value="#094771"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ComboBox.ItemContainerStyle>
                         </ComboBox>
                         
                         <!-- Code Editor -->
