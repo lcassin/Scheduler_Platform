@@ -2457,21 +2457,28 @@ Console.WriteLine(""Hello, World!"");
     private void About_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show(
-
             "Mermaid Editor v1.7\n\n" +
-            "A simple IDE for editing Mermaid diagrams and Markdown files.\n\n" +
+            "A visual IDE for editing Mermaid diagrams and Markdown files.\n\n" +
             "Features:\n" +
             "- Live preview as you type\n" +
             "- Mermaid diagram rendering with pan/zoom\n" +
             "- Markdown rendering with GitHub styling\n" +
-            "- On Click Syntax highlighting and IntelliSense\n" +
-            "- Export to PNG, SVG, EMF and Word\n" +
-            "- File open/save support\n" +
-            "- Drag and drop file support\n\n" +
+            "- Syntax highlighting and IntelliSense\n" +
+            "- Click-to-navigate between preview and code\n" +
+            "- Navigation dropdown for quick section jumping\n" +
+            "- Export to PNG, SVG, EMF, and Word\n" +
+            "- Word export embeds images for Markdown files\n" +
+            "- New document templates for all diagram types\n" +
+            "- File browser with preview on selection\n" +
+            "- Drag and drop file support\n" +
+            "- Undo/Redo support\n\n" +
             "Supported file types:\n" +
             "- .mmd, .mermaid - Mermaid diagrams\n" +
             "- .md - Markdown files\n\n" +
-			"� 2026 Lee Cassin",
+            "\u00A9 2026 Lee Cassin\n\n" +
+            "Licensed under the GNU General Public License v3.0\n" +
+            "This is free software; you are free to change and redistribute it.\n" +
+            "See LICENSE file for details.",
             "About Mermaid Editor",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
