@@ -380,14 +380,14 @@
         
         <!-- StatusBar Style -->
         <Style TargetType="StatusBar">
-            <Setter Property="Background" Value="{StaticResource AccentBrush}"/>
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Background" Value="{StaticResource MenuBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
         </Style>
         
         <!-- StatusBarItem Style -->
         <Style TargetType="StatusBarItem">
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
             <Setter Property="Padding" Value="8,2"/>
         </Style>
         
@@ -459,6 +459,12 @@
                     <MenuItem.Icon>
                         <TextBlock Text="&#xE8E5;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                     </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem x:Name="RecentFilesMenuItem" Header="_Recent Files">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE823;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                    <MenuItem Header="(No recent files)" IsEnabled="False"/>
                 </MenuItem>
                 <Separator/>
                 <MenuItem Header="_Save" Click="Save_Click" InputGestureText="Ctrl+S">
