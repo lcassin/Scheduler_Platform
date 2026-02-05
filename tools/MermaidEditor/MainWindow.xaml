@@ -259,29 +259,23 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TabItem">
-                        <Grid x:Name="tabGrid" Margin="0,0,0,-2">
+                        <Grid x:Name="tabGrid" Margin="0,0,0,-1">
                             <Border x:Name="border" 
                                     Background="{TemplateBinding Background}"
-                                    BorderThickness="0"
+                                    BorderThickness="1,1,1,0"
                                     BorderBrush="Transparent"
-                                    CornerRadius="4,4,0,0"
+                                    CornerRadius="6,6,0,0"
                                     Padding="{TemplateBinding Padding}">
                                 <ContentPresenter x:Name="contentPresenter"
                                                   ContentSource="Header"
                                                   HorizontalAlignment="Center"
                                                   VerticalAlignment="Center"/>
                             </Border>
-                            <!-- Purple accent borders for selected tab -->
-                            <Border x:Name="leftBorder" Width="2" HorizontalAlignment="Left" Background="Transparent"/>
-                            <Border x:Name="rightBorder" Width="2" HorizontalAlignment="Right" Background="Transparent"/>
-                            <Border x:Name="topBorder" Height="2" VerticalAlignment="Top" Background="Transparent"/>
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="border" Property="Background" Value="#1E1E1E"/>
-                                <Setter TargetName="leftBorder" Property="Background" Value="{StaticResource PurpleAccentBrush}"/>
-                                <Setter TargetName="rightBorder" Property="Background" Value="{StaticResource PurpleAccentBrush}"/>
-                                <Setter TargetName="topBorder" Property="Background" Value="{StaticResource PurpleAccentBrush}"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource PurpleAccentBrush}"/>
                                 <Setter Property="Panel.ZIndex" Value="1"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
@@ -675,15 +669,16 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
-                            <!-- Tab Header Panel -->
-                            <TabPanel Grid.Row="0" 
-                                       IsItemsHost="True" 
-                                       Background="#2D2D30"
-                                       Margin="0,0,0,0"/>
-                            <!-- Content area with purple border -->
+                            <!-- Tab Header Panel with purple line underneath non-selected tabs -->
+                            <Grid Grid.Row="0">
+                                <Border Background="#2D2D30" BorderBrush="{StaticResource PurpleAccentBrush}" 
+                                        BorderThickness="0,0,0,1" Margin="0,0,0,0"/>
+                                <TabPanel IsItemsHost="True" Background="Transparent" Margin="0,0,0,0"/>
+                            </Grid>
+                            <!-- Content area with purple border on left and right only -->
                             <Border Grid.Row="1" 
                                     BorderBrush="{StaticResource PurpleAccentBrush}" 
-                                    BorderThickness="2,2,2,0"
+                                    BorderThickness="1,0,1,0"
                                     Background="#1E1E1E">
                                 <ContentPresenter ContentSource="SelectedContent"/>
                             </Border>
