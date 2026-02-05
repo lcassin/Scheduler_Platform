@@ -259,7 +259,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TabItem">
-                        <Grid x:Name="tabGrid" Margin="0,0,0,-1">
+                        <Grid x:Name="tabGrid" Margin="0,0,0,0">
                             <Border x:Name="border" 
                                     Background="{TemplateBinding Background}"
                                     BorderThickness="1,1,1,0"
@@ -274,6 +274,7 @@
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="tabGrid" Property="Margin" Value="0,0,0,-1"/>
                                 <Setter TargetName="border" Property="Background" Value="#1E1E1E"/>
                                 <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource PurpleAccentBrush}"/>
                                 <Setter Property="Panel.ZIndex" Value="1"/>
@@ -672,8 +673,8 @@
                             <!-- Tab Header Panel with purple line underneath non-selected tabs -->
                             <Grid Grid.Row="0">
                                 <Border Background="#2D2D30" BorderBrush="{StaticResource PurpleAccentBrush}" 
-                                        BorderThickness="0,0,0,1" Margin="0,0,0,0"/>
-                                <TabPanel IsItemsHost="True" Background="Transparent" Margin="0,0,0,0"/>
+                                        BorderThickness="1,0,1,1" Margin="0,0,0,0"/>
+                                <TabPanel IsItemsHost="True" Background="Transparent" Margin="1,0,0,0"/>
                             </Grid>
                             <!-- Content area with purple border on left and right only -->
                             <Border Grid.Row="1" 
