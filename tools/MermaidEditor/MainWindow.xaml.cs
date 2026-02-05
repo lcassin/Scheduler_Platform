@@ -1933,20 +1933,23 @@ Console.WriteLine(""Hello, World!"");
         MessageBox.Show("Mermaid diagram exported to Word successfully!\n\nThe diagram has been embedded as a high-resolution image.", "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
     }
     
-    private static Drawing CreateImageElement(string relationshipId, int widthEmu, int heightEmu)
+    private static uint _imageIdCounter = 1;
+    
+    private static Drawing CreateImageElement(string relationshipId, int widthEmu, int heightEmu, string imageName = "Image")
     {
+        var imageId = _imageIdCounter++;
         var element = new Drawing(
             new DocumentFormat.OpenXml.Drawing.Wordprocessing.Inline(
                 new DocumentFormat.OpenXml.Drawing.Wordprocessing.Extent { Cx = widthEmu, Cy = heightEmu },
                 new DocumentFormat.OpenXml.Drawing.Wordprocessing.EffectExtent { LeftEdge = 0, TopEdge = 0, RightEdge = 0, BottomEdge = 0 },
-                new DocumentFormat.OpenXml.Drawing.Wordprocessing.DocProperties { Id = 1, Name = "Mermaid Diagram" },
+                new DocumentFormat.OpenXml.Drawing.Wordprocessing.DocProperties { Id = imageId, Name = imageName },
                 new DocumentFormat.OpenXml.Drawing.Wordprocessing.NonVisualGraphicFrameDrawingProperties(
                     new DocumentFormat.OpenXml.Drawing.GraphicFrameLocks { NoChangeAspect = true }),
                 new DocumentFormat.OpenXml.Drawing.Graphic(
                     new DocumentFormat.OpenXml.Drawing.GraphicData(
                         new DocumentFormat.OpenXml.Drawing.Pictures.Picture(
                             new DocumentFormat.OpenXml.Drawing.Pictures.NonVisualPictureProperties(
-                                new DocumentFormat.OpenXml.Drawing.Pictures.NonVisualDrawingProperties { Id = 0, Name = "MermaidDiagram.png" },
+                                new DocumentFormat.OpenXml.Drawing.Pictures.NonVisualDrawingProperties { Id = imageId, Name = $"{imageName}.png" },
                                 new DocumentFormat.OpenXml.Drawing.Pictures.NonVisualPictureDrawingProperties()),
                             new DocumentFormat.OpenXml.Drawing.Pictures.BlipFill(
                                 new DocumentFormat.OpenXml.Drawing.Blip { Embed = relationshipId },
@@ -1970,6 +1973,9 @@ Console.WriteLine(""Hello, World!"");
 
     private void ConvertMarkdownToWord(string markdown, string outputPath)
     {
+        // Reset image ID counter for each new document
+        _imageIdCounter = 1;
+        
         using var document = WordprocessingDocument.Create(outputPath, WordprocessingDocumentType.Document);
         var mainPart = document.AddMainDocumentPart();
         mainPart.Document = new Document();
@@ -2290,7 +2296,8 @@ Console.WriteLine(""Hello, World!"");
         }
 
         var relationshipId = mainPart.GetIdOfPart(imagePart);
-        return CreateImageElement(relationshipId, widthEmu, heightEmu);
+        var imageName = Path.GetFileNameWithoutExtension(imagePath);
+        return CreateImageElement(relationshipId, widthEmu, heightEmu, imageName);
     }
 
     private void UpdateExportMenuVisibility()
