@@ -673,13 +673,13 @@
                             <!-- Tab Header Panel with purple line underneath non-selected tabs -->
                             <Grid Grid.Row="0">
                                 <Border Background="#2D2D30" BorderBrush="{StaticResource PurpleAccentBrush}" 
-                                        BorderThickness="1,0,1,1" Margin="0,0,0,0"/>
-                                <TabPanel IsItemsHost="True" Background="Transparent" Margin="1,0,0,0"/>
+                                        BorderThickness="0,0,0,1" Margin="0,0,0,0"/>
+                                <TabPanel IsItemsHost="True" Background="Transparent" Margin="0,0,0,0"/>
                             </Grid>
-                            <!-- Content area with purple border on left and right only -->
+                            <!-- Content area with purple border on right only -->
                             <Border Grid.Row="1" 
                                     BorderBrush="{StaticResource PurpleAccentBrush}" 
-                                    BorderThickness="1,0,1,0"
+                                    BorderThickness="0,0,1,0"
                                     Background="#1E1E1E">
                                 <ContentPresenter ContentSource="SelectedContent"/>
                             </Border>
