@@ -402,7 +402,7 @@ Console.WriteLine(""Hello, World!"");
         {
             await PreviewWebView.EnsureCoreWebView2Async();
             _webViewInitialized = true;
-            RenderMermaid();
+            RenderPreview();
             
             // Style the toolbar overflow button programmatically
             StyleToolbarOverflowButtons();
