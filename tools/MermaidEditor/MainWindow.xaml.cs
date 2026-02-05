@@ -26,6 +26,9 @@ using Text = DocumentFormat.OpenXml.Wordprocessing.Text;
 using Bold = DocumentFormat.OpenXml.Wordprocessing.Bold;
 using Italic = DocumentFormat.OpenXml.Wordprocessing.Italic;
 using Drawing = DocumentFormat.OpenXml.Wordprocessing.Drawing;
+using Markdig;
+using Markdig.Syntax;
+using Markdig.Syntax.Inlines;
 
 namespace MermaidEditor;
 
@@ -1383,14 +1386,30 @@ Console.WriteLine(""Hello, World!"");
             }
         }
 
-        CodeEditor.Text = DefaultMermaidCode;
-        _currentFilePath = null;
-        _isDirty = false;
-        _currentRenderMode = RenderMode.Mermaid;
-        EditorHeaderText.Text = "Mermaid Code";
-        CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
-        UpdateExportMenuVisibility();
-        UpdateTitle();
+        // Show template selection dialog
+        var dialog = new NewDocumentDialog { Owner = this };
+        if (dialog.ShowDialog() == true && dialog.SelectedTemplate != null)
+        {
+            CodeEditor.Text = dialog.SelectedTemplate;
+            _currentFilePath = null;
+            _isDirty = false;
+            
+            if (dialog.IsMermaid)
+            {
+                _currentRenderMode = RenderMode.Mermaid;
+                EditorHeaderText.Text = "Mermaid Code";
+                CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
+            }
+            else
+            {
+                _currentRenderMode = RenderMode.Markdown;
+                EditorHeaderText.Text = "Markdown Code";
+                CodeEditor.SyntaxHighlighting = null;
+            }
+            
+            UpdateExportMenuVisibility();
+            UpdateTitle();
+        }
     }
 
     private void Open_Click(object sender, RoutedEventArgs e)
@@ -1956,150 +1975,322 @@ Console.WriteLine(""Hello, World!"");
         mainPart.Document = new Document();
         var body = mainPart.Document.AppendChild(new Body());
 
-        var lines = markdown.Split('\n');
-        var inCodeBlock = false;
-        var codeBlockContent = new List<string>();
+        // Use Markdig to parse the markdown
+        var pipeline = new MarkdownPipelineBuilder()
+            .UseAdvancedExtensions()
+            .Build();
+        var markdownDoc = Markdown.Parse(markdown, pipeline);
 
-        foreach (var line in lines)
+        // Get the base directory for resolving relative image paths
+        var baseDir = !string.IsNullOrEmpty(_currentFilePath) 
+            ? Path.GetDirectoryName(_currentFilePath) 
+            : Environment.CurrentDirectory;
+
+        // Process each block in the markdown document
+        foreach (var block in markdownDoc)
         {
-            var trimmedLine = line.TrimEnd('\r');
+            ProcessMarkdownBlock(block, body, mainPart, baseDir ?? Environment.CurrentDirectory);
+        }
+    }
 
-            // Handle code blocks
-            if (trimmedLine.StartsWith("```"))
-            {
-                if (inCodeBlock)
+    private void ProcessMarkdownBlock(Block block, Body body, MainDocumentPart mainPart, string baseDir)
+    {
+        switch (block)
+        {
+            case HeadingBlock heading:
+                var fontSize = heading.Level switch
                 {
-                    // End code block - add accumulated content
-                    foreach (var codeLine in codeBlockContent)
-                    {
-                        var codePara = new Paragraph(
-                            new ParagraphProperties(
-                                new Shading { Val = ShadingPatternValues.Clear, Fill = "E8E8E8" }
+                    1 => "32",
+                    2 => "28",
+                    3 => "26",
+                    4 => "24",
+                    5 => "22",
+                    _ => "20"
+                };
+                var headingPara = new Paragraph();
+                ProcessInlines(heading.Inline, headingPara, mainPart, baseDir, true, fontSize);
+                body.AppendChild(headingPara);
+                break;
+
+            case ParagraphBlock paragraph:
+                var para = new Paragraph();
+                ProcessInlines(paragraph.Inline, para, mainPart, baseDir, false, null);
+                body.AppendChild(para);
+                break;
+
+            case FencedCodeBlock codeBlock:
+                var codeLines = codeBlock.Lines.ToString().Split('\n');
+                foreach (var codeLine in codeLines)
+                {
+                    var codePara = new Paragraph(
+                        new ParagraphProperties(
+                            new Shading { Val = ShadingPatternValues.Clear, Fill = "E8E8E8" }
+                        ),
+                        new Run(
+                            new RunProperties(
+                                new RunFonts { Ascii = "Consolas", HighAnsi = "Consolas" },
+                                new FontSize { Val = "20" }
                             ),
-                            new Run(
-                                new RunProperties(
-                                    new RunFonts { Ascii = "Consolas", HighAnsi = "Consolas" },
-                                    new FontSize { Val = "20" }
-                                ),
-                                new Text(codeLine) { Space = SpaceProcessingModeValues.Preserve }
+                            new Text(codeLine.TrimEnd('\r')) { Space = SpaceProcessingModeValues.Preserve }
+                        )
+                    );
+                    body.AppendChild(codePara);
+                }
+                break;
+
+            case CodeBlock simpleCodeBlock:
+                var simpleCodeLines = simpleCodeBlock.Lines.ToString().Split('\n');
+                foreach (var codeLine in simpleCodeLines)
+                {
+                    var codePara = new Paragraph(
+                        new ParagraphProperties(
+                            new Shading { Val = ShadingPatternValues.Clear, Fill = "E8E8E8" }
+                        ),
+                        new Run(
+                            new RunProperties(
+                                new RunFonts { Ascii = "Consolas", HighAnsi = "Consolas" },
+                                new FontSize { Val = "20" }
+                            ),
+                            new Text(codeLine.TrimEnd('\r')) { Space = SpaceProcessingModeValues.Preserve }
+                        )
+                    );
+                    body.AppendChild(codePara);
+                }
+                break;
+
+            case ListBlock listBlock:
+                ProcessListBlock(listBlock, body, mainPart, baseDir, 0);
+                break;
+
+            case QuoteBlock quoteBlock:
+                foreach (var quoteChild in quoteBlock)
+                {
+                    if (quoteChild is ParagraphBlock quotePara)
+                    {
+                        var blockquotePara = new Paragraph(
+                            new ParagraphProperties(
+                                new Indentation { Left = "720" },
+                                new ParagraphBorders(
+                                    new LeftBorder { Val = BorderValues.Single, Size = 24, Color = "CCCCCC" }
+                                )
                             )
                         );
-                        body.AppendChild(codePara);
+                        ProcessInlines(quotePara.Inline, blockquotePara, mainPart, baseDir, false, null);
+                        body.AppendChild(blockquotePara);
                     }
-                    codeBlockContent.Clear();
-                    inCodeBlock = false;
+                }
+                break;
+
+            case ThematicBreakBlock:
+                var hrPara = new Paragraph(
+                    new ParagraphProperties(
+                        new ParagraphBorders(
+                            new BottomBorder { Val = BorderValues.Single, Size = 6, Color = "CCCCCC" }
+                        )
+                    )
+                );
+                body.AppendChild(hrPara);
+                break;
+
+            default:
+                // For any unhandled block types, add an empty paragraph
+                body.AppendChild(new Paragraph());
+                break;
+        }
+    }
+
+    private void ProcessListBlock(ListBlock listBlock, Body body, MainDocumentPart mainPart, string baseDir, int indentLevel)
+    {
+        var isOrdered = listBlock.IsOrdered;
+        var itemNumber = 1;
+
+        foreach (var item in listBlock)
+        {
+            if (item is ListItemBlock listItem)
+            {
+                foreach (var itemContent in listItem)
+                {
+                    if (itemContent is ParagraphBlock itemPara)
+                    {
+                        var bullet = isOrdered ? $"{itemNumber}. " : "- ";
+                        var listPara = new Paragraph(
+                            new ParagraphProperties(
+                                new Indentation { Left = ((indentLevel + 1) * 360).ToString() }
+                            )
+                        );
+                        
+                        // Add bullet/number
+                        listPara.AppendChild(new Run(new Text(bullet) { Space = SpaceProcessingModeValues.Preserve }));
+                        
+                        // Add content
+                        ProcessInlines(itemPara.Inline, listPara, mainPart, baseDir, false, null);
+                        body.AppendChild(listPara);
+                    }
+                    else if (itemContent is ListBlock nestedList)
+                    {
+                        ProcessListBlock(nestedList, body, mainPart, baseDir, indentLevel + 1);
+                    }
+                }
+                itemNumber++;
+            }
+        }
+    }
+
+    private void ProcessInlines(ContainerInline? inlines, Paragraph para, MainDocumentPart mainPart, string baseDir, bool isBold, string? fontSize)
+    {
+        if (inlines == null) return;
+
+        foreach (var inline in inlines)
+        {
+            ProcessInline(inline, para, mainPart, baseDir, isBold, false, fontSize);
+        }
+    }
+
+    private void ProcessInline(Inline inline, Paragraph para, MainDocumentPart mainPart, string baseDir, bool isBold, bool isItalic, string? fontSize)
+    {
+        switch (inline)
+        {
+            case LiteralInline literal:
+                var run = new Run();
+                var runProps = new RunProperties();
+                
+                if (isBold) runProps.AppendChild(new Bold());
+                if (isItalic) runProps.AppendChild(new Italic());
+                if (fontSize != null) runProps.AppendChild(new FontSize { Val = fontSize });
+                
+                if (runProps.HasChildren) run.AppendChild(runProps);
+                run.AppendChild(new Text(literal.Content.ToString()) { Space = SpaceProcessingModeValues.Preserve });
+                para.AppendChild(run);
+                break;
+
+            case EmphasisInline emphasis:
+                var newBold = isBold || emphasis.DelimiterCount >= 2;
+                var newItalic = isItalic || emphasis.DelimiterCount == 1 || emphasis.DelimiterCount == 3;
+                foreach (var child in emphasis)
+                {
+                    ProcessInline(child, para, mainPart, baseDir, newBold, newItalic, fontSize);
+                }
+                break;
+
+            case CodeInline code:
+                var codeRun = new Run();
+                var codeRunProps = new RunProperties();
+                codeRunProps.AppendChild(new RunFonts { Ascii = "Consolas", HighAnsi = "Consolas" });
+                codeRunProps.AppendChild(new Shading { Val = ShadingPatternValues.Clear, Fill = "E8E8E8" });
+                if (fontSize != null) codeRunProps.AppendChild(new FontSize { Val = fontSize });
+                codeRun.AppendChild(codeRunProps);
+                codeRun.AppendChild(new Text(code.Content) { Space = SpaceProcessingModeValues.Preserve });
+                para.AppendChild(codeRun);
+                break;
+
+            case LinkInline link:
+                if (link.IsImage)
+                {
+                    // Handle image
+                    var imagePath = link.Url;
+                    if (imagePath != null && !imagePath.StartsWith("http"))
+                    {
+                        // Resolve relative path
+                        var fullPath = Path.Combine(baseDir, imagePath);
+                        if (File.Exists(fullPath))
+                        {
+                            try
+                            {
+                                var imageBytes = File.ReadAllBytes(fullPath);
+                                var imageElement = EmbedImageInWord(mainPart, imageBytes, fullPath);
+                                if (imageElement != null)
+                                {
+                                    para.AppendChild(new Run(imageElement));
+                                }
+                            }
+                            catch
+                            {
+                                // If image loading fails, add placeholder text
+                                para.AppendChild(new Run(new Text($"[Image: {link.Url}]")));
+                            }
+                        }
+                        else
+                        {
+                            para.AppendChild(new Run(new Text($"[Image not found: {link.Url}]")));
+                        }
+                    }
+                    else
+                    {
+                        // External URL - add as text
+                        para.AppendChild(new Run(new Text($"[Image: {link.Url}]")));
+                    }
                 }
                 else
                 {
-                    inCodeBlock = true;
+                    // Handle regular link - just show the text
+                    foreach (var child in link)
+                    {
+                        ProcessInline(child, para, mainPart, baseDir, isBold, isItalic, fontSize);
+                    }
+                    if (link.Url != null)
+                    {
+                        var urlRun = new Run();
+                        var urlProps = new RunProperties();
+                        urlProps.AppendChild(new DocumentFormat.OpenXml.Wordprocessing.Color { Val = "0066CC" });
+                        urlRun.AppendChild(urlProps);
+                        urlRun.AppendChild(new Text($" ({link.Url})") { Space = SpaceProcessingModeValues.Preserve });
+                        para.AppendChild(urlRun);
+                    }
                 }
-                continue;
-            }
+                break;
 
-            if (inCodeBlock)
-            {
-                codeBlockContent.Add(trimmedLine);
-                continue;
-            }
+            case LineBreakInline:
+                para.AppendChild(new Run(new Break()));
+                break;
 
-            // Handle headers
-            if (trimmedLine.StartsWith("# "))
-            {
-                AddHeading(body, trimmedLine.Substring(2), "28", true);
-            }
-            else if (trimmedLine.StartsWith("## "))
-            {
-                AddHeading(body, trimmedLine.Substring(3), "26", true);
-            }
-            else if (trimmedLine.StartsWith("### "))
-            {
-                AddHeading(body, trimmedLine.Substring(4), "24", true);
-            }
-            else if (trimmedLine.StartsWith("#### "))
-            {
-                AddHeading(body, trimmedLine.Substring(5), "22", true);
-            }
-            else if (string.IsNullOrWhiteSpace(trimmedLine))
-            {
-                // Empty paragraph
-                body.AppendChild(new Paragraph());
-            }
-            else
-            {
-                // Regular paragraph with inline formatting
-                AddFormattedParagraph(body, trimmedLine);
-            }
+            case ContainerInline container:
+                foreach (var child in container)
+                {
+                    ProcessInline(child, para, mainPart, baseDir, isBold, isItalic, fontSize);
+                }
+                break;
         }
     }
 
-    private void AddHeading(Body body, string text, string fontSize, bool bold)
+    private Drawing? EmbedImageInWord(MainDocumentPart mainPart, byte[] imageBytes, string imagePath)
     {
-        var para = new Paragraph();
-        var run = new Run();
-        var runProps = new RunProperties();
-        
-        runProps.AppendChild(new FontSize { Val = fontSize });
-        if (bold)
+        var extension = Path.GetExtension(imagePath).ToLowerInvariant();
+        var contentType = extension switch
         {
-            runProps.AppendChild(new Bold());
-        }
-        
-        run.AppendChild(runProps);
-        run.AppendChild(new Text(text));
-        para.AppendChild(run);
-        body.AppendChild(para);
-    }
+            ".png" => "image/png",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".gif" => "image/gif",
+            ".bmp" => "image/bmp",
+            _ => "image/png"
+        };
 
-    private void AddFormattedParagraph(Body body, string text)
-    {
-        var para = new Paragraph();
-        
-        // Parse inline formatting (bold, italic, code)
-        var pattern = @"(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`|([^*`]+))";
-        var matches = Regex.Matches(text, pattern);
-
-        foreach (Match match in matches)
+        var imagePart = mainPart.AddNewPart<ImagePart>(contentType, null);
+        using (var stream = new MemoryStream(imageBytes))
         {
-            var run = new Run();
-            var runProps = new RunProperties();
-            string content;
-
-            if (match.Groups[2].Success) // Bold + Italic (***text***)
-            {
-                content = match.Groups[2].Value;
-                runProps.AppendChild(new Bold());
-                runProps.AppendChild(new Italic());
-            }
-            else if (match.Groups[3].Success) // Bold (**text**)
-            {
-                content = match.Groups[3].Value;
-                runProps.AppendChild(new Bold());
-            }
-            else if (match.Groups[4].Success) // Italic (*text*)
-            {
-                content = match.Groups[4].Value;
-                runProps.AppendChild(new Italic());
-            }
-            else if (match.Groups[5].Success) // Code (`text`)
-            {
-                content = match.Groups[5].Value;
-                runProps.AppendChild(new RunFonts { Ascii = "Consolas", HighAnsi = "Consolas" });
-                runProps.AppendChild(new Shading { Val = ShadingPatternValues.Clear, Fill = "E8E8E8" });
-            }
-            else // Plain text
-            {
-                content = match.Groups[6].Value;
-            }
-
-            if (runProps.HasChildren)
-            {
-                run.AppendChild(runProps);
-            }
-            run.AppendChild(new Text(content) { Space = SpaceProcessingModeValues.Preserve });
-            para.AppendChild(run);
+            imagePart.FeedData(stream);
         }
 
-        body.AppendChild(para);
+        // Get image dimensions
+        int widthEmu, heightEmu;
+        using (var stream = new MemoryStream(imageBytes))
+        {
+            using var bitmap = new System.Drawing.Bitmap(stream);
+            // Convert pixels to EMUs (914400 EMUs per inch, assuming 96 DPI)
+            widthEmu = (int)(bitmap.Width * 914400 / 96);
+            heightEmu = (int)(bitmap.Height * 914400 / 96);
+
+            // Limit max width to 6 inches
+            var maxWidthEmu = 6 * 914400;
+            if (widthEmu > maxWidthEmu)
+            {
+                var ratio = (double)maxWidthEmu / widthEmu;
+                widthEmu = maxWidthEmu;
+                heightEmu = (int)(heightEmu * ratio);
+            }
+        }
+
+        var relationshipId = mainPart.GetIdOfPart(imagePart);
+        return CreateImageElement(relationshipId, widthEmu, heightEmu);
     }
 
     private void UpdateExportMenuVisibility()

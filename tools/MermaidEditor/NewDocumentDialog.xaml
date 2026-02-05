@@ -1,0 +1,192 @@
+<Window x:Class="MermaidEditor.NewDocumentDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="New Document" 
+        Height="500" Width="600"
+        WindowStartupLocation="CenterOwner"
+        Background="#1E1E1E"
+        ResizeMode="NoResize">
+    <Window.Resources>
+        <Style x:Key="TemplateButtonStyle" TargetType="Button">
+            <Setter Property="Background" Value="#2D2D30"/>
+            <Setter Property="Foreground" Value="#F1F1F1"/>
+            <Setter Property="BorderBrush" Value="#3E3E42"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Margin" Value="4"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="4"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}" 
+                                              VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#3E3E42"/>
+                                <Setter Property="BorderBrush" Value="#007ACC"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        
+        <TextBlock Grid.Row="0" Text="Select a template to start with:" 
+                   Foreground="#F1F1F1" FontSize="16" FontWeight="SemiBold" Margin="0,0,0,16"/>
+        
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <TextBlock Text="Blank" Foreground="#808080" FontSize="12" Margin="4,8,0,4"/>
+                <Button Style="{StaticResource TemplateButtonStyle}" Click="BlankMermaid_Click">
+                    <StackPanel>
+                        <TextBlock Text="Blank Mermaid Diagram" FontWeight="SemiBold"/>
+                        <TextBlock Text="Start with an empty .mmd file" Foreground="#808080" FontSize="11"/>
+                    </StackPanel>
+                </Button>
+                <Button Style="{StaticResource TemplateButtonStyle}" Click="BlankMarkdown_Click">
+                    <StackPanel>
+                        <TextBlock Text="Blank Markdown Document" FontWeight="SemiBold"/>
+                        <TextBlock Text="Start with an empty .md file" Foreground="#808080" FontSize="11"/>
+                    </StackPanel>
+                </Button>
+                
+                <TextBlock Text="Flowcharts" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                <Button Style="{StaticResource TemplateButtonStyle}" Click="Flowchart_Click">
+                    <StackPanel>
+                        <TextBlock Text="Flowchart" FontWeight="SemiBold"/>
+                        <TextBlock Text="Basic flowchart with nodes and connections" Foreground="#808080" FontSize="11"/>
+                    </StackPanel>
+                </Button>
+                <Button Style="{StaticResource TemplateButtonStyle}" Click="FlowchartAdvanced_Click">
+                    <StackPanel>
+                        <TextBlock Text="Flowchart (Advanced)" FontWeight="SemiBold"/>
+                        <TextBlock Text="Flowchart with subgraphs, styling, and different node shapes" Foreground="#808080" FontSize="11"/>
+                    </StackPanel>
+                </Button>
+                
+                <TextBlock Text="Sequence Diagrams" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                <Button Style="{StaticResource TemplateButtonStyle}" Click="Sequence_Click">
+                    <StackPanel>
+                        <TextBlock Text="Sequence Diagram" FontWeight="SemiBold"/>
+                        <TextBlock Text="Interactions between participants over time" Foreground="#808080" FontSize="11"/>
+                    </StackPanel>
+                </Button>
+                
+                <TextBlock Text="Class Diagrams" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                <Button Style="{StaticResource TemplateButtonStyle}" Click="ClassDiagram_Click">
+                    <StackPanel>
+                        <TextBlock Text="Class Diagram" FontWeight="SemiBold"/>
+                        <TextBlock Text="UML class diagram with relationships" Foreground="#808080" FontSize="11"/>
+                    </StackPanel>
+                </Button>
+                
+                <TextBlock Text="State Diagrams" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                <Button Style="{StaticResource TemplateButtonStyle}" Click="StateDiagram_Click">
+                    <StackPanel>
+                        <TextBlock Text="State Diagram" FontWeight="SemiBold"/>
+                        <TextBlock Text="State machine with transitions" Foreground="#808080" FontSize="11"/>
+                    </StackPanel>
+                </Button>
+                
+                <TextBlock Text="Entity Relationship" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                <Button Style="{StaticResource TemplateButtonStyle}" Click="ERDiagram_Click">
+                    <StackPanel>
+                        <TextBlock Text="ER Diagram" FontWeight="SemiBold"/>
+                        <TextBlock Text="Database entity relationship diagram" Foreground="#808080" FontSize="11"/>
+                    </StackPanel>
+                </Button>
+                
+                <TextBlock Text="Gantt Charts" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                <Button Style="{StaticResource TemplateButtonStyle}" Click="Gantt_Click">
+                    <StackPanel>
+                        <TextBlock Text="Gantt Chart" FontWeight="SemiBold"/>
+                        <TextBlock Text="Project timeline with tasks and milestones" Foreground="#808080" FontSize="11"/>
+                    </StackPanel>
+                </Button>
+                
+                <TextBlock Text="Pie Charts" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                <Button Style="{StaticResource TemplateButtonStyle}" Click="Pie_Click">
+                    <StackPanel>
+                        <TextBlock Text="Pie Chart" FontWeight="SemiBold"/>
+                        <TextBlock Text="Simple pie chart with percentages" Foreground="#808080" FontSize="11"/>
+                    </StackPanel>
+                </Button>
+                
+                <TextBlock Text="Mind Maps" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                <Button Style="{StaticResource TemplateButtonStyle}" Click="Mindmap_Click">
+                    <StackPanel>
+                        <TextBlock Text="Mind Map" FontWeight="SemiBold"/>
+                        <TextBlock Text="Hierarchical mind map for brainstorming" Foreground="#808080" FontSize="11"/>
+                    </StackPanel>
+                </Button>
+                
+                <TextBlock Text="Timelines" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                <Button Style="{StaticResource TemplateButtonStyle}" Click="Timeline_Click">
+                    <StackPanel>
+                        <TextBlock Text="Timeline" FontWeight="SemiBold"/>
+                        <TextBlock Text="Chronological timeline of events" Foreground="#808080" FontSize="11"/>
+                    </StackPanel>
+                </Button>
+                
+                <TextBlock Text="Git Graphs" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                <Button Style="{StaticResource TemplateButtonStyle}" Click="GitGraph_Click">
+                    <StackPanel>
+                        <TextBlock Text="Git Graph" FontWeight="SemiBold"/>
+                        <TextBlock Text="Git branch and commit visualization" Foreground="#808080" FontSize="11"/>
+                    </StackPanel>
+                </Button>
+                
+                <TextBlock Text="User Journeys" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                <Button Style="{StaticResource TemplateButtonStyle}" Click="Journey_Click">
+                    <StackPanel>
+                        <TextBlock Text="User Journey" FontWeight="SemiBold"/>
+                        <TextBlock Text="User experience journey map" Foreground="#808080" FontSize="11"/>
+                    </StackPanel>
+                </Button>
+                
+                <TextBlock Text="Quadrant Charts" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                <Button Style="{StaticResource TemplateButtonStyle}" Click="Quadrant_Click">
+                    <StackPanel>
+                        <TextBlock Text="Quadrant Chart" FontWeight="SemiBold"/>
+                        <TextBlock Text="Four-quadrant analysis chart" Foreground="#808080" FontSize="11"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </ScrollViewer>
+        
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="Cancel" Width="80" Padding="8,6" Click="Cancel_Click"
+                    Background="#3E3E42" Foreground="#F1F1F1" BorderBrush="#555555">
+                <Button.Template>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" 
+                                BorderBrush="{TemplateBinding BorderBrush}" 
+                                BorderThickness="1" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Background" Value="#4E4E52"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Button.Template>
+            </Button>
+        </StackPanel>
+    </Grid>
+</Window>
