@@ -1,4 +1,5 @@
 using System.IO;
+using System.IO.Packaging;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Input;
@@ -1976,30 +1977,73 @@ Console.WriteLine(""Hello, World!"");
         // Reset image ID counter for each new document
         _imageIdCounter = 1;
         
-        using var document = WordprocessingDocument.Create(outputPath, WordprocessingDocumentType.Document);
-        var mainPart = document.AddMainDocumentPart();
-        mainPart.Document = new Document(new Body());
-
-        // Use Markdig to parse the markdown
-        var pipeline = new MarkdownPipelineBuilder()
-            .UseAdvancedExtensions()
-            .Build();
-        var markdownDoc = Markdown.Parse(markdown, pipeline);
-
-        // Get the base directory for resolving relative image paths
-        var baseDir = !string.IsNullOrEmpty(_currentFilePath) 
-            ? Path.GetDirectoryName(_currentFilePath) 
-            : Environment.CurrentDirectory;
-
-        // Process each block in the markdown document
-        var body = mainPart.Document.Body!;
-        foreach (var block in markdownDoc)
+        // Create the document
+        using (var document = WordprocessingDocument.Create(outputPath, WordprocessingDocumentType.Document))
         {
-            ProcessMarkdownBlock(block, body, mainPart, baseDir ?? Environment.CurrentDirectory);
+            var mainPart = document.AddMainDocumentPart();
+            mainPart.Document = new Document(new Body());
+
+            // Use Markdig to parse the markdown
+            var pipeline = new MarkdownPipelineBuilder()
+                .UseAdvancedExtensions()
+                .Build();
+            var markdownDoc = Markdown.Parse(markdown, pipeline);
+
+            // Get the base directory for resolving relative image paths
+            var baseDir = !string.IsNullOrEmpty(_currentFilePath) 
+                ? Path.GetDirectoryName(_currentFilePath) 
+                : Environment.CurrentDirectory;
+
+            // Process each block in the markdown document
+            var body = mainPart.Document.Body!;
+            foreach (var block in markdownDoc)
+            {
+                ProcessMarkdownBlock(block, body, mainPart, baseDir ?? Environment.CurrentDirectory);
+            }
+            
+            // Explicitly save the document
+            mainPart.Document.Save();
         }
         
-        // Explicitly save the document
-        mainPart.Document.Save();
+        // Fix the Content_Types.xml which OpenXML SDK 3.x generates incorrectly
+        FixWordDocumentContentTypes(outputPath);
+    }
+    
+    private static void FixWordDocumentContentTypes(string docxPath)
+    {
+        // Open the docx as a ZIP package and fix the [Content_Types].xml
+        using var package = Package.Open(docxPath, FileMode.Open, FileAccess.ReadWrite);
+        
+        // Get the content types part
+        var contentTypesPart = package.GetPart(new Uri("/[Content_Types].xml", UriKind.Relative));
+        
+        // Read the current content
+        string content;
+        using (var stream = contentTypesPart.GetStream(FileMode.Open, FileAccess.Read))
+        using (var reader = new StreamReader(stream))
+        {
+            content = reader.ReadToEnd();
+        }
+        
+        // Fix the incorrect Default entry for XML files
+        // Change: <Default Extension="xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml" />
+        // To: <Default Extension="xml" ContentType="application/xml" /> + <Override PartName="/word/document.xml" ContentType="..." />
+        if (content.Contains("Extension=\"xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\""))
+        {
+            content = content.Replace(
+                "Extension=\"xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"",
+                "Extension=\"xml\" ContentType=\"application/xml\"");
+            
+            // Add the Override element before the closing </Types> tag
+            content = content.Replace(
+                "</Types>",
+                "<Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\" /></Types>");
+            
+            // Write the fixed content back
+            using var stream = contentTypesPart.GetStream(FileMode.Create, FileAccess.Write);
+            using var writer = new StreamWriter(stream);
+            writer.Write(content);
+        }
     }
 
     private void ProcessMarkdownBlock(Block block, Body body, MainDocumentPart mainPart, string baseDir)
@@ -2306,13 +2350,20 @@ Console.WriteLine(""Hello, World!"");
     private void UpdateExportMenuVisibility()
     {
         // Show diagram exports only for Mermaid files
-        // Show Word export only for Markdown files
+        // Show Word export for both (Mermaid embeds as PNG, Markdown converts to formatted doc)
         var isMermaid = _currentRenderMode == RenderMode.Mermaid;
         
+        // Menu items
         ExportPngMenuItem.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
         ExportSvgMenuItem.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
         ExportEmfMenuItem.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
-        ExportWordMenuItem.Visibility = isMermaid ? Visibility.Collapsed : Visibility.Visible;
+        ExportWordMenuItem.Visibility = Visibility.Visible; // Always visible - works for both
+        
+        // Toolbar buttons - PNG/SVG/EMF only make sense for Mermaid diagrams
+        ExportPngToolbarButton.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
+        ExportSvgToolbarButton.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
+        ExportEmfToolbarButton.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
+        ExportWordToolbarButton.Visibility = Visibility.Visible; // Always visible - works for both
     }
 
     private string SanitizeSvgForXml(string svg)
