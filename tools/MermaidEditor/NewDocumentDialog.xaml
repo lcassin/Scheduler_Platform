@@ -51,139 +51,190 @@
         
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <StackPanel>
-                <TextBlock Text="Blank" Foreground="#808080" FontSize="12" Margin="4,8,0,4"/>
-                <Button Style="{StaticResource TemplateButtonStyle}" Click="BlankMermaid_Click">
-                    <StackPanel>
-                        <TextBlock Text="Blank Mermaid Diagram" FontWeight="SemiBold"/>
-                        <TextBlock Text="Start with an empty .mmd file" Foreground="#808080" FontSize="11"/>
-                    </StackPanel>
-                </Button>
-                <Button Style="{StaticResource TemplateButtonStyle}" Click="BlankMarkdown_Click">
-                    <StackPanel>
-                        <TextBlock Text="Blank Markdown Document" FontWeight="SemiBold"/>
-                        <TextBlock Text="Start with an empty .md file" Foreground="#808080" FontSize="11"/>
-                    </StackPanel>
-                </Button>
+                                <TextBlock Text="Blank" Foreground="#808080" FontSize="12" Margin="4,8,0,4"/>
+                                <Button Style="{StaticResource TemplateButtonStyle}" Click="BlankMermaid_Click">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Source="Resources/TemplateThumbnails/blank.png" Width="48" Height="48" Margin="0,0,12,0"/>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="Blank Mermaid Diagram" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Start with an empty .mmd file" Foreground="#808080" FontSize="11"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Button>
+                                <Button Style="{StaticResource TemplateButtonStyle}" Click="BlankMarkdown_Click">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Source="Resources/TemplateThumbnails/markdown.png" Width="48" Height="48" Margin="0,0,12,0"/>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="Blank Markdown Document" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Start with an empty .md file" Foreground="#808080" FontSize="11"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Button>
                 
-                <TextBlock Text="Flowcharts" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
-                <Button Style="{StaticResource TemplateButtonStyle}" Click="Flowchart_Click">
-                    <StackPanel>
-                        <TextBlock Text="Flowchart" FontWeight="SemiBold"/>
-                        <TextBlock Text="Basic flowchart with nodes and connections" Foreground="#808080" FontSize="11"/>
-                    </StackPanel>
-                </Button>
-                <Button Style="{StaticResource TemplateButtonStyle}" Click="FlowchartAdvanced_Click">
-                    <StackPanel>
-                        <TextBlock Text="Flowchart (Advanced)" FontWeight="SemiBold"/>
-                        <TextBlock Text="Flowchart with subgraphs, styling, and different node shapes" Foreground="#808080" FontSize="11"/>
-                    </StackPanel>
-                </Button>
+                                <TextBlock Text="Flowcharts" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                                <Button Style="{StaticResource TemplateButtonStyle}" Click="Flowchart_Click">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Source="Resources/TemplateThumbnails/flowchart.png" Width="48" Height="48" Margin="0,0,12,0"/>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="Flowchart" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Basic flowchart with nodes and connections" Foreground="#808080" FontSize="11"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Button>
+                                <Button Style="{StaticResource TemplateButtonStyle}" Click="FlowchartAdvanced_Click">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Source="Resources/TemplateThumbnails/flowchart.png" Width="48" Height="48" Margin="0,0,12,0"/>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="Flowchart (Advanced)" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Flowchart with subgraphs, styling, and different node shapes" Foreground="#808080" FontSize="11"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Button>
                 
-                <TextBlock Text="Sequence Diagrams" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
-                <Button Style="{StaticResource TemplateButtonStyle}" Click="Sequence_Click">
-                    <StackPanel>
-                        <TextBlock Text="Sequence Diagram" FontWeight="SemiBold"/>
-                        <TextBlock Text="Interactions between participants over time" Foreground="#808080" FontSize="11"/>
-                    </StackPanel>
-                </Button>
+                                <TextBlock Text="Sequence Diagrams" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                                <Button Style="{StaticResource TemplateButtonStyle}" Click="Sequence_Click">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Source="Resources/TemplateThumbnails/sequence.png" Width="48" Height="48" Margin="0,0,12,0"/>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="Sequence Diagram" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Interactions between participants over time" Foreground="#808080" FontSize="11"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Button>
                 
-                <TextBlock Text="Class Diagrams" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
-                <Button Style="{StaticResource TemplateButtonStyle}" Click="ClassDiagram_Click">
-                    <StackPanel>
-                        <TextBlock Text="Class Diagram" FontWeight="SemiBold"/>
-                        <TextBlock Text="UML class diagram with relationships" Foreground="#808080" FontSize="11"/>
-                    </StackPanel>
-                </Button>
+                                <TextBlock Text="Class Diagrams" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                                <Button Style="{StaticResource TemplateButtonStyle}" Click="ClassDiagram_Click">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Source="Resources/TemplateThumbnails/class.png" Width="48" Height="48" Margin="0,0,12,0"/>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="Class Diagram" FontWeight="SemiBold"/>
+                                            <TextBlock Text="UML class diagram with relationships" Foreground="#808080" FontSize="11"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Button>
                 
-                <TextBlock Text="State Diagrams" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
-                <Button Style="{StaticResource TemplateButtonStyle}" Click="StateDiagram_Click">
-                    <StackPanel>
-                        <TextBlock Text="State Diagram" FontWeight="SemiBold"/>
-                        <TextBlock Text="State machine with transitions" Foreground="#808080" FontSize="11"/>
-                    </StackPanel>
-                </Button>
+                                <TextBlock Text="State Diagrams" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                                <Button Style="{StaticResource TemplateButtonStyle}" Click="StateDiagram_Click">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image Source="Resources/TemplateThumbnails/state.png" Width="48" Height="48" Margin="0,0,12,0"/>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="State Diagram" FontWeight="SemiBold"/>
+                                            <TextBlock Text="State machine with transitions" Foreground="#808080" FontSize="11"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Button>
                 
-                <TextBlock Text="Entity Relationship" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
-                <Button Style="{StaticResource TemplateButtonStyle}" Click="ERDiagram_Click">
-                    <StackPanel>
-                        <TextBlock Text="ER Diagram" FontWeight="SemiBold"/>
-                        <TextBlock Text="Database entity relationship diagram" Foreground="#808080" FontSize="11"/>
-                    </StackPanel>
-                </Button>
+                        <TextBlock Text="Entity Relationship" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                        <Button Style="{StaticResource TemplateButtonStyle}" Click="ERDiagram_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Source="Resources/TemplateThumbnails/erdiagram.png" Width="48" Height="48" Margin="0,0,12,0"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="ER Diagram" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Database entity relationship diagram" Foreground="#808080" FontSize="11"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Button>
                 
-                <TextBlock Text="Gantt Charts" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
-                <Button Style="{StaticResource TemplateButtonStyle}" Click="Gantt_Click">
-                    <StackPanel>
-                        <TextBlock Text="Gantt Chart" FontWeight="SemiBold"/>
-                        <TextBlock Text="Project timeline with tasks and milestones" Foreground="#808080" FontSize="11"/>
-                    </StackPanel>
-                </Button>
+                        <TextBlock Text="Gantt Charts" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                        <Button Style="{StaticResource TemplateButtonStyle}" Click="Gantt_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Source="Resources/TemplateThumbnails/gantt.png" Width="48" Height="48" Margin="0,0,12,0"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Gantt Chart" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Project timeline with tasks and milestones" Foreground="#808080" FontSize="11"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Button>
                 
-                <TextBlock Text="Pie Charts" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
-                <Button Style="{StaticResource TemplateButtonStyle}" Click="Pie_Click">
-                    <StackPanel>
-                        <TextBlock Text="Pie Chart" FontWeight="SemiBold"/>
-                        <TextBlock Text="Simple pie chart with percentages" Foreground="#808080" FontSize="11"/>
-                    </StackPanel>
-                </Button>
+                        <TextBlock Text="Pie Charts" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                        <Button Style="{StaticResource TemplateButtonStyle}" Click="Pie_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Source="Resources/TemplateThumbnails/pie.png" Width="48" Height="48" Margin="0,0,12,0"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Pie Chart" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Simple pie chart with percentages" Foreground="#808080" FontSize="11"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Button>
                 
-                <TextBlock Text="Mind Maps" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
-                <Button Style="{StaticResource TemplateButtonStyle}" Click="Mindmap_Click">
-                    <StackPanel>
-                        <TextBlock Text="Mind Map" FontWeight="SemiBold"/>
-                        <TextBlock Text="Hierarchical mind map for brainstorming" Foreground="#808080" FontSize="11"/>
-                    </StackPanel>
-                </Button>
+                        <TextBlock Text="Mind Maps" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                        <Button Style="{StaticResource TemplateButtonStyle}" Click="Mindmap_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Source="Resources/TemplateThumbnails/mindmap.png" Width="48" Height="48" Margin="0,0,12,0"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Mind Map" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Hierarchical mind map for brainstorming" Foreground="#808080" FontSize="11"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Button>
                 
-                <TextBlock Text="Timelines" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
-                <Button Style="{StaticResource TemplateButtonStyle}" Click="Timeline_Click">
-                    <StackPanel>
-                        <TextBlock Text="Timeline" FontWeight="SemiBold"/>
-                        <TextBlock Text="Chronological timeline of events" Foreground="#808080" FontSize="11"/>
-                    </StackPanel>
-                </Button>
+                        <TextBlock Text="Timelines" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                        <Button Style="{StaticResource TemplateButtonStyle}" Click="Timeline_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Source="Resources/TemplateThumbnails/timeline.png" Width="48" Height="48" Margin="0,0,12,0"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Timeline" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Chronological timeline of events" Foreground="#808080" FontSize="11"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Button>
                 
-                <TextBlock Text="Git Graphs" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
-                <Button Style="{StaticResource TemplateButtonStyle}" Click="GitGraph_Click">
-                    <StackPanel>
-                        <TextBlock Text="Git Graph" FontWeight="SemiBold"/>
-                        <TextBlock Text="Git branch and commit visualization" Foreground="#808080" FontSize="11"/>
-                    </StackPanel>
-                </Button>
+                        <TextBlock Text="Git Graphs" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                        <Button Style="{StaticResource TemplateButtonStyle}" Click="GitGraph_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Source="Resources/TemplateThumbnails/gitgraph.png" Width="48" Height="48" Margin="0,0,12,0"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Git Graph" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Git branch and commit visualization" Foreground="#808080" FontSize="11"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Button>
                 
-                <TextBlock Text="User Journeys" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
-                <Button Style="{StaticResource TemplateButtonStyle}" Click="Journey_Click">
-                    <StackPanel>
-                        <TextBlock Text="User Journey" FontWeight="SemiBold"/>
-                        <TextBlock Text="User experience journey map" Foreground="#808080" FontSize="11"/>
-                    </StackPanel>
-                </Button>
+                        <TextBlock Text="User Journeys" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                        <Button Style="{StaticResource TemplateButtonStyle}" Click="Journey_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Source="Resources/TemplateThumbnails/journey.png" Width="48" Height="48" Margin="0,0,12,0"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="User Journey" FontWeight="SemiBold"/>
+                                    <TextBlock Text="User experience journey map" Foreground="#808080" FontSize="11"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Button>
                 
-                <TextBlock Text="Quadrant Charts" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
-                <Button Style="{StaticResource TemplateButtonStyle}" Click="Quadrant_Click">
-                    <StackPanel>
-                        <TextBlock Text="Quadrant Chart" FontWeight="SemiBold"/>
-                        <TextBlock Text="Four-quadrant analysis chart" Foreground="#808080" FontSize="11"/>
-                    </StackPanel>
-                </Button>
+                        <TextBlock Text="Quadrant Charts" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                        <Button Style="{StaticResource TemplateButtonStyle}" Click="Quadrant_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Source="Resources/TemplateThumbnails/quadrant.png" Width="48" Height="48" Margin="0,0,12,0"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Quadrant Chart" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Four-quadrant analysis chart" Foreground="#808080" FontSize="11"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Button>
                 
-                <TextBlock Text="Requirement Diagrams" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
-                <Button Style="{StaticResource TemplateButtonStyle}" Click="Requirement_Click">
-                    <StackPanel>
-                        <TextBlock Text="Requirement Diagram" FontWeight="SemiBold"/>
-                        <TextBlock Text="Requirements traceability and relationships" Foreground="#808080" FontSize="11"/>
-                    </StackPanel>
-                </Button>
+                        <TextBlock Text="Requirement Diagrams" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                        <Button Style="{StaticResource TemplateButtonStyle}" Click="Requirement_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Source="Resources/TemplateThumbnails/requirement.png" Width="48" Height="48" Margin="0,0,12,0"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="Requirement Diagram" FontWeight="SemiBold"/>
+                                    <TextBlock Text="Requirements traceability and relationships" Foreground="#808080" FontSize="11"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Button>
                 
-                <TextBlock Text="C4 Diagrams" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
-                <Button Style="{StaticResource TemplateButtonStyle}" Click="C4_Click">
-                    <StackPanel>
-                        <TextBlock Text="C4 Context Diagram" FontWeight="SemiBold"/>
-                        <TextBlock Text="System context with people, systems, and containers" Foreground="#808080" FontSize="11"/>
+                        <TextBlock Text="C4 Diagrams" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
+                        <Button Style="{StaticResource TemplateButtonStyle}" Click="C4_Click">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Source="Resources/TemplateThumbnails/c4.png" Width="48" Height="48" Margin="0,0,12,0"/>
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Text="C4 Context Diagram" FontWeight="SemiBold"/>
+                                    <TextBlock Text="System context with people, systems, and containers" Foreground="#808080" FontSize="11"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
-                </Button>
-            </StackPanel>
-        </ScrollViewer>
+                </ScrollViewer>
         
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
             <Button Content="Cancel" Width="80" Padding="8,6" Click="Cancel_Click"
