@@ -454,71 +454,106 @@
         
         <!-- Toolbar -->
         <Border Grid.Row="1" Background="{StaticResource MenuBackgroundBrush}" Padding="6">
-            <Border Background="{StaticResource ToolbarBackgroundBrush}" CornerRadius="4" HorizontalAlignment="Left">
-                <ToolBarTray Background="Transparent">
-                    <ToolBar Band="1" BandIndex="1" Background="Transparent">
-                    <Button Click="New_Click" ToolTip="New (Ctrl+N)" Style="{StaticResource ToolbarButtonStyle}">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                        <TextBlock Text="New" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
-                <Button Click="Open_Click" ToolTip="Open (Ctrl+O)" Style="{StaticResource ToolbarButtonStyle}">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#xE8E5;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                        <TextBlock Text="Open" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
-                <Button Click="Save_Click" ToolTip="Save (Ctrl+S)" Style="{StaticResource ToolbarButtonStyle}">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                        <TextBlock Text="Save" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
-                <Separator Background="{StaticResource BorderBrush}" Margin="4,4"/>
-                <Button Click="Undo_Click" ToolTip="Undo (Ctrl+Z)" Style="{StaticResource ToolbarButtonStyle}">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#xE7A7;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                        <TextBlock Text="Undo" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
-                <Button Click="Redo_Click" ToolTip="Redo (Ctrl+Y)" Style="{StaticResource ToolbarButtonStyle}">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#xE7A6;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                        <TextBlock Text="Redo" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
-                <Separator Background="{StaticResource BorderBrush}" Margin="4,4"/>
-                <Button Click="ZoomIn_Click" ToolTip="Zoom In (Ctrl++)" Style="{StaticResource ToolbarButtonStyle}">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#xE8A3;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                        <TextBlock Text="Zoom In" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
-                <Button Click="ZoomOut_Click" ToolTip="Zoom Out (Ctrl+-)" Style="{StaticResource ToolbarButtonStyle}">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#xE71F;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                        <TextBlock Text="Zoom Out" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
-                <Button Click="ResetZoom_Click" ToolTip="Reset Zoom (Ctrl+0)" Style="{StaticResource ToolbarButtonStyle}">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                        <TextBlock Text="Reset" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
-                <Button Click="FitToWindow_Click" ToolTip="Fit to Window (Ctrl+F)" Style="{StaticResource ToolbarButtonStyle}">
-                    <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="&#xE9A6;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                        <TextBlock Text="Fit" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Button>
-                <Separator Background="{StaticResource BorderBrush}" Margin="4,4"/>
-                <TextBlock Text="&#xE71E;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{StaticResource ForegroundBrush}" VerticalAlignment="Center" Margin="4,0,0,0"/>
-                <TextBlock x:Name="ZoomLevelText" Text="100%" Foreground="{StaticResource ForegroundBrush}" VerticalAlignment="Center" Width="50" Margin="4,0,0,0"/>
-                    </ToolBar>
-                </ToolBarTray>
-            </Border>
+            <StackPanel Orientation="Horizontal">
+                <!-- Main Toolbar -->
+                <Border Background="{StaticResource ToolbarBackgroundBrush}" CornerRadius="4" HorizontalAlignment="Left">
+                    <ToolBarTray Background="Transparent">
+                        <ToolBar Band="1" BandIndex="1" Background="Transparent">
+                        <Button Click="New_Click" ToolTip="New (Ctrl+N)" Style="{StaticResource ToolbarButtonStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="New" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Click="Open_Click" ToolTip="Open (Ctrl+O)" Style="{StaticResource ToolbarButtonStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE8E5;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="Open" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Click="Save_Click" ToolTip="Save (Ctrl+S)" Style="{StaticResource ToolbarButtonStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="Save" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Separator Background="{StaticResource BorderBrush}" Margin="4,4"/>
+                    <Button Click="Undo_Click" ToolTip="Undo (Ctrl+Z)" Style="{StaticResource ToolbarButtonStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE7A7;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="Undo" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Click="Redo_Click" ToolTip="Redo (Ctrl+Y)" Style="{StaticResource ToolbarButtonStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE7A6;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="Redo" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Separator Background="{StaticResource BorderBrush}" Margin="4,4"/>
+                    <Button Click="ZoomIn_Click" ToolTip="Zoom In (Ctrl++)" Style="{StaticResource ToolbarButtonStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE8A3;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="Zoom In" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Click="ZoomOut_Click" ToolTip="Zoom Out (Ctrl+-)" Style="{StaticResource ToolbarButtonStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE71F;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="Zoom Out" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Click="ResetZoom_Click" ToolTip="Reset Zoom (Ctrl+0)" Style="{StaticResource ToolbarButtonStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="Reset" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Button Click="FitToWindow_Click" ToolTip="Fit to Window (Ctrl+F)" Style="{StaticResource ToolbarButtonStyle}">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="&#xE9A6;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            <TextBlock Text="Fit" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                    <Separator Background="{StaticResource BorderBrush}" Margin="4,4"/>
+                    <TextBlock Text="&#xE71E;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{StaticResource ForegroundBrush}" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                    <TextBlock x:Name="ZoomLevelText" Text="100%" Foreground="{StaticResource ForegroundBrush}" VerticalAlignment="Center" Width="50" Margin="4,0,0,0"/>
+                        </ToolBar>
+                    </ToolBarTray>
+                </Border>
+                
+                <!-- Export Toolbar -->
+                <Border Background="{StaticResource ToolbarBackgroundBrush}" CornerRadius="4" HorizontalAlignment="Left" Margin="6,0,0,0">
+                    <ToolBarTray Background="Transparent">
+                        <ToolBar Band="1" BandIndex="1" Background="Transparent">
+                            <Button x:Name="ExportPngToolbarButton" Click="ExportPng_Click" ToolTip="Export as PNG (Ctrl+Shift+P)" Style="{StaticResource ToolbarButtonStyle}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xEB9F;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                                    <TextBlock Text="PNG" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="ExportSvgToolbarButton" Click="ExportSvg_Click" ToolTip="Export as SVG (Ctrl+Shift+G)" Style="{StaticResource ToolbarButtonStyle}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE943;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                                    <TextBlock Text="SVG" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="ExportEmfToolbarButton" Click="ExportEmf_Click" ToolTip="Export as EMF (Ctrl+Shift+E)" Style="{StaticResource ToolbarButtonStyle}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE8BA;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                                    <TextBlock Text="EMF" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                            <Button x:Name="ExportWordToolbarButton" Click="ExportWord_Click" ToolTip="Export to Word (Ctrl+Shift+W)" Style="{StaticResource ToolbarButtonStyle}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Word" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                        </ToolBar>
+                    </ToolBarTray>
+                </Border>
+            </StackPanel>
         </Border>
         
         <!-- Main Content - Split View -->

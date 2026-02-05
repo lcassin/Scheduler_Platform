@@ -25,6 +25,7 @@ using Run = DocumentFormat.OpenXml.Wordprocessing.Run;
 using Text = DocumentFormat.OpenXml.Wordprocessing.Text;
 using Bold = DocumentFormat.OpenXml.Wordprocessing.Bold;
 using Italic = DocumentFormat.OpenXml.Wordprocessing.Italic;
+using Drawing = DocumentFormat.OpenXml.Wordprocessing.Drawing;
 
 namespace MermaidEditor;
 
@@ -1792,7 +1793,7 @@ Console.WriteLine(""Hello, World!"");
         }
     }
 
-    private void ExportWord_Click(object sender, RoutedEventArgs e)
+    private async void ExportWord_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new SaveFileDialog
         {
@@ -1809,11 +1810,19 @@ Console.WriteLine(""Hello, World!"");
                 UpdateLastExportDirectory(dialog.FileName);
                 StatusText.Text = "Exporting Word document...";
                 
-                var markdown = CodeEditor.Text;
-                ConvertMarkdownToWord(markdown, dialog.FileName);
-                
-                StatusText.Text = "Exported as Word document";
-                MessageBox.Show("Word document exported successfully!", "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                if (_currentRenderMode == RenderMode.Mermaid)
+                {
+                    // For Mermaid diagrams, export as PNG embedded in Word
+                    await ExportMermaidToWord(dialog.FileName);
+                }
+                else
+                {
+                    // For Markdown, convert to formatted Word document
+                    var markdown = CodeEditor.Text;
+                    ConvertMarkdownToWord(markdown, dialog.FileName);
+                    StatusText.Text = "Exported as Word document";
+                    MessageBox.Show("Word document exported successfully!", "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
             }
             catch (Exception ex)
             {
@@ -1821,6 +1830,123 @@ Console.WriteLine(""Hello, World!"");
                 StatusText.Text = "Export failed";
             }
         }
+    }
+    
+    private async Task ExportMermaidToWord(string outputPath)
+    {
+        if (!_webViewInitialized)
+        {
+            MessageBox.Show("WebView not initialized. Please wait for the preview to load.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        
+        // Get PNG data from the diagram at 4x resolution
+        _pngExportTcs = new TaskCompletionSource<string>();
+        
+        await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.exportPngHighRes(4)");
+        
+        // Wait for the callback with a timeout
+        var timeoutTask = Task.Delay(30000);
+        var completedTask = await Task.WhenAny(_pngExportTcs.Task, timeoutTask);
+        
+        if (completedTask == timeoutTask)
+        {
+            _pngExportTcs = null;
+            throw new Exception("Export timed out");
+        }
+        
+        var dataUrl = await _pngExportTcs.Task;
+        _pngExportTcs = null;
+        
+        if (string.IsNullOrEmpty(dataUrl) || !dataUrl.StartsWith("data:image/png;base64,"))
+        {
+            MessageBox.Show("No diagram to export. Make sure the diagram is rendered correctly.", "Export Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        
+        var base64Data = dataUrl.Substring("data:image/png;base64,".Length);
+        var imageBytes = Convert.FromBase64String(base64Data);
+        
+        // Create Word document with embedded image
+        using var document = WordprocessingDocument.Create(outputPath, WordprocessingDocumentType.Document);
+        var mainPart = document.AddMainDocumentPart();
+        mainPart.Document = new Document();
+        var body = mainPart.Document.AppendChild(new Body());
+        
+        // Add the image to the document
+        var imagePart = mainPart.AddImagePart(ImagePartType.Png);
+        using (var stream = new MemoryStream(imageBytes))
+        {
+            imagePart.FeedData(stream);
+        }
+        
+        // Get image dimensions for proper sizing
+        int widthEmu, heightEmu;
+        using (var stream = new MemoryStream(imageBytes))
+        {
+            using var bitmap = new System.Drawing.Bitmap(stream);
+            // Convert pixels to EMUs (English Metric Units) - 914400 EMUs per inch, assuming 96 DPI
+            // Scale down by 4 since we exported at 4x resolution
+            var scaleFactor = 4.0;
+            widthEmu = (int)(bitmap.Width / scaleFactor * 914400 / 96);
+            heightEmu = (int)(bitmap.Height / scaleFactor * 914400 / 96);
+            
+            // Limit max width to 6 inches (page width minus margins)
+            var maxWidthEmu = 6 * 914400;
+            if (widthEmu > maxWidthEmu)
+            {
+                var ratio = (double)maxWidthEmu / widthEmu;
+                widthEmu = maxWidthEmu;
+                heightEmu = (int)(heightEmu * ratio);
+            }
+        }
+        
+        var relationshipId = mainPart.GetIdOfPart(imagePart);
+        
+        // Create the image element
+        var element = CreateImageElement(relationshipId, widthEmu, heightEmu);
+        
+        // Add a paragraph with the image
+        var para = new Paragraph(new Run(element));
+        body.AppendChild(para);
+        
+        StatusText.Text = "Exported diagram to Word document";
+        MessageBox.Show("Mermaid diagram exported to Word successfully!\n\nThe diagram has been embedded as a high-resolution image.", "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+    
+    private static Drawing CreateImageElement(string relationshipId, int widthEmu, int heightEmu)
+    {
+        var element = new Drawing(
+            new DocumentFormat.OpenXml.Drawing.Wordprocessing.Inline(
+                new DocumentFormat.OpenXml.Drawing.Wordprocessing.Extent { Cx = widthEmu, Cy = heightEmu },
+                new DocumentFormat.OpenXml.Drawing.Wordprocessing.EffectExtent { LeftEdge = 0, TopEdge = 0, RightEdge = 0, BottomEdge = 0 },
+                new DocumentFormat.OpenXml.Drawing.Wordprocessing.DocProperties { Id = 1, Name = "Mermaid Diagram" },
+                new DocumentFormat.OpenXml.Drawing.Wordprocessing.NonVisualGraphicFrameDrawingProperties(
+                    new DocumentFormat.OpenXml.Drawing.GraphicFrameLocks { NoChangeAspect = true }),
+                new DocumentFormat.OpenXml.Drawing.Graphic(
+                    new DocumentFormat.OpenXml.Drawing.GraphicData(
+                        new DocumentFormat.OpenXml.Drawing.Pictures.Picture(
+                            new DocumentFormat.OpenXml.Drawing.Pictures.NonVisualPictureProperties(
+                                new DocumentFormat.OpenXml.Drawing.Pictures.NonVisualDrawingProperties { Id = 0, Name = "MermaidDiagram.png" },
+                                new DocumentFormat.OpenXml.Drawing.Pictures.NonVisualPictureDrawingProperties()),
+                            new DocumentFormat.OpenXml.Drawing.Pictures.BlipFill(
+                                new DocumentFormat.OpenXml.Drawing.Blip { Embed = relationshipId },
+                                new DocumentFormat.OpenXml.Drawing.Stretch(new DocumentFormat.OpenXml.Drawing.FillRectangle())),
+                            new DocumentFormat.OpenXml.Drawing.Pictures.ShapeProperties(
+                                new DocumentFormat.OpenXml.Drawing.Transform2D(
+                                    new DocumentFormat.OpenXml.Drawing.Offset { X = 0, Y = 0 },
+                                    new DocumentFormat.OpenXml.Drawing.Extents { Cx = widthEmu, Cy = heightEmu }),
+                                new DocumentFormat.OpenXml.Drawing.PresetGeometry(
+                                    new DocumentFormat.OpenXml.Drawing.AdjustValueList()) { Preset = DocumentFormat.OpenXml.Drawing.ShapeTypeValues.Rectangle }))
+                    ) { Uri = "http://schemas.openxmlformats.org/drawingml/2006/picture" }))
+            {
+                DistanceFromTop = 0,
+                DistanceFromBottom = 0,
+                DistanceFromLeft = 0,
+                DistanceFromRight = 0
+            });
+        
+        return element;
     }
 
     private void ConvertMarkdownToWord(string markdown, string outputPath)
@@ -2077,7 +2203,7 @@ Console.WriteLine(""Hello, World!"");
             "Supported file types:\n" +
             "- .mmd, .mermaid - Mermaid diagrams\n" +
             "- .md - Markdown files\n\n" +
-			"© 2026 Lee Cassin",
+			"ï¿½ 2026 Lee Cassin",
             "About Mermaid Editor",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
