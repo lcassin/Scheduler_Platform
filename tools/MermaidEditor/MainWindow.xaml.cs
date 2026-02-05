@@ -1978,8 +1978,7 @@ Console.WriteLine(""Hello, World!"");
         
         using var document = WordprocessingDocument.Create(outputPath, WordprocessingDocumentType.Document);
         var mainPart = document.AddMainDocumentPart();
-        mainPart.Document = new Document();
-        var body = mainPart.Document.AppendChild(new Body());
+        mainPart.Document = new Document(new Body());
 
         // Use Markdig to parse the markdown
         var pipeline = new MarkdownPipelineBuilder()
@@ -1993,10 +1992,14 @@ Console.WriteLine(""Hello, World!"");
             : Environment.CurrentDirectory;
 
         // Process each block in the markdown document
+        var body = mainPart.Document.Body!;
         foreach (var block in markdownDoc)
         {
             ProcessMarkdownBlock(block, body, mainPart, baseDir ?? Environment.CurrentDirectory);
         }
+        
+        // Explicitly save the document
+        mainPart.Document.Save();
     }
 
     private void ProcessMarkdownBlock(Block block, Body body, MainDocumentPart mainPart, string baseDir)
