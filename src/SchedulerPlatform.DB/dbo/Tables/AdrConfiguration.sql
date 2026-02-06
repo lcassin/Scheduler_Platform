@@ -29,7 +29,7 @@
     [DatabaseCommandTimeoutSeconds]   INT            DEFAULT ((600)) NOT NULL,
     [TestModeEnabled]                 BIT            DEFAULT ((0)) NOT NULL,
     [TestModeMaxScrapingJobs]         INT            DEFAULT ((50)) NOT NULL,
-    [TestModeMaxCredentialChecks]     INT            DEFAULT ((50)) NOT NULL,
+    [TestModeMaxRebillJobs]           INT            DEFAULT ((50)) NOT NULL,
     [ErrorNotificationsEnabled]       BIT            DEFAULT ((1)) NOT NULL,
     [ErrorNotificationRecipients]     NVARCHAR (500) NULL,
     [OrchestrationNotificationsEnabled] BIT          DEFAULT ((1)) NOT NULL,

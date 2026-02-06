@@ -28,7 +28,7 @@
         @if (_config.TestModeEnabled)
         {
             <MudAlert Severity="Severity.Warning" Class="mb-4" Icon="@Icons.Material.Filled.Warning">
-                <strong>TEST MODE IS ENABLED</strong> - ADR requests and credential checks are limited to @_config.TestModeMaxScrapingJobs and @_config.TestModeMaxCredentialChecks jobs respectively. 
+                <strong>TEST MODE IS ENABLED</strong> - ADR requests and rebill jobs are limited to @_config.TestModeMaxScrapingJobs and @_config.TestModeMaxRebillJobs respectively. 
                 Status checks are not limited. Disable test mode before going to production.
             </MudAlert>
         }
@@ -184,12 +184,12 @@
                     </MudItem>
                     
                     <MudItem xs="12" sm="6" md="4">
-                        <MudNumericField @bind-Value="_config.TestModeMaxCredentialChecks" 
-                                         Label="Max Credential Checks (Test Mode)" 
+                        <MudNumericField @bind-Value="_config.TestModeMaxRebillJobs" 
+                                         Label="Max Rebill Jobs (Test Mode)" 
                                          Variant="Variant.Outlined"
                                          Min="0" Max="1000"
                                          Disabled="@(!_config.TestModeEnabled)"
-                                         HelperText="Max credential checks per run (0 = unlimited)" />
+                                         HelperText="Max rebill jobs per run (0 = unlimited)" />
                     </MudItem>
                     
                     <MudItem xs="12">
@@ -452,7 +452,7 @@
         // Test Mode Settings
         public bool TestModeEnabled { get; set; } = false;
         public int TestModeMaxScrapingJobs { get; set; } = 50;
-        public int TestModeMaxCredentialChecks { get; set; } = 50;
+        public int TestModeMaxRebillJobs { get; set; } = 50;
         // Logging Settings
         public bool EnableDetailedLogging { get; set; } = false;
         // Email Notification Settings

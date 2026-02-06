@@ -174,11 +174,11 @@ public class AdrConfiguration : BaseEntity
     public int TestModeMaxScrapingJobs { get; set; } = 50;
     
     /// <summary>
-    /// Maximum number of credential checks per orchestration run when test mode is enabled.
+    /// Maximum number of rebill jobs per orchestration run when test mode is enabled.
     /// Set to 0 for unlimited (same as test mode disabled for this step).
     /// Default: 50 jobs
     /// </summary>
-    public int TestModeMaxCredentialChecks { get; set; } = 50;
+    public int TestModeMaxRebillJobs { get; set; } = 50;
     
     // Logging Settings
     

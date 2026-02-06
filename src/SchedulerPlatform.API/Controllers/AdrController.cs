@@ -3344,10 +3344,10 @@ public class AdrController : ControllerBase
                         JobsCreated = r.JobsCreated ?? 0,
                         JobsSkipped = r.JobsSkipped ?? 0
                     } : null,
-                    CredentialVerificationResult = r.CredentialsVerified.HasValue ? new CredentialVerificationResult
+                    RebillResult = r.CredentialsVerified.HasValue ? new RebillResult
                     {
-                        CredentialsVerified = r.CredentialsVerified ?? 0,
-                        CredentialsFailed = r.CredentialsFailed ?? 0
+                        RebillRequestsSent = r.CredentialsVerified ?? 0,
+                        RebillRequestsFailed = r.CredentialsFailed ?? 0
                     } : null,
                     ScrapeResult = r.ScrapingRequested.HasValue ? new ScrapeResult
                     {
@@ -3916,13 +3916,13 @@ public class AdrController : ControllerBase
             {
                 TestModeEnabled = config?.TestModeEnabled ?? false,
                 TestModeMaxScrapingJobs = config?.TestModeMaxScrapingJobs ?? 50,
-                TestModeMaxCredentialChecks = config?.TestModeMaxCredentialChecks ?? 50
+                TestModeMaxRebillJobs = config?.TestModeMaxRebillJobs ?? 50
             });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving test mode status");
-            return Ok(new TestModeStatusResponse { TestModeEnabled = false, TestModeMaxScrapingJobs = 50, TestModeMaxCredentialChecks = 50 });
+            return Ok(new TestModeStatusResponse { TestModeEnabled = false, TestModeMaxScrapingJobs = 50, TestModeMaxRebillJobs = 50 });
         }
     }
 
@@ -4025,7 +4025,7 @@ public class AdrController : ControllerBase
             config.DatabaseCommandTimeoutSeconds = request.DatabaseCommandTimeoutSeconds ?? config.DatabaseCommandTimeoutSeconds;
             config.TestModeEnabled = request.TestModeEnabled ?? config.TestModeEnabled;
             config.TestModeMaxScrapingJobs = request.TestModeMaxScrapingJobs ?? config.TestModeMaxScrapingJobs;
-            config.TestModeMaxCredentialChecks = request.TestModeMaxCredentialChecks ?? config.TestModeMaxCredentialChecks;
+            config.TestModeMaxRebillJobs = request.TestModeMaxRebillJobs ?? config.TestModeMaxRebillJobs;
             // Logging Settings
             config.EnableDetailedLogging = request.EnableDetailedLogging ?? config.EnableDetailedLogging;
             // Data Retention Settings
@@ -5281,7 +5281,7 @@ public class UpdateAdrConfigurationRequest
     public int? DatabaseCommandTimeoutSeconds { get; set; }
     public bool? TestModeEnabled { get; set; }
     public int? TestModeMaxScrapingJobs { get; set; }
-    public int? TestModeMaxCredentialChecks { get; set; }
+    public int? TestModeMaxRebillJobs { get; set; }
     // Logging Settings
     public bool? EnableDetailedLogging { get; set; }
     // Data Retention Settings
@@ -5610,9 +5610,9 @@ public class TestModeStatusResponse
     public int TestModeMaxScrapingJobs { get; set; }
     
     /// <summary>
-    /// Maximum number of credential checks per orchestration run when test mode is enabled.
+    /// Maximum number of rebill jobs per orchestration run when test mode is enabled.
     /// </summary>
-    public int TestModeMaxCredentialChecks { get; set; }
+    public int TestModeMaxRebillJobs { get; set; }
 }
 
 #endregion

@@ -401,9 +401,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         return _cachedConfig?.TestModeMaxScrapingJobs ?? 50;
     }
 
-    private int GetTestModeMaxCredentialChecks()
+    private int GetTestModeMaxRebillJobs()
     {
-        return _cachedConfig?.TestModeMaxCredentialChecks ?? 50;
+        return _cachedConfig?.TestModeMaxRebillJobs ?? 50;
     }
 
     private bool IsDetailedLoggingEnabled()
@@ -613,7 +613,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             // Apply test mode limit if enabled
             if (IsTestModeEnabled())
             {
-                var maxJobs = GetTestModeMaxCredentialChecks();
+                var maxJobs = GetTestModeMaxRebillJobs();
                 if (maxJobs > 0 && jobsNeedingVerification.Count > maxJobs)
                 {
                     // Order by JobId for consistency - same jobs will be picked each run
@@ -2314,7 +2314,21 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 })
                 .ToList();
 
-            _logger.LogInformation("Found {Count} accounts for rebill on {DayOfWeek}", accountsForRebill.Count, todayDayOfWeek);
+            var totalAccountsFound = accountsForRebill.Count;
+            _logger.LogInformation("Found {Count} accounts for rebill on {DayOfWeek}", totalAccountsFound, todayDayOfWeek);
+
+            // Apply test mode limit if enabled
+            if (IsTestModeEnabled())
+            {
+                var maxJobs = GetTestModeMaxRebillJobs();
+                if (maxJobs > 0 && accountsForRebill.Count > maxJobs)
+                {
+                    // Order by AccountId for consistency - same accounts will be picked each run
+                    accountsForRebill = accountsForRebill.OrderBy(a => a.Id).Take(maxJobs).ToList();
+                    _logger.LogWarning("TEST MODE ENABLED: Limiting rebill accounts from {Total} to {Max} (ordered by AccountId for consistency)", 
+                        totalAccountsFound, maxJobs);
+                }
+            }
 
             // Report initial progress
             progressCallback?.Invoke(0, accountsForRebill.Count);
