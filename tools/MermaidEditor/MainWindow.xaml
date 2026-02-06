@@ -943,54 +943,26 @@
                                         </ItemsControl.ItemsPanel>
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
-                                                <Button Click="DocumentTab_Click"
-                                                        Tag="{Binding}"
-                                                        BorderThickness="1,1,1,0"
-                                                        Padding="8,4"
-                                                        Cursor="Hand">
-                                                    <Button.Style>
-                                                        <Style TargetType="Button">
-                                                            <Setter Property="Background" Value="#2D2D30"/>
-                                                            <Setter Property="BorderBrush" Value="Transparent"/>
-                                                            <Setter Property="Margin" Value="0,0,1,0"/>
-                                                            <Setter Property="Template">
-                                                                <Setter.Value>
-                                                                    <ControlTemplate TargetType="Button">
-                                                                        <Border Background="{TemplateBinding Background}"
-                                                                                BorderBrush="{TemplateBinding BorderBrush}"
-                                                                                BorderThickness="{TemplateBinding BorderThickness}"
-                                                                                CornerRadius="4,4,0,0"
-                                                                                Padding="{TemplateBinding Padding}"
-                                                                                Margin="{TemplateBinding Margin}">
-                                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                                                                        </Border>
-                                                                    </ControlTemplate>
-                                                                </Setter.Value>
-                                                            </Setter>
-                                                            <Style.Triggers>
-                                                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                                                    <Setter Property="Background" Value="#1E1E1E"/>
-                                                                    <Setter Property="BorderBrush" Value="#9184EE"/>
-                                                                    <Setter Property="Margin" Value="0,0,1,-1"/>
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Button.Style>
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <TextBlock Text="{Binding TabHeader}" 
-                                                                   Foreground="#F1F1F1" 
-                                                                   VerticalAlignment="Center"/>
-                                                        <Button Click="DocumentTab_CloseClick"
-                                                                Style="{StaticResource ToolbarButtonStyle}"
-                                                                Padding="2,0,0,0"
-                                                                Margin="6,0,0,0"
-                                                                VerticalAlignment="Center"
-                                                                ToolTip="Close"
-                                                                Tag="{Binding}">
-                                                            <TextBlock Text="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="10"/>
-                                                        </Button>
-                                                    </StackPanel>
-                                                </Button>
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,1,0">
+                                                    <Button Click="DocumentTab_Click"
+                                                            Tag="{Binding}"
+                                                            Content="{Binding TabHeader}"
+                                                            Background="#2D2D30"
+                                                            Foreground="#F1F1F1"
+                                                            BorderThickness="0"
+                                                            Padding="8,4"
+                                                            Cursor="Hand"/>
+                                                    <Button Click="DocumentTab_CloseClick"
+                                                            Tag="{Binding}"
+                                                            Background="#2D2D30"
+                                                            Foreground="#F1F1F1"
+                                                            BorderThickness="0"
+                                                            Padding="4"
+                                                            Cursor="Hand"
+                                                            ToolTip="Close">
+                                                        <TextBlock Text="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="10"/>
+                                                    </Button>
+                                                </StackPanel>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
