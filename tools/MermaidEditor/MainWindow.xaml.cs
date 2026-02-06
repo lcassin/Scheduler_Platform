@@ -926,8 +926,8 @@ Console.WriteLine(""Hello, World!"");
         }});
         
         function setupNodeClickHandlers(svg) {{
-            // Find all clickable elements in the SVG (nodes, edges, labels)
-            const clickableElements = svg.querySelectorAll('[id*=""flowchart-""], [id*=""stateDiagram-""], [id*=""classDiagram-""], [id*=""sequenceDiagram-""], .node, .cluster, .actor, .messageText, .labelText, .edgeLabel, .nodeLabel, g[class*=""node""]');
+            // Find all clickable elements in the SVG (nodes, edges, labels, subgraphs)
+            const clickableElements = svg.querySelectorAll('[id*=""flowchart-""], [id*=""stateDiagram-""], [id*=""classDiagram-""], [id*=""sequenceDiagram-""], .node, .cluster, .actor, .messageText, .labelText, .edgeLabel, .nodeLabel, g[class*=""node""], .cluster-label, [id*=""subGraph""]');
             
             clickableElements.forEach(el => {{
                 el.style.cursor = 'pointer';
@@ -941,6 +941,9 @@ Console.WriteLine(""Hello, World!"");
                     // Get the element's ID
                     const elId = el.id || el.getAttribute('id') || '';
                     
+                    // Check if this is a subgraph/cluster
+                    const isSubgraph = el.classList.contains('cluster') || el.classList.contains('cluster-label') || elId.includes('subGraph');
+                    
                     // Try to extract node ID from Mermaid's ID format (e.g., 'flowchart-A-0')
                     if (elId) {{
                         const parts = elId.split('-');
@@ -949,9 +952,19 @@ Console.WriteLine(""Hello, World!"");
                         }}
                     }}
                     
+                    // For subgraphs, look for the label text in cluster-label or foreignObject
+                    if (isSubgraph || el.classList.contains('cluster')) {{
+                        const clusterLabel = el.querySelector('.cluster-label, foreignObject, text') || el.closest('.cluster')?.querySelector('.cluster-label, foreignObject, text');
+                        if (clusterLabel) {{
+                            textContent = (clusterLabel.textContent || clusterLabel.innerText || '').trim();
+                        }}
+                    }}
+                    
                     // Also get text content from the element or its children
-                    const textEl = el.querySelector('text, .nodeLabel, span, foreignObject') || el;
-                    textContent = (textEl.textContent || textEl.innerText || '').trim();
+                    if (!textContent) {{
+                        const textEl = el.querySelector('text, .nodeLabel, span, foreignObject div, foreignObject') || el;
+                        textContent = (textEl.textContent || textEl.innerText || '').trim();
+                    }}
                     
                     // If no nodeId found, try to use the class name
                     if (!nodeId && el.classList) {{
@@ -972,10 +985,10 @@ Console.WriteLine(""Hello, World!"");
                 }});
             }});
             
-            // Also handle clicks on text elements directly
-            const textElements = svg.querySelectorAll('text, .nodeLabel');
+            // Also handle clicks on text elements directly (including subgraph labels)
+            const textElements = svg.querySelectorAll('text, .nodeLabel, .cluster-label foreignObject, .cluster-label text');
             textElements.forEach(el => {{
-                if (!el.closest('[id*=""flowchart-""]')) {{ // Don't double-handle
+                if (!el.closest('[id*=""flowchart-""]') || el.closest('.cluster-label')) {{ // Don't double-handle unless it's a cluster label
                     el.style.cursor = 'pointer';
                     el.addEventListener('click', function(e) {{
                         e.stopPropagation();
@@ -3960,7 +3973,15 @@ Console.WriteLine(""Hello, World!"");
         _isDirty = doc.IsDirty;
         _currentRenderMode = doc.RenderMode;
         _currentZoom = doc.PreviewZoom;
+        
+        // Reset navigation state for the new document
+        // New documents start with HasNavigatedAway = false
+        // Existing documents restore their saved state
         _hasNavigatedAway = doc.HasNavigatedAway;
+        
+        // Immediately disable back button - it will be re-enabled by CoreWebView2_NavigationCompleted
+        // if the document has navigated away, but for new documents it should stay disabled
+        PreviewBackButton.IsEnabled = false;
         
         // Swap the text document
         CodeEditor.Document = doc.TextDocument;
@@ -3980,12 +4001,11 @@ Console.WriteLine(""Hello, World!"");
         UpdateNavigationDropdown();
         UpdateExportMenuVisibility();
         
-        // Update back button state
-        PreviewBackButton.IsEnabled = _hasNavigatedAway;
-        
         _isSwitchingDocuments = false;
         
         // Re-render preview for the new document
+        // This will trigger NavigateToString which resets _hasNavigatedAway to false
+        // and keeps the back button disabled for fresh renders
         RenderPreview();
     }
     
