@@ -766,167 +766,84 @@
                 <ColumnDefinition Width="*" MinWidth="200"/>
             </Grid.ColumnDefinitions>
             
-            <!-- Left Panel - Tabbed Code Editor / File Browser -->
-            <TabControl x:Name="LeftPanelTabs" Grid.Column="0" Background="#2D2D30">
-                <TabControl.Template>
-                    <ControlTemplate TargetType="TabControl">
-                        <Grid>
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto"/>
-                                <RowDefinition Height="*"/>
-                            </Grid.RowDefinitions>
-                            <!-- Tab Header Panel with purple line underneath non-selected tabs -->
-                            <Grid Grid.Row="0">
-                                <Border Background="#2D2D30" BorderBrush="{StaticResource PurpleAccentBrush}" 
-                                        BorderThickness="0,0,0,1" Margin="0,0,0,0"/>
-                                <TabPanel IsItemsHost="True" Background="Transparent" Margin="0,0,0,0"/>
-                            </Grid>
-                            <!-- Content area with purple border on right only -->
-                            <Border Grid.Row="1" 
-                                    BorderBrush="{StaticResource PurpleAccentBrush}" 
-                                    BorderThickness="0,0,1,0"
-                                    Background="#1E1E1E">
-                                <ContentPresenter ContentSource="SelectedContent"/>
-                            </Border>
-                        </Grid>
-                    </ControlTemplate>
-                </TabControl.Template>
-                <!-- Code Tab -->
-                <TabItem x:Name="CodeTab">
-                    <TabItem.Header>
-                        <StackPanel Orientation="Horizontal" Margin="4,2">
-                            <TextBlock Text="&#xE943;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                            <TextBlock x:Name="EditorHeaderText" Text="Code" Margin="6,0,0,0" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </TabItem.Header>
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
-                        
-                        <!-- Document Tabs (populated programmatically) -->
-                        <Border Grid.Row="0" Background="#2D2D30" 
-                                BorderBrush="{StaticResource PurpleAccentBrush}" 
-                                BorderThickness="0,0,0,1">
-                            <ScrollViewer x:Name="DocumentTabScrollViewer" 
-                                          HorizontalScrollBarVisibility="Auto" 
-                                          VerticalScrollBarVisibility="Disabled">
-                                <StackPanel x:Name="DocumentTabsPanel" Orientation="Horizontal"/>
-                            </ScrollViewer>
-                        </Border>
-                        
-                        <!-- Navigation Dropdown Bar -->
-                        <ComboBox x:Name="NavigationDropdown" 
-                                  Grid.Row="1"
-                                  Style="{StaticResource NavigationComboBoxStyle}"
-                                  BorderThickness="0,0,0,1"
-                                  Margin="0,0,0,4"
-                                  SelectionChanged="NavigationDropdown_SelectionChanged"
-                                  ToolTip="Jump to section">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate>
-                                    <TextBlock Text="{Binding DisplayText}" Foreground="#F1F1F1" Margin="{Binding IndentMargin}"/>
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                            <ComboBox.ItemContainerStyle>
-                                <Style TargetType="ComboBoxItem">
-                                    <Setter Property="Background" Value="#2D2D30"/>
-                                    <Setter Property="Foreground" Value="#F1F1F1"/>
-                                    <Setter Property="Padding" Value="8,4"/>
-                                    <Setter Property="Template">
-                                        <Setter.Value>
-                                            <ControlTemplate TargetType="ComboBoxItem">
-                                                <Border x:Name="Bd" 
-                                                        Background="{TemplateBinding Background}" 
-                                                        Padding="{TemplateBinding Padding}">
-                                                    <ContentPresenter/>
-                                                </Border>
-                                                <ControlTemplate.Triggers>
-                                                    <Trigger Property="IsHighlighted" Value="True">
-                                                        <Setter TargetName="Bd" Property="Background" Value="#3E3E42"/>
-                                                    </Trigger>
-                                                    <Trigger Property="IsSelected" Value="True">
-                                                        <Setter TargetName="Bd" Property="Background" Value="#094771"/>
-                                                    </Trigger>
-                                                </ControlTemplate.Triggers>
-                                            </ControlTemplate>
-                                        </Setter.Value>
-                                    </Setter>
-                                </Style>
-                            </ComboBox.ItemContainerStyle>
-                        </ComboBox>
-                        
-                        <!-- Code Editor -->
-                        <avalon:TextEditor x:Name="CodeEditor" 
-                                 Grid.Row="2"
-                                 FontFamily="Consolas"
-                                 FontSize="14"
-                                 Background="#1E1E1E"
-                                 Foreground="#D4D4D4"
-                                 ShowLineNumbers="True"
-                                 WordWrap="False"
-                                 HorizontalScrollBarVisibility="Auto"
-                                 VerticalScrollBarVisibility="Auto"/>
-                    </Grid>
-                </TabItem>
+            <!-- Left Panel - Code Editor with Document Tabs -->
+            <Grid Grid.Column="0" Background="#2D2D30">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
                 
-                <!-- Files Tab -->
-                <TabItem>
-                    <TabItem.Header>
-                        <StackPanel Orientation="Horizontal" Margin="4,2">
-                            <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                            <TextBlock Text="Files" Margin="6,0,0,0" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </TabItem.Header>
-                    <Grid Background="#1E1E1E">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
-                        </Grid.RowDefinitions>
-                        
-                        <!-- Path Bar -->
-                        <Grid Grid.Row="0" Background="#2D2D30">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Button x:Name="BrowseFolderButton" Grid.Column="0" 
-                                    Click="BrowseFolder_Click" ToolTip="Browse for folder"
-                                    Style="{StaticResource ToolbarButtonStyle}" Margin="2">
-                                <TextBlock Text="&#xE8B7;" FontFamily="Segoe MDL2 Assets" FontSize="12"/>
-                            </Button>
-                            <Button x:Name="ParentFolderButton" Grid.Column="1" 
-                                    Click="ParentFolder_Click" ToolTip="Go to parent folder"
-                                    Style="{StaticResource ToolbarButtonStyle}" Margin="2">
-                                <TextBlock Text="&#xE74A;" FontFamily="Segoe MDL2 Assets" FontSize="12"/>
-                            </Button>
-                            <TextBox x:Name="CurrentPathTextBox" Grid.Column="2" 
-                                     Background="#3E3E42" Foreground="#D4D4D4" 
-                                     BorderThickness="0" Padding="4" Margin="2"
-                                     IsReadOnly="True"/>
-                        </Grid>
-                        
-                        <!-- File List -->
-                        <ListBox x:Name="FileListBox" Grid.Row="1" 
-                                 Background="#1E1E1E" Foreground="#D4D4D4"
-                                 BorderThickness="0"
-                                 SelectionChanged="FileListBox_SelectionChanged"
-                                 MouseDoubleClick="FileListBox_MouseDoubleClick">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <StackPanel Orientation="Horizontal" Margin="4,2">
-                                        <TextBlock Text="{Binding Icon}" Width="20" FontFamily="Segoe UI Symbol"/>
-                                        <TextBlock Text="{Binding Name}" Margin="4,0,0,0"/>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
-                    </Grid>
-                </TabItem>
-            </TabControl>
+                <!-- Document Tabs (populated programmatically) with purple accent styling -->
+                <Grid Grid.Row="0">
+                    <!-- Purple line underneath non-selected tabs -->
+                    <Border Background="#2D2D30" BorderBrush="{StaticResource PurpleAccentBrush}" 
+                            BorderThickness="0,0,0,1" Margin="0,0,0,0"/>
+                    <ScrollViewer x:Name="DocumentTabScrollViewer" 
+                                  HorizontalScrollBarVisibility="Auto" 
+                                  VerticalScrollBarVisibility="Disabled"
+                                  Background="Transparent">
+                        <StackPanel x:Name="DocumentTabsPanel" Orientation="Horizontal"/>
+                    </ScrollViewer>
+                </Grid>
+                
+                <!-- Navigation Dropdown Bar -->
+                <ComboBox x:Name="NavigationDropdown" 
+                          Grid.Row="1"
+                          Style="{StaticResource NavigationComboBoxStyle}"
+                          BorderThickness="0,0,0,1"
+                          Margin="0,0,0,4"
+                          SelectionChanged="NavigationDropdown_SelectionChanged"
+                          ToolTip="Jump to section">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding DisplayText}" Foreground="#F1F1F1" Margin="{Binding IndentMargin}"/>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                    <ComboBox.ItemContainerStyle>
+                        <Style TargetType="ComboBoxItem">
+                            <Setter Property="Background" Value="#2D2D30"/>
+                            <Setter Property="Foreground" Value="#F1F1F1"/>
+                            <Setter Property="Padding" Value="8,4"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ComboBoxItem">
+                                        <Border x:Name="Bd" 
+                                                Background="{TemplateBinding Background}" 
+                                                Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsHighlighted" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="#3E3E42"/>
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="#094771"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ComboBox.ItemContainerStyle>
+                </ComboBox>
+                
+                <!-- Code Editor with purple border on right -->
+                <Border Grid.Row="2" 
+                        BorderBrush="{StaticResource PurpleAccentBrush}" 
+                        BorderThickness="0,0,1,0"
+                        Background="#1E1E1E">
+                    <avalon:TextEditor x:Name="CodeEditor" 
+                             FontFamily="Consolas"
+                             FontSize="14"
+                             Background="#1E1E1E"
+                             Foreground="#D4D4D4"
+                             ShowLineNumbers="True"
+                             WordWrap="False"
+                             HorizontalScrollBarVisibility="Auto"
+                             VerticalScrollBarVisibility="Auto"/>
+                </Border>
+            </Grid>
             
             <!-- Splitter with grip indicator -->
             <GridSplitter Grid.Column="1" 

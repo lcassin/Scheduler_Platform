@@ -66,7 +66,6 @@ public partial class MainWindow : Window
     private RenderMode _currentRenderMode = RenderMode.Mermaid;
     private TaskCompletionSource<string>? _pngExportTcs;
     private string _currentBrowserPath = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-    private bool _isBrowsingFiles;
     private string? _lastExportDirectory;
     private string? _currentVirtualHostFolder;
     private const string VirtualHostName = "localfiles.mermaideditor";
@@ -155,11 +154,11 @@ Console.WriteLine(""Hello, World!"");
             UpdateTitle();
             UpdateNavigationDropdown();
             
-            // Navigate file browser to the file's folder and select the file
+            // Update current browser path for Open/Save dialogs
             var folder = Path.GetDirectoryName(filePath);
             if (!string.IsNullOrEmpty(folder))
             {
-                NavigateBrowserToFolder(folder, filePath);
+                _currentBrowserPath = folder;
             }
         }
         catch (Exception ex)
@@ -1651,15 +1650,13 @@ Console.WriteLine(""Hello, World!"");
         var ext = Path.GetExtension(filePath).ToLowerInvariant();
         _currentRenderMode = ext == ".md" ? RenderMode.Markdown : RenderMode.Mermaid;
         
-        // Update header text and syntax highlighting based on mode
+        // Update syntax highlighting based on mode
         if (_currentRenderMode == RenderMode.Markdown)
         {
-            EditorHeaderText.Text = "Markdown Code";
             CodeEditor.SyntaxHighlighting = null; // Use default for Markdown
         }
         else
         {
-            EditorHeaderText.Text = "Mermaid Code";
             CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
         }
         
@@ -1681,12 +1678,10 @@ Console.WriteLine(""Hello, World!"");
             // Update syntax highlighting
             if (dialog.IsMermaid)
             {
-                EditorHeaderText.Text = "Mermaid Code";
                 CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
             }
             else
             {
-                EditorHeaderText.Text = "Markdown Code";
                 CodeEditor.SyntaxHighlighting = null;
             }
             
@@ -2732,147 +2727,6 @@ Console.WriteLine(""Hello, World!"");
             MessageBoxImage.Information);
     }
 
-    // File Browser Methods
-    private void RefreshFileList()
-    {
-        try
-        {
-            var items = new List<FileListItem>();
-            
-            // Add directories
-            foreach (var dir in Directory.GetDirectories(_currentBrowserPath))
-            {
-                var dirInfo = new DirectoryInfo(dir);
-                items.Add(new FileListItem
-                {
-                    Name = dirInfo.Name,
-                    FullPath = dir,
-                    IsDirectory = true,
-                    Icon = "\uD83D\uDCC1" // Folder icon
-                });
-            }
-            
-            // Add .mmd, .mermaid, and .md files
-            var extensions = new[] { "*.mmd", "*.mermaid", "*.md" };
-            foreach (var ext in extensions)
-            {
-                foreach (var file in Directory.GetFiles(_currentBrowserPath, ext))
-                {
-                    var fileInfo = new FileInfo(file);
-                    items.Add(new FileListItem
-                    {
-                        Name = fileInfo.Name,
-                        FullPath = file,
-                        IsDirectory = false,
-                        Icon = fileInfo.Extension.ToLower() == ".md" ? "\uD83D\uDCC4" : "\uD83D\uDCC8" // Document or chart icon
-                    });
-                }
-            }
-            
-            // Sort: directories first, then files alphabetically
-            items = items.OrderBy(x => !x.IsDirectory).ThenBy(x => x.Name).ToList();
-            
-            FileListBox.ItemsSource = items;
-            CurrentPathTextBox.Text = _currentBrowserPath;
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Failed to read directory: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
-
-    private void BrowseFolder_Click(object sender, RoutedEventArgs e)
-    {
-        var dialog = new System.Windows.Forms.FolderBrowserDialog
-        {
-            SelectedPath = _currentBrowserPath,
-            Description = "Select a folder to browse"
-        };
-        
-        if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
-        {
-            _currentBrowserPath = dialog.SelectedPath;
-            RefreshFileList();
-        }
-    }
-
-    private void ParentFolder_Click(object sender, RoutedEventArgs e)
-    {
-        var parent = Directory.GetParent(_currentBrowserPath);
-        if (parent != null)
-        {
-            _currentBrowserPath = parent.FullName;
-            RefreshFileList();
-        }
-    }
-
-    private void FileListBox_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
-    {
-        if (FileListBox.SelectedItem is FileListItem item && !item.IsDirectory)
-        {
-            // Preview the file without fully opening it for editing
-            _isBrowsingFiles = true;
-            try
-            {
-                var content = File.ReadAllText(item.FullPath);
-                var ext = Path.GetExtension(item.FullPath).ToLowerInvariant();
-                
-                // Set render mode based on file type
-                if (ext == ".md")
-                {
-                    _currentRenderMode = RenderMode.Markdown;
-                }
-                else
-                {
-                    _currentRenderMode = RenderMode.Mermaid;
-                }
-                
-                // Render preview directly without changing the editor
-                if (_webViewInitialized)
-                {
-                    if (_currentRenderMode == RenderMode.Mermaid)
-                    {
-                        RenderMermaidPreview(content);
-                    }
-                    else
-                    {
-                        RenderMarkdownPreview(content, item.FullPath);
-                    }
-                }
-                
-                StatusText.Text = $"Previewing: {item.Name}";
-            }
-            catch (Exception ex)
-            {
-                StatusText.Text = $"Error previewing file: {ex.Message}";
-            }
-            finally
-            {
-                _isBrowsingFiles = false;
-            }
-        }
-    }
-
-    private void FileListBox_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
-    {
-        if (FileListBox.SelectedItem is FileListItem item)
-        {
-            if (item.IsDirectory)
-            {
-                // Navigate into directory
-                _currentBrowserPath = item.FullPath;
-                RefreshFileList();
-            }
-            else
-            {
-                // Open file in a new tab
-                OpenFileInTab(item.FullPath);
-                LeftPanelTabs.SelectedItem = CodeTab; // Switch to Code tab
-                StatusText.Text = "File opened from browser";
-            }
-        }
-    }
-
     private void RenderMermaidPreview(string code)
     {
         var html = $@"<!DOCTYPE html>
@@ -3015,26 +2869,6 @@ Console.WriteLine(""Hello, World!"");
 </html>";
         _isRenderingContent = true;
         PreviewWebView.NavigateToString(html);
-    }
-
-    private void NavigateBrowserToFolder(string folderPath, string? selectFilePath = null)
-    {
-        if (Directory.Exists(folderPath))
-        {
-            _currentBrowserPath = folderPath;
-            RefreshFileList();
-            
-            // Select the specified file in the list if provided
-            if (!string.IsNullOrEmpty(selectFilePath) && FileListBox.ItemsSource is List<FileListItem> items)
-            {
-                var fileItem = items.FirstOrDefault(x => x.FullPath.Equals(selectFilePath, StringComparison.OrdinalIgnoreCase));
-                if (fileItem != null)
-                {
-                    FileListBox.SelectedItem = fileItem;
-                    FileListBox.ScrollIntoView(fileItem);
-                }
-            }
-        }
     }
 
     private void Window_DragOver(object sender, System.Windows.DragEventArgs e)
@@ -3744,25 +3578,31 @@ Console.WriteLine(""Hello, World!"");
     /// </summary>
     private void CreateTabButtonForDocument(DocumentModel doc)
     {
-        var tabButton = new System.Windows.Controls.Button
+        // Create a Border to wrap the button for rounded corners and purple accent styling
+        var tabBorder = new System.Windows.Controls.Border
         {
             Tag = doc,
-            Padding = new Thickness(12, 6, 8, 6),
-            Margin = new Thickness(0, 0, 1, 0),
-            BorderThickness = new Thickness(0),
-            Cursor = System.Windows.Input.Cursors.Hand,
+            CornerRadius = new CornerRadius(6, 6, 0, 0),
+            Margin = new Thickness(0, 0, 1, 1), // Bottom margin of 1 to sit on the purple line
             Background = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2D2D30")),
-            Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F1F1F1")),
+            BorderThickness = new Thickness(1, 1, 1, 0),
+            BorderBrush = System.Windows.Media.Brushes.Transparent,
+            Cursor = System.Windows.Input.Cursors.Hand,
         };
         
         // Create content with text and close button
-        var stackPanel = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+        var stackPanel = new StackPanel 
+        { 
+            Orientation = System.Windows.Controls.Orientation.Horizontal,
+            Margin = new Thickness(12, 6, 8, 6)
+        };
         
         var textBlock = new TextBlock
         {
             Text = doc.TabHeader,
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(0, 0, 8, 0)
+            Margin = new Thickness(0, 0, 8, 0),
+            Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F1F1F1")),
         };
         
         var closeButton = new System.Windows.Controls.Button
@@ -3783,9 +3623,16 @@ Console.WriteLine(""Hello, World!"");
         
         stackPanel.Children.Add(textBlock);
         stackPanel.Children.Add(closeButton);
-        tabButton.Content = stackPanel;
+        tabBorder.Child = stackPanel;
         
-        tabButton.Click += DocumentTab_Click;
+        // Handle click on the border
+        tabBorder.MouseLeftButtonDown += (s, e) =>
+        {
+            if (s is System.Windows.Controls.Border border && border.Tag is DocumentModel clickedDoc)
+            {
+                SwitchToDocument(clickedDoc);
+            }
+        };
         
         // Subscribe to property changes to update tab header
         doc.PropertyChanged += (s, e) =>
@@ -3796,8 +3643,10 @@ Console.WriteLine(""Hello, World!"");
             }
         };
         
-        doc.TabButton = tabButton;
-        DocumentTabsPanel.Children.Add(tabButton);
+        // Store the border as the tab element (we'll cast it appropriately in UpdateTabStyles)
+        doc.TabButton = null; // Clear the old button reference
+        doc.TabBorder = tabBorder;
+        DocumentTabsPanel.Children.Add(tabBorder);
         
         UpdateTabStyles();
     }
@@ -3815,13 +3664,30 @@ Console.WriteLine(""Hello, World!"");
         
         foreach (var doc in _openDocuments)
         {
-            if (doc.TabButton != null)
+            var isSelected = doc == _activeDocument;
+            
+            // Update Border-based tabs (new style)
+            if (doc.TabBorder != null)
             {
-                var isSelected = doc == _activeDocument;
+                doc.TabBorder.Background = isSelected ? selectedBg : unselectedBg;
+                // Purple border on top and sides for selected tab, transparent for unselected
+                doc.TabBorder.BorderBrush = isSelected ? purpleAccent : System.Windows.Media.Brushes.Transparent;
+                // Selected tab extends down to cover the purple line (margin bottom = -1)
+                doc.TabBorder.Margin = isSelected ? new Thickness(0, 0, 1, -1) : new Thickness(0, 0, 1, 1);
+                // Set z-index so selected tab appears on top
+                System.Windows.Controls.Panel.SetZIndex(doc.TabBorder, isSelected ? 1 : 0);
+                
+                // Update text color
+                if (doc.TabBorder.Child is StackPanel sp && sp.Children.Count > 0 && sp.Children[0] is TextBlock tb)
+                {
+                    tb.Foreground = isSelected ? selectedFg : unselectedFg;
+                }
+            }
+            // Fallback for Button-based tabs (legacy)
+            else if (doc.TabButton != null)
+            {
                 doc.TabButton.Background = isSelected ? selectedBg : unselectedBg;
                 doc.TabButton.Foreground = isSelected ? selectedFg : unselectedFg;
-                
-                // Add purple bottom border for selected tab
                 doc.TabButton.BorderThickness = isSelected ? new Thickness(0, 0, 0, 2) : new Thickness(0);
                 doc.TabButton.BorderBrush = isSelected ? purpleAccent : null;
             }
@@ -3876,8 +3742,12 @@ Console.WriteLine(""Hello, World!"");
             }
         }
         
-        // Remove the tab button
-        if (doc.TabButton != null)
+        // Remove the tab element (Border or Button)
+        if (doc.TabBorder != null)
+        {
+            DocumentTabsPanel.Children.Remove(doc.TabBorder);
+        }
+        else if (doc.TabButton != null)
         {
             DocumentTabsPanel.Children.Remove(doc.TabButton);
         }
@@ -4030,11 +3900,11 @@ Console.WriteLine(""Hello, World!"");
             var doc = CreateNewDocument(filePath, content);
             SwitchToDocument(doc);
             
-            // Navigate file browser to the file's folder
+            // Update current browser path for Open/Save dialogs
             var folder = Path.GetDirectoryName(filePath);
             if (!string.IsNullOrEmpty(folder))
             {
-                NavigateBrowserToFolder(folder, filePath);
+                _currentBrowserPath = folder;
             }
             
             AddToRecentFiles(filePath);
@@ -4068,10 +3938,11 @@ Console.WriteLine(""Hello, World!"");
             var doc = CreateNewDocument(args[1], content);
             SwitchToDocument(doc);
             
+            // Update current browser path for Open/Save dialogs
             var folder = Path.GetDirectoryName(args[1]);
             if (!string.IsNullOrEmpty(folder))
             {
-                NavigateBrowserToFolder(folder, args[1]);
+                _currentBrowserPath = folder;
             }
             
             AddToRecentFiles(args[1]);
@@ -4201,8 +4072,9 @@ public class DocumentModel : System.ComponentModel.INotifyPropertyChanged
     public double PreviewZoom { get; set; } = 1.0;
     public bool HasNavigatedAway { get; set; }
     
-    // UI element reference for the tab button
+    // UI element references for the tab
     public System.Windows.Controls.Button? TabButton { get; set; }
+    public System.Windows.Controls.Border? TabBorder { get; set; }
     
     public string DisplayName => string.IsNullOrEmpty(FilePath) ? "Untitled" : Path.GetFileName(FilePath);
     
