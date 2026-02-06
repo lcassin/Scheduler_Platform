@@ -828,20 +828,22 @@
                     </ComboBox.ItemContainerStyle>
                 </ComboBox>
                 
-                <!-- Code Editor with purple border on right -->
+                <!-- Code Editor with purple border on right and subtle grey border on bottom -->
                 <Border Grid.Row="2" 
                         BorderBrush="{StaticResource PurpleAccentBrush}" 
                         BorderThickness="0,0,1,0"
                         Background="#1E1E1E">
-                    <avalon:TextEditor x:Name="CodeEditor" 
-                             FontFamily="Consolas"
-                             FontSize="14"
-                             Background="#1E1E1E"
-                             Foreground="#D4D4D4"
-                             ShowLineNumbers="True"
-                             WordWrap="False"
-                             HorizontalScrollBarVisibility="Auto"
-                             VerticalScrollBarVisibility="Auto"/>
+                    <Border BorderBrush="#414141" BorderThickness="0,0,0,1">
+                        <avalon:TextEditor x:Name="CodeEditor" 
+                                 FontFamily="Consolas"
+                                 FontSize="14"
+                                 Background="#1E1E1E"
+                                 Foreground="#D4D4D4"
+                                 ShowLineNumbers="True"
+                                 WordWrap="False"
+                                 HorizontalScrollBarVisibility="Auto"
+                                 VerticalScrollBarVisibility="Auto"/>
+                    </Border>
                 </Border>
             </Grid>
             
