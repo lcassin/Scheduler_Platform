@@ -3659,13 +3659,38 @@ Console.WriteLine(""Hello, World!"");
             }
         };
         
-        // Add context menu for tab operations
+        // Add context menu for tab operations with dark theme styling
+        var menuBackground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2D2D30"));
+        var menuBorder = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#3E3E42"));
+        var menuForeground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F1F1F1"));
+        
         var contextMenu = new System.Windows.Controls.ContextMenu
         {
-            Background = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2D2D30")),
-            BorderBrush = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#3E3E42")),
-            Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F1F1F1")),
+            Background = menuBackground,
+            BorderBrush = menuBorder,
+            Foreground = menuForeground,
         };
+        
+        // Create a style for menu items with dark theme
+        var menuItemStyle = new System.Windows.Style(typeof(System.Windows.Controls.MenuItem));
+        menuItemStyle.Setters.Add(new Setter(System.Windows.Controls.MenuItem.BackgroundProperty, menuBackground));
+        menuItemStyle.Setters.Add(new Setter(System.Windows.Controls.MenuItem.ForegroundProperty, menuForeground));
+        menuItemStyle.Setters.Add(new Setter(System.Windows.Controls.MenuItem.BorderBrushProperty, menuBorder));
+        menuItemStyle.Setters.Add(new Setter(System.Windows.Controls.MenuItem.PaddingProperty, new Thickness(8, 4, 8, 4)));
+        
+        // Add trigger for hover state
+        var hoverTrigger = new Trigger { Property = System.Windows.Controls.MenuItem.IsHighlightedProperty, Value = true };
+        hoverTrigger.Setters.Add(new Setter(System.Windows.Controls.MenuItem.BackgroundProperty, 
+            new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#3E3E42"))));
+        menuItemStyle.Triggers.Add(hoverTrigger);
+        
+        contextMenu.Resources.Add(typeof(System.Windows.Controls.MenuItem), menuItemStyle);
+        
+        // Style the separator
+        var separatorStyle = new System.Windows.Style(typeof(System.Windows.Controls.Separator));
+        separatorStyle.Setters.Add(new Setter(System.Windows.Controls.Separator.BackgroundProperty, menuBorder));
+        separatorStyle.Setters.Add(new Setter(System.Windows.Controls.Separator.MarginProperty, new Thickness(4, 2, 4, 2)));
+        contextMenu.Resources.Add(typeof(System.Windows.Controls.Separator), separatorStyle);
         
         var closeItem = new System.Windows.Controls.MenuItem { Header = "Close", Tag = doc };
         closeItem.Click += (s, e) => CloseDocument(doc);
