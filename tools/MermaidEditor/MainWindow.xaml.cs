@@ -1,7 +1,11 @@
 using System.IO;
+using System.IO.Compression;
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Threading;
 using DocumentFormat.OpenXml;
@@ -25,6 +29,10 @@ using Run = DocumentFormat.OpenXml.Wordprocessing.Run;
 using Text = DocumentFormat.OpenXml.Wordprocessing.Text;
 using Bold = DocumentFormat.OpenXml.Wordprocessing.Bold;
 using Italic = DocumentFormat.OpenXml.Wordprocessing.Italic;
+using Drawing = DocumentFormat.OpenXml.Wordprocessing.Drawing;
+using Markdig;
+using Markdig.Syntax;
+using Markdig.Syntax.Inlines;
 
 namespace MermaidEditor;
 
@@ -36,6 +44,19 @@ public enum RenderMode
 
 public partial class MainWindow : Window
 {
+    // P/Invoke for dark title bar
+    [DllImport("dwmapi.dll", PreserveSig = true)]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+    
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+    private const int DWMWA_CAPTION_COLOR = 35;
+    
+    // Multi-document support
+    private List<DocumentModel> _openDocuments = new();
+    private DocumentModel? _activeDocument;
+    private bool _isSwitchingDocuments;
+    
+    // These fields are updated when switching documents for backward compatibility
     private string? _currentFilePath;
     private bool _isDirty;
     private double _currentZoom = 1.0;
@@ -49,8 +70,16 @@ public partial class MainWindow : Window
     private string? _lastExportDirectory;
     private string? _currentVirtualHostFolder;
     private const string VirtualHostName = "localfiles.mermaideditor";
+    private List<string> _recentFiles = new();
+    private const int MaxRecentFiles = 10;
+    private static readonly string RecentFilesPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "MermaidEditor", "recent.json");
+    private bool _isRenderingContent; // Flag set when we call NavigateToString, cleared after navigation completes
+    private bool _isGoingBack; // Flag set when user clicks back button, cleared after navigation completes
+    private bool _hasNavigatedAway; // Track if user has navigated away from rendered content
 
-    private const string DefaultMermaidCode = @"flowchart TD
+    private const string DefaultMermaidCode= @"flowchart TD
     A[Start] --> B{Is it working?}
     B -->|Yes| C[Great!]
     B -->|No| D[Debug]
@@ -107,22 +136,12 @@ Console.WriteLine(""Hello, World!"");
 
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
+        SourceInitialized += MainWindow_SourceInitialized;
 
         SetupCodeEditor();
         
-        // Check for command-line arguments (file passed via file association)
-        var args = Environment.GetCommandLineArgs();
-        if (args.Length > 1 && File.Exists(args[1]))
-        {
-            // Load the file passed as argument
-            LoadFile(args[1]);
-        }
-        else
-        {
-            // Load default content (not dirty)
-            CodeEditor.Text = DefaultMermaidCode;
-            _isDirty = false;
-        }
+        // Initialize multi-document tab system
+        InitializeDocumentTabs();
     }
 
     private void LoadFile(string filePath)
@@ -134,6 +153,7 @@ Console.WriteLine(""Hello, World!"");
             SetRenderModeFromFile(filePath);
             _isDirty = false;
             UpdateTitle();
+            UpdateNavigationDropdown();
             
             // Navigate file browser to the file's folder and select the file
             var folder = Path.GetDirectoryName(filePath);
@@ -148,6 +168,134 @@ Console.WriteLine(""Hello, World!"");
             CodeEditor.Text = DefaultMermaidCode;
             _isDirty = false;
         }
+        
+        AddToRecentFiles(filePath);
+    }
+
+    private void MainWindow_SourceInitialized(object? sender, EventArgs e)
+    {
+        // Enable dark title bar on Windows 10/11
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd != IntPtr.Zero)
+            {
+                int value = 1; // Enable dark mode
+                DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref value, sizeof(int));
+                
+                // Set caption color to dark gray (#1E1E1E) to override Windows accent color
+                // Color format is 0x00BBGGRR (BGR, not RGB)
+                int captionColor = 0x001E1E1E; // #1E1E1E in BGR format
+                DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ref captionColor, sizeof(int));
+            }
+        }
+        catch
+        {
+            // Silently fail if DWM API is not available (older Windows versions)
+        }
+    }
+
+    private void LoadRecentFiles()
+    {
+        try
+        {
+            if (File.Exists(RecentFilesPath))
+            {
+                var json = File.ReadAllText(RecentFilesPath);
+                _recentFiles = System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+            }
+        }
+        catch
+        {
+            _recentFiles = new List<string>();
+        }
+        UpdateRecentFilesMenu();
+    }
+
+    private void SaveRecentFiles()
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(RecentFilesPath);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+            var json = System.Text.Json.JsonSerializer.Serialize(_recentFiles);
+            File.WriteAllText(RecentFilesPath, json);
+        }
+        catch
+        {
+            // Silently fail if we can't save recent files
+        }
+    }
+
+    private void AddToRecentFiles(string filePath)
+    {
+        // Remove if already exists (to move to top)
+        _recentFiles.Remove(filePath);
+        
+        // Add to beginning
+        _recentFiles.Insert(0, filePath);
+        
+        // Keep only MaxRecentFiles
+        if (_recentFiles.Count > MaxRecentFiles)
+        {
+            _recentFiles = _recentFiles.Take(MaxRecentFiles).ToList();
+        }
+        
+        SaveRecentFiles();
+        UpdateRecentFilesMenu();
+    }
+
+    private void UpdateRecentFilesMenu()
+    {
+        RecentFilesMenuItem.Items.Clear();
+        
+        if (_recentFiles.Count == 0)
+        {
+            var emptyItem = new System.Windows.Controls.MenuItem { Header = "(No recent files)", IsEnabled = false };
+            RecentFilesMenuItem.Items.Add(emptyItem);
+            return;
+        }
+        
+        foreach (var filePath in _recentFiles)
+        {
+            var menuItem = new System.Windows.Controls.MenuItem
+            {
+                Header = Path.GetFileName(filePath),
+                ToolTip = filePath
+            };
+            menuItem.Click += (s, e) => OpenRecentFile(filePath);
+            RecentFilesMenuItem.Items.Add(menuItem);
+        }
+        
+        RecentFilesMenuItem.Items.Add(new Separator());
+        
+        var clearItem = new System.Windows.Controls.MenuItem { Header = "Clear Recent Files" };
+        clearItem.Click += (s, e) =>
+        {
+            _recentFiles.Clear();
+            SaveRecentFiles();
+            UpdateRecentFilesMenu();
+        };
+        RecentFilesMenuItem.Items.Add(clearItem);
+    }
+
+    private void OpenRecentFile(string filePath)
+    {
+        if (!File.Exists(filePath))
+        {
+            MessageBox.Show($"File not found: {filePath}\n\nIt will be removed from the recent files list.", 
+                "File Not Found", MessageBoxButton.OK, MessageBoxImage.Warning);
+            _recentFiles.Remove(filePath);
+            SaveRecentFiles();
+            UpdateRecentFilesMenu();
+            return;
+        }
+        
+        // Open file in a new tab
+        OpenFileInTab(filePath);
     }
 
     private void SetupCodeEditor()
@@ -395,15 +543,55 @@ Console.WriteLine(""Hello, World!"");
         {
             await PreviewWebView.EnsureCoreWebView2Async();
             _webViewInitialized = true;
-            RenderMermaid();
+            
+            // Set up navigation completed handler to update back button state
+            PreviewWebView.CoreWebView2.NavigationCompleted += CoreWebView2_NavigationCompleted;
+            
+            RenderPreview();
             
             // Style the toolbar overflow button programmatically
             StyleToolbarOverflowButtons();
+            
+            // Load recent files
+            LoadRecentFiles();
         }
         catch (Exception ex)
         {
             MessageBox.Show($"Failed to initialize WebView2: {ex.Message}\n\nMake sure WebView2 Runtime is installed.",
                 "Initialization Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+    
+    private void CoreWebView2_NavigationCompleted(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
+    {
+        if (_isRenderingContent)
+        {
+            // This navigation is from our NavigateToString call - this is the base render
+            _isRenderingContent = false;
+            _hasNavigatedAway = false;
+            PreviewBackButton.IsEnabled = false;
+        }
+        else if (_isGoingBack)
+        {
+            // This navigation is from clicking the back button - stay disabled
+            _isGoingBack = false;
+            _hasNavigatedAway = false;
+            PreviewBackButton.IsEnabled = false;
+        }
+        else
+        {
+            // User has navigated away from rendered content (clicked a link)
+            _hasNavigatedAway = true;
+            PreviewBackButton.IsEnabled = true;
+        }
+    }
+    
+    private void PreviewBack_Click(object sender, RoutedEventArgs e)
+    {
+        if (_hasNavigatedAway && PreviewWebView.CoreWebView2?.CanGoBack == true)
+        {
+            _isGoingBack = true;
+            PreviewWebView.CoreWebView2.GoBack();
         }
     }
     
@@ -525,15 +713,29 @@ Console.WriteLine(""Hello, World!"");
 
     private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
-        if (_isDirty)
+        // Check all open documents for unsaved changes
+        var unsavedDocs = _openDocuments.Where(d => d.IsDirty).ToList();
+        
+        if (unsavedDocs.Count > 0)
         {
-            var result = MessageBox.Show("You have unsaved changes. Do you want to save before closing?",
+            var message = unsavedDocs.Count == 1
+                ? $"'{unsavedDocs[0].DisplayName}' has unsaved changes. Do you want to save before closing?"
+                : $"{unsavedDocs.Count} documents have unsaved changes. Do you want to save before closing?";
+            
+            var result = MessageBox.Show(message,
                 "Unsaved Changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
 
             switch (result)
             {
                 case MessageBoxResult.Yes:
-                    Save_Click(this, new RoutedEventArgs());
+                    foreach (var doc in unsavedDocs)
+                    {
+                        if (!SaveDocument(doc))
+                        {
+                            e.Cancel = true;
+                            return;
+                        }
+                    }
                     break;
                 case MessageBoxResult.Cancel:
                     e.Cancel = true;
@@ -544,7 +746,13 @@ Console.WriteLine(""Hello, World!"");
 
     private void CodeEditor_TextChanged(object? sender, EventArgs e)
     {
+        if (_isSwitchingDocuments) return; // Don't mark dirty when switching documents
+        
         _isDirty = true;
+        if (_activeDocument != null)
+        {
+            _activeDocument.IsDirty = true;
+        }
         UpdateTitle();
         _renderTimer.Stop();
         _renderTimer.Start();
@@ -554,6 +762,7 @@ Console.WriteLine(""Hello, World!"");
     {
         _renderTimer.Stop();
         RenderPreview();
+        UpdateNavigationDropdown();
     }
 
     private void RenderPreview()
@@ -884,6 +1093,7 @@ Console.WriteLine(""Hello, World!"");
 </body>
 </html>";
 
+        _isRenderingContent = true;
         PreviewWebView.NavigateToString(html);
         PreviewWebView.WebMessageReceived -= PreviewWebView_WebMessageReceived;
         PreviewWebView.WebMessageReceived += PreviewWebView_WebMessageReceived;
@@ -1076,6 +1286,38 @@ Console.WriteLine(""Hello, World!"");
                 }});
             }});
             
+            // Add click handlers to bold text (strong)
+            content.querySelectorAll('strong').forEach(el => {{
+                el.style.cursor = 'pointer';
+                el.addEventListener('click', function(e) {{
+                    e.stopPropagation();
+                    const text = el.textContent.trim();
+                    if (text) {{
+                        window.chrome.webview.postMessage({{ 
+                            type: 'elementClick', 
+                            text: text,
+                            elementType: 'bold'
+                        }});
+                    }}
+                }});
+            }});
+            
+            // Add click handlers to italic text (em)
+            content.querySelectorAll('em').forEach(el => {{
+                el.style.cursor = 'pointer';
+                el.addEventListener('click', function(e) {{
+                    e.stopPropagation();
+                    const text = el.textContent.trim();
+                    if (text) {{
+                        window.chrome.webview.postMessage({{ 
+                            type: 'elementClick', 
+                            text: text,
+                            elementType: 'italic'
+                        }});
+                    }}
+                }});
+            }});
+            
             // Add click handlers to paragraphs (but not if they contain other clickable elements)
             content.querySelectorAll('p').forEach(el => {{
                 if (!el.querySelector('code')) {{
@@ -1099,7 +1341,10 @@ Console.WriteLine(""Hello, World!"");
 </body>
 </html>";
 
+        _isRenderingContent = true;
         PreviewWebView.NavigateToString(html);
+        PreviewWebView.WebMessageReceived -= PreviewWebView_WebMessageReceived;
+        PreviewWebView.WebMessageReceived += PreviewWebView_WebMessageReceived;
         StatusText.Text = "Markdown rendered";
     }
 
@@ -1230,6 +1475,50 @@ Console.WriteLine(""Hello, World!"");
                                 bestMatchStart = idx;
                                 bestMatchLength = text.Length;
                             }
+                            break;
+                        }
+                    }
+                    else if (elementType == "bold")
+                    {
+                        // Look for bold markers **text** or __text__
+                        var boldPattern1 = $@"\*\*{System.Text.RegularExpressions.Regex.Escape(text)}\*\*";
+                        var boldPattern2 = $@"__{System.Text.RegularExpressions.Regex.Escape(text)}__";
+                        var match1 = System.Text.RegularExpressions.Regex.Match(line, boldPattern1, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        var match2 = System.Text.RegularExpressions.Regex.Match(line, boldPattern2, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        if (match1.Success)
+                        {
+                            bestLineIndex = i;
+                            bestMatchStart = match1.Index;
+                            bestMatchLength = match1.Length;
+                            break;
+                        }
+                        else if (match2.Success)
+                        {
+                            bestLineIndex = i;
+                            bestMatchStart = match2.Index;
+                            bestMatchLength = match2.Length;
+                            break;
+                        }
+                    }
+                    else if (elementType == "italic")
+                    {
+                        // Look for italic markers *text* or _text_
+                        var italicPattern1 = $@"(?<!\*)\*(?!\*){System.Text.RegularExpressions.Regex.Escape(text)}\*(?!\*)";
+                        var italicPattern2 = $@"(?<!_)_(?!_){System.Text.RegularExpressions.Regex.Escape(text)}_(?!_)";
+                        var match1 = System.Text.RegularExpressions.Regex.Match(line, italicPattern1, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        var match2 = System.Text.RegularExpressions.Regex.Match(line, italicPattern2, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        if (match1.Success)
+                        {
+                            bestLineIndex = i;
+                            bestMatchStart = match1.Index;
+                            bestMatchLength = match1.Length;
+                            break;
+                        }
+                        else if (match2.Success)
+                        {
+                            bestLineIndex = i;
+                            bestMatchStart = match2.Index;
+                            bestMatchLength = match2.Length;
                             break;
                         }
                     }
@@ -1367,48 +1656,33 @@ Console.WriteLine(""Hello, World!"");
 
     private void New_Click(object sender, RoutedEventArgs e)
     {
-        if (_isDirty)
+        // Show template selection dialog
+        var dialog = new NewDocumentDialog { Owner = this };
+        if (dialog.ShowDialog() == true && dialog.SelectedTemplate != null)
         {
-            var result = MessageBox.Show("You have unsaved changes. Do you want to save first?",
-                "Unsaved Changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-
-            if (result == MessageBoxResult.Yes)
+            // Create a new document with the selected template
+            var doc = CreateNewDocument(null, dialog.SelectedTemplate);
+            doc.RenderMode = dialog.IsMermaid ? RenderMode.Mermaid : RenderMode.Markdown;
+            SwitchToDocument(doc);
+            
+            // Update syntax highlighting
+            if (dialog.IsMermaid)
             {
-                Save_Click(sender, e);
+                EditorHeaderText.Text = "Mermaid Code";
+                CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
             }
-            else if (result == MessageBoxResult.Cancel)
+            else
             {
-                return;
+                EditorHeaderText.Text = "Markdown Code";
+                CodeEditor.SyntaxHighlighting = null;
             }
+            
+            UpdateExportMenuVisibility();
         }
-
-        CodeEditor.Text = DefaultMermaidCode;
-        _currentFilePath = null;
-        _isDirty = false;
-        _currentRenderMode = RenderMode.Mermaid;
-        EditorHeaderText.Text = "Mermaid Code";
-        CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
-        UpdateExportMenuVisibility();
-        UpdateTitle();
     }
 
     private void Open_Click(object sender, RoutedEventArgs e)
     {
-        if (_isDirty)
-        {
-            var result = MessageBox.Show("You have unsaved changes. Do you want to save first?",
-                "Unsaved Changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-
-            if (result == MessageBoxResult.Yes)
-            {
-                Save_Click(sender, e);
-            }
-            else if (result == MessageBoxResult.Cancel)
-            {
-                return;
-            }
-        }
-
         var dialog = new OpenFileDialog
         {
             Filter = "Mermaid Files (*.mmd;*.mermaid)|*.mmd;*.mermaid|Markdown Files (*.md)|*.md|All Files (*.*)|*.*",
@@ -1417,55 +1691,40 @@ Console.WriteLine(""Hello, World!"");
 
         if (dialog.ShowDialog() == true)
         {
-            try
-            {
-                CodeEditor.Text = File.ReadAllText(dialog.FileName);
-                _currentFilePath = dialog.FileName;
-                SetRenderModeFromFile(dialog.FileName);
-                _isDirty = false;
-                UpdateTitle();
-                RenderPreview();
-                StatusText.Text = "File opened";
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Failed to open file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            OpenFileInTab(dialog.FileName);
+            StatusText.Text = "File opened";
         }
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)
     {
-        if (string.IsNullOrEmpty(_currentFilePath))
+        if (_activeDocument == null) return;
+        
+        if (SaveDocument(_activeDocument))
         {
-            SaveAs_Click(sender, e);
-            return;
-        }
-
-        try
-        {
-            File.WriteAllText(_currentFilePath, CodeEditor.Text);
-            _isDirty = false;
+            _currentFilePath = _activeDocument.FilePath;
+            _isDirty = _activeDocument.IsDirty;
             UpdateTitle();
             StatusText.Text = "File saved";
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Failed to save file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
     private void SaveAs_Click(object sender, RoutedEventArgs e)
     {
+        if (_activeDocument == null) return;
+        
         var dialog = new SaveFileDialog
         {
-            Filter = "Mermaid Files (*.mmd)|*.mmd|Markdown Files (*.md)|*.md|All Files (*.*)|*.*",
-            Title = "Save Mermaid File",
-            DefaultExt = ".mmd"
+            Filter = _activeDocument.RenderMode == RenderMode.Markdown
+                ? "Markdown Files (*.md)|*.md|All Files (*.*)|*.*"
+                : "Mermaid Files (*.mmd)|*.mmd|All Files (*.*)|*.*",
+            Title = "Save File",
+            DefaultExt = _activeDocument.RenderMode == RenderMode.Markdown ? ".md" : ".mmd"
         };
 
         if (dialog.ShowDialog() == true)
         {
+            _activeDocument.FilePath = dialog.FileName;
             _currentFilePath = dialog.FileName;
             // Update export directory to match where the file was saved
             UpdateLastExportDirectory(dialog.FileName);
@@ -1792,7 +2051,7 @@ Console.WriteLine(""Hello, World!"");
         }
     }
 
-    private void ExportWord_Click(object sender, RoutedEventArgs e)
+    private async void ExportWord_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new SaveFileDialog
         {
@@ -1809,11 +2068,19 @@ Console.WriteLine(""Hello, World!"");
                 UpdateLastExportDirectory(dialog.FileName);
                 StatusText.Text = "Exporting Word document...";
                 
-                var markdown = CodeEditor.Text;
-                ConvertMarkdownToWord(markdown, dialog.FileName);
-                
-                StatusText.Text = "Exported as Word document";
-                MessageBox.Show("Word document exported successfully!", "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                if (_currentRenderMode == RenderMode.Mermaid)
+                {
+                    // For Mermaid diagrams, export as PNG embedded in Word
+                    await ExportMermaidToWord(dialog.FileName);
+                }
+                else
+                {
+                    // For Markdown, convert to formatted Word document
+                    var markdown = CodeEditor.Text;
+                    ConvertMarkdownToWord(markdown, dialog.FileName);
+                    StatusText.Text = "Exported as Word document";
+                    MessageBox.Show("Word document exported successfully!", "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
             }
             catch (Exception ex)
             {
@@ -1822,170 +2089,532 @@ Console.WriteLine(""Hello, World!"");
             }
         }
     }
-
-    private void ConvertMarkdownToWord(string markdown, string outputPath)
+    
+    private async Task ExportMermaidToWord(string outputPath)
     {
+        if (!_webViewInitialized)
+        {
+            MessageBox.Show("WebView not initialized. Please wait for the preview to load.", "Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        
+        // Get PNG data from the diagram at 4x resolution
+        _pngExportTcs = new TaskCompletionSource<string>();
+        
+        await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.exportPngHighRes(4)");
+        
+        // Wait for the callback with a timeout
+        var timeoutTask = Task.Delay(30000);
+        var completedTask = await Task.WhenAny(_pngExportTcs.Task, timeoutTask);
+        
+        if (completedTask == timeoutTask)
+        {
+            _pngExportTcs = null;
+            throw new Exception("Export timed out");
+        }
+        
+        var dataUrl = await _pngExportTcs.Task;
+        _pngExportTcs = null;
+        
+        if (string.IsNullOrEmpty(dataUrl) || !dataUrl.StartsWith("data:image/png;base64,"))
+        {
+            MessageBox.Show("No diagram to export. Make sure the diagram is rendered correctly.", "Export Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        
+        var base64Data = dataUrl.Substring("data:image/png;base64,".Length);
+        var imageBytes = Convert.FromBase64String(base64Data);
+        
+        // Create Word document with embedded image
         using var document = WordprocessingDocument.Create(outputPath, WordprocessingDocumentType.Document);
         var mainPart = document.AddMainDocumentPart();
         mainPart.Document = new Document();
         var body = mainPart.Document.AppendChild(new Body());
-
-        var lines = markdown.Split('\n');
-        var inCodeBlock = false;
-        var codeBlockContent = new List<string>();
-
-        foreach (var line in lines)
+        
+        // Add the image to the document
+        var imagePart = mainPart.AddImagePart(ImagePartType.Png);
+        using (var stream = new MemoryStream(imageBytes))
         {
-            var trimmedLine = line.TrimEnd('\r');
-
-            // Handle code blocks
-            if (trimmedLine.StartsWith("```"))
+            imagePart.FeedData(stream);
+        }
+        
+        // Get image dimensions for proper sizing
+        int widthEmu, heightEmu;
+        using (var stream = new MemoryStream(imageBytes))
+        {
+            using var bitmap = new System.Drawing.Bitmap(stream);
+            // Convert pixels to EMUs (English Metric Units) - 914400 EMUs per inch, assuming 96 DPI
+            // Scale down by 4 since we exported at 4x resolution
+            var scaleFactor = 4.0;
+            widthEmu = (int)(bitmap.Width / scaleFactor * 914400 / 96);
+            heightEmu = (int)(bitmap.Height / scaleFactor * 914400 / 96);
+            
+            // Limit max width to 6 inches (page width minus margins)
+            var maxWidthEmu = 6 * 914400;
+            if (widthEmu > maxWidthEmu)
             {
-                if (inCodeBlock)
+                var ratio = (double)maxWidthEmu / widthEmu;
+                widthEmu = maxWidthEmu;
+                heightEmu = (int)(heightEmu * ratio);
+            }
+        }
+        
+        var relationshipId = mainPart.GetIdOfPart(imagePart);
+        
+        // Create the image element
+        var element = CreateImageElement(relationshipId, widthEmu, heightEmu);
+        
+        // Add a paragraph with the image
+        var para = new Paragraph(new Run(element));
+        body.AppendChild(para);
+        
+        StatusText.Text = "Exported diagram to Word document";
+        MessageBox.Show("Mermaid diagram exported to Word successfully!\n\nThe diagram has been embedded as a high-resolution image.", "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+    
+    private static uint _imageIdCounter = 1;
+    
+    private static Drawing CreateImageElement(string relationshipId, int widthEmu, int heightEmu, string imageName = "Image")
+    {
+        var imageId = _imageIdCounter++;
+        var element = new Drawing(
+            new DocumentFormat.OpenXml.Drawing.Wordprocessing.Inline(
+                new DocumentFormat.OpenXml.Drawing.Wordprocessing.Extent { Cx = widthEmu, Cy = heightEmu },
+                new DocumentFormat.OpenXml.Drawing.Wordprocessing.EffectExtent { LeftEdge = 0, TopEdge = 0, RightEdge = 0, BottomEdge = 0 },
+                new DocumentFormat.OpenXml.Drawing.Wordprocessing.DocProperties { Id = imageId, Name = imageName },
+                new DocumentFormat.OpenXml.Drawing.Wordprocessing.NonVisualGraphicFrameDrawingProperties(
+                    new DocumentFormat.OpenXml.Drawing.GraphicFrameLocks { NoChangeAspect = true }),
+                new DocumentFormat.OpenXml.Drawing.Graphic(
+                    new DocumentFormat.OpenXml.Drawing.GraphicData(
+                        new DocumentFormat.OpenXml.Drawing.Pictures.Picture(
+                            new DocumentFormat.OpenXml.Drawing.Pictures.NonVisualPictureProperties(
+                                new DocumentFormat.OpenXml.Drawing.Pictures.NonVisualDrawingProperties { Id = imageId, Name = $"{imageName}.png" },
+                                new DocumentFormat.OpenXml.Drawing.Pictures.NonVisualPictureDrawingProperties()),
+                            new DocumentFormat.OpenXml.Drawing.Pictures.BlipFill(
+                                new DocumentFormat.OpenXml.Drawing.Blip { Embed = relationshipId },
+                                new DocumentFormat.OpenXml.Drawing.Stretch(new DocumentFormat.OpenXml.Drawing.FillRectangle())),
+                            new DocumentFormat.OpenXml.Drawing.Pictures.ShapeProperties(
+                                new DocumentFormat.OpenXml.Drawing.Transform2D(
+                                    new DocumentFormat.OpenXml.Drawing.Offset { X = 0, Y = 0 },
+                                    new DocumentFormat.OpenXml.Drawing.Extents { Cx = widthEmu, Cy = heightEmu }),
+                                new DocumentFormat.OpenXml.Drawing.PresetGeometry(
+                                    new DocumentFormat.OpenXml.Drawing.AdjustValueList()) { Preset = DocumentFormat.OpenXml.Drawing.ShapeTypeValues.Rectangle }))
+                    ) { Uri = "http://schemas.openxmlformats.org/drawingml/2006/picture" }))
+            {
+                DistanceFromTop = 0,
+                DistanceFromBottom = 0,
+                DistanceFromLeft = 0,
+                DistanceFromRight = 0
+            });
+        
+        return element;
+    }
+
+    private void ConvertMarkdownToWord(string markdown, string outputPath)
+    {
+        // Reset image ID counter for each new document
+        _imageIdCounter = 1;
+        
+        // Create the document
+        using (var document = WordprocessingDocument.Create(outputPath, WordprocessingDocumentType.Document))
+        {
+            var mainPart = document.AddMainDocumentPart();
+            mainPart.Document = new Document(new Body());
+
+            // Use Markdig to parse the markdown
+            var pipeline = new MarkdownPipelineBuilder()
+                .UseAdvancedExtensions()
+                .Build();
+            var markdownDoc = Markdown.Parse(markdown, pipeline);
+
+            // Get the base directory for resolving relative image paths
+            var baseDir = !string.IsNullOrEmpty(_currentFilePath) 
+                ? Path.GetDirectoryName(_currentFilePath) 
+                : Environment.CurrentDirectory;
+
+            // Process each block in the markdown document
+            var body = mainPart.Document.Body!;
+            foreach (var block in markdownDoc)
+            {
+                ProcessMarkdownBlock(block, body, mainPart, baseDir ?? Environment.CurrentDirectory);
+            }
+            
+            // Explicitly save the document
+            mainPart.Document.Save();
+        }
+        
+        // Fix the Content_Types.xml which OpenXML SDK 3.x generates incorrectly
+        FixWordDocumentContentTypes(outputPath);
+    }
+    
+    private static void FixWordDocumentContentTypes(string docxPath)
+    {
+        // Open the docx as a ZIP archive and fix the [Content_Types].xml
+        using var archive = ZipFile.Open(docxPath, ZipArchiveMode.Update);
+        
+        // Get the content types entry
+        var contentTypesEntry = archive.GetEntry("[Content_Types].xml");
+        if (contentTypesEntry == null) return;
+        
+        // Read the current content
+        string content;
+        using (var stream = contentTypesEntry.Open())
+        using (var reader = new StreamReader(stream))
+        {
+            content = reader.ReadToEnd();
+        }
+        
+        // Fix the incorrect Default entry for XML files
+        // Change: <Default Extension="xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml" />
+        // To: <Default Extension="xml" ContentType="application/xml" /> + <Override PartName="/word/document.xml" ContentType="..." />
+        if (content.Contains("Extension=\"xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\""))
+        {
+            content = content.Replace(
+                "Extension=\"xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"",
+                "Extension=\"xml\" ContentType=\"application/xml\"");
+            
+            // Add the Override element before the closing </Types> tag
+            content = content.Replace(
+                "</Types>",
+                "<Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\" /></Types>");
+            
+            // Delete the old entry and create a new one with the fixed content
+            contentTypesEntry.Delete();
+            var newEntry = archive.CreateEntry("[Content_Types].xml");
+            using var writeStream = newEntry.Open();
+            using var writer = new StreamWriter(writeStream);
+            writer.Write(content);
+        }
+    }
+
+    private void ProcessMarkdownBlock(Block block, Body body, MainDocumentPart mainPart, string baseDir)
+    {
+        switch (block)
+        {
+            case HeadingBlock heading:
+                var fontSize = heading.Level switch
                 {
-                    // End code block - add accumulated content
-                    foreach (var codeLine in codeBlockContent)
-                    {
-                        var codePara = new Paragraph(
-                            new ParagraphProperties(
-                                new Shading { Val = ShadingPatternValues.Clear, Fill = "E8E8E8" }
+                    1 => "32",
+                    2 => "28",
+                    3 => "26",
+                    4 => "24",
+                    5 => "22",
+                    _ => "20"
+                };
+                var headingPara = new Paragraph();
+                ProcessInlines(heading.Inline, headingPara, mainPart, baseDir, true, fontSize);
+                body.AppendChild(headingPara);
+                break;
+
+            case ParagraphBlock paragraph:
+                var para = new Paragraph();
+                ProcessInlines(paragraph.Inline, para, mainPart, baseDir, false, null);
+                body.AppendChild(para);
+                break;
+
+            case FencedCodeBlock codeBlock:
+                var codeLines = codeBlock.Lines.ToString().Split('\n');
+                foreach (var codeLine in codeLines)
+                {
+                    var codePara = new Paragraph(
+                        new ParagraphProperties(
+                            new Shading { Val = ShadingPatternValues.Clear, Fill = "E8E8E8" }
+                        ),
+                        new Run(
+                            new RunProperties(
+                                new RunFonts { Ascii = "Consolas", HighAnsi = "Consolas" },
+                                new FontSize { Val = "20" }
                             ),
-                            new Run(
-                                new RunProperties(
-                                    new RunFonts { Ascii = "Consolas", HighAnsi = "Consolas" },
-                                    new FontSize { Val = "20" }
-                                ),
-                                new Text(codeLine) { Space = SpaceProcessingModeValues.Preserve }
+                            new Text(codeLine.TrimEnd('\r')) { Space = SpaceProcessingModeValues.Preserve }
+                        )
+                    );
+                    body.AppendChild(codePara);
+                }
+                break;
+
+            case CodeBlock simpleCodeBlock:
+                var simpleCodeLines = simpleCodeBlock.Lines.ToString().Split('\n');
+                foreach (var codeLine in simpleCodeLines)
+                {
+                    var codePara = new Paragraph(
+                        new ParagraphProperties(
+                            new Shading { Val = ShadingPatternValues.Clear, Fill = "E8E8E8" }
+                        ),
+                        new Run(
+                            new RunProperties(
+                                new RunFonts { Ascii = "Consolas", HighAnsi = "Consolas" },
+                                new FontSize { Val = "20" }
+                            ),
+                            new Text(codeLine.TrimEnd('\r')) { Space = SpaceProcessingModeValues.Preserve }
+                        )
+                    );
+                    body.AppendChild(codePara);
+                }
+                break;
+
+            case ListBlock listBlock:
+                ProcessListBlock(listBlock, body, mainPart, baseDir, 0);
+                break;
+
+            case QuoteBlock quoteBlock:
+                foreach (var quoteChild in quoteBlock)
+                {
+                    if (quoteChild is ParagraphBlock quotePara)
+                    {
+                        var blockquotePara = new Paragraph(
+                            new ParagraphProperties(
+                                new Indentation { Left = "720" },
+                                new ParagraphBorders(
+                                    new LeftBorder { Val = BorderValues.Single, Size = 24, Color = "CCCCCC" }
+                                )
                             )
                         );
-                        body.AppendChild(codePara);
+                        ProcessInlines(quotePara.Inline, blockquotePara, mainPart, baseDir, false, null);
+                        body.AppendChild(blockquotePara);
                     }
-                    codeBlockContent.Clear();
-                    inCodeBlock = false;
+                }
+                break;
+
+            case ThematicBreakBlock:
+                var hrPara = new Paragraph(
+                    new ParagraphProperties(
+                        new ParagraphBorders(
+                            new BottomBorder { Val = BorderValues.Single, Size = 6, Color = "CCCCCC" }
+                        )
+                    )
+                );
+                body.AppendChild(hrPara);
+                break;
+
+            default:
+                // For any unhandled block types, add an empty paragraph
+                body.AppendChild(new Paragraph());
+                break;
+        }
+    }
+
+    private void ProcessListBlock(ListBlock listBlock, Body body, MainDocumentPart mainPart, string baseDir, int indentLevel)
+    {
+        var isOrdered = listBlock.IsOrdered;
+        var itemNumber = 1;
+
+        foreach (var item in listBlock)
+        {
+            if (item is ListItemBlock listItem)
+            {
+                foreach (var itemContent in listItem)
+                {
+                    if (itemContent is ParagraphBlock itemPara)
+                    {
+                        var bullet = isOrdered ? $"{itemNumber}. " : "- ";
+                        var listPara = new Paragraph(
+                            new ParagraphProperties(
+                                new Indentation { Left = ((indentLevel + 1) * 360).ToString() }
+                            )
+                        );
+                        
+                        // Add bullet/number
+                        listPara.AppendChild(new Run(new Text(bullet) { Space = SpaceProcessingModeValues.Preserve }));
+                        
+                        // Add content
+                        ProcessInlines(itemPara.Inline, listPara, mainPart, baseDir, false, null);
+                        body.AppendChild(listPara);
+                    }
+                    else if (itemContent is ListBlock nestedList)
+                    {
+                        ProcessListBlock(nestedList, body, mainPart, baseDir, indentLevel + 1);
+                    }
+                }
+                itemNumber++;
+            }
+        }
+    }
+
+    private void ProcessInlines(ContainerInline? inlines, Paragraph para, MainDocumentPart mainPart, string baseDir, bool isBold, string? fontSize)
+    {
+        if (inlines == null) return;
+
+        foreach (var inline in inlines)
+        {
+            ProcessInline(inline, para, mainPart, baseDir, isBold, false, fontSize);
+        }
+    }
+
+    private void ProcessInline(Inline inline, Paragraph para, MainDocumentPart mainPart, string baseDir, bool isBold, bool isItalic, string? fontSize)
+    {
+        switch (inline)
+        {
+            case LiteralInline literal:
+                var run = new Run();
+                var runProps = new RunProperties();
+                
+                if (isBold) runProps.AppendChild(new Bold());
+                if (isItalic) runProps.AppendChild(new Italic());
+                if (fontSize != null) runProps.AppendChild(new FontSize { Val = fontSize });
+                
+                if (runProps.HasChildren) run.AppendChild(runProps);
+                run.AppendChild(new Text(literal.Content.ToString()) { Space = SpaceProcessingModeValues.Preserve });
+                para.AppendChild(run);
+                break;
+
+            case EmphasisInline emphasis:
+                var newBold = isBold || emphasis.DelimiterCount >= 2;
+                var newItalic = isItalic || emphasis.DelimiterCount == 1 || emphasis.DelimiterCount == 3;
+                foreach (var child in emphasis)
+                {
+                    ProcessInline(child, para, mainPart, baseDir, newBold, newItalic, fontSize);
+                }
+                break;
+
+            case CodeInline code:
+                var codeRun = new Run();
+                var codeRunProps = new RunProperties();
+                codeRunProps.AppendChild(new RunFonts { Ascii = "Consolas", HighAnsi = "Consolas" });
+                codeRunProps.AppendChild(new Shading { Val = ShadingPatternValues.Clear, Fill = "E8E8E8" });
+                if (fontSize != null) codeRunProps.AppendChild(new FontSize { Val = fontSize });
+                codeRun.AppendChild(codeRunProps);
+                codeRun.AppendChild(new Text(code.Content) { Space = SpaceProcessingModeValues.Preserve });
+                para.AppendChild(codeRun);
+                break;
+
+            case LinkInline link:
+                if (link.IsImage)
+                {
+                    // Handle image
+                    var imagePath = link.Url;
+                    if (imagePath != null && !imagePath.StartsWith("http"))
+                    {
+                        // Resolve relative path
+                        var fullPath = Path.Combine(baseDir, imagePath);
+                        if (File.Exists(fullPath))
+                        {
+                            try
+                            {
+                                var imageBytes = File.ReadAllBytes(fullPath);
+                                var imageElement = EmbedImageInWord(mainPart, imageBytes, fullPath);
+                                if (imageElement != null)
+                                {
+                                    para.AppendChild(new Run(imageElement));
+                                }
+                            }
+                            catch
+                            {
+                                // If image loading fails, add placeholder text
+                                para.AppendChild(new Run(new Text($"[Image: {link.Url}]")));
+                            }
+                        }
+                        else
+                        {
+                            para.AppendChild(new Run(new Text($"[Image not found: {link.Url}]")));
+                        }
+                    }
+                    else
+                    {
+                        // External URL - add as text
+                        para.AppendChild(new Run(new Text($"[Image: {link.Url}]")));
+                    }
                 }
                 else
                 {
-                    inCodeBlock = true;
+                    // Handle regular link - just show the text
+                    foreach (var child in link)
+                    {
+                        ProcessInline(child, para, mainPart, baseDir, isBold, isItalic, fontSize);
+                    }
+                    if (link.Url != null)
+                    {
+                        var urlRun = new Run();
+                        var urlProps = new RunProperties();
+                        urlProps.AppendChild(new DocumentFormat.OpenXml.Wordprocessing.Color { Val = "0066CC" });
+                        urlRun.AppendChild(urlProps);
+                        urlRun.AppendChild(new Text($" ({link.Url})") { Space = SpaceProcessingModeValues.Preserve });
+                        para.AppendChild(urlRun);
+                    }
                 }
-                continue;
-            }
+                break;
 
-            if (inCodeBlock)
-            {
-                codeBlockContent.Add(trimmedLine);
-                continue;
-            }
+            case LineBreakInline:
+                para.AppendChild(new Run(new Break()));
+                break;
 
-            // Handle headers
-            if (trimmedLine.StartsWith("# "))
-            {
-                AddHeading(body, trimmedLine.Substring(2), "28", true);
-            }
-            else if (trimmedLine.StartsWith("## "))
-            {
-                AddHeading(body, trimmedLine.Substring(3), "26", true);
-            }
-            else if (trimmedLine.StartsWith("### "))
-            {
-                AddHeading(body, trimmedLine.Substring(4), "24", true);
-            }
-            else if (trimmedLine.StartsWith("#### "))
-            {
-                AddHeading(body, trimmedLine.Substring(5), "22", true);
-            }
-            else if (string.IsNullOrWhiteSpace(trimmedLine))
-            {
-                // Empty paragraph
-                body.AppendChild(new Paragraph());
-            }
-            else
-            {
-                // Regular paragraph with inline formatting
-                AddFormattedParagraph(body, trimmedLine);
-            }
+            case ContainerInline container:
+                foreach (var child in container)
+                {
+                    ProcessInline(child, para, mainPart, baseDir, isBold, isItalic, fontSize);
+                }
+                break;
         }
     }
 
-    private void AddHeading(Body body, string text, string fontSize, bool bold)
+    private Drawing? EmbedImageInWord(MainDocumentPart mainPart, byte[] imageBytes, string imagePath)
     {
-        var para = new Paragraph();
-        var run = new Run();
-        var runProps = new RunProperties();
-        
-        runProps.AppendChild(new FontSize { Val = fontSize });
-        if (bold)
+        var extension = Path.GetExtension(imagePath).ToLowerInvariant();
+        var imagePartType = extension switch
         {
-            runProps.AppendChild(new Bold());
-        }
-        
-        run.AppendChild(runProps);
-        run.AppendChild(new Text(text));
-        para.AppendChild(run);
-        body.AppendChild(para);
-    }
+            ".png" => ImagePartType.Png,
+            ".jpg" or ".jpeg" => ImagePartType.Jpeg,
+            ".gif" => ImagePartType.Gif,
+            ".bmp" => ImagePartType.Bmp,
+            _ => ImagePartType.Png
+        };
 
-    private void AddFormattedParagraph(Body body, string text)
-    {
-        var para = new Paragraph();
-        
-        // Parse inline formatting (bold, italic, code)
-        var pattern = @"(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`|([^*`]+))";
-        var matches = Regex.Matches(text, pattern);
-
-        foreach (Match match in matches)
+        var imagePart = mainPart.AddImagePart(imagePartType);
+        using (var stream = new MemoryStream(imageBytes))
         {
-            var run = new Run();
-            var runProps = new RunProperties();
-            string content;
-
-            if (match.Groups[2].Success) // Bold + Italic (***text***)
-            {
-                content = match.Groups[2].Value;
-                runProps.AppendChild(new Bold());
-                runProps.AppendChild(new Italic());
-            }
-            else if (match.Groups[3].Success) // Bold (**text**)
-            {
-                content = match.Groups[3].Value;
-                runProps.AppendChild(new Bold());
-            }
-            else if (match.Groups[4].Success) // Italic (*text*)
-            {
-                content = match.Groups[4].Value;
-                runProps.AppendChild(new Italic());
-            }
-            else if (match.Groups[5].Success) // Code (`text`)
-            {
-                content = match.Groups[5].Value;
-                runProps.AppendChild(new RunFonts { Ascii = "Consolas", HighAnsi = "Consolas" });
-                runProps.AppendChild(new Shading { Val = ShadingPatternValues.Clear, Fill = "E8E8E8" });
-            }
-            else // Plain text
-            {
-                content = match.Groups[6].Value;
-            }
-
-            if (runProps.HasChildren)
-            {
-                run.AppendChild(runProps);
-            }
-            run.AppendChild(new Text(content) { Space = SpaceProcessingModeValues.Preserve });
-            para.AppendChild(run);
+            imagePart.FeedData(stream);
         }
 
-        body.AppendChild(para);
+        // Get image dimensions
+        long widthEmu, heightEmu;
+        using (var stream = new MemoryStream(imageBytes))
+        {
+            using var bitmap = new System.Drawing.Bitmap(stream);
+            // Convert pixels to EMUs (914400 EMUs per inch, assuming 96 DPI)
+            // Use long to avoid integer overflow with large images
+            widthEmu = (long)bitmap.Width * 914400L / 96L;
+            heightEmu = (long)bitmap.Height * 914400L / 96L;
+
+            // Limit max width to 6 inches (5486400 EMUs)
+            const long maxWidthEmu = 6L * 914400L;
+            if (widthEmu > maxWidthEmu)
+            {
+                var ratio = (double)maxWidthEmu / widthEmu;
+                widthEmu = maxWidthEmu;
+                heightEmu = (long)(heightEmu * ratio);
+            }
+            
+            // Limit max height to 9 inches (8229600 EMUs) to fit on page
+            const long maxHeightEmu = 9L * 914400L;
+            if (heightEmu > maxHeightEmu)
+            {
+                var ratio = (double)maxHeightEmu / heightEmu;
+                heightEmu = maxHeightEmu;
+                widthEmu = (long)(widthEmu * ratio);
+            }
+        }
+
+        var relationshipId = mainPart.GetIdOfPart(imagePart);
+        var imageName = Path.GetFileNameWithoutExtension(imagePath);
+        return CreateImageElement(relationshipId, (int)widthEmu, (int)heightEmu, imageName);
     }
 
     private void UpdateExportMenuVisibility()
     {
         // Show diagram exports only for Mermaid files
-        // Show Word export only for Markdown files
+        // Show Word export for both (Mermaid embeds as PNG, Markdown converts to formatted doc)
         var isMermaid = _currentRenderMode == RenderMode.Mermaid;
         
+        // Menu items
         ExportPngMenuItem.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
         ExportSvgMenuItem.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
         ExportEmfMenuItem.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
-        ExportWordMenuItem.Visibility = isMermaid ? Visibility.Collapsed : Visibility.Visible;
+        ExportWordMenuItem.Visibility = Visibility.Visible; // Always visible - works for both
+        
+        // Toolbar buttons - PNG/SVG/EMF only make sense for Mermaid diagrams
+        ExportPngToolbarButton.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
+        ExportSvgToolbarButton.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
+        ExportEmfToolbarButton.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
+        ExportWordToolbarButton.Visibility = Visibility.Visible; // Always visible - works for both
     }
 
     private string SanitizeSvgForXml(string svg)
@@ -2063,21 +2692,28 @@ Console.WriteLine(""Hello, World!"");
     private void About_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show(
-
             "Mermaid Editor v1.7\n\n" +
-            "A simple IDE for editing Mermaid diagrams and Markdown files.\n\n" +
+            "A visual IDE for editing Mermaid diagrams and Markdown files.\n\n" +
             "Features:\n" +
             "- Live preview as you type\n" +
             "- Mermaid diagram rendering with pan/zoom\n" +
             "- Markdown rendering with GitHub styling\n" +
-            "- On Click Syntax highlighting and IntelliSense\n" +
-            "- Export to PNG, SVG, EMF and Word\n" +
-            "- File open/save support\n" +
-            "- Drag and drop file support\n\n" +
+            "- Syntax highlighting and IntelliSense\n" +
+            "- Click-to-navigate between preview and code\n" +
+            "- Navigation dropdown for quick section jumping\n" +
+            "- Export to PNG, SVG, EMF, and Word\n" +
+            "- Word export embeds images for Markdown files\n" +
+            "- New document templates for all diagram types\n" +
+            "- File browser with preview on selection\n" +
+            "- Drag and drop file support\n" +
+            "- Undo/Redo support\n\n" +
             "Supported file types:\n" +
             "- .mmd, .mermaid - Mermaid diagrams\n" +
             "- .md - Markdown files\n\n" +
-			"© 2026 Lee Cassin",
+            "\u00A9 2026 Lee Cassin\n\n" +
+            "Licensed under the GNU General Public License v3.0\n" +
+            "This is free software; you are free to change and redistribute it.\n" +
+            "See LICENSE file for details.",
             "About Mermaid Editor",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
@@ -2216,23 +2852,8 @@ Console.WriteLine(""Hello, World!"");
             }
             else
             {
-                // Open file for editing
-                if (_isDirty)
-                {
-                    var result = MessageBox.Show("You have unsaved changes. Do you want to save first?",
-                        "Unsaved Changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-
-                    if (result == MessageBoxResult.Yes)
-                    {
-                        Save_Click(this, new RoutedEventArgs());
-                    }
-                    else if (result == MessageBoxResult.Cancel)
-                    {
-                        return;
-                    }
-                }
-                
-                LoadFile(item.FullPath);
+                // Open file in a new tab
+                OpenFileInTab(item.FullPath);
                 LeftPanelTabs.SelectedItem = CodeTab; // Switch to Code tab
                 StatusText.Text = "File opened from browser";
             }
@@ -2343,6 +2964,7 @@ Console.WriteLine(""Hello, World!"");
     </script>
 </body>
 </html>";
+        _isRenderingContent = true;
         PreviewWebView.NavigateToString(html);
     }
 
@@ -2378,6 +3000,7 @@ Console.WriteLine(""Hello, World!"");
     </script>
 </body>
 </html>";
+        _isRenderingContent = true;
         PreviewWebView.NavigateToString(html);
     }
 
@@ -2428,56 +3051,1020 @@ Console.WriteLine(""Hello, World!"");
             var files = (string[])e.Data.GetData(DataFormats.FileDrop);
             if (files != null && files.Length > 0)
             {
-                var filePath = files[0];
-                var ext = Path.GetExtension(filePath).ToLowerInvariant();
+                // Open each dropped file in a new tab
+                foreach (var filePath in files)
+                {
+                    var ext = Path.GetExtension(filePath).ToLowerInvariant();
+                    
+                    if (ext == ".mmd" || ext == ".mermaid" || ext == ".md")
+                    {
+                        OpenFileInTab(filePath);
+                    }
+                }
                 
-                if (ext == ".mmd" || ext == ".mermaid" || ext == ".md")
-                {
-                    if (_isDirty)
-                    {
-                        var result = MessageBox.Show("You have unsaved changes. Do you want to save first?",
-                            "Unsaved Changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-
-                        if (result == MessageBoxResult.Yes)
-                        {
-                            Save_Click(this, new RoutedEventArgs());
-                        }
-                        else if (result == MessageBoxResult.Cancel)
-                        {
-                            return;
-                        }
-                    }
-
-                    try
-                    {
-                        CodeEditor.Text = File.ReadAllText(filePath);
-                        _currentFilePath = filePath;
-                        SetRenderModeFromFile(filePath);
-                        _isDirty = false;
-                        UpdateTitle();
-                        RenderPreview();
-                        
-                        // Navigate file browser to the file's folder and select the file
-                        var folder = Path.GetDirectoryName(filePath);
-                        if (!string.IsNullOrEmpty(folder))
-                        {
-                            NavigateBrowserToFolder(folder, filePath);
-                        }
-                        
-                        StatusText.Text = "File opened via drag and drop";
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show($"Failed to open file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                    }
-                }
-                else
-                {
-                    MessageBox.Show("Please drop a .mmd, .mermaid, or .md file.", "Invalid File Type", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
+                StatusText.Text = files.Length == 1 
+                    ? "File opened via drag and drop" 
+                    : $"{files.Length} files opened via drag and drop";
             }
         }
     }
+
+    private void UpdateNavigationDropdown()
+    {
+        var items = _currentRenderMode == RenderMode.Markdown 
+            ? ExtractMarkdownHeadings() 
+            : ExtractMermaidSections();
+        
+        NavigationDropdown.ItemsSource = items;
+        if (items.Count > 0)
+        {
+            NavigationDropdown.SelectedIndex = 0;
+        }
+    }
+
+    private List<NavigationItem> ExtractMarkdownHeadings()
+    {
+        var items = new List<NavigationItem>();
+        var lines = CodeEditor.Text.Split('\n');
+        
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i].TrimStart();
+            if (line.StartsWith("#"))
+            {
+                int level = 0;
+                while (level < line.Length && line[level] == '#') level++;
+                
+                if (level <= 6 && level < line.Length && line[level] == ' ')
+                {
+                    var headingText = line.Substring(level).Trim();
+                    var headingId = headingText.ToLowerInvariant()
+                        .Replace(" ", "-")
+                        .Replace(".", "")
+                        .Replace(",", "")
+                        .Replace(":", "")
+                        .Replace("'", "")
+                        .Replace("\"", "");
+                    
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = headingText,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = level,
+                        HeadingId = headingId
+                    });
+                }
+            }
+        }
+        
+        return items;
+    }
+
+    private List<NavigationItem> ExtractMermaidSections()
+    {
+        var items = new List<NavigationItem>();
+        var lines = CodeEditor.Text.Split('\n');
+        
+        // Diagram types to look for
+        var diagramTypes = new[] { "flowchart", "graph", "sequenceDiagram", "classDiagram", 
+            "stateDiagram", "stateDiagram-v2", "erDiagram", "journey", "gantt", "pie", 
+            "quadrantChart", "requirementDiagram", "gitGraph", "mindmap", "timeline",
+            "zenuml", "sankey-beta", "xychart-beta", "block-beta", "C4Context", "C4Container", 
+            "C4Component", "C4Dynamic", "C4Deployment" };
+        
+        bool foundDiagramType = false;
+        string currentDiagramType = "";
+        
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i].Trim();
+            
+            // Skip frontmatter config lines
+            if (line == "---" || line.StartsWith("config:") || line.StartsWith("look:") || 
+                line.StartsWith("theme:") || line.StartsWith("layout:"))
+                continue;
+            
+            // Check for diagram type declaration
+            if (!foundDiagramType)
+            {
+                foreach (var diagramType in diagramTypes)
+                {
+                    if (line.StartsWith(diagramType, StringComparison.OrdinalIgnoreCase))
+                    {
+                        var displayName = diagramType;
+                        currentDiagramType = diagramType.ToLower();
+                        // Extract direction if present (e.g., "flowchart TD" -> "Flowchart (TD)")
+                        var parts = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (parts.Length > 1)
+                        {
+                            displayName = $"{diagramType} ({parts[1]})";
+                        }
+                        
+                        items.Add(new NavigationItem
+                        {
+                            DisplayText = displayName,
+                            RawText = line,
+                            LineNumber = i + 1,
+                            Level = 1,
+                            HeadingId = ""
+                        });
+                        foundDiagramType = true;
+                        break;
+                    }
+                }
+            }
+            
+            // Subgraphs (flowchart/graph)
+            if (line.StartsWith("subgraph ", StringComparison.OrdinalIgnoreCase))
+            {
+                var name = line.Substring(9).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Subgraph: " + name,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // State definitions (stateDiagram)
+            else if (line.StartsWith("state ", StringComparison.OrdinalIgnoreCase) && line.Contains("{"))
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(line, @"state\s+""?([^""{\s]+)""?\s*\{?");
+                if (match.Success)
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  State: " + match.Groups[1].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            // Participants (sequenceDiagram)
+            else if (line.StartsWith("participant ", StringComparison.OrdinalIgnoreCase))
+            {
+                var participantText = line.Substring(12).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Participant: " + participantText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // Actors (sequenceDiagram)
+            else if (line.StartsWith("actor ", StringComparison.OrdinalIgnoreCase))
+            {
+                var actorText = line.Substring(6).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Actor: " + actorText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // Notes (sequenceDiagram)
+            else if (line.StartsWith("Note ", StringComparison.OrdinalIgnoreCase))
+            {
+                var noteMatch = System.Text.RegularExpressions.Regex.Match(line, @"Note\s+(?:over|left of|right of)\s+([^:]+):\s*(.*)");
+                if (noteMatch.Success)
+                {
+                    var noteText = noteMatch.Groups[2].Value.Trim();
+                    if (noteText.Length > 30) noteText = noteText.Substring(0, 30) + "...";
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  Note: " + noteText,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            // Loop blocks (sequenceDiagram)
+            else if (line.StartsWith("loop ", StringComparison.OrdinalIgnoreCase))
+            {
+                var loopText = line.Substring(5).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Loop: " + loopText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // Alt blocks (sequenceDiagram)
+            else if (line.StartsWith("alt ", StringComparison.OrdinalIgnoreCase))
+            {
+                var altText = line.Substring(4).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Alt: " + altText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // Opt blocks (sequenceDiagram)
+            else if (line.StartsWith("opt ", StringComparison.OrdinalIgnoreCase))
+            {
+                var optText = line.Substring(4).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Opt: " + optText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // Par blocks (sequenceDiagram)
+            else if (line.StartsWith("par ", StringComparison.OrdinalIgnoreCase))
+            {
+                var parText = line.Substring(4).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Par: " + parText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // Critical blocks (sequenceDiagram)
+            else if (line.StartsWith("critical ", StringComparison.OrdinalIgnoreCase))
+            {
+                var criticalText = line.Substring(9).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Critical: " + criticalText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // Break blocks (sequenceDiagram)
+            else if (line.StartsWith("break ", StringComparison.OrdinalIgnoreCase))
+            {
+                var breakText = line.Substring(6).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Break: " + breakText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // Rect blocks (sequenceDiagram - highlight regions)
+            else if (line.StartsWith("rect ", StringComparison.OrdinalIgnoreCase))
+            {
+                var rectText = line.Substring(5).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Rect: " + rectText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // Class definitions (classDiagram)
+            else if (line.StartsWith("class ", StringComparison.OrdinalIgnoreCase) && currentDiagramType == "classdiagram")
+            {
+                var classMatch = System.Text.RegularExpressions.Regex.Match(line, @"class\s+(\w+)");
+                if (classMatch.Success)
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  Class: " + classMatch.Groups[1].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            // Sections (gantt, journey, timeline)
+            else if (line.StartsWith("section ", StringComparison.OrdinalIgnoreCase))
+            {
+                var sectionText = line.Substring(8).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Section: " + sectionText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // Title (various diagrams)
+            else if (line.StartsWith("title ", StringComparison.OrdinalIgnoreCase) || line.StartsWith("title:"))
+            {
+                var titleText = line.Contains(":") ? line.Substring(line.IndexOf(':') + 1).Trim() : line.Substring(6).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Title: " + titleText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // gitGraph - branch, checkout, merge
+            else if (line.StartsWith("branch ", StringComparison.OrdinalIgnoreCase))
+            {
+                var branchText = line.Substring(7).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Branch: " + branchText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            else if (line.StartsWith("checkout ", StringComparison.OrdinalIgnoreCase))
+            {
+                var checkoutText = line.Substring(9).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Checkout: " + checkoutText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            else if (line.StartsWith("merge ", StringComparison.OrdinalIgnoreCase))
+            {
+                var mergeText = line.Substring(6).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Merge: " + mergeText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            // requirementDiagram - requirement, element
+            else if (line.StartsWith("requirement ", StringComparison.OrdinalIgnoreCase) ||
+                     line.StartsWith("functionalRequirement ", StringComparison.OrdinalIgnoreCase) ||
+                     line.StartsWith("performanceRequirement ", StringComparison.OrdinalIgnoreCase) ||
+                     line.StartsWith("interfaceRequirement ", StringComparison.OrdinalIgnoreCase) ||
+                     line.StartsWith("physicalRequirement ", StringComparison.OrdinalIgnoreCase) ||
+                     line.StartsWith("designConstraint ", StringComparison.OrdinalIgnoreCase))
+            {
+                var reqMatch = System.Text.RegularExpressions.Regex.Match(line, @"^\w+\s+(\w+)\s*\{?");
+                if (reqMatch.Success)
+                {
+                    var reqType = line.Split(' ')[0];
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  Req: " + reqMatch.Groups[1].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            else if (line.StartsWith("element ", StringComparison.OrdinalIgnoreCase))
+            {
+                var elemMatch = System.Text.RegularExpressions.Regex.Match(line, @"element\s+(\w+)\s*\{?");
+                if (elemMatch.Success)
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  Element: " + elemMatch.Groups[1].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            // C4 diagrams - Person, System, Container, Component, Boundary
+            else if (line.StartsWith("Person(", StringComparison.OrdinalIgnoreCase) ||
+                     line.StartsWith("Person_Ext(", StringComparison.OrdinalIgnoreCase))
+            {
+                var c4Match = System.Text.RegularExpressions.Regex.Match(line, @"Person(?:_Ext)?\((\w+),\s*""([^""]+)""");
+                if (c4Match.Success)
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  Person: " + c4Match.Groups[2].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            else if (line.StartsWith("System(", StringComparison.OrdinalIgnoreCase) ||
+                     line.StartsWith("System_Ext(", StringComparison.OrdinalIgnoreCase) ||
+                     line.StartsWith("SystemDb(", StringComparison.OrdinalIgnoreCase) ||
+                     line.StartsWith("SystemDb_Ext(", StringComparison.OrdinalIgnoreCase))
+            {
+                var c4Match = System.Text.RegularExpressions.Regex.Match(line, @"System(?:Db)?(?:_Ext)?\((\w+),\s*""([^""]+)""");
+                if (c4Match.Success)
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  System: " + c4Match.Groups[2].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            else if (line.StartsWith("Container(", StringComparison.OrdinalIgnoreCase) ||
+                     line.StartsWith("ContainerDb(", StringComparison.OrdinalIgnoreCase))
+            {
+                var c4Match = System.Text.RegularExpressions.Regex.Match(line, @"Container(?:Db)?\((\w+),\s*""([^""]+)""");
+                if (c4Match.Success)
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  Container: " + c4Match.Groups[2].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            else if (line.StartsWith("Component(", StringComparison.OrdinalIgnoreCase))
+            {
+                var c4Match = System.Text.RegularExpressions.Regex.Match(line, @"Component\((\w+),\s*""([^""]+)""");
+                if (c4Match.Success)
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  Component: " + c4Match.Groups[2].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            else if (line.StartsWith("Boundary(", StringComparison.OrdinalIgnoreCase))
+            {
+                var c4Match = System.Text.RegularExpressions.Regex.Match(line, @"Boundary\((\w+),\s*""([^""]+)""");
+                if (c4Match.Success)
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  Boundary: " + c4Match.Groups[2].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            // quadrantChart - x-axis, y-axis, quadrant labels
+            else if (line.StartsWith("x-axis ", StringComparison.OrdinalIgnoreCase))
+            {
+                var axisText = line.Substring(7).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  X-Axis: " + axisText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            else if (line.StartsWith("y-axis ", StringComparison.OrdinalIgnoreCase))
+            {
+                var axisText = line.Substring(7).Trim();
+                items.Add(new NavigationItem
+                {
+                    DisplayText = "  Y-Axis: " + axisText,
+                    RawText = line,
+                    LineNumber = i + 1,
+                    Level = 2,
+                    HeadingId = ""
+                });
+            }
+            else if (line.StartsWith("quadrant-", StringComparison.OrdinalIgnoreCase))
+            {
+                var quadrantMatch = System.Text.RegularExpressions.Regex.Match(line, @"quadrant-(\d)\s+(.+)");
+                if (quadrantMatch.Success)
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  Quadrant " + quadrantMatch.Groups[1].Value + ": " + quadrantMatch.Groups[2].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            // mindmap - root node (first non-empty line after mindmap declaration)
+            else if (line.StartsWith("root(", StringComparison.OrdinalIgnoreCase))
+            {
+                var rootMatch = System.Text.RegularExpressions.Regex.Match(line, @"root\(\(([^)]+)\)\)");
+                if (rootMatch.Success)
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  Root: " + rootMatch.Groups[1].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            // erDiagram - entity definitions (lines with { that define entities)
+            else if (currentDiagramType == "erdiagram" && line.Contains("{") && !line.StartsWith("%%"))
+            {
+                var entityMatch = System.Text.RegularExpressions.Regex.Match(line, @"^\s*(\w+)\s*\{");
+                if (entityMatch.Success)
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  Entity: " + entityMatch.Groups[1].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+            // pie chart - data entries
+            else if (currentDiagramType == "pie" && line.Contains(":") && line.Contains("\""))
+            {
+                var pieMatch = System.Text.RegularExpressions.Regex.Match(line, @"""([^""]+)""\s*:\s*(\d+)");
+                if (pieMatch.Success)
+                {
+                    items.Add(new NavigationItem
+                    {
+                        DisplayText = "  " + pieMatch.Groups[1].Value + ": " + pieMatch.Groups[2].Value,
+                        RawText = line,
+                        LineNumber = i + 1,
+                        Level = 2,
+                        HeadingId = ""
+                    });
+                }
+            }
+        }
+        
+        return items;
+    }
+
+    private bool _isNavigating = false;
+
+    private void NavigationDropdown_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_isNavigating) return;
+        
+        if (NavigationDropdown.SelectedItem is NavigationItem item)
+        {
+            _isNavigating = true;
+            try
+            {
+                var line = CodeEditor.Document.GetLineByNumber(item.LineNumber);
+                CodeEditor.ScrollToLine(item.LineNumber);
+                CodeEditor.TextArea.Caret.Offset = line.Offset;
+                CodeEditor.TextArea.Caret.BringCaretToView();
+                CodeEditor.Select(line.Offset, line.Length);
+                
+                if (_currentRenderMode == RenderMode.Markdown && !string.IsNullOrEmpty(item.HeadingId))
+                {
+                    ScrollPreviewToHeading(item.HeadingId);
+                }
+            }
+            finally
+            {
+                _isNavigating = false;
+            }
+        }
+    }
+
+    private async void ScrollPreviewToHeading(string headingId)
+    {
+        if (!_webViewInitialized) return;
+        
+        try
+        {
+            var script = $@"
+                (function() {{
+                    var element = document.getElementById('{headingId}');
+                    if (element) {{
+                        element.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+                        return true;
+                    }}
+                    var headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
+                    for (var i = 0; i < headings.length; i++) {{
+                        var h = headings[i];
+                        var text = h.textContent.toLowerCase().replace(/\s+/g, '-').replace(/[.,:'""]/g, '');
+                        if (text === '{headingId}' || h.id === '{headingId}') {{
+                            h.scrollIntoView({{ behavior: 'smooth', block: 'start' }});
+                            return true;
+                        }}
+                    }}
+                    return false;
+                }})();
+            ";
+            await PreviewWebView.ExecuteScriptAsync(script);
+        }
+        catch
+        {
+        }
+    }
+    
+    #region Multi-Document Tab Support
+    
+    /// <summary>
+    /// Creates a new document and adds it to the tab strip
+    /// </summary>
+    private DocumentModel CreateNewDocument(string? filePath = null, string? content = null)
+    {
+        var doc = new DocumentModel
+        {
+            FilePath = filePath,
+            RenderMode = RenderMode.Mermaid
+        };
+        
+        if (!string.IsNullOrEmpty(filePath))
+        {
+            SetDocumentRenderModeFromFile(doc, filePath);
+        }
+        
+        doc.TextDocument.Text = content ?? (doc.RenderMode == RenderMode.Markdown ? DefaultMarkdownCode : DefaultMermaidCode);
+        doc.IsDirty = false;
+        
+        _openDocuments.Add(doc);
+        CreateTabButtonForDocument(doc);
+        
+        return doc;
+    }
+    
+    /// <summary>
+    /// Sets the render mode for a document based on its file extension
+    /// </summary>
+    private void SetDocumentRenderModeFromFile(DocumentModel doc, string filePath)
+    {
+        var ext = Path.GetExtension(filePath).ToLowerInvariant();
+        doc.RenderMode = ext == ".md" ? RenderMode.Markdown : RenderMode.Mermaid;
+    }
+    
+    /// <summary>
+    /// Creates a tab button for a document and adds it to the tab strip
+    /// </summary>
+    private void CreateTabButtonForDocument(DocumentModel doc)
+    {
+        var tabButton = new System.Windows.Controls.Button
+        {
+            Tag = doc,
+            Padding = new Thickness(12, 6, 8, 6),
+            Margin = new Thickness(0, 0, 1, 0),
+            BorderThickness = new Thickness(0),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            Background = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2D2D30")),
+            Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F1F1F1")),
+        };
+        
+        // Create content with text and close button
+        var stackPanel = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+        
+        var textBlock = new TextBlock
+        {
+            Text = doc.TabHeader,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 8, 0)
+        };
+        
+        var closeButton = new System.Windows.Controls.Button
+        {
+            Content = "x",
+            FontSize = 10,
+            Width = 16,
+            Height = 16,
+            Padding = new Thickness(0),
+            BorderThickness = new Thickness(0),
+            Background = System.Windows.Media.Brushes.Transparent,
+            Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#888888")),
+            VerticalAlignment = VerticalAlignment.Center,
+            Cursor = System.Windows.Input.Cursors.Hand,
+            Tag = doc
+        };
+        closeButton.Click += CloseDocumentTab_Click;
+        
+        stackPanel.Children.Add(textBlock);
+        stackPanel.Children.Add(closeButton);
+        tabButton.Content = stackPanel;
+        
+        tabButton.Click += DocumentTab_Click;
+        
+        // Subscribe to property changes to update tab header
+        doc.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName == nameof(DocumentModel.TabHeader))
+            {
+                textBlock.Text = doc.TabHeader;
+            }
+        };
+        
+        doc.TabButton = tabButton;
+        DocumentTabsPanel.Children.Add(tabButton);
+        
+        UpdateTabStyles();
+    }
+    
+    /// <summary>
+    /// Updates the visual styles of all document tabs
+    /// </summary>
+    private void UpdateTabStyles()
+    {
+        var selectedBg = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#1E1E1E"));
+        var unselectedBg = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2D2D30"));
+        var selectedFg = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F1F1F1"));
+        var unselectedFg = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#9D9D9D"));
+        var purpleAccent = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#9184EE"));
+        
+        foreach (var doc in _openDocuments)
+        {
+            if (doc.TabButton != null)
+            {
+                var isSelected = doc == _activeDocument;
+                doc.TabButton.Background = isSelected ? selectedBg : unselectedBg;
+                doc.TabButton.Foreground = isSelected ? selectedFg : unselectedFg;
+                
+                // Add purple bottom border for selected tab
+                doc.TabButton.BorderThickness = isSelected ? new Thickness(0, 0, 0, 2) : new Thickness(0);
+                doc.TabButton.BorderBrush = isSelected ? purpleAccent : null;
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Handles clicking on a document tab to switch to that document
+    /// </summary>
+    private void DocumentTab_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Button button && button.Tag is DocumentModel doc)
+        {
+            SwitchToDocument(doc);
+        }
+    }
+    
+    /// <summary>
+    /// Handles clicking the close button on a document tab
+    /// </summary>
+    private void CloseDocumentTab_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true; // Prevent the tab click from firing
+        
+        if (sender is System.Windows.Controls.Button button && button.Tag is DocumentModel doc)
+        {
+            CloseDocument(doc);
+        }
+    }
+    
+    /// <summary>
+    /// Closes a document, prompting to save if dirty
+    /// </summary>
+    private void CloseDocument(DocumentModel doc)
+    {
+        if (doc.IsDirty)
+        {
+            var result = MessageBox.Show(
+                $"Do you want to save changes to {doc.DisplayName}?",
+                "Save Changes",
+                MessageBoxButton.YesNoCancel,
+                MessageBoxImage.Question);
+            
+            if (result == MessageBoxResult.Cancel)
+                return;
+            
+            if (result == MessageBoxResult.Yes)
+            {
+                // Save the document
+                if (!SaveDocument(doc))
+                    return; // Save was cancelled
+            }
+        }
+        
+        // Remove the tab button
+        if (doc.TabButton != null)
+        {
+            DocumentTabsPanel.Children.Remove(doc.TabButton);
+        }
+        
+        // Remove from list
+        var index = _openDocuments.IndexOf(doc);
+        _openDocuments.Remove(doc);
+        
+        // If this was the active document, switch to another
+        if (doc == _activeDocument)
+        {
+            if (_openDocuments.Count > 0)
+            {
+                // Switch to the next document, or the previous if we closed the last one
+                var newIndex = Math.Min(index, _openDocuments.Count - 1);
+                SwitchToDocument(_openDocuments[newIndex]);
+            }
+            else
+            {
+                // No more documents, create a new untitled one
+                var newDoc = CreateNewDocument();
+                SwitchToDocument(newDoc);
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Saves a document, returning true if successful
+    /// </summary>
+    private bool SaveDocument(DocumentModel doc)
+    {
+        if (string.IsNullOrEmpty(doc.FilePath))
+        {
+            // Need to do Save As
+            var dialog = new SaveFileDialog
+            {
+                Filter = doc.RenderMode == RenderMode.Markdown
+                    ? "Markdown Files (*.md)|*.md|All Files (*.*)|*.*"
+                    : "Mermaid Files (*.mmd)|*.mmd|All Files (*.*)|*.*",
+                DefaultExt = doc.RenderMode == RenderMode.Markdown ? ".md" : ".mmd"
+            };
+            
+            if (dialog.ShowDialog() == true)
+            {
+                doc.FilePath = dialog.FileName;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        
+        try
+        {
+            File.WriteAllText(doc.FilePath, doc.TextDocument.Text);
+            doc.IsDirty = false;
+            AddToRecentFiles(doc.FilePath);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Failed to save file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            return false;
+        }
+    }
+    
+    /// <summary>
+    /// Switches to a different document
+    /// </summary>
+    private void SwitchToDocument(DocumentModel doc)
+    {
+        if (_activeDocument == doc) return;
+        
+        _isSwitchingDocuments = true;
+        
+        // Save current document state
+        if (_activeDocument != null)
+        {
+            _activeDocument.CaretOffset = CodeEditor.CaretOffset;
+            _activeDocument.VerticalScrollOffset = CodeEditor.VerticalOffset;
+            _activeDocument.HorizontalScrollOffset = CodeEditor.HorizontalOffset;
+            _activeDocument.PreviewZoom = _currentZoom;
+            _activeDocument.HasNavigatedAway = _hasNavigatedAway;
+            _activeDocument.IsSelected = false;
+        }
+        
+        // Switch to new document
+        _activeDocument = doc;
+        doc.IsSelected = true;
+        
+        // Update backward compatibility fields
+        _currentFilePath = doc.FilePath;
+        _isDirty = doc.IsDirty;
+        _currentRenderMode = doc.RenderMode;
+        _currentZoom = doc.PreviewZoom;
+        _hasNavigatedAway = doc.HasNavigatedAway;
+        
+        // Swap the text document
+        CodeEditor.Document = doc.TextDocument;
+        
+        // Restore editor state
+        try
+        {
+            CodeEditor.CaretOffset = Math.Min(doc.CaretOffset, doc.TextDocument.TextLength);
+            CodeEditor.ScrollToVerticalOffset(doc.VerticalScrollOffset);
+            CodeEditor.ScrollToHorizontalOffset(doc.HorizontalScrollOffset);
+        }
+        catch { }
+        
+        // Update UI
+        UpdateTabStyles();
+        UpdateTitle();
+        UpdateNavigationDropdown();
+        UpdateExportMenuVisibility();
+        
+        // Update back button state
+        PreviewBackButton.IsEnabled = _hasNavigatedAway;
+        
+        _isSwitchingDocuments = false;
+        
+        // Re-render preview for the new document
+        RenderPreview();
+    }
+    
+    /// <summary>
+    /// Opens a file in a new tab or switches to existing tab if already open
+    /// </summary>
+    private void OpenFileInTab(string filePath)
+    {
+        // Check if file is already open
+        var existingDoc = _openDocuments.FirstOrDefault(d => 
+            string.Equals(d.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+        
+        if (existingDoc != null)
+        {
+            SwitchToDocument(existingDoc);
+            return;
+        }
+        
+        try
+        {
+            var content = File.ReadAllText(filePath);
+            var doc = CreateNewDocument(filePath, content);
+            SwitchToDocument(doc);
+            
+            // Navigate file browser to the file's folder
+            var folder = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(folder))
+            {
+                NavigateBrowserToFolder(folder, filePath);
+            }
+            
+            AddToRecentFiles(filePath);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Failed to open file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+    
+    /// <summary>
+    /// Opens a file from an external source (e.g., another instance via named pipe)
+    /// This is a public method called by App.xaml.cs for single-instance support
+    /// </summary>
+    public void OpenFileFromExternalSource(string filePath)
+    {
+        OpenFileInTab(filePath);
+    }
+    
+    /// <summary>
+    /// Initializes the document tab system on startup
+    /// </summary>
+    private void InitializeDocumentTabs()
+    {
+        // Create initial document
+        var args = Environment.GetCommandLineArgs();
+        if (args.Length > 1 && File.Exists(args[1]))
+        {
+            // Open file from command line
+            var content = File.ReadAllText(args[1]);
+            var doc = CreateNewDocument(args[1], content);
+            SwitchToDocument(doc);
+            
+            var folder = Path.GetDirectoryName(args[1]);
+            if (!string.IsNullOrEmpty(folder))
+            {
+                NavigateBrowserToFolder(folder, args[1]);
+            }
+            
+            AddToRecentFiles(args[1]);
+        }
+        else
+        {
+            // Create new untitled document
+            var doc = CreateNewDocument();
+            SwitchToDocument(doc);
+        }
+    }
+    
+    #endregion
 }
 
 public class MermaidCompletionData: ICompletionData
@@ -2528,4 +4115,83 @@ public class RelayCommand : ICommand
     public bool CanExecute(object? parameter) => _canExecute?.Invoke(parameter) ?? true;
 
     public void Execute(object? parameter) => _execute(parameter);
+}
+
+public class NavigationItem
+{
+    public string DisplayText { get; set; } = "";
+    public string RawText { get; set; } = "";
+    public int LineNumber { get; set; }
+    public int Level { get; set; }
+    public string HeadingId { get; set; } = "";
+    public Thickness IndentMargin => new Thickness((Level - 1) * 12, 0, 0, 0);
+}
+
+/// <summary>
+/// Represents an open document in the multi-document interface
+/// </summary>
+public class DocumentModel : System.ComponentModel.INotifyPropertyChanged
+{
+    private string? _filePath;
+    private bool _isDirty;
+    
+    public string? FilePath
+    {
+        get => _filePath;
+        set
+        {
+            _filePath = value;
+            OnPropertyChanged(nameof(FilePath));
+            OnPropertyChanged(nameof(DisplayName));
+            OnPropertyChanged(nameof(TabHeader));
+        }
+    }
+    
+    public bool IsDirty
+    {
+        get => _isDirty;
+        set
+        {
+            _isDirty = value;
+            OnPropertyChanged(nameof(IsDirty));
+            OnPropertyChanged(nameof(TabHeader));
+        }
+    }
+    
+    public RenderMode RenderMode { get; set; } = RenderMode.Mermaid;
+    
+    private bool _isSelected;
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set
+        {
+            _isSelected = value;
+            OnPropertyChanged(nameof(IsSelected));
+        }
+    }
+    
+    // Editor state
+    public ICSharpCode.AvalonEdit.Document.TextDocument TextDocument { get; set; } = new();
+    public int CaretOffset { get; set; }
+    public double VerticalScrollOffset { get; set; }
+    public double HorizontalScrollOffset { get; set; }
+    
+    // Preview state
+    public double PreviewZoom { get; set; } = 1.0;
+    public bool HasNavigatedAway { get; set; }
+    
+    // UI element reference for the tab button
+    public System.Windows.Controls.Button? TabButton { get; set; }
+    
+    public string DisplayName => string.IsNullOrEmpty(FilePath) ? "Untitled" : Path.GetFileName(FilePath);
+    
+    public string TabHeader => IsDirty ? $"{DisplayName} *" : DisplayName;
+    
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+    
+    protected void OnPropertyChanged(string propertyName)
+    {
+        PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(propertyName));
+    }
 }
