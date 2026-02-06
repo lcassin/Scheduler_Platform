@@ -1414,27 +1414,23 @@ Console.WriteLine(""Hello, World!"");
         int bestMatchLength = 0;
         
         // First, try to find by node ID (for Mermaid diagrams)
+        // Prioritize node DEFINITIONS (with brackets/labels) over references
         if (!string.IsNullOrEmpty(nodeId))
         {
+            var escapedNodeId = System.Text.RegularExpressions.Regex.Escape(nodeId);
+            
+            // First pass: Look for node DEFINITIONS (where the node has a label in brackets)
+            var definitionPatterns = new[]
+            {
+                $@"\b{escapedNodeId}\s*[\[\(\{{\<]",  // A[, A(, A{, A< - node with label
+                $@"^\s*{escapedNodeId}\s*:",          // A: (for state diagrams)
+                $@"state\s+{escapedNodeId}\b",        // state A
+            };
+            
             for (int i = 0; i < lines.Length; i++)
             {
                 var line = lines[i];
-                
-                // Look for node definitions like "A[text]", "A{text}", "A((text))", "A-->B", etc.
-                // Also look for node ID at the start of arrows or in brackets
-                var patterns = new[]
-                {
-                    $@"\b{System.Text.RegularExpressions.Regex.Escape(nodeId)}\s*[\[\(\{{\<]",  // A[, A(, A{, A<
-                    $@"\b{System.Text.RegularExpressions.Regex.Escape(nodeId)}\s*-->",          // A-->
-                    $@"\b{System.Text.RegularExpressions.Regex.Escape(nodeId)}\s*---",          // A---
-                    $@"\b{System.Text.RegularExpressions.Regex.Escape(nodeId)}\s*-\.\-",        // A-.-
-                    $@"-->\s*{System.Text.RegularExpressions.Regex.Escape(nodeId)}\b",          // -->A
-                    $@"---\s*{System.Text.RegularExpressions.Regex.Escape(nodeId)}\b",          // ---A
-                    $@"^\s*{System.Text.RegularExpressions.Regex.Escape(nodeId)}\s*:",          // A: (for state diagrams)
-                    $@"state\s+{System.Text.RegularExpressions.Regex.Escape(nodeId)}\b",        // state A
-                };
-                
-                foreach (var pattern in patterns)
+                foreach (var pattern in definitionPatterns)
                 {
                     var match = System.Text.RegularExpressions.Regex.Match(line, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                     if (match.Success)
@@ -1445,8 +1441,37 @@ Console.WriteLine(""Hello, World!"");
                         break;
                     }
                 }
-                
                 if (bestLineIndex >= 0) break;
+            }
+            
+            // Second pass: If no definition found, look for references (arrows pointing to/from the node)
+            if (bestLineIndex < 0)
+            {
+                var referencePatterns = new[]
+                {
+                    $@"\b{escapedNodeId}\s*-->",          // A-->
+                    $@"\b{escapedNodeId}\s*---",          // A---
+                    $@"\b{escapedNodeId}\s*-\.\-",        // A-.-
+                    $@"-->\s*{escapedNodeId}\b",          // -->A
+                    $@"---\s*{escapedNodeId}\b",          // ---A
+                };
+                
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    var line = lines[i];
+                    foreach (var pattern in referencePatterns)
+                    {
+                        var match = System.Text.RegularExpressions.Regex.Match(line, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        if (match.Success)
+                        {
+                            bestLineIndex = i;
+                            bestMatchStart = match.Index;
+                            bestMatchLength = nodeId.Length;
+                            break;
+                        }
+                    }
+                    if (bestLineIndex >= 0) break;
+                }
             }
         }
         
@@ -3634,6 +3659,30 @@ Console.WriteLine(""Hello, World!"");
             }
         };
         
+        // Add context menu for tab operations
+        var contextMenu = new System.Windows.Controls.ContextMenu
+        {
+            Background = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2D2D30")),
+            BorderBrush = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#3E3E42")),
+            Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F1F1F1")),
+        };
+        
+        var closeItem = new System.Windows.Controls.MenuItem { Header = "Close", Tag = doc };
+        closeItem.Click += (s, e) => CloseDocument(doc);
+        
+        var closeAllItem = new System.Windows.Controls.MenuItem { Header = "Close All" };
+        closeAllItem.Click += (s, e) => CloseAllDocuments();
+        
+        var closeAllButThisItem = new System.Windows.Controls.MenuItem { Header = "Close All But This", Tag = doc };
+        closeAllButThisItem.Click += (s, e) => CloseAllDocumentsExcept(doc);
+        
+        contextMenu.Items.Add(closeItem);
+        contextMenu.Items.Add(new System.Windows.Controls.Separator());
+        contextMenu.Items.Add(closeAllItem);
+        contextMenu.Items.Add(closeAllButThisItem);
+        
+        tabBorder.ContextMenu = contextMenu;
+        
         // Subscribe to property changes to update tab header
         doc.PropertyChanged += (s, e) =>
         {
@@ -3771,6 +3820,44 @@ Console.WriteLine(""Hello, World!"");
                 var newDoc = CreateNewDocument();
                 SwitchToDocument(newDoc);
             }
+        }
+    }
+    
+    /// <summary>
+    /// Closes all open documents
+    /// </summary>
+    private void CloseAllDocuments()
+    {
+        // Make a copy of the list since we'll be modifying it
+        var docsToClose = _openDocuments.ToList();
+        foreach (var doc in docsToClose)
+        {
+            CloseDocument(doc);
+            // If user cancelled closing a dirty document, stop
+            if (_openDocuments.Contains(doc))
+                break;
+        }
+    }
+    
+    /// <summary>
+    /// Closes all documents except the specified one
+    /// </summary>
+    private void CloseAllDocumentsExcept(DocumentModel keepDoc)
+    {
+        // Make a copy of the list since we'll be modifying it
+        var docsToClose = _openDocuments.Where(d => d != keepDoc).ToList();
+        foreach (var doc in docsToClose)
+        {
+            CloseDocument(doc);
+            // If user cancelled closing a dirty document, stop
+            if (_openDocuments.Contains(doc))
+                break;
+        }
+        
+        // Make sure the kept document is active
+        if (_openDocuments.Contains(keepDoc))
+        {
+            SwitchToDocument(keepDoc);
         }
     }
     
