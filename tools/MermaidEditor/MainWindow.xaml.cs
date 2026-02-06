@@ -1486,7 +1486,8 @@ Console.WriteLine(""Hello, World!"");
             // by searching for the text with HTML tags replaced by regex wildcards
             var htmlTagPattern = System.Text.RegularExpressions.Regex.Escape(normalizedText);
             // Replace spaces with a pattern that matches spaces, <br/>, <br>, or newlines
-            var flexiblePattern = htmlTagPattern.Replace("\\ ", @"(?:\s|<br\s*/?>)+");
+            // Note: Regex.Escape doesn't escape spaces, so we replace literal spaces
+            var flexiblePattern = htmlTagPattern.Replace(" ", @"(?:\s|<br\s*/?>)+");
             
             // For Markdown, handle different element types
             if (!string.IsNullOrEmpty(elementType))
