@@ -753,8 +753,20 @@ Console.WriteLine(""Hello, World!"");
             _activeDocument.IsDirty = true;
         }
         UpdateTitle();
+        UpdateUndoRedoState();
         _renderTimer.Stop();
         _renderTimer.Start();
+    }
+    
+    private void UpdateUndoRedoState()
+    {
+        var canUndo = CodeEditor.CanUndo;
+        var canRedo = CodeEditor.CanRedo;
+        
+        UndoButton.IsEnabled = canUndo;
+        RedoButton.IsEnabled = canRedo;
+        UndoMenuItem.IsEnabled = canUndo;
+        RedoMenuItem.IsEnabled = canRedo;
     }
 
     private void RenderTimer_Tick(object? sender, EventArgs e)
@@ -1486,7 +1498,8 @@ Console.WriteLine(""Hello, World!"");
             // by searching for the text with HTML tags replaced by regex wildcards
             var htmlTagPattern = System.Text.RegularExpressions.Regex.Escape(normalizedText);
             // Replace spaces with a pattern that matches spaces, <br/>, <br>, or newlines
-            var flexiblePattern = htmlTagPattern.Replace("\\ ", @"(?:\s|<br\s*/?>)+");
+            // Note: Regex.Escape doesn't escape spaces, so we replace literal spaces
+            var flexiblePattern = htmlTagPattern.Replace(" ", @"(?:\s|<br\s*/?>)+");
             
             // For Markdown, handle different element types
             if (!string.IsNullOrEmpty(elementType))
@@ -1854,6 +1867,7 @@ Console.WriteLine(""Hello, World!"");
         if (CodeEditor.CanUndo)
         {
             CodeEditor.Undo();
+            UpdateUndoRedoState();
         }
     }
 
@@ -1862,6 +1876,7 @@ Console.WriteLine(""Hello, World!"");
         if (CodeEditor.CanRedo)
         {
             CodeEditor.Redo();
+            UpdateUndoRedoState();
         }
     }
 
@@ -3625,6 +3640,7 @@ Console.WriteLine(""Hello, World!"");
         }
         
         doc.TextDocument.Text = content ?? (doc.RenderMode == RenderMode.Markdown ? DefaultMarkdownCode : DefaultMermaidCode);
+        doc.TextDocument.UndoStack.ClearAll(); // Clear undo history so users can't undo past the initial content
         doc.IsDirty = false;
         
         _openDocuments.Add(doc);
@@ -3730,17 +3746,6 @@ Console.WriteLine(""Hello, World!"");
         
         contextMenu.Resources.Add(typeof(System.Windows.Controls.MenuItem), menuItemStyle);
         
-        // Style the separator with a custom template to fully control its appearance
-        var separatorStyle = new System.Windows.Style(typeof(System.Windows.Controls.Separator));
-        var separatorTemplate = new ControlTemplate(typeof(System.Windows.Controls.Separator));
-        var separatorBorder = new FrameworkElementFactory(typeof(System.Windows.Controls.Border));
-        separatorBorder.SetValue(System.Windows.Controls.Border.BackgroundProperty, menuBorder);
-        separatorBorder.SetValue(System.Windows.Controls.Border.HeightProperty, 1.0);
-        separatorBorder.SetValue(System.Windows.Controls.Border.MarginProperty, new Thickness(4, 4, 4, 4));
-        separatorTemplate.VisualTree = separatorBorder;
-        separatorStyle.Setters.Add(new Setter(System.Windows.Controls.Separator.TemplateProperty, separatorTemplate));
-        contextMenu.Resources.Add(typeof(System.Windows.Controls.Separator), separatorStyle);
-        
         // Get the filename for the Close menu item
         var fileName = string.IsNullOrEmpty(doc.FilePath) ? "Untitled" : System.IO.Path.GetFileName(doc.FilePath);
         var closeItem = new System.Windows.Controls.MenuItem { Header = $"Close \"{fileName}\"", Tag = doc };
@@ -3752,8 +3757,32 @@ Console.WriteLine(""Hello, World!"");
         var closeAllButThisItem = new System.Windows.Controls.MenuItem { Header = "Close All But This", Tag = doc };
         closeAllButThisItem.Click += (s, e) => CloseAllDocumentsExcept(doc);
         
+        // Create a custom separator using a disabled MenuItem with a Border as content
+        // This avoids the white icon gutter that WPF's default Separator has
+        var separatorItem = new System.Windows.Controls.MenuItem
+        {
+            IsEnabled = false,
+            IsHitTestVisible = false,
+            Focusable = false,
+            Height = 9,
+            Padding = new Thickness(0),
+            Margin = new Thickness(0),
+        };
+        // Create a custom template for the separator MenuItem
+        var sepTemplate = new ControlTemplate(typeof(System.Windows.Controls.MenuItem));
+        var sepBorder = new FrameworkElementFactory(typeof(System.Windows.Controls.Border));
+        sepBorder.SetValue(System.Windows.Controls.Border.BackgroundProperty, menuBackground);
+        sepBorder.SetValue(System.Windows.Controls.Border.HeightProperty, 9.0);
+        var sepLine = new FrameworkElementFactory(typeof(System.Windows.Controls.Border));
+        sepLine.SetValue(System.Windows.Controls.Border.BackgroundProperty, menuBorder);
+        sepLine.SetValue(System.Windows.Controls.Border.HeightProperty, 1.0);
+        sepLine.SetValue(System.Windows.Controls.Border.MarginProperty, new Thickness(8, 4, 8, 4));
+        sepBorder.AppendChild(sepLine);
+        sepTemplate.VisualTree = sepBorder;
+        separatorItem.Template = sepTemplate;
+        
         contextMenu.Items.Add(closeItem);
-        contextMenu.Items.Add(new System.Windows.Controls.Separator());
+        contextMenu.Items.Add(separatorItem);
         contextMenu.Items.Add(closeAllItem);
         contextMenu.Items.Add(closeAllButThisItem);
         
@@ -4033,6 +4062,7 @@ Console.WriteLine(""Hello, World!"");
         UpdateTitle();
         UpdateNavigationDropdown();
         UpdateExportMenuVisibility();
+        UpdateUndoRedoState();
         
         _isSwitchingDocuments = false;
         

@@ -605,12 +605,12 @@
                 </MenuItem>
             </MenuItem>
             <MenuItem Header="_Edit" Style="{StaticResource TopLevelMenuItemStyle}">
-                <MenuItem Header="_Undo" Click="Undo_Click" InputGestureText="Ctrl+Z">
+                <MenuItem x:Name="UndoMenuItem" Header="_Undo" Click="Undo_Click" InputGestureText="Ctrl+Z" IsEnabled="False">
                     <MenuItem.Icon>
                         <TextBlock Text="&#xE7A7;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                     </MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Header="_Redo" Click="Redo_Click" InputGestureText="Ctrl+Y">
+                <MenuItem x:Name="RedoMenuItem" Header="_Redo" Click="Redo_Click" InputGestureText="Ctrl+Y" IsEnabled="False">
                     <MenuItem.Icon>
                         <TextBlock Text="&#xE7A6;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                     </MenuItem.Icon>
@@ -679,13 +679,13 @@
                         </StackPanel>
                     </Button>
                     <Separator Background="{StaticResource BorderBrush}" Margin="4,4"/>
-                    <Button Click="Undo_Click" ToolTip="Undo (Ctrl+Z)" Style="{StaticResource ToolbarButtonStyle}">
+                    <Button x:Name="UndoButton" Click="Undo_Click" ToolTip="Undo (Ctrl+Z)" Style="{StaticResource ToolbarButtonStyle}" IsEnabled="False">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE7A7;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
                             <TextBlock Text="Undo" Margin="4,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
-                    <Button Click="Redo_Click" ToolTip="Redo (Ctrl+Y)" Style="{StaticResource ToolbarButtonStyle}">
+                    <Button x:Name="RedoButton" Click="Redo_Click" ToolTip="Redo (Ctrl+Y)" Style="{StaticResource ToolbarButtonStyle}" IsEnabled="False">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE7A6;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
                             <TextBlock Text="Redo" Margin="4,0,0,0" VerticalAlignment="Center"/>
