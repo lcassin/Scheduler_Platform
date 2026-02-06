@@ -3952,7 +3952,6 @@ public class AdrController : ControllerBase
                     CredentialCheckLeadDays = 7,
                     ScrapeRetryDays = 5,
                     MaxRetries = 5,
-                    FinalStatusCheckDelayDays = 5,
                     DailyStatusCheckDelayDays = 1,
                     MaxParallelRequests = 8,
                     BatchSize = 1000,
@@ -4012,7 +4011,6 @@ public class AdrController : ControllerBase
             config.CredentialCheckLeadDays = request.CredentialCheckLeadDays ?? config.CredentialCheckLeadDays;
             config.ScrapeRetryDays = request.ScrapeRetryDays ?? config.ScrapeRetryDays;
             config.MaxRetries = request.MaxRetries ?? config.MaxRetries;
-            config.FinalStatusCheckDelayDays = request.FinalStatusCheckDelayDays ?? config.FinalStatusCheckDelayDays;
             config.DailyStatusCheckDelayDays = request.DailyStatusCheckDelayDays ?? config.DailyStatusCheckDelayDays;
             config.MaxParallelRequests = request.MaxParallelRequests ?? config.MaxParallelRequests;
             config.BatchSize = request.BatchSize ?? config.BatchSize;
@@ -5269,7 +5267,6 @@ public class UpdateAdrConfigurationRequest
     public int? CredentialCheckLeadDays { get; set; }
     public int? ScrapeRetryDays { get; set; }
     public int? MaxRetries { get; set; }
-    public int? FinalStatusCheckDelayDays { get; set; }
     public int? DailyStatusCheckDelayDays { get; set; }
     public int? MaxParallelRequests { get; set; }
     public int? BatchSize { get; set; }

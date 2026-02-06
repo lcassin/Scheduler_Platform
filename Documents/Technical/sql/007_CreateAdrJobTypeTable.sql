@@ -60,7 +60,7 @@ END
 GO
 
 -- Insert default job types (matching existing AdrRequestType enum values)
--- AdrRequestType.AttemptLogin = 1, AdrRequestType.DownloadInvoice = 2
+-- AdrRequestType.AttemptLogin = 1, AdrRequestType.DownloadInvoice = 2, AdrRequestType.Rebill = 3
 IF NOT EXISTS (SELECT 1 FROM [dbo].[AdrJobType] WHERE [Code] = 'CREDENTIAL_CHECK')
 BEGIN
     INSERT INTO [dbo].[AdrJobType] (
@@ -114,6 +114,34 @@ BEGIN
         'System'
     );
     PRINT 'Inserted DOWNLOAD_INVOICE job type';
+END
+GO
+
+IF NOT EXISTS (SELECT 1 FROM [dbo].[AdrJobType] WHERE [Code] = 'REBILL')
+BEGIN
+    INSERT INTO [dbo].[AdrJobType] (
+        [Code],
+        [Name],
+        [Description],
+        [EndpointUrl],
+        [AdrRequestTypeId],
+        [IsActive],
+        [DisplayOrder],
+        [CreatedBy],
+        [ModifiedBy]
+    )
+    VALUES (
+        'REBILL',
+        'Rebill Check',
+        'Weekly check for updated bills, partial invoices, and off-cycle invoices. Also verifies credentials. Unlike Download Invoice, rebill checks do NOT create Zendesk tickets when no document is found (only for credential failures).',
+        NULL,  -- Uses default endpoint from configuration
+        3,     -- Maps to AdrRequestType.Rebill
+        1,     -- IsActive
+        3,     -- DisplayOrder
+        'System',
+        'System'
+    );
+    PRINT 'Inserted REBILL job type';
 END
 GO
 
