@@ -440,17 +440,17 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                     request.RequestId, jobResult.JobsCreated, jobResult.JobsSkipped);
             }
 
-            // Step 3: Verify credentials
+            // Step 3: Process Rebill (replaces credential verification)
             if (request.RunCredentialVerification)
             {
                 _queue.UpdateStatus(request.RequestId, s => 
                 {
-                    s.CurrentStep = "Verifying credentials";
+                    s.CurrentStep = "Processing rebill";
                     s.CurrentStepPhase = "Preparing";
                     s.CurrentStepProgress = 0;
                     s.CurrentStepTotal = 0;
                 });
-                _logger.LogInformation("Request {RequestId}: Starting credential verification", request.RequestId);
+                _logger.LogInformation("Request {RequestId}: Starting rebill processing", request.RequestId);
                 
                 var credResult = await orchestratorService.VerifyCredentialsAsync(
                     (progress, total) => _queue.UpdateStatus(request.RequestId, s => 
@@ -476,7 +476,7 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                 });
                 
                 _logger.LogInformation(
-                    "Request {RequestId}: Credential verification completed. Verified: {Verified}, Failed: {Failed}",
+                    "Request {RequestId}: Rebill processing completed. Verified: {Verified}, Failed: {Failed}",
                     request.RequestId, credResult.CredentialsVerified, credResult.CredentialsFailed);
             }
 

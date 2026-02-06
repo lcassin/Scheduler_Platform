@@ -70,7 +70,7 @@ public class AdrOrchestrationRun : BaseEntity
     public int? JobsCreated { get; set; }
     public int? JobsSkipped { get; set; }
     
-    // Step 3: Verify Credentials results
+    // Step 3: Process Rebill results (replaces Verify Credentials)
     public int? CredentialsVerified { get; set; }
     public int? CredentialsFailed { get; set; }
     
