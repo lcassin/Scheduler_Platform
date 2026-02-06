@@ -1478,6 +1478,16 @@ Console.WriteLine(""Hello, World!"");
         // If no match by nodeId, try to find by text content
         if (bestLineIndex < 0 && !string.IsNullOrEmpty(text))
         {
+            // Normalize the search text - replace newlines with spaces for matching
+            // This handles cases where HTML <br/> tags are rendered as newlines in the preview
+            var normalizedText = text.Replace("\n", " ").Replace("\r", "").Trim();
+            
+            // For Mermaid diagrams, also try to find text that contains <br/> or <br> tags
+            // by searching for the text with HTML tags replaced by regex wildcards
+            var htmlTagPattern = System.Text.RegularExpressions.Regex.Escape(normalizedText);
+            // Replace spaces with a pattern that matches spaces, <br/>, <br>, or newlines
+            var flexiblePattern = htmlTagPattern.Replace("\\ ", @"(?:\s|<br\s*/?>)+");
+            
             // For Markdown, handle different element types
             if (!string.IsNullOrEmpty(elementType))
             {
@@ -1579,45 +1589,79 @@ Console.WriteLine(""Hello, World!"");
             else
             {
                 // For Mermaid, search for the text in brackets or quotes
+                // First try with the flexible pattern that handles <br/> tags
                 for (int i = 0; i < lines.Length; i++)
                 {
                     var line = lines[i];
                     
-                    // Look for text in brackets: [text], (text), {text}, "text"
-                    var bracketPatterns = new[]
+                    // Look for text in brackets with flexible matching for HTML tags: [text], (text), {text}, "text"
+                    var bracketPatternsFlexible = new[]
                     {
-                        $@"\[{System.Text.RegularExpressions.Regex.Escape(text)}\]",
-                        $@"\({System.Text.RegularExpressions.Regex.Escape(text)}\)",
-                        $@"\{{{System.Text.RegularExpressions.Regex.Escape(text)}\}}",
-                        $@"""{System.Text.RegularExpressions.Regex.Escape(text)}""",
-                        $@"'{System.Text.RegularExpressions.Regex.Escape(text)}'",
+                        $@"\[{flexiblePattern}\]",
+                        $@"\({flexiblePattern}\)",
+                        $@"\{{{flexiblePattern}\}}",
+                        $@"""{flexiblePattern}""",
+                        $@"'{flexiblePattern}'",
                     };
                     
-                    foreach (var pattern in bracketPatterns)
+                    foreach (var pattern in bracketPatternsFlexible)
                     {
                         var match = System.Text.RegularExpressions.Regex.Match(line, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                         if (match.Success)
                         {
                             bestLineIndex = i;
                             bestMatchStart = match.Index + 1; // Skip the opening bracket
-                            bestMatchLength = text.Length;
+                            bestMatchLength = match.Length - 2; // Exclude both brackets
                             break;
                         }
                     }
                     
                     if (bestLineIndex >= 0) break;
-                    
-                    // Also try plain text search as fallback
-                    if (line.Contains(text, StringComparison.OrdinalIgnoreCase))
+                }
+                
+                // If flexible pattern didn't match, try exact text match
+                if (bestLineIndex < 0)
+                {
+                    for (int i = 0; i < lines.Length; i++)
                     {
-                        bestLineIndex = i;
-                        var idx = line.IndexOf(text, StringComparison.OrdinalIgnoreCase);
-                        if (idx >= 0)
+                        var line = lines[i];
+                        
+                        // Look for exact text in brackets: [text], (text), {text}, "text"
+                        var bracketPatterns = new[]
                         {
-                            bestMatchStart = idx;
-                            bestMatchLength = text.Length;
+                            $@"\[{System.Text.RegularExpressions.Regex.Escape(normalizedText)}\]",
+                            $@"\({System.Text.RegularExpressions.Regex.Escape(normalizedText)}\)",
+                            $@"\{{{System.Text.RegularExpressions.Regex.Escape(normalizedText)}\}}",
+                            $@"""{System.Text.RegularExpressions.Regex.Escape(normalizedText)}""",
+                            $@"'{System.Text.RegularExpressions.Regex.Escape(normalizedText)}'",
+                        };
+                        
+                        foreach (var pattern in bracketPatterns)
+                        {
+                            var match = System.Text.RegularExpressions.Regex.Match(line, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                            if (match.Success)
+                            {
+                                bestLineIndex = i;
+                                bestMatchStart = match.Index + 1; // Skip the opening bracket
+                                bestMatchLength = normalizedText.Length;
+                                break;
+                            }
                         }
-                        break;
+                        
+                        if (bestLineIndex >= 0) break;
+                        
+                        // Also try plain text search as fallback
+                        if (line.Contains(normalizedText, StringComparison.OrdinalIgnoreCase))
+                        {
+                            bestLineIndex = i;
+                            var idx = line.IndexOf(normalizedText, StringComparison.OrdinalIgnoreCase);
+                            if (idx >= 0)
+                            {
+                                bestMatchStart = idx;
+                                bestMatchLength = normalizedText.Length;
+                            }
+                            break;
+                        }
                     }
                 }
             }
@@ -3686,13 +3730,20 @@ Console.WriteLine(""Hello, World!"");
         
         contextMenu.Resources.Add(typeof(System.Windows.Controls.MenuItem), menuItemStyle);
         
-        // Style the separator
+        // Style the separator with a custom template to fully control its appearance
         var separatorStyle = new System.Windows.Style(typeof(System.Windows.Controls.Separator));
-        separatorStyle.Setters.Add(new Setter(System.Windows.Controls.Separator.BackgroundProperty, menuBorder));
-        separatorStyle.Setters.Add(new Setter(System.Windows.Controls.Separator.MarginProperty, new Thickness(4, 2, 4, 2)));
+        var separatorTemplate = new ControlTemplate(typeof(System.Windows.Controls.Separator));
+        var separatorBorder = new FrameworkElementFactory(typeof(System.Windows.Controls.Border));
+        separatorBorder.SetValue(System.Windows.Controls.Border.BackgroundProperty, menuBorder);
+        separatorBorder.SetValue(System.Windows.Controls.Border.HeightProperty, 1.0);
+        separatorBorder.SetValue(System.Windows.Controls.Border.MarginProperty, new Thickness(4, 4, 4, 4));
+        separatorTemplate.VisualTree = separatorBorder;
+        separatorStyle.Setters.Add(new Setter(System.Windows.Controls.Separator.TemplateProperty, separatorTemplate));
         contextMenu.Resources.Add(typeof(System.Windows.Controls.Separator), separatorStyle);
         
-        var closeItem = new System.Windows.Controls.MenuItem { Header = "Close", Tag = doc };
+        // Get the filename for the Close menu item
+        var fileName = string.IsNullOrEmpty(doc.FilePath) ? "Untitled" : System.IO.Path.GetFileName(doc.FilePath);
+        var closeItem = new System.Windows.Controls.MenuItem { Header = $"Close \"{fileName}\"", Tag = doc };
         closeItem.Click += (s, e) => CloseDocument(doc);
         
         var closeAllItem = new System.Windows.Controls.MenuItem { Header = "Close All" };
