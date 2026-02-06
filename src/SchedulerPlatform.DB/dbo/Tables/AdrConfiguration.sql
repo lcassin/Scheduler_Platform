@@ -3,7 +3,6 @@
     [CredentialCheckLeadDays]         INT            DEFAULT ((7)) NOT NULL,
     [ScrapeRetryDays]                 INT            DEFAULT ((5)) NOT NULL,
     [MaxRetries]                      INT            DEFAULT ((5)) NOT NULL,
-    [FinalStatusCheckDelayDays]       INT            DEFAULT ((5)) NOT NULL,
     [DailyStatusCheckDelayDays]       INT            DEFAULT ((1)) NOT NULL,
     [MaxParallelRequests]             INT            DEFAULT ((8)) NOT NULL,
     [BatchSize]                       INT            DEFAULT ((1000)) NOT NULL,

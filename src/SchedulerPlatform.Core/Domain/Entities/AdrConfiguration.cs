@@ -30,12 +30,6 @@ public class AdrConfiguration : BaseEntity
     public int MaxRetries { get; set; } = 5;
     
     /// <summary>
-    /// Number of days after billing window ends to perform final status check.
-    /// Default: 5 days
-    /// </summary>
-    public int FinalStatusCheckDelayDays { get; set; } = 5;
-    
-    /// <summary>
     /// Number of days to wait between status checks.
     /// Default: 1 day (check status the day after scraping)
     /// </summary>

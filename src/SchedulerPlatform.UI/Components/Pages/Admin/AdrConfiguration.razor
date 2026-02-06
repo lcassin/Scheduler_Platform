@@ -75,14 +75,6 @@
                                          HelperText="Days after ADR request to check status" />
                     </MudItem>
                     
-                    <MudItem xs="12" sm="6" md="4">
-                        <MudNumericField @bind-Value="_config.FinalStatusCheckDelayDays" 
-                                         Label="Final Status Check Delay (Days)" 
-                                         Variant="Variant.Outlined"
-                                         Min="1" Max="14"
-                                         HelperText="Days after billing window to do final check" />
-                    </MudItem>
-                    
                     <MudItem xs="12">
                         <MudDivider Class="my-4" />
                         <MudText Typo="Typo.h6" Class="mb-2">Invoice Window Settings</MudText>
@@ -436,7 +428,6 @@
         public int CredentialCheckLeadDays { get; set; } = 7;
         public int ScrapeRetryDays { get; set; } = 5;
         public int MaxRetries { get; set; } = 5;
-        public int FinalStatusCheckDelayDays { get; set; } = 5;
         public int DailyStatusCheckDelayDays { get; set; } = 1;
         public int MaxParallelRequests { get; set; } = 8;
         public int BatchSize { get; set; } = 1000;

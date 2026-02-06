@@ -228,7 +228,6 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     private const int DefaultScrapeRetryDays = 5;
     private const int DefaultFollowUpDelayDays = 5;
     private const int DefaultDailyStatusCheckDelayDays = 1;  // Check status the day after scraping
-    private const int DefaultFinalStatusCheckDelayDays = 5;  // Final check 5 days after billing window ends
     private const int DefaultMaxRetries = 5;
     private const int DefaultBatchSize = 1000; // Process and save in batches to avoid large transactions
     private const int DefaultMaxParallelRequests = 8; // Default parallel API requests
@@ -282,7 +281,6 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             CredentialCheckLeadDays = _configuration.GetValue<int>("SchedulerSettings:AdrOrchestration:CredentialCheckLeadDays", DefaultCredentialCheckLeadDays),
             ScrapeRetryDays = _configuration.GetValue<int>("SchedulerSettings:AdrOrchestration:ScrapeRetryDays", DefaultScrapeRetryDays),
             MaxRetries = _configuration.GetValue<int>("SchedulerSettings:AdrOrchestration:MaxRetries", DefaultMaxRetries),
-            FinalStatusCheckDelayDays = _configuration.GetValue<int>("SchedulerSettings:AdrOrchestration:FinalStatusCheckDelayDays", DefaultFinalStatusCheckDelayDays),
             DailyStatusCheckDelayDays = _configuration.GetValue<int>("SchedulerSettings:AdrOrchestration:DailyStatusCheckDelayDays", DefaultDailyStatusCheckDelayDays),
             MaxParallelRequests = _configuration.GetValue<int>("SchedulerSettings:AdrOrchestration:MaxParallelRequests", DefaultMaxParallelRequests),
             BatchSize = _configuration.GetValue<int>("SchedulerSettings:AdrOrchestration:BatchSize", DefaultBatchSize),
@@ -391,11 +389,6 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     private int GetDailyStatusCheckDelayDays()
     {
         return _cachedConfig?.DailyStatusCheckDelayDays ?? DefaultDailyStatusCheckDelayDays;
-    }
-
-    private int GetFinalStatusCheckDelayDays()
-    {
-        return _cachedConfig?.FinalStatusCheckDelayDays ?? DefaultFinalStatusCheckDelayDays;
     }
 
     private bool IsTestModeEnabled()
@@ -1240,33 +1233,20 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         {
             _logger.LogInformation("Starting status check with {MaxParallel} parallel workers", maxParallel);
 
-            // Split status checks into two categories:
-            // 1. Daily status checks (1-day delay): Jobs still in their billing window
-            // 2. Final status checks (5-day delay after NextRangeEndDate): Jobs past their billing window
+            // Get jobs needing daily status check (jobs that were scraped at least delayDays ago)
             var now = DateTime.UtcNow;
             var dailyDelayDays = GetDailyStatusCheckDelayDays();
-            var finalDelayDays = GetFinalStatusCheckDelayDays();
             
             // Log the query parameters for debugging
             _logger.LogInformation(
-                "Status check query parameters: Now={Now}, DailyDelayDays={DailyDelay}, FinalDelayDays={FinalDelay}, " +
-                "DailyThreshold={DailyThreshold}, FinalThreshold={FinalThreshold}",
-                now, dailyDelayDays, finalDelayDays, 
-                now.AddDays(-dailyDelayDays).Date, now.AddDays(-finalDelayDays).Date);
+                "Status check query parameters: Now={Now}, DailyDelayDays={DailyDelay}, DailyThreshold={DailyThreshold}",
+                now, dailyDelayDays, now.AddDays(-dailyDelayDays).Date);
             
-            var dailyJobs = (await _unitOfWork.AdrJobs.GetJobsNeedingDailyStatusCheckAsync(now, dailyDelayDays, finalDelayDays)).ToList();
-            var finalJobs = (await _unitOfWork.AdrJobs.GetJobsNeedingFinalStatusCheckAsync(now, finalDelayDays)).ToList();
-            
-            // Merge and deduplicate by job ID
-            var jobsNeedingStatusCheck = dailyJobs
-                .Concat(finalJobs)
-                .GroupBy(j => j.Id)
-                .Select(g => g.First())
-                .ToList();
+            var jobsNeedingStatusCheck = (await _unitOfWork.AdrJobs.GetJobsNeedingDailyStatusCheckAsync(now, dailyDelayDays)).ToList();
             
             _logger.LogInformation(
-                "Status check selection: {DailyCount} daily, {FinalCount} final, {Total} total (after dedup)",
-                dailyJobs.Count, finalJobs.Count, jobsNeedingStatusCheck.Count);
+                "Status check selection: {Total} jobs need status check",
+                jobsNeedingStatusCheck.Count);
 
             // Report initial progress (0 of total)
             progressCallback?.Invoke(0, jobsNeedingStatusCheck.Count);
