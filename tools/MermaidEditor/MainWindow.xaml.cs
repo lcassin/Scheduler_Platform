@@ -1414,27 +1414,23 @@ Console.WriteLine(""Hello, World!"");
         int bestMatchLength = 0;
         
         // First, try to find by node ID (for Mermaid diagrams)
+        // Prioritize node DEFINITIONS (with brackets/labels) over references
         if (!string.IsNullOrEmpty(nodeId))
         {
+            var escapedNodeId = System.Text.RegularExpressions.Regex.Escape(nodeId);
+            
+            // First pass: Look for node DEFINITIONS (where the node has a label in brackets)
+            var definitionPatterns = new[]
+            {
+                $@"\b{escapedNodeId}\s*[\[\(\{{\<]",  // A[, A(, A{, A< - node with label
+                $@"^\s*{escapedNodeId}\s*:",          // A: (for state diagrams)
+                $@"state\s+{escapedNodeId}\b",        // state A
+            };
+            
             for (int i = 0; i < lines.Length; i++)
             {
                 var line = lines[i];
-                
-                // Look for node definitions like "A[text]", "A{text}", "A((text))", "A-->B", etc.
-                // Also look for node ID at the start of arrows or in brackets
-                var patterns = new[]
-                {
-                    $@"\b{System.Text.RegularExpressions.Regex.Escape(nodeId)}\s*[\[\(\{{\<]",  // A[, A(, A{, A<
-                    $@"\b{System.Text.RegularExpressions.Regex.Escape(nodeId)}\s*-->",          // A-->
-                    $@"\b{System.Text.RegularExpressions.Regex.Escape(nodeId)}\s*---",          // A---
-                    $@"\b{System.Text.RegularExpressions.Regex.Escape(nodeId)}\s*-\.\-",        // A-.-
-                    $@"-->\s*{System.Text.RegularExpressions.Regex.Escape(nodeId)}\b",          // -->A
-                    $@"---\s*{System.Text.RegularExpressions.Regex.Escape(nodeId)}\b",          // ---A
-                    $@"^\s*{System.Text.RegularExpressions.Regex.Escape(nodeId)}\s*:",          // A: (for state diagrams)
-                    $@"state\s+{System.Text.RegularExpressions.Regex.Escape(nodeId)}\b",        // state A
-                };
-                
-                foreach (var pattern in patterns)
+                foreach (var pattern in definitionPatterns)
                 {
                     var match = System.Text.RegularExpressions.Regex.Match(line, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
                     if (match.Success)
@@ -1445,8 +1441,37 @@ Console.WriteLine(""Hello, World!"");
                         break;
                     }
                 }
-                
                 if (bestLineIndex >= 0) break;
+            }
+            
+            // Second pass: If no definition found, look for references (arrows pointing to/from the node)
+            if (bestLineIndex < 0)
+            {
+                var referencePatterns = new[]
+                {
+                    $@"\b{escapedNodeId}\s*-->",          // A-->
+                    $@"\b{escapedNodeId}\s*---",          // A---
+                    $@"\b{escapedNodeId}\s*-\.\-",        // A-.-
+                    $@"-->\s*{escapedNodeId}\b",          // -->A
+                    $@"---\s*{escapedNodeId}\b",          // ---A
+                };
+                
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    var line = lines[i];
+                    foreach (var pattern in referencePatterns)
+                    {
+                        var match = System.Text.RegularExpressions.Regex.Match(line, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                        if (match.Success)
+                        {
+                            bestLineIndex = i;
+                            bestMatchStart = match.Index;
+                            bestMatchLength = nodeId.Length;
+                            break;
+                        }
+                    }
+                    if (bestLineIndex >= 0) break;
+                }
             }
         }
         
