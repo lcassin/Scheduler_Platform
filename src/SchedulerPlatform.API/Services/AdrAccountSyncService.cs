@@ -349,13 +349,13 @@ INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId
         AdrAccountSyncResult result,
         CancellationToken cancellationToken)
     {
-        // Query unique clients from external database
+        // Query unique clients from external database (only active clients)
         var clientQuery = @"
 SELECT DISTINCT CL.ClientId, CL.ClientName
 FROM [dbo].[ADRInvoiceAccountData] AD
     LEFT OUTER JOIN Account A ON AD.VCAccountId = A.AccountId
     LEFT OUTER JOIN Client CL ON A.ClientId = CL.ClientId
-WHERE CL.ClientId IS NOT NULL";
+WHERE CL.ClientId IS NOT NULL AND CL.IsActive = 1";
 
         var uniqueClients = new List<(int ExternalClientId, string ClientName)>();
         
@@ -906,7 +906,8 @@ WHERE CL.ClientId IS NOT NULL";
 			INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId
 			LEFT OUTER JOIN Vendor V ON AD.VendorCode = V.PrimaryVendorCode
 			LEFT OUTER JOIN VendorXRef VX ON V.VendorId = VX.PrimaryVendorId
-			LEFT OUTER JOIN Vendor MV ON VX.MasterVendorId = MV.VendorId;
+			LEFT OUTER JOIN Vendor MV ON VX.MasterVendorId = MV.VendorId
+		WHERE (CL.IsActive = 1 OR CL.ClientId IS NULL);
 
 		;WITH AccountStats AS (
 			SELECT AccountId,

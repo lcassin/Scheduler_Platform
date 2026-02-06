@@ -34,6 +34,26 @@ public interface IAdrOrchestratorService
     /// <param name="cancellationToken">Cancellation token for the operation</param>
     /// <returns>Results of the bulk credential verification operation</returns>
     Task<BulkCredentialVerificationResult> VerifyAllAccountCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
+    
+    /// <summary>
+    /// Processes weekly rebill checks for accounts whose expected billing day of week matches today.
+    /// Rebill checks look for updated invoices, partial invoices, and off-cycle invoices.
+    /// Unlike regular ADR requests, rebill checks do NOT create Zendesk tickets when no document is found
+    /// (only creates tickets for credential failures).
+    /// </summary>
+    /// <param name="progressCallback">Optional callback to report progress (current, total)</param>
+    /// <param name="cancellationToken">Cancellation token for the operation</param>
+    /// <returns>Results of the rebill processing operation</returns>
+    Task<RebillResult> ProcessRebillAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
+    
+    /// <summary>
+    /// Fires a rebill check for a single account.
+    /// This is used for manual rebill triggers from the API.
+    /// </summary>
+    /// <param name="accountId">The AdrAccount ID to fire rebill for</param>
+    /// <param name="cancellationToken">Cancellation token for the operation</param>
+    /// <returns>Result of the single account rebill operation</returns>
+    Task<SingleRebillResult> FireRebillForAccountAsync(int accountId, CancellationToken cancellationToken = default);
 }
 
 #region Result Classes
@@ -124,6 +144,73 @@ public class BulkCredentialVerificationResult
     /// Total duration of the bulk verification operation.
     /// </summary>
     public TimeSpan Duration { get; set; }
+}
+
+/// <summary>
+/// Result of weekly rebill processing for accounts.
+/// </summary>
+public class RebillResult
+{
+    /// <summary>
+    /// Total number of accounts processed for rebill.
+    /// </summary>
+    public int AccountsProcessed { get; set; }
+    
+    /// <summary>
+    /// Number of rebill requests sent successfully.
+    /// </summary>
+    public int RebillRequestsSent { get; set; }
+    
+    /// <summary>
+    /// Number of rebill requests that failed.
+    /// </summary>
+    public int RebillRequestsFailed { get; set; }
+    
+    /// <summary>
+    /// Number of accounts skipped (blacklisted, no credential, etc.).
+    /// </summary>
+    public int AccountsSkipped { get; set; }
+    
+    /// <summary>
+    /// Number of errors encountered during processing.
+    /// </summary>
+    public int Errors { get; set; }
+    
+    /// <summary>
+    /// Detailed error messages for troubleshooting.
+    /// </summary>
+    public List<string> ErrorMessages { get; set; } = new();
+    
+    /// <summary>
+    /// Total duration of the rebill operation.
+    /// </summary>
+    public TimeSpan Duration { get; set; }
+}
+
+/// <summary>
+/// Result of firing a rebill for a single account.
+/// </summary>
+public class SingleRebillResult
+{
+    /// <summary>
+    /// Whether the rebill request was sent successfully.
+    /// </summary>
+    public bool IsSuccess { get; set; }
+    
+    /// <summary>
+    /// The ADR API IndexId returned for the request.
+    /// </summary>
+    public long? IndexId { get; set; }
+    
+    /// <summary>
+    /// Error message if the request failed.
+    /// </summary>
+    public string? ErrorMessage { get; set; }
+    
+    /// <summary>
+    /// HTTP status code from the ADR API.
+    /// </summary>
+    public int? HttpStatusCode { get; set; }
 }
 
 #endregion
@@ -943,12 +1030,17 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             using var semaphore = new SemaphoreSlim(maxParallel, maxParallel);
             int completedApiCalls = 0;
             var totalApiCalls = jobsToProcess.Count;
+            var today = DateTime.UtcNow.Date;
             
             var tasks = jobsToProcess.Select(async jobInfo =>
             {
                 await semaphore.WaitAsync(cancellationToken);
                 try
                 {
+                    // IsLastAttempt is true when today is the last day of the billing window
+                    // This tells the ADR API to create a Zendesk ticket if the download fails
+                    var isLastAttempt = jobInfo.EndDate.HasValue && jobInfo.EndDate.Value.Date <= today;
+                    
                     var apiResult = await CallAdrApiAsync(
                         AdrRequestType.DownloadInvoice,
                         jobInfo.CredentialId,
@@ -957,7 +1049,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         jobInfo.JobId,
                         jobInfo.VMAccountId,
                         jobInfo.InterfaceAccountId,
-                        cancellationToken);
+                        cancellationToken,
+                        isLastAttempt);
 
                     apiResults[jobInfo.JobId] = (apiResult, jobInfo.ExecutionId);
                     
@@ -2206,6 +2299,256 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         }
     }
 
+    /// <summary>
+    /// Processes weekly rebill checks for accounts whose expected billing day of week matches today.
+    /// Rebill checks look for updated invoices, partial invoices, and off-cycle invoices.
+    /// </summary>
+    public async Task<RebillResult> ProcessRebillAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    {
+        var result = new RebillResult();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var maxParallel = GetMaxParallelRequests();
+        var today = DateTime.UtcNow.Date;
+        var todayDayOfWeek = today.DayOfWeek;
+
+        try
+        {
+            _logger.LogInformation("Starting weekly rebill processing for day of week: {DayOfWeek}", todayDayOfWeek);
+
+            // Load blacklist entries for filtering
+            var blacklistEntries = await LoadBlacklistEntriesAsync("All");
+
+            // Get all active accounts where the day of week of ExpectedNextDateTime matches today
+            // Use OverriddenDateTime if set, otherwise use ExpectedNextDateTime
+            var allAccounts = await _unitOfWork.AdrAccounts.GetAllAsync();
+            var accountsForRebill = allAccounts
+                .Where(a => !a.IsDeleted && a.CredentialId > 0)
+                .Where(a => 
+                {
+                    // Use the overridden date if manually set, otherwise use expected date
+                    var dateToCheck = a.IsManuallyOverridden && a.OverriddenDateTime.HasValue 
+                        ? a.OverriddenDateTime.Value 
+                        : a.ExpectedNextDateTime;
+                    
+                    return dateToCheck.HasValue && dateToCheck.Value.DayOfWeek == todayDayOfWeek;
+                })
+                .ToList();
+
+            _logger.LogInformation("Found {Count} accounts for rebill on {DayOfWeek}", accountsForRebill.Count, todayDayOfWeek);
+
+            // Report initial progress
+            progressCallback?.Invoke(0, accountsForRebill.Count);
+
+            if (!accountsForRebill.Any())
+            {
+                stopwatch.Stop();
+                result.Duration = stopwatch.Elapsed;
+                return result;
+            }
+
+            // Filter out blacklisted accounts
+            var accountsToProcess = new List<AdrAccount>();
+            foreach (var account in accountsForRebill)
+            {
+                if (IsAccountBlacklistedCached(account, blacklistEntries))
+                {
+                    result.AccountsSkipped++;
+                    LogDetailedInfo("Skipping blacklisted account {VMAccountId} for rebill", account.VMAccountId);
+                }
+                else
+                {
+                    accountsToProcess.Add(account);
+                }
+            }
+
+            _logger.LogInformation("Processing {Count} accounts for rebill (skipped {Skipped} blacklisted)", 
+                accountsToProcess.Count, result.AccountsSkipped);
+
+            // Process rebill requests in parallel
+            var apiResults = new ConcurrentDictionary<int, AdrApiResult>();
+            using var semaphore = new SemaphoreSlim(maxParallel, maxParallel);
+            int completedCalls = 0;
+            var totalCalls = accountsToProcess.Count;
+
+            var tasks = accountsToProcess.Select(async account =>
+            {
+                await semaphore.WaitAsync(cancellationToken);
+                try
+                {
+                    // For rebill, we use the current billing window dates from the account
+                    var startDate = account.NextRangeStartDateTime ?? account.ExpectedRangeStartDateTime;
+                    var endDate = account.NextRangeEndDateTime ?? account.ExpectedRangeEndDateTime;
+
+                    var apiResult = await CallAdrApiAsync(
+                        AdrRequestType.Rebill,
+                        account.CredentialId,
+                        startDate,
+                        endDate,
+                        0, // No job ID for rebill - it's account-level
+                        account.VMAccountId,
+                        account.InterfaceAccountId,
+                        cancellationToken,
+                        false); // Rebill is never the "last attempt" - it's a weekly check
+
+                    apiResults[account.Id] = apiResult;
+
+                    var count = Interlocked.Increment(ref completedCalls);
+                    if (count % 50 == 0 || count == totalCalls)
+                    {
+                        progressCallback?.Invoke(count, totalCalls);
+                    }
+                    if (count % 500 == 0 || count == totalCalls)
+                    {
+                        _logger.LogInformation(
+                            "Rebill API calls: {Completed}/{Total} completed ({Percent:F1}%)",
+                            count, totalCalls, (double)count / totalCalls * 100);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error calling ADR API for rebill account {AccountId}", account.Id);
+                    apiResults[account.Id] = new AdrApiResult
+                    {
+                        IsSuccess = false,
+                        IsError = true,
+                        ErrorMessage = ex.Message
+                    };
+
+                    var count = Interlocked.Increment(ref completedCalls);
+                    if (count % 50 == 0 || count == totalCalls)
+                    {
+                        progressCallback?.Invoke(count, totalCalls);
+                    }
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks);
+
+            // Process results
+            foreach (var account in accountsToProcess)
+            {
+                result.AccountsProcessed++;
+
+                if (apiResults.TryGetValue(account.Id, out var apiResult))
+                {
+                    if (apiResult.IsSuccess)
+                    {
+                        result.RebillRequestsSent++;
+                    }
+                    else if (apiResult.IsError)
+                    {
+                        result.RebillRequestsFailed++;
+                        result.Errors++;
+                        if (result.ErrorMessages.Count < 100)
+                        {
+                            result.ErrorMessages.Add($"Account {account.Id} (VMAccountId: {account.VMAccountId}): {apiResult.ErrorMessage}");
+                        }
+                    }
+                    else
+                    {
+                        result.RebillRequestsFailed++;
+                    }
+                }
+            }
+
+            stopwatch.Stop();
+            result.Duration = stopwatch.Elapsed;
+
+            _logger.LogInformation(
+                "Weekly rebill processing completed in {Duration}. Processed: {Processed}, Sent: {Sent}, Failed: {Failed}, Skipped: {Skipped}, Errors: {Errors}",
+                result.Duration, result.AccountsProcessed, result.RebillRequestsSent, result.RebillRequestsFailed, result.AccountsSkipped, result.Errors);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Weekly rebill processing failed");
+            result.Errors++;
+            result.ErrorMessages.Add($"Rebill processing failed: {ex.Message}");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Fires a rebill check for a single account.
+    /// </summary>
+    public async Task<SingleRebillResult> FireRebillForAccountAsync(int accountId, CancellationToken cancellationToken = default)
+    {
+        var result = new SingleRebillResult();
+
+        try
+        {
+            var account = await _unitOfWork.AdrAccounts.GetByIdAsync(accountId);
+            if (account == null)
+            {
+                result.IsSuccess = false;
+                result.ErrorMessage = $"Account with ID {accountId} not found";
+                return result;
+            }
+
+            if (account.IsDeleted)
+            {
+                result.IsSuccess = false;
+                result.ErrorMessage = $"Account {accountId} is deleted";
+                return result;
+            }
+
+            if (account.CredentialId <= 0)
+            {
+                result.IsSuccess = false;
+                result.ErrorMessage = $"Account {accountId} has no valid credential";
+                return result;
+            }
+
+            _logger.LogInformation("Firing rebill for account {AccountId} (VMAccountId: {VMAccountId})", accountId, account.VMAccountId);
+
+            var startDate = account.NextRangeStartDateTime ?? account.ExpectedRangeStartDateTime;
+            var endDate = account.NextRangeEndDateTime ?? account.ExpectedRangeEndDateTime;
+
+            var apiResult = await CallAdrApiAsync(
+                AdrRequestType.Rebill,
+                account.CredentialId,
+                startDate,
+                endDate,
+                0, // No job ID for manual rebill
+                account.VMAccountId,
+                account.InterfaceAccountId,
+                cancellationToken,
+                false);
+
+            result.IsSuccess = apiResult.IsSuccess;
+            result.IndexId = apiResult.IndexId;
+            result.HttpStatusCode = apiResult.HttpStatusCode;
+            result.ErrorMessage = apiResult.ErrorMessage;
+
+            if (apiResult.IsSuccess)
+            {
+                _logger.LogInformation("Rebill request sent successfully for account {AccountId}, IndexId: {IndexId}", accountId, apiResult.IndexId);
+            }
+            else
+            {
+                _logger.LogWarning("Rebill request failed for account {AccountId}: {Error}", accountId, apiResult.ErrorMessage);
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error firing rebill for account {AccountId}", accountId);
+            result.IsSuccess = false;
+            result.ErrorMessage = ex.Message;
+            return result;
+        }
+    }
+
     #endregion
 
     #region Private Helper Methods
@@ -2260,7 +2603,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         int jobId,
         long vmAccountId,
         string? interfaceAccountId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool isLastAttempt = false)
     {
         var result = new AdrApiResult();
 
@@ -2282,7 +2626,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 RecipientEmail = recipientEmail,
                 JobId = jobId,
                 AccountId = vmAccountId,
-                InterfaceAccountId = interfaceAccountId
+                InterfaceAccountId = interfaceAccountId,
+                IsLastAttempt = isLastAttempt
             };
 
             // Store the request payload for debugging/diagnostics

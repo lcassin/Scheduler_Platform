@@ -2945,6 +2945,72 @@ public class AdrController : ControllerBase
     }
 
     /// <summary>
+    /// Triggers weekly rebill processing for accounts whose expected billing day of week matches today.
+    /// Rebill checks look for updated invoices, partial invoices, and off-cycle invoices.
+    /// Unlike regular ADR requests, rebill checks do NOT create Zendesk tickets when no document is found
+    /// (only creates tickets for credential failures).
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token for the operation.</param>
+    /// <returns>The rebill processing result including counts of requests sent and failed.</returns>
+    /// <response code="200">Returns the rebill processing result.</response>
+    /// <response code="500">An error occurred during rebill processing.</response>
+    [HttpPost("orchestrate/process-rebill")]
+    [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    [ProducesResponseType(typeof(RebillResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<RebillResult>> ProcessRebill(CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("Weekly rebill processing triggered by {User}", User.Identity?.Name ?? "Unknown");
+            var result = await _orchestratorService.ProcessRebillAsync(null, cancellationToken);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during rebill processing");
+            return StatusCode(500, new { error = "An error occurred during rebill processing", message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Fires a rebill check for a single account.
+    /// This is used for manual rebill triggers when you need to check a specific account
+    /// for updated or off-cycle invoices outside of the weekly rebill schedule.
+    /// </summary>
+    /// <param name="accountId">The AdrAccount ID to fire rebill for.</param>
+    /// <param name="cancellationToken">Cancellation token for the operation.</param>
+    /// <returns>The result of the single account rebill operation.</returns>
+    /// <response code="200">Returns the rebill result including IndexId if successful.</response>
+    /// <response code="400">The account was not found or is invalid.</response>
+    /// <response code="500">An error occurred during the rebill request.</response>
+    [HttpPost("orchestrate/rebill/{accountId}")]
+    [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    [ProducesResponseType(typeof(SingleRebillResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<SingleRebillResult>> FireRebillForAccount(int accountId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("Manual rebill for account {AccountId} triggered by {User}", accountId, User.Identity?.Name ?? "Unknown");
+            var result = await _orchestratorService.FireRebillForAccountAsync(accountId, cancellationToken);
+            
+            if (!result.IsSuccess && result.ErrorMessage?.Contains("not found") == true)
+            {
+                return BadRequest(new { error = result.ErrorMessage });
+            }
+            
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during manual rebill for account {AccountId}", accountId);
+            return StatusCode(500, new { error = "An error occurred during rebill", message = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Runs the complete ADR orchestration cycle: sync accounts, create jobs, verify credentials, check statuses, and process ADR requests.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token for the operation.</param>
