@@ -753,8 +753,20 @@ Console.WriteLine(""Hello, World!"");
             _activeDocument.IsDirty = true;
         }
         UpdateTitle();
+        UpdateUndoRedoState();
         _renderTimer.Stop();
         _renderTimer.Start();
+    }
+    
+    private void UpdateUndoRedoState()
+    {
+        var canUndo = CodeEditor.CanUndo;
+        var canRedo = CodeEditor.CanRedo;
+        
+        UndoButton.IsEnabled = canUndo;
+        RedoButton.IsEnabled = canRedo;
+        UndoMenuItem.IsEnabled = canUndo;
+        RedoMenuItem.IsEnabled = canRedo;
     }
 
     private void RenderTimer_Tick(object? sender, EventArgs e)
@@ -1855,6 +1867,7 @@ Console.WriteLine(""Hello, World!"");
         if (CodeEditor.CanUndo)
         {
             CodeEditor.Undo();
+            UpdateUndoRedoState();
         }
     }
 
@@ -1863,6 +1876,7 @@ Console.WriteLine(""Hello, World!"");
         if (CodeEditor.CanRedo)
         {
             CodeEditor.Redo();
+            UpdateUndoRedoState();
         }
     }
 
@@ -3626,6 +3640,7 @@ Console.WriteLine(""Hello, World!"");
         }
         
         doc.TextDocument.Text = content ?? (doc.RenderMode == RenderMode.Markdown ? DefaultMarkdownCode : DefaultMermaidCode);
+        doc.TextDocument.UndoStack.ClearAll(); // Clear undo history so users can't undo past the initial content
         doc.IsDirty = false;
         
         _openDocuments.Add(doc);
@@ -4047,6 +4062,7 @@ Console.WriteLine(""Hello, World!"");
         UpdateTitle();
         UpdateNavigationDropdown();
         UpdateExportMenuVisibility();
+        UpdateUndoRedoState();
         
         _isSwitchingDocuments = false;
         
