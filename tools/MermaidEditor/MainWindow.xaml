@@ -951,7 +951,19 @@
                                                         Padding="8,4"
                                                         Margin="0,0,1,0"
                                                         MouseLeftButtonDown="DocumentTab_MouseLeftButtonDown"
-                                                        Cursor="Hand">
+                                                        Cursor="Hand"
+                                                        Tag="{Binding}">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                                    <Setter Property="Background" Value="#1E1E1E"/>
+                                                                    <Setter Property="BorderBrush" Value="#9184EE"/>
+                                                                    <Setter Property="Margin" Value="0,0,1,-1"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
                                                     <StackPanel Orientation="Horizontal">
                                                         <TextBlock Text="{Binding TabHeader}" 
                                                                    Foreground="#F1F1F1" 
@@ -967,14 +979,6 @@
                                                         </Button>
                                                     </StackPanel>
                                                 </Border>
-                                                <DataTemplate.Triggers>
-                                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                                        <Setter TargetName="TabBorder" Property="Background" Value="#1E1E1E"/>
-                                                        <Setter TargetName="TabBorder" Property="BorderBrush" Value="{StaticResource PurpleAccentBrush}"/>
-                                                        <Setter TargetName="TabBorder" Property="Margin" Value="0,0,1,-1"/>
-                                                        <Setter TargetName="TabBorder" Property="Panel.ZIndex" Value="1"/>
-                                                    </DataTrigger>
-                                                </DataTemplate.Triggers>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
