@@ -3659,6 +3659,30 @@ Console.WriteLine(""Hello, World!"");
             }
         };
         
+        // Add context menu for tab operations
+        var contextMenu = new System.Windows.Controls.ContextMenu
+        {
+            Background = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2D2D30")),
+            BorderBrush = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#3E3E42")),
+            Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F1F1F1")),
+        };
+        
+        var closeItem = new System.Windows.Controls.MenuItem { Header = "Close", Tag = doc };
+        closeItem.Click += (s, e) => CloseDocument(doc);
+        
+        var closeAllItem = new System.Windows.Controls.MenuItem { Header = "Close All" };
+        closeAllItem.Click += (s, e) => CloseAllDocuments();
+        
+        var closeAllButThisItem = new System.Windows.Controls.MenuItem { Header = "Close All But This", Tag = doc };
+        closeAllButThisItem.Click += (s, e) => CloseAllDocumentsExcept(doc);
+        
+        contextMenu.Items.Add(closeItem);
+        contextMenu.Items.Add(new System.Windows.Controls.Separator());
+        contextMenu.Items.Add(closeAllItem);
+        contextMenu.Items.Add(closeAllButThisItem);
+        
+        tabBorder.ContextMenu = contextMenu;
+        
         // Subscribe to property changes to update tab header
         doc.PropertyChanged += (s, e) =>
         {
@@ -3796,6 +3820,44 @@ Console.WriteLine(""Hello, World!"");
                 var newDoc = CreateNewDocument();
                 SwitchToDocument(newDoc);
             }
+        }
+    }
+    
+    /// <summary>
+    /// Closes all open documents
+    /// </summary>
+    private void CloseAllDocuments()
+    {
+        // Make a copy of the list since we'll be modifying it
+        var docsToClose = _openDocuments.ToList();
+        foreach (var doc in docsToClose)
+        {
+            CloseDocument(doc);
+            // If user cancelled closing a dirty document, stop
+            if (_openDocuments.Contains(doc))
+                break;
+        }
+    }
+    
+    /// <summary>
+    /// Closes all documents except the specified one
+    /// </summary>
+    private void CloseAllDocumentsExcept(DocumentModel keepDoc)
+    {
+        // Make a copy of the list since we'll be modifying it
+        var docsToClose = _openDocuments.Where(d => d != keepDoc).ToList();
+        foreach (var doc in docsToClose)
+        {
+            CloseDocument(doc);
+            // If user cancelled closing a dirty document, stop
+            if (_openDocuments.Contains(doc))
+                break;
+        }
+        
+        // Make sure the kept document is active
+        if (_openDocuments.Contains(keepDoc))
+        {
+            SwitchToDocument(keepDoc);
         }
     }
     
