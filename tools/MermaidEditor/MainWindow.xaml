@@ -802,12 +802,24 @@
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
                         
+                        <!-- Document Tabs (populated programmatically) -->
+                        <Border Grid.Row="0" Background="#2D2D30" 
+                                BorderBrush="{StaticResource PurpleAccentBrush}" 
+                                BorderThickness="0,0,0,1">
+                            <ScrollViewer x:Name="DocumentTabScrollViewer" 
+                                          HorizontalScrollBarVisibility="Auto" 
+                                          VerticalScrollBarVisibility="Disabled">
+                                <StackPanel x:Name="DocumentTabsPanel" Orientation="Horizontal"/>
+                            </ScrollViewer>
+                        </Border>
+                        
                         <!-- Navigation Dropdown Bar -->
                         <ComboBox x:Name="NavigationDropdown" 
-                                  Grid.Row="0"
+                                  Grid.Row="1"
                                   Style="{StaticResource NavigationComboBoxStyle}"
                                   BorderThickness="0,0,0,1"
                                   Margin="0,0,0,4"
@@ -848,7 +860,7 @@
                         
                         <!-- Code Editor -->
                         <avalon:TextEditor x:Name="CodeEditor" 
-                                 Grid.Row="1"
+                                 Grid.Row="2"
                                  FontFamily="Consolas"
                                  FontSize="14"
                                  Background="#1E1E1E"

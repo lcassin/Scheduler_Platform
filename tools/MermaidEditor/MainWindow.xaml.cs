@@ -51,6 +51,12 @@ public partial class MainWindow : Window
     private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
     private const int DWMWA_CAPTION_COLOR = 35;
     
+    // Multi-document support
+    private List<DocumentModel> _openDocuments = new();
+    private DocumentModel? _activeDocument;
+    private bool _isSwitchingDocuments;
+    
+    // These fields are updated when switching documents for backward compatibility
     private string? _currentFilePath;
     private bool _isDirty;
     private double _currentZoom = 1.0;
@@ -134,19 +140,8 @@ Console.WriteLine(""Hello, World!"");
 
         SetupCodeEditor();
         
-        // Check for command-line arguments (file passed via file association)
-        var args = Environment.GetCommandLineArgs();
-        if (args.Length > 1 && File.Exists(args[1]))
-        {
-            // Load the file passed as argument
-            LoadFile(args[1]);
-        }
-        else
-        {
-            // Load default content (not dirty)
-            CodeEditor.Text = DefaultMermaidCode;
-            _isDirty = false;
-        }
+        // Initialize multi-document tab system
+        InitializeDocumentTabs();
     }
 
     private void LoadFile(string filePath)
@@ -299,21 +294,8 @@ Console.WriteLine(""Hello, World!"");
             return;
         }
         
-        if (_isDirty)
-        {
-            var result = MessageBox.Show("Do you want to save changes?", "Unsaved Changes",
-                MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-            if (result == MessageBoxResult.Yes)
-            {
-                Save_Click(this, new RoutedEventArgs());
-            }
-            else if (result == MessageBoxResult.Cancel)
-            {
-                return;
-            }
-        }
-        
-        LoadFile(filePath);
+        // Open file in a new tab
+        OpenFileInTab(filePath);
     }
 
     private void SetupCodeEditor()
@@ -731,15 +713,29 @@ Console.WriteLine(""Hello, World!"");
 
     private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
-        if (_isDirty)
+        // Check all open documents for unsaved changes
+        var unsavedDocs = _openDocuments.Where(d => d.IsDirty).ToList();
+        
+        if (unsavedDocs.Count > 0)
         {
-            var result = MessageBox.Show("You have unsaved changes. Do you want to save before closing?",
+            var message = unsavedDocs.Count == 1
+                ? $"'{unsavedDocs[0].DisplayName}' has unsaved changes. Do you want to save before closing?"
+                : $"{unsavedDocs.Count} documents have unsaved changes. Do you want to save before closing?";
+            
+            var result = MessageBox.Show(message,
                 "Unsaved Changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
 
             switch (result)
             {
                 case MessageBoxResult.Yes:
-                    Save_Click(this, new RoutedEventArgs());
+                    foreach (var doc in unsavedDocs)
+                    {
+                        if (!SaveDocument(doc))
+                        {
+                            e.Cancel = true;
+                            return;
+                        }
+                    }
                     break;
                 case MessageBoxResult.Cancel:
                     e.Cancel = true;
@@ -750,7 +746,13 @@ Console.WriteLine(""Hello, World!"");
 
     private void CodeEditor_TextChanged(object? sender, EventArgs e)
     {
+        if (_isSwitchingDocuments) return; // Don't mark dirty when switching documents
+        
         _isDirty = true;
+        if (_activeDocument != null)
+        {
+            _activeDocument.IsDirty = true;
+        }
         UpdateTitle();
         _renderTimer.Stop();
         _renderTimer.Start();
@@ -1654,64 +1656,33 @@ Console.WriteLine(""Hello, World!"");
 
     private void New_Click(object sender, RoutedEventArgs e)
     {
-        if (_isDirty)
-        {
-            var result = MessageBox.Show("You have unsaved changes. Do you want to save first?",
-                "Unsaved Changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-
-            if (result == MessageBoxResult.Yes)
-            {
-                Save_Click(sender, e);
-            }
-            else if (result == MessageBoxResult.Cancel)
-            {
-                return;
-            }
-        }
-
         // Show template selection dialog
         var dialog = new NewDocumentDialog { Owner = this };
         if (dialog.ShowDialog() == true && dialog.SelectedTemplate != null)
         {
-            CodeEditor.Text = dialog.SelectedTemplate;
-            _currentFilePath = null;
-            _isDirty = false;
+            // Create a new document with the selected template
+            var doc = CreateNewDocument(null, dialog.SelectedTemplate);
+            doc.RenderMode = dialog.IsMermaid ? RenderMode.Mermaid : RenderMode.Markdown;
+            SwitchToDocument(doc);
             
+            // Update syntax highlighting
             if (dialog.IsMermaid)
             {
-                _currentRenderMode = RenderMode.Mermaid;
                 EditorHeaderText.Text = "Mermaid Code";
                 CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
             }
             else
             {
-                _currentRenderMode = RenderMode.Markdown;
                 EditorHeaderText.Text = "Markdown Code";
                 CodeEditor.SyntaxHighlighting = null;
             }
             
             UpdateExportMenuVisibility();
-            UpdateTitle();
         }
     }
 
     private void Open_Click(object sender, RoutedEventArgs e)
     {
-        if (_isDirty)
-        {
-            var result = MessageBox.Show("You have unsaved changes. Do you want to save first?",
-                "Unsaved Changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-
-            if (result == MessageBoxResult.Yes)
-            {
-                Save_Click(sender, e);
-            }
-            else if (result == MessageBoxResult.Cancel)
-            {
-                return;
-            }
-        }
-
         var dialog = new OpenFileDialog
         {
             Filter = "Mermaid Files (*.mmd;*.mermaid)|*.mmd;*.mermaid|Markdown Files (*.md)|*.md|All Files (*.*)|*.*",
@@ -1720,55 +1691,40 @@ Console.WriteLine(""Hello, World!"");
 
         if (dialog.ShowDialog() == true)
         {
-            try
-            {
-                CodeEditor.Text = File.ReadAllText(dialog.FileName);
-                _currentFilePath = dialog.FileName;
-                SetRenderModeFromFile(dialog.FileName);
-                _isDirty = false;
-                UpdateTitle();
-                RenderPreview();
-                StatusText.Text = "File opened";
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Failed to open file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            OpenFileInTab(dialog.FileName);
+            StatusText.Text = "File opened";
         }
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)
     {
-        if (string.IsNullOrEmpty(_currentFilePath))
+        if (_activeDocument == null) return;
+        
+        if (SaveDocument(_activeDocument))
         {
-            SaveAs_Click(sender, e);
-            return;
-        }
-
-        try
-        {
-            File.WriteAllText(_currentFilePath, CodeEditor.Text);
-            _isDirty = false;
+            _currentFilePath = _activeDocument.FilePath;
+            _isDirty = _activeDocument.IsDirty;
             UpdateTitle();
             StatusText.Text = "File saved";
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Failed to save file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
     private void SaveAs_Click(object sender, RoutedEventArgs e)
     {
+        if (_activeDocument == null) return;
+        
         var dialog = new SaveFileDialog
         {
-            Filter = "Mermaid Files (*.mmd)|*.mmd|Markdown Files (*.md)|*.md|All Files (*.*)|*.*",
-            Title = "Save Mermaid File",
-            DefaultExt = ".mmd"
+            Filter = _activeDocument.RenderMode == RenderMode.Markdown
+                ? "Markdown Files (*.md)|*.md|All Files (*.*)|*.*"
+                : "Mermaid Files (*.mmd)|*.mmd|All Files (*.*)|*.*",
+            Title = "Save File",
+            DefaultExt = _activeDocument.RenderMode == RenderMode.Markdown ? ".md" : ".mmd"
         };
 
         if (dialog.ShowDialog() == true)
         {
+            _activeDocument.FilePath = dialog.FileName;
             _currentFilePath = dialog.FileName;
             // Update export directory to match where the file was saved
             UpdateLastExportDirectory(dialog.FileName);
@@ -2896,23 +2852,8 @@ Console.WriteLine(""Hello, World!"");
             }
             else
             {
-                // Open file for editing
-                if (_isDirty)
-                {
-                    var result = MessageBox.Show("You have unsaved changes. Do you want to save first?",
-                        "Unsaved Changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-
-                    if (result == MessageBoxResult.Yes)
-                    {
-                        Save_Click(this, new RoutedEventArgs());
-                    }
-                    else if (result == MessageBoxResult.Cancel)
-                    {
-                        return;
-                    }
-                }
-                
-                LoadFile(item.FullPath);
+                // Open file in a new tab
+                OpenFileInTab(item.FullPath);
                 LeftPanelTabs.SelectedItem = CodeTab; // Switch to Code tab
                 StatusText.Text = "File opened from browser";
             }
@@ -3110,53 +3051,20 @@ Console.WriteLine(""Hello, World!"");
             var files = (string[])e.Data.GetData(DataFormats.FileDrop);
             if (files != null && files.Length > 0)
             {
-                var filePath = files[0];
-                var ext = Path.GetExtension(filePath).ToLowerInvariant();
+                // Open each dropped file in a new tab
+                foreach (var filePath in files)
+                {
+                    var ext = Path.GetExtension(filePath).ToLowerInvariant();
+                    
+                    if (ext == ".mmd" || ext == ".mermaid" || ext == ".md")
+                    {
+                        OpenFileInTab(filePath);
+                    }
+                }
                 
-                if (ext == ".mmd" || ext == ".mermaid" || ext == ".md")
-                {
-                    if (_isDirty)
-                    {
-                        var result = MessageBox.Show("You have unsaved changes. Do you want to save first?",
-                            "Unsaved Changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-
-                        if (result == MessageBoxResult.Yes)
-                        {
-                            Save_Click(this, new RoutedEventArgs());
-                        }
-                        else if (result == MessageBoxResult.Cancel)
-                        {
-                            return;
-                        }
-                    }
-
-                    try
-                    {
-                        CodeEditor.Text = File.ReadAllText(filePath);
-                        _currentFilePath = filePath;
-                        SetRenderModeFromFile(filePath);
-                        _isDirty = false;
-                        UpdateTitle();
-                        RenderPreview();
-                        
-                        // Navigate file browser to the file's folder and select the file
-                        var folder = Path.GetDirectoryName(filePath);
-                        if (!string.IsNullOrEmpty(folder))
-                        {
-                            NavigateBrowserToFolder(folder, filePath);
-                        }
-                        
-                        StatusText.Text = "File opened via drag and drop";
-                    }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show($"Failed to open file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                    }
-                }
-                else
-                {
-                    MessageBox.Show("Please drop a .mmd, .mermaid, or .md file.", "Invalid File Type", MessageBoxButton.OK, MessageBoxImage.Warning);
-                }
+                StatusText.Text = files.Length == 1 
+                    ? "File opened via drag and drop" 
+                    : $"{files.Length} files opened via drag and drop";
             }
         }
     }
@@ -3781,6 +3689,382 @@ Console.WriteLine(""Hello, World!"");
         {
         }
     }
+    
+    #region Multi-Document Tab Support
+    
+    /// <summary>
+    /// Creates a new document and adds it to the tab strip
+    /// </summary>
+    private DocumentModel CreateNewDocument(string? filePath = null, string? content = null)
+    {
+        var doc = new DocumentModel
+        {
+            FilePath = filePath,
+            RenderMode = RenderMode.Mermaid
+        };
+        
+        if (!string.IsNullOrEmpty(filePath))
+        {
+            SetDocumentRenderModeFromFile(doc, filePath);
+        }
+        
+        doc.TextDocument.Text = content ?? (doc.RenderMode == RenderMode.Markdown ? DefaultMarkdownCode : DefaultMermaidCode);
+        doc.IsDirty = false;
+        
+        _openDocuments.Add(doc);
+        CreateTabButtonForDocument(doc);
+        
+        return doc;
+    }
+    
+    /// <summary>
+    /// Sets the render mode for a document based on its file extension
+    /// </summary>
+    private void SetDocumentRenderModeFromFile(DocumentModel doc, string filePath)
+    {
+        var ext = Path.GetExtension(filePath).ToLowerInvariant();
+        doc.RenderMode = ext == ".md" ? RenderMode.Markdown : RenderMode.Mermaid;
+    }
+    
+    /// <summary>
+    /// Creates a tab button for a document and adds it to the tab strip
+    /// </summary>
+    private void CreateTabButtonForDocument(DocumentModel doc)
+    {
+        var tabButton = new System.Windows.Controls.Button
+        {
+            Tag = doc,
+            Padding = new Thickness(12, 6, 8, 6),
+            Margin = new Thickness(0, 0, 1, 0),
+            BorderThickness = new Thickness(0),
+            Cursor = System.Windows.Input.Cursors.Hand,
+            Background = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2D2D30")),
+            Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F1F1F1")),
+        };
+        
+        // Create content with text and close button
+        var stackPanel = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+        
+        var textBlock = new TextBlock
+        {
+            Text = doc.TabHeader,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 8, 0)
+        };
+        
+        var closeButton = new System.Windows.Controls.Button
+        {
+            Content = "x",
+            FontSize = 10,
+            Width = 16,
+            Height = 16,
+            Padding = new Thickness(0),
+            BorderThickness = new Thickness(0),
+            Background = System.Windows.Media.Brushes.Transparent,
+            Foreground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#888888")),
+            VerticalAlignment = VerticalAlignment.Center,
+            Cursor = System.Windows.Input.Cursors.Hand,
+            Tag = doc
+        };
+        closeButton.Click += CloseDocumentTab_Click;
+        
+        stackPanel.Children.Add(textBlock);
+        stackPanel.Children.Add(closeButton);
+        tabButton.Content = stackPanel;
+        
+        tabButton.Click += DocumentTab_Click;
+        
+        // Subscribe to property changes to update tab header
+        doc.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName == nameof(DocumentModel.TabHeader))
+            {
+                textBlock.Text = doc.TabHeader;
+            }
+        };
+        
+        doc.TabButton = tabButton;
+        DocumentTabsPanel.Children.Add(tabButton);
+        
+        UpdateTabStyles();
+    }
+    
+    /// <summary>
+    /// Updates the visual styles of all document tabs
+    /// </summary>
+    private void UpdateTabStyles()
+    {
+        var selectedBg = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#1E1E1E"));
+        var unselectedBg = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2D2D30"));
+        var selectedFg = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F1F1F1"));
+        var unselectedFg = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#9D9D9D"));
+        var purpleAccent = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#9184EE"));
+        
+        foreach (var doc in _openDocuments)
+        {
+            if (doc.TabButton != null)
+            {
+                var isSelected = doc == _activeDocument;
+                doc.TabButton.Background = isSelected ? selectedBg : unselectedBg;
+                doc.TabButton.Foreground = isSelected ? selectedFg : unselectedFg;
+                
+                // Add purple bottom border for selected tab
+                doc.TabButton.BorderThickness = isSelected ? new Thickness(0, 0, 0, 2) : new Thickness(0);
+                doc.TabButton.BorderBrush = isSelected ? purpleAccent : null;
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Handles clicking on a document tab to switch to that document
+    /// </summary>
+    private void DocumentTab_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Button button && button.Tag is DocumentModel doc)
+        {
+            SwitchToDocument(doc);
+        }
+    }
+    
+    /// <summary>
+    /// Handles clicking the close button on a document tab
+    /// </summary>
+    private void CloseDocumentTab_Click(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true; // Prevent the tab click from firing
+        
+        if (sender is System.Windows.Controls.Button button && button.Tag is DocumentModel doc)
+        {
+            CloseDocument(doc);
+        }
+    }
+    
+    /// <summary>
+    /// Closes a document, prompting to save if dirty
+    /// </summary>
+    private void CloseDocument(DocumentModel doc)
+    {
+        if (doc.IsDirty)
+        {
+            var result = MessageBox.Show(
+                $"Do you want to save changes to {doc.DisplayName}?",
+                "Save Changes",
+                MessageBoxButton.YesNoCancel,
+                MessageBoxImage.Question);
+            
+            if (result == MessageBoxResult.Cancel)
+                return;
+            
+            if (result == MessageBoxResult.Yes)
+            {
+                // Save the document
+                if (!SaveDocument(doc))
+                    return; // Save was cancelled
+            }
+        }
+        
+        // Remove the tab button
+        if (doc.TabButton != null)
+        {
+            DocumentTabsPanel.Children.Remove(doc.TabButton);
+        }
+        
+        // Remove from list
+        var index = _openDocuments.IndexOf(doc);
+        _openDocuments.Remove(doc);
+        
+        // If this was the active document, switch to another
+        if (doc == _activeDocument)
+        {
+            if (_openDocuments.Count > 0)
+            {
+                // Switch to the next document, or the previous if we closed the last one
+                var newIndex = Math.Min(index, _openDocuments.Count - 1);
+                SwitchToDocument(_openDocuments[newIndex]);
+            }
+            else
+            {
+                // No more documents, create a new untitled one
+                var newDoc = CreateNewDocument();
+                SwitchToDocument(newDoc);
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Saves a document, returning true if successful
+    /// </summary>
+    private bool SaveDocument(DocumentModel doc)
+    {
+        if (string.IsNullOrEmpty(doc.FilePath))
+        {
+            // Need to do Save As
+            var dialog = new SaveFileDialog
+            {
+                Filter = doc.RenderMode == RenderMode.Markdown
+                    ? "Markdown Files (*.md)|*.md|All Files (*.*)|*.*"
+                    : "Mermaid Files (*.mmd)|*.mmd|All Files (*.*)|*.*",
+                DefaultExt = doc.RenderMode == RenderMode.Markdown ? ".md" : ".mmd"
+            };
+            
+            if (dialog.ShowDialog() == true)
+            {
+                doc.FilePath = dialog.FileName;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        
+        try
+        {
+            File.WriteAllText(doc.FilePath, doc.TextDocument.Text);
+            doc.IsDirty = false;
+            AddToRecentFiles(doc.FilePath);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Failed to save file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            return false;
+        }
+    }
+    
+    /// <summary>
+    /// Switches to a different document
+    /// </summary>
+    private void SwitchToDocument(DocumentModel doc)
+    {
+        if (_activeDocument == doc) return;
+        
+        _isSwitchingDocuments = true;
+        
+        // Save current document state
+        if (_activeDocument != null)
+        {
+            _activeDocument.CaretOffset = CodeEditor.CaretOffset;
+            _activeDocument.VerticalScrollOffset = CodeEditor.VerticalOffset;
+            _activeDocument.HorizontalScrollOffset = CodeEditor.HorizontalOffset;
+            _activeDocument.PreviewZoom = _currentZoom;
+            _activeDocument.HasNavigatedAway = _hasNavigatedAway;
+            _activeDocument.IsSelected = false;
+        }
+        
+        // Switch to new document
+        _activeDocument = doc;
+        doc.IsSelected = true;
+        
+        // Update backward compatibility fields
+        _currentFilePath = doc.FilePath;
+        _isDirty = doc.IsDirty;
+        _currentRenderMode = doc.RenderMode;
+        _currentZoom = doc.PreviewZoom;
+        _hasNavigatedAway = doc.HasNavigatedAway;
+        
+        // Swap the text document
+        CodeEditor.Document = doc.TextDocument;
+        
+        // Restore editor state
+        try
+        {
+            CodeEditor.CaretOffset = Math.Min(doc.CaretOffset, doc.TextDocument.TextLength);
+            CodeEditor.ScrollToVerticalOffset(doc.VerticalScrollOffset);
+            CodeEditor.ScrollToHorizontalOffset(doc.HorizontalScrollOffset);
+        }
+        catch { }
+        
+        // Update UI
+        UpdateTabStyles();
+        UpdateTitle();
+        UpdateNavigationDropdown();
+        UpdateExportMenuVisibility();
+        
+        // Update back button state
+        PreviewBackButton.IsEnabled = _hasNavigatedAway;
+        
+        _isSwitchingDocuments = false;
+        
+        // Re-render preview for the new document
+        RenderPreview();
+    }
+    
+    /// <summary>
+    /// Opens a file in a new tab or switches to existing tab if already open
+    /// </summary>
+    private void OpenFileInTab(string filePath)
+    {
+        // Check if file is already open
+        var existingDoc = _openDocuments.FirstOrDefault(d => 
+            string.Equals(d.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+        
+        if (existingDoc != null)
+        {
+            SwitchToDocument(existingDoc);
+            return;
+        }
+        
+        try
+        {
+            var content = File.ReadAllText(filePath);
+            var doc = CreateNewDocument(filePath, content);
+            SwitchToDocument(doc);
+            
+            // Navigate file browser to the file's folder
+            var folder = Path.GetDirectoryName(filePath);
+            if (!string.IsNullOrEmpty(folder))
+            {
+                NavigateBrowserToFolder(folder, filePath);
+            }
+            
+            AddToRecentFiles(filePath);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Failed to open file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+    
+    /// <summary>
+    /// Opens a file from an external source (e.g., another instance via named pipe)
+    /// This is a public method called by App.xaml.cs for single-instance support
+    /// </summary>
+    public void OpenFileFromExternalSource(string filePath)
+    {
+        OpenFileInTab(filePath);
+    }
+    
+    /// <summary>
+    /// Initializes the document tab system on startup
+    /// </summary>
+    private void InitializeDocumentTabs()
+    {
+        // Create initial document
+        var args = Environment.GetCommandLineArgs();
+        if (args.Length > 1 && File.Exists(args[1]))
+        {
+            // Open file from command line
+            var content = File.ReadAllText(args[1]);
+            var doc = CreateNewDocument(args[1], content);
+            SwitchToDocument(doc);
+            
+            var folder = Path.GetDirectoryName(args[1]);
+            if (!string.IsNullOrEmpty(folder))
+            {
+                NavigateBrowserToFolder(folder, args[1]);
+            }
+            
+            AddToRecentFiles(args[1]);
+        }
+        else
+        {
+            // Create new untitled document
+            var doc = CreateNewDocument();
+            SwitchToDocument(doc);
+        }
+    }
+    
+    #endregion
 }
 
 public class MermaidCompletionData: ICompletionData
@@ -3841,4 +4125,73 @@ public class NavigationItem
     public int Level { get; set; }
     public string HeadingId { get; set; } = "";
     public Thickness IndentMargin => new Thickness((Level - 1) * 12, 0, 0, 0);
+}
+
+/// <summary>
+/// Represents an open document in the multi-document interface
+/// </summary>
+public class DocumentModel : System.ComponentModel.INotifyPropertyChanged
+{
+    private string? _filePath;
+    private bool _isDirty;
+    
+    public string? FilePath
+    {
+        get => _filePath;
+        set
+        {
+            _filePath = value;
+            OnPropertyChanged(nameof(FilePath));
+            OnPropertyChanged(nameof(DisplayName));
+            OnPropertyChanged(nameof(TabHeader));
+        }
+    }
+    
+    public bool IsDirty
+    {
+        get => _isDirty;
+        set
+        {
+            _isDirty = value;
+            OnPropertyChanged(nameof(IsDirty));
+            OnPropertyChanged(nameof(TabHeader));
+        }
+    }
+    
+    public RenderMode RenderMode { get; set; } = RenderMode.Mermaid;
+    
+    private bool _isSelected;
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set
+        {
+            _isSelected = value;
+            OnPropertyChanged(nameof(IsSelected));
+        }
+    }
+    
+    // Editor state
+    public ICSharpCode.AvalonEdit.Document.TextDocument TextDocument { get; set; } = new();
+    public int CaretOffset { get; set; }
+    public double VerticalScrollOffset { get; set; }
+    public double HorizontalScrollOffset { get; set; }
+    
+    // Preview state
+    public double PreviewZoom { get; set; } = 1.0;
+    public bool HasNavigatedAway { get; set; }
+    
+    // UI element reference for the tab button
+    public System.Windows.Controls.Button? TabButton { get; set; }
+    
+    public string DisplayName => string.IsNullOrEmpty(FilePath) ? "Untitled" : Path.GetFileName(FilePath);
+    
+    public string TabHeader => IsDirty ? $"{DisplayName} *" : DisplayName;
+    
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+    
+    protected void OnPropertyChanged(string propertyName)
+    {
+        PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(propertyName));
+    }
 }
