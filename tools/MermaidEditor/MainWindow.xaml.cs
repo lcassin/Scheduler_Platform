@@ -69,6 +69,8 @@ public partial class MainWindow : Window
     private static readonly string RecentFilesPath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "MermaidEditor", "recent.json");
+    private int _baseNavigationId; // Track the navigation ID when we render content
+    private bool _isNavigatingAway; // Track if user has navigated away from rendered content
 
     private const string DefaultMermaidCode= @"flowchart TD
     A[Start] --> B{Is it working?}
@@ -579,13 +581,27 @@ Console.WriteLine(""Hello, World!"");
     
     private void CoreWebView2_NavigationCompleted(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
     {
-        // Update back button enabled state based on whether we can go back
-        PreviewBackButton.IsEnabled = PreviewWebView.CoreWebView2.CanGoBack;
+        // Check if this navigation is from our rendered content (NavigateToString uses about:blank)
+        var currentUrl = PreviewWebView.CoreWebView2.Source;
+        var isBaseRender = currentUrl == "about:blank" || currentUrl.StartsWith("https://" + VirtualHostName);
+        
+        if (isBaseRender)
+        {
+            // We're on the base rendered content, mark this as the base and disable back
+            _isNavigatingAway = false;
+            PreviewBackButton.IsEnabled = false;
+        }
+        else
+        {
+            // User has navigated away from rendered content
+            _isNavigatingAway = true;
+            PreviewBackButton.IsEnabled = true;
+        }
     }
     
     private void PreviewBack_Click(object sender, RoutedEventArgs e)
     {
-        if (PreviewWebView.CoreWebView2?.CanGoBack == true)
+        if (_isNavigatingAway && PreviewWebView.CoreWebView2?.CanGoBack == true)
         {
             PreviewWebView.CoreWebView2.GoBack();
         }
