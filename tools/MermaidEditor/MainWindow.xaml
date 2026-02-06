@@ -288,6 +288,112 @@
             </Setter>
         </Style>
         
+        <!-- Document Tab Style with Close Button -->
+        <Style x:Key="DocumentTabItemStyle" TargetType="TabItem">
+            <Setter Property="Background" Value="{StaticResource ToolbarBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Margin" Value="0,0,1,0"/>
+            <Setter Property="Panel.ZIndex" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabItem">
+                        <Grid x:Name="tabGrid" Margin="0,0,0,1">
+                            <Border x:Name="border" 
+                                    Background="{TemplateBinding Background}"
+                                    BorderThickness="1,1,1,0"
+                                    BorderBrush="Transparent"
+                                    CornerRadius="4,4,0,0"
+                                    Padding="{TemplateBinding Padding}">
+                                <StackPanel Orientation="Horizontal">
+                                    <ContentPresenter x:Name="contentPresenter"
+                                                      ContentSource="Header"
+                                                      VerticalAlignment="Center"/>
+                                    <Button x:Name="CloseButton" 
+                                            Click="DocumentTab_CloseClick"
+                                            Style="{StaticResource ToolbarButtonStyle}"
+                                            Padding="4,0,0,0"
+                                            Margin="6,0,0,0"
+                                            VerticalAlignment="Center"
+                                            ToolTip="Close">
+                                        <TextBlock Text="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="10"/>
+                                    </Button>
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="tabGrid" Property="Margin" Value="0,0,1,-1"/>
+                                <Setter TargetName="border" Property="Background" Value="#1E1E1E"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="{StaticResource PurpleAccentBrush}"/>
+                                <Setter Property="Panel.ZIndex" Value="1"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{StaticResource HoverBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- Document TabControl Style with Scrollable Tabs -->
+        <Style x:Key="DocumentTabControlStyle" TargetType="TabControl">
+            <Setter Property="Background" Value="{StaticResource ToolbarBackgroundBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TabControl">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <!-- Tab Header Panel with scroll buttons -->
+                            <Grid Grid.Row="0" Background="{StaticResource ToolbarBackgroundBrush}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <!-- Left scroll button -->
+                                <RepeatButton x:Name="ScrollLeftButton" Grid.Column="0" 
+                                              Style="{StaticResource ToolbarButtonStyle}"
+                                              Padding="4,2" Visibility="Collapsed"
+                                              Click="DocumentTabs_ScrollLeft">
+                                    <TextBlock Text="&#xE76B;" FontFamily="Segoe MDL2 Assets" FontSize="12"/>
+                                </RepeatButton>
+                                <!-- Scrollable tab panel -->
+                                <ScrollViewer x:Name="TabScrollViewer" Grid.Column="1" 
+                                              HorizontalScrollBarVisibility="Hidden" 
+                                              VerticalScrollBarVisibility="Disabled"
+                                              CanContentScroll="True">
+                                    <Border BorderBrush="{StaticResource PurpleAccentBrush}" 
+                                            BorderThickness="0,0,0,1">
+                                        <TabPanel IsItemsHost="True" Background="Transparent"/>
+                                    </Border>
+                                </ScrollViewer>
+                                <!-- Right scroll button -->
+                                <RepeatButton x:Name="ScrollRightButton" Grid.Column="2" 
+                                              Style="{StaticResource ToolbarButtonStyle}"
+                                              Padding="4,2" Visibility="Collapsed"
+                                              Click="DocumentTabs_ScrollRight">
+                                    <TextBlock Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="12"/>
+                                </RepeatButton>
+                            </Grid>
+                            <!-- Content area -->
+                            <Border Grid.Row="1" Background="#1E1E1E">
+                                <ContentPresenter ContentSource="SelectedContent"/>
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="ItemContainerStyle" Value="{StaticResource DocumentTabItemStyle}"/>
+        </Style>
+        
         <!-- ComboBox Style for Navigation Dropdown -->
         <Style x:Key="NavigationComboBoxStyle" TargetType="ComboBox">
             <Setter Property="Background" Value="{StaticResource ToolbarBackgroundBrush}"/>
@@ -802,12 +908,90 @@
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
                         
+                        <!-- Document Tabs -->
+                        <Grid Grid.Row="0" Background="#2D2D30">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <!-- Left scroll button -->
+                            <RepeatButton x:Name="DocTabScrollLeftButton" Grid.Column="0" 
+                                          Style="{StaticResource ToolbarButtonStyle}"
+                                          Padding="4,2" Visibility="Collapsed"
+                                          Click="DocumentTabs_ScrollLeft">
+                                <TextBlock Text="&#xE76B;" FontFamily="Segoe MDL2 Assets" FontSize="12"/>
+                            </RepeatButton>
+                            <!-- Scrollable document tabs -->
+                            <ScrollViewer x:Name="DocumentTabScrollViewer" Grid.Column="1" 
+                                          HorizontalScrollBarVisibility="Hidden" 
+                                          VerticalScrollBarVisibility="Disabled"
+                                          PreviewMouseWheel="DocumentTabScrollViewer_PreviewMouseWheel">
+                                <Border BorderBrush="{StaticResource PurpleAccentBrush}" 
+                                        BorderThickness="0,0,0,1">
+                                    <ItemsControl x:Name="DocumentTabs" 
+                                                  ItemsSource="{Binding}"
+                                                  Background="Transparent">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border x:Name="TabBorder" 
+                                                        Background="#2D2D30"
+                                                        BorderThickness="1,1,1,0"
+                                                        BorderBrush="Transparent"
+                                                        CornerRadius="4,4,0,0"
+                                                        Padding="8,4"
+                                                        Margin="0,0,1,0"
+                                                        MouseLeftButtonDown="DocumentTab_MouseLeftButtonDown"
+                                                        Cursor="Hand">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <TextBlock Text="{Binding TabHeader}" 
+                                                                   Foreground="#F1F1F1" 
+                                                                   VerticalAlignment="Center"/>
+                                                        <Button Click="DocumentTab_CloseClick"
+                                                                Style="{StaticResource ToolbarButtonStyle}"
+                                                                Padding="2,0,0,0"
+                                                                Margin="6,0,0,0"
+                                                                VerticalAlignment="Center"
+                                                                ToolTip="Close"
+                                                                Tag="{Binding}">
+                                                            <TextBlock Text="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="10"/>
+                                                        </Button>
+                                                    </StackPanel>
+                                                </Border>
+                                                <DataTemplate.Triggers>
+                                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                        <Setter TargetName="TabBorder" Property="Background" Value="#1E1E1E"/>
+                                                        <Setter TargetName="TabBorder" Property="BorderBrush" Value="{StaticResource PurpleAccentBrush}"/>
+                                                        <Setter TargetName="TabBorder" Property="Margin" Value="0,0,1,-1"/>
+                                                        <Setter TargetName="TabBorder" Property="Panel.ZIndex" Value="1"/>
+                                                    </DataTrigger>
+                                                </DataTemplate.Triggers>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </Border>
+                            </ScrollViewer>
+                            <!-- Right scroll button -->
+                            <RepeatButton x:Name="DocTabScrollRightButton" Grid.Column="2" 
+                                          Style="{StaticResource ToolbarButtonStyle}"
+                                          Padding="4,2" Visibility="Collapsed"
+                                          Click="DocumentTabs_ScrollRight">
+                                <TextBlock Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="12"/>
+                            </RepeatButton>
+                        </Grid>
+                        
                         <!-- Navigation Dropdown Bar -->
                         <ComboBox x:Name="NavigationDropdown" 
-                                  Grid.Row="0"
+                                  Grid.Row="1"
                                   Style="{StaticResource NavigationComboBoxStyle}"
                                   BorderThickness="0,0,0,1"
                                   Margin="0,0,0,4"
@@ -848,7 +1032,7 @@
                         
                         <!-- Code Editor -->
                         <avalon:TextEditor x:Name="CodeEditor" 
-                                 Grid.Row="1"
+                                 Grid.Row="2"
                                  FontFamily="Consolas"
                                  FontSize="14"
                                  Background="#1E1E1E"
