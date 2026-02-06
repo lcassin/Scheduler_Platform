@@ -448,9 +448,9 @@ Console.WriteLine(""Hello, World!"");
     }
     
     // Document tab event handlers
-    private void DocumentTab_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private void DocumentTab_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is FrameworkElement element && element.DataContext is DocumentModel doc)
+        if (sender is FrameworkElement element && element.Tag is DocumentModel doc)
         {
             SwitchToDocument(doc);
         }
