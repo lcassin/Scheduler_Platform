@@ -70,6 +70,7 @@ public partial class MainWindow : Window
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "MermaidEditor", "recent.json");
     private bool _isRenderingContent; // Flag set when we call NavigateToString, cleared after navigation completes
+    private bool _isGoingBack; // Flag set when user clicks back button, cleared after navigation completes
     private bool _hasNavigatedAway; // Track if user has navigated away from rendered content
 
     private const string DefaultMermaidCode= @"flowchart TD
@@ -588,6 +589,13 @@ Console.WriteLine(""Hello, World!"");
             _hasNavigatedAway = false;
             PreviewBackButton.IsEnabled = false;
         }
+        else if (_isGoingBack)
+        {
+            // This navigation is from clicking the back button - stay disabled
+            _isGoingBack = false;
+            _hasNavigatedAway = false;
+            PreviewBackButton.IsEnabled = false;
+        }
         else
         {
             // User has navigated away from rendered content (clicked a link)
@@ -600,10 +608,8 @@ Console.WriteLine(""Hello, World!"");
     {
         if (_hasNavigatedAway && PreviewWebView.CoreWebView2?.CanGoBack == true)
         {
+            _isGoingBack = true;
             PreviewWebView.CoreWebView2.GoBack();
-            // After going back, we're back at the base render
-            _hasNavigatedAway = false;
-            PreviewBackButton.IsEnabled = false;
         }
     }
     
