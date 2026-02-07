@@ -656,13 +656,13 @@ public class AdrService : IAdrService
             {
                 IsEnabled = config?.TestModeEnabled ?? false,
                 MaxScrapingJobs = config?.TestModeMaxScrapingJobs ?? 50,
-                MaxCredentialChecks = config?.TestModeMaxCredentialChecks ?? 50
+                MaxRebillJobs = config?.TestModeMaxRebillJobs ?? 50
             };
         }
         catch
         {
             // Return default (disabled) if unable to fetch configuration
-            return new TestModeStatus { IsEnabled = false, MaxScrapingJobs = 50, MaxCredentialChecks = 50 };
+            return new TestModeStatus { IsEnabled = false, MaxScrapingJobs = 50, MaxRebillJobs = 50 };
         }
     }
 
@@ -708,7 +708,7 @@ internal class AdrConfigurationResponse
 {
     public bool TestModeEnabled { get; set; }
     public int TestModeMaxScrapingJobs { get; set; }
-    public int TestModeMaxCredentialChecks { get; set; }
+    public int TestModeMaxRebillJobs { get; set; }
 }
 
 internal class CancelOrchestrationSuccessResponse

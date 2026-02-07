@@ -16,7 +16,7 @@ public class TestModeStatus
     public int MaxScrapingJobs { get; set; }
     
     /// <summary>
-    /// Maximum number of credential checks per orchestration run when test mode is enabled.
+    /// Maximum number of rebill jobs per orchestration run when test mode is enabled.
     /// </summary>
-    public int MaxCredentialChecks { get; set; }
+    public int MaxRebillJobs { get; set; }
 }
