@@ -16,7 +16,7 @@
 @if (_testModeStatus?.IsEnabled == true)
 {
     <MudAlert Severity="Severity.Warning" Class="mb-4" Icon="@Icons.Material.Filled.Warning">
-        <strong>TEST MODE IS ENABLED</strong> - ADR requests and credential checks are limited to @_testModeStatus.MaxScrapingJobs and @_testModeStatus.MaxCredentialChecks jobs respectively per orchestration run.
+        <strong>TEST MODE IS ENABLED</strong> - ADR requests and rebill jobs are limited to @_testModeStatus.MaxScrapingJobs and @_testModeStatus.MaxRebillJobs respectively per orchestration run.
     </MudAlert>
 }
 
