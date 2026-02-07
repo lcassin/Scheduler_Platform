@@ -1579,30 +1579,36 @@ Console.WriteLine(""Hello, World!"");
             }
             else
             {
-                // For Mermaid diagrams - comprehensive search
+                // For Mermaid diagrams - comprehensive search with priority ordering
+                // Priority: exact matches first, then partial matches
                 
-                // PASS 1: Look for sequence diagram keywords (alt, else, loop, opt, par, critical, break, Note)
-                string[] sequenceKeywords = { "alt ", "else ", "loop ", "opt ", "par ", "critical ", "break ", "Note over ", "Note left of ", "Note right of " };
+                // PASS 1: Look for participant/actor definitions (exact match on name or alias)
+                // This must come first so clicking on actor boxes finds the definition, not text containing the name
+                string[] actorKeywords = { "participant ", "actor " };
                 for (int i = 0; i < lines.Length; i++)
                 {
                     var line = lines[i];
                     var trimmedLine = line.TrimStart();
                     
-                    foreach (var keyword in sequenceKeywords)
+                    foreach (var keyword in actorKeywords)
                     {
                         if (trimmedLine.StartsWith(keyword, StringComparison.OrdinalIgnoreCase))
                         {
-                            // Check if the text after the keyword matches
                             var afterKeyword = trimmedLine.Substring(keyword.Length).Trim();
-                            if (afterKeyword.Equals(normalizedText, StringComparison.OrdinalIgnoreCase) ||
-                                afterKeyword.StartsWith(normalizedText, StringComparison.OrdinalIgnoreCase))
+                            // Handle "participant A as Alice" format
+                            var asIdx = afterKeyword.IndexOf(" as ", StringComparison.OrdinalIgnoreCase);
+                            string actorName = asIdx > 0 ? afterKeyword.Substring(0, asIdx) : afterKeyword;
+                            string actorAlias = asIdx > 0 ? afterKeyword.Substring(asIdx + 4).Trim() : "";
+                            
+                            if (actorName.Equals(normalizedText, StringComparison.OrdinalIgnoreCase) ||
+                                actorAlias.Equals(normalizedText, StringComparison.OrdinalIgnoreCase))
                             {
                                 bestLineIndex = i;
                                 var keywordIdx = line.IndexOf(keyword.TrimEnd(), StringComparison.OrdinalIgnoreCase);
                                 if (keywordIdx >= 0)
                                 {
                                     bestMatchStart = keywordIdx;
-                                    bestMatchLength = line.Length - keywordIdx; // Highlight the whole line from keyword
+                                    bestMatchLength = line.Length - keywordIdx;
                                 }
                                 break;
                             }
@@ -1611,38 +1617,45 @@ Console.WriteLine(""Hello, World!"");
                     if (bestLineIndex >= 0) break;
                 }
                 
-                // PASS 2: Look for sequence diagram messages (contains : followed by text)
+                // PASS 2: Look for sequence diagram keywords (alt, else, loop, opt, par, critical, break, Note)
+                // Requires exact match or text starts with the search text
                 if (bestLineIndex < 0)
                 {
+                    string[] sequenceKeywords = { "alt ", "else ", "loop ", "opt ", "par ", "critical ", "break ", "Note over ", "Note left of ", "Note right of " };
                     for (int i = 0; i < lines.Length; i++)
                     {
                         var line = lines[i];
-                        var colonIdx = line.IndexOf(':');
-                        if (colonIdx > 0)
+                        var trimmedLine = line.TrimStart();
+                        
+                        foreach (var keyword in sequenceKeywords)
                         {
-                            var afterColon = line.Substring(colonIdx + 1).Trim();
-                            if (afterColon.Equals(normalizedText, StringComparison.OrdinalIgnoreCase) ||
-                                afterColon.Contains(normalizedText, StringComparison.OrdinalIgnoreCase))
+                            if (trimmedLine.StartsWith(keyword, StringComparison.OrdinalIgnoreCase))
                             {
-                                bestLineIndex = i;
-                                var textIdx = line.IndexOf(normalizedText, StringComparison.OrdinalIgnoreCase);
-                                if (textIdx >= 0)
+                                // Check if the text after the keyword matches exactly
+                                var afterKeyword = trimmedLine.Substring(keyword.Length).Trim();
+                                // For Note, handle the colon separator
+                                var colonIdx = afterKeyword.IndexOf(':');
+                                var noteText = colonIdx > 0 ? afterKeyword.Substring(colonIdx + 1).Trim() : afterKeyword;
+                                
+                                if (afterKeyword.Equals(normalizedText, StringComparison.OrdinalIgnoreCase) ||
+                                    noteText.Equals(normalizedText, StringComparison.OrdinalIgnoreCase))
                                 {
-                                    bestMatchStart = textIdx;
-                                    bestMatchLength = normalizedText.Length;
+                                    bestLineIndex = i;
+                                    var keywordIdx = line.IndexOf(keyword.TrimEnd(), StringComparison.OrdinalIgnoreCase);
+                                    if (keywordIdx >= 0)
+                                    {
+                                        bestMatchStart = keywordIdx;
+                                        bestMatchLength = line.Length - keywordIdx;
+                                    }
+                                    break;
                                 }
-                                else
-                                {
-                                    bestMatchStart = colonIdx + 1;
-                                    bestMatchLength = line.Length - colonIdx - 1;
-                                }
-                                break;
                             }
                         }
+                        if (bestLineIndex >= 0) break;
                     }
                 }
                 
-                // PASS 3: Look for text in brackets [text], (text), {text}, "text"
+                // PASS 3: Look for text in brackets [text], (text), {text}, "text" - exact match
                 if (bestLineIndex < 0)
                 {
                     for (int i = 0; i < lines.Length; i++)
@@ -1675,44 +1688,65 @@ Console.WriteLine(""Hello, World!"");
                     }
                 }
                 
-                // PASS 4: Look for participant/actor definitions
+                // PASS 4: Look for sequence diagram messages (text after colon) - exact match only
+                // This comes after brackets and actors to avoid matching partial text
                 if (bestLineIndex < 0)
                 {
-                    string[] actorKeywords = { "participant ", "actor " };
                     for (int i = 0; i < lines.Length; i++)
                     {
                         var line = lines[i];
-                        var trimmedLine = line.TrimStart();
-                        
-                        foreach (var keyword in actorKeywords)
+                        var colonIdx = line.IndexOf(':');
+                        if (colonIdx > 0)
                         {
-                            if (trimmedLine.StartsWith(keyword, StringComparison.OrdinalIgnoreCase))
+                            var afterColon = line.Substring(colonIdx + 1).Trim();
+                            // Only match if the text after colon equals the search text exactly
+                            if (afterColon.Equals(normalizedText, StringComparison.OrdinalIgnoreCase))
                             {
-                                var afterKeyword = trimmedLine.Substring(keyword.Length).Trim();
-                                // Handle "participant A as Alice" format
-                                var asIdx = afterKeyword.IndexOf(" as ", StringComparison.OrdinalIgnoreCase);
-                                string actorName = asIdx > 0 ? afterKeyword.Substring(0, asIdx) : afterKeyword;
-                                string actorAlias = asIdx > 0 ? afterKeyword.Substring(asIdx + 4).Trim() : "";
-                                
-                                if (actorName.Equals(normalizedText, StringComparison.OrdinalIgnoreCase) ||
-                                    actorAlias.Equals(normalizedText, StringComparison.OrdinalIgnoreCase))
+                                bestLineIndex = i;
+                                var textIdx = line.IndexOf(normalizedText, StringComparison.OrdinalIgnoreCase);
+                                if (textIdx >= 0)
                                 {
-                                    bestLineIndex = i;
-                                    var keywordIdx = line.IndexOf(keyword.TrimEnd(), StringComparison.OrdinalIgnoreCase);
-                                    if (keywordIdx >= 0)
-                                    {
-                                        bestMatchStart = keywordIdx;
-                                        bestMatchLength = line.Length - keywordIdx;
-                                    }
-                                    break;
+                                    bestMatchStart = textIdx;
+                                    bestMatchLength = normalizedText.Length;
                                 }
+                                else
+                                {
+                                    bestMatchStart = colonIdx + 1;
+                                    bestMatchLength = line.Length - colonIdx - 1;
+                                }
+                                break;
                             }
                         }
-                        if (bestLineIndex >= 0) break;
                     }
                 }
                 
-                // PASS 5: Plain text search as final fallback
+                // PASS 5: Look for messages containing the text (partial match, but text must be > 3 chars)
+                // This allows finding longer messages but avoids matching short words like "User" in "User interaction"
+                if (bestLineIndex < 0 && normalizedText.Length > 10)
+                {
+                    for (int i = 0; i < lines.Length; i++)
+                    {
+                        var line = lines[i];
+                        var colonIdx = line.IndexOf(':');
+                        if (colonIdx > 0)
+                        {
+                            var afterColon = line.Substring(colonIdx + 1).Trim();
+                            if (afterColon.Contains(normalizedText, StringComparison.OrdinalIgnoreCase))
+                            {
+                                bestLineIndex = i;
+                                var textIdx = line.IndexOf(normalizedText, StringComparison.OrdinalIgnoreCase);
+                                if (textIdx >= 0)
+                                {
+                                    bestMatchStart = textIdx;
+                                    bestMatchLength = normalizedText.Length;
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                // PASS 6: Plain text search as final fallback
                 if (bestLineIndex < 0)
                 {
                     for (int i = 0; i < lines.Length; i++)
