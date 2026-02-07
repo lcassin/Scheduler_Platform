@@ -404,8 +404,8 @@ public class EmailService : IEmailService
         int syncAccountsUpdated,
         int jobsCreated,
         int jobsSkipped,
-        int credentialsVerified,
-        int credentialsFailed,
+        int rebillRequestsSent,
+        int rebillRequestsFailed,
         int scrapesRequested,
         int scrapesFailed,
         int statusesChecked,
@@ -430,7 +430,7 @@ public class EmailService : IEmailService
             }
 
             // Determine if there were any failures
-            var totalFailures = credentialsFailed + scrapesFailed + statusesFailed + errorMessages.Count;
+            var totalFailures = rebillRequestsFailed + scrapesFailed + statusesFailed + errorMessages.Count;
             if (totalFailures == 0)
             {
                 _logger.LogDebug("Orchestration completed with no failures, skipping notification");
@@ -444,7 +444,7 @@ public class EmailService : IEmailService
             var body = BuildOrchestrationSummaryEmailBody(
                 orchestrationName, requestId, startedAt, completedAt, duration, environment,
                 syncAccountsInserted, syncAccountsUpdated, jobsCreated, jobsSkipped,
-                credentialsVerified, credentialsFailed, scrapesRequested, scrapesFailed,
+                rebillRequestsSent, rebillRequestsFailed, scrapesRequested, scrapesFailed,
                 statusesChecked, statusesFailed, errorMessages);
 
             // Build attachment with detailed error messages if any
@@ -489,10 +489,10 @@ public class EmailService : IEmailService
     private static string BuildOrchestrationSummaryEmailBody(
         string orchestrationName, string requestId, DateTime startedAt, DateTime completedAt, TimeSpan duration, string environment,
         int syncAccountsInserted, int syncAccountsUpdated, int jobsCreated, int jobsSkipped,
-        int credentialsVerified, int credentialsFailed, int scrapesRequested, int scrapesFailed,
+        int rebillRequestsSent, int rebillRequestsFailed, int scrapesRequested, int scrapesFailed,
         int statusesChecked, int statusesFailed, List<string> errorMessages)
     {
-        var totalFailures = credentialsFailed + scrapesFailed + statusesFailed + errorMessages.Count;
+        var totalFailures = rebillRequestsFailed + scrapesFailed + statusesFailed + errorMessages.Count;
         var headerColor = totalFailures > 0 ? "#ff9800" : "#4CAF50"; // Orange for warnings, green for success
         
         var sb = new StringBuilder();
@@ -530,8 +530,8 @@ public class EmailService : IEmailService
         sb.AppendLine($"<tr><td>Account Sync</td><td class='success'>{syncAccountsInserted + syncAccountsUpdated} synced</td><td>-</td></tr>");
         sb.AppendLine($"<tr><td>Job Creation</td><td class='success'>{jobsCreated} created</td><td>{jobsSkipped} skipped</td></tr>");
         
-        var credFailClass = credentialsFailed > 0 ? "failure" : "";
-        sb.AppendLine($"<tr><td>Credential Verification</td><td class='success'>{credentialsVerified} verified</td><td class='{credFailClass}'>{credentialsFailed} failed</td></tr>");
+        var rebillFailClass = rebillRequestsFailed > 0 ? "failure" : "";
+        sb.AppendLine($"<tr><td>Rebill Processing</td><td class='success'>{rebillRequestsSent} sent</td><td class='{rebillFailClass}'>{rebillRequestsFailed} failed</td></tr>");
         
         var scrapeFailClass = scrapesFailed > 0 ? "failure" : "";
         sb.AppendLine($"<tr><td>ADR Requests</td><td class='success'>{scrapesRequested} requested</td><td class='{scrapeFailClass}'>{scrapesFailed} failed</td></tr>");
