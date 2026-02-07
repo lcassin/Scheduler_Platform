@@ -1425,82 +1425,118 @@ Console.WriteLine(""Hello, World!"");
         int bestMatchStart = -1;
         int bestMatchLength = 0;
         
-        // First, try to find by node ID (for Mermaid diagrams)
-        // Prioritize node DEFINITIONS (with brackets/labels) over references
+        // Normalize text for searching
+        var normalizedText = text?.Replace("\n", " ").Replace("\r", "").Trim() ?? "";
+        
+        // PRIORITY 1: Find by node ID (most reliable for Mermaid diagrams)
+        // This ensures we find the right node even when multiple nodes have the same text (e.g., "Yes", "No")
         if (!string.IsNullOrEmpty(nodeId))
         {
-            var escapedNodeId = System.Text.RegularExpressions.Regex.Escape(nodeId);
-            
-            // First pass: Look for node DEFINITIONS (where the node has a label in brackets)
-            var definitionPatterns = new[]
-            {
-                $@"\b{escapedNodeId}\s*[\[\(\{{\<]",  // A[, A(, A{, A< - node with label
-                $@"^\s*{escapedNodeId}\s*:",          // A: (for state diagrams)
-                $@"state\s+{escapedNodeId}\b",        // state A
-            };
-            
             for (int i = 0; i < lines.Length; i++)
             {
                 var line = lines[i];
-                foreach (var pattern in definitionPatterns)
+                
+                // Look for node definition: nodeId followed by bracket (e.g., B{, A[, C()
+                // Use simple string search first, then validate with character check
+                var nodeIdx = line.IndexOf(nodeId, StringComparison.Ordinal);
+                while (nodeIdx >= 0)
                 {
-                    var match = System.Text.RegularExpressions.Regex.Match(line, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                    if (match.Success)
+                    // Check if this is a word boundary (not part of a longer identifier)
+                    bool isWordStart = nodeIdx == 0 || !char.IsLetterOrDigit(line[nodeIdx - 1]);
+                    
+                    if (isWordStart)
                     {
-                        bestLineIndex = i;
-                        bestMatchStart = match.Index;
-                        bestMatchLength = nodeId.Length;
-                        break;
+                        // Look for bracket after the nodeId (possibly with whitespace)
+                        var afterNode = nodeIdx + nodeId.Length;
+                        while (afterNode < line.Length && char.IsWhiteSpace(line[afterNode]))
+                            afterNode++;
+                        
+                        if (afterNode < line.Length)
+                        {
+                            var nextChar = line[afterNode];
+                            // Check for node definition brackets: [, (, {, <, or : (for state diagrams)
+                            if (nextChar == '[' || nextChar == '(' || nextChar == '{' || nextChar == '<' || nextChar == ':')
+                            {
+                                bestLineIndex = i;
+                                bestMatchStart = nodeIdx;
+                                
+                                // Find the closing bracket to highlight the full node definition
+                                var closingBracket = nextChar switch
+                                {
+                                    '[' => ']',
+                                    '(' => ')',
+                                    '{' => '}',
+                                    '<' => '>',
+                                    _ => '\0'
+                                };
+                                
+                                if (closingBracket != '\0')
+                                {
+                                    var closeIdx = line.IndexOf(closingBracket, afterNode + 1);
+                                    if (closeIdx > afterNode)
+                                    {
+                                        bestMatchLength = closeIdx - nodeIdx + 1; // Include closing bracket
+                                    }
+                                    else
+                                    {
+                                        bestMatchLength = line.Length - nodeIdx; // To end of line
+                                    }
+                                }
+                                else
+                                {
+                                    bestMatchLength = nodeId.Length;
+                                }
+                                break;
+                            }
+                        }
                     }
+                    
+                    // Continue searching for next occurrence
+                    nodeIdx = line.IndexOf(nodeId, nodeIdx + 1, StringComparison.Ordinal);
                 }
+                
                 if (bestLineIndex >= 0) break;
             }
             
-            // Second pass: If no definition found, look for references (arrows pointing to/from the node)
+            // If no definition found, look for references (arrows)
             if (bestLineIndex < 0)
             {
-                var referencePatterns = new[]
-                {
-                    $@"\b{escapedNodeId}\s*-->",          // A-->
-                    $@"\b{escapedNodeId}\s*---",          // A---
-                    $@"\b{escapedNodeId}\s*-\.\-",        // A-.-
-                    $@"-->\s*{escapedNodeId}\b",          // -->A
-                    $@"---\s*{escapedNodeId}\b",          // ---A
-                };
-                
                 for (int i = 0; i < lines.Length; i++)
                 {
                     var line = lines[i];
-                    foreach (var pattern in referencePatterns)
+                    var nodeIdx = line.IndexOf(nodeId, StringComparison.Ordinal);
+                    while (nodeIdx >= 0)
                     {
-                        var match = System.Text.RegularExpressions.Regex.Match(line, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                        if (match.Success)
+                        bool isWordStart = nodeIdx == 0 || !char.IsLetterOrDigit(line[nodeIdx - 1]);
+                        bool isWordEnd = (nodeIdx + nodeId.Length >= line.Length) || !char.IsLetterOrDigit(line[nodeIdx + nodeId.Length]);
+                        
+                        if (isWordStart && isWordEnd)
                         {
-                            bestLineIndex = i;
-                            bestMatchStart = match.Index;
-                            bestMatchLength = nodeId.Length;
-                            break;
+                            // Check if it's near an arrow
+                            var before = nodeIdx > 2 ? line.Substring(Math.Max(0, nodeIdx - 4), Math.Min(4, nodeIdx)) : "";
+                            var afterEnd = nodeIdx + nodeId.Length;
+                            var after = afterEnd < line.Length ? line.Substring(afterEnd, Math.Min(4, line.Length - afterEnd)) : "";
+                            
+                            if (before.Contains("-->") || before.Contains("---") || before.Contains("-.-") ||
+                                after.StartsWith("-->") || after.StartsWith("---") || after.StartsWith("-.-") ||
+                                after.StartsWith(" -->") || after.StartsWith(" ---"))
+                            {
+                                bestLineIndex = i;
+                                bestMatchStart = nodeIdx;
+                                bestMatchLength = nodeId.Length;
+                                break;
+                            }
                         }
+                        nodeIdx = line.IndexOf(nodeId, nodeIdx + 1, StringComparison.Ordinal);
                     }
                     if (bestLineIndex >= 0) break;
                 }
             }
         }
         
-        // If no match by nodeId, try to find by text content
-        if (bestLineIndex < 0 && !string.IsNullOrEmpty(text))
+        // PRIORITY 2: Find by text content (fallback when nodeId doesn't match)
+        if (bestLineIndex < 0 && !string.IsNullOrEmpty(normalizedText))
         {
-            // Normalize the search text - replace newlines with spaces for matching
-            // This handles cases where HTML <br/> tags are rendered as newlines in the preview
-            var normalizedText = text.Replace("\n", " ").Replace("\r", "").Trim();
-            
-            // For Mermaid diagrams, also try to find text that contains <br/> or <br> tags
-            // by searching for the text with HTML tags replaced by regex wildcards
-            var htmlTagPattern = System.Text.RegularExpressions.Regex.Escape(normalizedText);
-            // Replace spaces with a pattern that matches spaces, <br/>, <br>, or newlines
-            // Note: Regex.Escape doesn't escape spaces, so we replace literal spaces
-            var flexiblePattern = htmlTagPattern.Replace(" ", @"(?:\s|<br\s*/?>)+");
-            
             // For Markdown, handle different element types
             if (!string.IsNullOrEmpty(elementType))
             {
@@ -1508,92 +1544,34 @@ Console.WriteLine(""Hello, World!"");
                 {
                     var line = lines[i];
                     
-                    if (elementType == "heading")
+                    if (elementType == "heading" && line.TrimStart().StartsWith("#") && line.Contains(normalizedText, StringComparison.OrdinalIgnoreCase))
                     {
-                        // Look for heading markers followed by the text
-                        if (line.TrimStart().StartsWith("#") && line.Contains(text, StringComparison.OrdinalIgnoreCase))
-                        {
-                            bestLineIndex = i;
-                            var idx = line.IndexOf(text, StringComparison.OrdinalIgnoreCase);
-                            if (idx >= 0)
-                            {
-                                bestMatchStart = idx;
-                                bestMatchLength = text.Length;
-                            }
-                            break;
-                        }
+                        bestLineIndex = i;
+                        var idx = line.IndexOf(normalizedText, StringComparison.OrdinalIgnoreCase);
+                        if (idx >= 0) { bestMatchStart = idx; bestMatchLength = normalizedText.Length; }
+                        break;
                     }
-                    else if (elementType == "code")
+                    else if (elementType == "code" && line.Contains(normalizedText))
                     {
-                        // Look for code blocks or inline code
-                        if (line.Contains(text))
-                        {
-                            bestLineIndex = i;
-                            var idx = line.IndexOf(text);
-                            if (idx >= 0)
-                            {
-                                bestMatchStart = idx;
-                                bestMatchLength = text.Length;
-                            }
-                            break;
-                        }
+                        bestLineIndex = i;
+                        var idx = line.IndexOf(normalizedText);
+                        if (idx >= 0) { bestMatchStart = idx; bestMatchLength = normalizedText.Length; }
+                        break;
                     }
-                    else if (elementType == "bold")
+                    else if ((elementType == "bold" || elementType == "italic") && line.Contains(normalizedText, StringComparison.OrdinalIgnoreCase))
                     {
-                        // Look for bold markers **text** or __text__
-                        var boldPattern1 = $@"\*\*{System.Text.RegularExpressions.Regex.Escape(text)}\*\*";
-                        var boldPattern2 = $@"__{System.Text.RegularExpressions.Regex.Escape(text)}__";
-                        var match1 = System.Text.RegularExpressions.Regex.Match(line, boldPattern1, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                        var match2 = System.Text.RegularExpressions.Regex.Match(line, boldPattern2, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                        if (match1.Success)
-                        {
-                            bestLineIndex = i;
-                            bestMatchStart = match1.Index;
-                            bestMatchLength = match1.Length;
-                            break;
-                        }
-                        else if (match2.Success)
-                        {
-                            bestLineIndex = i;
-                            bestMatchStart = match2.Index;
-                            bestMatchLength = match2.Length;
-                            break;
-                        }
+                        bestLineIndex = i;
+                        var idx = line.IndexOf(normalizedText, StringComparison.OrdinalIgnoreCase);
+                        if (idx >= 0) { bestMatchStart = idx; bestMatchLength = normalizedText.Length; }
+                        break;
                     }
-                    else if (elementType == "italic")
+                    else if (string.IsNullOrEmpty(elementType) || elementType == "text")
                     {
-                        // Look for italic markers *text* or _text_
-                        var italicPattern1 = $@"(?<!\*)\*(?!\*){System.Text.RegularExpressions.Regex.Escape(text)}\*(?!\*)";
-                        var italicPattern2 = $@"(?<!_)_(?!_){System.Text.RegularExpressions.Regex.Escape(text)}_(?!_)";
-                        var match1 = System.Text.RegularExpressions.Regex.Match(line, italicPattern1, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                        var match2 = System.Text.RegularExpressions.Regex.Match(line, italicPattern2, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                        if (match1.Success)
+                        if (line.Contains(normalizedText, StringComparison.OrdinalIgnoreCase))
                         {
                             bestLineIndex = i;
-                            bestMatchStart = match1.Index;
-                            bestMatchLength = match1.Length;
-                            break;
-                        }
-                        else if (match2.Success)
-                        {
-                            bestLineIndex = i;
-                            bestMatchStart = match2.Index;
-                            bestMatchLength = match2.Length;
-                            break;
-                        }
-                    }
-                    else
-                    {
-                        // Generic text search
-                        if (line.Contains(text, StringComparison.OrdinalIgnoreCase))
-                        {
-                            bestLineIndex = i;
-                            var idx = line.IndexOf(text, StringComparison.OrdinalIgnoreCase);
-                            if (idx >= 0)
-                            {
-                                bestMatchStart = idx;
-                                bestMatchLength = text.Length;
-                            }
+                            var idx = line.IndexOf(normalizedText, StringComparison.OrdinalIgnoreCase);
+                            if (idx >= 0) { bestMatchStart = idx; bestMatchLength = normalizedText.Length; }
                             break;
                         }
                     }
@@ -1601,78 +1579,48 @@ Console.WriteLine(""Hello, World!"");
             }
             else
             {
-                // For Mermaid, search for the text in brackets or quotes
-                // First try with the flexible pattern that handles <br/> tags
+                // For Mermaid, search for text in brackets
+                // First, try to find the exact text in any bracket type
                 for (int i = 0; i < lines.Length; i++)
                 {
                     var line = lines[i];
+                    var textIdx = line.IndexOf(normalizedText, StringComparison.OrdinalIgnoreCase);
                     
-                    // Look for text in brackets with flexible matching for HTML tags: [text], (text), {text}, "text"
-                    var bracketPatternsFlexible = new[]
+                    if (textIdx >= 0)
                     {
-                        $@"\[{flexiblePattern}\]",
-                        $@"\({flexiblePattern}\)",
-                        $@"\{{{flexiblePattern}\}}",
-                        $@"""{flexiblePattern}""",
-                        $@"'{flexiblePattern}'",
-                    };
-                    
-                    foreach (var pattern in bracketPatternsFlexible)
-                    {
-                        var match = System.Text.RegularExpressions.Regex.Match(line, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                        if (match.Success)
+                        // Check if it's inside brackets
+                        var beforeText = textIdx > 0 ? line[textIdx - 1] : ' ';
+                        var afterIdx = textIdx + normalizedText.Length;
+                        var afterText = afterIdx < line.Length ? line[afterIdx] : ' ';
+                        
+                        // Check for common bracket pairs
+                        bool inBrackets = (beforeText == '[' && afterText == ']') ||
+                                         (beforeText == '(' && afterText == ')') ||
+                                         (beforeText == '{' && afterText == '}') ||
+                                         (beforeText == '"' && afterText == '"') ||
+                                         (beforeText == '\'' && afterText == '\'');
+                        
+                        if (inBrackets)
                         {
                             bestLineIndex = i;
-                            bestMatchStart = match.Index + 1; // Skip the opening bracket
-                            bestMatchLength = match.Length - 2; // Exclude both brackets
+                            bestMatchStart = textIdx;
+                            bestMatchLength = normalizedText.Length;
                             break;
                         }
                     }
-                    
-                    if (bestLineIndex >= 0) break;
                 }
                 
-                // If flexible pattern didn't match, try exact text match
+                // If not found in brackets, try plain text search
                 if (bestLineIndex < 0)
                 {
                     for (int i = 0; i < lines.Length; i++)
                     {
                         var line = lines[i];
-                        
-                        // Look for exact text in brackets: [text], (text), {text}, "text"
-                        var bracketPatterns = new[]
-                        {
-                            $@"\[{System.Text.RegularExpressions.Regex.Escape(normalizedText)}\]",
-                            $@"\({System.Text.RegularExpressions.Regex.Escape(normalizedText)}\)",
-                            $@"\{{{System.Text.RegularExpressions.Regex.Escape(normalizedText)}\}}",
-                            $@"""{System.Text.RegularExpressions.Regex.Escape(normalizedText)}""",
-                            $@"'{System.Text.RegularExpressions.Regex.Escape(normalizedText)}'",
-                        };
-                        
-                        foreach (var pattern in bracketPatterns)
-                        {
-                            var match = System.Text.RegularExpressions.Regex.Match(line, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-                            if (match.Success)
-                            {
-                                bestLineIndex = i;
-                                bestMatchStart = match.Index + 1; // Skip the opening bracket
-                                bestMatchLength = normalizedText.Length;
-                                break;
-                            }
-                        }
-                        
-                        if (bestLineIndex >= 0) break;
-                        
-                        // Also try plain text search as fallback
                         if (line.Contains(normalizedText, StringComparison.OrdinalIgnoreCase))
                         {
                             bestLineIndex = i;
                             var idx = line.IndexOf(normalizedText, StringComparison.OrdinalIgnoreCase);
-                            if (idx >= 0)
-                            {
-                                bestMatchStart = idx;
-                                bestMatchLength = normalizedText.Length;
-                            }
+                            if (idx >= 0) { bestMatchStart = idx; bestMatchLength = normalizedText.Length; }
                             break;
                         }
                     }
