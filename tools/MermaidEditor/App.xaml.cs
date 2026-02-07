@@ -15,12 +15,14 @@ public partial class App : System.Windows.Application
     private const string MutexName = "MermaidEditor_SingleInstance_Mutex";
     private const string PipeName = "MermaidEditor_SingleInstance_Pipe";
     private static Mutex? _mutex;
+    private static bool _ownsMutex = false;
     private CancellationTokenSource? _pipeServerCts;
 
     protected override void OnStartup(StartupEventArgs e)
     {
         bool createdNew;
         _mutex = new Mutex(true, MutexName, out createdNew);
+        _ownsMutex = createdNew;
 
         if (!createdNew)
         {
@@ -48,7 +50,17 @@ public partial class App : System.Windows.Application
     protected override void OnExit(ExitEventArgs e)
     {
         _pipeServerCts?.Cancel();
-        _mutex?.ReleaseMutex();
+        if (_ownsMutex && _mutex != null)
+        {
+            try
+            {
+                _mutex.ReleaseMutex();
+            }
+            catch
+            {
+                // Ignore errors releasing mutex
+            }
+        }
         _mutex?.Dispose();
         base.OnExit(e);
     }
