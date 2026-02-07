@@ -748,7 +748,7 @@
                         <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                     </MenuItem.Icon>
                 </MenuItem>
-                <Separator Style="{StaticResource MenuSeparatorStyle}"/>
+                <Separator/>
                 <MenuItem Header="_About" Click="About_Click">
                     <MenuItem.Icon>
                         <TextBlock Text="&#xE946;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
