@@ -55,7 +55,7 @@ public class AdrOrchestrationStatus
     // Results from each step
     public AdrAccountSyncResult? SyncResult { get; set; }
     public JobCreationResult? JobCreationResult { get; set; }
-    public CredentialVerificationResult? CredentialVerificationResult { get; set; }
+    public RebillResult? RebillResult { get; set; }
     public ScrapeResult? ScrapeResult { get; set; }
     public StatusCheckResult? StatusCheckResult { get; set; }
 }
@@ -452,7 +452,7 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                 });
                 _logger.LogInformation("Request {RequestId}: Starting rebill processing", request.RequestId);
                 
-                var credResult = await orchestratorService.VerifyCredentialsAsync(
+                var rebillResult = await orchestratorService.ProcessRebillAsync(
                     (progress, total) => _queue.UpdateStatus(request.RequestId, s => 
                     {
                         // Negative progress indicates setup/preparing phase
@@ -472,12 +472,12 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                 _queue.UpdateStatus(request.RequestId, s => 
                 {
                     s.CurrentStepPhase = null;
-                    s.CredentialVerificationResult = credResult;
+                    s.RebillResult = rebillResult;
                 });
                 
                 _logger.LogInformation(
-                    "Request {RequestId}: Rebill processing completed. Verified: {Verified}, Failed: {Failed}",
-                    request.RequestId, credResult.CredentialsVerified, credResult.CredentialsFailed);
+                    "Request {RequestId}: Rebill processing completed. Sent: {Sent}, Failed: {Failed}, Skipped: {Skipped}",
+                    request.RequestId, rebillResult.RebillRequestsSent, rebillResult.RebillRequestsFailed, rebillResult.AccountsSkipped);
             }
 
             // Step 4: Check statuses of yesterday's ScrapeRequested jobs BEFORE sending new scrapes
@@ -706,10 +706,10 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                     dbRun.JobsSkipped = memStatus.JobCreationResult.JobsSkipped;
                 }
                 
-                if (memStatus.CredentialVerificationResult != null)
+                if (memStatus.RebillResult != null)
                 {
-                    dbRun.CredentialsVerified = memStatus.CredentialVerificationResult.CredentialsVerified;
-                    dbRun.CredentialsFailed = memStatus.CredentialVerificationResult.CredentialsFailed;
+                    dbRun.CredentialsVerified = memStatus.RebillResult.RebillRequestsSent;
+                    dbRun.CredentialsFailed = memStatus.RebillResult.RebillRequestsFailed;
                 }
                 
                 if (memStatus.ScrapeResult != null)
@@ -765,20 +765,20 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                 allErrorMessages.AddRange(status.SyncResult.ErrorMessages);
             if (status.JobCreationResult?.ErrorMessages != null)
                 allErrorMessages.AddRange(status.JobCreationResult.ErrorMessages);
-            if (status.CredentialVerificationResult?.ErrorMessages != null)
-                allErrorMessages.AddRange(status.CredentialVerificationResult.ErrorMessages);
+            if (status.RebillResult?.ErrorMessages != null)
+                allErrorMessages.AddRange(status.RebillResult.ErrorMessages);
             if (status.ScrapeResult?.ErrorMessages != null)
                 allErrorMessages.AddRange(status.ScrapeResult.ErrorMessages);
             if (status.StatusCheckResult?.ErrorMessages != null)
                 allErrorMessages.AddRange(status.StatusCheckResult.ErrorMessages);
             
             // Calculate totals
-            var credentialsFailed = status.CredentialVerificationResult?.CredentialsFailed ?? 0;
+            var rebillFailed = status.RebillResult?.RebillRequestsFailed ?? 0;
             var scrapesFailed = status.ScrapeResult?.ScrapesFailed ?? 0;
             var statusesFailed = status.StatusCheckResult?.JobsNeedingReview ?? 0;
             
             // Only send if there were failures
-            var totalFailures = credentialsFailed + scrapesFailed + statusesFailed + allErrorMessages.Count;
+            var totalFailures = rebillFailed + scrapesFailed + statusesFailed + allErrorMessages.Count;
             if (totalFailures == 0)
             {
                 _logger.LogDebug("Request {RequestId}: No failures detected, skipping summary notification", requestId);
@@ -797,8 +797,8 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                 status.SyncResult?.AccountsUpdated ?? 0,
                 status.JobCreationResult?.JobsCreated ?? 0,
                 status.JobCreationResult?.JobsSkipped ?? 0,
-                status.CredentialVerificationResult?.CredentialsVerified ?? 0,
-                credentialsFailed,
+                status.RebillResult?.RebillRequestsSent ?? 0,
+                rebillFailed,
                 status.ScrapeResult?.ScrapesRequested ?? 0,
                 scrapesFailed,
                 status.StatusCheckResult?.JobsChecked ?? 0,
