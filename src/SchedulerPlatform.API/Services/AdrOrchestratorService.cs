@@ -224,7 +224,6 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     private readonly ILogger<AdrOrchestratorService> _logger;
 
     // Default values used when database configuration is not available
-    private const int DefaultCredentialCheckLeadDays = 7;
     private const int DefaultScrapeRetryDays = 5;
     private const int DefaultFollowUpDelayDays = 5;
     private const int DefaultDailyStatusCheckDelayDays = 1;  // Check status the day after scraping
@@ -278,7 +277,6 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         // Return default configuration if database config not available
         _cachedConfig = new AdrConfiguration
         {
-            CredentialCheckLeadDays = _configuration.GetValue<int>("SchedulerSettings:AdrOrchestration:CredentialCheckLeadDays", DefaultCredentialCheckLeadDays),
             ScrapeRetryDays = _configuration.GetValue<int>("SchedulerSettings:AdrOrchestration:ScrapeRetryDays", DefaultScrapeRetryDays),
             MaxRetries = _configuration.GetValue<int>("SchedulerSettings:AdrOrchestration:MaxRetries", DefaultMaxRetries),
             DailyStatusCheckDelayDays = _configuration.GetValue<int>("SchedulerSettings:AdrOrchestration:DailyStatusCheckDelayDays", DefaultDailyStatusCheckDelayDays),
@@ -375,12 +373,6 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             _configuration.GetValue<int>("SchedulerSettings:AdrOrchestration:MaxParallelRequests", DefaultMaxParallelRequests);
     }
 
-    private int GetCredentialCheckLeadDays()
-    {
-        return _cachedConfig?.CredentialCheckLeadDays ?? 
-            _configuration.GetValue<int>("SchedulerSettings:AdrOrchestration:CredentialCheckLeadDays", DefaultCredentialCheckLeadDays);
-    }
-
     private int GetBatchSize()
     {
         return _cachedConfig?.BatchSize ?? DefaultBatchSize;
@@ -444,10 +436,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 return result;
             }
 
-            // Use the new method that includes AdrAccountRules for rule tracking per BRD requirements
-            // Pass credentialCheckLeadDays so jobs are created BEFORE NextRunDate, allowing credential verification
-            var credentialCheckLeadDays = GetCredentialCheckLeadDays();
-            var dueAccounts = await _unitOfWork.AdrAccounts.GetDueAccountsWithRulesAsync(credentialCheckLeadDays);
+            // Use the method that includes AdrAccountRules for rule tracking per BRD requirements
+            // Jobs are created when NextRunDate <= today (the day scraping should start)
+            var dueAccounts = await _unitOfWork.AdrAccounts.GetDueAccountsWithRulesAsync();
 
             int processedSinceLastSave = 0;
             int batchNumber = 1;
@@ -598,7 +589,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         var result = new CredentialVerificationResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var maxParallel = GetMaxParallelRequests();
-        var credentialCheckLeadDays = GetCredentialCheckLeadDays();
+        // Default lead days for credential verification (used by bulk verification endpoint)
+        const int credentialCheckLeadDays = 7;
 
         try
         {

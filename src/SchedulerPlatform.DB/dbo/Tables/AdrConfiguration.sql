@@ -1,6 +1,5 @@
 ﻿CREATE TABLE [dbo].[AdrConfiguration] (
     [AdrConfigurationId]              INT            IDENTITY (1, 1) NOT NULL,
-    [CredentialCheckLeadDays]         INT            DEFAULT ((7)) NOT NULL,
     [ScrapeRetryDays]                 INT            DEFAULT ((5)) NOT NULL,
     [MaxRetries]                      INT            DEFAULT ((5)) NOT NULL,
     [DailyStatusCheckDelayDays]       INT            DEFAULT ((1)) NOT NULL,
