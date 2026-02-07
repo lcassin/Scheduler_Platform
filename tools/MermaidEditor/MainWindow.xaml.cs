@@ -1425,10 +1425,10 @@ Console.WriteLine(""Hello, World!"");
         int bestMatchStart = -1;
         int bestMatchLength = 0;
         
-        // Normalize text for searching
-        var normalizedText = text?.Replace("\n", " ").Replace("\r", "").Trim() ?? "";
+        // Normalize text for searching - handle HTML line breaks and whitespace
+        var normalizedText = text?.Replace("\n", " ").Replace("\r", "").Replace("<br>", " ").Replace("<br/>", " ").Trim() ?? "";
         
-        // PRIORITY 1: Find by node ID (most reliable for Mermaid diagrams)
+        // PRIORITY 1: Find by node ID (most reliable for flowchart/state diagrams)
         // This ensures we find the right node even when multiple nodes have the same text (e.g., "Yes", "No")
         if (!string.IsNullOrEmpty(nodeId))
         {
@@ -1437,7 +1437,6 @@ Console.WriteLine(""Hello, World!"");
                 var line = lines[i];
                 
                 // Look for node definition: nodeId followed by bracket (e.g., B{, A[, C()
-                // Use simple string search first, then validate with character check
                 var nodeIdx = line.IndexOf(nodeId, StringComparison.Ordinal);
                 while (nodeIdx >= 0)
                 {
@@ -1491,7 +1490,6 @@ Console.WriteLine(""Hello, World!"");
                         }
                     }
                     
-                    // Continue searching for next occurrence
                     nodeIdx = line.IndexOf(nodeId, nodeIdx + 1, StringComparison.Ordinal);
                 }
                 
@@ -1512,14 +1510,16 @@ Console.WriteLine(""Hello, World!"");
                         
                         if (isWordStart && isWordEnd)
                         {
-                            // Check if it's near an arrow
-                            var before = nodeIdx > 2 ? line.Substring(Math.Max(0, nodeIdx - 4), Math.Min(4, nodeIdx)) : "";
+                            // Check if it's near an arrow (flowchart or sequence diagram)
+                            var before = nodeIdx > 4 ? line.Substring(Math.Max(0, nodeIdx - 5), Math.Min(5, nodeIdx)) : "";
                             var afterEnd = nodeIdx + nodeId.Length;
-                            var after = afterEnd < line.Length ? line.Substring(afterEnd, Math.Min(4, line.Length - afterEnd)) : "";
+                            var after = afterEnd < line.Length ? line.Substring(afterEnd, Math.Min(5, line.Length - afterEnd)) : "";
                             
                             if (before.Contains("-->") || before.Contains("---") || before.Contains("-.-") ||
+                                before.Contains("->>") || before.Contains("-->>") || before.Contains("-x") ||
                                 after.StartsWith("-->") || after.StartsWith("---") || after.StartsWith("-.-") ||
-                                after.StartsWith(" -->") || after.StartsWith(" ---"))
+                                after.StartsWith("->>") || after.StartsWith("-->>") || after.StartsWith("-x") ||
+                                after.StartsWith(" -->") || after.StartsWith(" ---") || after.StartsWith(" ->>"))
                             {
                                 bestLineIndex = i;
                                 bestMatchStart = nodeIdx;
@@ -1534,10 +1534,10 @@ Console.WriteLine(""Hello, World!"");
             }
         }
         
-        // PRIORITY 2: Find by text content (fallback when nodeId doesn't match)
+        // PRIORITY 2: Find by text content
         if (bestLineIndex < 0 && !string.IsNullOrEmpty(normalizedText))
         {
-            // For Markdown, handle different element types
+            // For Markdown with element type hints
             if (!string.IsNullOrEmpty(elementType))
             {
                 for (int i = 0; i < lines.Length; i++)
@@ -1579,38 +1579,140 @@ Console.WriteLine(""Hello, World!"");
             }
             else
             {
-                // For Mermaid, search for text in brackets
-                // First, try to find the exact text in any bracket type
+                // For Mermaid diagrams - comprehensive search
+                
+                // PASS 1: Look for sequence diagram keywords (alt, else, loop, opt, par, critical, break, Note)
+                string[] sequenceKeywords = { "alt ", "else ", "loop ", "opt ", "par ", "critical ", "break ", "Note over ", "Note left of ", "Note right of " };
                 for (int i = 0; i < lines.Length; i++)
                 {
                     var line = lines[i];
-                    var textIdx = line.IndexOf(normalizedText, StringComparison.OrdinalIgnoreCase);
+                    var trimmedLine = line.TrimStart();
                     
-                    if (textIdx >= 0)
+                    foreach (var keyword in sequenceKeywords)
                     {
-                        // Check if it's inside brackets
-                        var beforeText = textIdx > 0 ? line[textIdx - 1] : ' ';
-                        var afterIdx = textIdx + normalizedText.Length;
-                        var afterText = afterIdx < line.Length ? line[afterIdx] : ' ';
-                        
-                        // Check for common bracket pairs
-                        bool inBrackets = (beforeText == '[' && afterText == ']') ||
-                                         (beforeText == '(' && afterText == ')') ||
-                                         (beforeText == '{' && afterText == '}') ||
-                                         (beforeText == '"' && afterText == '"') ||
-                                         (beforeText == '\'' && afterText == '\'');
-                        
-                        if (inBrackets)
+                        if (trimmedLine.StartsWith(keyword, StringComparison.OrdinalIgnoreCase))
                         {
-                            bestLineIndex = i;
-                            bestMatchStart = textIdx;
-                            bestMatchLength = normalizedText.Length;
-                            break;
+                            // Check if the text after the keyword matches
+                            var afterKeyword = trimmedLine.Substring(keyword.Length).Trim();
+                            if (afterKeyword.Equals(normalizedText, StringComparison.OrdinalIgnoreCase) ||
+                                afterKeyword.StartsWith(normalizedText, StringComparison.OrdinalIgnoreCase))
+                            {
+                                bestLineIndex = i;
+                                var keywordIdx = line.IndexOf(keyword.TrimEnd(), StringComparison.OrdinalIgnoreCase);
+                                if (keywordIdx >= 0)
+                                {
+                                    bestMatchStart = keywordIdx;
+                                    bestMatchLength = line.Length - keywordIdx; // Highlight the whole line from keyword
+                                }
+                                break;
+                            }
+                        }
+                    }
+                    if (bestLineIndex >= 0) break;
+                }
+                
+                // PASS 2: Look for sequence diagram messages (contains : followed by text)
+                if (bestLineIndex < 0)
+                {
+                    for (int i = 0; i < lines.Length; i++)
+                    {
+                        var line = lines[i];
+                        var colonIdx = line.IndexOf(':');
+                        if (colonIdx > 0)
+                        {
+                            var afterColon = line.Substring(colonIdx + 1).Trim();
+                            if (afterColon.Equals(normalizedText, StringComparison.OrdinalIgnoreCase) ||
+                                afterColon.Contains(normalizedText, StringComparison.OrdinalIgnoreCase))
+                            {
+                                bestLineIndex = i;
+                                var textIdx = line.IndexOf(normalizedText, StringComparison.OrdinalIgnoreCase);
+                                if (textIdx >= 0)
+                                {
+                                    bestMatchStart = textIdx;
+                                    bestMatchLength = normalizedText.Length;
+                                }
+                                else
+                                {
+                                    bestMatchStart = colonIdx + 1;
+                                    bestMatchLength = line.Length - colonIdx - 1;
+                                }
+                                break;
+                            }
                         }
                     }
                 }
                 
-                // If not found in brackets, try plain text search
+                // PASS 3: Look for text in brackets [text], (text), {text}, "text"
+                if (bestLineIndex < 0)
+                {
+                    for (int i = 0; i < lines.Length; i++)
+                    {
+                        var line = lines[i];
+                        var textIdx = line.IndexOf(normalizedText, StringComparison.OrdinalIgnoreCase);
+                        
+                        if (textIdx >= 0)
+                        {
+                            // Check if it's inside brackets
+                            var beforeText = textIdx > 0 ? line[textIdx - 1] : ' ';
+                            var afterIdx = textIdx + normalizedText.Length;
+                            var afterText = afterIdx < line.Length ? line[afterIdx] : ' ';
+                            
+                            // Check for common bracket pairs
+                            bool inBrackets = (beforeText == '[' && afterText == ']') ||
+                                             (beforeText == '(' && afterText == ')') ||
+                                             (beforeText == '{' && afterText == '}') ||
+                                             (beforeText == '"' && afterText == '"') ||
+                                             (beforeText == '\'' && afterText == '\'');
+                            
+                            if (inBrackets)
+                            {
+                                bestLineIndex = i;
+                                bestMatchStart = textIdx;
+                                bestMatchLength = normalizedText.Length;
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                // PASS 4: Look for participant/actor definitions
+                if (bestLineIndex < 0)
+                {
+                    string[] actorKeywords = { "participant ", "actor " };
+                    for (int i = 0; i < lines.Length; i++)
+                    {
+                        var line = lines[i];
+                        var trimmedLine = line.TrimStart();
+                        
+                        foreach (var keyword in actorKeywords)
+                        {
+                            if (trimmedLine.StartsWith(keyword, StringComparison.OrdinalIgnoreCase))
+                            {
+                                var afterKeyword = trimmedLine.Substring(keyword.Length).Trim();
+                                // Handle "participant A as Alice" format
+                                var asIdx = afterKeyword.IndexOf(" as ", StringComparison.OrdinalIgnoreCase);
+                                string actorName = asIdx > 0 ? afterKeyword.Substring(0, asIdx) : afterKeyword;
+                                string actorAlias = asIdx > 0 ? afterKeyword.Substring(asIdx + 4).Trim() : "";
+                                
+                                if (actorName.Equals(normalizedText, StringComparison.OrdinalIgnoreCase) ||
+                                    actorAlias.Equals(normalizedText, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    bestLineIndex = i;
+                                    var keywordIdx = line.IndexOf(keyword.TrimEnd(), StringComparison.OrdinalIgnoreCase);
+                                    if (keywordIdx >= 0)
+                                    {
+                                        bestMatchStart = keywordIdx;
+                                        bestMatchLength = line.Length - keywordIdx;
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                        if (bestLineIndex >= 0) break;
+                    }
+                }
+                
+                // PASS 5: Plain text search as final fallback
                 if (bestLineIndex < 0)
                 {
                     for (int i = 0; i < lines.Length; i++)
