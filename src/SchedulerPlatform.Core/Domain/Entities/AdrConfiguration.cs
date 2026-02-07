@@ -10,12 +10,6 @@ namespace SchedulerPlatform.Core.Domain.Entities;
 public class AdrConfiguration : BaseEntity
 {
     /// <summary>
-    /// Number of days before NextRunDateTime to start credential verification.
-    /// Default: 7 days
-    /// </summary>
-    public int CredentialCheckLeadDays { get; set; } = 7;
-    
-    /// <summary>
     /// DEPRECATED: This field is no longer used by the orchestration logic.
     /// Retry behavior is now controlled by the date range (NextRunDate through NextRangeEndDate)
     /// and MaxRetries. Kept for backward compatibility - can be removed in a future cleanup.

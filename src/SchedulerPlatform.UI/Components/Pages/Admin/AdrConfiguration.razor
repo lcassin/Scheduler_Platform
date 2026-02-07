@@ -52,14 +52,6 @@
                     </MudItem>
                     
                     <MudItem xs="12" sm="6" md="4">
-                        <MudNumericField @bind-Value="_config.CredentialCheckLeadDays" 
-                                         Label="Credential Check Lead Days" 
-                                         Variant="Variant.Outlined"
-                                         Min="1" Max="30"
-                                         HelperText="Days before NextRunDate to verify credentials" />
-                    </MudItem>
-                    
-                    <MudItem xs="12" sm="6" md="4">
                         <MudNumericField @bind-Value="_config.MaxRetries"
                                          Label="Max Retries" 
                                          Variant="Variant.Outlined"
@@ -425,7 +417,6 @@
     private class AdrConfigurationModel
     {
         public int Id { get; set; }
-        public int CredentialCheckLeadDays { get; set; } = 7;
         public int ScrapeRetryDays { get; set; } = 5;
         public int MaxRetries { get; set; } = 5;
         public int DailyStatusCheckDelayDays { get; set; } = 1;

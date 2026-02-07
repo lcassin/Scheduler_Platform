@@ -3949,7 +3949,6 @@ public class AdrController : ControllerBase
                 // Return default configuration if none exists
                 config = new AdrConfiguration
                 {
-                    CredentialCheckLeadDays = 7,
                     ScrapeRetryDays = 5,
                     MaxRetries = 5,
                     DailyStatusCheckDelayDays = 1,
@@ -4008,7 +4007,6 @@ public class AdrController : ControllerBase
             }
             
             // Update configuration values
-            config.CredentialCheckLeadDays = request.CredentialCheckLeadDays ?? config.CredentialCheckLeadDays;
             config.ScrapeRetryDays = request.ScrapeRetryDays ?? config.ScrapeRetryDays;
             config.MaxRetries = request.MaxRetries ?? config.MaxRetries;
             config.DailyStatusCheckDelayDays = request.DailyStatusCheckDelayDays ?? config.DailyStatusCheckDelayDays;
@@ -5264,7 +5262,6 @@ public class AdrStatusCheckApiResponse
 /// </summary>
 public class UpdateAdrConfigurationRequest
 {
-    public int? CredentialCheckLeadDays { get; set; }
     public int? ScrapeRetryDays { get; set; }
     public int? MaxRetries { get; set; }
     public int? DailyStatusCheckDelayDays { get; set; }
