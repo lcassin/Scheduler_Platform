@@ -2735,20 +2735,20 @@ Console.WriteLine(""Hello, World!"");
         Close();
     }
 
+    private bool _isUpdatingZoomSlider = false;
+    
     private async void ZoomIn_Click(object sender, RoutedEventArgs e)
     {
         if (!_webViewInitialized) return;
-        _currentZoom = Math.Min(_currentZoom * 1.25, 10);
-        await PreviewWebView.CoreWebView2.ExecuteScriptAsync($"window.setZoom({_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)})");
-        ZoomLevelText.Text = $"{_currentZoom * 100:F0}%";
+        _currentZoom = Math.Min(_currentZoom * 1.25, 5);
+        await ApplyZoom();
     }
 
     private async void ZoomOut_Click(object sender, RoutedEventArgs e)
     {
         if (!_webViewInitialized) return;
         _currentZoom = Math.Max(_currentZoom / 1.25, 0.1);
-        await PreviewWebView.CoreWebView2.ExecuteScriptAsync($"window.setZoom({_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)})");
-        ZoomLevelText.Text = $"{_currentZoom * 100:F0}%";
+        await ApplyZoom();
     }
 
     private async void ResetZoom_Click(object sender, RoutedEventArgs e)
@@ -2756,13 +2756,35 @@ Console.WriteLine(""Hello, World!"");
         if (!_webViewInitialized) return;
         _currentZoom = 1.0;
         await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.resetView()");
-        ZoomLevelText.Text = "100%";
+        UpdateZoomUI();
     }
 
     private async void FitToWindow_Click(object sender, RoutedEventArgs e)
     {
         if (!_webViewInitialized) return;
         await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.fitToWindow()");
+    }
+    
+    private async void ZoomSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_isUpdatingZoomSlider || !_webViewInitialized) return;
+        _currentZoom = e.NewValue / 100.0;
+        await PreviewWebView.CoreWebView2.ExecuteScriptAsync($"window.setZoom({_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)})");
+        ZoomLevelText.Text = $"{e.NewValue:F0}%";
+    }
+    
+    private async Task ApplyZoom()
+    {
+        await PreviewWebView.CoreWebView2.ExecuteScriptAsync($"window.setZoom({_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)})");
+        UpdateZoomUI();
+    }
+    
+    private void UpdateZoomUI()
+    {
+        _isUpdatingZoomSlider = true;
+        ZoomSlider.Value = _currentZoom * 100;
+        ZoomLevelText.Text = $"{_currentZoom * 100:F0}%";
+        _isUpdatingZoomSlider = false;
     }
 
     private void SyntaxHelp_Click(object sender, RoutedEventArgs e)

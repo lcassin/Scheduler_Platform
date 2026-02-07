@@ -691,34 +691,6 @@
                             <TextBlock Text="Redo" Margin="4,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
-                    <Separator Background="{StaticResource BorderBrush}" Margin="4,4"/>
-                    <Button Click="ZoomIn_Click" ToolTip="Zoom In (Ctrl++)" Style="{StaticResource ToolbarButtonStyle}">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE8A3;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                            <TextBlock Text="Zoom In" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Button>
-                    <Button Click="ZoomOut_Click" ToolTip="Zoom Out (Ctrl+-)" Style="{StaticResource ToolbarButtonStyle}">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE71F;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                            <TextBlock Text="Zoom Out" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Button>
-                    <Button Click="ResetZoom_Click" ToolTip="Reset Zoom (Ctrl+0)" Style="{StaticResource ToolbarButtonStyle}">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE72C;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                            <TextBlock Text="Reset" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Button>
-                    <Button Click="FitToWindow_Click" ToolTip="Fit to Window (Ctrl+F)" Style="{StaticResource ToolbarButtonStyle}">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="&#xE9A6;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                            <TextBlock Text="Fit" Margin="4,0,0,0" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Button>
-                    <Separator Background="{StaticResource BorderBrush}" Margin="4,4"/>
-                    <TextBlock Text="&#xE71E;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{StaticResource ForegroundBrush}" VerticalAlignment="Center" Margin="4,0,0,0"/>
-                    <TextBlock x:Name="ZoomLevelText" Text="100%" Foreground="{StaticResource ForegroundBrush}" VerticalAlignment="Center" Width="50" Margin="4,0,0,0"/>
                         </ToolBar>
                     </ToolBarTray>
                 </Border>
@@ -898,6 +870,42 @@
             <Separator/>
             <StatusBarItem>
                 <TextBlock x:Name="FilePathText" Text="Untitled"/>
+            </StatusBarItem>
+            <!-- Spacer to push zoom controls to the right -->
+            <StatusBarItem HorizontalAlignment="Right" DockPanel.Dock="Right">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- Fit to Window button -->
+                    <Button x:Name="FitButton" Click="FitToWindow_Click" ToolTip="Fit to Window (Ctrl+F)" 
+                            Background="Transparent" BorderThickness="0" Padding="4,2" Margin="0,0,8,0"
+                            Cursor="Hand">
+                        <TextBlock Text="&#xE9A6;" FontFamily="Segoe MDL2 Assets" FontSize="12" VerticalAlignment="Center"/>
+                    </Button>
+                    <Separator/>
+                    <!-- Zoom Out button -->
+                    <Button x:Name="ZoomOutButton" Click="ZoomOut_Click" ToolTip="Zoom Out (Ctrl+-)" 
+                            Background="Transparent" BorderThickness="0" Padding="2" Margin="4,0,0,0"
+                            Cursor="Hand">
+                        <TextBlock Text="-" FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
+                    </Button>
+                    <!-- Zoom Slider -->
+                    <Slider x:Name="ZoomSlider" 
+                            Width="100" 
+                            Minimum="10" 
+                            Maximum="500" 
+                            Value="100"
+                            VerticalAlignment="Center"
+                            Margin="4,0"
+                            ValueChanged="ZoomSlider_ValueChanged"
+                            ToolTip="Zoom Level"/>
+                    <!-- Zoom In button -->
+                    <Button x:Name="ZoomInButton" Click="ZoomIn_Click" ToolTip="Zoom In (Ctrl++)" 
+                            Background="Transparent" BorderThickness="0" Padding="2" Margin="0,0,4,0"
+                            Cursor="Hand">
+                        <TextBlock Text="+" FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
+                    </Button>
+                    <!-- Zoom percentage display -->
+                    <TextBlock x:Name="ZoomLevelText" Text="100%" VerticalAlignment="Center" Width="45" TextAlignment="Right" Margin="4,0,8,0"/>
+                </StackPanel>
             </StatusBarItem>
         </StatusBar>
     </Grid>
