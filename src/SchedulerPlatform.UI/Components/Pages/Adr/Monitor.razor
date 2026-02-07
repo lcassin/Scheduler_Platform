@@ -350,7 +350,7 @@
                                         {
                                             <MudItem xs="6">
                                                 <MudText Typo="Typo.body2">
-                                                    <MudIcon Icon="@Icons.Material.Filled.Circle" Size="Size.Small" Color="@GetStatusColor(status.Key)" Class="mr-1" />
+                                                    <span style="color: @GetStatusHexColor(status.Key); font-size: 12px;">&#9679;</span>
                                                     @status.Key: @status.Value
                                                 </MudText>
                                             </MudItem>
@@ -1631,6 +1631,21 @@
         "Cancelled" => Color.Warning,
         "Interrupted" => Color.Secondary,
         _ => Color.Default
+    };
+
+    /// <summary>
+    /// Returns the hex color for a status to match the pie chart colors exactly.
+    /// Used for the custom legend to ensure color consistency.
+    /// </summary>
+    private string GetStatusHexColor(string status) => status switch
+    {
+        "Completed" => "#66bb6a",   // Green
+        "Failed" => "#f44336",      // Red
+        "Cancelled" => "#ff9800",   // Orange
+        "Interrupted" => "#ab47bc", // Purple
+        "Running" => "#42a5f5",     // Blue
+        "Queued" => "#9e9e9e",      // Gray
+        _ => "#9e9e9e"              // Default gray
     };
 
     private Color GetStepColor(string stepName, AdrOrchestrationStatus status)
