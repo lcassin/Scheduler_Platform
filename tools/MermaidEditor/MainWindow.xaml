@@ -963,11 +963,11 @@
         <!-- Status Bar -->
         <StatusBar Grid.Row="3">
             <StatusBarItem>
-                <TextBlock x:Name="StatusText" Text="Ready"/>
+                <TextBlock x:Name="StatusText" Text="Ready" Foreground="#7d7d7d"/>
             </StatusBarItem>
             <Separator/>
             <StatusBarItem>
-                <TextBlock x:Name="FilePathText" Text="Untitled"/>
+                <TextBlock x:Name="FilePathText" Text="Untitled" Foreground="#7d7d7d"/>
             </StatusBarItem>
             <!-- Spacer to push zoom controls to the right -->
             <StatusBarItem HorizontalAlignment="Right" DockPanel.Dock="Right">
@@ -975,13 +975,13 @@
                     <!-- Fit to Window button -->
                     <Button x:Name="FitButton" Click="FitToWindow_Click" ToolTip="Fit to Window (Ctrl+F)" 
                             Style="{StaticResource StatusBarButtonStyle}" Margin="0,0,8,0">
-                        <TextBlock Text="&#xE9A6;" FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="#808080" VerticalAlignment="Center"/>
+                        <TextBlock Text="&#xE9A6;" FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="#7d7d7d" VerticalAlignment="Center"/>
                     </Button>
                     <Separator/>
                     <!-- Zoom Out button -->
                     <Button x:Name="ZoomOutButton" Click="ZoomOut_Click" ToolTip="Zoom Out (Ctrl+-)" 
                             Style="{StaticResource StatusBarButtonStyle}" Margin="4,0,0,0">
-                        <TextBlock Text="-" FontSize="14" FontWeight="Bold" Foreground="#808080" VerticalAlignment="Center"/>
+                        <TextBlock Text="-" FontSize="14" FontWeight="Bold" Foreground="#7d7d7d" VerticalAlignment="Center"/>
                     </Button>
                     <!-- Zoom Slider -->
                     <Slider x:Name="ZoomSlider" 
@@ -997,10 +997,10 @@
                     <!-- Zoom In button -->
                     <Button x:Name="ZoomInButton" Click="ZoomIn_Click" ToolTip="Zoom In (Ctrl++)" 
                             Style="{StaticResource StatusBarButtonStyle}" Margin="0,0,4,0">
-                        <TextBlock Text="+" FontSize="14" FontWeight="Bold" Foreground="#808080" VerticalAlignment="Center"/>
+                        <TextBlock Text="+" FontSize="14" FontWeight="Bold" Foreground="#7d7d7d" VerticalAlignment="Center"/>
                     </Button>
                     <!-- Zoom percentage display -->
-                    <TextBlock x:Name="ZoomLevelText" Text="100%" Foreground="#808080" VerticalAlignment="Center" Width="45" TextAlignment="Right" Margin="4,0,8,0"/>
+                    <TextBlock x:Name="ZoomLevelText" Text="100%" Foreground="#7d7d7d" VerticalAlignment="Center" Width="45" TextAlignment="Right" Margin="4,0,8,0"/>
                 </StackPanel>
             </StatusBarItem>
         </StatusBar>
