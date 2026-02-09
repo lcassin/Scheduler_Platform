@@ -78,6 +78,7 @@ public partial class MainWindow : Window
     private bool _isGoingBack; // Flag set when user clicks back button, cleared after navigation completes
     private bool _hasNavigatedAway; // Track if user has navigated away from rendered content
     private bool _markdownPageLoaded; // Track if Markdown page structure is already loaded (for incremental updates)
+    private bool _mermaidPageLoaded; // Track if Mermaid page structure is already loaded (for incremental updates)
     
     // File change detection
     private FileSystemWatcher? _fileWatcher;
@@ -600,10 +601,14 @@ Console.WriteLine(""Hello, World!"");
             _hasNavigatedAway = false;
             PreviewBackButton.IsEnabled = false;
             
-            // Mark Markdown page as loaded so subsequent updates use JavaScript instead of page reload
+            // Mark page as loaded so subsequent updates use JavaScript instead of page reload
             if (_currentRenderMode == RenderMode.Markdown)
             {
                 _markdownPageLoaded = true;
+            }
+            else if (_currentRenderMode == RenderMode.Mermaid)
+            {
+                _mermaidPageLoaded = true;
             }
         }
         else if (_isGoingBack)
@@ -612,16 +617,18 @@ Console.WriteLine(""Hello, World!"");
             _isGoingBack = false;
             _hasNavigatedAway = false;
             PreviewBackButton.IsEnabled = false;
-            // Reset markdown page loaded flag since we navigated away
+            // Reset page loaded flags since we navigated away
             _markdownPageLoaded = false;
+            _mermaidPageLoaded = false;
         }
         else
         {
             // User has navigated away from rendered content (clicked a link)
             _hasNavigatedAway = true;
             PreviewBackButton.IsEnabled = true;
-            // Reset markdown page loaded flag since we navigated away
+            // Reset page loaded flags since we navigated away
             _markdownPageLoaded = false;
+            _mermaidPageLoaded = false;
         }
     }
     
@@ -832,7 +839,7 @@ Console.WriteLine(""Hello, World!"");
         }
     }
 
-    private void RenderMermaid()
+    private async void RenderMermaid()
     {
         if (!_webViewInitialized) return;
         
@@ -841,6 +848,29 @@ Console.WriteLine(""Hello, World!"");
 
         var mermaidCode = CodeEditor.Text;
         var escapedCode = System.Text.Json.JsonSerializer.Serialize(mermaidCode);
+        
+        // If page is already loaded, just update the diagram via JavaScript (preserves pan/zoom position)
+        if (_mermaidPageLoaded && !_hasNavigatedAway)
+        {
+            try
+            {
+                // Update diagram without reloading the page - pan/zoom position is preserved
+                await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
+                    (function() {{
+                        if (typeof updateDiagram === 'function') {{
+                            updateDiagram({escapedCode});
+                        }}
+                    }})();
+                ");
+                StatusText.Text = "Mermaid rendered";
+                return;
+            }
+            catch
+            {
+                // If JavaScript update fails, fall back to full page reload
+                _mermaidPageLoaded = false;
+            }
+        }
 
         var html = $@"<!DOCTYPE html>
 <html>
@@ -1160,6 +1190,98 @@ Console.WriteLine(""Hello, World!"");
                 window.chrome.webview.postMessage({{ type: 'pngExportError', error: e.message }});
             }}
         }};
+        
+        // Update diagram content without reloading the page (preserves pan/zoom position)
+        window.updateDiagram = function(newCode) {{
+            // Save current panzoom transform
+            let savedTransform = null;
+            if (panzoomInstance) {{
+                savedTransform = panzoomInstance.getTransform();
+            }}
+            
+            const diagram = document.getElementById('diagram');
+            
+            // Clear existing content and add new mermaid code
+            diagram.innerHTML = '<pre class=""mermaid"">' + newCode.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>';
+            diagram.classList.remove('has-error');
+            diagram.style.minWidth = '2000px';
+            diagram.style.width = '';
+            
+            // Destroy old panzoom instance
+            if (panzoomInstance) {{
+                panzoomInstance.dispose();
+                panzoomInstance = null;
+            }}
+            
+            // Re-render mermaid
+            mermaid.run().then(() => {{
+                const svg = document.querySelector('#diagram svg');
+                
+                // Fix SVG and container dimensions after render
+                if (svg) {{
+                    let svgWidth = 0;
+                    let svgHeight = 0;
+                    
+                    const viewBox = svg.getAttribute('viewBox');
+                    if (viewBox) {{
+                        const parts = viewBox.split(' ');
+                        if (parts.length === 4) {{
+                            svgWidth = parseFloat(parts[2]);
+                            svgHeight = parseFloat(parts[3]);
+                        }}
+                    }}
+                    
+                    if (svgWidth === 0 || svgHeight === 0) {{
+                        try {{
+                            const bbox = svg.getBBox();
+                            svgWidth = bbox.width + 40;
+                            svgHeight = bbox.height + 40;
+                        }} catch (e) {{ }}
+                    }}
+                    
+                    if (svgWidth > 0 && svgHeight > 0) {{
+                        svg.style.width = svgWidth + 'px';
+                        svg.style.height = svgHeight + 'px';
+                        svg.style.minWidth = svgWidth + 'px';
+                        svg.style.minHeight = svgHeight + 'px';
+                        
+                        diagram.style.minWidth = 'auto';
+                        diagram.style.width = 'auto';
+                    }}
+                    
+                    // Set up click handlers
+                    setupNodeClickHandlers(svg);
+                }}
+                
+                // Re-create panzoom
+                panzoomInstance = panzoom(diagram, {{
+                    maxZoom: 10,
+                    minZoom: 0.1,
+                    initialZoom: 1,
+                    bounds: false,
+                    boundsPadding: 0.1
+                }});
+                
+                // Restore saved transform (pan/zoom position)
+                if (savedTransform) {{
+                    panzoomInstance.moveTo(savedTransform.x, savedTransform.y);
+                    panzoomInstance.zoomAbs(0, 0, savedTransform.scale);
+                    currentZoom = savedTransform.scale;
+                }} else {{
+                    panzoomInstance.moveTo(0, 0);
+                    panzoomInstance.zoomAbs(0, 0, 1);
+                    currentZoom = 1;
+                }}
+                
+                panzoomInstance.on('zoom', function(e) {{
+                    currentZoom = e.getTransform().scale;
+                    window.chrome.webview.postMessage({{ type: 'zoom', level: currentZoom }});
+                }});
+            }}).catch(err => {{
+                diagram.classList.add('has-error');
+                diagram.innerHTML = '<div class=""error"">Error: ' + err.message + '</div>';
+            }});
+        }};
     </script>
 </body>
 </html>";
@@ -1174,6 +1296,9 @@ Console.WriteLine(""Hello, World!"");
     private async void RenderMarkdown()
     {
         if (!_webViewInitialized) return;
+        
+        // Reset mermaid page loaded flag since we're switching to Markdown mode
+        _mermaidPageLoaded = false;
 
         var markdownCode = CodeEditor.Text;
         var escapedCode = System.Text.Json.JsonSerializer.Serialize(markdownCode);
