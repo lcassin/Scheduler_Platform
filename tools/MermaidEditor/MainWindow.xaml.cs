@@ -2928,32 +2928,115 @@ Console.WriteLine(""Hello, World!"");
 
     private void About_Click(object sender, RoutedEventArgs e)
     {
-        MessageBox.Show(
-            "Mermaid Editor v2.0.0\n\n" +
-            "A visual IDE for editing Mermaid diagrams and Markdown files.\n\n" +
-            "Features:\n" +
-            "- Live preview as you type\n" +
-            "- Mermaid diagram rendering with pan/zoom\n" +
-            "- Markdown rendering with GitHub styling\n" +
-            "- Syntax highlighting and IntelliSense\n" +
-            "- Click-to-navigate between preview and code\n" +
-            "- Navigation dropdown for quick section jumping\n" +
-            "- Export to PNG, SVG, EMF, and Word\n" +
-            "- Word export embeds images for Markdown files\n" +
-            "- New document templates for all diagram types\n" +
-            "- File browser with preview on selection\n" +
-            "- Drag and drop file support\n" +
-            "- Undo/Redo support\n\n" +
-            "Supported file types:\n" +
-            "- .mmd, .mermaid - Mermaid diagrams\n" +
-            "- .md - Markdown files\n\n" +
-            "\u00A9 2026 Lee Cassin\n\n" +
-            "Licensed under the GNU General Public License v3.0\n" +
-            "This is free software; you are free to change and redistribute it.\n" +
-            "See LICENSE file for details.",
-            "About Mermaid Editor",
-            MessageBoxButton.OK,
-            MessageBoxImage.Information);
+        // Create custom About dialog with Mermaid icon
+        var aboutWindow = new Window
+        {
+            Title = "About Mermaid Editor",
+            Width = 500,
+            Height = 480,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Owner = this,
+            ResizeMode = ResizeMode.NoResize,
+            Background = (SolidColorBrush)System.Windows.Application.Current.Resources["ThemeBackgroundBrush"]
+        };
+        
+        var mainGrid = new Grid { Margin = new Thickness(20) };
+        mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        
+        // Header with icon and title
+        var headerPanel = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 16) };
+        
+        // Load the app icon
+        var iconImage = new System.Windows.Controls.Image
+        {
+            Width = 64,
+            Height = 64,
+            Margin = new Thickness(0, 0, 16, 0)
+        };
+        try
+        {
+            var iconUri = new Uri("pack://application:,,,/app.ico", UriKind.Absolute);
+            iconImage.Source = new System.Windows.Media.Imaging.BitmapImage(iconUri);
+        }
+        catch
+        {
+            // If icon fails to load, continue without it
+        }
+        
+        var titlePanel = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        titlePanel.Children.Add(new TextBlock
+        {
+            Text = "Mermaid Editor",
+            FontSize = 24,
+            FontWeight = FontWeights.Bold,
+            Foreground = (SolidColorBrush)System.Windows.Application.Current.Resources["ThemeForegroundBrush"]
+        });
+        titlePanel.Children.Add(new TextBlock
+        {
+            Text = "Version 2.0.0",
+            FontSize = 14,
+            Foreground = (SolidColorBrush)System.Windows.Application.Current.Resources["ThemeDisabledForegroundBrush"],
+            Margin = new Thickness(0, 4, 0, 0)
+        });
+        
+        headerPanel.Children.Add(iconImage);
+        headerPanel.Children.Add(titlePanel);
+        Grid.SetRow(headerPanel, 0);
+        
+        // Content with description
+        var contentScroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        var contentText = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = (SolidColorBrush)System.Windows.Application.Current.Resources["ThemeForegroundBrush"],
+            Text = "A visual IDE for editing Mermaid diagrams and Markdown files.\n\n" +
+                   "Features:\n" +
+                   "- Live preview as you type\n" +
+                   "- Mermaid diagram rendering with pan/zoom\n" +
+                   "- Markdown rendering with GitHub styling\n" +
+                   "- Syntax highlighting and IntelliSense\n" +
+                   "- Click-to-navigate between preview and code\n" +
+                   "- Navigation dropdown for quick section jumping\n" +
+                   "- Export to PNG, SVG, EMF, and Word\n" +
+                   "- Word export embeds images for Markdown files\n" +
+                   "- New document templates for all diagram types\n" +
+                   "- File browser with preview on selection\n" +
+                   "- Drag and drop file support\n" +
+                   "- Undo/Redo support\n\n" +
+                   "Supported file types:\n" +
+                   "- .mmd, .mermaid - Mermaid diagrams\n" +
+                   "- .md - Markdown files\n\n" +
+                   "\u00A9 2026 Lee Cassin\n\n" +
+                   "Licensed under the GNU General Public License v3.0\n" +
+                   "This is free software; you are free to change and redistribute it.\n" +
+                   "See LICENSE file for details."
+        };
+        contentScroll.Content = contentText;
+        Grid.SetRow(contentScroll, 1);
+        
+        // OK button
+        var okButton = new System.Windows.Controls.Button
+        {
+            Content = "OK",
+            Width = 80,
+            Padding = new Thickness(8, 6, 8, 6),
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
+            Margin = new Thickness(0, 16, 0, 0),
+            Background = (SolidColorBrush)System.Windows.Application.Current.Resources["ThemeToolbarBackgroundBrush"],
+            Foreground = (SolidColorBrush)System.Windows.Application.Current.Resources["ThemeForegroundBrush"],
+            BorderBrush = (SolidColorBrush)System.Windows.Application.Current.Resources["ThemeBorderBrush"]
+        };
+        okButton.Click += (s, args) => aboutWindow.Close();
+        Grid.SetRow(okButton, 2);
+        
+        mainGrid.Children.Add(headerPanel);
+        mainGrid.Children.Add(contentScroll);
+        mainGrid.Children.Add(okButton);
+        
+        aboutWindow.Content = mainGrid;
+        aboutWindow.ShowDialog();
     }
 
     private void ThemeDark_Click(object sender, RoutedEventArgs e)
