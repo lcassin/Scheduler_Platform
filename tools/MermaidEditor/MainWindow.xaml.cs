@@ -545,6 +545,11 @@ Console.WriteLine(""Hello, World!"");
     {
         try
         {
+            // Load and apply saved theme
+            ThemeManager.LoadTheme();
+            UpdateThemeMenuCheckmarks();
+            UpdateEditorTheme();
+            
             await PreviewWebView.EnsureCoreWebView2Async();
             _webViewInitialized = true;
             
@@ -2922,7 +2927,7 @@ Console.WriteLine(""Hello, World!"");
     private void About_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show(
-            "Mermaid Editor v1.7\n\n" +
+            "Mermaid Editor v2.0.0\n\n" +
             "A visual IDE for editing Mermaid diagrams and Markdown files.\n\n" +
             "Features:\n" +
             "- Live preview as you type\n" +
@@ -2947,6 +2952,125 @@ Console.WriteLine(""Hello, World!"");
             "About Mermaid Editor",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
+    }
+
+    private void ThemeDark_Click(object sender, RoutedEventArgs e)
+    {
+        ApplyTheme(AppTheme.Dark);
+    }
+
+    private void ThemeLight_Click(object sender, RoutedEventArgs e)
+    {
+        ApplyTheme(AppTheme.Light);
+    }
+
+    private void ThemeTwilight_Click(object sender, RoutedEventArgs e)
+    {
+        ApplyTheme(AppTheme.Twilight);
+    }
+
+    private void ApplyTheme(AppTheme theme)
+    {
+        ThemeManager.ApplyTheme(theme);
+        UpdateThemeMenuCheckmarks();
+        UpdateEditorTheme();
+        UpdateTitleBarTheme();
+        RenderPreview(); // Re-render preview with new theme
+    }
+
+    private void UpdateThemeMenuCheckmarks()
+    {
+        ThemeDarkMenuItem.IsChecked = ThemeManager.CurrentTheme == AppTheme.Dark;
+        ThemeLightMenuItem.IsChecked = ThemeManager.CurrentTheme == AppTheme.Light;
+        ThemeTwilightMenuItem.IsChecked = ThemeManager.CurrentTheme == AppTheme.Twilight;
+    }
+
+    private void UpdateEditorTheme()
+    {
+        var colors = ThemeManager.GetThemeColors(ThemeManager.CurrentTheme);
+        
+        // Update AvalonEdit colors
+        CodeEditor.Background = new SolidColorBrush(colors.EditorBackground);
+        CodeEditor.Foreground = new SolidColorBrush(colors.EditorForeground);
+        CodeEditor.LineNumbersForeground = new SolidColorBrush(colors.LineNumber);
+        
+        // Update syntax highlighting based on theme
+        RegisterThemeSyntaxHighlighting();
+    }
+
+    private void RegisterThemeSyntaxHighlighting()
+    {
+        var isDark = ThemeManager.IsDarkTheme;
+        
+        // Color values based on theme
+        var commentColor = isDark ? "#6A9955" : "#008000";
+        var keywordColor = isDark ? "#569CD6" : "#0000FF";
+        var diagramTypeColor = isDark ? "#C586C0" : "#AF00DB";
+        
+        var xshd = "<?xml version=\"1.0\"?>" +
+            "<SyntaxDefinition name=\"Mermaid\" xmlns=\"http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008\">" +
+            "<Color name=\"Comment\" foreground=\"" + commentColor + "\" />" +
+            "<Color name=\"Keyword\" foreground=\"" + keywordColor + "\" fontWeight=\"bold\" />" +
+            "<Color name=\"DiagramType\" foreground=\"" + diagramTypeColor + "\" fontWeight=\"bold\" />" +
+            "<RuleSet>" +
+            "<Span color=\"Comment\" begin=\"%%\" />" +
+            "<Keywords color=\"DiagramType\">" +
+            "<Word>flowchart</Word><Word>graph</Word><Word>sequenceDiagram</Word>" +
+            "<Word>classDiagram</Word><Word>stateDiagram</Word><Word>erDiagram</Word>" +
+            "<Word>journey</Word><Word>gantt</Word><Word>pie</Word><Word>mindmap</Word>" +
+            "<Word>timeline</Word><Word>gitGraph</Word><Word>quadrantChart</Word>" +
+            "</Keywords>" +
+            "<Keywords color=\"Keyword\">" +
+            "<Word>subgraph</Word><Word>end</Word><Word>direction</Word>" +
+            "<Word>participant</Word><Word>actor</Word><Word>activate</Word><Word>deactivate</Word>" +
+            "<Word>Note</Word><Word>note</Word><Word>loop</Word><Word>alt</Word><Word>else</Word>" +
+            "<Word>opt</Word><Word>par</Word><Word>critical</Word><Word>break</Word><Word>rect</Word>" +
+            "<Word>class</Word><Word>state</Word><Word>section</Word><Word>title</Word>" +
+            "<Word>TB</Word><Word>TD</Word><Word>BT</Word><Word>RL</Word><Word>LR</Word>" +
+            "</Keywords>" +
+            "</RuleSet>" +
+            "</SyntaxDefinition>";
+
+        try
+        {
+            using var reader = new XmlTextReader(new StringReader(xshd));
+            var definition = HighlightingLoader.Load(reader, HighlightingManager.Instance);
+            HighlightingManager.Instance.RegisterHighlighting("Mermaid", new[] { ".mmd", ".mermaid" }, definition);
+            CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
+        }
+        catch
+        {
+            // If syntax highlighting fails, continue without it
+        }
+    }
+
+    private void UpdateTitleBarTheme()
+    {
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd != IntPtr.Zero)
+            {
+                var isDark = ThemeManager.IsDarkTheme;
+                int darkModeValue = isDark ? 1 : 0;
+                DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkModeValue, sizeof(int));
+                
+                // Set caption color based on theme
+                var colors = ThemeManager.GetThemeColors(ThemeManager.CurrentTheme);
+                int captionColor = ColorToInt(colors.Background);
+                DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ref captionColor, sizeof(int));
+            }
+        }
+        catch
+        {
+            // Silently fail if DWM API is not available
+        }
+    }
+
+    private static int ColorToInt(System.Windows.Media.Color color)
+    {
+        // Color format is 0x00BBGGRR (BGR, not RGB)
+        return (color.B << 16) | (color.G << 8) | color.R;
     }
 
     private void RenderMermaidPreview(string code)
