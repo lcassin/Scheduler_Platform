@@ -1301,10 +1301,14 @@ Console.WriteLine(""Hello, World!"");
                 }});
             }});
             
-            // Add click handlers to list items
+            // Add click handlers to list items - handle clicks anywhere in the list item
             content.querySelectorAll('li').forEach(el => {{
                 el.style.cursor = 'pointer';
                 el.addEventListener('click', function(e) {{
+                    // Don't navigate if clicking on a link
+                    if (e.target.tagName === 'A' || e.target.closest('a')) {{
+                        return;
+                    }}
                     e.stopPropagation();
                     const text = el.textContent.trim();
                     if (text) {{
@@ -1334,33 +1338,61 @@ Console.WriteLine(""Hello, World!"");
             }});
             
             // Add click handlers to bold text (strong)
+            // If inside a list item, use the list item's text for better context
             content.querySelectorAll('strong').forEach(el => {{
                 el.style.cursor = 'pointer';
                 el.addEventListener('click', function(e) {{
                     e.stopPropagation();
-                    const text = el.textContent.trim();
-                    if (text) {{
-                        window.chrome.webview.postMessage({{ 
-                            type: 'elementClick', 
-                            text: text,
-                            elementType: 'bold'
-                        }});
+                    const listItem = el.closest('li');
+                    if (listItem) {{
+                        // Use list item text for better matching
+                        const text = listItem.textContent.trim();
+                        if (text) {{
+                            window.chrome.webview.postMessage({{ 
+                                type: 'elementClick', 
+                                text: text,
+                                elementType: 'listitem'
+                            }});
+                        }}
+                    }} else {{
+                        const text = el.textContent.trim();
+                        if (text) {{
+                            window.chrome.webview.postMessage({{ 
+                                type: 'elementClick', 
+                                text: text,
+                                elementType: 'bold'
+                            }});
+                        }}
                     }}
                 }});
             }});
             
             // Add click handlers to italic text (em)
+            // If inside a list item, use the list item's text for better context
             content.querySelectorAll('em').forEach(el => {{
                 el.style.cursor = 'pointer';
                 el.addEventListener('click', function(e) {{
                     e.stopPropagation();
-                    const text = el.textContent.trim();
-                    if (text) {{
-                        window.chrome.webview.postMessage({{ 
-                            type: 'elementClick', 
-                            text: text,
-                            elementType: 'italic'
-                        }});
+                    const listItem = el.closest('li');
+                    if (listItem) {{
+                        // Use list item text for better matching
+                        const text = listItem.textContent.trim();
+                        if (text) {{
+                            window.chrome.webview.postMessage({{ 
+                                type: 'elementClick', 
+                                text: text,
+                                elementType: 'listitem'
+                            }});
+                        }}
+                    }} else {{
+                        const text = el.textContent.trim();
+                        if (text) {{
+                            window.chrome.webview.postMessage({{ 
+                                type: 'elementClick', 
+                                text: text,
+                                elementType: 'italic'
+                            }});
+                        }}
                     }}
                 }});
             }});
@@ -1588,6 +1620,32 @@ Console.WriteLine(""Hello, World!"");
                         var idx = line.IndexOf(normalizedText, StringComparison.OrdinalIgnoreCase);
                         if (idx >= 0) { bestMatchStart = idx; bestMatchLength = normalizedText.Length; }
                         break;
+                    }
+                    else if (elementType == "listitem")
+                    {
+                        // For list items, look for lines starting with - or * and containing the text
+                        var trimmedLine = line.TrimStart();
+                        if ((trimmedLine.StartsWith("- ") || trimmedLine.StartsWith("* ") || trimmedLine.StartsWith("+ ")) &&
+                            LineContainsListItemText(line, normalizedText))
+                        {
+                            bestLineIndex = i;
+                            bestMatchStart = 0;
+                            bestMatchLength = line.Length;
+                            break;
+                        }
+                    }
+                    else if (elementType == "paragraph")
+                    {
+                        // For paragraphs, search for any part of the text (handles Markdown syntax differences)
+                        // Try to find a line that contains a significant portion of the text
+                        var searchText = normalizedText.Length > 20 ? normalizedText.Substring(0, 20) : normalizedText;
+                        if (line.Contains(searchText, StringComparison.OrdinalIgnoreCase))
+                        {
+                            bestLineIndex = i;
+                            var idx = line.IndexOf(searchText, StringComparison.OrdinalIgnoreCase);
+                            if (idx >= 0) { bestMatchStart = idx; bestMatchLength = searchText.Length; }
+                            break;
+                        }
                     }
                     else if (string.IsNullOrEmpty(elementType) || elementType == "text")
                     {
@@ -1825,6 +1883,32 @@ Console.WriteLine(""Hello, World!"");
         {
             StatusText.Text = "Element not found in source";
         }
+    }
+
+    /// <summary>
+    /// Helper method to check if a Markdown list item line contains the rendered text.
+    /// Handles Markdown syntax like **bold**, *italic*, [links](url), etc.
+    /// </summary>
+    private bool LineContainsListItemText(string line, string renderedText)
+    {
+        // The rendered text is what appears in the browser (without Markdown syntax)
+        // We need to check if the line contains the key words from the rendered text
+        
+        // Split the rendered text into words and check if the line contains them
+        var words = renderedText.Split(new[] { ' ', '-', ':', ',', '.' }, StringSplitOptions.RemoveEmptyEntries);
+        
+        // Check if the line contains at least the first few significant words
+        int matchCount = 0;
+        foreach (var word in words.Take(5))
+        {
+            if (word.Length > 2 && line.Contains(word, StringComparison.OrdinalIgnoreCase))
+            {
+                matchCount++;
+            }
+        }
+        
+        // If we match at least 2 words (or all words if less than 2), consider it a match
+        return matchCount >= Math.Min(2, words.Length);
     }
 
     private void UpdateTitle()
