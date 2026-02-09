@@ -94,6 +94,27 @@ public static class ThemeManager
         resources["ThemeSliderThumbHoverColor"] = colors.SliderThumbHover;
         resources["ThemeTabSelectedBackgroundColor"] = colors.TabSelectedBackground;
         
+        // Update brush resources directly (required for DynamicResource to work properly)
+        resources["ThemeBackgroundBrush"] = new SolidColorBrush(colors.Background);
+        resources["ThemeMenuBackgroundBrush"] = new SolidColorBrush(colors.MenuBackground);
+        resources["ThemeToolbarBackgroundBrush"] = new SolidColorBrush(colors.ToolbarBackground);
+        resources["ThemeBorderBrush"] = new SolidColorBrush(colors.Border);
+        resources["ThemeForegroundBrush"] = new SolidColorBrush(colors.Foreground);
+        resources["ThemeAccentBrush"] = new SolidColorBrush(colors.Accent);
+        resources["ThemePurpleAccentBrush"] = new SolidColorBrush(colors.PurpleAccent);
+        resources["ThemeHoverBrush"] = new SolidColorBrush(colors.Hover);
+        resources["ThemeSelectedBrush"] = new SolidColorBrush(colors.Selected);
+        resources["ThemeDisabledForegroundBrush"] = new SolidColorBrush(colors.DisabledForeground);
+        resources["ThemeEditorBackgroundBrush"] = new SolidColorBrush(colors.EditorBackground);
+        resources["ThemeEditorForegroundBrush"] = new SolidColorBrush(colors.EditorForeground);
+        resources["ThemeLineNumberBrush"] = new SolidColorBrush(colors.LineNumber);
+        resources["ThemeSelectionBrush"] = new SolidColorBrush(colors.Selection);
+        resources["ThemeStatusBarBrush"] = new SolidColorBrush(colors.StatusBar);
+        resources["ThemeSliderTrackBrush"] = new SolidColorBrush(colors.SliderTrack);
+        resources["ThemeSliderThumbBrush"] = new SolidColorBrush(colors.SliderThumb);
+        resources["ThemeSliderThumbHoverBrush"] = new SolidColorBrush(colors.SliderThumbHover);
+        resources["ThemeTabSelectedBackgroundBrush"] = new SolidColorBrush(colors.TabSelectedBackground);
+        
         if (save)
         {
             SaveTheme();
