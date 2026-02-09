@@ -1193,19 +1193,28 @@ Console.WriteLine(""Hello, World!"");
         
         // Update diagram content without reloading the page (preserves pan/zoom position)
         window.updateDiagram = function(newCode) {{
-            // Save current panzoom transform
+            // Save current panzoom transform (only zoom level, not position - position causes issues when diagram size changes)
+            let savedZoom = currentZoom;
             let savedTransform = null;
             if (panzoomInstance) {{
                 savedTransform = panzoomInstance.getTransform();
             }}
             
             const diagram = document.getElementById('diagram');
+            const container = document.getElementById('container');
+            
+            // Save scroll position of container
+            const savedScrollLeft = container.scrollLeft;
+            const savedScrollTop = container.scrollTop;
             
             // Clear existing content and add new mermaid code
             diagram.innerHTML = '<pre class=""mermaid"">' + newCode.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>';
             diagram.classList.remove('has-error');
             diagram.style.minWidth = '2000px';
             diagram.style.width = '';
+            
+            // Reset any transform on diagram before re-rendering
+            diagram.style.transform = '';
             
             // Destroy old panzoom instance
             if (panzoomInstance) {{
@@ -1215,67 +1224,79 @@ Console.WriteLine(""Hello, World!"");
             
             // Re-render mermaid
             mermaid.run().then(() => {{
-                const svg = document.querySelector('#diagram svg');
-                
-                // Fix SVG and container dimensions after render
-                if (svg) {{
-                    let svgWidth = 0;
-                    let svgHeight = 0;
+                // Use requestAnimationFrame to ensure SVG is fully rendered
+                requestAnimationFrame(() => {{
+                    const svg = document.querySelector('#diagram svg');
                     
-                    const viewBox = svg.getAttribute('viewBox');
-                    if (viewBox) {{
-                        const parts = viewBox.split(' ');
-                        if (parts.length === 4) {{
-                            svgWidth = parseFloat(parts[2]);
-                            svgHeight = parseFloat(parts[3]);
-                        }}
+                    // Fix SVG and container dimensions after render
+                    if (svg) {{
+                        // Wait another frame to ensure text is fully rendered
+                        requestAnimationFrame(() => {{
+                            let svgWidth = 0;
+                            let svgHeight = 0;
+                            
+                            // Use getBBox for accurate dimensions (includes all rendered content)
+                            try {{
+                                const bbox = svg.getBBox();
+                                svgWidth = bbox.width + 40;
+                                svgHeight = bbox.height + 40;
+                            }} catch (e) {{
+                                // Fall back to viewBox
+                                const viewBox = svg.getAttribute('viewBox');
+                                if (viewBox) {{
+                                    const parts = viewBox.split(' ');
+                                    if (parts.length === 4) {{
+                                        svgWidth = parseFloat(parts[2]);
+                                        svgHeight = parseFloat(parts[3]);
+                                    }}
+                                }}
+                            }}
+                            
+                            if (svgWidth > 0 && svgHeight > 0) {{
+                                svg.style.width = svgWidth + 'px';
+                                svg.style.height = svgHeight + 'px';
+                                svg.style.minWidth = svgWidth + 'px';
+                                svg.style.minHeight = svgHeight + 'px';
+                                svg.removeAttribute('max-width');
+                                
+                                diagram.style.minWidth = 'auto';
+                                diagram.style.width = 'auto';
+                            }}
+                            
+                            // Set up click handlers
+                            setupNodeClickHandlers(svg);
+                            
+                            // Re-create panzoom
+                            panzoomInstance = panzoom(diagram, {{
+                                maxZoom: 10,
+                                minZoom: 0.1,
+                                initialZoom: 1,
+                                bounds: false,
+                                boundsPadding: 0.1
+                            }});
+                            
+                            // Restore zoom level and approximate position
+                            if (savedTransform && savedZoom !== 1) {{
+                                // Only restore zoom, reset position to avoid misalignment
+                                panzoomInstance.moveTo(0, 0);
+                                panzoomInstance.zoomAbs(0, 0, savedZoom);
+                                currentZoom = savedZoom;
+                            }} else {{
+                                panzoomInstance.moveTo(0, 0);
+                                panzoomInstance.zoomAbs(0, 0, 1);
+                                currentZoom = 1;
+                            }}
+                            
+                            // Restore container scroll position
+                            container.scrollLeft = savedScrollLeft;
+                            container.scrollTop = savedScrollTop;
+                            
+                            panzoomInstance.on('zoom', function(e) {{
+                                currentZoom = e.getTransform().scale;
+                                window.chrome.webview.postMessage({{ type: 'zoom', level: currentZoom }});
+                            }});
+                        }});
                     }}
-                    
-                    if (svgWidth === 0 || svgHeight === 0) {{
-                        try {{
-                            const bbox = svg.getBBox();
-                            svgWidth = bbox.width + 40;
-                            svgHeight = bbox.height + 40;
-                        }} catch (e) {{ }}
-                    }}
-                    
-                    if (svgWidth > 0 && svgHeight > 0) {{
-                        svg.style.width = svgWidth + 'px';
-                        svg.style.height = svgHeight + 'px';
-                        svg.style.minWidth = svgWidth + 'px';
-                        svg.style.minHeight = svgHeight + 'px';
-                        
-                        diagram.style.minWidth = 'auto';
-                        diagram.style.width = 'auto';
-                    }}
-                    
-                    // Set up click handlers
-                    setupNodeClickHandlers(svg);
-                }}
-                
-                // Re-create panzoom
-                panzoomInstance = panzoom(diagram, {{
-                    maxZoom: 10,
-                    minZoom: 0.1,
-                    initialZoom: 1,
-                    bounds: false,
-                    boundsPadding: 0.1
-                }});
-                
-                // Restore saved transform (pan/zoom position)
-                if (savedTransform) {{
-                    panzoomInstance.moveTo(savedTransform.x, savedTransform.y);
-                    panzoomInstance.zoomAbs(0, 0, savedTransform.scale);
-                    currentZoom = savedTransform.scale;
-                }} else {{
-                    panzoomInstance.moveTo(0, 0);
-                    panzoomInstance.zoomAbs(0, 0, 1);
-                    currentZoom = 1;
-                }}
-                
-                panzoomInstance.on('zoom', function(e) {{
-                    currentZoom = e.getTransform().scale;
-                    window.chrome.webview.postMessage({{ type: 'zoom', level: currentZoom }});
                 }});
             }}).catch(err => {{
                 diagram.classList.add('has-error');
