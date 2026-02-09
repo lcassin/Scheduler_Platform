@@ -3071,7 +3071,7 @@ Console.WriteLine(""Hello, World!"");
         // Header with icon and title
         var headerPanel = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 16) };
         
-        // Load the app icon from the window's icon
+        // Load the app icon from file
         var iconImage = new System.Windows.Controls.Image
         {
             Width = 64,
@@ -3080,26 +3080,30 @@ Console.WriteLine(""Hello, World!"");
         };
         try
         {
-            // Use the main window's icon which is already loaded
-            if (this.Icon != null)
+            // Load icon from file in the application directory
+            var iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.ico");
+            if (System.IO.File.Exists(iconPath))
             {
-                iconImage.Source = this.Icon;
-            }
-            else
-            {
-                // Fallback: try to load from file
-                var iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.ico");
-                if (System.IO.File.Exists(iconPath))
+                // Use BitmapImage with file stream for reliable loading
+                using (var stream = new System.IO.FileStream(iconPath, System.IO.FileMode.Open, System.IO.FileAccess.Read))
                 {
-                    var iconUri = new Uri(iconPath, UriKind.Absolute);
                     var decoder = new System.Windows.Media.Imaging.IconBitmapDecoder(
-                        iconUri,
-                        System.Windows.Media.Imaging.BitmapCreateOptions.None,
-                        System.Windows.Media.Imaging.BitmapCacheOption.Default);
-                    // Get the largest frame from the icon
+                        stream,
+                        System.Windows.Media.Imaging.BitmapCreateOptions.PreservePixelFormat,
+                        System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
+                    // Get the largest frame from the icon (usually the last one)
                     if (decoder.Frames.Count > 0)
                     {
-                        iconImage.Source = decoder.Frames[decoder.Frames.Count - 1];
+                        // Find the largest frame
+                        var largestFrame = decoder.Frames[0];
+                        foreach (var frame in decoder.Frames)
+                        {
+                            if (frame.PixelWidth > largestFrame.PixelWidth)
+                            {
+                                largestFrame = frame;
+                            }
+                        }
+                        iconImage.Source = largestFrame;
                     }
                 }
             }
