@@ -13,6 +13,7 @@
 
     <ItemGroup>
       <Resource Include="Resources\TemplateThumbnails\*.png" />
+      <Resource Include="app.ico" />
     </ItemGroup>
 
     <ItemGroup>

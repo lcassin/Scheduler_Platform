@@ -77,7 +77,7 @@ public partial class MainWindow : Window
     private bool _isRenderingContent; // Flag set when we call NavigateToString, cleared after navigation completes
     private bool _isGoingBack; // Flag set when user clicks back button, cleared after navigation completes
     private bool _hasNavigatedAway; // Track if user has navigated away from rendered content
-    private double _pendingScrollPosition; // Scroll position to restore after Markdown render
+    private bool _markdownPageLoaded; // Track if Markdown page structure is already loaded (for incremental updates)
     
     // File change detection
     private FileSystemWatcher? _fileWatcher;
@@ -599,7 +599,12 @@ Console.WriteLine(""Hello, World!"");
             _isRenderingContent = false;
             _hasNavigatedAway = false;
             PreviewBackButton.IsEnabled = false;
-            // Scroll position is restored via JavaScript in the HTML for Markdown
+            
+            // Mark Markdown page as loaded so subsequent updates use JavaScript instead of page reload
+            if (_currentRenderMode == RenderMode.Markdown)
+            {
+                _markdownPageLoaded = true;
+            }
         }
         else if (_isGoingBack)
         {
@@ -607,12 +612,16 @@ Console.WriteLine(""Hello, World!"");
             _isGoingBack = false;
             _hasNavigatedAway = false;
             PreviewBackButton.IsEnabled = false;
+            // Reset markdown page loaded flag since we navigated away
+            _markdownPageLoaded = false;
         }
         else
         {
             // User has navigated away from rendered content (clicked a link)
             _hasNavigatedAway = true;
             PreviewBackButton.IsEnabled = true;
+            // Reset markdown page loaded flag since we navigated away
+            _markdownPageLoaded = false;
         }
     }
     
@@ -826,6 +835,9 @@ Console.WriteLine(""Hello, World!"");
     private void RenderMermaid()
     {
         if (!_webViewInitialized) return;
+        
+        // Reset markdown page loaded flag since we're switching to Mermaid mode
+        _markdownPageLoaded = false;
 
         var mermaidCode = CodeEditor.Text;
         var escapedCode = System.Text.Json.JsonSerializer.Serialize(mermaidCode);
@@ -1163,22 +1175,31 @@ Console.WriteLine(""Hello, World!"");
     {
         if (!_webViewInitialized) return;
 
-        // Save current scroll position before re-rendering
-        try
-        {
-            var scrollResult = await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.scrollY || document.documentElement.scrollTop || 0");
-            if (double.TryParse(scrollResult, out var scrollPos))
-            {
-                _pendingScrollPosition = scrollPos;
-            }
-        }
-        catch
-        {
-            _pendingScrollPosition = 0;
-        }
-
         var markdownCode = CodeEditor.Text;
         var escapedCode = System.Text.Json.JsonSerializer.Serialize(markdownCode);
+        
+        // If page is already loaded, just update the content via JavaScript (preserves scroll position)
+        if (_markdownPageLoaded && !_hasNavigatedAway)
+        {
+            try
+            {
+                // Update content without reloading the page - scroll position is naturally preserved
+                await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
+                    (function() {{
+                        const markdownContent = {escapedCode};
+                        document.getElementById('content').innerHTML = marked.parse(markdownContent);
+                        setupClickHandlers();
+                    }})();
+                ");
+                StatusText.Text = "Markdown rendered";
+                return;
+            }
+            catch
+            {
+                // If JavaScript update fails, fall back to full page reload
+                _markdownPageLoaded = false;
+            }
+        }
         
         // Set up virtual host mapping for resolving relative image paths
         var baseTag = "";
@@ -1271,14 +1292,6 @@ Console.WriteLine(""Hello, World!"");
         }});
         
         document.getElementById('content').innerHTML = marked.parse(markdownContent);
-        
-        // Restore scroll position after content is rendered (use requestAnimationFrame to ensure layout is complete)
-        const savedScrollPosition = {_pendingScrollPosition.ToString(System.Globalization.CultureInfo.InvariantCulture)};
-        if (savedScrollPosition > 0) {{
-            requestAnimationFrame(() => {{
-                window.scrollTo(0, savedScrollPosition);
-            }});
-        }}
         
         // Add click handlers for click-to-highlight feature
         setupClickHandlers();
@@ -3067,14 +3080,38 @@ Console.WriteLine(""Hello, World!"");
         // Header with icon and title
         var headerPanel = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 16) };
         
-        // Use the window's icon (set from ApplicationIcon in project)
+        // Load the icon from embedded resource
         var iconImage = new System.Windows.Controls.Image
         {
             Width = 64,
             Height = 64,
-            Margin = new Thickness(0, 0, 16, 0),
-            Source = this.Icon
+            Margin = new Thickness(0, 0, 16, 0)
         };
+        try
+        {
+            var iconUri = new Uri("pack://application:,,,/app.ico", UriKind.Absolute);
+            var decoder = new System.Windows.Media.Imaging.IconBitmapDecoder(
+                iconUri,
+                System.Windows.Media.Imaging.BitmapCreateOptions.PreservePixelFormat,
+                System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
+            if (decoder.Frames.Count > 0)
+            {
+                // Find the largest frame for best quality
+                var largestFrame = decoder.Frames[0];
+                foreach (var frame in decoder.Frames)
+                {
+                    if (frame.PixelWidth > largestFrame.PixelWidth)
+                    {
+                        largestFrame = frame;
+                    }
+                }
+                iconImage.Source = largestFrame;
+            }
+        }
+        catch
+        {
+            // If icon fails to load, continue without it
+        }
         
         var titlePanel = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         titlePanel.Children.Add(new TextBlock
