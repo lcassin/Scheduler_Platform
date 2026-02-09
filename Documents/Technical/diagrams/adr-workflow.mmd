@@ -26,43 +26,42 @@ flowchart TB
         
         Step2 --> Step3
         
-        subgraph Step3["Step 3: Verify Credentials"]
-            S3A[Find Jobs where NextRunDateTime within 7-day window] --> S3B{Status = Pending AND has CredentialId?}
+        subgraph Step3["Step 3: Process Rebill"]
+            S3A[Find Accounts where ExpectedBillingDayOfWeek = Today] --> S3B{Account has CredentialId?}
             S3B -->|No| S3C[Skip]
-            S3B -->|Yes| S3D{Already Verified This Period?}
+            S3B -->|Yes| S3D{Already Processed This Week?}
             S3D -->|Yes| S3E[Skip - Idempotency]
-            S3D -->|No| S3F[Call ADR API: Attempt Login]
+            S3D -->|No| S3F[Call ADR API: Rebill Request with IsLastAttempt flag]
             S3F --> S3G{API Response}
-            S3G -->|Success| S3H[Status = CredentialVerified]
-            S3G -->|Failed| S3I[Status = CredentialFailed]
-            S3H --> S3J[Record AdrJobExecution]
+            S3G -->|Success| S3H[Rebill Request Sent]
+            S3G -->|Failed| S3I[Rebill Request Failed]
+            S3H --> S3J[Record Result]
             S3I --> S3J
         end
         
         Step3 --> Step4
         
-        subgraph Step4["Step 4: Process Scraping"]
-            S4A[Find Jobs where NextRunDateTime <= Today] --> S4B{Status = CredentialVerified OR CredentialFailed?}
-            S4B -->|No| S4C[Skip]
-            S4B -->|Yes| S4D{Already Scraped This Period?}
-            S4D -->|Yes| S4E[Skip - Idempotency]
-            S4D -->|No| S4F{NextRangeEndDateTime Passed?}
-            S4F -->|Yes| S4G[Status = NeedsReview]
-            S4F -->|No| S4H[Call ADR API: Download Invoice]
-            S4H --> S4I{API Response}
-            S4I -->|Success| S4J[Status = Completed]
-            S4I -->|In Progress| S4K[Retry Tomorrow]
-            S4I -->|Failed| S4L[Increment RetryCount]
+        subgraph Step4["Step 4: Check Statuses"]
+            S4A[Find Jobs with ADR Request Sent status] --> S4B[Call ADR API: Get Status]
+            S4B --> S4C{Status Response}
+            S4C -->|Complete| S4D[Status = Completed<br/>Advance rule to next cycle]
+            S4C -->|No Documents Found| S4E[Keep status - retry today]
+            S4C -->|Failed| S4F[Status = Failed or NeedsReview]
         end
         
         Step4 --> Step5
         
-        subgraph Step5["Step 5: Check Statuses"]
-            S5A[Find Jobs with AdrIndexId and Status != Completed] --> S5B[Call ADR API: Get Status]
-            S5B --> S5C{Status Response}
-            S5C -->|Complete| S5D[Status = Completed]
-            S5C -->|Failed| S5E[Status = Failed]
-            S5C -->|In Progress| S5F[Keep Current Status]
+        subgraph Step5["Step 5: Send ADR Requests"]
+            S5A[Find Jobs where NextRunDateTime <= Today] --> S5B{Status = Pending?}
+            S5B -->|No| S5C[Skip]
+            S5B -->|Yes| S5D{Already Requested This Period?}
+            S5D -->|Yes| S5E[Skip - Idempotency]
+            S5D -->|No| S5F{NextRangeEndDateTime Passed?}
+            S5F -->|Yes| S5G[Status = NeedsReview]
+            S5F -->|No| S5H[Call ADR API: Download Invoice]
+            S5H --> S5I{API Response}
+            S5I -->|Success| S5J[Status = ADR Request Sent]
+            S5I -->|Failed| S5K[Record error, retry tomorrow]
         end
         
         Step5 --> End([Orchestration Complete])
