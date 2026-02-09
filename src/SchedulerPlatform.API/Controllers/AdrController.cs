@@ -2945,6 +2945,72 @@ public class AdrController : ControllerBase
     }
 
     /// <summary>
+    /// Triggers weekly rebill processing for accounts whose expected billing day of week matches today.
+    /// Rebill checks look for updated invoices, partial invoices, and off-cycle invoices.
+    /// Unlike regular ADR requests, rebill checks do NOT create Zendesk tickets when no document is found
+    /// (only creates tickets for credential failures).
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token for the operation.</param>
+    /// <returns>The rebill processing result including counts of requests sent and failed.</returns>
+    /// <response code="200">Returns the rebill processing result.</response>
+    /// <response code="500">An error occurred during rebill processing.</response>
+    [HttpPost("orchestrate/process-rebill")]
+    [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    [ProducesResponseType(typeof(RebillResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<RebillResult>> ProcessRebill(CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("Weekly rebill processing triggered by {User}", User.Identity?.Name ?? "Unknown");
+            var result = await _orchestratorService.ProcessRebillAsync(null, cancellationToken);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during rebill processing");
+            return StatusCode(500, new { error = "An error occurred during rebill processing", message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Fires a rebill check for a single account.
+    /// This is used for manual rebill triggers when you need to check a specific account
+    /// for updated or off-cycle invoices outside of the weekly rebill schedule.
+    /// </summary>
+    /// <param name="accountId">The AdrAccount ID to fire rebill for.</param>
+    /// <param name="cancellationToken">Cancellation token for the operation.</param>
+    /// <returns>The result of the single account rebill operation.</returns>
+    /// <response code="200">Returns the rebill result including IndexId if successful.</response>
+    /// <response code="400">The account was not found or is invalid.</response>
+    /// <response code="500">An error occurred during the rebill request.</response>
+    [HttpPost("orchestrate/rebill/{accountId}")]
+    [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    [ProducesResponseType(typeof(SingleRebillResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<SingleRebillResult>> FireRebillForAccount(int accountId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            _logger.LogInformation("Manual rebill for account {AccountId} triggered by {User}", accountId, User.Identity?.Name ?? "Unknown");
+            var result = await _orchestratorService.FireRebillForAccountAsync(accountId, cancellationToken);
+            
+            if (!result.IsSuccess && result.ErrorMessage?.Contains("not found") == true)
+            {
+                return BadRequest(new { error = result.ErrorMessage });
+            }
+            
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during manual rebill for account {AccountId}", accountId);
+            return StatusCode(500, new { error = "An error occurred during rebill", message = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Runs the complete ADR orchestration cycle: sync accounts, create jobs, verify credentials, check statuses, and process ADR requests.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token for the operation.</param>
@@ -3278,10 +3344,10 @@ public class AdrController : ControllerBase
                         JobsCreated = r.JobsCreated ?? 0,
                         JobsSkipped = r.JobsSkipped ?? 0
                     } : null,
-                    CredentialVerificationResult = r.CredentialsVerified.HasValue ? new CredentialVerificationResult
+                    RebillResult = r.CredentialsVerified.HasValue ? new RebillResult
                     {
-                        CredentialsVerified = r.CredentialsVerified ?? 0,
-                        CredentialsFailed = r.CredentialsFailed ?? 0
+                        RebillRequestsSent = r.CredentialsVerified ?? 0,
+                        RebillRequestsFailed = r.CredentialsFailed ?? 0
                     } : null,
                     ScrapeResult = r.ScrapingRequested.HasValue ? new ScrapeResult
                     {
@@ -3850,13 +3916,13 @@ public class AdrController : ControllerBase
             {
                 TestModeEnabled = config?.TestModeEnabled ?? false,
                 TestModeMaxScrapingJobs = config?.TestModeMaxScrapingJobs ?? 50,
-                TestModeMaxCredentialChecks = config?.TestModeMaxCredentialChecks ?? 50
+                TestModeMaxRebillJobs = config?.TestModeMaxRebillJobs ?? 50
             });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving test mode status");
-            return Ok(new TestModeStatusResponse { TestModeEnabled = false, TestModeMaxScrapingJobs = 50, TestModeMaxCredentialChecks = 50 });
+            return Ok(new TestModeStatusResponse { TestModeEnabled = false, TestModeMaxScrapingJobs = 50, TestModeMaxRebillJobs = 50 });
         }
     }
 
@@ -3883,10 +3949,8 @@ public class AdrController : ControllerBase
                 // Return default configuration if none exists
                 config = new AdrConfiguration
                 {
-                    CredentialCheckLeadDays = 7,
                     ScrapeRetryDays = 5,
                     MaxRetries = 5,
-                    FinalStatusCheckDelayDays = 5,
                     DailyStatusCheckDelayDays = 1,
                     MaxParallelRequests = 8,
                     BatchSize = 1000,
@@ -3943,10 +4007,8 @@ public class AdrController : ControllerBase
             }
             
             // Update configuration values
-            config.CredentialCheckLeadDays = request.CredentialCheckLeadDays ?? config.CredentialCheckLeadDays;
             config.ScrapeRetryDays = request.ScrapeRetryDays ?? config.ScrapeRetryDays;
             config.MaxRetries = request.MaxRetries ?? config.MaxRetries;
-            config.FinalStatusCheckDelayDays = request.FinalStatusCheckDelayDays ?? config.FinalStatusCheckDelayDays;
             config.DailyStatusCheckDelayDays = request.DailyStatusCheckDelayDays ?? config.DailyStatusCheckDelayDays;
             config.MaxParallelRequests = request.MaxParallelRequests ?? config.MaxParallelRequests;
             config.BatchSize = request.BatchSize ?? config.BatchSize;
@@ -3961,7 +4023,7 @@ public class AdrController : ControllerBase
             config.DatabaseCommandTimeoutSeconds = request.DatabaseCommandTimeoutSeconds ?? config.DatabaseCommandTimeoutSeconds;
             config.TestModeEnabled = request.TestModeEnabled ?? config.TestModeEnabled;
             config.TestModeMaxScrapingJobs = request.TestModeMaxScrapingJobs ?? config.TestModeMaxScrapingJobs;
-            config.TestModeMaxCredentialChecks = request.TestModeMaxCredentialChecks ?? config.TestModeMaxCredentialChecks;
+            config.TestModeMaxRebillJobs = request.TestModeMaxRebillJobs ?? config.TestModeMaxRebillJobs;
             // Logging Settings
             config.EnableDetailedLogging = request.EnableDetailedLogging ?? config.EnableDetailedLogging;
             // Data Retention Settings
@@ -5200,10 +5262,8 @@ public class AdrStatusCheckApiResponse
 /// </summary>
 public class UpdateAdrConfigurationRequest
 {
-    public int? CredentialCheckLeadDays { get; set; }
     public int? ScrapeRetryDays { get; set; }
     public int? MaxRetries { get; set; }
-    public int? FinalStatusCheckDelayDays { get; set; }
     public int? DailyStatusCheckDelayDays { get; set; }
     public int? MaxParallelRequests { get; set; }
     public int? BatchSize { get; set; }
@@ -5218,7 +5278,7 @@ public class UpdateAdrConfigurationRequest
     public int? DatabaseCommandTimeoutSeconds { get; set; }
     public bool? TestModeEnabled { get; set; }
     public int? TestModeMaxScrapingJobs { get; set; }
-    public int? TestModeMaxCredentialChecks { get; set; }
+    public int? TestModeMaxRebillJobs { get; set; }
     // Logging Settings
     public bool? EnableDetailedLogging { get; set; }
     // Data Retention Settings
@@ -5547,9 +5607,9 @@ public class TestModeStatusResponse
     public int TestModeMaxScrapingJobs { get; set; }
     
     /// <summary>
-    /// Maximum number of credential checks per orchestration run when test mode is enabled.
+    /// Maximum number of rebill jobs per orchestration run when test mode is enabled.
     /// </summary>
-    public int TestModeMaxCredentialChecks { get; set; }
+    public int TestModeMaxRebillJobs { get; set; }
 }
 
 #endregion

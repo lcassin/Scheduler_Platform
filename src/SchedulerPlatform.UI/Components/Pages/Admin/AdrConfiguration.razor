@@ -28,7 +28,7 @@
         @if (_config.TestModeEnabled)
         {
             <MudAlert Severity="Severity.Warning" Class="mb-4" Icon="@Icons.Material.Filled.Warning">
-                <strong>TEST MODE IS ENABLED</strong> - ADR requests and credential checks are limited to @_config.TestModeMaxScrapingJobs and @_config.TestModeMaxCredentialChecks jobs respectively. 
+                <strong>TEST MODE IS ENABLED</strong> - ADR requests and rebill jobs are limited to @_config.TestModeMaxScrapingJobs and @_config.TestModeMaxRebillJobs respectively. 
                 Status checks are not limited. Disable test mode before going to production.
             </MudAlert>
         }
@@ -52,14 +52,6 @@
                     </MudItem>
                     
                     <MudItem xs="12" sm="6" md="4">
-                        <MudNumericField @bind-Value="_config.CredentialCheckLeadDays" 
-                                         Label="Credential Check Lead Days" 
-                                         Variant="Variant.Outlined"
-                                         Min="1" Max="30"
-                                         HelperText="Days before NextRunDate to verify credentials" />
-                    </MudItem>
-                    
-                    <MudItem xs="12" sm="6" md="4">
                         <MudNumericField @bind-Value="_config.MaxRetries"
                                          Label="Max Retries" 
                                          Variant="Variant.Outlined"
@@ -73,14 +65,6 @@
                                          Variant="Variant.Outlined"
                                          Min="1" Max="7"
                                          HelperText="Days after ADR request to check status" />
-                    </MudItem>
-                    
-                    <MudItem xs="12" sm="6" md="4">
-                        <MudNumericField @bind-Value="_config.FinalStatusCheckDelayDays" 
-                                         Label="Final Status Check Delay (Days)" 
-                                         Variant="Variant.Outlined"
-                                         Min="1" Max="14"
-                                         HelperText="Days after billing window to do final check" />
                     </MudItem>
                     
                     <MudItem xs="12">
@@ -171,7 +155,7 @@
                             Test Mode Settings @(_config.TestModeEnabled ? "(ENABLED)" : "")
                         </MudText>
                         <MudText Typo="Typo.body2" Class="mb-2">
-                            Use test mode to limit the number of ADR requests and credential checks during testing phases. 
+                            Use test mode to limit the number of ADR requests and rebill jobs during testing phases. 
                             This reduces API costs while still processing real jobs through the full workflow.
                         </MudText>
                     </MudItem>
@@ -192,12 +176,12 @@
                     </MudItem>
                     
                     <MudItem xs="12" sm="6" md="4">
-                        <MudNumericField @bind-Value="_config.TestModeMaxCredentialChecks" 
-                                         Label="Max Credential Checks (Test Mode)" 
+                        <MudNumericField @bind-Value="_config.TestModeMaxRebillJobs" 
+                                         Label="Max Rebill Jobs (Test Mode)" 
                                          Variant="Variant.Outlined"
                                          Min="0" Max="1000"
                                          Disabled="@(!_config.TestModeEnabled)"
-                                         HelperText="Max credential checks per run (0 = unlimited)" />
+                                         HelperText="Max rebill jobs per run (0 = unlimited)" />
                     </MudItem>
                     
                     <MudItem xs="12">
@@ -433,10 +417,8 @@
     private class AdrConfigurationModel
     {
         public int Id { get; set; }
-        public int CredentialCheckLeadDays { get; set; } = 7;
         public int ScrapeRetryDays { get; set; } = 5;
         public int MaxRetries { get; set; } = 5;
-        public int FinalStatusCheckDelayDays { get; set; } = 5;
         public int DailyStatusCheckDelayDays { get; set; } = 1;
         public int MaxParallelRequests { get; set; } = 8;
         public int BatchSize { get; set; } = 1000;
@@ -461,7 +443,7 @@
         // Test Mode Settings
         public bool TestModeEnabled { get; set; } = false;
         public int TestModeMaxScrapingJobs { get; set; } = 50;
-        public int TestModeMaxCredentialChecks { get; set; } = 50;
+        public int TestModeMaxRebillJobs { get; set; } = 50;
         // Logging Settings
         public bool EnableDetailedLogging { get; set; } = false;
         // Email Notification Settings

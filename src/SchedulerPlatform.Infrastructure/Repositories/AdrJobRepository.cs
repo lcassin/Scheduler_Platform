@@ -415,22 +415,16 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
         return results.ToDictionary(x => x.Status ?? "", x => x.Count);
     }
 
-    public async Task<IEnumerable<AdrJob>> GetJobsNeedingDailyStatusCheckAsync(DateTime currentDate, int delayDays = 1, int finalDelayDays = 5)
+    public async Task<IEnumerable<AdrJob>> GetJobsNeedingDailyStatusCheckAsync(DateTime currentDate, int delayDays = 1)
     {
         // Daily status checks: Jobs that were scraped at least delayDays ago
         // This enables the "day after scraping, check status" workflow
-        //
-        // IMPORTANT: This query now includes jobs whose billing window has ended recently
-        // (within the last finalDelayDays) to eliminate the gap where jobs were orphaned.
-        // Previously, jobs whose billing window ended between 0-5 days ago weren't picked up
-        // by either daily or final status check queries.
         //
         // The orchestrator's CheckPendingStatusesAsync will handle these jobs appropriately:
         // - Jobs still in billing window: revert to ScrapeRequested for retry
         // - Jobs past billing window: mark as NoInvoiceFound and advance rule
         var checkDate = currentDate.AddDays(-delayDays).Date;
         var today = currentDate.Date;
-        var finalThreshold = currentDate.AddDays(-finalDelayDays).Date;
 
         // Get scraping-related jobs that need status check
         var scrapingJobs = await _dbSet
@@ -439,13 +433,7 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                         (j.Status == "ScrapeRequested" || j.Status == "StatusCheckInProgress" || j.Status == "NeedsReview") &&
                         !j.ScrapingCompletedDateTime.HasValue &&
                         // At least delayDays since last modification
-                        j.ModifiedDateTime <= checkDate &&
-                        j.NextRangeEndDateTime.HasValue &&
-                        // Include jobs that are either:
-                        // 1. Still in billing window (NextRangeEndDateTime >= today), OR
-                        // 2. Recently past billing window (NextRangeEndDateTime >= finalThreshold)
-                        //    This eliminates the gap where jobs were orphaned
-                        j.NextRangeEndDateTime.Value.Date >= finalThreshold)
+                        j.ModifiedDateTime <= checkDate)
             .Include(j => j.AdrAccount)
             .ToListAsync();
 
@@ -467,24 +455,6 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
 
         // Combine and return all jobs needing status check
         return scrapingJobs.Concat(credentialJobs);
-    }
-
-    public async Task<IEnumerable<AdrJob>> GetJobsNeedingFinalStatusCheckAsync(DateTime currentDate, int finalDelayDays = 5)
-    {
-        // Final status checks: Jobs that have passed their billing window by at least finalDelayDays
-        // This is the "5-6 days after NextRangeEndDate" final retry logic
-        var thresholdDate = currentDate.AddDays(-finalDelayDays).Date;
-
-        return await _dbSet
-            .Where(j => !j.IsDeleted &&
-                        !j.IsManualRequest &&
-                        (j.Status == "ScrapeRequested" || j.Status == "StatusCheckInProgress") &&
-                        !j.ScrapingCompletedDateTime.HasValue &&
-                        // Billing window ended at least finalDelayDays ago
-                        j.NextRangeEndDateTime.HasValue &&
-                        j.NextRangeEndDateTime.Value.Date < thresholdDate)
-            .Include(j => j.AdrAccount)
-            .ToListAsync();
     }
 
     public async Task<IEnumerable<AdrJob>> GetAllJobsForManualStatusCheckAsync()

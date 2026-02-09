@@ -1,9 +1,7 @@
 ﻿CREATE TABLE [dbo].[AdrConfiguration] (
     [AdrConfigurationId]              INT            IDENTITY (1, 1) NOT NULL,
-    [CredentialCheckLeadDays]         INT            DEFAULT ((7)) NOT NULL,
     [ScrapeRetryDays]                 INT            DEFAULT ((5)) NOT NULL,
     [MaxRetries]                      INT            DEFAULT ((5)) NOT NULL,
-    [FinalStatusCheckDelayDays]       INT            DEFAULT ((5)) NOT NULL,
     [DailyStatusCheckDelayDays]       INT            DEFAULT ((1)) NOT NULL,
     [MaxParallelRequests]             INT            DEFAULT ((8)) NOT NULL,
     [BatchSize]                       INT            DEFAULT ((1000)) NOT NULL,
@@ -30,7 +28,7 @@
     [DatabaseCommandTimeoutSeconds]   INT            DEFAULT ((600)) NOT NULL,
     [TestModeEnabled]                 BIT            DEFAULT ((0)) NOT NULL,
     [TestModeMaxScrapingJobs]         INT            DEFAULT ((50)) NOT NULL,
-    [TestModeMaxCredentialChecks]     INT            DEFAULT ((50)) NOT NULL,
+    [TestModeMaxRebillJobs]           INT            DEFAULT ((50)) NOT NULL,
     [ErrorNotificationsEnabled]       BIT            DEFAULT ((1)) NOT NULL,
     [ErrorNotificationRecipients]     NVARCHAR (500) NULL,
     [OrchestrationNotificationsEnabled] BIT          DEFAULT ((1)) NOT NULL,

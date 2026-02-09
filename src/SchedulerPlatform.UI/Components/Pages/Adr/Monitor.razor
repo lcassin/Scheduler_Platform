@@ -14,7 +14,7 @@
 @if (_testModeStatus?.IsEnabled == true)
 {
     <MudAlert Severity="Severity.Warning" Class="mb-4" Icon="@Icons.Material.Filled.Warning">
-        <strong>TEST MODE IS ENABLED</strong> - ADR requests and credential checks are limited to @_testModeStatus.MaxScrapingJobs and @_testModeStatus.MaxCredentialChecks jobs respectively per orchestration run.
+        <strong>TEST MODE IS ENABLED</strong> - ADR requests and rebill jobs are limited to @_testModeStatus.MaxScrapingJobs and @_testModeStatus.MaxRebillJobs respectively per orchestration run.
     </MudAlert>
 }
 
@@ -262,10 +262,10 @@
                                                 }
                                             </ItemContent>
                                         </MudTimelineItem>
-                                        <MudTimelineItem Color="@GetLastRunStepColor("Verifying credentials")" Icon="@Icons.Material.Filled.CheckCircle">
+                                        <MudTimelineItem Color="@GetLastRunStepColor("Processing rebill")" Icon="@Icons.Material.Filled.CheckCircle">
                                             <ItemContent>
                                                 <MudText Typo="Typo.body2">
-                                                    Verify Credentials
+                                                    Process Rebill
                                                     @if (_lastCompletedRun.CredentialVerificationResult?.Duration.TotalSeconds > 0)
                                                     {
                                                         <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-2">@FormatDuration(_lastCompletedRun.CredentialVerificationResult.Duration)</MudChip>
@@ -350,7 +350,7 @@
                                         {
                                             <MudItem xs="6">
                                                 <MudText Typo="Typo.body2">
-                                                    <MudIcon Icon="@Icons.Material.Filled.Circle" Size="Size.Small" Color="@GetStatusColor(status.Key)" Class="mr-1" />
+                                                    <span style="color: @GetStatusHexColor(status.Key); font-size: 12px;">&#9679;</span>
                                                     @status.Key: @status.Value
                                                 </MudText>
                                             </MudItem>
@@ -481,10 +481,10 @@
                                         }
                                     </ItemContent>
                                 </MudTimelineItem>
-                                    <MudTimelineItem Color="@GetStepColor("Verifying credentials", _currentStatus.Status)" Icon="@GetStepIcon("Verifying credentials", _currentStatus.Status)">
+                                    <MudTimelineItem Color="@GetStepColor("Processing rebill", _currentStatus.Status)" Icon="@GetStepIcon("Processing rebill", _currentStatus.Status)">
                                         <ItemContent>
-                                            <MudText Typo="Typo.body2">Verify Credentials</MudText>
-                                            @if (_currentStatus.Status.CurrentStep == "Verifying credentials" && _currentStatus.Status.CurrentStepTotal > 0)
+                                            <MudText Typo="Typo.body2">Process Rebill</MudText>
+                                            @if (_currentStatus.Status.CurrentStep == "Processing rebill" && _currentStatus.Status.CurrentStepTotal > 0)
                                             {
                                                 @if (_currentStatus.Status.CurrentStepPhase == "Preparing")
                                                 {
@@ -910,9 +910,9 @@
                         }
                     </ItemContent>
                 </MudTimelineItem>
-                <MudTimelineItem Color="@GetSelectedRunStepColor("Verifying credentials")" Icon="@Icons.Material.Filled.CheckCircle">
+                <MudTimelineItem Color="@GetSelectedRunStepColor("Processing rebill")" Icon="@Icons.Material.Filled.CheckCircle">
                     <ItemContent>
-                        <MudText Typo="Typo.body2"><strong>Verify Credentials</strong></MudText>
+                        <MudText Typo="Typo.body2"><strong>Process Rebill</strong></MudText>
                         @if (_selectedRun.CredentialVerificationResult != null)
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
@@ -1147,12 +1147,13 @@
             { "Completed", "#66bb6a" }, // Green
             { "Failed", "#f44336" },    // Red
             { "Cancelled", "#ff9800" }, // Orange
+            { "Interrupted", "#ab47bc" }, // Purple - distinct from other statuses
             { "Running", "#42a5f5" },   // Blue
             { "Queued", "#9e9e9e" }     // Gray
         };
         
         // Count runs by status - order matches the color palette
-        var statusOrder = new[] { "Completed", "Failed", "Cancelled", "Running", "Queued" };
+        var statusOrder = new[] { "Completed", "Failed", "Cancelled", "Interrupted", "Running", "Queued" };
         _orchestrationStatusCounts = _recentHistory
             .GroupBy(h => h.Status)
             .ToDictionary(g => g.Key, g => g.Count());
@@ -1628,13 +1629,29 @@
         "Completed" => Color.Success,
         "Failed" => Color.Error,
         "Cancelled" => Color.Warning,
+        "Interrupted" => Color.Secondary,
         _ => Color.Default
+    };
+
+    /// <summary>
+    /// Returns the hex color for a status to match the pie chart colors exactly.
+    /// Used for the custom legend to ensure color consistency.
+    /// </summary>
+    private string GetStatusHexColor(string status) => status switch
+    {
+        "Completed" => "#66bb6a",   // Green
+        "Failed" => "#f44336",      // Red
+        "Cancelled" => "#ff9800",   // Orange
+        "Interrupted" => "#ab47bc", // Purple
+        "Running" => "#42a5f5",     // Blue
+        "Queued" => "#9e9e9e",      // Gray
+        _ => "#9e9e9e"              // Default gray
     };
 
     private Color GetStepColor(string stepName, AdrOrchestrationStatus status)
     {
-        // Step order: Sync → Create Jobs → Verify Credentials → Check Statuses → Process Scraping
-        var steps = new[] { "Syncing accounts", "Creating jobs", "Verifying credentials", "Checking statuses", "Processing scraping" };
+        // Step order: Sync → Create Jobs → Process Rebill → Check Statuses → Send ADR Requests
+        var steps = new[] { "Syncing accounts", "Creating jobs", "Processing rebill", "Checking statuses", "Processing scraping" };
         // Normalize "Checking all scraped statuses" to "Checking statuses" for comparison
         var normalizedCurrentStep = status.CurrentStep == "Checking all scraped statuses" ? "Checking statuses" : status.CurrentStep;
         var currentIndex = Array.IndexOf(steps, normalizedCurrentStep);
@@ -1661,8 +1678,8 @@
 
     private string GetStepIcon(string stepName, AdrOrchestrationStatus status)
     {
-        // Step order: Sync → Create Jobs → Verify Credentials → Check Statuses → Process Scraping
-        var steps = new[] { "Syncing accounts", "Creating jobs", "Verifying credentials", "Checking statuses", "Processing scraping" };
+        // Step order: Sync → Create Jobs → Process Rebill → Check Statuses → Send ADR Requests
+        var steps = new[] { "Syncing accounts", "Creating jobs", "Processing rebill", "Checking statuses", "Processing scraping" };
         // Normalize "Checking all scraped statuses" to "Checking statuses" for comparison
         var normalizedCurrentStep = status.CurrentStep == "Checking all scraped statuses" ? "Checking statuses" : status.CurrentStep;
         var currentIndex = Array.IndexOf(steps, normalizedCurrentStep);
