@@ -1365,23 +1365,24 @@ Console.WriteLine(""Hello, World!"");
                 }});
             }});
             
-            // Add click handlers to paragraphs (but not if they contain other clickable elements)
+            // Add click handlers to paragraphs - handle clicks anywhere in the paragraph
             content.querySelectorAll('p').forEach(el => {{
-                if (!el.querySelector('code')) {{
-                    el.style.cursor = 'pointer';
-                    el.addEventListener('click', function(e) {{
-                        if (e.target === el) {{
-                            const text = el.textContent.trim().substring(0, 50); // First 50 chars
-                            if (text) {{
-                                window.chrome.webview.postMessage({{ 
-                                    type: 'elementClick', 
-                                    text: text,
-                                    elementType: 'paragraph'
-                                }});
-                            }}
-                        }}
-                    }});
-                }}
+                el.style.cursor = 'pointer';
+                el.addEventListener('click', function(e) {{
+                    // Don't navigate if clicking on a link (let the link work normally)
+                    if (e.target.tagName === 'A' || e.target.closest('a')) {{
+                        return;
+                    }}
+                    e.stopPropagation();
+                    const text = el.textContent.trim().substring(0, 50); // First 50 chars
+                    if (text) {{
+                        window.chrome.webview.postMessage({{ 
+                            type: 'elementClick', 
+                            text: text,
+                            elementType: 'paragraph'
+                        }});
+                    }}
+                }});
             }});
         }}
     </script>
