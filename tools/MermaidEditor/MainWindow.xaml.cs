@@ -2975,6 +2975,7 @@ Console.WriteLine(""Hello, World!"");
         UpdateThemeMenuCheckmarks();
         UpdateEditorTheme();
         UpdateTitleBarTheme();
+        UpdateTabStyles(); // Update tab colors for new theme
         RenderPreview(); // Re-render preview with new theme
     }
 
@@ -3981,29 +3982,21 @@ Console.WriteLine(""Hello, World!"");
             }
         };
         
-        // Add context menu for tab operations with dark theme styling
-        var menuBackground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2D2D30"));
-        var menuBorder = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#3E3E42"));
-        var menuForeground = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F1F1F1"));
+        // Add context menu for tab operations with theme-aware styling
+        var contextMenu = new System.Windows.Controls.ContextMenu();
+        contextMenu.SetResourceReference(System.Windows.Controls.ContextMenu.BackgroundProperty, "ThemeToolbarBackgroundBrush");
+        contextMenu.SetResourceReference(System.Windows.Controls.ContextMenu.BorderBrushProperty, "ThemeBorderBrush");
+        contextMenu.SetResourceReference(System.Windows.Controls.ContextMenu.ForegroundProperty, "ThemeForegroundBrush");
         
-        var contextMenu = new System.Windows.Controls.ContextMenu
-        {
-            Background = menuBackground,
-            BorderBrush = menuBorder,
-            Foreground = menuForeground,
-        };
-        
-        // Create a style for menu items with dark theme
+        // Create a style for menu items with theme-aware colors
         var menuItemStyle = new System.Windows.Style(typeof(System.Windows.Controls.MenuItem));
-        menuItemStyle.Setters.Add(new Setter(System.Windows.Controls.MenuItem.BackgroundProperty, menuBackground));
-        menuItemStyle.Setters.Add(new Setter(System.Windows.Controls.MenuItem.ForegroundProperty, menuForeground));
-        menuItemStyle.Setters.Add(new Setter(System.Windows.Controls.MenuItem.BorderBrushProperty, menuBorder));
+        menuItemStyle.Setters.Add(new Setter(System.Windows.Controls.MenuItem.BackgroundProperty, System.Windows.Media.Brushes.Transparent));
+        menuItemStyle.Setters.Add(new Setter(System.Windows.Controls.MenuItem.ForegroundProperty, new DynamicResourceExtension("ThemeForegroundBrush")));
         menuItemStyle.Setters.Add(new Setter(System.Windows.Controls.MenuItem.PaddingProperty, new Thickness(8, 4, 8, 4)));
         
         // Add trigger for hover state
         var hoverTrigger = new Trigger { Property = System.Windows.Controls.MenuItem.IsHighlightedProperty, Value = true };
-        hoverTrigger.Setters.Add(new Setter(System.Windows.Controls.MenuItem.BackgroundProperty, 
-            new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#3E3E42"))));
+        hoverTrigger.Setters.Add(new Setter(System.Windows.Controls.MenuItem.BackgroundProperty, new DynamicResourceExtension("ThemeHoverBrush")));
         menuItemStyle.Triggers.Add(hoverTrigger);
         
         contextMenu.Resources.Add(typeof(System.Windows.Controls.MenuItem), menuItemStyle);
@@ -4030,13 +4023,13 @@ Console.WriteLine(""Hello, World!"");
             Padding = new Thickness(0),
             Margin = new Thickness(0),
         };
-        // Create a custom template for the separator MenuItem
+        // Create a custom template for the separator MenuItem with theme-aware colors
         var sepTemplate = new ControlTemplate(typeof(System.Windows.Controls.MenuItem));
         var sepBorder = new FrameworkElementFactory(typeof(System.Windows.Controls.Border));
-        sepBorder.SetValue(System.Windows.Controls.Border.BackgroundProperty, menuBackground);
+        sepBorder.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty, "ThemeToolbarBackgroundBrush");
         sepBorder.SetValue(System.Windows.Controls.Border.HeightProperty, 9.0);
         var sepLine = new FrameworkElementFactory(typeof(System.Windows.Controls.Border));
-        sepLine.SetValue(System.Windows.Controls.Border.BackgroundProperty, menuBorder);
+        sepLine.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty, "ThemeBorderBrush");
         sepLine.SetValue(System.Windows.Controls.Border.HeightProperty, 1.0);
         sepLine.SetValue(System.Windows.Controls.Border.MarginProperty, new Thickness(8, 4, 8, 4));
         sepBorder.AppendChild(sepLine);
@@ -4072,11 +4065,17 @@ Console.WriteLine(""Hello, World!"");
     /// </summary>
     private void UpdateTabStyles()
     {
-        var selectedBg = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#1E1E1E"));
-        var unselectedBg = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2D2D30"));
-        var selectedFg = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F1F1F1"));
-        var unselectedFg = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#9D9D9D"));
-        var purpleAccent = new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#9184EE"));
+        // Get theme-aware colors from resources
+        var selectedBg = System.Windows.Application.Current.Resources["ThemeTabSelectedBackgroundBrush"] as SolidColorBrush 
+            ?? new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#1E1E1E"));
+        var unselectedBg = System.Windows.Application.Current.Resources["ThemeToolbarBackgroundBrush"] as SolidColorBrush 
+            ?? new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#2D2D30"));
+        var selectedFg = System.Windows.Application.Current.Resources["ThemeForegroundBrush"] as SolidColorBrush 
+            ?? new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#F1F1F1"));
+        var unselectedFg = System.Windows.Application.Current.Resources["ThemeDisabledForegroundBrush"] as SolidColorBrush 
+            ?? new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#9D9D9D"));
+        var purpleAccent = System.Windows.Application.Current.Resources["ThemePurpleAccentBrush"] as SolidColorBrush 
+            ?? new SolidColorBrush((System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString("#9184EE"));
         
         foreach (var doc in _openDocuments)
         {

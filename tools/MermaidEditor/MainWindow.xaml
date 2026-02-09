@@ -12,7 +12,7 @@
         AllowDrop="True"
         Drop="Window_Drop"
         DragOver="Window_DragOver"
-        Background="#1E1E1E">
+        Background="{DynamicResource ThemeBackgroundBrush}">
     
     <Window.Resources>
         <!-- Menu Style -->
@@ -191,6 +191,19 @@
                                 <Setter TargetName="Arrow" Property="Fill" Value="{DynamicResource ThemeDisabledForegroundBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
+        <!-- ToolBar Thumb Style (grip handle) -->
+        <Style x:Key="{x:Static ToolBar.ThumbStyleKey}" TargetType="Thumb">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Thumb">
+                        <Border Background="Transparent" Padding="6,0">
+                            <Rectangle Width="4" Fill="{DynamicResource ThemeBorderBrush}"/>
+                        </Border>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -521,15 +534,15 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Thumb">
                         <Border x:Name="rectangle"
-                                Background="#686868"
+                                Background="{DynamicResource ThemeSliderThumbBrush}"
                                 CornerRadius="4"
                                 Margin="2"/>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="rectangle" Property="Background" Value="#9E9E9E"/>
+                                <Setter TargetName="rectangle" Property="Background" Value="{DynamicResource ThemeSliderThumbHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsDragging" Value="True">
-                                <Setter TargetName="rectangle" Property="Background" Value="#BDBDBD"/>
+                                <Setter TargetName="rectangle" Property="Background" Value="{DynamicResource ThemeSliderThumbHoverBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -966,11 +979,11 @@
         <!-- Status Bar -->
         <StatusBar Grid.Row="3">
             <StatusBarItem>
-                <TextBlock x:Name="StatusText" Text="Ready" Foreground="#7d7d7d"/>
+                <TextBlock x:Name="StatusText" Text="Ready" Foreground="{DynamicResource ThemeDisabledForegroundBrush}"/>
             </StatusBarItem>
             <Separator/>
             <StatusBarItem>
-                <TextBlock x:Name="FilePathText" Text="Untitled" Foreground="#7d7d7d"/>
+                <TextBlock x:Name="FilePathText" Text="Untitled" Foreground="{DynamicResource ThemeDisabledForegroundBrush}"/>
             </StatusBarItem>
             <!-- Spacer to push zoom controls to the right -->
             <StatusBarItem HorizontalAlignment="Right" DockPanel.Dock="Right">
@@ -978,13 +991,13 @@
                     <!-- Fit to Window button -->
                     <Button x:Name="FitButton" Click="FitToWindow_Click" ToolTip="Fit to Window (Ctrl+F)" 
                             Style="{StaticResource StatusBarButtonStyle}" Margin="0,0,8,0">
-                        <TextBlock Text="&#xE9A6;" FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="#7d7d7d" VerticalAlignment="Center"/>
+                        <TextBlock Text="&#xE9A6;" FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" VerticalAlignment="Center"/>
                     </Button>
                     <Separator/>
                     <!-- Zoom Out button -->
                     <Button x:Name="ZoomOutButton" Click="ZoomOut_Click" ToolTip="Zoom Out (Ctrl+-)" 
                             Style="{StaticResource StatusBarButtonStyle}" Margin="4,0,0,0">
-                        <TextBlock Text="-" FontSize="14" FontWeight="Bold" Foreground="#7d7d7d" VerticalAlignment="Center"/>
+                        <TextBlock Text="-" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" VerticalAlignment="Center"/>
                     </Button>
                     <!-- Zoom Slider -->
                     <Slider x:Name="ZoomSlider" 
@@ -1000,10 +1013,10 @@
                     <!-- Zoom In button -->
                     <Button x:Name="ZoomInButton" Click="ZoomIn_Click" ToolTip="Zoom In (Ctrl++)" 
                             Style="{StaticResource StatusBarButtonStyle}" Margin="0,0,4,0">
-                        <TextBlock Text="+" FontSize="14" FontWeight="Bold" Foreground="#7d7d7d" VerticalAlignment="Center"/>
+                        <TextBlock Text="+" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" VerticalAlignment="Center"/>
                     </Button>
                     <!-- Zoom percentage display -->
-                    <TextBlock x:Name="ZoomLevelText" Text="100%" Foreground="#7d7d7d" VerticalAlignment="Center" Width="45" TextAlignment="Right" Margin="4,0,8,0"/>
+                    <TextBlock x:Name="ZoomLevelText" Text="100%" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" VerticalAlignment="Center" Width="45" TextAlignment="Right" Margin="4,0,8,0"/>
                 </StackPanel>
             </StatusBarItem>
         </StatusBar>
