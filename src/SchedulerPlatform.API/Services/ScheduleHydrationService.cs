@@ -113,7 +113,11 @@ public class ScheduleHydrationService : IHostedService
                 {
                     try
                     {
-                        if (schedule.NextRunDateTime == null || schedule.NextRunDateTime < now)
+                        // Only recompute NextRunDateTime if it's null (never been set)
+                        // Do NOT recompute if it's in the past - let MissedSchedulesProcessor handle those
+                        // This prevents a race condition where we update NextRunDateTime before
+                        // MissedSchedulesProcessor can detect and fire the missed schedule
+                        if (schedule.NextRunDateTime == null)
                         {
                             try
                             {
@@ -142,16 +146,24 @@ public class ScheduleHydrationService : IHostedService
                                     batchRecomputedCount++;
                                     
                                     _logger.LogDebug(
-                                        "ScheduleHydrationService: Recomputed NextRunDateTime for schedule {ScheduleId} to {NextRunDateTime}",
+                                        "ScheduleHydrationService: Computed initial NextRunDateTime for schedule {ScheduleId} to {NextRunDateTime}",
                                         schedule.Id, schedule.NextRunDateTime.Value.ToString("o"));
                                 }
                             }
                             catch (Exception cronEx)
                             {
                                 _logger.LogWarning(cronEx, 
-                                    "ScheduleHydrationService: Could not recompute NextRunDateTime for schedule {ScheduleId} with cron {CronExpression}",
+                                    "ScheduleHydrationService: Could not compute NextRunDateTime for schedule {ScheduleId} with cron {CronExpression}",
                                     schedule.Id, schedule.CronExpression);
                             }
+                        }
+                        else if (schedule.NextRunDateTime < now)
+                        {
+                            // Schedule is missed - log it but don't update NextRunDateTime
+                            // MissedSchedulesProcessor will handle firing this schedule
+                            _logger.LogDebug(
+                                "ScheduleHydrationService: Schedule {ScheduleId} ({ScheduleName}) has missed NextRunDateTime {NextRunDateTime}, will be handled by MissedSchedulesProcessor",
+                                schedule.Id, schedule.Name, schedule.NextRunDateTime.Value.ToString("o"));
                         }
                         
                         await schedulerService.ScheduleJob(schedule);

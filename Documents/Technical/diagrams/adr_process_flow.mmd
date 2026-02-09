@@ -1,0 +1,64 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e6f3ff', 'primaryTextColor': '#000', 'primaryBorderColor': '#0066cc', 'lineColor': '#333', 'secondaryColor': '#fff5e6', 'tertiaryColor': '#f0fff0'}}}%%
+flowchart TB
+    subgraph Step1["Step 1: Account & Billing Pattern Discovery (Daily - SEPARATE PROCESS)"]
+        S1A[("VendorCredNewUAT<br/>Database")] --> S1B["Query Invoice History<br/>& Account Data<br/>(Convert to EF)"]
+        S1B --> S1C["Calculate Billing Patterns<br/>(MedianDays, PeriodType)"]
+        S1C --> S1D["Determine NextRunDate<br/>& Date Ranges"]
+        S1D --> S1E["Keep Latest CredentialId<br/>per Account"]
+        S1E --> S1F[("Scheduler Platform<br/>Account Table")]
+        S1F --> S1G{{"Few Thousand/Day<br/>(~200k/month total)"}}
+    end
+
+    subgraph Orchestrator["Steps 2-4: ORCHESTRATOR"]
+        subgraph Step2["Step 2: Job Creation"]
+            S2A["Identify Accounts<br/>NextRunStatus = 'Run Now'<br/>or 'Due Soon'"] --> S2B{"Job Exists for<br/>Same Billing Period?"}
+            S2B -->|No| S2C["Create Job Record<br/>Copy BillingPeriodStart/End<br/>from Account"]
+            S2B -->|Yes| S2D["Skip - Same Period<br/>Already Has Job"]
+            S2C --> S2E[("Job Table<br/>(Scheduler DB)")]
+            S2C --> S2F["Create Schedules<br/>for Steps 3 & 4"]
+        end
+
+        subgraph Step3["Step 3: Credential Verification (7 Days Before)"]
+            S3A["Schedule Fires<br/>7 Days Before NextRunDate"] --> S3B["Call IngestAdrRequest API<br/>ADRRequestTypeId = 1<br/>(Attempt Login)"]
+            S3B --> S3C{"Response?"}
+            S3C -->|200 OK| S3D["Record Success<br/>in JobExecution"]
+            S3C -->|4xx Error| S3E["Record Failure<br/>in JobExecution"]
+            S3E --> S3F["Track Error in UI<br/>(Downstream API<br/>handles tickets)"]
+        end
+
+        subgraph Step4["Step 4: Invoice Scraping (5 Days)"]
+            S4A["Day 1: Schedule Fires<br/>on NextRunDate"] --> S4B["Call IngestAdrRequest API<br/>ADRRequestTypeId = 2<br/>(Download Invoice)"]
+            S4B --> S4C["Record JobExecution"]
+            
+            S4D["Days 2-5:<br/>Daily Schedule"] --> S4E["Check Status API<br/>GetRequestStatusByJobId"]
+            S4E --> S4F{"Status?"}
+            S4F -->|"IsFinal = 1<br/>(Complete or<br/>Needs Review)"| S4G["Cancel Remaining<br/>Schedules"]
+            S4F -->|"IsError = 1<br/>(Not Final)"| S4H["Record Error<br/>Continue Tomorrow"]
+            S4F -->|"Still Processing"| S4I["Call IngestAdrRequest<br/>Again"]
+            S4I --> S4C
+            S4H --> S4C
+            
+            S4G --> S4J{"Status = 11?"}
+            S4J -->|Yes| S4K["Mark Job<br/>SUCCESS"]
+            S4J -->|No| S4L["Mark Job<br/>NEEDS REVIEW"]
+        end
+
+        subgraph Step4b["Step 4b: Follow-up (If Not Complete)"]
+            S4M["After Day 5:<br/>Not Final & No Errors"] --> S4N["Schedule Follow-up<br/>5 Days Later"]
+            S4N --> S4O["Final Status Check"]
+            S4O --> S4P["Close Out Job<br/>with Final Status"]
+        end
+
+        Step2 --> Step3
+        Step3 --> Step4
+        Step4 --> Step4b
+    end
+
+    Step1 --> Orchestrator
+
+    style Step1 fill:#e6f3ff,stroke:#0066cc
+    style Orchestrator fill:#f9f9f9,stroke:#666
+    style Step2 fill:#fff5e6,stroke:#cc6600
+    style Step3 fill:#f0fff0,stroke:#006600
+    style Step4 fill:#fff0f0,stroke:#cc0000
+    style Step4b fill:#f5f0ff,stroke:#6600cc

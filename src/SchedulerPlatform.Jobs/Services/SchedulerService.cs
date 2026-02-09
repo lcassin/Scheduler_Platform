@@ -38,13 +38,33 @@ public class SchedulerService : ISchedulerService
             .StoreDurably()
             .Build();
 
+        // Determine the timezone for the cron schedule
+        TimeZoneInfo scheduleTimeZone = TimeZoneInfo.Utc;
+        if (!string.IsNullOrWhiteSpace(schedule.TimeZone))
+        {
+            try
+            {
+                scheduleTimeZone = TimeZoneInfo.FindSystemTimeZoneById(schedule.TimeZone);
+                _logger.LogDebug("Using timezone {TimeZone} for schedule {ScheduleId}", schedule.TimeZone, schedule.Id);
+            }
+            catch (Exception tzEx)
+            {
+                _logger.LogWarning(tzEx, "Invalid timezone {TimeZone} for schedule {ScheduleId}, using UTC", 
+                    schedule.TimeZone, schedule.Id);
+            }
+        }
+
         ITrigger trigger;
         if (schedule.NextRunDateTime.HasValue)
         {
             trigger = TriggerBuilder.Create()
                 .WithIdentity($"Trigger_{schedule.Id}", $"Group_{schedule.ClientId}")
                 .ForJob(jobDetail)
-                .WithCronSchedule(schedule.CronExpression, x => x.WithMisfireHandlingInstructionDoNothing())
+                .WithCronSchedule(schedule.CronExpression, x => 
+                {
+                    x.WithMisfireHandlingInstructionDoNothing();
+                    x.InTimeZone(scheduleTimeZone);
+                })
                 .StartAt(schedule.NextRunDateTime.Value)
                 .Build();
         }
@@ -53,7 +73,11 @@ public class SchedulerService : ISchedulerService
             trigger = TriggerBuilder.Create()
                 .WithIdentity($"Trigger_{schedule.Id}", $"Group_{schedule.ClientId}")
                 .ForJob(jobDetail)
-                .WithCronSchedule(schedule.CronExpression, x => x.WithMisfireHandlingInstructionDoNothing())
+                .WithCronSchedule(schedule.CronExpression, x => 
+                {
+                    x.WithMisfireHandlingInstructionDoNothing();
+                    x.InTimeZone(scheduleTimeZone);
+                })
                 .StartNow()
                 .Build();
         }
@@ -65,8 +89,8 @@ public class SchedulerService : ISchedulerService
         }
 
         await _scheduler.ScheduleJob(jobDetail, trigger);
-        _logger.LogInformation("Scheduled job {JobKey} with trigger {TriggerKey} and cron expression {CronExpression}",
-            jobDetail.Key, trigger.Key, schedule.CronExpression);
+        _logger.LogInformation("Scheduled job {JobKey} with trigger {TriggerKey}, cron expression {CronExpression}, timezone {TimeZone}",
+            jobDetail.Key, trigger.Key, schedule.CronExpression, scheduleTimeZone.Id);
     }
 
     public async Task UnscheduleJob(int scheduleId, int clientId)

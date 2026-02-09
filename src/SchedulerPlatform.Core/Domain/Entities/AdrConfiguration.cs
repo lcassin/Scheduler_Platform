@@ -10,12 +10,6 @@ namespace SchedulerPlatform.Core.Domain.Entities;
 public class AdrConfiguration : BaseEntity
 {
     /// <summary>
-    /// Number of days before NextRunDateTime to start credential verification.
-    /// Default: 7 days
-    /// </summary>
-    public int CredentialCheckLeadDays { get; set; } = 7;
-    
-    /// <summary>
     /// DEPRECATED: This field is no longer used by the orchestration logic.
     /// Retry behavior is now controlled by the date range (NextRunDate through NextRangeEndDate)
     /// and MaxRetries. Kept for backward compatibility - can be removed in a future cleanup.
@@ -28,12 +22,6 @@ public class AdrConfiguration : BaseEntity
     /// Default: 5 retries
     /// </summary>
     public int MaxRetries { get; set; } = 5;
-    
-    /// <summary>
-    /// Number of days after billing window ends to perform final status check.
-    /// Default: 5 days
-    /// </summary>
-    public int FinalStatusCheckDelayDays { get; set; } = 5;
     
     /// <summary>
     /// Number of days to wait between status checks.
@@ -180,11 +168,11 @@ public class AdrConfiguration : BaseEntity
     public int TestModeMaxScrapingJobs { get; set; } = 50;
     
     /// <summary>
-    /// Maximum number of credential checks per orchestration run when test mode is enabled.
+    /// Maximum number of rebill jobs per orchestration run when test mode is enabled.
     /// Set to 0 for unlimited (same as test mode disabled for this step).
     /// Default: 50 jobs
     /// </summary>
-    public int TestModeMaxCredentialChecks { get; set; } = 50;
+    public int TestModeMaxRebillJobs { get; set; } = 50;
     
     // Logging Settings
     
