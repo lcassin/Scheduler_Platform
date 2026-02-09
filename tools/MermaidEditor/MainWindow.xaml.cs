@@ -3033,7 +3033,7 @@ Console.WriteLine(""Hello, World!"");
         // Header with icon and title
         var headerPanel = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 16) };
         
-        // Load the app icon
+        // Load the app icon from the window's icon
         var iconImage = new System.Windows.Controls.Image
         {
             Width = 64,
@@ -3042,8 +3042,29 @@ Console.WriteLine(""Hello, World!"");
         };
         try
         {
-            var iconUri = new Uri("pack://application:,,,/app.ico", UriKind.Absolute);
-            iconImage.Source = new System.Windows.Media.Imaging.BitmapImage(iconUri);
+            // Use the main window's icon which is already loaded
+            if (this.Icon != null)
+            {
+                iconImage.Source = this.Icon;
+            }
+            else
+            {
+                // Fallback: try to load from file
+                var iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.ico");
+                if (System.IO.File.Exists(iconPath))
+                {
+                    var iconUri = new Uri(iconPath, UriKind.Absolute);
+                    var decoder = new System.Windows.Media.Imaging.IconBitmapDecoder(
+                        iconUri,
+                        System.Windows.Media.Imaging.BitmapCreateOptions.None,
+                        System.Windows.Media.Imaging.BitmapCacheOption.Default);
+                    // Get the largest frame from the icon
+                    if (decoder.Frames.Count > 0)
+                    {
+                        iconImage.Source = decoder.Frames[decoder.Frames.Count - 1];
+                    }
+                }
+            }
         }
         catch
         {
