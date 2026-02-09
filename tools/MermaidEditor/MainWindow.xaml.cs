@@ -3354,10 +3354,19 @@ Console.WriteLine(""Hello, World!"");
             ? ExtractMarkdownHeadings() 
             : ExtractMermaidSections();
         
-        NavigationDropdown.ItemsSource = items;
-        if (items.Count > 0)
+        // Use _isNavigating flag to prevent selection change from triggering navigation
+        _isNavigating = true;
+        try
         {
-            NavigationDropdown.SelectedIndex = 0;
+            NavigationDropdown.ItemsSource = items;
+            if (items.Count > 0)
+            {
+                NavigationDropdown.SelectedIndex = 0;
+            }
+        }
+        finally
+        {
+            _isNavigating = false;
         }
     }
 
