@@ -591,7 +591,7 @@ Console.WriteLine(""Hello, World!"");
         }
     }
     
-    private async void CoreWebView2_NavigationCompleted(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
+    private void CoreWebView2_NavigationCompleted(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
     {
         if (_isRenderingContent)
         {
@@ -599,19 +599,7 @@ Console.WriteLine(""Hello, World!"");
             _isRenderingContent = false;
             _hasNavigatedAway = false;
             PreviewBackButton.IsEnabled = false;
-            
-            // Restore scroll position for Markdown preview
-            if (_currentRenderMode == RenderMode.Markdown && _pendingScrollPosition > 0)
-            {
-                try
-                {
-                    await PreviewWebView.CoreWebView2.ExecuteScriptAsync($"window.scrollTo(0, {_pendingScrollPosition});");
-                }
-                catch
-                {
-                    // Ignore scroll restore errors
-                }
-            }
+            // Scroll position is restored via JavaScript in the HTML for Markdown
         }
         else if (_isGoingBack)
         {
@@ -1283,6 +1271,12 @@ Console.WriteLine(""Hello, World!"");
         }});
         
         document.getElementById('content').innerHTML = marked.parse(markdownContent);
+        
+        // Restore scroll position after content is rendered
+        const savedScrollPosition = {_pendingScrollPosition};
+        if (savedScrollPosition > 0) {{
+            window.scrollTo(0, savedScrollPosition);
+        }}
         
         // Add click handlers for click-to-highlight feature
         setupClickHandlers();
