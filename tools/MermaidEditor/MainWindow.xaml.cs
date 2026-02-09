@@ -545,10 +545,12 @@ Console.WriteLine(""Hello, World!"");
     {
         try
         {
-            // Load and apply saved theme
-            ThemeManager.LoadTheme();
-            UpdateThemeMenuCheckmarks();
-            UpdateEditorTheme();
+                // Load and apply saved theme
+                ThemeManager.LoadTheme();
+                UpdateThemeMenuCheckmarks();
+                UpdateEditorTheme();
+                UpdateTitleBarTheme();
+                UpdateTabStyles(); // Refresh tab styles after theme is loaded
             
             await PreviewWebView.EnsureCoreWebView2Async();
             _webViewInitialized = true;
