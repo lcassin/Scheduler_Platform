@@ -4,6 +4,49 @@
              xmlns:local="clr-namespace:MermaidEditor"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-         
+        <ResourceDictionary>
+            <!-- Theme colors - these will be updated dynamically when theme changes -->
+            <!-- Dark Theme (Default) -->
+            <Color x:Key="ThemeBackgroundColor">#1E1E1E</Color>
+            <Color x:Key="ThemeMenuBackgroundColor">#1E1E1E</Color>
+            <Color x:Key="ThemeToolbarBackgroundColor">#2D2D30</Color>
+            <Color x:Key="ThemeBorderColor">#3E3E42</Color>
+            <Color x:Key="ThemeForegroundColor">#F1F1F1</Color>
+            <Color x:Key="ThemeAccentColor">#007ACC</Color>
+            <Color x:Key="ThemePurpleAccentColor">#9184EE</Color>
+            <Color x:Key="ThemeHoverColor">#3E3E42</Color>
+            <Color x:Key="ThemeSelectedColor">#094771</Color>
+            <Color x:Key="ThemeDisabledForegroundColor">#656565</Color>
+            <Color x:Key="ThemeEditorBackgroundColor">#1E1E1E</Color>
+            <Color x:Key="ThemeEditorForegroundColor">#D4D4D4</Color>
+            <Color x:Key="ThemeLineNumberColor">#858585</Color>
+            <Color x:Key="ThemeSelectionColor">#264F78</Color>
+            <Color x:Key="ThemeStatusBarColor">#007ACC</Color>
+            <Color x:Key="ThemeSliderTrackColor">#4A4A4A</Color>
+            <Color x:Key="ThemeSliderThumbColor">#6A6A6A</Color>
+            <Color x:Key="ThemeSliderThumbHoverColor">#8A8A8A</Color>
+            <Color x:Key="ThemeTabSelectedBackgroundColor">#1E1E1E</Color>
+            
+            <!-- SolidColorBrush resources that reference the colors -->
+            <SolidColorBrush x:Key="ThemeBackgroundBrush" Color="{DynamicResource ThemeBackgroundColor}"/>
+            <SolidColorBrush x:Key="ThemeMenuBackgroundBrush" Color="{DynamicResource ThemeMenuBackgroundColor}"/>
+            <SolidColorBrush x:Key="ThemeToolbarBackgroundBrush" Color="{DynamicResource ThemeToolbarBackgroundColor}"/>
+            <SolidColorBrush x:Key="ThemeBorderBrush" Color="{DynamicResource ThemeBorderColor}"/>
+            <SolidColorBrush x:Key="ThemeForegroundBrush" Color="{DynamicResource ThemeForegroundColor}"/>
+            <SolidColorBrush x:Key="ThemeAccentBrush" Color="{DynamicResource ThemeAccentColor}"/>
+            <SolidColorBrush x:Key="ThemePurpleAccentBrush" Color="{DynamicResource ThemePurpleAccentColor}"/>
+            <SolidColorBrush x:Key="ThemeHoverBrush" Color="{DynamicResource ThemeHoverColor}"/>
+            <SolidColorBrush x:Key="ThemeSelectedBrush" Color="{DynamicResource ThemeSelectedColor}"/>
+            <SolidColorBrush x:Key="ThemeDisabledForegroundBrush" Color="{DynamicResource ThemeDisabledForegroundColor}"/>
+            <SolidColorBrush x:Key="ThemeEditorBackgroundBrush" Color="{DynamicResource ThemeEditorBackgroundColor}"/>
+            <SolidColorBrush x:Key="ThemeEditorForegroundBrush" Color="{DynamicResource ThemeEditorForegroundColor}"/>
+            <SolidColorBrush x:Key="ThemeLineNumberBrush" Color="{DynamicResource ThemeLineNumberColor}"/>
+            <SolidColorBrush x:Key="ThemeSelectionBrush" Color="{DynamicResource ThemeSelectionColor}"/>
+            <SolidColorBrush x:Key="ThemeStatusBarBrush" Color="{DynamicResource ThemeStatusBarColor}"/>
+            <SolidColorBrush x:Key="ThemeSliderTrackBrush" Color="{DynamicResource ThemeSliderTrackColor}"/>
+            <SolidColorBrush x:Key="ThemeSliderThumbBrush" Color="{DynamicResource ThemeSliderThumbColor}"/>
+            <SolidColorBrush x:Key="ThemeSliderThumbHoverBrush" Color="{DynamicResource ThemeSliderThumbHoverColor}"/>
+            <SolidColorBrush x:Key="ThemeTabSelectedBackgroundBrush" Color="{DynamicResource ThemeTabSelectedBackgroundColor}"/>
+        </ResourceDictionary>
     </Application.Resources>
 </Application>

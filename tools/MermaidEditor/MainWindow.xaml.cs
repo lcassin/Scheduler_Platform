@@ -77,6 +77,11 @@ public partial class MainWindow : Window
     private bool _isRenderingContent; // Flag set when we call NavigateToString, cleared after navigation completes
     private bool _isGoingBack; // Flag set when user clicks back button, cleared after navigation completes
     private bool _hasNavigatedAway; // Track if user has navigated away from rendered content
+    
+    // File change detection
+    private FileSystemWatcher? _fileWatcher;
+    private bool _isReloadingFile; // Prevent recursive change notifications during reload
+    private bool _isSavingFile; // Prevent change notification when we save the file ourselves
 
     private const string DefaultMermaidCode= @"flowchart TD
     A[Start] --> B{Is it working?}
@@ -540,6 +545,11 @@ Console.WriteLine(""Hello, World!"");
     {
         try
         {
+            // Load and apply saved theme
+            ThemeManager.LoadTheme();
+            UpdateThemeMenuCheckmarks();
+            UpdateEditorTheme();
+            
             await PreviewWebView.EnsureCoreWebView2Async();
             _webViewInitialized = true;
             
@@ -748,6 +758,10 @@ Console.WriteLine(""Hello, World!"");
                     break;
             }
         }
+        
+        // Clean up file watcher
+        _fileWatcher?.Dispose();
+        _fileWatcher = null;
     }
 
     private void CodeEditor_TextChanged(object? sender, EventArgs e)
@@ -2913,7 +2927,7 @@ Console.WriteLine(""Hello, World!"");
     private void About_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show(
-            "Mermaid Editor v1.7.2\n\n" +
+            "Mermaid Editor v2.0.0\n\n" +
             "A visual IDE for editing Mermaid diagrams and Markdown files.\n\n" +
             "Features:\n" +
             "- Live preview as you type\n" +
@@ -2938,6 +2952,125 @@ Console.WriteLine(""Hello, World!"");
             "About Mermaid Editor",
             MessageBoxButton.OK,
             MessageBoxImage.Information);
+    }
+
+    private void ThemeDark_Click(object sender, RoutedEventArgs e)
+    {
+        ApplyTheme(AppTheme.Dark);
+    }
+
+    private void ThemeLight_Click(object sender, RoutedEventArgs e)
+    {
+        ApplyTheme(AppTheme.Light);
+    }
+
+    private void ThemeTwilight_Click(object sender, RoutedEventArgs e)
+    {
+        ApplyTheme(AppTheme.Twilight);
+    }
+
+    private void ApplyTheme(AppTheme theme)
+    {
+        ThemeManager.ApplyTheme(theme);
+        UpdateThemeMenuCheckmarks();
+        UpdateEditorTheme();
+        UpdateTitleBarTheme();
+        RenderPreview(); // Re-render preview with new theme
+    }
+
+    private void UpdateThemeMenuCheckmarks()
+    {
+        ThemeDarkMenuItem.IsChecked = ThemeManager.CurrentTheme == AppTheme.Dark;
+        ThemeLightMenuItem.IsChecked = ThemeManager.CurrentTheme == AppTheme.Light;
+        ThemeTwilightMenuItem.IsChecked = ThemeManager.CurrentTheme == AppTheme.Twilight;
+    }
+
+    private void UpdateEditorTheme()
+    {
+        var colors = ThemeManager.GetThemeColors(ThemeManager.CurrentTheme);
+        
+        // Update AvalonEdit colors
+        CodeEditor.Background = new SolidColorBrush(colors.EditorBackground);
+        CodeEditor.Foreground = new SolidColorBrush(colors.EditorForeground);
+        CodeEditor.LineNumbersForeground = new SolidColorBrush(colors.LineNumber);
+        
+        // Update syntax highlighting based on theme
+        RegisterThemeSyntaxHighlighting();
+    }
+
+    private void RegisterThemeSyntaxHighlighting()
+    {
+        var isDark = ThemeManager.IsDarkTheme;
+        
+        // Color values based on theme
+        var commentColor = isDark ? "#6A9955" : "#008000";
+        var keywordColor = isDark ? "#569CD6" : "#0000FF";
+        var diagramTypeColor = isDark ? "#C586C0" : "#AF00DB";
+        
+        var xshd = "<?xml version=\"1.0\"?>" +
+            "<SyntaxDefinition name=\"Mermaid\" xmlns=\"http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008\">" +
+            "<Color name=\"Comment\" foreground=\"" + commentColor + "\" />" +
+            "<Color name=\"Keyword\" foreground=\"" + keywordColor + "\" fontWeight=\"bold\" />" +
+            "<Color name=\"DiagramType\" foreground=\"" + diagramTypeColor + "\" fontWeight=\"bold\" />" +
+            "<RuleSet>" +
+            "<Span color=\"Comment\" begin=\"%%\" />" +
+            "<Keywords color=\"DiagramType\">" +
+            "<Word>flowchart</Word><Word>graph</Word><Word>sequenceDiagram</Word>" +
+            "<Word>classDiagram</Word><Word>stateDiagram</Word><Word>erDiagram</Word>" +
+            "<Word>journey</Word><Word>gantt</Word><Word>pie</Word><Word>mindmap</Word>" +
+            "<Word>timeline</Word><Word>gitGraph</Word><Word>quadrantChart</Word>" +
+            "</Keywords>" +
+            "<Keywords color=\"Keyword\">" +
+            "<Word>subgraph</Word><Word>end</Word><Word>direction</Word>" +
+            "<Word>participant</Word><Word>actor</Word><Word>activate</Word><Word>deactivate</Word>" +
+            "<Word>Note</Word><Word>note</Word><Word>loop</Word><Word>alt</Word><Word>else</Word>" +
+            "<Word>opt</Word><Word>par</Word><Word>critical</Word><Word>break</Word><Word>rect</Word>" +
+            "<Word>class</Word><Word>state</Word><Word>section</Word><Word>title</Word>" +
+            "<Word>TB</Word><Word>TD</Word><Word>BT</Word><Word>RL</Word><Word>LR</Word>" +
+            "</Keywords>" +
+            "</RuleSet>" +
+            "</SyntaxDefinition>";
+
+        try
+        {
+            using var reader = new XmlTextReader(new StringReader(xshd));
+            var definition = HighlightingLoader.Load(reader, HighlightingManager.Instance);
+            HighlightingManager.Instance.RegisterHighlighting("Mermaid", new[] { ".mmd", ".mermaid" }, definition);
+            CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
+        }
+        catch
+        {
+            // If syntax highlighting fails, continue without it
+        }
+    }
+
+    private void UpdateTitleBarTheme()
+    {
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd != IntPtr.Zero)
+            {
+                var isDark = ThemeManager.IsDarkTheme;
+                int darkModeValue = isDark ? 1 : 0;
+                DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkModeValue, sizeof(int));
+                
+                // Set caption color based on theme
+                var colors = ThemeManager.GetThemeColors(ThemeManager.CurrentTheme);
+                int captionColor = ColorToInt(colors.Background);
+                DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ref captionColor, sizeof(int));
+            }
+        }
+        catch
+        {
+            // Silently fail if DWM API is not available
+        }
+    }
+
+    private static int ColorToInt(System.Windows.Media.Color color)
+    {
+        // Color format is 0x00BBGGRR (BGR, not RGB)
+        return (color.B << 16) | (color.G << 8) | color.R;
     }
 
     private void RenderMermaidPreview(string code)
@@ -4123,13 +4256,21 @@ Console.WriteLine(""Hello, World!"");
         
         try
         {
+            _isSavingFile = true;
             File.WriteAllText(doc.FilePath, doc.TextDocument.Text);
+            doc.LastKnownWriteTime = File.GetLastWriteTimeUtc(doc.FilePath);
+            _isSavingFile = false;
             doc.IsDirty = false;
             AddToRecentFiles(doc.FilePath);
+            
+            // Set up file watcher for the saved file
+            SetupFileWatcher(doc.FilePath);
+            
             return true;
         }
         catch (Exception ex)
         {
+            _isSavingFile = false;
             MessageBox.Show($"Failed to save file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             return false;
         }
@@ -4220,7 +4361,11 @@ Console.WriteLine(""Hello, World!"");
         {
             var content = File.ReadAllText(filePath);
             var doc = CreateNewDocument(filePath, content);
+            doc.LastKnownWriteTime = File.GetLastWriteTimeUtc(filePath);
             SwitchToDocument(doc);
+            
+            // Set up file watcher for external change detection
+            SetupFileWatcher(filePath);
             
             // Update current browser path for Open/Save dialogs
             var folder = Path.GetDirectoryName(filePath);
@@ -4258,7 +4403,11 @@ Console.WriteLine(""Hello, World!"");
             // Open file from command line
             var content = File.ReadAllText(args[1]);
             var doc = CreateNewDocument(args[1], content);
+            doc.LastKnownWriteTime = File.GetLastWriteTimeUtc(args[1]);
             SwitchToDocument(doc);
+            
+            // Set up file watcher for external change detection
+            SetupFileWatcher(args[1]);
             
             // Update current browser path for Open/Save dialogs
             var folder = Path.GetDirectoryName(args[1]);
@@ -4279,6 +4428,151 @@ Console.WriteLine(""Hello, World!"");
     }
     
     private bool _showNewDocumentDialogOnLoad = false;
+    
+    /// <summary>
+    /// Sets up a FileSystemWatcher to monitor the current file for external changes
+    /// </summary>
+    private void SetupFileWatcher(string? filePath)
+    {
+        // Dispose existing watcher
+        _fileWatcher?.Dispose();
+        _fileWatcher = null;
+        
+        if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+            return;
+        
+        try
+        {
+            var directory = Path.GetDirectoryName(filePath);
+            var fileName = Path.GetFileName(filePath);
+            
+            if (string.IsNullOrEmpty(directory) || string.IsNullOrEmpty(fileName))
+                return;
+            
+            _fileWatcher = new FileSystemWatcher(directory, fileName)
+            {
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
+                EnableRaisingEvents = true
+            };
+            
+            _fileWatcher.Changed += FileWatcher_Changed;
+        }
+        catch (Exception)
+        {
+            // Silently fail if we can't set up the watcher (e.g., network path issues)
+            _fileWatcher?.Dispose();
+            _fileWatcher = null;
+        }
+    }
+    
+    /// <summary>
+    /// Handles file change notifications from FileSystemWatcher
+    /// </summary>
+    private void FileWatcher_Changed(object sender, FileSystemEventArgs e)
+    {
+        // Ignore if we're saving the file ourselves or reloading
+        if (_isSavingFile || _isReloadingFile)
+            return;
+        
+        // Find the document that matches this file
+        var changedDoc = _openDocuments.FirstOrDefault(d => 
+            string.Equals(d.FilePath, e.FullPath, StringComparison.OrdinalIgnoreCase));
+        
+        if (changedDoc == null)
+            return;
+        
+        // Check if the file's write time has actually changed
+        try
+        {
+            var currentWriteTime = File.GetLastWriteTimeUtc(e.FullPath);
+            if (currentWriteTime <= changedDoc.LastKnownWriteTime)
+                return;
+            
+            // Mark that an external change was detected
+            changedDoc.ExternalChangeDetected = true;
+            changedDoc.LastKnownWriteTime = currentWriteTime;
+            
+            // Show prompt on UI thread
+            Dispatcher.BeginInvoke(new Action(() => PromptForFileReload(changedDoc)));
+        }
+        catch (Exception)
+        {
+            // File might be locked or inaccessible, ignore
+        }
+    }
+    
+    /// <summary>
+    /// Prompts the user to reload a file that was modified externally
+    /// </summary>
+    private void PromptForFileReload(DocumentModel doc)
+    {
+        if (!doc.ExternalChangeDetected || string.IsNullOrEmpty(doc.FilePath))
+            return;
+        
+        // Reset the flag
+        doc.ExternalChangeDetected = false;
+        
+        var fileName = Path.GetFileName(doc.FilePath);
+        var message = doc.IsDirty
+            ? $"The file '{fileName}' has been modified outside the editor.\n\nYou have unsaved changes. Do you want to reload the file and lose your changes?"
+            : $"The file '{fileName}' has been modified outside the editor.\n\nDo you want to reload it?";
+        
+        var result = MessageBox.Show(
+            message,
+            "File Changed",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+        
+        if (result == MessageBoxResult.Yes)
+        {
+            ReloadDocument(doc);
+        }
+    }
+    
+    /// <summary>
+    /// Reloads a document from disk
+    /// </summary>
+    private void ReloadDocument(DocumentModel doc)
+    {
+        if (string.IsNullOrEmpty(doc.FilePath) || !File.Exists(doc.FilePath))
+        {
+            MessageBox.Show("The file no longer exists.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+        
+        try
+        {
+            _isReloadingFile = true;
+            
+            var content = File.ReadAllText(doc.FilePath);
+            doc.LastKnownWriteTime = File.GetLastWriteTimeUtc(doc.FilePath);
+            
+            // Preserve caret position if possible
+            var caretOffset = doc.TextDocument.TextLength > 0 ? Math.Min(doc.CaretOffset, content.Length) : 0;
+            
+            doc.TextDocument.Text = content;
+            doc.IsDirty = false;
+            
+            // If this is the active document, update the editor
+            if (doc == _activeDocument)
+            {
+                try
+                {
+                    CodeEditor.CaretOffset = Math.Min(caretOffset, doc.TextDocument.TextLength);
+                }
+                catch { }
+                
+                RenderPreview();
+            }
+            
+            _isReloadingFile = false;
+        }
+        catch (Exception ex)
+        {
+            _isReloadingFile = false;
+            MessageBox.Show($"Failed to reload file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
     
     private void ShowStartupNewDocumentDialog()
     {
@@ -4305,7 +4599,11 @@ Console.WriteLine(""Hello, World!"");
                     
                     var content = File.ReadAllText(openDialog.FileName);
                     var doc = CreateNewDocument(openDialog.FileName, content);
+                    doc.LastKnownWriteTime = File.GetLastWriteTimeUtc(openDialog.FileName);
                     SwitchToDocument(doc);
+                    
+                    // Set up file watcher for external change detection
+                    SetupFileWatcher(openDialog.FileName);
                     
                     var folder = Path.GetDirectoryName(openDialog.FileName);
                     if (!string.IsNullOrEmpty(folder))
@@ -4451,6 +4749,10 @@ public class DocumentModel : System.ComponentModel.INotifyPropertyChanged
     // Preview state
     public double PreviewZoom { get; set; } = 1.0;
     public bool HasNavigatedAway { get; set; }
+    
+    // File change detection
+    public DateTime LastKnownWriteTime { get; set; }
+    public bool ExternalChangeDetected { get; set; }
     
     // UI element references for the tab
     public System.Windows.Controls.Button? TabButton { get; set; }

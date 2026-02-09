@@ -736,6 +736,15 @@
                         <TextBlock Text="&#xE9A6;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                     </MenuItem.Icon>
                 </MenuItem>
+                <Separator/>
+                <MenuItem Header="_Theme">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE790;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                    <MenuItem x:Name="ThemeDarkMenuItem" Header="_Dark" Click="ThemeDark_Click" IsCheckable="True" IsChecked="True"/>
+                    <MenuItem x:Name="ThemeLightMenuItem" Header="_Light" Click="ThemeLight_Click" IsCheckable="True"/>
+                    <MenuItem x:Name="ThemeTwilightMenuItem" Header="_Twilight" Click="ThemeTwilight_Click" IsCheckable="True"/>
+                </MenuItem>
             </MenuItem>
             <MenuItem Header="_Help" Style="{StaticResource TopLevelMenuItemStyle}">
                 <MenuItem Header="Mermaid _Syntax Reference" Click="SyntaxHelp_Click">
