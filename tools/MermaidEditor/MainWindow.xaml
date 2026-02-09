@@ -196,19 +196,6 @@
             </Setter>
         </Style>
         
-        <!-- ToolBar Thumb Style (grip handle) -->
-        <Style x:Key="{x:Static ToolBar.ThumbStyleKey}" TargetType="Thumb">
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Thumb">
-                        <Border Background="Transparent" Padding="6,0">
-                            <Rectangle Width="4" Fill="{DynamicResource ThemeBorderBrush}"/>
-                        </Border>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        
         <!-- ToolBar Button Style -->
         <Style x:Key="ToolbarButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
