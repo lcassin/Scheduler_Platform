@@ -3982,24 +3982,8 @@ Console.WriteLine(""Hello, World!"");
             }
         };
         
-        // Add context menu for tab operations with theme-aware styling
+        // Add context menu for tab operations - uses XAML styles from Window.Resources
         var contextMenu = new System.Windows.Controls.ContextMenu();
-        contextMenu.SetResourceReference(System.Windows.Controls.ContextMenu.BackgroundProperty, "ThemeToolbarBackgroundBrush");
-        contextMenu.SetResourceReference(System.Windows.Controls.ContextMenu.BorderBrushProperty, "ThemeBorderBrush");
-        contextMenu.SetResourceReference(System.Windows.Controls.ContextMenu.ForegroundProperty, "ThemeForegroundBrush");
-        
-        // Create a style for menu items with theme-aware colors
-        var menuItemStyle = new System.Windows.Style(typeof(System.Windows.Controls.MenuItem));
-        menuItemStyle.Setters.Add(new Setter(System.Windows.Controls.MenuItem.BackgroundProperty, System.Windows.Media.Brushes.Transparent));
-        menuItemStyle.Setters.Add(new Setter(System.Windows.Controls.MenuItem.ForegroundProperty, new DynamicResourceExtension("ThemeForegroundBrush")));
-        menuItemStyle.Setters.Add(new Setter(System.Windows.Controls.MenuItem.PaddingProperty, new Thickness(8, 4, 8, 4)));
-        
-        // Add trigger for hover state
-        var hoverTrigger = new Trigger { Property = System.Windows.Controls.MenuItem.IsHighlightedProperty, Value = true };
-        hoverTrigger.Setters.Add(new Setter(System.Windows.Controls.MenuItem.BackgroundProperty, new DynamicResourceExtension("ThemeHoverBrush")));
-        menuItemStyle.Triggers.Add(hoverTrigger);
-        
-        contextMenu.Resources.Add(typeof(System.Windows.Controls.MenuItem), menuItemStyle);
         
         // Get the filename for the Close menu item
         var fileName = string.IsNullOrEmpty(doc.FilePath) ? "Untitled" : System.IO.Path.GetFileName(doc.FilePath);
@@ -4012,32 +3996,8 @@ Console.WriteLine(""Hello, World!"");
         var closeAllButThisItem = new System.Windows.Controls.MenuItem { Header = "Close All But This", Tag = doc };
         closeAllButThisItem.Click += (s, e) => CloseAllDocumentsExcept(doc);
         
-        // Create a custom separator using a disabled MenuItem with a Border as content
-        // This avoids the white icon gutter that WPF's default Separator has
-        var separatorItem = new System.Windows.Controls.MenuItem
-        {
-            IsEnabled = false,
-            IsHitTestVisible = false,
-            Focusable = false,
-            Height = 9,
-            Padding = new Thickness(0),
-            Margin = new Thickness(0),
-        };
-        // Create a custom template for the separator MenuItem with theme-aware colors
-        var sepTemplate = new ControlTemplate(typeof(System.Windows.Controls.MenuItem));
-        var sepBorder = new FrameworkElementFactory(typeof(System.Windows.Controls.Border));
-        sepBorder.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty, "ThemeToolbarBackgroundBrush");
-        sepBorder.SetValue(System.Windows.Controls.Border.HeightProperty, 9.0);
-        var sepLine = new FrameworkElementFactory(typeof(System.Windows.Controls.Border));
-        sepLine.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty, "ThemeBorderBrush");
-        sepLine.SetValue(System.Windows.Controls.Border.HeightProperty, 1.0);
-        sepLine.SetValue(System.Windows.Controls.Border.MarginProperty, new Thickness(8, 4, 8, 4));
-        sepBorder.AppendChild(sepLine);
-        sepTemplate.VisualTree = sepBorder;
-        separatorItem.Template = sepTemplate;
-        
         contextMenu.Items.Add(closeItem);
-        contextMenu.Items.Add(separatorItem);
+        contextMenu.Items.Add(new Separator());
         contextMenu.Items.Add(closeAllItem);
         contextMenu.Items.Add(closeAllButThisItem);
         
