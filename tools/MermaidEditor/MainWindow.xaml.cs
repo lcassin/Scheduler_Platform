@@ -77,6 +77,7 @@ public partial class MainWindow : Window
     private bool _isRenderingContent; // Flag set when we call NavigateToString, cleared after navigation completes
     private bool _isGoingBack; // Flag set when user clicks back button, cleared after navigation completes
     private bool _hasNavigatedAway; // Track if user has navigated away from rendered content
+    private double _pendingScrollPosition; // Scroll position to restore after Markdown render
     
     // File change detection
     private FileSystemWatcher? _fileWatcher;
@@ -376,6 +377,10 @@ Console.WriteLine(""Hello, World!"");
 
     private void ShowCompletionWindow()
     {
+        // Only show IntelliSense for Mermaid files, not Markdown
+        if (_currentRenderMode != RenderMode.Mermaid)
+            return;
+            
         var wordStart = GetWordStart();
         var currentWord = GetCurrentWord(wordStart);
         
@@ -384,9 +389,15 @@ Console.WriteLine(""Hello, World!"");
 
         var completionData = GetCompletionData(currentWord);
         if (completionData.Count == 0)
+        {
+            // Close any existing completion window if no matches
+            _completionWindow?.Close();
             return;
+        }
 
         _completionWindow = new CompletionWindow(CodeEditor.TextArea);
+        _completionWindow.CloseAutomatically = true;
+        _completionWindow.CloseWhenCaretAtBeginning = true;
         var data = _completionWindow.CompletionList.CompletionData;
         
         foreach (var item in completionData)
@@ -580,7 +591,7 @@ Console.WriteLine(""Hello, World!"");
         }
     }
     
-    private void CoreWebView2_NavigationCompleted(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
+    private async void CoreWebView2_NavigationCompleted(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
     {
         if (_isRenderingContent)
         {
@@ -588,6 +599,19 @@ Console.WriteLine(""Hello, World!"");
             _isRenderingContent = false;
             _hasNavigatedAway = false;
             PreviewBackButton.IsEnabled = false;
+            
+            // Restore scroll position for Markdown preview
+            if (_currentRenderMode == RenderMode.Markdown && _pendingScrollPosition > 0)
+            {
+                try
+                {
+                    await PreviewWebView.CoreWebView2.ExecuteScriptAsync($"window.scrollTo(0, {_pendingScrollPosition});");
+                }
+                catch
+                {
+                    // Ignore scroll restore errors
+                }
+            }
         }
         else if (_isGoingBack)
         {
@@ -1147,9 +1171,23 @@ Console.WriteLine(""Hello, World!"");
         StatusText.Text = "Mermaid rendered";
     }
 
-    private void RenderMarkdown()
+    private async void RenderMarkdown()
     {
         if (!_webViewInitialized) return;
+
+        // Save current scroll position before re-rendering
+        try
+        {
+            var scrollResult = await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.scrollY || document.documentElement.scrollTop || 0");
+            if (double.TryParse(scrollResult, out var scrollPos))
+            {
+                _pendingScrollPosition = scrollPos;
+            }
+        }
+        catch
+        {
+            _pendingScrollPosition = 0;
+        }
 
         var markdownCode = CodeEditor.Text;
         var escapedCode = System.Text.Json.JsonSerializer.Serialize(markdownCode);
