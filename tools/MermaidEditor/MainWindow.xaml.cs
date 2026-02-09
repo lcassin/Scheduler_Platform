@@ -77,6 +77,11 @@ public partial class MainWindow : Window
     private bool _isRenderingContent; // Flag set when we call NavigateToString, cleared after navigation completes
     private bool _isGoingBack; // Flag set when user clicks back button, cleared after navigation completes
     private bool _hasNavigatedAway; // Track if user has navigated away from rendered content
+    
+    // File change detection
+    private FileSystemWatcher? _fileWatcher;
+    private bool _isReloadingFile; // Prevent recursive change notifications during reload
+    private bool _isSavingFile; // Prevent change notification when we save the file ourselves
 
     private const string DefaultMermaidCode= @"flowchart TD
     A[Start] --> B{Is it working?}
@@ -748,6 +753,10 @@ Console.WriteLine(""Hello, World!"");
                     break;
             }
         }
+        
+        // Clean up file watcher
+        _fileWatcher?.Dispose();
+        _fileWatcher = null;
     }
 
     private void CodeEditor_TextChanged(object? sender, EventArgs e)
@@ -4123,13 +4132,21 @@ Console.WriteLine(""Hello, World!"");
         
         try
         {
+            _isSavingFile = true;
             File.WriteAllText(doc.FilePath, doc.TextDocument.Text);
+            doc.LastKnownWriteTime = File.GetLastWriteTimeUtc(doc.FilePath);
+            _isSavingFile = false;
             doc.IsDirty = false;
             AddToRecentFiles(doc.FilePath);
+            
+            // Set up file watcher for the saved file
+            SetupFileWatcher(doc.FilePath);
+            
             return true;
         }
         catch (Exception ex)
         {
+            _isSavingFile = false;
             MessageBox.Show($"Failed to save file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             return false;
         }
@@ -4220,7 +4237,11 @@ Console.WriteLine(""Hello, World!"");
         {
             var content = File.ReadAllText(filePath);
             var doc = CreateNewDocument(filePath, content);
+            doc.LastKnownWriteTime = File.GetLastWriteTimeUtc(filePath);
             SwitchToDocument(doc);
+            
+            // Set up file watcher for external change detection
+            SetupFileWatcher(filePath);
             
             // Update current browser path for Open/Save dialogs
             var folder = Path.GetDirectoryName(filePath);
@@ -4258,7 +4279,11 @@ Console.WriteLine(""Hello, World!"");
             // Open file from command line
             var content = File.ReadAllText(args[1]);
             var doc = CreateNewDocument(args[1], content);
+            doc.LastKnownWriteTime = File.GetLastWriteTimeUtc(args[1]);
             SwitchToDocument(doc);
+            
+            // Set up file watcher for external change detection
+            SetupFileWatcher(args[1]);
             
             // Update current browser path for Open/Save dialogs
             var folder = Path.GetDirectoryName(args[1]);
@@ -4279,6 +4304,151 @@ Console.WriteLine(""Hello, World!"");
     }
     
     private bool _showNewDocumentDialogOnLoad = false;
+    
+    /// <summary>
+    /// Sets up a FileSystemWatcher to monitor the current file for external changes
+    /// </summary>
+    private void SetupFileWatcher(string? filePath)
+    {
+        // Dispose existing watcher
+        _fileWatcher?.Dispose();
+        _fileWatcher = null;
+        
+        if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath))
+            return;
+        
+        try
+        {
+            var directory = Path.GetDirectoryName(filePath);
+            var fileName = Path.GetFileName(filePath);
+            
+            if (string.IsNullOrEmpty(directory) || string.IsNullOrEmpty(fileName))
+                return;
+            
+            _fileWatcher = new FileSystemWatcher(directory, fileName)
+            {
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size,
+                EnableRaisingEvents = true
+            };
+            
+            _fileWatcher.Changed += FileWatcher_Changed;
+        }
+        catch (Exception)
+        {
+            // Silently fail if we can't set up the watcher (e.g., network path issues)
+            _fileWatcher?.Dispose();
+            _fileWatcher = null;
+        }
+    }
+    
+    /// <summary>
+    /// Handles file change notifications from FileSystemWatcher
+    /// </summary>
+    private void FileWatcher_Changed(object sender, FileSystemEventArgs e)
+    {
+        // Ignore if we're saving the file ourselves or reloading
+        if (_isSavingFile || _isReloadingFile)
+            return;
+        
+        // Find the document that matches this file
+        var changedDoc = _openDocuments.FirstOrDefault(d => 
+            string.Equals(d.FilePath, e.FullPath, StringComparison.OrdinalIgnoreCase));
+        
+        if (changedDoc == null)
+            return;
+        
+        // Check if the file's write time has actually changed
+        try
+        {
+            var currentWriteTime = File.GetLastWriteTimeUtc(e.FullPath);
+            if (currentWriteTime <= changedDoc.LastKnownWriteTime)
+                return;
+            
+            // Mark that an external change was detected
+            changedDoc.ExternalChangeDetected = true;
+            changedDoc.LastKnownWriteTime = currentWriteTime;
+            
+            // Show prompt on UI thread
+            Dispatcher.BeginInvoke(new Action(() => PromptForFileReload(changedDoc)));
+        }
+        catch (Exception)
+        {
+            // File might be locked or inaccessible, ignore
+        }
+    }
+    
+    /// <summary>
+    /// Prompts the user to reload a file that was modified externally
+    /// </summary>
+    private void PromptForFileReload(DocumentModel doc)
+    {
+        if (!doc.ExternalChangeDetected || string.IsNullOrEmpty(doc.FilePath))
+            return;
+        
+        // Reset the flag
+        doc.ExternalChangeDetected = false;
+        
+        var fileName = Path.GetFileName(doc.FilePath);
+        var message = doc.IsDirty
+            ? $"The file '{fileName}' has been modified outside the editor.\n\nYou have unsaved changes. Do you want to reload the file and lose your changes?"
+            : $"The file '{fileName}' has been modified outside the editor.\n\nDo you want to reload it?";
+        
+        var result = MessageBox.Show(
+            message,
+            "File Changed",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Question);
+        
+        if (result == MessageBoxResult.Yes)
+        {
+            ReloadDocument(doc);
+        }
+    }
+    
+    /// <summary>
+    /// Reloads a document from disk
+    /// </summary>
+    private void ReloadDocument(DocumentModel doc)
+    {
+        if (string.IsNullOrEmpty(doc.FilePath) || !File.Exists(doc.FilePath))
+        {
+            MessageBox.Show("The file no longer exists.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+        
+        try
+        {
+            _isReloadingFile = true;
+            
+            var content = File.ReadAllText(doc.FilePath);
+            doc.LastKnownWriteTime = File.GetLastWriteTimeUtc(doc.FilePath);
+            
+            // Preserve caret position if possible
+            var caretOffset = doc.TextDocument.TextLength > 0 ? Math.Min(doc.CaretOffset, content.Length) : 0;
+            
+            doc.TextDocument.Text = content;
+            doc.IsDirty = false;
+            
+            // If this is the active document, update the editor
+            if (doc == _activeDocument)
+            {
+                try
+                {
+                    CodeEditor.CaretOffset = Math.Min(caretOffset, doc.TextDocument.TextLength);
+                }
+                catch { }
+                
+                RenderPreview();
+            }
+            
+            _isReloadingFile = false;
+        }
+        catch (Exception ex)
+        {
+            _isReloadingFile = false;
+            MessageBox.Show($"Failed to reload file: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
     
     private void ShowStartupNewDocumentDialog()
     {
@@ -4305,7 +4475,11 @@ Console.WriteLine(""Hello, World!"");
                     
                     var content = File.ReadAllText(openDialog.FileName);
                     var doc = CreateNewDocument(openDialog.FileName, content);
+                    doc.LastKnownWriteTime = File.GetLastWriteTimeUtc(openDialog.FileName);
                     SwitchToDocument(doc);
+                    
+                    // Set up file watcher for external change detection
+                    SetupFileWatcher(openDialog.FileName);
                     
                     var folder = Path.GetDirectoryName(openDialog.FileName);
                     if (!string.IsNullOrEmpty(folder))
@@ -4451,6 +4625,10 @@ public class DocumentModel : System.ComponentModel.INotifyPropertyChanged
     // Preview state
     public double PreviewZoom { get; set; } = 1.0;
     public bool HasNavigatedAway { get; set; }
+    
+    // File change detection
+    public DateTime LastKnownWriteTime { get; set; }
+    public bool ExternalChangeDetected { get; set; }
     
     // UI element references for the tab
     public System.Windows.Controls.Button? TabButton { get; set; }
