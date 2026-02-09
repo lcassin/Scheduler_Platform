@@ -51,7 +51,18 @@
         
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
             <StackPanel>
-                                <TextBlock Text="Blank" Foreground="#808080" FontSize="12" Margin="4,8,0,4"/>
+                                <TextBlock Text="Open" Foreground="#808080" FontSize="12" Margin="4,8,0,4"/>
+                                <Button Style="{StaticResource TemplateButtonStyle}" Click="OpenExistingFile_Click">
+                                    <StackPanel Orientation="Horizontal">
+                                        <TextBlock Text="&#xE8E5;" FontFamily="Segoe MDL2 Assets" FontSize="32" VerticalAlignment="Center" Margin="8,0,20,0"/>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="Open Existing File" FontWeight="SemiBold"/>
+                                            <TextBlock Text="Browse for an existing .mmd or .md file" Foreground="#808080" FontSize="11"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Button>
+                                
+                                <TextBlock Text="Blank" Foreground="#808080" FontSize="12" Margin="4,16,0,4"/>
                                 <Button Style="{StaticResource TemplateButtonStyle}" Click="BlankMermaid_Click">
                                     <StackPanel Orientation="Horizontal">
                                         <Image Source="Resources/TemplateThumbnails/blank.png" Width="48" Height="48" Margin="0,0,12,0"/>

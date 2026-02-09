@@ -6,6 +6,7 @@ public partial class NewDocumentDialog : Window
 {
     public string? SelectedTemplate { get; private set; }
     public bool IsMermaid { get; private set; } = true;
+    public bool OpenExistingFile { get; private set; } = false;
 
     public NewDocumentDialog()
     {
@@ -609,6 +610,13 @@ C4Context
     %% Rel(from, to, label) - Relationship
     %% Rel(from, to, label, technology) - Relationship with tech
     %% BiRel(from, to, label) - Bidirectional relationship");
+    }
+
+    private void OpenExistingFile_Click(object sender, RoutedEventArgs e)
+    {
+        OpenExistingFile = true;
+        DialogResult = true;
+        Close();
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e)

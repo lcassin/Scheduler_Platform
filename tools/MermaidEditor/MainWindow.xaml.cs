@@ -4264,9 +4264,62 @@ Console.WriteLine(""Hello, World!"");
         }
         else
         {
-            // Create new untitled document
-            var doc = CreateNewDocument();
-            SwitchToDocument(doc);
+            // Show New Document dialog on startup
+            var dialog = new NewDocumentDialog { Owner = this };
+            if (dialog.ShowDialog() == true)
+            {
+                if (dialog.OpenExistingFile)
+                {
+                    // User wants to open an existing file
+                    var openDialog = new Microsoft.Win32.OpenFileDialog
+                    {
+                        Filter = "All Supported Files|*.mmd;*.md|Mermaid Files (*.mmd)|*.mmd|Markdown Files (*.md)|*.md|All Files (*.*)|*.*",
+                        InitialDirectory = _currentBrowserPath ?? Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments)
+                    };
+                    
+                    if (openDialog.ShowDialog() == true)
+                    {
+                        var content = File.ReadAllText(openDialog.FileName);
+                        var doc = CreateNewDocument(openDialog.FileName, content);
+                        SwitchToDocument(doc);
+                        
+                        var folder = Path.GetDirectoryName(openDialog.FileName);
+                        if (!string.IsNullOrEmpty(folder))
+                        {
+                            _currentBrowserPath = folder;
+                        }
+                        
+                        AddToRecentFiles(openDialog.FileName);
+                    }
+                    else
+                    {
+                        // User cancelled open dialog, create blank document
+                        var doc = CreateNewDocument();
+                        SwitchToDocument(doc);
+                    }
+                }
+                else if (dialog.SelectedTemplate != null)
+                {
+                    // Create document from selected template
+                    var doc = CreateNewDocument();
+                    doc.TextDocument.Text = dialog.SelectedTemplate;
+                    doc.RenderMode = dialog.IsMermaid ? RenderMode.Mermaid : RenderMode.Markdown;
+                    doc.IsDirty = false;
+                    SwitchToDocument(doc);
+                }
+                else
+                {
+                    // Fallback - create blank document
+                    var doc = CreateNewDocument();
+                    SwitchToDocument(doc);
+                }
+            }
+            else
+            {
+                // User cancelled dialog, create blank document
+                var doc = CreateNewDocument();
+                SwitchToDocument(doc);
+            }
         }
     }
     
