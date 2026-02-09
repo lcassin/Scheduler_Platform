@@ -1272,10 +1272,12 @@ Console.WriteLine(""Hello, World!"");
         
         document.getElementById('content').innerHTML = marked.parse(markdownContent);
         
-        // Restore scroll position after content is rendered
-        const savedScrollPosition = {_pendingScrollPosition};
+        // Restore scroll position after content is rendered (use requestAnimationFrame to ensure layout is complete)
+        const savedScrollPosition = {_pendingScrollPosition.ToString(System.Globalization.CultureInfo.InvariantCulture)};
         if (savedScrollPosition > 0) {{
-            window.scrollTo(0, savedScrollPosition);
+            requestAnimationFrame(() => {{
+                window.scrollTo(0, savedScrollPosition);
+            }});
         }}
         
         // Add click handlers for click-to-highlight feature
@@ -3065,47 +3067,14 @@ Console.WriteLine(""Hello, World!"");
         // Header with icon and title
         var headerPanel = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 16) };
         
-        // Load the app icon from file
+        // Use the window's icon (set from ApplicationIcon in project)
         var iconImage = new System.Windows.Controls.Image
         {
             Width = 64,
             Height = 64,
-            Margin = new Thickness(0, 0, 16, 0)
+            Margin = new Thickness(0, 0, 16, 0),
+            Source = this.Icon
         };
-        try
-        {
-            // Load icon from file in the application directory
-            var iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.ico");
-            if (System.IO.File.Exists(iconPath))
-            {
-                // Use BitmapImage with file stream for reliable loading
-                using (var stream = new System.IO.FileStream(iconPath, System.IO.FileMode.Open, System.IO.FileAccess.Read))
-                {
-                    var decoder = new System.Windows.Media.Imaging.IconBitmapDecoder(
-                        stream,
-                        System.Windows.Media.Imaging.BitmapCreateOptions.PreservePixelFormat,
-                        System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
-                    // Get the largest frame from the icon (usually the last one)
-                    if (decoder.Frames.Count > 0)
-                    {
-                        // Find the largest frame
-                        var largestFrame = decoder.Frames[0];
-                        foreach (var frame in decoder.Frames)
-                        {
-                            if (frame.PixelWidth > largestFrame.PixelWidth)
-                            {
-                                largestFrame = frame;
-                            }
-                        }
-                        iconImage.Source = largestFrame;
-                    }
-                }
-            }
-        }
-        catch
-        {
-            // If icon fails to load, continue without it
-        }
         
         var titlePanel = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         titlePanel.Children.Add(new TextBlock
