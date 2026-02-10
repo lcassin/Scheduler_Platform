@@ -27,11 +27,13 @@ public partial class NewDocumentDialog : Window
             var recentFilePath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 "MermaidEditor",
-                "recent.txt");
+                "recent.json");
 
             if (File.Exists(recentFilePath))
             {
-                _recentFiles = File.ReadAllLines(recentFilePath)
+                var json = File.ReadAllText(recentFilePath);
+                var allFiles = System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+                _recentFiles = allFiles
                     .Where(f => !string.IsNullOrWhiteSpace(f) && File.Exists(f))
                     .Take(10)
                     .ToList();
