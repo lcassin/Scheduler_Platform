@@ -1,0 +1,57 @@
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#e6f3ff', 'primaryTextColor': '#000', 'primaryBorderColor': '#0066cc', 'lineColor': '#333', 'secondaryColor': '#fff5e6', 'tertiaryColor': '#f0fff0'}}}%%
+flowchart TB
+    subgraph Step1["Step 1: Account & Billing Pattern Discovery (Daily)"]
+        S1A[("VendorCredNewUAT<br/>Database")] --> S1B["Query Invoice History<br/>& Account Data"]
+        S1B --> S1C["Calculate Billing Patterns<br/>(MedianDays, PeriodType)"]
+        S1C --> S1D["Determine NextRunDate<br/>& Date Ranges"]
+        S1D --> S1E["Keep Latest CredentialId<br/>per Account"]
+        S1E --> S1F[("Scheduler Platform<br/>Account Table")]
+        S1F --> S1G{{"Few Thousand/Day<br/>(~200k/month total)"}}
+    end
+
+    subgraph Orchestrator["Steps 2-5: ORCHESTRATOR"]
+        subgraph Step2["Step 2: Job Creation"]
+            S2A["Identify Accounts<br/>NextRunStatus = 'Run Now'<br/>or 'Due Soon'"] --> S2B{"Job Exists for<br/>Same Billing Period?"}
+            S2B -->|No| S2C["Create Job Record<br/>Copy BillingPeriodStart/End<br/>from Account Rule"]
+            S2B -->|Yes| S2D["Skip - Same Period<br/>Already Has Job"]
+            S2C --> S2E[("Job Table<br/>(Scheduler DB)")]
+        end
+
+        subgraph Step3["Step 3: Process Rebill (Weekly)"]
+            S3A["Check if Today =<br/>Account's ExpectedBillingDayOfWeek"] --> S3B{"Rebill Day<br/>Matches Today?"}
+            S3B -->|Yes| S3C["Call ADR API<br/>JobType = 3 (Rebill)<br/>with IsLastAttempt flag"]
+            S3B -->|No| S3D["Skip - Not this<br/>account's rebill day"]
+            S3C --> S3E{"Response?"}
+            S3E -->|200 OK| S3F["Record Success<br/>Rebill Request Sent"]
+            S3E -->|Error| S3G["Record Failure<br/>in Results"]
+        end
+
+        subgraph Step4["Step 4: Check Statuses (BEFORE new requests)"]
+            S4A["Find Jobs with<br/>ADR Request Sent status"] --> S4B["Call Status API<br/>GetRequestStatusByJobId"]
+            S4B --> S4C{"Status?"}
+            S4C -->|"Complete<br/>(StatusId = 11)"| S4D["Mark Job SUCCESS<br/>Advance Rule to<br/>Next Billing Cycle"]
+            S4C -->|"No Documents Found<br/>(StatusId = 13)"| S4E["Keep Status<br/>Will Retry Today"]
+            S4C -->|"Failed/Error"| S4F["Mark Job<br/>NEEDS REVIEW"]
+        end
+
+        subgraph Step5["Step 5: Send ADR Requests"]
+            S5A["Find Jobs where<br/>NextRunDateTime <= Today<br/>Status = Pending"] --> S5B{"Within Billing<br/>Window?"}
+            S5B -->|Yes| S5C["Call IngestAdrRequest API<br/>ADRRequestTypeId = 2<br/>(Download Invoice)"]
+            S5B -->|"No - Past<br/>NextRangeEndDateTime"| S5D["Mark Job<br/>NEEDS REVIEW"]
+            S5C --> S5E["Record JobExecution<br/>Status = ADR Request Sent"]
+            S5E --> S5F["Will Check Status<br/>Tomorrow in Step 4"]
+        end
+
+        Step2 --> Step3
+        Step3 --> Step4
+        Step4 --> Step5
+    end
+
+    Step1 --> Orchestrator
+
+    style Step1 fill:#e6f3ff,stroke:#0066cc
+    style Orchestrator fill:#f9f9f9,stroke:#666
+    style Step2 fill:#fff5e6,stroke:#cc6600
+    style Step3 fill:#f0fff0,stroke:#006600
+    style Step4 fill:#f5f0ff,stroke:#6600cc
+    style Step5 fill:#fff0f0,stroke:#cc0000
