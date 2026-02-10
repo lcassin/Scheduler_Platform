@@ -193,7 +193,8 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             bool? isManualRequest = null,
             string? sortColumn = null,
             bool sortDescending = true,
-            List<int>? jobIds = null)
+            List<int>? jobIds = null,
+            int? jobTypeId = null)
         {
             // Filter by both job.IsDeleted AND account.IsDeleted to exclude jobs for deleted accounts
             var query = _dbSet.Where(j => !j.IsDeleted && j.AdrAccount != null && !j.AdrAccount.IsDeleted);
@@ -276,6 +277,11 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             if (credentialId.HasValue)
             {
                 query = query.Where(j => j.CredentialId == credentialId.Value);
+            }
+
+            if (jobTypeId.HasValue)
+            {
+                query = query.Where(j => j.JobTypeId == jobTypeId.Value);
             }
 
             int totalCount;

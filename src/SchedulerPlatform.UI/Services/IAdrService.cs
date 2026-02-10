@@ -51,7 +51,8 @@ public interface IAdrService
             bool? isManualRequest = null,
             string? blacklistStatus = null,
             string? sortColumn = null,
-            bool sortDescending = true);
+            bool sortDescending = true,
+            int? jobTypeId = null);
     Task<AdrJob?> GetJobAsync(int id);
     Task<List<AdrJob>> GetJobsByAccountAsync(int adrAccountId);
     Task<AdrJobStats> GetJobStatsAsync(int? lastOrchestrationRuns = null);

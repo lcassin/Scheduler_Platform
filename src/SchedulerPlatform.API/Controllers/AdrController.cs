@@ -1648,6 +1648,7 @@ public class AdrController : ControllerBase
     /// <param name="interfaceAccountId">Optional interface account ID to filter jobs.</param>
     /// <param name="credentialId">Optional credential ID to filter jobs.</param>
     /// <param name="isManualRequest">Optional filter for manual vs automated requests.</param>
+    /// <param name="jobTypeId">Optional job type ID filter (1 = Credential Check, 2 = Download Invoice, 3 = Rebill).</param>
     /// <param name="sortColumn">Column name to sort by.</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
     /// <returns>A paginated list of ADR jobs.</returns>
@@ -1672,6 +1673,7 @@ public class AdrController : ControllerBase
         [FromQuery] int? credentialId = null,
         [FromQuery] bool? isManualRequest = null,
         [FromQuery] string? blacklistStatus = null,
+        [FromQuery] int? jobTypeId = null,
         [FromQuery] string? sortColumn = null,
         [FromQuery] bool sortDescending = true)
     {
@@ -1767,7 +1769,8 @@ public class AdrController : ControllerBase
                     isManualRequest,
                     sortColumn,
                     sortDescending,
-                    jobIdsWithBlacklistStatus);
+                    jobIdsWithBlacklistStatus,
+                    jobTypeId);
 
                 // Get blacklist status for each job (single query)
                 var today = DateTime.UtcNow.Date;

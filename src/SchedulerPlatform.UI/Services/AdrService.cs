@@ -216,7 +216,8 @@ public class AdrService : IAdrService
         bool? isManualRequest = null,
         string? blacklistStatus = null,
         string? sortColumn = null,
-        bool sortDescending = true)
+        bool sortDescending = true,
+        int? jobTypeId = null)
     {
         var queryParams = new List<string>
         {
@@ -256,6 +257,9 @@ public class AdrService : IAdrService
 
         if (!string.IsNullOrWhiteSpace(blacklistStatus))
             queryParams.Add($"blacklistStatus={Uri.EscapeDataString(blacklistStatus)}");
+
+        if (jobTypeId.HasValue)
+            queryParams.Add($"jobTypeId={jobTypeId.Value}");
 
         if (!string.IsNullOrWhiteSpace(sortColumn))
             queryParams.Add($"sortColumn={Uri.EscapeDataString(sortColumn)}");
