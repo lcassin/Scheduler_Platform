@@ -6,7 +6,7 @@ The Automated Data Retrieval (ADR) system automates the process of retrieving bi
 
 ## How It Works
 
-The ADR process runs daily and follows a 6-step workflow:
+The ADR process runs daily and follows a 5-step workflow:
 
 ![ADR Process Overview](/diagrams/adr-business-workflow.png)
 
@@ -24,9 +24,8 @@ For an account with Next Run Date of January 17:
 
 | Phase | Dates | What Happens |
 |-------|-------|--------------|
-| Credential Check | Jan 10-16 | Verify login credentials work (7 days before) |
 | ADR Requests | Jan 17-21 | Send daily requests until invoice found |
-| Final Retry | Jan 27-28 | One last attempt if still not found |
+| Rebill Check | Weekly | Check for updated/partial/off-cycle invoices on the account's expected billing day of week |
 
 ## Daily Orchestration Flow
 
@@ -35,12 +34,11 @@ Each day, the orchestration runs through these steps in order:
 ![Daily Orchestration Flow](diagrams/adr-daily-orchestration.png)
 
 The order is important:
-1. **Check Status First** - See if yesterday's requests succeeded before sending new ones
-2. **Send ADR Requests** - Only for jobs that still need processing
-3. **Verify Credentials** - For accounts coming due in the next 7 days
-4. **Create Jobs** - For accounts that are now due
-5. **Sync Accounts** - Import any updates from the source system
-6. **Cleanup** - Finalize any stale jobs
+1. **Sync Accounts** - Import any updates from the source system
+2. **Create Jobs** - For accounts that are now due
+3. **Process Rebill** - Weekly rebill checks for updated/partial invoices
+4. **Check Statuses** - See if yesterday's requests succeeded before sending new ones
+5. **Send ADR Requests** - Only for jobs that still need processing
 
 ### Step 1: Sync Accounts
 The system imports vendor account information from the source database. This includes account numbers, vendor codes, and billing patterns. Accounts that have been manually corrected are preserved during sync.
@@ -48,17 +46,14 @@ The system imports vendor account information from the source database. This inc
 ### Step 2: Create Jobs
 The system identifies which accounts are due for invoice retrieval based on their billing cycle. A "job" is created for each account that needs processing. Accounts marked as "Missing" (requiring research) are skipped.
 
-### Step 3: Verify Credentials
-Seven days before an account's billing date, the system verifies that the login credentials are still valid. If credentials fail, a helpdesk ticket is automatically created for the Customer Service team to update them.
+### Step 3: Process Rebill
+On each account's expected billing day of week, the system sends a rebill request to check for updated, partial, or off-cycle invoices. This runs weekly and includes an `IsLastAttempt` flag that tells the ADR API whether to create a Zendesk ticket on final failure.
 
-### Step 4: Send ADR Requests
+### Step 4: Check Statuses
+The system monitors the status of all pending requests. This happens BEFORE sending new ADR requests to prevent duplicate requests. When an invoice is successfully retrieved, the job is marked as complete.
+
+### Step 5: Send ADR Requests
 On the billing date, the system sends requests to retrieve the invoice documents. Requests are sent daily until either the invoice is found or the billing window closes.
-
-### Step 5: Check Status
-The system monitors the status of all pending requests. When an invoice is successfully retrieved, the job is marked as complete.
-
-### Step 6: Cleanup
-Jobs that are stuck in pending status past their billing window are finalized to prevent them from blocking future processing.
 
 ## Job Status Flow
 
@@ -68,9 +63,7 @@ Each job progresses through several statuses:
 
 | Status | Description |
 |--------|-------------|
-| Pending | Job created, waiting for credential verification |
-| Credential Verified | Login credentials confirmed working |
-| Credential Failed | Login credentials need attention (helpdesk notified) |
+| Pending | Job created, waiting for ADR request to be sent |
 | ADR Request Sent | Invoice retrieval request submitted |
 | Completed | Invoice successfully retrieved |
 | Failed | Unable to retrieve invoice after all retries |
