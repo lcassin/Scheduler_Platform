@@ -1,4 +1,6 @@
+using System.IO;
 using System.Windows;
+using System.Windows.Controls;
 
 namespace MermaidEditor;
 
@@ -7,10 +9,115 @@ public partial class NewDocumentDialog : Window
     public string? SelectedTemplate { get; private set; }
     public bool IsMermaid { get; private set; } = true;
     public bool OpenExistingFile { get; private set; } = false;
+    public string? SelectedRecentFilePath { get; private set; }
+
+    private List<string> _recentFiles = new();
 
     public NewDocumentDialog()
     {
         InitializeComponent();
+        LoadRecentFiles();
+        PopulateRecentFilesList();
+    }
+
+    private void LoadRecentFiles()
+    {
+        try
+        {
+            var recentFilePath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "MermaidEditor",
+                "recent.txt");
+
+            if (File.Exists(recentFilePath))
+            {
+                _recentFiles = File.ReadAllLines(recentFilePath)
+                    .Where(f => !string.IsNullOrWhiteSpace(f) && File.Exists(f))
+                    .Take(10)
+                    .ToList();
+            }
+        }
+        catch
+        {
+            // Ignore errors loading recent files
+        }
+    }
+
+    private void PopulateRecentFilesList()
+    {
+        if (_recentFiles.Count == 0)
+        {
+            NoRecentFilesText.Visibility = Visibility.Visible;
+            return;
+        }
+
+        NoRecentFilesText.Visibility = Visibility.Collapsed;
+
+        foreach (var filePath in _recentFiles)
+        {
+            var fileName = Path.GetFileName(filePath);
+            var directory = Path.GetDirectoryName(filePath) ?? "";
+            
+            // Shorten the directory path if it's too long
+            if (directory.Length > 35)
+            {
+                directory = "..." + directory.Substring(directory.Length - 32);
+            }
+
+            var button = new System.Windows.Controls.Button
+            {
+                Style = (Style)FindResource("RecentFileButtonStyle"),
+                Tag = filePath,
+                Content = new StackPanel
+                {
+                    Orientation = System.Windows.Controls.Orientation.Horizontal,
+                    Children =
+                    {
+                        new TextBlock
+                        {
+                            Text = fileName.EndsWith(".mmd") ? "\uE8A5" : "\uE8A5",
+                            FontFamily = new System.Windows.Media.FontFamily("Segoe MDL2 Assets"),
+                            FontSize = 16,
+                            VerticalAlignment = VerticalAlignment.Center,
+                            Margin = new Thickness(0, 0, 8, 0),
+                            Foreground = (System.Windows.Media.Brush)FindResource("ThemeDisabledForegroundBrush")
+                        },
+                        new StackPanel
+                        {
+                            VerticalAlignment = VerticalAlignment.Center,
+                            Children =
+                            {
+                                new TextBlock
+                                {
+                                    Text = fileName,
+                                    FontWeight = FontWeights.SemiBold,
+                                    Foreground = (System.Windows.Media.Brush)FindResource("ThemeForegroundBrush")
+                                },
+                                new TextBlock
+                                {
+                                    Text = directory,
+                                    FontSize = 10,
+                                    Foreground = (System.Windows.Media.Brush)FindResource("ThemeDisabledForegroundBrush")
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            
+            button.Click += RecentFile_Click;
+            RecentFilesPanel.Children.Add(button);
+        }
+    }
+
+    private void RecentFile_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Button button && button.Tag is string filePath)
+        {
+            SelectedRecentFilePath = filePath;
+            DialogResult = true;
+            Close();
+        }
     }
 
     private void SetTemplateAndClose(string template, bool isMermaid = true)

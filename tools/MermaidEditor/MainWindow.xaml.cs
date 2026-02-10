@@ -77,6 +77,8 @@ public partial class MainWindow : Window
     private bool _isRenderingContent; // Flag set when we call NavigateToString, cleared after navigation completes
     private bool _isGoingBack; // Flag set when user clicks back button, cleared after navigation completes
     private bool _hasNavigatedAway; // Track if user has navigated away from rendered content
+    private bool _markdownPageLoaded; // Track if Markdown page structure is already loaded (for incremental updates)
+    private bool _mermaidPageLoaded; // Track if Mermaid page structure is already loaded (for incremental updates)
     
     // File change detection
     private FileSystemWatcher? _fileWatcher;
@@ -376,6 +378,10 @@ Console.WriteLine(""Hello, World!"");
 
     private void ShowCompletionWindow()
     {
+        // Only show IntelliSense for Mermaid files, not Markdown
+        if (_currentRenderMode != RenderMode.Mermaid)
+            return;
+            
         var wordStart = GetWordStart();
         var currentWord = GetCurrentWord(wordStart);
         
@@ -384,9 +390,15 @@ Console.WriteLine(""Hello, World!"");
 
         var completionData = GetCompletionData(currentWord);
         if (completionData.Count == 0)
+        {
+            // Close any existing completion window if no matches
+            _completionWindow?.Close();
             return;
+        }
 
         _completionWindow = new CompletionWindow(CodeEditor.TextArea);
+        _completionWindow.CloseAutomatically = true;
+        _completionWindow.CloseWhenCaretAtBeginning = true;
         var data = _completionWindow.CompletionList.CompletionData;
         
         foreach (var item in completionData)
@@ -545,10 +557,12 @@ Console.WriteLine(""Hello, World!"");
     {
         try
         {
-            // Load and apply saved theme
-            ThemeManager.LoadTheme();
-            UpdateThemeMenuCheckmarks();
-            UpdateEditorTheme();
+                // Load and apply saved theme
+                ThemeManager.LoadTheme();
+                UpdateThemeMenuCheckmarks();
+                UpdateEditorTheme();
+                UpdateTitleBarTheme();
+                UpdateTabStyles(); // Refresh tab styles after theme is loaded
             
             await PreviewWebView.EnsureCoreWebView2Async();
             _webViewInitialized = true;
@@ -586,6 +600,16 @@ Console.WriteLine(""Hello, World!"");
             _isRenderingContent = false;
             _hasNavigatedAway = false;
             PreviewBackButton.IsEnabled = false;
+            
+            // Mark page as loaded so subsequent updates use JavaScript instead of page reload
+            if (_currentRenderMode == RenderMode.Markdown)
+            {
+                _markdownPageLoaded = true;
+            }
+            else if (_currentRenderMode == RenderMode.Mermaid)
+            {
+                _mermaidPageLoaded = true;
+            }
         }
         else if (_isGoingBack)
         {
@@ -593,12 +617,18 @@ Console.WriteLine(""Hello, World!"");
             _isGoingBack = false;
             _hasNavigatedAway = false;
             PreviewBackButton.IsEnabled = false;
+            // Reset page loaded flags since we navigated away
+            _markdownPageLoaded = false;
+            _mermaidPageLoaded = false;
         }
         else
         {
             // User has navigated away from rendered content (clicked a link)
             _hasNavigatedAway = true;
             PreviewBackButton.IsEnabled = true;
+            // Reset page loaded flags since we navigated away
+            _markdownPageLoaded = false;
+            _mermaidPageLoaded = false;
         }
     }
     
@@ -809,12 +839,38 @@ Console.WriteLine(""Hello, World!"");
         }
     }
 
-    private void RenderMermaid()
+    private async void RenderMermaid()
     {
         if (!_webViewInitialized) return;
+        
+        // Reset markdown page loaded flag since we're switching to Mermaid mode
+        _markdownPageLoaded = false;
 
         var mermaidCode = CodeEditor.Text;
         var escapedCode = System.Text.Json.JsonSerializer.Serialize(mermaidCode);
+        
+        // If page is already loaded, just update the diagram via JavaScript (preserves pan/zoom position)
+        if (_mermaidPageLoaded && !_hasNavigatedAway)
+        {
+            try
+            {
+                // Update diagram without reloading the page - pan/zoom position is preserved
+                await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
+                    (function() {{
+                        if (typeof updateDiagram === 'function') {{
+                            updateDiagram({escapedCode});
+                        }}
+                    }})();
+                ");
+                StatusText.Text = "Mermaid rendered";
+                return;
+            }
+            catch
+            {
+                // If JavaScript update fails, fall back to full page reload
+                _mermaidPageLoaded = false;
+            }
+        }
 
         var html = $@"<!DOCTYPE html>
 <html>
@@ -1134,6 +1190,119 @@ Console.WriteLine(""Hello, World!"");
                 window.chrome.webview.postMessage({{ type: 'pngExportError', error: e.message }});
             }}
         }};
+        
+        // Update diagram content without reloading the page (preserves pan/zoom position)
+        window.updateDiagram = function(newCode) {{
+            // Save current panzoom transform (only zoom level, not position - position causes issues when diagram size changes)
+            let savedZoom = currentZoom;
+            let savedTransform = null;
+            if (panzoomInstance) {{
+                savedTransform = panzoomInstance.getTransform();
+            }}
+            
+            const diagram = document.getElementById('diagram');
+            const container = document.getElementById('container');
+            
+            // Save scroll position of container
+            const savedScrollLeft = container.scrollLeft;
+            const savedScrollTop = container.scrollTop;
+            
+            // Clear existing content and add new mermaid code
+            diagram.innerHTML = '<pre class=""mermaid"">' + newCode.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>';
+            diagram.classList.remove('has-error');
+            diagram.style.minWidth = '2000px';
+            diagram.style.width = '';
+            
+            // Reset any transform on diagram before re-rendering
+            diagram.style.transform = '';
+            
+            // Destroy old panzoom instance
+            if (panzoomInstance) {{
+                panzoomInstance.dispose();
+                panzoomInstance = null;
+            }}
+            
+            // Re-render mermaid
+            mermaid.run().then(() => {{
+                // Use requestAnimationFrame to ensure SVG is fully rendered
+                requestAnimationFrame(() => {{
+                    const svg = document.querySelector('#diagram svg');
+                    
+                    // Fix SVG and container dimensions after render
+                    if (svg) {{
+                        // Wait another frame to ensure text is fully rendered
+                        requestAnimationFrame(() => {{
+                            let svgWidth = 0;
+                            let svgHeight = 0;
+                            
+                            // Use getBBox for accurate dimensions (includes all rendered content)
+                            try {{
+                                const bbox = svg.getBBox();
+                                svgWidth = bbox.width + 40;
+                                svgHeight = bbox.height + 40;
+                            }} catch (e) {{
+                                // Fall back to viewBox
+                                const viewBox = svg.getAttribute('viewBox');
+                                if (viewBox) {{
+                                    const parts = viewBox.split(' ');
+                                    if (parts.length === 4) {{
+                                        svgWidth = parseFloat(parts[2]);
+                                        svgHeight = parseFloat(parts[3]);
+                                    }}
+                                }}
+                            }}
+                            
+                            if (svgWidth > 0 && svgHeight > 0) {{
+                                svg.style.width = svgWidth + 'px';
+                                svg.style.height = svgHeight + 'px';
+                                svg.style.minWidth = svgWidth + 'px';
+                                svg.style.minHeight = svgHeight + 'px';
+                                svg.removeAttribute('max-width');
+                                
+                                diagram.style.minWidth = 'auto';
+                                diagram.style.width = 'auto';
+                            }}
+                            
+                            // Set up click handlers
+                            setupNodeClickHandlers(svg);
+                            
+                            // Re-create panzoom
+                            panzoomInstance = panzoom(diagram, {{
+                                maxZoom: 10,
+                                minZoom: 0.1,
+                                initialZoom: 1,
+                                bounds: false,
+                                boundsPadding: 0.1
+                            }});
+                            
+                            // Restore zoom level and approximate position
+                            if (savedTransform && savedZoom !== 1) {{
+                                // Only restore zoom, reset position to avoid misalignment
+                                panzoomInstance.moveTo(0, 0);
+                                panzoomInstance.zoomAbs(0, 0, savedZoom);
+                                currentZoom = savedZoom;
+                            }} else {{
+                                panzoomInstance.moveTo(0, 0);
+                                panzoomInstance.zoomAbs(0, 0, 1);
+                                currentZoom = 1;
+                            }}
+                            
+                            // Restore container scroll position
+                            container.scrollLeft = savedScrollLeft;
+                            container.scrollTop = savedScrollTop;
+                            
+                            panzoomInstance.on('zoom', function(e) {{
+                                currentZoom = e.getTransform().scale;
+                                window.chrome.webview.postMessage({{ type: 'zoom', level: currentZoom }});
+                            }});
+                        }});
+                    }}
+                }});
+            }}).catch(err => {{
+                diagram.classList.add('has-error');
+                diagram.innerHTML = '<div class=""error"">Error: ' + err.message + '</div>';
+            }});
+        }};
     </script>
 </body>
 </html>";
@@ -1145,12 +1314,38 @@ Console.WriteLine(""Hello, World!"");
         StatusText.Text = "Mermaid rendered";
     }
 
-    private void RenderMarkdown()
+    private async void RenderMarkdown()
     {
         if (!_webViewInitialized) return;
+        
+        // Reset mermaid page loaded flag since we're switching to Markdown mode
+        _mermaidPageLoaded = false;
 
         var markdownCode = CodeEditor.Text;
         var escapedCode = System.Text.Json.JsonSerializer.Serialize(markdownCode);
+        
+        // If page is already loaded, just update the content via JavaScript (preserves scroll position)
+        if (_markdownPageLoaded && !_hasNavigatedAway)
+        {
+            try
+            {
+                // Update content without reloading the page - scroll position is naturally preserved
+                await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
+                    (function() {{
+                        const markdownContent = {escapedCode};
+                        document.getElementById('content').innerHTML = marked.parse(markdownContent);
+                        setupClickHandlers();
+                    }})();
+                ");
+                StatusText.Text = "Markdown rendered";
+                return;
+            }
+            catch
+            {
+                // If JavaScript update fails, fall back to full page reload
+                _markdownPageLoaded = false;
+            }
+        }
         
         // Set up virtual host mapping for resolving relative image paths
         var baseTag = "";
@@ -1299,10 +1494,14 @@ Console.WriteLine(""Hello, World!"");
                 }});
             }});
             
-            // Add click handlers to list items
+            // Add click handlers to list items - handle clicks anywhere in the list item
             content.querySelectorAll('li').forEach(el => {{
                 el.style.cursor = 'pointer';
                 el.addEventListener('click', function(e) {{
+                    // Don't navigate if clicking on a link
+                    if (e.target.tagName === 'A' || e.target.closest('a')) {{
+                        return;
+                    }}
                     e.stopPropagation();
                     const text = el.textContent.trim();
                     if (text) {{
@@ -1332,54 +1531,83 @@ Console.WriteLine(""Hello, World!"");
             }});
             
             // Add click handlers to bold text (strong)
+            // If inside a list item, use the list item's text for better context
             content.querySelectorAll('strong').forEach(el => {{
                 el.style.cursor = 'pointer';
                 el.addEventListener('click', function(e) {{
                     e.stopPropagation();
-                    const text = el.textContent.trim();
-                    if (text) {{
-                        window.chrome.webview.postMessage({{ 
-                            type: 'elementClick', 
-                            text: text,
-                            elementType: 'bold'
-                        }});
+                    const listItem = el.closest('li');
+                    if (listItem) {{
+                        // Use list item text for better matching
+                        const text = listItem.textContent.trim();
+                        if (text) {{
+                            window.chrome.webview.postMessage({{ 
+                                type: 'elementClick', 
+                                text: text,
+                                elementType: 'listitem'
+                            }});
+                        }}
+                    }} else {{
+                        const text = el.textContent.trim();
+                        if (text) {{
+                            window.chrome.webview.postMessage({{ 
+                                type: 'elementClick', 
+                                text: text,
+                                elementType: 'bold'
+                            }});
+                        }}
                     }}
                 }});
             }});
             
             // Add click handlers to italic text (em)
+            // If inside a list item, use the list item's text for better context
             content.querySelectorAll('em').forEach(el => {{
                 el.style.cursor = 'pointer';
                 el.addEventListener('click', function(e) {{
                     e.stopPropagation();
-                    const text = el.textContent.trim();
-                    if (text) {{
-                        window.chrome.webview.postMessage({{ 
-                            type: 'elementClick', 
-                            text: text,
-                            elementType: 'italic'
-                        }});
+                    const listItem = el.closest('li');
+                    if (listItem) {{
+                        // Use list item text for better matching
+                        const text = listItem.textContent.trim();
+                        if (text) {{
+                            window.chrome.webview.postMessage({{ 
+                                type: 'elementClick', 
+                                text: text,
+                                elementType: 'listitem'
+                            }});
+                        }}
+                    }} else {{
+                        const text = el.textContent.trim();
+                        if (text) {{
+                            window.chrome.webview.postMessage({{ 
+                                type: 'elementClick', 
+                                text: text,
+                                elementType: 'italic'
+                            }});
+                        }}
                     }}
                 }});
             }});
             
-            // Add click handlers to paragraphs (but not if they contain other clickable elements)
+            // Add click handlers to paragraphs - handle clicks anywhere in the paragraph
             content.querySelectorAll('p').forEach(el => {{
-                if (!el.querySelector('code')) {{
-                    el.style.cursor = 'pointer';
-                    el.addEventListener('click', function(e) {{
-                        if (e.target === el) {{
-                            const text = el.textContent.trim().substring(0, 50); // First 50 chars
-                            if (text) {{
-                                window.chrome.webview.postMessage({{ 
-                                    type: 'elementClick', 
-                                    text: text,
-                                    elementType: 'paragraph'
-                                }});
-                            }}
-                        }}
-                    }});
-                }}
+                el.style.cursor = 'pointer';
+                el.addEventListener('click', function(e) {{
+                    // Don't navigate if clicking on a link (let the link work normally)
+                    if (e.target.tagName === 'A' || e.target.closest('a')) {{
+                        return;
+                    }}
+                    e.stopPropagation();
+                    const text = el.textContent.trim().substring(0, 50); // First 50 chars
+                    if (text) {{
+                        window.chrome.webview.postMessage({{ 
+                            type: 'elementClick', 
+                            text: text,
+                            elementType: 'paragraph'
+                        }});
+                    }}
+                }});
             }});
         }}
     </script>
@@ -1585,6 +1813,32 @@ Console.WriteLine(""Hello, World!"");
                         var idx = line.IndexOf(normalizedText, StringComparison.OrdinalIgnoreCase);
                         if (idx >= 0) { bestMatchStart = idx; bestMatchLength = normalizedText.Length; }
                         break;
+                    }
+                    else if (elementType == "listitem")
+                    {
+                        // For list items, look for lines starting with - or * and containing the text
+                        var trimmedLine = line.TrimStart();
+                        if ((trimmedLine.StartsWith("- ") || trimmedLine.StartsWith("* ") || trimmedLine.StartsWith("+ ")) &&
+                            LineContainsListItemText(line, normalizedText))
+                        {
+                            bestLineIndex = i;
+                            bestMatchStart = 0;
+                            bestMatchLength = line.Length;
+                            break;
+                        }
+                    }
+                    else if (elementType == "paragraph")
+                    {
+                        // For paragraphs, search for any part of the text (handles Markdown syntax differences)
+                        // Try to find a line that contains a significant portion of the text
+                        var searchText = normalizedText.Length > 20 ? normalizedText.Substring(0, 20) : normalizedText;
+                        if (line.Contains(searchText, StringComparison.OrdinalIgnoreCase))
+                        {
+                            bestLineIndex = i;
+                            var idx = line.IndexOf(searchText, StringComparison.OrdinalIgnoreCase);
+                            if (idx >= 0) { bestMatchStart = idx; bestMatchLength = searchText.Length; }
+                            break;
+                        }
                     }
                     else if (string.IsNullOrEmpty(elementType) || elementType == "text")
                     {
@@ -1824,6 +2078,32 @@ Console.WriteLine(""Hello, World!"");
         }
     }
 
+    /// <summary>
+    /// Helper method to check if a Markdown list item line contains the rendered text.
+    /// Handles Markdown syntax like **bold**, *italic*, [links](url), etc.
+    /// </summary>
+    private bool LineContainsListItemText(string line, string renderedText)
+    {
+        // The rendered text is what appears in the browser (without Markdown syntax)
+        // We need to check if the line contains the key words from the rendered text
+        
+        // Split the rendered text into words and check if the line contains them
+        var words = renderedText.Split(new[] { ' ', '-', ':', ',', '.' }, StringSplitOptions.RemoveEmptyEntries);
+        
+        // Check if the line contains at least the first few significant words
+        int matchCount = 0;
+        foreach (var word in words.Take(5))
+        {
+            if (word.Length > 2 && line.Contains(word, StringComparison.OrdinalIgnoreCase))
+            {
+                matchCount++;
+            }
+        }
+        
+        // If we match at least 2 words (or all words if less than 2), consider it a match
+        return matchCount >= Math.Min(2, words.Length);
+    }
+
     private void UpdateTitle()
     {
         var fileName = string.IsNullOrEmpty(_currentFilePath) ? "Untitled" : System.IO.Path.GetFileName(_currentFilePath);
@@ -1855,24 +2135,38 @@ Console.WriteLine(""Hello, World!"");
     {
         // Show template selection dialog
         var dialog = new NewDocumentDialog { Owner = this };
-        if (dialog.ShowDialog() == true && dialog.SelectedTemplate != null)
+        if (dialog.ShowDialog() == true)
         {
-            // Create a new document with the selected template
-            var doc = CreateNewDocument(null, dialog.SelectedTemplate);
-            doc.RenderMode = dialog.IsMermaid ? RenderMode.Mermaid : RenderMode.Markdown;
-            SwitchToDocument(doc);
-            
-            // Update syntax highlighting
-            if (dialog.IsMermaid)
+            if (dialog.SelectedRecentFilePath != null)
             {
-                CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
+                // User selected a recent file
+                OpenFileInTab(dialog.SelectedRecentFilePath);
+                StatusText.Text = "File opened";
             }
-            else
+            else if (dialog.OpenExistingFile)
             {
-                CodeEditor.SyntaxHighlighting = null;
+                // User wants to browse for a file
+                Open_Click(sender, e);
             }
-            
-            UpdateExportMenuVisibility();
+            else if (dialog.SelectedTemplate != null)
+            {
+                // Create a new document with the selected template
+                var doc = CreateNewDocument(null, dialog.SelectedTemplate);
+                doc.RenderMode = dialog.IsMermaid ? RenderMode.Mermaid : RenderMode.Markdown;
+                SwitchToDocument(doc);
+                
+                // Update syntax highlighting
+                if (dialog.IsMermaid)
+                {
+                    CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
+                }
+                else
+                {
+                    CodeEditor.SyntaxHighlighting = null;
+                }
+                
+                UpdateExportMenuVisibility();
+            }
         }
     }
 
@@ -2926,32 +3220,131 @@ Console.WriteLine(""Hello, World!"");
 
     private void About_Click(object sender, RoutedEventArgs e)
     {
-        MessageBox.Show(
-            "Mermaid Editor v2.0.0\n\n" +
-            "A visual IDE for editing Mermaid diagrams and Markdown files.\n\n" +
-            "Features:\n" +
-            "- Live preview as you type\n" +
-            "- Mermaid diagram rendering with pan/zoom\n" +
-            "- Markdown rendering with GitHub styling\n" +
-            "- Syntax highlighting and IntelliSense\n" +
-            "- Click-to-navigate between preview and code\n" +
-            "- Navigation dropdown for quick section jumping\n" +
-            "- Export to PNG, SVG, EMF, and Word\n" +
-            "- Word export embeds images for Markdown files\n" +
-            "- New document templates for all diagram types\n" +
-            "- File browser with preview on selection\n" +
-            "- Drag and drop file support\n" +
-            "- Undo/Redo support\n\n" +
-            "Supported file types:\n" +
-            "- .mmd, .mermaid - Mermaid diagrams\n" +
-            "- .md - Markdown files\n\n" +
-            "\u00A9 2026 Lee Cassin\n\n" +
-            "Licensed under the GNU General Public License v3.0\n" +
-            "This is free software; you are free to change and redistribute it.\n" +
-            "See LICENSE file for details.",
-            "About Mermaid Editor",
-            MessageBoxButton.OK,
-            MessageBoxImage.Information);
+        // Create custom About dialog with Mermaid icon
+        var aboutWindow = new Window
+        {
+            Title = "About Mermaid Editor",
+            Width = 500,
+            Height = 480,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Owner = this,
+            ResizeMode = ResizeMode.NoResize,
+            Background = (SolidColorBrush)System.Windows.Application.Current.Resources["ThemeBackgroundBrush"]
+        };
+        
+        var mainGrid = new Grid { Margin = new Thickness(20) };
+        mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        
+        // Header with icon and title
+        var headerPanel = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 16) };
+        
+        // Load the icon from embedded resource
+        var iconImage = new System.Windows.Controls.Image
+        {
+            Width = 64,
+            Height = 64,
+            Margin = new Thickness(0, 0, 16, 0)
+        };
+        try
+        {
+            var iconUri = new Uri("pack://application:,,,/app.ico", UriKind.Absolute);
+            var decoder = new System.Windows.Media.Imaging.IconBitmapDecoder(
+                iconUri,
+                System.Windows.Media.Imaging.BitmapCreateOptions.PreservePixelFormat,
+                System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
+            if (decoder.Frames.Count > 0)
+            {
+                // Find the largest frame for best quality
+                var largestFrame = decoder.Frames[0];
+                foreach (var frame in decoder.Frames)
+                {
+                    if (frame.PixelWidth > largestFrame.PixelWidth)
+                    {
+                        largestFrame = frame;
+                    }
+                }
+                iconImage.Source = largestFrame;
+            }
+        }
+        catch
+        {
+            // If icon fails to load, continue without it
+        }
+        
+        var titlePanel = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        titlePanel.Children.Add(new TextBlock
+        {
+            Text = "Mermaid Editor",
+            FontSize = 24,
+            FontWeight = FontWeights.Bold,
+            Foreground = (SolidColorBrush)System.Windows.Application.Current.Resources["ThemeForegroundBrush"]
+        });
+        titlePanel.Children.Add(new TextBlock
+        {
+            Text = "Version 2.0.0",
+            FontSize = 14,
+            Foreground = (SolidColorBrush)System.Windows.Application.Current.Resources["ThemeDisabledForegroundBrush"],
+            Margin = new Thickness(0, 4, 0, 0)
+        });
+        
+        headerPanel.Children.Add(iconImage);
+        headerPanel.Children.Add(titlePanel);
+        Grid.SetRow(headerPanel, 0);
+        
+        // Content with description
+        var contentScroll = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        var contentText = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = (SolidColorBrush)System.Windows.Application.Current.Resources["ThemeForegroundBrush"],
+            Text = "A visual IDE for editing Mermaid diagrams and Markdown files.\n\n" +
+                   "Features:\n" +
+                   "- Live preview as you type\n" +
+                   "- Mermaid diagram rendering with pan/zoom\n" +
+                   "- Markdown rendering with GitHub styling\n" +
+                   "- Syntax highlighting and IntelliSense\n" +
+                   "- Click-to-navigate between preview and code\n" +
+                   "- Navigation dropdown for quick section jumping\n" +
+                   "- Export to PNG, SVG, EMF, and Word\n" +
+                   "- Word export embeds images for Markdown files\n" +
+                   "- New document templates for all diagram types\n" +
+                   "- File browser with preview on selection\n" +
+                   "- Drag and drop file support\n" +
+                   "- Undo/Redo support\n\n" +
+                   "Supported file types:\n" +
+                   "- .mmd, .mermaid - Mermaid diagrams\n" +
+                   "- .md - Markdown files\n\n" +
+                   "\u00A9 2026 Lee Cassin\n\n" +
+                   "Licensed under the GNU General Public License v3.0\n" +
+                   "This is free software; you are free to change and redistribute it.\n" +
+                   "See LICENSE file for details."
+        };
+        contentScroll.Content = contentText;
+        Grid.SetRow(contentScroll, 1);
+        
+        // OK button
+        var okButton = new System.Windows.Controls.Button
+        {
+            Content = "OK",
+            Width = 80,
+            Padding = new Thickness(8, 6, 8, 6),
+            HorizontalAlignment = System.Windows.HorizontalAlignment.Right,
+            Margin = new Thickness(0, 16, 0, 0),
+            Background = (SolidColorBrush)System.Windows.Application.Current.Resources["ThemeToolbarBackgroundBrush"],
+            Foreground = (SolidColorBrush)System.Windows.Application.Current.Resources["ThemeForegroundBrush"],
+            BorderBrush = (SolidColorBrush)System.Windows.Application.Current.Resources["ThemeBorderBrush"]
+        };
+        okButton.Click += (s, args) => aboutWindow.Close();
+        Grid.SetRow(okButton, 2);
+        
+        mainGrid.Children.Add(headerPanel);
+        mainGrid.Children.Add(contentScroll);
+        mainGrid.Children.Add(okButton);
+        
+        aboutWindow.Content = mainGrid;
+        aboutWindow.ShowDialog();
     }
 
     private void ThemeDark_Click(object sender, RoutedEventArgs e)
@@ -3269,10 +3662,19 @@ Console.WriteLine(""Hello, World!"");
             ? ExtractMarkdownHeadings() 
             : ExtractMermaidSections();
         
-        NavigationDropdown.ItemsSource = items;
-        if (items.Count > 0)
+        // Use _isNavigating flag to prevent selection change from triggering navigation
+        _isNavigating = true;
+        try
         {
-            NavigationDropdown.SelectedIndex = 0;
+            NavigationDropdown.ItemsSource = items;
+            if (items.Count > 0)
+            {
+                NavigationDropdown.SelectedIndex = 0;
+            }
+        }
+        finally
+        {
+            _isNavigating = false;
         }
     }
 
@@ -3982,24 +4384,8 @@ Console.WriteLine(""Hello, World!"");
             }
         };
         
-        // Add context menu for tab operations with theme-aware styling
+        // Add context menu for tab operations - uses XAML styles from Window.Resources
         var contextMenu = new System.Windows.Controls.ContextMenu();
-        contextMenu.SetResourceReference(System.Windows.Controls.ContextMenu.BackgroundProperty, "ThemeToolbarBackgroundBrush");
-        contextMenu.SetResourceReference(System.Windows.Controls.ContextMenu.BorderBrushProperty, "ThemeBorderBrush");
-        contextMenu.SetResourceReference(System.Windows.Controls.ContextMenu.ForegroundProperty, "ThemeForegroundBrush");
-        
-        // Create a style for menu items with theme-aware colors
-        var menuItemStyle = new System.Windows.Style(typeof(System.Windows.Controls.MenuItem));
-        menuItemStyle.Setters.Add(new Setter(System.Windows.Controls.MenuItem.BackgroundProperty, System.Windows.Media.Brushes.Transparent));
-        menuItemStyle.Setters.Add(new Setter(System.Windows.Controls.MenuItem.ForegroundProperty, new DynamicResourceExtension("ThemeForegroundBrush")));
-        menuItemStyle.Setters.Add(new Setter(System.Windows.Controls.MenuItem.PaddingProperty, new Thickness(8, 4, 8, 4)));
-        
-        // Add trigger for hover state
-        var hoverTrigger = new Trigger { Property = System.Windows.Controls.MenuItem.IsHighlightedProperty, Value = true };
-        hoverTrigger.Setters.Add(new Setter(System.Windows.Controls.MenuItem.BackgroundProperty, new DynamicResourceExtension("ThemeHoverBrush")));
-        menuItemStyle.Triggers.Add(hoverTrigger);
-        
-        contextMenu.Resources.Add(typeof(System.Windows.Controls.MenuItem), menuItemStyle);
         
         // Get the filename for the Close menu item
         var fileName = string.IsNullOrEmpty(doc.FilePath) ? "Untitled" : System.IO.Path.GetFileName(doc.FilePath);
@@ -4012,32 +4398,8 @@ Console.WriteLine(""Hello, World!"");
         var closeAllButThisItem = new System.Windows.Controls.MenuItem { Header = "Close All But This", Tag = doc };
         closeAllButThisItem.Click += (s, e) => CloseAllDocumentsExcept(doc);
         
-        // Create a custom separator using a disabled MenuItem with a Border as content
-        // This avoids the white icon gutter that WPF's default Separator has
-        var separatorItem = new System.Windows.Controls.MenuItem
-        {
-            IsEnabled = false,
-            IsHitTestVisible = false,
-            Focusable = false,
-            Height = 9,
-            Padding = new Thickness(0),
-            Margin = new Thickness(0),
-        };
-        // Create a custom template for the separator MenuItem with theme-aware colors
-        var sepTemplate = new ControlTemplate(typeof(System.Windows.Controls.MenuItem));
-        var sepBorder = new FrameworkElementFactory(typeof(System.Windows.Controls.Border));
-        sepBorder.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty, "ThemeToolbarBackgroundBrush");
-        sepBorder.SetValue(System.Windows.Controls.Border.HeightProperty, 9.0);
-        var sepLine = new FrameworkElementFactory(typeof(System.Windows.Controls.Border));
-        sepLine.SetResourceReference(System.Windows.Controls.Border.BackgroundProperty, "ThemeBorderBrush");
-        sepLine.SetValue(System.Windows.Controls.Border.HeightProperty, 1.0);
-        sepLine.SetValue(System.Windows.Controls.Border.MarginProperty, new Thickness(8, 4, 8, 4));
-        sepBorder.AppendChild(sepLine);
-        sepTemplate.VisualTree = sepBorder;
-        separatorItem.Template = sepTemplate;
-        
         contextMenu.Items.Add(closeItem);
-        contextMenu.Items.Add(separatorItem);
+        contextMenu.Items.Add(new Separator());
         contextMenu.Items.Add(closeAllItem);
         contextMenu.Items.Add(closeAllButThisItem);
         
@@ -4578,7 +4940,32 @@ Console.WriteLine(""Hello, World!"");
         var dialog = new NewDocumentDialog { Owner = this };
         if (dialog.ShowDialog() == true)
         {
-            if (dialog.OpenExistingFile)
+            if (dialog.SelectedRecentFilePath != null)
+            {
+                // User selected a recent file - close blank document and open the file
+                if (_openDocuments.Count == 1 && _activeDocument != null && 
+                    string.IsNullOrEmpty(_activeDocument.FilePath) && !_activeDocument.IsDirty)
+                {
+                    CloseDocument(_activeDocument);
+                }
+                
+                var content = File.ReadAllText(dialog.SelectedRecentFilePath);
+                var doc = CreateNewDocument(dialog.SelectedRecentFilePath, content);
+                doc.LastKnownWriteTime = File.GetLastWriteTimeUtc(dialog.SelectedRecentFilePath);
+                SwitchToDocument(doc);
+                
+                // Set up file watcher for external change detection
+                SetupFileWatcher(dialog.SelectedRecentFilePath);
+                
+                var folder = Path.GetDirectoryName(dialog.SelectedRecentFilePath);
+                if (!string.IsNullOrEmpty(folder))
+                {
+                    _currentBrowserPath = folder;
+                }
+                
+                AddToRecentFiles(dialog.SelectedRecentFilePath);
+            }
+            else if (dialog.OpenExistingFile)
             {
                 // User wants to open an existing file
                 var openDialog = new Microsoft.Win32.OpenFileDialog
