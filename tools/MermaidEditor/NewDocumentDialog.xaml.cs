@@ -628,82 +628,82 @@ quadrantChart
     {
         SetTemplateAndClose(@"requirementDiagram
 
-    requirement User_Authentication {
-        id: REQ-001
-        text: The system shall authenticate users
-        risk: high
-        verifymethod: test
-    }
+requirement User_Authentication {
+id: REQ-001
+text: The system shall authenticate users
+risk: high
+verifymethod: test
+}
 
-    requirement Password_Policy {
-        id: REQ-002
-        text: Passwords must be at least 8 characters
-        risk: medium
-        verifymethod: inspection
-    }
+requirement Password_Policy {
+id: REQ-002
+text: Passwords must be at least 8 characters
+risk: medium
+verifymethod: inspection
+}
 
-    requirement Session_Management {
-        id: REQ-003
-        text: Sessions shall expire after 30 minutes
-        risk: medium
-        verifymethod: test
-    }
+requirement Session_Management {
+id: REQ-003
+text: Sessions shall expire after 30 minutes
+risk: medium
+verifymethod: test
+}
 
-    functionalRequirement Login_Page {
-        id: REQ-004
-        text: System shall provide a login page
-        risk: low
-        verifymethod: demonstration
-    }
+functionalRequirement Login_Page {
+id: REQ-004
+text: System shall provide a login page
+risk: low
+verifymethod: demonstration
+}
 
-    performanceRequirement Response_Time {
-        id: REQ-005
-        text: Login shall complete within 2 seconds
-        risk: medium
-        verifymethod: test
-    }
+performanceRequirement Response_Time {
+id: REQ-005
+text: Login shall complete within 2 seconds
+risk: medium
+verifymethod: test
+}
 
-    interfaceRequirement API_Auth {
-        id: REQ-006
-        text: API shall support OAuth 2.0
-        risk: high
-        verifymethod: inspection
-    }
+interfaceRequirement API_Auth {
+id: REQ-006
+text: API shall support OAuth 2.0
+risk: high
+verifymethod: inspection
+}
 
-    element Auth_Module {
-        type: module
-        docRef: AUTH-DOC-001
-    }
+element Auth_Module {
+type: module
+docRef: AUTH-DOC-001
+}
 
-    element Login_Component {
-        type: component
-        docRef: LOGIN-DOC-001
-    }
+element Login_Component {
+type: component
+docRef: LOGIN-DOC-001
+}
 
-    User_Authentication - traces -> Password_Policy
-    User_Authentication - traces -> Session_Management
-    User_Authentication - contains -> Login_Page
-    Login_Page - derives -> Response_Time
-    Auth_Module - satisfies -> User_Authentication
-    Login_Component - satisfies -> Login_Page
-    API_Auth - refines -> User_Authentication
+User_Authentication - traces -> Password_Policy
+User_Authentication - traces -> Session_Management
+User_Authentication - contains -> Login_Page
+Login_Page - derives -> Response_Time
+Auth_Module - satisfies -> User_Authentication
+Login_Component - satisfies -> Login_Page
+API_Auth - refines -> User_Authentication
 
-    %% Requirement types:
-    %% requirement - Generic requirement
-    %% functionalRequirement - Functional requirement
-    %% performanceRequirement - Performance requirement
-    %% interfaceRequirement - Interface requirement
-    %% physicalRequirement - Physical requirement
-    %% designConstraint - Design constraint
+%% Requirement types:
+%% requirement - Generic requirement
+%% functionalRequirement - Functional requirement
+%% performanceRequirement - Performance requirement
+%% interfaceRequirement - Interface requirement
+%% physicalRequirement - Physical requirement
+%% designConstraint - Design constraint
 
-    %% Relationship types:
-    %% contains - Parent contains child
-    %% copies - Copies another requirement
-    %% derives - Derived from another
-    %% satisfies - Element satisfies requirement
-    %% verifies - Element verifies requirement
-    %% refines - Refines another requirement
-    %% traces - Traces to another requirement");
+%% Relationship types:
+%% contains - Parent contains child
+%% copies - Copies another requirement
+%% derives - Derived from another
+%% satisfies - Element satisfies requirement
+%% verifies - Element verifies requirement
+%% refines - Refines another requirement
+%% traces - Traces to another requirement");
     }
 
     private void C4_Click(object sender, RoutedEventArgs e)
