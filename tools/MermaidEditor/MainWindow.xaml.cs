@@ -332,6 +332,7 @@ Console.WriteLine(""Hello, World!"");
             "<Word>classDiagram</Word><Word>stateDiagram</Word><Word>erDiagram</Word>" +
             "<Word>journey</Word><Word>gantt</Word><Word>pie</Word><Word>mindmap</Word>" +
             "<Word>timeline</Word><Word>gitGraph</Word><Word>quadrantChart</Word>" +
+            "<Word>requirementDiagram</Word><Word>C4Context</Word><Word>C4Container</Word><Word>C4Component</Word><Word>C4Dynamic</Word><Word>C4Deployment</Word>" +
             "</Keywords>" +
             "<Keywords color=\"Keyword\">" +
             "<Word>subgraph</Word><Word>end</Word><Word>direction</Word>" +
@@ -340,6 +341,10 @@ Console.WriteLine(""Hello, World!"");
             "<Word>opt</Word><Word>par</Word><Word>critical</Word><Word>break</Word><Word>rect</Word>" +
             "<Word>class</Word><Word>state</Word><Word>section</Word><Word>title</Word>" +
             "<Word>TB</Word><Word>TD</Word><Word>BT</Word><Word>RL</Word><Word>LR</Word>" +
+            "<Word>requirement</Word><Word>functionalRequirement</Word><Word>performanceRequirement</Word>" +
+            "<Word>interfaceRequirement</Word><Word>physicalRequirement</Word><Word>designConstraint</Word>" +
+            "<Word>element</Word><Word>satisfies</Word><Word>traces</Word><Word>contains</Word>" +
+            "<Word>derives</Word><Word>refines</Word><Word>verifies</Word><Word>copies</Word>" +
             "</Keywords>" +
             "</RuleSet>" +
             "</SyntaxDefinition>";
@@ -3446,6 +3451,7 @@ Console.WriteLine(""Hello, World!"");
             "<Word>classDiagram</Word><Word>stateDiagram</Word><Word>erDiagram</Word>" +
             "<Word>journey</Word><Word>gantt</Word><Word>pie</Word><Word>mindmap</Word>" +
             "<Word>timeline</Word><Word>gitGraph</Word><Word>quadrantChart</Word>" +
+            "<Word>requirementDiagram</Word><Word>C4Context</Word><Word>C4Container</Word><Word>C4Component</Word><Word>C4Dynamic</Word><Word>C4Deployment</Word>" +
             "</Keywords>" +
             "<Keywords color=\"Keyword\">" +
             "<Word>subgraph</Word><Word>end</Word><Word>direction</Word>" +
@@ -3454,6 +3460,10 @@ Console.WriteLine(""Hello, World!"");
             "<Word>opt</Word><Word>par</Word><Word>critical</Word><Word>break</Word><Word>rect</Word>" +
             "<Word>class</Word><Word>state</Word><Word>section</Word><Word>title</Word>" +
             "<Word>TB</Word><Word>TD</Word><Word>BT</Word><Word>RL</Word><Word>LR</Word>" +
+            "<Word>requirement</Word><Word>functionalRequirement</Word><Word>performanceRequirement</Word>" +
+            "<Word>interfaceRequirement</Word><Word>physicalRequirement</Word><Word>designConstraint</Word>" +
+            "<Word>element</Word><Word>satisfies</Word><Word>traces</Word><Word>contains</Word>" +
+            "<Word>derives</Word><Word>refines</Word><Word>verifies</Word><Word>copies</Word>" +
             "</Keywords>" +
             "</RuleSet>" +
             "</SyntaxDefinition>";
