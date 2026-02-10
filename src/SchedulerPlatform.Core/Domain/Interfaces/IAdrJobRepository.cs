@@ -45,4 +45,11 @@ public interface IAdrJobRepository : IRepository<AdrJob>
     /// <param name="currentDate">The current date for comparison</param>
     /// <param name="maxLookbackDays">Maximum days to look back (to avoid processing very old jobs)</param>
     Task<IEnumerable<AdrJob>> GetStalePendingJobsAsync(DateTime currentDate, int maxLookbackDays = 90);
+    
+    /// <summary>
+    /// Gets the persistent rebill job for an account, or null if none exists.
+    /// Rebill jobs (JobTypeId = 3) are persistent per-account and reused for all rebill executions.
+    /// </summary>
+    /// <param name="adrAccountId">The account ID to find the rebill job for</param>
+    Task<AdrJob?> GetRebillJobByAccountAsync(int adrAccountId);
 }

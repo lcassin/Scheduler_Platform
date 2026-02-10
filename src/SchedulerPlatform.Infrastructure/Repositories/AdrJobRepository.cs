@@ -503,4 +503,16 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             .Include(j => j.AdrAccount)
             .ToListAsync();
     }
+
+    public async Task<AdrJob?> GetRebillJobByAccountAsync(int adrAccountId)
+    {
+        // Rebill jobs (JobTypeId = 3) are persistent per-account and reused for all rebill executions.
+        // There should only be one rebill job per account.
+        const int rebillJobTypeId = 3;
+        
+        return await _dbSet
+            .FirstOrDefaultAsync(j => j.AdrAccountId == adrAccountId && 
+                                      j.JobTypeId == rebillJobTypeId &&
+                                      !j.IsDeleted);
+    }
 }

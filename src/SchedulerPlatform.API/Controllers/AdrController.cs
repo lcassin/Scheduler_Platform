@@ -928,67 +928,124 @@ public class AdrController : ControllerBase
                 var isRebillCheck = requestType == 3;
                 var initialStatus = requestType switch { 1 => "CredentialCheckInProgress", 3 => "RebillInProgress", _ => "ScrapeInProgress" };
 
-                // Step 1: Check if a job already exists for this account and billing period
-                // The unique index UX_AdrJob_Account_BillingPeriod prevents duplicates
-                var existingJob = (await _unitOfWork.AdrJobs.FindAsync(j => 
-                    j.AdrAccountId == account.Id && 
-                    j.BillingPeriodStartDateTime == rangeStart && 
-                    j.BillingPeriodEndDateTime == rangeEnd))
-                    .FirstOrDefault();
-
                 AdrJob job;
 
-                if (existingJob != null)
+                if (isRebillCheck)
                 {
-                    // Use the existing job - update its status and mark as manual request
-                    job = existingJob;
-                    job.Status = initialStatus;
-                    job.IsManualRequest = true;
-                    job.ManualRequestReason = request.Reason;
-                    job.ModifiedDateTime = DateTime.UtcNow;
-                    job.ModifiedBy = username;
+                    // For rebill requests, use the persistent rebill job (JobTypeId = 3)
+                    // This ensures all rebill executions for an account share the same job
+                    const int rebillJobTypeId = 3;
+                    var existingRebillJob = await _unitOfWork.AdrJobs.GetRebillJobByAccountAsync(account.Id);
                     
-                    await _unitOfWork.AdrJobs.UpdateAsync(job);
-                    await _unitOfWork.SaveChangesAsync();
-
-                    _logger.LogInformation(
-                        "Using existing AdrJob {JobId} for manual request on account {AccountId} ({VMAccountNumber}). Range: {RangeStart} to {RangeEnd}",
-                        job.Id, id, account.VMAccountNumber, rangeStart, rangeEnd);
+                    if (existingRebillJob != null)
+                    {
+                        job = existingRebillJob;
+                        job.ModifiedDateTime = DateTime.UtcNow;
+                        job.ModifiedBy = username;
+                        
+                        await _unitOfWork.AdrJobs.UpdateAsync(job);
+                        await _unitOfWork.SaveChangesAsync();
+                        
+                        _logger.LogInformation(
+                            "Using existing persistent rebill job {JobId} for manual rebill on account {AccountId} ({VMAccountNumber})",
+                            job.Id, id, account.VMAccountNumber);
+                    }
+                    else
+                    {
+                        // Create a new persistent rebill job
+                        job = new AdrJob
+                        {
+                            AdrAccountId = account.Id,
+                            VMAccountId = account.VMAccountId,
+                            VMAccountNumber = account.VMAccountNumber,
+                            PrimaryVendorCode = account.PrimaryVendorCode,
+                            MasterVendorCode = account.MasterVendorCode,
+                            CredentialId = account.CredentialId,
+                            PeriodType = account.PeriodType,
+                            JobTypeId = rebillJobTypeId,
+                            // For rebill jobs, billing period dates are placeholders since they're persistent
+                            BillingPeriodStartDateTime = new DateTime(2000, 1, 1),
+                            BillingPeriodEndDateTime = new DateTime(2099, 12, 31),
+                            Status = "RebillActive",
+                            IsMissing = false,
+                            IsManualRequest = false, // Rebill jobs are shared, not manual-only
+                            CreatedDateTime = DateTime.UtcNow,
+                            CreatedBy = username,
+                            ModifiedDateTime = DateTime.UtcNow,
+                            ModifiedBy = username
+                        };
+                        
+                        await _unitOfWork.AdrJobs.AddAsync(job);
+                        await _unitOfWork.SaveChangesAsync();
+                        
+                        _logger.LogInformation(
+                            "Created persistent rebill job {JobId} for manual rebill on account {AccountId} ({VMAccountNumber})",
+                            job.Id, id, account.VMAccountNumber);
+                    }
                 }
                 else
                 {
-                    // Create a new AdrJob record with IsManualRequest = true
-                    // This job is excluded from orchestration but visible in Jobs UI
-                    job = new AdrJob
+                    // For credential check and download requests, use billing period-based jobs
+                    // Step 1: Check if a job already exists for this account and billing period
+                    // The unique index UX_AdrJob_Account_BillingPeriod prevents duplicates
+                    var existingJob = (await _unitOfWork.AdrJobs.FindAsync(j => 
+                        j.AdrAccountId == account.Id && 
+                        j.BillingPeriodStartDateTime == rangeStart && 
+                        j.BillingPeriodEndDateTime == rangeEnd))
+                        .FirstOrDefault();
+
+                    if (existingJob != null)
                     {
-                        AdrAccountId = account.Id,
-                        VMAccountId = account.VMAccountId,
-                        VMAccountNumber = account.VMAccountNumber,
-                        PrimaryVendorCode = account.PrimaryVendorCode,
-                        MasterVendorCode = account.MasterVendorCode,
-                        CredentialId = account.CredentialId,
-                        PeriodType = account.PeriodType,
-                        BillingPeriodStartDateTime = rangeStart,
-                        BillingPeriodEndDateTime = rangeEnd,
-                        NextRunDateTime = DateTime.UtcNow,
-                        NextRangeStartDateTime = rangeStart,
-                        NextRangeEndDateTime = rangeEnd,
-                        Status = initialStatus,
-                        IsMissing = false,
-                        IsManualRequest = true,
-                        ManualRequestReason = request.Reason,
-                        CreatedDateTime = DateTime.UtcNow,
-                        CreatedBy = username,
-                        ModifiedDateTime = DateTime.UtcNow,
-                        ModifiedBy = username
-                    };
+                        // Use the existing job - update its status and mark as manual request
+                        job = existingJob;
+                        job.Status = initialStatus;
+                        job.IsManualRequest = true;
+                        job.ManualRequestReason = request.Reason;
+                        job.ModifiedDateTime = DateTime.UtcNow;
+                        job.ModifiedBy = username;
+                        
+                        await _unitOfWork.AdrJobs.UpdateAsync(job);
+                        await _unitOfWork.SaveChangesAsync();
 
-                    await _unitOfWork.AdrJobs.AddAsync(job);
-                    await _unitOfWork.SaveChangesAsync();
+                        _logger.LogInformation(
+                            "Using existing AdrJob {JobId} for manual request on account {AccountId} ({VMAccountNumber}). Range: {RangeStart} to {RangeEnd}",
+                            job.Id, id, account.VMAccountNumber, rangeStart, rangeEnd);
+                    }
+                    else
+                    {
+                        // Create a new AdrJob record with IsManualRequest = true
+                        // This job is excluded from orchestration but visible in Jobs UI
+                        job = new AdrJob
+                        {
+                            AdrAccountId = account.Id,
+                            VMAccountId = account.VMAccountId,
+                            VMAccountNumber = account.VMAccountNumber,
+                            PrimaryVendorCode = account.PrimaryVendorCode,
+                            MasterVendorCode = account.MasterVendorCode,
+                            CredentialId = account.CredentialId,
+                            PeriodType = account.PeriodType,
+                            BillingPeriodStartDateTime = rangeStart,
+                            BillingPeriodEndDateTime = rangeEnd,
+                            NextRunDateTime = DateTime.UtcNow,
+                            NextRangeStartDateTime = rangeStart,
+                            NextRangeEndDateTime = rangeEnd,
+                            Status = initialStatus,
+                            IsMissing = false,
+                            IsManualRequest = true,
+                            ManualRequestReason = request.Reason,
+                            CreatedDateTime = DateTime.UtcNow,
+                            CreatedBy = username,
+                            ModifiedDateTime = DateTime.UtcNow,
+                            ModifiedBy = username
+                        };
 
-                    _logger.LogInformation(
-                        "Created manual AdrJob {JobId} for account {AccountId} ({VMAccountNumber}). Range: {RangeStart} to {RangeEnd}",
-                        job.Id, id, account.VMAccountNumber, rangeStart, rangeEnd);
+                        await _unitOfWork.AdrJobs.AddAsync(job);
+                        await _unitOfWork.SaveChangesAsync();
+
+                        _logger.LogInformation(
+                            "Created manual AdrJob {JobId} for account {AccountId} ({VMAccountNumber}). Range: {RangeStart} to {RangeEnd}",
+                            job.Id, id, account.VMAccountNumber, rangeStart, rangeEnd);
+                    }
                 }
 
                 // Step 2: Create an AdrJobExecution linked to the job
