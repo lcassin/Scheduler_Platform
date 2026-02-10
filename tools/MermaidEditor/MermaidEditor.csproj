@@ -21,11 +21,11 @@
     <PackageReference Include="DocumentFormat.OpenXml" Version="3.4.1" />
     <PackageReference Include="DocumentFormat.OpenXml.Framework" Version="3.4.1" />
     <PackageReference Include="ExCSS" Version="4.3.1" />
-    <PackageReference Include="Markdig" Version="0.44.0" />
+    <PackageReference Include="Markdig" Version="0.45.0" />
     <PackageReference Include="MermaidDotNet" Version="0.7.31" />
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3719.77" />
     <PackageReference Include="Svg" Version="3.4.7" />
-    <PackageReference Include="System.Drawing.Common" Version="10.0.2" />
+    <PackageReference Include="System.Drawing.Common" Version="10.0.3" />
   </ItemGroup>
 
 </Project>
