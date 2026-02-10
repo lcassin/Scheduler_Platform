@@ -140,12 +140,25 @@
             </Setter>
         </Style>
         
-        <!-- ContextMenu Style for dark dropdown -->
+        <!-- ContextMenu Style with full template to remove icon gutter -->
         <Style TargetType="ContextMenu">
             <Setter Property="Background" Value="{DynamicResource ThemeToolbarBackgroundBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContextMenu">
+                        <Border Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="2"
+                                Padding="0,4">
+                            <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         
         <!-- Separator Style -->
@@ -154,12 +167,66 @@
             <Setter Property="Margin" Value="4,2"/>
         </Style>
         
-        <!-- ToolBar Style -->
+        <!-- ToolBar Style with full template to control overflow panel background -->
         <Style TargetType="ToolBar">
             <Setter Property="Background" Value="{DynamicResource ThemeToolbarBackgroundBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="4,2"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToolBar">
+                        <Grid x:Name="Grid" SnapsToDevicePixels="True">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <Border x:Name="MainPanelBorder" 
+                                    Background="{TemplateBinding Background}" 
+                                    BorderThickness="0"
+                                    Padding="{TemplateBinding Padding}">
+                                <DockPanel KeyboardNavigation.TabNavigation="Local" KeyboardNavigation.TabIndex="1">
+                                    <ToolBarPanel x:Name="PART_ToolBarPanel" 
+                                                  IsItemsHost="True" 
+                                                  SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                                </DockPanel>
+                            </Border>
+                            <ToggleButton x:Name="OverflowButton" 
+                                          Grid.Column="1"
+                                          ClickMode="Press"
+                                          IsChecked="{Binding IsOverflowOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                          IsEnabled="{TemplateBinding HasOverflowItems}"
+                                          Style="{StaticResource {x:Static ToolBar.ToggleButtonStyleKey}}"/>
+                            <Popup x:Name="OverflowPopup"
+                                   AllowsTransparency="True"
+                                   Focusable="False"
+                                   IsOpen="{Binding IsOverflowOpen, RelativeSource={RelativeSource TemplatedParent}}"
+                                   Placement="Bottom"
+                                   PopupAnimation="Slide"
+                                   StaysOpen="False">
+                                <Border x:Name="DropDownBorder"
+                                        Background="{DynamicResource ThemeToolbarBackgroundBrush}"
+                                        BorderBrush="{DynamicResource ThemeBorderBrush}"
+                                        BorderThickness="1">
+                                    <ToolBarOverflowPanel x:Name="PART_ToolBarOverflowPanel"
+                                                          FocusVisualStyle="{x:Null}"
+                                                          Focusable="True"
+                                                          KeyboardNavigation.DirectionalNavigation="Cycle"
+                                                          KeyboardNavigation.TabNavigation="Cycle"
+                                                          Margin="2"
+                                                          SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"
+                                                          WrapWidth="200"/>
+                                </Border>
+                            </Popup>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="HasOverflowItems" Value="False">
+                                <Setter TargetName="OverflowButton" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         
         <!-- ToolBar Overflow Button Style -->
@@ -191,19 +258,6 @@
                                 <Setter TargetName="Arrow" Property="Fill" Value="{DynamicResource ThemeDisabledForegroundBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
-                    </ControlTemplate>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        
-        <!-- ToolBar Thumb Style (grip handle) -->
-        <Style x:Key="{x:Static ToolBar.ThumbStyleKey}" TargetType="Thumb">
-            <Setter Property="Template">
-                <Setter.Value>
-                    <ControlTemplate TargetType="Thumb">
-                        <Border Background="Transparent" Padding="6,0">
-                            <Rectangle Width="4" Fill="{DynamicResource ThemeBorderBrush}"/>
-                        </Border>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
