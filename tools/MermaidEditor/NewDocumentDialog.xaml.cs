@@ -626,11 +626,7 @@ quadrantChart
 
     private void Requirement_Click(object sender, RoutedEventArgs e)
     {
-        SetTemplateAndClose(@"---
-config:
-  theme: default
----
-requirementDiagram
+        SetTemplateAndClose(@"requirementDiagram
 
     requirement User_Authentication {
         id: REQ-001
