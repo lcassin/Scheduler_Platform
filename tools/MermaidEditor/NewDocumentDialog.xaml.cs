@@ -20,28 +20,61 @@ public partial class NewDocumentDialog : Window
         PopulateRecentFilesList();
     }
 
+    private static readonly string RecentFilesPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "MermaidEditor", "recent.json");
+
     private void LoadRecentFiles()
     {
         try
         {
-            var recentFilePath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "MermaidEditor",
-                "recent.json");
-
-            if (File.Exists(recentFilePath))
+            if (File.Exists(RecentFilesPath))
             {
-                var json = File.ReadAllText(recentFilePath);
+                var json = File.ReadAllText(RecentFilesPath);
                 var allFiles = System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
-                _recentFiles = allFiles
-                    .Where(f => !string.IsNullOrWhiteSpace(f) && File.Exists(f))
-                    .Take(10)
-                    .ToList();
+                
+                // Check for missing files
+                var existingFiles = allFiles.Where(f => !string.IsNullOrWhiteSpace(f) && File.Exists(f)).ToList();
+                var missingFiles = allFiles.Where(f => !string.IsNullOrWhiteSpace(f) && !File.Exists(f)).ToList();
+                
+                if (missingFiles.Count > 0)
+                {
+                    var fileNames = string.Join("\n", missingFiles.Select(f => Path.GetFileName(f)));
+                    var result = System.Windows.MessageBox.Show(
+                        $"The following recent files no longer exist:\n\n{fileNames}\n\nRemove them from the recent files list?",
+                        "Missing Files", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                    
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        // Save the cleaned list
+                        SaveRecentFiles(existingFiles);
+                    }
+                }
+                
+                _recentFiles = existingFiles.Take(10).ToList();
             }
         }
         catch
         {
             // Ignore errors loading recent files
+        }
+    }
+
+    private void SaveRecentFiles(List<string> files)
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(RecentFilesPath);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+            var json = System.Text.Json.JsonSerializer.Serialize(files);
+            File.WriteAllText(RecentFilesPath, json);
+        }
+        catch
+        {
+            // Silently fail if we can't save recent files
         }
     }
 
