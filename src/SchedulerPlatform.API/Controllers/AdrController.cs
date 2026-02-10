@@ -922,10 +922,11 @@ public class AdrController : ControllerBase
                 var rangeStart = request.RangeStartDate ?? request.TargetDate.AddDays(-windowDays);
                 var rangeEnd = request.RangeEndDate ?? request.TargetDate.AddDays(windowDays);
 
-                // Determine the request type (1 = Vendor Credential Check, 2 = ADR Download Request)
-                var requestType = request.RequestType == 1 ? 1 : 2;
+                // Determine the request type (1 = Vendor Credential Check, 2 = ADR Download Request, 3 = Rebill Check)
+                var requestType = request.RequestType switch { 1 => 1, 3 => 3, _ => 2 };
                 var isCredentialCheck = requestType == 1;
-                var initialStatus = isCredentialCheck ? "CredentialCheckInProgress" : "ScrapeInProgress";
+                var isRebillCheck = requestType == 3;
+                var initialStatus = requestType switch { 1 => "CredentialCheckInProgress", 3 => "RebillInProgress", _ => "ScrapeInProgress" };
 
                 // Step 1: Check if a job already exists for this account and billing period
                 // The unique index UX_AdrJob_Account_BillingPeriod prevents duplicates
@@ -5225,7 +5226,7 @@ public class ManualScrapeRequest
     public bool IsHighPriority { get; set; }
     
     /// <summary>
-    /// ADR Request Type: 1 = Vendor Credential Check, 2 = ADR Download Request (default)
+    /// ADR Request Type: 1 = Vendor Credential Check, 2 = ADR Download Request (default), 3 = Rebill Check
     /// </summary>
     public int RequestType { get; set; } = 2;
 }

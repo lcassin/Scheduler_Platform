@@ -31,6 +31,7 @@
                                HelperText="Select the type of ADR request to send">
                         <MudSelectItem Value="2">ADR Download Request</MudSelectItem>
                         <MudSelectItem Value="1">Vendor Credential Check</MudSelectItem>
+                        <MudSelectItem Value="3">Rebill Check</MudSelectItem>
                     </MudSelect>
                 </MudItem>
                 <MudItem xs="12">
@@ -102,7 +103,7 @@
             }
             else
             {
-                <span>@(_requestType == 1 ? "Submit Credential Check" : "Submit ADR Request")</span>
+                <span>@(_requestType switch { 1 => "Submit Credential Check", 3 => "Submit Rebill Check", _ => "Submit ADR Request" })</span>
             }
         </MudButton>
     </DialogActions>
@@ -151,7 +152,7 @@
                 _isHighPriority,
                 _requestType);
             
-            var requestTypeName = _requestType == 1 ? "Vendor Credential Check" : "ADR Download Request";
+            var requestTypeName = _requestType switch { 1 => "Vendor Credential Check", 3 => "Rebill Check", _ => "ADR Download Request" };
             Snackbar.Add($"{requestTypeName} submitted. Execution ID: {result.ExecutionId}, Range: {result.RangeStartDate:MM/dd/yyyy} - {result.RangeEndDate:MM/dd/yyyy}", Severity.Success);
             MudDialog.Close(DialogResult.Ok(result));
         }
