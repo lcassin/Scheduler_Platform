@@ -2135,24 +2135,38 @@ Console.WriteLine(""Hello, World!"");
     {
         // Show template selection dialog
         var dialog = new NewDocumentDialog { Owner = this };
-        if (dialog.ShowDialog() == true && dialog.SelectedTemplate != null)
+        if (dialog.ShowDialog() == true)
         {
-            // Create a new document with the selected template
-            var doc = CreateNewDocument(null, dialog.SelectedTemplate);
-            doc.RenderMode = dialog.IsMermaid ? RenderMode.Mermaid : RenderMode.Markdown;
-            SwitchToDocument(doc);
-            
-            // Update syntax highlighting
-            if (dialog.IsMermaid)
+            if (dialog.SelectedRecentFilePath != null)
             {
-                CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
+                // User selected a recent file
+                OpenFileInTab(dialog.SelectedRecentFilePath);
+                StatusText.Text = "File opened";
             }
-            else
+            else if (dialog.OpenExistingFile)
             {
-                CodeEditor.SyntaxHighlighting = null;
+                // User wants to browse for a file
+                Open_Click(sender, e);
             }
-            
-            UpdateExportMenuVisibility();
+            else if (dialog.SelectedTemplate != null)
+            {
+                // Create a new document with the selected template
+                var doc = CreateNewDocument(null, dialog.SelectedTemplate);
+                doc.RenderMode = dialog.IsMermaid ? RenderMode.Mermaid : RenderMode.Markdown;
+                SwitchToDocument(doc);
+                
+                // Update syntax highlighting
+                if (dialog.IsMermaid)
+                {
+                    CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
+                }
+                else
+                {
+                    CodeEditor.SyntaxHighlighting = null;
+                }
+                
+                UpdateExportMenuVisibility();
+            }
         }
     }
 
@@ -4926,7 +4940,32 @@ Console.WriteLine(""Hello, World!"");
         var dialog = new NewDocumentDialog { Owner = this };
         if (dialog.ShowDialog() == true)
         {
-            if (dialog.OpenExistingFile)
+            if (dialog.SelectedRecentFilePath != null)
+            {
+                // User selected a recent file - close blank document and open the file
+                if (_openDocuments.Count == 1 && _activeDocument != null && 
+                    string.IsNullOrEmpty(_activeDocument.FilePath) && !_activeDocument.IsDirty)
+                {
+                    CloseDocument(_activeDocument);
+                }
+                
+                var content = File.ReadAllText(dialog.SelectedRecentFilePath);
+                var doc = CreateNewDocument(dialog.SelectedRecentFilePath, content);
+                doc.LastKnownWriteTime = File.GetLastWriteTimeUtc(dialog.SelectedRecentFilePath);
+                SwitchToDocument(doc);
+                
+                // Set up file watcher for external change detection
+                SetupFileWatcher(dialog.SelectedRecentFilePath);
+                
+                var folder = Path.GetDirectoryName(dialog.SelectedRecentFilePath);
+                if (!string.IsNullOrEmpty(folder))
+                {
+                    _currentBrowserPath = folder;
+                }
+                
+                AddToRecentFiles(dialog.SelectedRecentFilePath);
+            }
+            else if (dialog.OpenExistingFile)
             {
                 // User wants to open an existing file
                 var openDialog = new Microsoft.Win32.OpenFileDialog
