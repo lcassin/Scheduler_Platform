@@ -52,7 +52,7 @@ public interface IAdrService
             string? blacklistStatus = null,
             string? sortColumn = null,
             bool sortDescending = true,
-            int? jobTypeId = null);
+            int? adrJobTypeId = null);
     Task<AdrJob?> GetJobAsync(int id);
     Task<List<AdrJob>> GetJobsByAccountAsync(int adrAccountId);
     Task<AdrJobStats> GetJobStatsAsync(int? lastOrchestrationRuns = null);

@@ -23,7 +23,7 @@ public class AdrJob : BaseEntity
     /// FK to AdrJobType table. Identifies the type of job (1 = Credential Check, 2 = Download Invoice, 3 = Rebill).
     /// Null for legacy jobs created before job types were implemented.
     /// </summary>
-    public int? JobTypeId { get; set; }
+    public int? AdrJobTypeId { get; set; }
     
     /// <summary>
     /// External account ID from VendorCred (denormalized for queries)
@@ -156,7 +156,7 @@ public class AdrJob : BaseEntity
     public AdrAccountRule? AdrAccountRule { get; set; }
     
     [JsonIgnore]
-    public AdrJobType? JobType { get; set; }
+    public AdrJobType? AdrJobType { get; set; }
     
     [JsonIgnore]
     public ICollection<AdrJobExecution> AdrJobExecutions { get; set; } = new List<AdrJobExecution>();

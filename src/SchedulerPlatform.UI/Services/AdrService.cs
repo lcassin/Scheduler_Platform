@@ -217,7 +217,7 @@ public class AdrService : IAdrService
         string? blacklistStatus = null,
         string? sortColumn = null,
         bool sortDescending = true,
-        int? jobTypeId = null)
+        int? adrJobTypeId = null)
     {
         var queryParams = new List<string>
         {
@@ -258,8 +258,8 @@ public class AdrService : IAdrService
         if (!string.IsNullOrWhiteSpace(blacklistStatus))
             queryParams.Add($"blacklistStatus={Uri.EscapeDataString(blacklistStatus)}");
 
-        if (jobTypeId.HasValue)
-            queryParams.Add($"jobTypeId={jobTypeId.Value}");
+        if (adrJobTypeId.HasValue)
+            queryParams.Add($"adrJobTypeId={adrJobTypeId.Value}");
 
         if (!string.IsNullOrWhiteSpace(sortColumn))
             queryParams.Add($"sortColumn={Uri.EscapeDataString(sortColumn)}");
