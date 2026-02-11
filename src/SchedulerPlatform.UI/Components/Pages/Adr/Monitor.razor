@@ -232,7 +232,8 @@
                                                 @if (_lastCompletedRun.SyncResult != null)
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                        @_lastCompletedRun.SyncResult.AccountsInserted inserted, @_lastCompletedRun.SyncResult.AccountsUpdated updated
+                                                        <span style="color: var(--mud-palette-success);">@_lastCompletedRun.SyncResult.AccountsInserted inserted</span>,
+                                                        <span style="color: var(--mud-palette-success);">@_lastCompletedRun.SyncResult.AccountsUpdated updated</span>
                                                     </MudText>
                                                 }
                                                 else
@@ -253,7 +254,8 @@
                                                 @if (_lastCompletedRun.JobCreationResult != null)
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                        @_lastCompletedRun.JobCreationResult.JobsCreated created, @_lastCompletedRun.JobCreationResult.JobsSkipped skipped
+                                                        <span style="color: var(--mud-palette-success);">@_lastCompletedRun.JobCreationResult.JobsCreated created</span>,
+                                                        @_lastCompletedRun.JobCreationResult.JobsSkipped skipped
                                                     </MudText>
                                                 }
                                                 else
@@ -274,7 +276,9 @@
                                                 @if (_lastCompletedRun.RebillResult != null)
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                        @_lastCompletedRun.RebillResult.RebillRequestsSent sent, @_lastCompletedRun.RebillResult.RebillRequestsFailed failed, @_lastCompletedRun.RebillResult.AccountsSkipped skipped
+                                                        <span style="color: var(--mud-palette-success);">@_lastCompletedRun.RebillResult.RebillRequestsSent sent</span>,
+                                                        <span style="color: var(--mud-palette-error);">@_lastCompletedRun.RebillResult.RebillRequestsFailed failed</span>,
+                                                        @_lastCompletedRun.RebillResult.AccountsSkipped skipped
                                                     </MudText>
                                                 }
                                                 else
@@ -295,7 +299,8 @@
                                                 @if (_lastCompletedRun.StatusCheckResult != null)
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                        @_lastCompletedRun.StatusCheckResult.JobsCompleted completed, @_lastCompletedRun.StatusCheckResult.JobsNeedingReview need review
+                                                        <span style="color: var(--mud-palette-success);">@_lastCompletedRun.StatusCheckResult.JobsCompleted completed</span>,
+                                                        <span style="color: var(--mud-palette-warning);">@_lastCompletedRun.StatusCheckResult.JobsNeedingReview need review</span>
                                                     </MudText>
                                                 }
                                                 else
@@ -316,7 +321,9 @@
                                                 @if (_lastCompletedRun.ScrapeResult != null)
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                        @_lastCompletedRun.ScrapeResult.ScrapesRequested ADR requests sent, @_lastCompletedRun.ScrapeResult.ScrapesCompleted completed
+                                                        <span style="color: var(--mud-palette-success);">@_lastCompletedRun.ScrapeResult.ScrapesRequested ADR requests sent</span>,
+                                                        <span style="color: var(--mud-palette-success);">@_lastCompletedRun.ScrapeResult.ScrapesCompleted completed</span>,
+                                                        <span style="color: var(--mud-palette-error);">@_lastCompletedRun.ScrapeResult.ScrapesFailed failed</span>
                                                     </MudText>
                                                 }
                                                 else
@@ -874,7 +881,8 @@
                         @if (_selectedRun.SyncResult != null)
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                @_selectedRun.SyncResult.AccountsInserted inserted, @_selectedRun.SyncResult.AccountsUpdated updated
+                                <span style="color: var(--mud-palette-success);">@_selectedRun.SyncResult.AccountsInserted inserted</span>,
+                                <span style="color: var(--mud-palette-success);">@_selectedRun.SyncResult.AccountsUpdated updated</span>
                             </MudText>
                             @if (_selectedRun.SyncResult.Duration.TotalSeconds > 0)
                             {
@@ -899,7 +907,8 @@
                         @if (_selectedRun.JobCreationResult != null)
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                @_selectedRun.JobCreationResult.JobsCreated created, @_selectedRun.JobCreationResult.JobsSkipped skipped
+                                <span style="color: var(--mud-palette-success);">@_selectedRun.JobCreationResult.JobsCreated created</span>,
+                                @_selectedRun.JobCreationResult.JobsSkipped skipped
                             </MudText>
                             @if (_selectedRun.JobCreationResult.Duration.TotalSeconds > 0)
                             {

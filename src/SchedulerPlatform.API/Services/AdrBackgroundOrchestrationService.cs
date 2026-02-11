@@ -692,36 +692,41 @@ public class AdrBackgroundOrchestrationService : BackgroundService
             
             if (memStatus != null)
             {
-                // Copy step results from in-memory status
+                // Copy step results from in-memory status (including Duration)
                 if (memStatus.SyncResult != null)
                 {
                     dbRun.SyncAccountsInserted = memStatus.SyncResult.AccountsInserted;
                     dbRun.SyncAccountsUpdated = memStatus.SyncResult.AccountsUpdated;
                     dbRun.SyncAccountsTotal = memStatus.SyncResult.AccountsInserted + memStatus.SyncResult.AccountsUpdated;
+                    dbRun.SyncDurationSeconds = memStatus.SyncResult.Duration.TotalSeconds;
                 }
                 
                 if (memStatus.JobCreationResult != null)
                 {
                     dbRun.JobsCreated = memStatus.JobCreationResult.JobsCreated;
                     dbRun.JobsSkipped = memStatus.JobCreationResult.JobsSkipped;
+                    dbRun.JobCreationDurationSeconds = memStatus.JobCreationResult.Duration.TotalSeconds;
                 }
                 
                 if (memStatus.RebillResult != null)
                 {
                     dbRun.CredentialsVerified = memStatus.RebillResult.RebillRequestsSent;
                     dbRun.CredentialsFailed = memStatus.RebillResult.RebillRequestsFailed;
+                    dbRun.RebillDurationSeconds = memStatus.RebillResult.Duration.TotalSeconds;
                 }
                 
                 if (memStatus.ScrapeResult != null)
                 {
                     dbRun.ScrapingRequested = memStatus.ScrapeResult.ScrapesRequested;
                     dbRun.ScrapingFailed = memStatus.ScrapeResult.ScrapesFailed;
+                    dbRun.ScrapingDurationSeconds = memStatus.ScrapeResult.Duration.TotalSeconds;
                 }
                 
                 if (memStatus.StatusCheckResult != null)
                 {
                     dbRun.StatusesChecked = memStatus.StatusCheckResult.JobsCompleted + memStatus.StatusCheckResult.JobsNeedingReview;
                     dbRun.StatusesFailed = memStatus.StatusCheckResult.JobsNeedingReview;
+                    dbRun.StatusCheckDurationSeconds = memStatus.StatusCheckResult.Duration.TotalSeconds;
                 }
             }
             
