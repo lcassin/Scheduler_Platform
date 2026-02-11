@@ -3384,44 +3384,51 @@ public class AdrController : ControllerBase
                     .Take(pageSize);
             }
             
-            var dbHistory = await pagedQuery
-                .Select(r => new AdrOrchestrationStatus
+            var dbRuns = await pagedQuery.ToListAsync();
+            
+            // Map to AdrOrchestrationStatus with Duration values restored from database
+            var dbHistory = dbRuns.Select(r => new AdrOrchestrationStatus
+            {
+                RequestId = r.RequestId,
+                RequestedBy = r.RequestedBy,
+                RequestedAt = r.RequestedDateTime,
+                StartedAt = r.StartedDateTime,
+                CompletedAt = r.CompletedDateTime,
+                Status = r.Status,
+                CurrentStep = r.CurrentStep,
+                ErrorMessage = r.ErrorMessage,
+                SyncResult = r.SyncAccountsInserted.HasValue ? new AdrAccountSyncResult
                 {
-                    RequestId = r.RequestId,
-                    RequestedBy = r.RequestedBy,
-                    RequestedAt = r.RequestedDateTime,
-                    StartedAt = r.StartedDateTime,
-                    CompletedAt = r.CompletedDateTime,
-                    Status = r.Status,
-                    CurrentStep = r.CurrentStep,
-                    ErrorMessage = r.ErrorMessage,
-                    SyncResult = r.SyncAccountsInserted.HasValue ? new AdrAccountSyncResult
-                    {
-                        AccountsInserted = r.SyncAccountsInserted ?? 0,
-                        AccountsUpdated = r.SyncAccountsUpdated ?? 0
-                    } : null,
-                    JobCreationResult = r.JobsCreated.HasValue ? new JobCreationResult
-                    {
-                        JobsCreated = r.JobsCreated ?? 0,
-                        JobsSkipped = r.JobsSkipped ?? 0
-                    } : null,
-                    RebillResult = r.CredentialsVerified.HasValue ? new RebillResult
-                    {
-                        RebillRequestsSent = r.CredentialsVerified ?? 0,
-                        RebillRequestsFailed = r.CredentialsFailed ?? 0
-                    } : null,
-                    ScrapeResult = r.ScrapingRequested.HasValue ? new ScrapeResult
-                    {
-                        ScrapesRequested = r.ScrapingRequested ?? 0,
-                        ScrapesFailed = r.ScrapingFailed ?? 0
-                    } : null,
-                    StatusCheckResult = r.StatusesChecked.HasValue ? new StatusCheckResult
-                    {
-                        JobsCompleted = r.StatusesChecked ?? 0,
-                        JobsNeedingReview = r.StatusesFailed ?? 0
-                    } : null
-                })
-                .ToListAsync();
+                    AccountsInserted = r.SyncAccountsInserted ?? 0,
+                    AccountsUpdated = r.SyncAccountsUpdated ?? 0,
+                    SyncStartDateTime = r.StartedDateTime ?? r.RequestedDateTime,
+                    SyncEndDateTime = r.StartedDateTime?.AddSeconds(r.SyncDurationSeconds ?? 0) ?? r.RequestedDateTime
+                } : null,
+                JobCreationResult = r.JobsCreated.HasValue ? new JobCreationResult
+                {
+                    JobsCreated = r.JobsCreated ?? 0,
+                    JobsSkipped = r.JobsSkipped ?? 0,
+                    Duration = r.JobCreationDurationSeconds.HasValue ? TimeSpan.FromSeconds(r.JobCreationDurationSeconds.Value) : TimeSpan.Zero
+                } : null,
+                RebillResult = r.CredentialsVerified.HasValue ? new RebillResult
+                {
+                    RebillRequestsSent = r.CredentialsVerified ?? 0,
+                    RebillRequestsFailed = r.CredentialsFailed ?? 0,
+                    Duration = r.RebillDurationSeconds.HasValue ? TimeSpan.FromSeconds(r.RebillDurationSeconds.Value) : TimeSpan.Zero
+                } : null,
+                ScrapeResult = r.ScrapingRequested.HasValue ? new ScrapeResult
+                {
+                    ScrapesRequested = r.ScrapingRequested ?? 0,
+                    ScrapesFailed = r.ScrapingFailed ?? 0,
+                    Duration = r.ScrapingDurationSeconds.HasValue ? TimeSpan.FromSeconds(r.ScrapingDurationSeconds.Value) : TimeSpan.Zero
+                } : null,
+                StatusCheckResult = r.StatusesChecked.HasValue ? new StatusCheckResult
+                {
+                    JobsCompleted = r.StatusesChecked ?? 0,
+                    JobsNeedingReview = r.StatusesFailed ?? 0,
+                    Duration = r.StatusCheckDurationSeconds.HasValue ? TimeSpan.FromSeconds(r.StatusCheckDurationSeconds.Value) : TimeSpan.Zero
+                } : null
+            }).ToList();
             
             if (dbHistory.Any())
             {
