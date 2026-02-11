@@ -201,9 +201,18 @@
                                         </MudItem>
                                         <MudItem xs="12" md="6">
                                             <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Status</MudText>
-                                            <MudChip T="string" Size="Size.Medium" Color="@GetStatusColor(_lastCompletedRun.Status)" Class="mb-3">
-                                                @_lastCompletedRun.Status
-                                            </MudChip>
+                                            @if (_lastCompletedRun.Status == "Interrupted")
+                                            {
+                                                <MudChip T="string" Size="Size.Medium" Style="background-color: #ab47bc; color: white;" Class="mb-3">
+                                                    @_lastCompletedRun.Status
+                                                </MudChip>
+                                            }
+                                            else
+                                            {
+                                                <MudChip T="string" Size="Size.Medium" Color="@GetStatusColor(_lastCompletedRun.Status)" Class="mb-3">
+                                                    @_lastCompletedRun.Status
+                                                </MudChip>
+                                            }
                                             
                                             <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Completed At</MudText>
                                             <MudText Typo="Typo.body1" Class="mb-3">@FormatDateTime(_lastCompletedRun.CompletedAt, "MM/dd/yyyy hh:mm:ss tt")</MudText>
@@ -393,9 +402,18 @@
                             </MudItem>
                             <MudItem xs="12" md="6">
                                 <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Status</MudText>
-                                <MudChip T="string" Size="Size.Medium" Color="@GetStatusColor(_currentStatus.Status.Status)" Class="mb-3">
-                                    @_currentStatus.Status.Status
-                                </MudChip>
+                                                                @if (_currentStatus.Status.Status == "Interrupted")
+                                                                {
+                                                                    <MudChip T="string" Size="Size.Medium" Style="background-color: #ab47bc; color: white;" Class="mb-3">
+                                                                        @_currentStatus.Status.Status
+                                                                    </MudChip>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <MudChip T="string" Size="Size.Medium" Color="@GetStatusColor(_currentStatus.Status.Status)" Class="mb-3">
+                                                                        @_currentStatus.Status.Status
+                                                                    </MudChip>
+                                                                }
                                 
                                 <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Current Step</MudText>
                                 <MudText Typo="Typo.body1" Class="mb-3">
@@ -787,7 +805,14 @@
                 <MudTd DataLabel="Started At">@(context.StartedAt.HasValue ? ConvertToUserTime(context.StartedAt.Value).ToString("hh:mm:ss tt") : "N/A")</MudTd>
                 <MudTd DataLabel="Completed At">@(context.CompletedAt.HasValue ? ConvertToUserTime(context.CompletedAt.Value).ToString("hh:mm:ss tt") : "N/A")</MudTd>
                 <MudTd DataLabel="Status">
-                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">@context.Status</MudChip>
+                    @if (context.Status == "Interrupted")
+                    {
+                        <MudChip T="string" Size="Size.Small" Style="background-color: #ab47bc; color: white;">@context.Status</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">@context.Status</MudChip>
+                    }
                 </MudTd>
                 <MudTd DataLabel="Duration">
                     @if (context.StartedAt.HasValue && context.CompletedAt.HasValue)
@@ -847,9 +872,18 @@
                 </MudItem>
                 <MudItem xs="12" md="6">
                     <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Status</MudText>
-                    <MudChip T="string" Size="Size.Medium" Color="@GetStatusColor(_selectedRun.Status)" Class="mb-3">
-                        @_selectedRun.Status
-                    </MudChip>
+                    @if (_selectedRun.Status == "Interrupted")
+                    {
+                        <MudChip T="string" Size="Size.Medium" Style="background-color: #ab47bc; color: white;" Class="mb-3">
+                            @_selectedRun.Status
+                        </MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Medium" Color="@GetStatusColor(_selectedRun.Status)" Class="mb-3">
+                            @_selectedRun.Status
+                        </MudChip>
+                    }
                     
                     <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Started At</MudText>
                     <MudText Typo="Typo.body1" Class="mb-3">@(_selectedRun.StartedAt.HasValue ? FormatDateTime(_selectedRun.StartedAt, "MM/dd/yyyy hh:mm:ss tt") : "N/A")</MudText>
