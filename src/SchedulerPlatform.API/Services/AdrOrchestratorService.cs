@@ -2407,63 +2407,53 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             
             _logger.LogInformation("Rebill job setup complete: {Created} created, {Reused} reused", jobsCreated, jobsReused);
 
-            // Step 3: Process rebill requests in parallel with batched saves
-            var apiResults = new ConcurrentDictionary<int, (AdrApiResult ApiResult, AdrJobExecution? Execution)>();
+            // Step 3: Process rebill requests in parallel
+            // IMPORTANT: Do NOT use DbContext inside parallel tasks - it's not thread-safe
+            // Instead, collect API results in a ConcurrentDictionary and create execution records after
+            var apiResults = new ConcurrentDictionary<int, AdrApiResult>();
             using var semaphore = new SemaphoreSlim(maxParallel, maxParallel);
             int completedCalls = 0;
             var totalCalls = accountJobMap.Count;
-            
-            // OPTIMIZATION: Collect executions for batch saving instead of saving after each API call
-            var pendingExecutions = new ConcurrentBag<AdrJobExecution>();
-            var executionSaveLock = new object();
-            const int executionSaveBatchSize = 100;
 
-            var tasks = accountJobMap.Select(async kvp =>
+            // Build list of accounts to process with their job and date info
+            var accountsToCall = accountJobMap
+                .Where(kvp => accountLookup.ContainsKey(kvp.Key))
+                .Select(kvp => {
+                    var account = accountLookup[kvp.Key];
+                    return (
+                        AccountId: kvp.Key,
+                        JobId: kvp.Value.Id,
+                        CredentialId: account.CredentialId,
+                        StartDate: account.NextRangeStartDateTime ?? account.ExpectedRangeStartDateTime,
+                        EndDate: account.NextRangeEndDateTime ?? account.ExpectedRangeEndDateTime,
+                        VMAccountId: account.VMAccountId,
+                        InterfaceAccountId: account.InterfaceAccountId
+                    );
+                })
+                .ToList();
+
+            _logger.LogInformation("Starting parallel rebill API calls for {Count} accounts with {MaxParallel} workers", 
+                accountsToCall.Count, maxParallel);
+
+            var tasks = accountsToCall.Select(async accountInfo =>
             {
-                var accountId = kvp.Key;
-                var job = kvp.Value;
-                
-                // OPTIMIZATION: O(1) dictionary lookup instead of O(n) First() call
-                if (!accountLookup.TryGetValue(accountId, out var account))
-                {
-                    _logger.LogWarning("Account {AccountId} not found in lookup", accountId);
-                    return;
-                }
-                
                 await semaphore.WaitAsync(cancellationToken);
                 try
                 {
-                    // Create execution record for this rebill attempt (don't save yet)
-                    var execution = await CreateExecutionAsync(job.Id, (int)AdrRequestType.Rebill, saveChanges: false);
-                    
-                    // For rebill, we use the current billing window dates from the account
-                    var startDate = account.NextRangeStartDateTime ?? account.ExpectedRangeStartDateTime;
-                    var endDate = account.NextRangeEndDateTime ?? account.ExpectedRangeEndDateTime;
-
                     var apiResult = await CallAdrApiAsync(
                         AdrRequestType.Rebill,
-                        account.CredentialId,
-                        startDate,
-                        endDate,
-                        job.Id,
-                        account.VMAccountId,
-                        account.InterfaceAccountId,
+                        accountInfo.CredentialId,
+                        accountInfo.StartDate,
+                        accountInfo.EndDate,
+                        accountInfo.JobId,
+                        accountInfo.VMAccountId,
+                        accountInfo.InterfaceAccountId,
                         cancellationToken,
                         false); // Rebill is never the "last attempt" - it's a weekly check
 
-                    // Complete the execution record with the result (don't save yet)
-                    await CompleteExecutionAsync(execution, apiResult);
-                    pendingExecutions.Add(execution);
-
-                    apiResults[accountId] = (apiResult, execution);
+                    apiResults[accountInfo.AccountId] = apiResult;
 
                     var count = Interlocked.Increment(ref completedCalls);
-                    
-                    // OPTIMIZATION: Batch save executions periodically instead of after each call
-                    if (count % executionSaveBatchSize == 0)
-                    {
-                        await SavePendingExecutionsAsync(pendingExecutions);
-                    }
                     
                     if (count % 50 == 0 || count == totalCalls)
                     {
@@ -2482,13 +2472,13 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error calling ADR API for rebill account {AccountId}", accountId);
-                    apiResults[accountId] = (new AdrApiResult
+                    _logger.LogError(ex, "Error calling ADR API for rebill account {AccountId}", accountInfo.AccountId);
+                    apiResults[accountInfo.AccountId] = new AdrApiResult
                     {
                         IsSuccess = false,
                         IsError = true,
                         ErrorMessage = ex.Message
-                    }, null);
+                    };
 
                     var count = Interlocked.Increment(ref completedCalls);
                     if (count % 50 == 0 || count == totalCalls)
@@ -2504,8 +2494,71 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
             await Task.WhenAll(tasks);
             
-            // Save any remaining pending executions
-            await SavePendingExecutionsAsync(pendingExecutions);
+            _logger.LogInformation("Completed {Count} parallel rebill API calls, creating execution records", apiResults.Count);
+
+            // Step 4: Create execution records sequentially (DbContext is not thread-safe)
+            // This is done AFTER all API calls complete to enable true parallelism
+            const int executionBatchSize = 500;
+            int executionsCreated = 0;
+            int executionsSinceLastSave = 0;
+            
+            foreach (var accountInfo in accountsToCall)
+            {
+                if (!apiResults.TryGetValue(accountInfo.AccountId, out var apiResult))
+                {
+                    continue;
+                }
+                
+                try
+                {
+                    // Create execution record for this rebill attempt
+                    var execution = new AdrJobExecution
+                    {
+                        AdrJobId = accountInfo.JobId,
+                        AdrRequestTypeId = (int)AdrRequestType.Rebill,
+                        StartDateTime = DateTime.UtcNow,
+                        EndDateTime = DateTime.UtcNow,
+                        AdrStatusId = apiResult.StatusId,
+                        AdrStatusDescription = apiResult.StatusDescription,
+                        AdrIndexId = apiResult.IndexId,
+                        HttpStatusCode = apiResult.HttpStatusCode,
+                        IsSuccess = apiResult.IsSuccess,
+                        IsError = apiResult.IsError,
+                        IsFinal = apiResult.IsFinal,
+                        ErrorMessage = apiResult.ErrorMessage,
+                        ApiResponse = apiResult.RawResponse,
+                        RequestPayload = apiResult.RequestPayload,
+                        CreatedDateTime = DateTime.UtcNow,
+                        CreatedBy = "System Created",
+                        ModifiedDateTime = DateTime.UtcNow,
+                        ModifiedBy = "System Created"
+                    };
+                    
+                    await _unitOfWork.AdrJobExecutions.AddAsync(execution);
+                    executionsCreated++;
+                    executionsSinceLastSave++;
+                    
+                    // Save in batches
+                    if (executionsSinceLastSave >= executionBatchSize)
+                    {
+                        await _unitOfWork.SaveChangesAsync();
+                        executionsSinceLastSave = 0;
+                        _logger.LogDebug("Saved execution batch: {Created}/{Total}", executionsCreated, apiResults.Count);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error creating execution record for account {AccountId}", accountInfo.AccountId);
+                }
+            }
+            
+            // Save any remaining executions
+            if (executionsSinceLastSave > 0)
+            {
+                await _unitOfWork.SaveChangesAsync();
+            }
+            
+            _logger.LogInformation("Created {Count} execution records for rebill API calls", executionsCreated);
 
             // Process results
             foreach (var account in accountsToProcess)
@@ -2520,9 +2573,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 
                 result.AccountsProcessed++;
 
-                if (apiResults.TryGetValue(account.Id, out var resultTuple))
+                if (apiResults.TryGetValue(account.Id, out var apiResult))
                 {
-                    var apiResult = resultTuple.ApiResult;
                     if (apiResult.IsSuccess)
                     {
                         result.RebillRequestsSent++;
@@ -2592,27 +2644,6 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             ModifiedDateTime = now,
             ModifiedBy = "System Created"
         };
-    }
-    
-    /// <summary>
-    /// Saves pending execution records in a thread-safe manner.
-    /// Used for batch saving optimization.
-    /// </summary>
-    private async Task SavePendingExecutionsAsync(ConcurrentBag<AdrJobExecution> pendingExecutions)
-    {
-        if (pendingExecutions.IsEmpty)
-            return;
-            
-        try
-        {
-            await _unitOfWork.SaveChangesAsync();
-            _logger.LogDebug("Saved batch of {Count} execution records", pendingExecutions.Count);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error saving execution batch");
-            throw;
-        }
     }
 
     /// <summary>
