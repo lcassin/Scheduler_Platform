@@ -325,7 +325,14 @@
                     <RowTemplate>
                         <MudTd DataLabel="Date">@(_orchestrationHistoryFormattedDates.TryGetValue(context.RequestId, out var formattedDate) ? formattedDate : context.RequestedAt.ToString("MM/dd hh:mm tt"))</MudTd>
                         <MudTd DataLabel="Status">
-                            <MudChip T="string" Size="Size.Small" Color="@GetOrchestrationHistoryStatusColor(context.Status)">@context.Status</MudChip>
+                            @if (context.Status == "Interrupted")
+                            {
+                                <MudChip T="string" Size="Size.Small" Style="background-color: #ab47bc; color: white;">@context.Status</MudChip>
+                            }
+                            else
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="@GetOrchestrationHistoryStatusColor(context.Status)">@context.Status</MudChip>
+                            }
                         </MudTd>
                         <MudTd DataLabel="Duration">
                             @if (context.StartedAt.HasValue && context.CompletedAt.HasValue)
