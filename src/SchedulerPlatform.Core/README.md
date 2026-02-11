@@ -242,7 +242,7 @@ All entities inherit from `BaseEntity` which provides common tracking fields:
 
 ### ADR Domain Model
 
-The ADR (Automated Data Retrieval) domain model supports automated invoice scraping from vendor portals. These entities track accounts, jobs, executions, and orchestration runs for the ADR process.
+The ADR (Automated Document Retrieval) domain model supports automated invoice scraping from vendor portals. These entities track accounts, jobs, executions, and orchestration runs for the ADR process.
 
 For the complete ER diagram, see [ADR ER Diagram](../../../Documents/Technical/diagrams/adr-er-diagram.png).
 

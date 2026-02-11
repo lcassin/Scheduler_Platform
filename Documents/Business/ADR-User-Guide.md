@@ -1,8 +1,8 @@
-# ADR (Automated Data Retrieval) User Guide
+# ADR (Automated Document Retrieval) User Guide
 
 ## Overview
 
-The Automated Data Retrieval (ADR) system automates the process of retrieving billing documents (invoices) from vendor portals. Instead of manually logging into each vendor's website to download invoices, the ADR system handles this automatically based on each account's billing cycle.
+The Automated Document Retrieval (ADR) system automates the process of retrieving billing documents (invoices) from vendor portals. Instead of manually logging into each vendor's website to download invoices, the ADR system handles this automatically based on each account's billing cycle.
 
 ## How It Works
 

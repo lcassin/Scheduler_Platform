@@ -319,7 +319,7 @@
                         <MudTh>Duration</MudTh>
                         <MudTh>Accounts Synced</MudTh>
                         <MudTh>Jobs Created</MudTh>
-                        <MudTh>Credentials</MudTh>
+                        <MudTh>Rebill</MudTh>
                         <MudTh>ADR Requests</MudTh>
                     </HeaderContent>
                     <RowTemplate>
@@ -366,13 +366,13 @@
                                 <text>-</text>
                             }
                         </MudTd>
-                        <MudTd DataLabel="Credentials">
-                            @if (context.CredentialVerificationResult != null)
+                        <MudTd DataLabel="Rebill">
+                            @if (context.RebillResult != null)
                             {
                                 <MudText Typo="Typo.body2">
-                                    <span style="color: var(--mud-palette-success);">@context.CredentialVerificationResult.CredentialsVerified</span>
+                                    <span style="color: var(--mud-palette-success);">@context.RebillResult.RebillRequestsSent</span>
                                     /
-                                    <span style="color: var(--mud-palette-error);">@context.CredentialVerificationResult.CredentialsFailed</span>
+                                    <span style="color: var(--mud-palette-error);">@context.RebillResult.RebillRequestsFailed</span>
                                 </MudText>
                             }
                             else if (context.Status == "Completed" || context.Status == "Failed")
