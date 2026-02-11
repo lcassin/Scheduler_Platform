@@ -53,4 +53,12 @@ public interface IAdrJobRepository : IRepository<AdrJob>
     /// </summary>
     /// <param name="adrAccountId">The account ID to find the rebill job for</param>
     Task<AdrJob?> GetRebillJobByAccountAsync(int adrAccountId);
+    
+    /// <summary>
+    /// Gets all existing rebill jobs for a list of account IDs in a single query.
+    /// This is an optimization to avoid N+1 queries when processing rebill for many accounts.
+    /// </summary>
+    /// <param name="accountIds">The list of account IDs to find rebill jobs for</param>
+    /// <returns>Dictionary mapping account ID to rebill job (only accounts with existing jobs are included)</returns>
+    Task<Dictionary<int, AdrJob>> GetRebillJobsByAccountIdsAsync(IEnumerable<int> accountIds);
 }
