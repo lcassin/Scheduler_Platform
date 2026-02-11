@@ -36,4 +36,13 @@ public interface IAdrAccountRepository : IRepository<AdrAccount>
     /// </summary>
     /// <returns>All non-deleted accounts with CredentialId > 0</returns>
     Task<IEnumerable<AdrAccount>> GetAllActiveAccountsForCredentialCheckAsync();
+    
+    /// <summary>
+    /// Gets accounts for weekly rebill processing where the expected billing day of week matches the specified day.
+    /// Uses OverriddenDateTime if manually set, otherwise uses ExpectedNextDateTime.
+    /// This is optimized to filter at the database level rather than loading all accounts into memory.
+    /// </summary>
+    /// <param name="dayOfWeek">The day of week to filter by (0 = Sunday, 6 = Saturday)</param>
+    /// <returns>Active accounts with valid credentials whose billing day matches the specified day</returns>
+    Task<IEnumerable<AdrAccount>> GetAccountsForRebillByDayOfWeekAsync(DayOfWeek dayOfWeek);
 }

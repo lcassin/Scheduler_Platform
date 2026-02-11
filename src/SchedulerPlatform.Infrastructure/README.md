@@ -247,7 +247,7 @@ dotnet ef migrations script --startup-project ../SchedulerPlatform.API
 
 ### ADR Persistence and Indexing
 
-The ADR (Automated Data Retrieval) tables support automated invoice scraping from vendor portals. Due to EF Core migration reliability issues, manual SQL scripts are provided in the `/scripts` folder.
+The ADR (Automated Document Retrieval) tables support automated invoice scraping from vendor portals. Due to EF Core migration reliability issues, manual SQL scripts are provided in the `/scripts` folder.
 
 **ADR Tables:**
 - `AdrAccount`: Vendor accounts synced from VendorCredNewUAT with billing patterns

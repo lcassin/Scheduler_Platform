@@ -294,7 +294,7 @@ This is how users interact with the scheduling system. Whether through a web UI,
 - Centralized credential management with encryption
 
 #### AdrController
-**Purpose**: Manage ADR (Automated Data Retrieval) process for automated invoice scraping from vendor portals.
+**Purpose**: Manage ADR (Automated Document Retrieval) process for automated invoice scraping from vendor portals.
 
 For the complete workflow diagram, see [ADR Workflow Diagram](../../../Documents/Technical/diagrams/adr-workflow.png).
 For the sequence diagram, see [ADR Sequence Diagram](../../../Documents/Technical/diagrams/adr-sequence-orchestration.png).

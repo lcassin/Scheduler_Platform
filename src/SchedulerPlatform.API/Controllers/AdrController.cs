@@ -13,7 +13,7 @@ using SchedulerPlatform.Infrastructure.Data;
 namespace SchedulerPlatform.API.Controllers;
 
 /// <summary>
-/// Controller for managing Automated Data Retrieval (ADR) accounts, jobs, and executions.
+/// Controller for managing Automated Document Retrieval (ADR) accounts, jobs, and executions.
 /// Provides endpoints for ADR account management, job orchestration, and data scraping operations.
 /// </summary>
 [ApiController]

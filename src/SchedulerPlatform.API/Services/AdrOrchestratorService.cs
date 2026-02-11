@@ -2300,21 +2300,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             // Load blacklist entries for filtering
             var blacklistEntries = await LoadBlacklistEntriesAsync("All");
 
-            // Get all active accounts where the day of week of ExpectedNextDateTime matches today
-            // Use OverriddenDateTime if set, otherwise use ExpectedNextDateTime
-            var allAccounts = await _unitOfWork.AdrAccounts.GetAllAsync();
-            var accountsForRebill = allAccounts
-                .Where(a => !a.IsDeleted && a.CredentialId > 0)
-                .Where(a => 
-                {
-                    // Use the overridden date if manually set, otherwise use expected date
-                    var dateToCheck = a.IsManuallyOverridden && a.OverriddenDateTime.HasValue 
-                        ? a.OverriddenDateTime.Value 
-                        : a.ExpectedNextDateTime;
-                    
-                    return dateToCheck.HasValue && dateToCheck.Value.DayOfWeek == todayDayOfWeek;
-                })
-                .ToList();
+            // Get accounts for rebill using optimized database query that filters by day of week
+            // This avoids loading all 170k+ accounts into memory and filtering in-memory
+            var accountsForRebill = (await _unitOfWork.AdrAccounts.GetAccountsForRebillByDayOfWeekAsync(todayDayOfWeek)).ToList();
 
             var totalAccountsFound = accountsForRebill.Count;
             _logger.LogInformation("Found {Count} accounts for rebill on {DayOfWeek}", totalAccountsFound, todayDayOfWeek);
