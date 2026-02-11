@@ -80,6 +80,14 @@
                 </MudSelect>
             </MudItem>
             <MudItem xs="12" md="2">
+                <MudSelect T="int?" @bind-Value="_selectedJobTypeId" Label="Job Type" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                    <MudSelectItem T="int?" Value="@((int?)null)">All</MudSelectItem>
+                    <MudSelectItem T="int?" Value="@((int?)1)">Credential Check</MudSelectItem>
+                    <MudSelectItem T="int?" Value="@((int?)2)">Download Invoice</MudSelectItem>
+                    <MudSelectItem T="int?" Value="@((int?)3)">Rebill</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="2">
                 <MudTextField @bind-Value="_searchInterfaceAccountId"
                               Label="Interface Account ID" 
                               Placeholder="Enter interface acct"
@@ -332,6 +340,7 @@
     private string? _searchAccountNumber;
     private string _selectedStatus = "";
     private string _selectedBlacklistStatus = "";
+    private int? _selectedJobTypeId;
     private string? _searchInterfaceAccountId;
     private string? _filterMasterVendorCode;
     private string? _filterPrimaryVendorCode;
@@ -427,7 +436,8 @@
                 _showManualJobs ? true : (bool?)null, // null = show all jobs (default), true = show only manual jobs
                 _filterBlacklistStatus,
                 sortColumn,
-                sortDescending);
+                sortDescending,
+                _selectedJobTypeId);
 
             return new TableData<AdrJob>
             {
@@ -478,6 +488,7 @@
         _searchAccountNumber = null;
         _selectedStatus = "";
         _selectedBlacklistStatus = "";
+        _selectedJobTypeId = null;
         _searchInterfaceAccountId = null;
         _showManualJobs = false;
         _filterMasterVendorCode = null;

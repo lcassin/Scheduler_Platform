@@ -193,7 +193,8 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             bool? isManualRequest = null,
             string? sortColumn = null,
             bool sortDescending = true,
-            List<int>? jobIds = null)
+            List<int>? jobIds = null,
+            int? jobTypeId = null)
         {
             // Filter by both job.IsDeleted AND account.IsDeleted to exclude jobs for deleted accounts
             var query = _dbSet.Where(j => !j.IsDeleted && j.AdrAccount != null && !j.AdrAccount.IsDeleted);
@@ -276,6 +277,11 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             if (credentialId.HasValue)
             {
                 query = query.Where(j => j.CredentialId == credentialId.Value);
+            }
+
+            if (jobTypeId.HasValue)
+            {
+                query = query.Where(j => j.JobTypeId == jobTypeId.Value);
             }
 
             int totalCount;
@@ -502,5 +508,17 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                         j.AdrAccountRuleId.HasValue)
             .Include(j => j.AdrAccount)
             .ToListAsync();
+    }
+
+    public async Task<AdrJob?> GetRebillJobByAccountAsync(int adrAccountId)
+    {
+        // Rebill jobs (JobTypeId = 3) are persistent per-account and reused for all rebill executions.
+        // There should only be one rebill job per account.
+        const int rebillJobTypeId = 3;
+        
+        return await _dbSet
+            .FirstOrDefaultAsync(j => j.AdrAccountId == adrAccountId && 
+                                      j.JobTypeId == rebillJobTypeId &&
+                                      !j.IsDeleted);
     }
 }
