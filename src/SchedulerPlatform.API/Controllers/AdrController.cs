@@ -932,9 +932,9 @@ public class AdrController : ControllerBase
 
                 if (isRebillCheck)
                 {
-                    // For rebill requests, use the persistent rebill job (JobTypeId = 3)
+                    // For rebill requests, use the persistent rebill job (AdrJobTypeId = 3)
                     // This ensures all rebill executions for an account share the same job
-                    const int rebillJobTypeId = 3;
+                    const int rebillAdrJobTypeId = 3;
                     var existingRebillJob = await _unitOfWork.AdrJobs.GetRebillJobByAccountAsync(account.Id);
                     
                     if (existingRebillJob != null)
@@ -962,7 +962,7 @@ public class AdrController : ControllerBase
                             MasterVendorCode = account.MasterVendorCode,
                             CredentialId = account.CredentialId,
                             PeriodType = account.PeriodType,
-                            JobTypeId = rebillJobTypeId,
+                            AdrJobTypeId = rebillAdrJobTypeId,
                             // For rebill jobs, billing period dates are placeholders since they're persistent
                             BillingPeriodStartDateTime = new DateTime(2000, 1, 1),
                             BillingPeriodEndDateTime = new DateTime(2099, 12, 31),
@@ -1648,7 +1648,7 @@ public class AdrController : ControllerBase
     /// <param name="interfaceAccountId">Optional interface account ID to filter jobs.</param>
     /// <param name="credentialId">Optional credential ID to filter jobs.</param>
     /// <param name="isManualRequest">Optional filter for manual vs automated requests.</param>
-    /// <param name="jobTypeId">Optional job type ID filter (1 = Credential Check, 2 = Download Invoice, 3 = Rebill).</param>
+    /// <param name="adrJobTypeId">Optional job type ID filter (1 = Credential Check, 2 = Download Invoice, 3 = Rebill).</param>
     /// <param name="sortColumn">Column name to sort by.</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
     /// <returns>A paginated list of ADR jobs.</returns>
@@ -1673,7 +1673,7 @@ public class AdrController : ControllerBase
         [FromQuery] int? credentialId = null,
         [FromQuery] bool? isManualRequest = null,
         [FromQuery] string? blacklistStatus = null,
-        [FromQuery] int? jobTypeId = null,
+        [FromQuery] int? adrJobTypeId = null,
         [FromQuery] string? sortColumn = null,
         [FromQuery] bool sortDescending = true)
     {
@@ -1770,7 +1770,7 @@ public class AdrController : ControllerBase
                     sortColumn,
                     sortDescending,
                     jobIdsWithBlacklistStatus,
-                    jobTypeId);
+                    adrJobTypeId);
 
                 // Get blacklist status for each job (single query)
                 var today = DateTime.UtcNow.Date;

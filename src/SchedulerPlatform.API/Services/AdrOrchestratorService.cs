@@ -2656,11 +2656,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
     /// <summary>
     /// Gets or creates a persistent rebill job for an account.
-    /// Rebill jobs (JobTypeId = 3) are persistent per-account and reused for all rebill executions.
+    /// Rebill jobs (AdrJobTypeId = 3) are persistent per-account and reused for all rebill executions.
     /// </summary>
     private async Task<AdrJob> GetOrCreateRebillJobAsync(AdrAccount account, bool saveChanges = true)
     {
-        const int rebillJobTypeId = 3;
+        const int rebillAdrJobTypeId = 3;
         
         // Try to find existing rebill job for this account
         var existingJob = await _unitOfWork.AdrJobs.GetRebillJobByAccountAsync(account.Id);
@@ -2681,7 +2681,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             MasterVendorCode = account.MasterVendorCode,
             CredentialId = account.CredentialId,
             PeriodType = account.PeriodType,
-            JobTypeId = rebillJobTypeId,
+            AdrJobTypeId = rebillAdrJobTypeId,
             // For rebill jobs, billing period dates are not meaningful since they're persistent
             // Use a placeholder date range that indicates this is a rebill job
             BillingPeriodStartDateTime = new DateTime(2000, 1, 1),
