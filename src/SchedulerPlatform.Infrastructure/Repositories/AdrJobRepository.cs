@@ -521,4 +521,26 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                                       j.AdrJobTypeId == rebillAdrJobTypeId &&
                                       !j.IsDeleted);
     }
+    
+    public async Task<Dictionary<int, AdrJob>> GetRebillJobsByAccountIdsAsync(IEnumerable<int> accountIds)
+    {
+        // Rebill jobs (AdrJobTypeId = 3) are persistent per-account and reused for all rebill executions.
+        // This bulk method avoids N+1 queries when processing rebill for many accounts.
+        const int rebillAdrJobTypeId = 3;
+        var accountIdList = accountIds.ToList();
+        
+        if (!accountIdList.Any())
+        {
+            return new Dictionary<int, AdrJob>();
+        }
+        
+        var rebillJobs = await _dbSet
+            .Where(j => accountIdList.Contains(j.AdrAccountId) && 
+                        j.AdrJobTypeId == rebillAdrJobTypeId &&
+                        !j.IsDeleted)
+            .ToListAsync();
+        
+        // Return as dictionary keyed by AdrAccountId
+        return rebillJobs.ToDictionary(j => j.AdrAccountId);
+    }
 }
