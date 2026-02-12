@@ -328,8 +328,11 @@ public class AdrAccountSyncService : IAdrAccountSyncService
         var countQuery = @"
 SELECT COUNT(DISTINCT CONCAT(AD.VCAccountId, '_', AD.AccountNumber))
 FROM [dbo].[ADRInvoiceAccountData] AD
+INNER JOIN Account A ON AD.VCAccountId = A.AccountId AND A.IsActive = 1
+INNER JOIN Client CL ON A.ClientId = CL.ClientId AND CL.IsActive = 1
 INNER JOIN CredentialAccount CA ON AD.VCAccountId = CA.AccountId
-INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId";
+INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId
+WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL)";
 
         await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
@@ -353,9 +356,9 @@ INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId
         var clientQuery = @"
 SELECT DISTINCT CL.ClientId, CL.ClientName
 FROM [dbo].[ADRInvoiceAccountData] AD
-    LEFT OUTER JOIN Account A ON AD.VCAccountId = A.AccountId
-    LEFT OUTER JOIN Client CL ON A.ClientId = CL.ClientId
-WHERE CL.ClientId IS NOT NULL AND CL.IsActive = 1";
+    INNER JOIN Account A ON AD.VCAccountId = A.AccountId AND A.IsActive = 1
+    INNER JOIN Client CL ON A.ClientId = CL.ClientId AND CL.IsActive = 1
+WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL)";
 
         var uniqueClients = new List<(int ExternalClientId, string ClientName)>();
         
@@ -900,14 +903,14 @@ WHERE CL.ClientId IS NOT NULL AND CL.IsActive = 1";
 			  ,CL.ClientName
 		INTO #tmpCredentialAccountBilling
 		FROM [dbo].[ADRInvoiceAccountData] AD
-			LEFT OUTER JOIN Account A ON AD.VCAccountId = A.AccountId
-			LEFT OUTER JOIN Client CL ON A.ClientId = CL.ClientId
+			INNER JOIN Account A ON AD.VCAccountId = A.AccountId AND A.IsActive = 1
+			INNER JOIN Client CL ON A.ClientId = CL.ClientId AND CL.IsActive = 1
 			INNER JOIN CredentialAccount CA ON AD.VCAccountId = CA.AccountId
 			INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId
 			LEFT OUTER JOIN Vendor V ON AD.VendorCode = V.PrimaryVendorCode
 			LEFT OUTER JOIN VendorXRef VX ON V.VendorId = VX.PrimaryVendorId
 			LEFT OUTER JOIN Vendor MV ON VX.MasterVendorId = MV.VendorId
-		WHERE (CL.IsActive = 1 OR CL.ClientId IS NULL);
+		WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL);
 
 		;WITH AccountStats AS (
 			SELECT AccountId,
