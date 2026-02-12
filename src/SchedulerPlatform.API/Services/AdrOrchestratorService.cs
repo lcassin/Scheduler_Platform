@@ -616,7 +616,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             if (IsTestModeEnabled())
             {
                 var maxJobs = GetTestModeMaxRebillJobs();
-                if (maxJobs > 0 && jobsNeedingVerification.Count > maxJobs)
+                if (maxJobs == 0)
+                {
+                    jobsNeedingVerification.Clear();
+                    _logger.LogWarning("TEST MODE ENABLED: Skipping credential verification (max set to 0)");
+                }
+                else if (jobsNeedingVerification.Count > maxJobs)
                 {
                     // Order by JobId for consistency - same jobs will be picked each run
                     jobsNeedingVerification = jobsNeedingVerification.OrderBy(j => j.Id).Take(maxJobs).ToList();
@@ -929,7 +934,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             if (IsTestModeEnabled())
             {
                 var maxJobs = GetTestModeMaxScrapingJobs();
-                if (maxJobs > 0 && jobsReadyForScraping.Count > maxJobs)
+                if (maxJobs == 0)
+                {
+                    jobsReadyForScraping.Clear();
+                    _logger.LogWarning("TEST MODE ENABLED: Skipping ADR scraping (max set to 0)");
+                }
+                else if (jobsReadyForScraping.Count > maxJobs)
                 {
                     // Order by JobId for consistency - same jobs will be picked each run
                     jobsReadyForScraping = jobsReadyForScraping.OrderBy(j => j.Id).Take(maxJobs).ToList();
@@ -2312,7 +2322,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             if (IsTestModeEnabled())
             {
                 var maxJobs = GetTestModeMaxRebillJobs();
-                if (maxJobs > 0 && accountsForRebill.Count > maxJobs)
+                if (maxJobs == 0)
+                {
+                    accountsForRebill.Clear();
+                    _logger.LogWarning("TEST MODE ENABLED: Skipping rebill processing (max set to 0)");
+                }
+                else if (accountsForRebill.Count > maxJobs)
                 {
                     // Order by AccountId for consistency - same accounts will be picked each run
                     accountsForRebill = accountsForRebill.OrderBy(a => a.Id).Take(maxJobs).ToList();
