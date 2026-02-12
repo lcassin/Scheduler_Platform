@@ -492,6 +492,92 @@
     transition: max-height 0.3s ease;
   }
 
+  .workflow-section {
+    background: #fff;
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    margin-bottom: 12px;
+    border: 2px solid #1B1B1B;
+  }
+
+  .workflow-section .section-label { background: #1B1B1B; }
+
+  .workflow-pipeline {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    padding: 20px 16px;
+    overflow-x: auto;
+    justify-content: center;
+  }
+
+  .wf-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 120px;
+    max-width: 150px;
+    text-align: center;
+  }
+
+  .wf-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    color: #fff;
+    margin-bottom: 6px;
+    border: 3px solid rgba(255,255,255,0.3);
+  }
+
+  .wf-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 2px;
+  }
+
+  .wf-sublabel {
+    font-size: 10px;
+    color: #777;
+    line-height: 1.3;
+  }
+
+  .wf-azure-map {
+    font-size: 9px;
+    color: var(--azure-blue);
+    margin-top: 4px;
+    padding: 2px 6px;
+    background: var(--azure-light);
+    border-radius: 3px;
+    word-break: break-all;
+    max-width: 140px;
+  }
+
+  .wf-arrow {
+    display: flex;
+    align-items: center;
+    font-size: 24px;
+    color: #888;
+    padding: 0 4px;
+    margin-top: 16px;
+  }
+
+  .wf-branch {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .wf-branch-arrow {
+    font-size: 18px;
+    color: #888;
+  }
+
   @media print {
     body { background: #fff; padding: 10px; }
     .resource-card:hover { transform: none; }
@@ -501,6 +587,7 @@
   @media (max-width: 800px) {
     .env-columns { grid-template-columns: 1fr; }
     .flow-steps { grid-template-columns: 1fr; }
+    .workflow-pipeline { flex-wrap: wrap; justify-content: center; }
   }
 </style>
 </head>
@@ -522,6 +609,82 @@
   <div class="legend-item"><div class="legend-dot" style="background:#005A9E"></div> App Service Plan</div>
   <div class="legend-item"><div class="legend-dot" style="background:#D83B01"></div> Alert Rule</div>
   <div class="legend-item"><div class="legend-dot" style="background:#CC2131"></div> SQL Server</div>
+</div>
+
+<!-- ======== APPLICATION WORKFLOW ======== -->
+<div class="workflow-section">
+  <div class="section-label"><span class="icon">&#128640;</span> ExpenseSmart 3.0 &mdash; Application Workflow</div>
+  <div class="workflow-pipeline">
+
+    <div class="wf-step">
+      <div class="wf-icon" style="background:#0078D4">&#128100;</div>
+      <div class="wf-label">Users</div>
+      <div class="wf-sublabel">ExpenseSmart 3.0</div>
+    </div>
+
+    <div class="wf-arrow">&rarr;</div>
+
+    <div class="wf-step">
+      <div class="wf-icon" style="background:#5C2D91">&#128272;</div>
+      <div class="wf-label">SSO</div>
+      <div class="wf-sublabel">Authentication &amp; Security Layer</div>
+      <div class="wf-azure-map">cass-ueg-common-identity</div>
+    </div>
+
+    <div class="wf-arrow">&rarr;</div>
+
+    <div class="wf-step">
+      <div class="wf-icon" style="background:#CC2131">&#128451;</div>
+      <div class="wf-label">User DB Check</div>
+      <div class="wf-sublabel">SQL Auth Validation</div>
+      <div class="wf-azure-map">On-Prem SQL via Private Endpoints</div>
+    </div>
+
+    <div class="wf-arrow">&rarr;</div>
+
+    <div class="wf-step">
+      <div class="wf-icon" style="background:#00B7C3">&#9729;</div>
+      <div class="wf-label">API Management</div>
+      <div class="wf-sublabel">Load Balancing, APIs &amp; API Security</div>
+      <div class="wf-azure-map">cass-ueg-exm-api-client / admin / workflow</div>
+    </div>
+
+    <div class="wf-arrow">&rarr;</div>
+
+    <div class="wf-branch">
+      <div class="wf-step">
+        <div class="wf-icon" style="background:#D83B01">&#9881;</div>
+        <div class="wf-label">Functional API &amp; Business Logic</div>
+        <div class="wf-sublabel">Core Processing</div>
+        <div class="wf-azure-map">cass-ueg-exm-api-* + cass-ueg-exm-fun</div>
+      </div>
+      <div class="wf-branch-arrow">&darr; &uarr;</div>
+      <div class="wf-step">
+        <div class="wf-icon" style="background:#0078D4">&#128421;</div>
+        <div class="wf-label">Web UI</div>
+        <div class="wf-sublabel">User Interface</div>
+        <div class="wf-azure-map">cass-ueg-exm-web</div>
+      </div>
+    </div>
+
+    <div class="wf-arrow">&rarr;</div>
+
+    <div class="wf-step">
+      <div class="wf-icon" style="background:#0B7A3E">&#128451;</div>
+      <div class="wf-label">Storage Layer</div>
+      <div class="wf-sublabel">SQL Data Storage</div>
+      <div class="wf-azure-map">On-Prem: PEMSDBSQL01 + PEMSDBSQL10</div>
+    </div>
+
+    <div class="wf-arrow">&rarr;</div>
+
+    <div class="wf-step">
+      <div class="wf-icon" style="background:#B36B00">&#128202;</div>
+      <div class="wf-label">Reporting Layer</div>
+      <div class="wf-sublabel">Analytics &amp; Reports</div>
+    </div>
+
+  </div>
 </div>
 
 <!-- ======== AZURE CLOUD: EXPENSESMART APP SERVICES ======== -->
