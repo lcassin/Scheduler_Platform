@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Expensesmart 3.0 - Full Architecture Diagram</title>
+<style>
+  :root {
+    --azure-blue: #0078D4;
+    --azure-dark: #004578;
+    --azure-light: #DEECF9;
+    --dev-color: #0B7A3E;
+    --dev-bg: #E6F4EA;
+    --uat-color: #B36B00;
+    --uat-bg: #FFF4E0;
+    --onprem-color: #5C2D91;
+    --onprem-bg: #F3EDFB;
+    --sql-color: #CC2131;
+    --hybrid-color: #E3008C;
+    --card-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    --border-radius: 8px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #F5F5F5;
+    color: #333;
+    padding: 20px;
+  }
+
+  .diagram-header {
+    text-align: center;
+    padding: 24px 20px;
+    background: linear-gradient(135deg, var(--azure-dark), var(--azure-blue));
+    color: #fff;
+    border-radius: var(--border-radius);
+    margin-bottom: 24px;
+  }
+
+  .diagram-header h1 { font-size: 28px; font-weight: 600; margin-bottom: 4px; }
+  .diagram-header .subtitle { font-size: 14px; opacity: 0.85; }
+  .diagram-header .date { font-size: 12px; opacity: 0.7; margin-top: 6px; }
+
+  .legend {
+    display: flex;
+    gap: 20px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    padding: 12px 20px;
+    background: #fff;
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+  }
+
+  .legend-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+
+  .section-label {
+    font-size: 18px;
+    font-weight: 600;
+    padding: 10px 16px;
+    border-radius: var(--border-radius) var(--border-radius) 0 0;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-label .icon { font-size: 22px; }
+
+  .azure-section {
+    background: #fff;
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    margin-bottom: 12px;
+    border: 2px solid var(--azure-blue);
+  }
+
+  .azure-section .section-label { background: var(--azure-blue); }
+
+  .env-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .env-box {
+    border-radius: var(--border-radius);
+    padding: 14px;
+    border: 2px dashed;
+  }
+
+  .env-box.dev {
+    border-color: var(--dev-color);
+    background: var(--dev-bg);
+  }
+
+  .env-box.uat {
+    border-color: var(--uat-color);
+    background: var(--uat-bg);
+  }
+
+  .env-title {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .env-box.dev .env-title { color: var(--dev-color); }
+  .env-box.uat .env-title { color: var(--uat-color); }
+
+  .resource-group {
+    margin-bottom: 10px;
+  }
+
+  .resource-group-title {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #666;
+    margin-bottom: 6px;
+    padding-bottom: 3px;
+    border-bottom: 1px solid rgba(0,0,0,0.1);
+  }
+
+  .resource-card {
+    background: #fff;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-bottom: 5px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    border-left: 3px solid transparent;
+    transition: transform 0.15s;
+  }
+
+  .resource-card:hover {
+    transform: translateX(3px);
+  }
+
+  .resource-card.app-service { border-left-color: #0078D4; }
+  .resource-card.function-app { border-left-color: #FFC107; }
+  .resource-card.app-insights { border-left-color: #68217A; }
+  .resource-card.key-vault { border-left-color: #E3008C; }
+  .resource-card.storage { border-left-color: #0063B1; }
+  .resource-card.private-endpoint { border-left-color: #00B7C3; }
+  .resource-card.app-service-plan { border-left-color: #005A9E; }
+  .resource-card.network-intf { border-left-color: #498205; }
+  .resource-card.alert-rule { border-left-color: #D83B01; }
+  .resource-card.managed-identity { border-left-color: #008272; }
+  .resource-card.sql-server { border-left-color: var(--sql-color); }
+
+  .resource-icon {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+
+  .resource-name {
+    font-weight: 500;
+    word-break: break-all;
+    flex: 1;
+  }
+
+  .resource-type {
+    font-size: 10px;
+    color: #888;
+    white-space: nowrap;
+  }
+
+  .hybrid-connector {
+    text-align: center;
+    padding: 16px;
+    margin: 12px 0;
+    position: relative;
+  }
+
+  .hybrid-connector .line {
+    border: none;
+    border-top: 3px dashed var(--hybrid-color);
+    margin: 8px auto;
+    width: 80%;
+  }
+
+  .hybrid-connector .label {
+    display: inline-block;
+    background: var(--hybrid-color);
+    color: #fff;
+    padding: 6px 18px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .hybrid-connector .sublabel {
+    font-size: 11px;
+    color: #888;
+    margin-top: 4px;
+  }
+
+  .onprem-section {
+    background: #fff;
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    margin-bottom: 12px;
+    border: 2px solid var(--onprem-color);
+  }
+
+  .onprem-section .section-label { background: var(--onprem-color); }
+
+  .onprem-content {
+    padding: 16px;
+  }
+
+  .sql-tier {
+    margin-bottom: 16px;
+  }
+
+  .sql-tier-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--onprem-color);
+    margin-bottom: 8px;
+    padding: 4px 10px;
+    background: var(--onprem-bg);
+    border-radius: 4px;
+    display: inline-block;
+  }
+
+  .sql-servers-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .sql-server-box {
+    background: #fff;
+    border: 2px solid var(--sql-color);
+    border-radius: var(--border-radius);
+    padding: 12px;
+    min-width: 180px;
+    max-width: 220px;
+    flex: 1;
+    text-align: center;
+  }
+
+  .sql-server-box.primary {
+    border-color: var(--azure-blue);
+    background: var(--azure-light);
+    min-width: 380px;
+    max-width: 500px;
+  }
+
+  .sql-server-box.replica {
+    border-color: #498205;
+    background: #F0F9E8;
+    min-width: 380px;
+    max-width: 500px;
+  }
+
+  .sql-server-name {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--sql-color);
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .sql-server-box.primary .sql-server-name { color: var(--azure-dark); }
+  .sql-server-box.replica .sql-server-name { color: #498205; }
+
+  .sql-db-list {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .sql-db {
+    background: rgba(0,0,0,0.06);
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .flow-arrow {
+    text-align: center;
+    padding: 6px;
+    font-size: 20px;
+    color: var(--azure-blue);
+  }
+
+  .flow-arrow.replication { color: #498205; }
+  .flow-arrow .flow-label {
+    font-size: 11px;
+    display: block;
+  }
+
+  .data-flow-section {
+    background: #fff;
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    margin-bottom: 12px;
+    border: 2px solid #0063B1;
+    padding: 16px;
+  }
+
+  .data-flow-section .section-label { background: #0063B1; margin: -16px -16px 16px -16px; border-radius: 6px 6px 0 0; }
+
+  .flow-steps {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+  }
+
+  .flow-step {
+    background: #F8F9FA;
+    border-radius: 6px;
+    padding: 12px;
+    border-left: 4px solid var(--azure-blue);
+    position: relative;
+  }
+
+  .flow-step .step-number {
+    position: absolute;
+    top: -8px;
+    left: -8px;
+    background: var(--azure-blue);
+    color: #fff;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .flow-step .step-title {
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 4px;
+    margin-left: 14px;
+  }
+
+  .flow-step .step-desc {
+    font-size: 12px;
+    color: #555;
+    line-height: 1.4;
+  }
+
+  .shared-resources {
+    background: #fff;
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    margin-bottom: 12px;
+    border: 2px solid #005A9E;
+  }
+
+  .shared-resources .section-label { background: #005A9E; }
+
+  .shared-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 8px;
+    padding: 16px;
+  }
+
+  .pipeline-section {
+    background: #fff;
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    margin-bottom: 12px;
+    border: 2px solid #005A9E;
+  }
+
+  .pipeline-section .section-label { background: #005A9E; }
+
+  .pipeline-flow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .pipeline-stage {
+    background: #F0F6FF;
+    border: 1px solid var(--azure-blue);
+    border-radius: 6px;
+    padding: 10px 16px;
+    text-align: center;
+    min-width: 120px;
+  }
+
+  .pipeline-stage .stage-name {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--azure-dark);
+  }
+
+  .pipeline-stage .stage-detail {
+    font-size: 11px;
+    color: #666;
+    margin-top: 2px;
+  }
+
+  .pipeline-arrow {
+    font-size: 20px;
+    color: var(--azure-blue);
+  }
+
+  .notes-section {
+    background: #FFFDE7;
+    border: 1px solid #FFC107;
+    border-radius: var(--border-radius);
+    padding: 14px 18px;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .notes-section h3 {
+    color: #B36B00;
+    margin-bottom: 6px;
+    font-size: 14px;
+  }
+
+  .notes-section ul {
+    padding-left: 20px;
+  }
+
+  .env-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .env-badge.dev { background: var(--dev-color); color: #fff; }
+  .env-badge.uat { background: var(--uat-color); color: #fff; }
+
+  .toggle-btn {
+    background: none;
+    border: 1px solid rgba(0,0,0,0.2);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 11px;
+    cursor: pointer;
+    color: #666;
+    margin-left: auto;
+  }
+
+  .toggle-btn:hover { background: rgba(0,0,0,0.05); }
+
+  .collapsible-content {
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+  }
+
+  @media print {
+    body { background: #fff; padding: 10px; }
+    .resource-card:hover { transform: none; }
+    .toggle-btn { display: none; }
+  }
+
+  @media (max-width: 800px) {
+    .env-columns { grid-template-columns: 1fr; }
+    .flow-steps { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="diagram-header">
+  <h1>Expensesmart 3.0 &mdash; Full Architecture Diagram</h1>
+  <div class="subtitle">Facilities Division &bull; Azure Cloud (DEV + UAT) &bull; Hybrid Connectivity &bull; On-Premises SQL Server Topology</div>
+  <div class="date">Resource Group: nuscueges2rg &nbsp;|&nbsp; Region: Central US &nbsp;|&nbsp; Generated: Feb 2026 &nbsp;|&nbsp; Current: v2 (repurposing for v3)</div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#0078D4"></div> App Service</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#FFC107"></div> Function App</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#68217A"></div> App Insights</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#E3008C"></div> Key Vault</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#0063B1"></div> Storage</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#00B7C3"></div> Private Endpoint</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#005A9E"></div> App Service Plan</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#D83B01"></div> Alert Rule</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#CC2131"></div> SQL Server</div>
+</div>
+
+<!-- ======== AZURE CLOUD: EXPENSESMART APP SERVICES ======== -->
+<div class="azure-section">
+  <div class="section-label"><span class="icon">&#9729;</span> Azure Cloud &mdash; Expensesmart v2 App Services (to be repurposed for v3)</div>
+  <div class="env-columns">
+
+    <!-- DEV ENVIRONMENT -->
+    <div class="env-box dev">
+      <div class="env-title"><span class="env-badge dev">DEV</span> Development Environment</div>
+
+      <div class="resource-group">
+        <div class="resource-group-title">Web Frontend</div>
+        <div class="resource-card app-service">
+          <div class="resource-icon">&#127760;</div>
+          <div class="resource-name">cass-ueg-exm-web-usc-dev</div>
+          <div class="resource-type">App Service</div>
+        </div>
+        <div class="resource-card app-insights">
+          <div class="resource-icon">&#128200;</div>
+          <div class="resource-name">cass-ueg-exm-web-usc-dev-ai</div>
+          <div class="resource-type">App Insights</div>
+        </div>
+      </div>
+
+      <div class="resource-group">
+        <div class="resource-group-title">Admin API</div>
+        <div class="resource-card app-service">
+          <div class="resource-icon">&#9881;</div>
+          <div class="resource-name">cass-ueg-exm-api-admin-usc-dev</div>
+          <div class="resource-type">App Service</div>
+        </div>
+        <div class="resource-card app-insights">
+          <div class="resource-icon">&#128200;</div>
+          <div class="resource-name">cass-ueg-exm-api-admin-usc-dev-ai</div>
+          <div class="resource-type">App Insights</div>
+        </div>
+      </div>
+
+      <div class="resource-group">
+        <div class="resource-group-title">Client API</div>
+        <div class="resource-card app-service">
+          <div class="resource-icon">&#128101;</div>
+          <div class="resource-name">cass-ueg-exm-api-client-usc-dev</div>
+          <div class="resource-type">App Service</div>
+        </div>
+        <div class="resource-card app-insights">
+          <div class="resource-icon">&#128200;</div>
+          <div class="resource-name">cass-ueg-exm-api-client-usc-dev-ai</div>
+          <div class="resource-type">App Insights</div>
+        </div>
+      </div>
+
+      <div class="resource-group">
+        <div class="resource-group-title">Workflow API</div>
+        <div class="resource-card app-service">
+          <div class="resource-icon">&#128260;</div>
+          <div class="resource-name">cass-ueg-exm-api-workflow-usc-dev</div>
+          <div class="resource-type">App Service</div>
+        </div>
+        <div class="resource-card app-insights">
+          <div class="resource-icon">&#128200;</div>
+          <div class="resource-name">cass-ueg-exm-api-workflow-usc-dev-ai</div>
+          <div class="resource-type">App Insights</div>
+        </div>
+      </div>
+
+      <div class="resource-group">
+        <div class="resource-group-title">Function App</div>
+        <div class="resource-card function-app">
+          <div class="resource-icon">&#9889;</div>
+          <div class="resource-name">cass-ueg-exm-fun-usc-dev</div>
+          <div class="resource-type">Function App</div>
+        </div>
+        <div class="resource-card app-insights">
+          <div class="resource-icon">&#128200;</div>
+          <div class="resource-name">cass-ueg-exm-fun-usc-dev-ai01</div>
+          <div class="resource-type">App Insights</div>
+        </div>
+        <div class="resource-card private-endpoint">
+          <div class="resource-icon">&#128274;</div>
+          <div class="resource-name">cass-ueg-exm-fun-usc-dev-pe01</div>
+          <div class="resource-type">Private Endpoint</div>
+        </div>
+      </div>
+
+      <div class="resource-group">
+        <div class="resource-group-title">Identity / Auth</div>
+        <div class="resource-card app-service">
+          <div class="resource-icon">&#128272;</div>
+          <div class="resource-name">cass-ueg-common-identity-usc-dev</div>
+          <div class="resource-type">App Service</div>
+        </div>
+        <div class="resource-card app-insights">
+          <div class="resource-icon">&#128200;</div>
+          <div class="resource-name">cass-ueg-common-identity-usc-dev-ai</div>
+          <div class="resource-type">App Insights</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- UAT ENVIRONMENT -->
+    <div class="env-box uat">
+      <div class="env-title"><span class="env-badge uat">UAT</span> User Acceptance Testing</div>
+
+      <div class="resource-group">
+        <div class="resource-group-title">Web Frontend</div>
+        <div class="resource-card app-service">
+          <div class="resource-icon">&#127760;</div>
+          <div class="resource-name">cass-ueg-exm-web-usc-uat</div>
+          <div class="resource-type">App Service</div>
+        </div>
+        <div class="resource-card app-insights">
+          <div class="resource-icon">&#128200;</div>
+          <div class="resource-name">cass-ueg-exm-web-usc-uatai01</div>
+          <div class="resource-type">App Insights</div>
+        </div>
+        <div class="resource-card private-endpoint">
+          <div class="resource-icon">&#128274;</div>
+          <div class="resource-name">cass-ueg-exm-web-usc-uatpe01</div>
+          <div class="resource-type">Private Endpoint</div>
+        </div>
+      </div>
+
+      <div class="resource-group">
+        <div class="resource-group-title">Admin API</div>
+        <div class="resource-card app-service">
+          <div class="resource-icon">&#9881;</div>
+          <div class="resource-name">cass-ueg-exm-api-admin-usc-uat</div>
+          <div class="resource-type">App Service</div>
+        </div>
+        <div class="resource-card private-endpoint">
+          <div class="resource-icon">&#128274;</div>
+          <div class="resource-name">cass-ueg-exm-api-admin-usc-uatpe01</div>
+          <div class="resource-type">Private Endpoint</div>
+        </div>
+      </div>
+
+      <div class="resource-group">
+        <div class="resource-group-title">Client API</div>
+        <div class="resource-card app-service">
+          <div class="resource-icon">&#128101;</div>
+          <div class="resource-name">cass-ueg-exm-api-client-usc-uat</div>
+          <div class="resource-type">App Service</div>
+        </div>
+        <div class="resource-card app-insights">
+          <div class="resource-icon">&#128200;</div>
+          <div class="resource-name">cass-ueg-exm-api-client-uatai01</div>
+          <div class="resource-type">App Insights</div>
+        </div>
+        <div class="resource-card app-insights">
+          <div class="resource-icon">&#128200;</div>
+          <div class="resource-name">cass-ueg-exm-api-client-usc-uatai01</div>
+          <div class="resource-type">App Insights</div>
+        </div>
+        <div class="resource-card private-endpoint">
+          <div class="resource-icon">&#128274;</div>
+          <div class="resource-name">cass-ueg-exm-api-client-usc-uatpe01</div>
+          <div class="resource-type">Private Endpoint</div>
+        </div>
+      </div>
+
+      <div class="resource-group">
+        <div class="resource-group-title">Workflow API</div>
+        <div class="resource-card app-service">
+          <div class="resource-icon">&#128260;</div>
+          <div class="resource-name">cass-ueg-exm-api-workflow-usc-uat</div>
+          <div class="resource-type">App Service</div>
+        </div>
+        <div class="resource-card app-insights">
+          <div class="resource-icon">&#128200;</div>
+          <div class="resource-name">cass-ueg-exm-api-workflow-usc-uatai01</div>
+          <div class="resource-type">App Insights</div>
+        </div>
+        <div class="resource-card private-endpoint">
+          <div class="resource-icon">&#128274;</div>
+          <div class="resource-name">cass-ueg-exm-api-workflow-usc-uatpe01</div>
+          <div class="resource-type">Private Endpoint</div>
+        </div>
+      </div>
+
+      <div class="resource-group">
+        <div class="resource-group-title">Function App</div>
+        <div class="resource-card function-app">
+          <div class="resource-icon">&#9889;</div>
+          <div class="resource-name">cass-ueg-exm-fun-usc-uat</div>
+          <div class="resource-type">Function App</div>
+        </div>
+        <div class="resource-card app-insights">
+          <div class="resource-icon">&#128200;</div>
+          <div class="resource-name">cass-ueg-exm-fun-usc-uatai01</div>
+          <div class="resource-type">App Insights</div>
+        </div>
+        <div class="resource-card private-endpoint">
+          <div class="resource-icon">&#128274;</div>
+          <div class="resource-name">cass-ueg-exm-fun-usc-uatpe01</div>
+          <div class="resource-type">Private Endpoint</div>
+        </div>
+        <div class="resource-card storage">
+          <div class="resource-icon">&#128451;</div>
+          <div class="resource-name">cassuegexmfunuscuatsa01</div>
+          <div class="resource-type">Storage Account</div>
+        </div>
+      </div>
+
+      <div class="resource-group">
+        <div class="resource-group-title">Identity / Auth</div>
+        <div class="resource-card app-service">
+          <div class="resource-icon">&#128272;</div>
+          <div class="resource-name">cass-ueg-common-identity-usc-uat</div>
+          <div class="resource-type">App Service</div>
+        </div>
+        <div class="resource-card app-insights">
+          <div class="resource-icon">&#128200;</div>
+          <div class="resource-name">cass-ueg-common-identity-usc-uatai01</div>
+          <div class="resource-type">App Insights</div>
+        </div>
+        <div class="resource-card private-endpoint">
+          <div class="resource-icon">&#128274;</div>
+          <div class="resource-name">cass-ueg-common-identity-usc-uatpe01</div>
+          <div class="resource-type">Private Endpoint</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== SHARED INFRASTRUCTURE ======== -->
+<div class="shared-resources">
+  <div class="section-label"><span class="icon">&#128736;</span> Shared Azure Infrastructure (Cross-Environment)</div>
+  <div class="shared-grid">
+    <div class="resource-card key-vault">
+      <div class="resource-icon">&#128273;</div>
+      <div class="resource-name">nuscuegexmkv01</div>
+      <div class="resource-type">Key Vault</div>
+    </div>
+    <div class="resource-card private-endpoint">
+      <div class="resource-icon">&#128274;</div>
+      <div class="resource-name">nuscuegexmkv01pe01</div>
+      <div class="resource-type">KV Private Endpoint</div>
+    </div>
+    <div class="resource-card storage">
+      <div class="resource-icon">&#128451;</div>
+      <div class="resource-name">nuscuegemxfn01sa01</div>
+      <div class="resource-type">Storage Account</div>
+    </div>
+    <div class="resource-card app-service-plan">
+      <div class="resource-icon">&#128187;</div>
+      <div class="resource-name">cass-ueg-exm-api-admin-uscasp01</div>
+      <div class="resource-type">App Service Plan</div>
+    </div>
+    <div class="resource-card app-service-plan">
+      <div class="resource-icon">&#128187;</div>
+      <div class="resource-name">cass-ueg-exm-api-workflow-uscasp01</div>
+      <div class="resource-type">App Service Plan</div>
+    </div>
+    <div class="resource-card app-service-plan">
+      <div class="resource-icon">&#128187;</div>
+      <div class="resource-name">cass-ueg-exm-fun-uscasp01</div>
+      <div class="resource-type">App Service Plan</div>
+    </div>
+    <div class="resource-card app-service-plan">
+      <div class="resource-icon">&#128187;</div>
+      <div class="resource-name">cass-ueg-exm-web-uscasp01</div>
+      <div class="resource-type">App Service Plan</div>
+    </div>
+    <div class="resource-card app-service-plan">
+      <div class="resource-icon">&#128187;</div>
+      <div class="resource-name">nuscueges2asp01</div>
+      <div class="resource-type">App Service Plan</div>
+    </div>
+    <div class="resource-card app-service-plan">
+      <div class="resource-icon">&#128187;</div>
+      <div class="resource-name">nuscueges2asp02</div>
+      <div class="resource-type">App Service Plan</div>
+    </div>
+    <div class="resource-card app-service-plan">
+      <div class="resource-icon">&#128187;</div>
+      <div class="resource-name">nuscueges2asp03</div>
+      <div class="resource-type">App Service Plan</div>
+    </div>
+    <div class="resource-card app-service-plan">
+      <div class="resource-icon">&#128187;</div>
+      <div class="resource-name">nuscueges2uatasp01</div>
+      <div class="resource-type">App Service Plan (UAT)</div>
+    </div>
+    <div class="resource-card app-service-plan">
+      <div class="resource-icon">&#128187;</div>
+      <div class="resource-name">nuscuegexmaspwin01</div>
+      <div class="resource-type">App Service Plan (Windows)</div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== HYBRID CONNECTOR ======== -->
+<div class="hybrid-connector">
+  <hr class="line">
+  <div class="label">Hybrid Connection &mdash; Azure to On-Premises</div>
+  <div class="sublabel">Private Endpoints + VNet Integration &rarr; On-Prem SQL Servers (local on-prem connectivity)</div>
+  <hr class="line">
+</div>
+
+<!-- ======== ON-PREMISES SQL SERVER TOPOLOGY ======== -->
+<div class="onprem-section">
+  <div class="section-label"><span class="icon">&#127970;</span> On-Premises SQL Server Topology &mdash; Expensesmart 3.0 Data Flow</div>
+  <div class="onprem-content">
+
+    <!-- Source Servers Tier -->
+    <div class="sql-tier">
+      <div class="sql-tier-title">Source / Feeder Servers</div>
+      <div class="sql-servers-row">
+        <div class="sql-server-box">
+          <div class="sql-server-name">&#128451; EMSDBPR05</div>
+          <div class="sql-db-list">
+            <div class="sql-db">UtilitymartSub</div>
+            <div class="sql-db">DataLoader</div>
+          </div>
+        </div>
+        <div class="sql-server-box">
+          <div class="sql-server-name">&#128451; EMSDBHA</div>
+          <div class="sql-db-list">
+            <div class="sql-db">EMS</div>
+            <div class="sql-db">SHADOWBASE_UTILITIES</div>
+          </div>
+        </div>
+        <div class="sql-server-box">
+          <div class="sql-server-name">&#128451; EMSDBPR06</div>
+          <div class="sql-db-list">
+            <div class="sql-db">EMSDBPR11 Daily Vendor Import</div>
+          </div>
+        </div>
+        <div class="sql-server-box">
+          <div class="sql-server-name">&#128451; EMSDBPR07</div>
+          <div class="sql-db-list">
+            <div class="sql-db">Utilityweb</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-arrow">&#11015; &#11015; &#11015;<span class="flow-label">Data feeds into central processing hub</span></div>
+
+    <!-- Primary Processing Server -->
+    <div class="sql-tier">
+      <div class="sql-tier-title">Primary Processing Hub</div>
+      <div class="sql-servers-row" style="justify-content:center;">
+        <div class="sql-server-box primary">
+          <div class="sql-server-name">&#128451; PEMSDBSQL01 &nbsp;/&nbsp; PEMSDBSQL01\UEG</div>
+          <div style="font-size:11px;color:#555;margin-bottom:8px;">Central processing via ES_Initial_MasterImportExpenseSmart / ES_Daily_Incremental_Delete_Load</div>
+          <div class="sql-db-list">
+            <div class="sql-db">DataLoader</div>
+            <div class="sql-db">Client-db (x5 multi-tenant)</div>
+            <div class="sql-db">EMSUPortalCommon</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-arrow replication">&#11015; &#11015; &#11015;<span class="flow-label" style="color:#498205;">SQL Replication (all databases mirrored)</span></div>
+
+    <!-- Replica Server -->
+    <div class="sql-tier">
+      <div class="sql-tier-title">Replica / Secondary Server</div>
+      <div class="sql-servers-row" style="justify-content:center;">
+        <div class="sql-server-box replica">
+          <div class="sql-server-name">&#128451; PEMSDBSQL10</div>
+          <div style="font-size:11px;color:#555;margin-bottom:8px;">Full replica of all Expensesmart databases</div>
+          <div class="sql-db-list">
+            <div class="sql-db">DataLoader</div>
+            <div class="sql-db">Client-db (x5 multi-tenant)</div>
+            <div class="sql-db">EMSUPortalCommon</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== DATA FLOW STEPS ======== -->
+<div class="data-flow-section">
+  <div class="section-label"><span class="icon">&#128260;</span> Data Processing Flow Steps (from DBA diagram)</div>
+  <div class="flow-steps">
+    <div class="flow-step">
+      <div class="step-number">1</div>
+      <div class="step-title">Master Import</div>
+      <div class="step-desc">
+        <strong>EMSDBHA (EMS)</strong> &#8594; <strong>PEMSDBSQL01\UEG</strong><br>
+        Runs ES_Initial_MasterImportExpenseSmart and ES_Daily_Incremental_Delete_Load_MasterImportExpenseSmart to populate DataLoader and Client databases.
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-number">2</div>
+      <div class="step-title">Daily Vendor Import</div>
+      <div class="step-desc">
+        <strong>EMSDBPR06</strong> &#8594; <strong>PEMSDBSQL01 (EMSUPortalCommon)</strong><br>
+        EMSDBPR11 Daily Vendor Import process feeds vendor data into the portal common database.
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-number">3</div>
+      <div class="step-title">EcoTrak Manual Process</div>
+      <div class="step-desc">
+        <strong>Manual Input</strong> &#8594; <strong>EMSDBPR05 (UtilitymartSub)</strong><br>
+        EcoTrak data is manually entered into the UtilitymartSub database on EMSDBPR05.
+      </div>
+    </div>
+    <div class="flow-step">
+      <div class="step-number">4</div>
+      <div class="step-desc">
+        <div class="step-title">Utility Data Sync</div>
+        <strong>EMSDBPR05 (UtilitymartSub)</strong> &#8594; <strong>PEMSDBSQL01 (DataLoader)</strong><br>
+        Utility data syncs from the UtilitymartSub database into the central DataLoader.
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== MONITORING / ALERTS ======== -->
+<div class="shared-resources">
+  <div class="section-label"><span class="icon">&#128276;</span> Smart Detector Alert Rules (Failure Anomalies)</div>
+  <div class="shared-grid">
+    <div class="resource-card alert-rule">
+      <div class="resource-icon">&#9888;</div>
+      <div class="resource-name">common-identity-usc-dev-ai</div>
+      <div class="resource-type">Alert</div>
+    </div>
+    <div class="resource-card alert-rule">
+      <div class="resource-icon">&#9888;</div>
+      <div class="resource-name">exm-api-admin-usc-dev-ai</div>
+      <div class="resource-type">Alert</div>
+    </div>
+    <div class="resource-card alert-rule">
+      <div class="resource-icon">&#9888;</div>
+      <div class="resource-name">exm-api-client-uatai01</div>
+      <div class="resource-type">Alert</div>
+    </div>
+    <div class="resource-card alert-rule">
+      <div class="resource-icon">&#9888;</div>
+      <div class="resource-name">exm-api-client-usc-dev-ai</div>
+      <div class="resource-type">Alert</div>
+    </div>
+    <div class="resource-card alert-rule">
+      <div class="resource-icon">&#9888;</div>
+      <div class="resource-name">exm-api-client-usc-uatai01</div>
+      <div class="resource-type">Alert</div>
+    </div>
+    <div class="resource-card alert-rule">
+      <div class="resource-icon">&#9888;</div>
+      <div class="resource-name">exm-api-workflow-usc-dev-ai</div>
+      <div class="resource-type">Alert</div>
+    </div>
+    <div class="resource-card alert-rule">
+      <div class="resource-icon">&#9888;</div>
+      <div class="resource-name">exm-api-workflow-usc-uatai01</div>
+      <div class="resource-type">Alert</div>
+    </div>
+    <div class="resource-card alert-rule">
+      <div class="resource-icon">&#9888;</div>
+      <div class="resource-name">exm-fun-usc-dev-ai01</div>
+      <div class="resource-type">Alert</div>
+    </div>
+    <div class="resource-card alert-rule">
+      <div class="resource-icon">&#9888;</div>
+      <div class="resource-name">exm-fun-usc-uatai01</div>
+      <div class="resource-type">Alert</div>
+    </div>
+    <div class="resource-card alert-rule">
+      <div class="resource-icon">&#9888;</div>
+      <div class="resource-name">exm-web-usc-dev-ai</div>
+      <div class="resource-type">Alert</div>
+    </div>
+    <div class="resource-card alert-rule">
+      <div class="resource-icon">&#9888;</div>
+      <div class="resource-name">exm-web-usc-uatai01</div>
+      <div class="resource-type">Alert</div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== NOTES ======== -->
+<div class="notes-section">
+  <h3>Architecture Notes &amp; v3 Repurposing Considerations</h3>
+  <ul>
+    <li><strong>Naming Convention:</strong> "N" prefix = non-production. UAT resources have the same base name as DEV but without "Dev" (e.g., DEV: <code>cass-ueg-exm-web-usc-dev</code> &rarr; UAT: <code>cass-ueg-exm-web-usc-uat</code>).</li>
+    <li><strong>Resource Group:</strong> All resources live in <code>nuscueges2rg</code> in Central US.</li>
+    <li><strong>UAT Private Endpoints:</strong> UAT environment has private endpoints for all App Services and Function Apps; DEV only has a private endpoint for the Function App.</li>
+    <li><strong>Hybrid Connectivity:</strong> Azure App Services connect to on-prem SQL servers via private endpoints and VNet integration for secure hybrid access to the local on-prem SQL infrastructure.</li>
+    <li><strong>Identity:</strong> A shared identity service (<code>cass-ueg-common-identity</code>) serves Expensesmart across environments.</li>
+    <li><strong>On-Prem SQL Topology:</strong> 6 SQL servers with the central hub at PEMSDBSQL01\UEG, replicated to PEMSDBSQL10. Multi-tenant Client-db architecture with 5+ client databases.</li>
+    <li><strong>v2 &rarr; v3:</strong> Current Azure resources are running Expensesmart v2. These will be repurposed for v3 deployment with the updated data processing flow shown in this diagram.</li>
+    <li><strong>App Service Plans:</strong> Multiple plans (<code>nuscueges2asp01-03</code>, <code>nuscueges2uatasp01</code>, <code>nuscuegexmaspwin01</code>) host the various App Services across environments. Several component-specific plans also exist for Admin API, Workflow API, Function App, and Web.</li>
+  </ul>
+</div>
+
+</body>
+</html>
