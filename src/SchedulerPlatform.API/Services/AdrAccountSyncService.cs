@@ -1021,16 +1021,15 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
 			INNER JOIN NextRunCalc nr ON nr.AccountId = cab.AccountId
 		),
 		MaxCred AS (
-			SELECT VMAccountId, VMAccountNumber, ExpectedNextDate, MAX(CredentialId) AS MaxCredentialId
+			SELECT VMAccountId, VMAccountNumber, MAX(CredentialId) AS MaxCredentialId
 			FROM Combined
-			GROUP BY VMAccountId, VMAccountNumber, ExpectedNextDate
+			GROUP BY VMAccountId, VMAccountNumber
 		),
 		Filtered AS (
 			SELECT c.*
 			FROM Combined c
 			JOIN MaxCred m ON m.VMAccountId = c.VMAccountId
 						  AND m.VMAccountNumber = c.VMAccountNumber
-						  AND m.ExpectedNextDate = c.ExpectedNextDate
 						  AND m.MaxCredentialId = c.CredentialId
 		)
 		SELECT DISTINCT
