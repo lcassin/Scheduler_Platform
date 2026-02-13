@@ -33,7 +33,7 @@ public interface IAdrOrchestratorService
     /// <param name="progressCallback">Optional callback to report progress (current, total)</param>
     /// <param name="cancellationToken">Cancellation token for the operation</param>
     /// <returns>Results of the bulk credential verification operation</returns>
-    Task<BulkCredentialVerificationResult> VerifyAllAccountCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
+    Task<BulkCredentialVerificationResult> VerifyAllAccountCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, int? testrun=null);
     
     /// <summary>
     /// Processes weekly rebill checks for accounts whose expected billing day of week matches today.
@@ -211,6 +211,16 @@ public class SingleRebillResult
     /// HTTP status code from the ADR API.
     /// </summary>
     public int? HttpStatusCode { get; set; }
+    
+    /// <summary>
+    /// The persistent rebill job ID for this account.
+    /// </summary>
+    public int? JobId { get; set; }
+    
+    /// <summary>
+    /// The execution ID for this specific rebill request.
+    /// </summary>
+    public int? ExecutionId { get; set; }
 }
 
 #endregion
@@ -606,7 +616,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             if (IsTestModeEnabled())
             {
                 var maxJobs = GetTestModeMaxRebillJobs();
-                if (maxJobs > 0 && jobsNeedingVerification.Count > maxJobs)
+                if (maxJobs == 0)
+                {
+                    jobsNeedingVerification.Clear();
+                    _logger.LogWarning("TEST MODE ENABLED: Skipping credential verification (max set to 0)");
+                }
+                else if (jobsNeedingVerification.Count > maxJobs)
                 {
                     // Order by JobId for consistency - same jobs will be picked each run
                     jobsNeedingVerification = jobsNeedingVerification.OrderBy(j => j.Id).Take(maxJobs).ToList();
@@ -919,7 +934,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             if (IsTestModeEnabled())
             {
                 var maxJobs = GetTestModeMaxScrapingJobs();
-                if (maxJobs > 0 && jobsReadyForScraping.Count > maxJobs)
+                if (maxJobs == 0)
+                {
+                    jobsReadyForScraping.Clear();
+                    _logger.LogWarning("TEST MODE ENABLED: Skipping ADR scraping (max set to 0)");
+                }
+                else if (jobsReadyForScraping.Count > maxJobs)
                 {
                     // Order by JobId for consistency - same jobs will be picked each run
                     jobsReadyForScraping = jobsReadyForScraping.OrderBy(j => j.Id).Take(maxJobs).ToList();
@@ -2122,7 +2142,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// this method checks ALL accounts with valid CredentialIds regardless of scheduling.
     /// Note: This does NOT respect test mode limits as it's intended for one-time bulk operations.
     /// </summary>
-    public async Task<BulkCredentialVerificationResult> VerifyAllAccountCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    public async Task<BulkCredentialVerificationResult> VerifyAllAccountCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, int? testrun=null)
     {
         var result = new BulkCredentialVerificationResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -2133,7 +2153,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             _logger.LogInformation("Starting BULK credential verification for ALL accounts with {MaxParallel} parallel workers", maxParallel);
 
             // Get ALL active accounts with valid credentials (not limited by scheduling or test mode)
-            var allAccounts = (await _unitOfWork.AdrAccounts.GetAllActiveAccountsForCredentialCheckAsync()).ToList();
+            var allAccounts = (await _unitOfWork.AdrAccounts.GetAllActiveAccountsForCredentialCheckAsync(testrun)).ToList();
             var totalAccounts = allAccounts.Count;
             
             _logger.LogInformation("Found {Count} active accounts with valid credentials for bulk verification", totalAccounts);
@@ -2274,6 +2294,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// <summary>
     /// Processes weekly rebill checks for accounts whose expected billing day of week matches today.
     /// Rebill checks look for updated invoices, partial invoices, and off-cycle invoices.
+    /// OPTIMIZED: Uses bulk job lookup, dictionary-based account lookup, and batched saves.
     /// </summary>
     public async Task<RebillResult> ProcessRebillAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
     {
@@ -2290,21 +2311,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             // Load blacklist entries for filtering
             var blacklistEntries = await LoadBlacklistEntriesAsync("All");
 
-            // Get all active accounts where the day of week of ExpectedNextDateTime matches today
-            // Use OverriddenDateTime if set, otherwise use ExpectedNextDateTime
-            var allAccounts = await _unitOfWork.AdrAccounts.GetAllAsync();
-            var accountsForRebill = allAccounts
-                .Where(a => !a.IsDeleted && a.CredentialId > 0)
-                .Where(a => 
-                {
-                    // Use the overridden date if manually set, otherwise use expected date
-                    var dateToCheck = a.IsManuallyOverridden && a.OverriddenDateTime.HasValue 
-                        ? a.OverriddenDateTime.Value 
-                        : a.ExpectedNextDateTime;
-                    
-                    return dateToCheck.HasValue && dateToCheck.Value.DayOfWeek == todayDayOfWeek;
-                })
-                .ToList();
+            // Get accounts for rebill using optimized database query that filters by day of week
+            // This avoids loading all 170k+ accounts into memory and filtering in-memory
+            var accountsForRebill = (await _unitOfWork.AdrAccounts.GetAccountsForRebillByDayOfWeekAsync(todayDayOfWeek)).ToList();
 
             var totalAccountsFound = accountsForRebill.Count;
             _logger.LogInformation("Found {Count} accounts for rebill on {DayOfWeek}", totalAccountsFound, todayDayOfWeek);
@@ -2313,7 +2322,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             if (IsTestModeEnabled())
             {
                 var maxJobs = GetTestModeMaxRebillJobs();
-                if (maxJobs > 0 && accountsForRebill.Count > maxJobs)
+                if (maxJobs == 0)
+                {
+                    accountsForRebill.Clear();
+                    _logger.LogWarning("TEST MODE ENABLED: Skipping rebill processing (max set to 0)");
+                }
+                else if (accountsForRebill.Count > maxJobs)
                 {
                     // Order by AccountId for consistency - same accounts will be picked each run
                     accountsForRebill = accountsForRebill.OrderBy(a => a.Id).Take(maxJobs).ToList();
@@ -2350,35 +2364,112 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             _logger.LogInformation("Processing {Count} accounts for rebill (skipped {Skipped} blacklisted)", 
                 accountsToProcess.Count, result.AccountsSkipped);
 
-            // Process rebill requests in parallel
+            if (!accountsToProcess.Any())
+            {
+                stopwatch.Stop();
+                result.Duration = stopwatch.Elapsed;
+                return result;
+            }
+
+            // OPTIMIZATION: Create dictionary for O(1) account lookup instead of O(n) First() calls
+            var accountLookup = accountsToProcess.ToDictionary(a => a.Id);
+
+            // Step 1: OPTIMIZATION - Bulk load existing rebill jobs in one query instead of N queries
+            var accountIds = accountsToProcess.Select(a => a.Id).ToList();
+            _logger.LogInformation("Bulk loading existing rebill jobs for {Count} accounts", accountIds.Count);
+            var existingRebillJobs = await _unitOfWork.AdrJobs.GetRebillJobsByAccountIdsAsync(accountIds);
+            _logger.LogInformation("Found {Count} existing rebill jobs", existingRebillJobs.Count);
+
+            // Step 2: Create missing rebill jobs in batches
+            var accountJobMap = new Dictionary<int, AdrJob>(existingRebillJobs);
+            const int jobSetupBatchSize = 500;
+            int jobsCreated = 0;
+            int jobsReused = existingRebillJobs.Count;
+            
+            var accountsNeedingJobs = accountsToProcess.Where(a => !existingRebillJobs.ContainsKey(a.Id)).ToList();
+            _logger.LogInformation("Creating rebill jobs for {Count} accounts (reusing {Reused} existing)", 
+                accountsNeedingJobs.Count, jobsReused);
+            
+            for (int i = 0; i < accountsNeedingJobs.Count; i += jobSetupBatchSize)
+            {
+                var batch = accountsNeedingJobs.Skip(i).Take(jobSetupBatchSize).ToList();
+                
+                foreach (var account in batch)
+                {
+                    try
+                    {
+                        var job = CreateRebillJobEntity(account);
+                        await _unitOfWork.AdrJobs.AddAsync(job);
+                        accountJobMap[account.Id] = job;
+                        jobsCreated++;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error creating rebill job for account {AccountId}", account.Id);
+                        result.Errors++;
+                        if (result.ErrorMessages.Count < 100)
+                        {
+                            result.ErrorMessages.Add($"Account {account.Id}: Failed to create rebill job - {ex.Message}");
+                        }
+                    }
+                }
+                
+                // Save batch
+                await _unitOfWork.SaveChangesAsync();
+                _logger.LogDebug("Saved rebill job setup batch: {Processed}/{Total}", 
+                    Math.Min(i + jobSetupBatchSize, accountsNeedingJobs.Count), accountsNeedingJobs.Count);
+            }
+            
+            _logger.LogInformation("Rebill job setup complete: {Created} created, {Reused} reused", jobsCreated, jobsReused);
+
+            // Step 3: Process rebill requests in parallel
+            // IMPORTANT: Do NOT use DbContext inside parallel tasks - it's not thread-safe
+            // Instead, collect API results in a ConcurrentDictionary and create execution records after
             var apiResults = new ConcurrentDictionary<int, AdrApiResult>();
             using var semaphore = new SemaphoreSlim(maxParallel, maxParallel);
             int completedCalls = 0;
-            var totalCalls = accountsToProcess.Count;
+            var totalCalls = accountJobMap.Count;
 
-            var tasks = accountsToProcess.Select(async account =>
+            // Build list of accounts to process with their job and date info
+            var accountsToCall = accountJobMap
+                .Where(kvp => accountLookup.ContainsKey(kvp.Key))
+                .Select(kvp => {
+                    var account = accountLookup[kvp.Key];
+                    return (
+                        AccountId: kvp.Key,
+                        JobId: kvp.Value.Id,
+                        CredentialId: account.CredentialId,
+                        StartDate: account.NextRangeStartDateTime ?? account.ExpectedRangeStartDateTime,
+                        EndDate: account.NextRangeEndDateTime ?? account.ExpectedRangeEndDateTime,
+                        VMAccountId: account.VMAccountId,
+                        InterfaceAccountId: account.InterfaceAccountId
+                    );
+                })
+                .ToList();
+
+            _logger.LogInformation("Starting parallel rebill API calls for {Count} accounts with {MaxParallel} workers", 
+                accountsToCall.Count, maxParallel);
+
+            var tasks = accountsToCall.Select(async accountInfo =>
             {
                 await semaphore.WaitAsync(cancellationToken);
                 try
                 {
-                    // For rebill, we use the current billing window dates from the account
-                    var startDate = account.NextRangeStartDateTime ?? account.ExpectedRangeStartDateTime;
-                    var endDate = account.NextRangeEndDateTime ?? account.ExpectedRangeEndDateTime;
-
                     var apiResult = await CallAdrApiAsync(
                         AdrRequestType.Rebill,
-                        account.CredentialId,
-                        startDate,
-                        endDate,
-                        0, // No job ID for rebill - it's account-level
-                        account.VMAccountId,
-                        account.InterfaceAccountId,
+                        accountInfo.CredentialId,
+                        accountInfo.StartDate,
+                        accountInfo.EndDate,
+                        accountInfo.JobId,
+                        accountInfo.VMAccountId,
+                        accountInfo.InterfaceAccountId,
                         cancellationToken,
                         false); // Rebill is never the "last attempt" - it's a weekly check
 
-                    apiResults[account.Id] = apiResult;
+                    apiResults[accountInfo.AccountId] = apiResult;
 
                     var count = Interlocked.Increment(ref completedCalls);
+                    
                     if (count % 50 == 0 || count == totalCalls)
                     {
                         progressCallback?.Invoke(count, totalCalls);
@@ -2396,8 +2487,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error calling ADR API for rebill account {AccountId}", account.Id);
-                    apiResults[account.Id] = new AdrApiResult
+                    _logger.LogError(ex, "Error calling ADR API for rebill account {AccountId}", accountInfo.AccountId);
+                    apiResults[accountInfo.AccountId] = new AdrApiResult
                     {
                         IsSuccess = false,
                         IsError = true,
@@ -2417,10 +2508,84 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             });
 
             await Task.WhenAll(tasks);
+            
+            _logger.LogInformation("Completed {Count} parallel rebill API calls, creating execution records", apiResults.Count);
+
+            // Step 4: Create execution records sequentially (DbContext is not thread-safe)
+            // This is done AFTER all API calls complete to enable true parallelism
+            const int executionBatchSize = 500;
+            int executionsCreated = 0;
+            int executionsSinceLastSave = 0;
+            
+            foreach (var accountInfo in accountsToCall)
+            {
+                if (!apiResults.TryGetValue(accountInfo.AccountId, out var apiResult))
+                {
+                    continue;
+                }
+                
+                try
+                {
+                    // Create execution record for this rebill attempt
+                    var execution = new AdrJobExecution
+                    {
+                        AdrJobId = accountInfo.JobId,
+                        AdrRequestTypeId = (int)AdrRequestType.Rebill,
+                        StartDateTime = DateTime.UtcNow,
+                        EndDateTime = DateTime.UtcNow,
+                        AdrStatusId = apiResult.StatusId,
+                        AdrStatusDescription = apiResult.StatusDescription,
+                        AdrIndexId = apiResult.IndexId,
+                        HttpStatusCode = apiResult.HttpStatusCode,
+                        IsSuccess = apiResult.IsSuccess,
+                        IsError = apiResult.IsError,
+                        IsFinal = apiResult.IsFinal,
+                        ErrorMessage = apiResult.ErrorMessage,
+                        ApiResponse = apiResult.RawResponse,
+                        RequestPayload = apiResult.RequestPayload,
+                        CreatedDateTime = DateTime.UtcNow,
+                        CreatedBy = "System Created",
+                        ModifiedDateTime = DateTime.UtcNow,
+                        ModifiedBy = "System Created"
+                    };
+                    
+                    await _unitOfWork.AdrJobExecutions.AddAsync(execution);
+                    executionsCreated++;
+                    executionsSinceLastSave++;
+                    
+                    // Save in batches
+                    if (executionsSinceLastSave >= executionBatchSize)
+                    {
+                        await _unitOfWork.SaveChangesAsync();
+                        executionsSinceLastSave = 0;
+                        _logger.LogDebug("Saved execution batch: {Created}/{Total}", executionsCreated, apiResults.Count);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error creating execution record for account {AccountId}", accountInfo.AccountId);
+                }
+            }
+            
+            // Save any remaining executions
+            if (executionsSinceLastSave > 0)
+            {
+                await _unitOfWork.SaveChangesAsync();
+            }
+            
+            _logger.LogInformation("Created {Count} execution records for rebill API calls", executionsCreated);
 
             // Process results
             foreach (var account in accountsToProcess)
             {
+                if (!accountJobMap.ContainsKey(account.Id))
+                {
+                    // Account failed during job setup
+                    result.AccountsProcessed++;
+                    result.RebillRequestsFailed++;
+                    continue;
+                }
+                
                 result.AccountsProcessed++;
 
                 if (apiResults.TryGetValue(account.Id, out var apiResult))
@@ -2462,9 +2627,43 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             throw;
         }
     }
+    
+    /// <summary>
+    /// Creates a rebill job entity without saving to database.
+    /// Used for batch job creation optimization.
+    /// </summary>
+    private AdrJob CreateRebillJobEntity(AdrAccount account)
+    {
+        const int rebillAdrJobTypeId = 3;
+        var now = DateTime.UtcNow;
+        
+        return new AdrJob
+        {
+            AdrAccountId = account.Id,
+            VMAccountId = account.VMAccountId,
+            VMAccountNumber = account.VMAccountNumber,
+            PrimaryVendorCode = account.PrimaryVendorCode,
+            MasterVendorCode = account.MasterVendorCode,
+            CredentialId = account.CredentialId,
+            PeriodType = account.PeriodType,
+            AdrJobTypeId = rebillAdrJobTypeId,
+            // For rebill jobs, billing period dates are not meaningful since they're persistent
+            // Use a placeholder date range that indicates this is a rebill job
+            BillingPeriodStartDateTime = new DateTime(2000, 1, 1),
+            BillingPeriodEndDateTime = new DateTime(2099, 12, 31),
+            Status = "RebillActive",
+            IsMissing = false,
+            IsManualRequest = false,
+            CreatedDateTime = now,
+            CreatedBy = "System Created",
+            ModifiedDateTime = now,
+            ModifiedBy = "System Created"
+        };
+    }
 
     /// <summary>
     /// Fires a rebill check for a single account.
+    /// Uses the persistent rebill job for the account (creates one if it doesn't exist).
     /// </summary>
     public async Task<SingleRebillResult> FireRebillForAccountAsync(int accountId, CancellationToken cancellationToken = default)
     {
@@ -2496,6 +2695,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
             _logger.LogInformation("Firing rebill for account {AccountId} (VMAccountId: {VMAccountId})", accountId, account.VMAccountId);
 
+            // Get or create the persistent rebill job for this account
+            var job = await GetOrCreateRebillJobAsync(account);
+            
+            // Create execution record for this rebill attempt
+            var execution = await CreateExecutionAsync(job.Id, (int)AdrRequestType.Rebill);
+
             var startDate = account.NextRangeStartDateTime ?? account.ExpectedRangeStartDateTime;
             var endDate = account.NextRangeEndDateTime ?? account.ExpectedRangeEndDateTime;
 
@@ -2504,20 +2709,27 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 account.CredentialId,
                 startDate,
                 endDate,
-                0, // No job ID for manual rebill
+                job.Id, // Now we have a real job ID
                 account.VMAccountId,
                 account.InterfaceAccountId,
                 cancellationToken,
                 false);
 
+            // Complete the execution record with the result
+            await CompleteExecutionAsync(execution, apiResult);
+            await _unitOfWork.SaveChangesAsync();
+
             result.IsSuccess = apiResult.IsSuccess;
             result.IndexId = apiResult.IndexId;
             result.HttpStatusCode = apiResult.HttpStatusCode;
             result.ErrorMessage = apiResult.ErrorMessage;
+            result.JobId = job.Id;
+            result.ExecutionId = execution.Id;
 
             if (apiResult.IsSuccess)
             {
-                _logger.LogInformation("Rebill request sent successfully for account {AccountId}, IndexId: {IndexId}", accountId, apiResult.IndexId);
+                _logger.LogInformation("Rebill request sent successfully for account {AccountId}, JobId: {JobId}, ExecutionId: {ExecutionId}, IndexId: {IndexId}", 
+                    accountId, job.Id, execution.Id, apiResult.IndexId);
             }
             else
             {
@@ -2560,6 +2772,60 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         }
 
         return execution;
+    }
+
+    /// <summary>
+    /// Gets or creates a persistent rebill job for an account.
+    /// Rebill jobs (AdrJobTypeId = 3) are persistent per-account and reused for all rebill executions.
+    /// </summary>
+    private async Task<AdrJob> GetOrCreateRebillJobAsync(AdrAccount account, bool saveChanges = true)
+    {
+        const int rebillAdrJobTypeId = 3;
+        
+        // Try to find existing rebill job for this account
+        var existingJob = await _unitOfWork.AdrJobs.GetRebillJobByAccountAsync(account.Id);
+        
+        if (existingJob != null)
+        {
+            return existingJob;
+        }
+        
+        // Create a new persistent rebill job
+        var now = DateTime.UtcNow;
+        var job = new AdrJob
+        {
+            AdrAccountId = account.Id,
+            VMAccountId = account.VMAccountId,
+            VMAccountNumber = account.VMAccountNumber,
+            PrimaryVendorCode = account.PrimaryVendorCode,
+            MasterVendorCode = account.MasterVendorCode,
+            CredentialId = account.CredentialId,
+            PeriodType = account.PeriodType,
+            AdrJobTypeId = rebillAdrJobTypeId,
+            // For rebill jobs, billing period dates are not meaningful since they're persistent
+            // Use a placeholder date range that indicates this is a rebill job
+            BillingPeriodStartDateTime = new DateTime(2000, 1, 1),
+            BillingPeriodEndDateTime = new DateTime(2099, 12, 31),
+            Status = "RebillActive",
+            IsMissing = false,
+            IsManualRequest = false,
+            CreatedDateTime = now,
+            CreatedBy = "System Created",
+            ModifiedDateTime = now,
+            ModifiedBy = "System Created"
+        };
+        
+        await _unitOfWork.AdrJobs.AddAsync(job);
+        
+        if (saveChanges)
+        {
+            await _unitOfWork.SaveChangesAsync();
+        }
+        
+        _logger.LogInformation("Created persistent rebill job {JobId} for account {AccountId} (VMAccountId: {VMAccountId})", 
+            job.Id, account.Id, account.VMAccountId);
+        
+        return job;
     }
 
     private async Task CompleteExecutionAsync(AdrJobExecution execution, AdrApiResult apiResult)

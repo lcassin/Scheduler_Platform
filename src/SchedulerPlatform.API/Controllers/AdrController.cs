@@ -13,7 +13,7 @@ using SchedulerPlatform.Infrastructure.Data;
 namespace SchedulerPlatform.API.Controllers;
 
 /// <summary>
-/// Controller for managing Automated Data Retrieval (ADR) accounts, jobs, and executions.
+/// Controller for managing Automated Document Retrieval (ADR) accounts, jobs, and executions.
 /// Provides endpoints for ADR account management, job orchestration, and data scraping operations.
 /// </summary>
 [ApiController]
@@ -922,72 +922,130 @@ public class AdrController : ControllerBase
                 var rangeStart = request.RangeStartDate ?? request.TargetDate.AddDays(-windowDays);
                 var rangeEnd = request.RangeEndDate ?? request.TargetDate.AddDays(windowDays);
 
-                // Determine the request type (1 = Vendor Credential Check, 2 = ADR Download Request)
-                var requestType = request.RequestType == 1 ? 1 : 2;
+                // Determine the request type (1 = Vendor Credential Check, 2 = ADR Download Request, 3 = Rebill Check)
+                var requestType = request.RequestType switch { 1 => 1, 3 => 3, _ => 2 };
                 var isCredentialCheck = requestType == 1;
-                var initialStatus = isCredentialCheck ? "CredentialCheckInProgress" : "ScrapeInProgress";
-
-                // Step 1: Check if a job already exists for this account and billing period
-                // The unique index UX_AdrJob_Account_BillingPeriod prevents duplicates
-                var existingJob = (await _unitOfWork.AdrJobs.FindAsync(j => 
-                    j.AdrAccountId == account.Id && 
-                    j.BillingPeriodStartDateTime == rangeStart && 
-                    j.BillingPeriodEndDateTime == rangeEnd))
-                    .FirstOrDefault();
+                var isRebillCheck = requestType == 3;
+                var initialStatus = requestType switch { 1 => "CredentialCheckInProgress", 3 => "RebillInProgress", _ => "ScrapeInProgress" };
 
                 AdrJob job;
 
-                if (existingJob != null)
+                if (isRebillCheck)
                 {
-                    // Use the existing job - update its status and mark as manual request
-                    job = existingJob;
-                    job.Status = initialStatus;
-                    job.IsManualRequest = true;
-                    job.ManualRequestReason = request.Reason;
-                    job.ModifiedDateTime = DateTime.UtcNow;
-                    job.ModifiedBy = username;
+                    // For rebill requests, use the persistent rebill job (AdrJobTypeId = 3)
+                    // This ensures all rebill executions for an account share the same job
+                    const int rebillAdrJobTypeId = 3;
+                    var existingRebillJob = await _unitOfWork.AdrJobs.GetRebillJobByAccountAsync(account.Id);
                     
-                    await _unitOfWork.AdrJobs.UpdateAsync(job);
-                    await _unitOfWork.SaveChangesAsync();
-
-                    _logger.LogInformation(
-                        "Using existing AdrJob {JobId} for manual request on account {AccountId} ({VMAccountNumber}). Range: {RangeStart} to {RangeEnd}",
-                        job.Id, id, account.VMAccountNumber, rangeStart, rangeEnd);
+                    if (existingRebillJob != null)
+                    {
+                        job = existingRebillJob;
+                        job.ModifiedDateTime = DateTime.UtcNow;
+                        job.ModifiedBy = username;
+                        
+                        await _unitOfWork.AdrJobs.UpdateAsync(job);
+                        await _unitOfWork.SaveChangesAsync();
+                        
+                        _logger.LogInformation(
+                            "Using existing persistent rebill job {JobId} for manual rebill on account {AccountId} ({VMAccountNumber})",
+                            job.Id, id, account.VMAccountNumber);
+                    }
+                    else
+                    {
+                        // Create a new persistent rebill job
+                        job = new AdrJob
+                        {
+                            AdrAccountId = account.Id,
+                            VMAccountId = account.VMAccountId,
+                            VMAccountNumber = account.VMAccountNumber,
+                            PrimaryVendorCode = account.PrimaryVendorCode,
+                            MasterVendorCode = account.MasterVendorCode,
+                            CredentialId = account.CredentialId,
+                            PeriodType = account.PeriodType,
+                            AdrJobTypeId = rebillAdrJobTypeId,
+                            // For rebill jobs, billing period dates are placeholders since they're persistent
+                            BillingPeriodStartDateTime = new DateTime(2000, 1, 1),
+                            BillingPeriodEndDateTime = new DateTime(2099, 12, 31),
+                            Status = "RebillActive",
+                            IsMissing = false,
+                            IsManualRequest = false, // Rebill jobs are shared, not manual-only
+                            CreatedDateTime = DateTime.UtcNow,
+                            CreatedBy = username,
+                            ModifiedDateTime = DateTime.UtcNow,
+                            ModifiedBy = username
+                        };
+                        
+                        await _unitOfWork.AdrJobs.AddAsync(job);
+                        await _unitOfWork.SaveChangesAsync();
+                        
+                        _logger.LogInformation(
+                            "Created persistent rebill job {JobId} for manual rebill on account {AccountId} ({VMAccountNumber})",
+                            job.Id, id, account.VMAccountNumber);
+                    }
                 }
                 else
                 {
-                    // Create a new AdrJob record with IsManualRequest = true
-                    // This job is excluded from orchestration but visible in Jobs UI
-                    job = new AdrJob
+                    // For credential check and download requests, use billing period-based jobs
+                    // Step 1: Check if a job already exists for this account and billing period
+                    // The unique index UX_AdrJob_Account_BillingPeriod prevents duplicates
+                    var existingJob = (await _unitOfWork.AdrJobs.FindAsync(j => 
+                        j.AdrAccountId == account.Id && 
+                        j.BillingPeriodStartDateTime == rangeStart && 
+                        j.BillingPeriodEndDateTime == rangeEnd))
+                        .FirstOrDefault();
+
+                    if (existingJob != null)
                     {
-                        AdrAccountId = account.Id,
-                        VMAccountId = account.VMAccountId,
-                        VMAccountNumber = account.VMAccountNumber,
-                        PrimaryVendorCode = account.PrimaryVendorCode,
-                        MasterVendorCode = account.MasterVendorCode,
-                        CredentialId = account.CredentialId,
-                        PeriodType = account.PeriodType,
-                        BillingPeriodStartDateTime = rangeStart,
-                        BillingPeriodEndDateTime = rangeEnd,
-                        NextRunDateTime = DateTime.UtcNow,
-                        NextRangeStartDateTime = rangeStart,
-                        NextRangeEndDateTime = rangeEnd,
-                        Status = initialStatus,
-                        IsMissing = false,
-                        IsManualRequest = true,
-                        ManualRequestReason = request.Reason,
-                        CreatedDateTime = DateTime.UtcNow,
-                        CreatedBy = username,
-                        ModifiedDateTime = DateTime.UtcNow,
-                        ModifiedBy = username
-                    };
+                        // Use the existing job - update its status and mark as manual request
+                        job = existingJob;
+                        job.Status = initialStatus;
+                        job.IsManualRequest = true;
+                        job.ManualRequestReason = request.Reason;
+                        job.ModifiedDateTime = DateTime.UtcNow;
+                        job.ModifiedBy = username;
+                        
+                        await _unitOfWork.AdrJobs.UpdateAsync(job);
+                        await _unitOfWork.SaveChangesAsync();
 
-                    await _unitOfWork.AdrJobs.AddAsync(job);
-                    await _unitOfWork.SaveChangesAsync();
+                        _logger.LogInformation(
+                            "Using existing AdrJob {JobId} for manual request on account {AccountId} ({VMAccountNumber}). Range: {RangeStart} to {RangeEnd}",
+                            job.Id, id, account.VMAccountNumber, rangeStart, rangeEnd);
+                    }
+                    else
+                    {
+                        // Create a new AdrJob record with IsManualRequest = true
+                        // This job is excluded from orchestration but visible in Jobs UI
+                        job = new AdrJob
+                        {
+                            AdrAccountId = account.Id,
+                            VMAccountId = account.VMAccountId,
+                            VMAccountNumber = account.VMAccountNumber,
+                            PrimaryVendorCode = account.PrimaryVendorCode,
+                            MasterVendorCode = account.MasterVendorCode,
+                            CredentialId = account.CredentialId,
+                            PeriodType = account.PeriodType,
+                            BillingPeriodStartDateTime = rangeStart,
+                            BillingPeriodEndDateTime = rangeEnd,
+                            NextRunDateTime = DateTime.UtcNow,
+                            NextRangeStartDateTime = rangeStart,
+                            NextRangeEndDateTime = rangeEnd,
+                            Status = initialStatus,
+                            IsMissing = false,
+                            IsManualRequest = true,
+                            ManualRequestReason = request.Reason,
+                            CreatedDateTime = DateTime.UtcNow,
+                            CreatedBy = username,
+                            ModifiedDateTime = DateTime.UtcNow,
+                            ModifiedBy = username
+                        };
 
-                    _logger.LogInformation(
-                        "Created manual AdrJob {JobId} for account {AccountId} ({VMAccountNumber}). Range: {RangeStart} to {RangeEnd}",
-                        job.Id, id, account.VMAccountNumber, rangeStart, rangeEnd);
+                        await _unitOfWork.AdrJobs.AddAsync(job);
+                        await _unitOfWork.SaveChangesAsync();
+
+                        _logger.LogInformation(
+                            "Created manual AdrJob {JobId} for account {AccountId} ({VMAccountNumber}). Range: {RangeStart} to {RangeEnd}",
+                            job.Id, id, account.VMAccountNumber, rangeStart, rangeEnd);
+                    }
                 }
 
                 // Step 2: Create an AdrJobExecution linked to the job
@@ -1590,6 +1648,7 @@ public class AdrController : ControllerBase
     /// <param name="interfaceAccountId">Optional interface account ID to filter jobs.</param>
     /// <param name="credentialId">Optional credential ID to filter jobs.</param>
     /// <param name="isManualRequest">Optional filter for manual vs automated requests.</param>
+    /// <param name="adrJobTypeId">Optional job type ID filter (1 = Credential Check, 2 = Download Invoice, 3 = Rebill).</param>
     /// <param name="sortColumn">Column name to sort by.</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
     /// <returns>A paginated list of ADR jobs.</returns>
@@ -1614,6 +1673,7 @@ public class AdrController : ControllerBase
         [FromQuery] int? credentialId = null,
         [FromQuery] bool? isManualRequest = null,
         [FromQuery] string? blacklistStatus = null,
+        [FromQuery] int? adrJobTypeId = null,
         [FromQuery] string? sortColumn = null,
         [FromQuery] bool sortDescending = true)
     {
@@ -1709,7 +1769,8 @@ public class AdrController : ControllerBase
                     isManualRequest,
                     sortColumn,
                     sortDescending,
-                    jobIdsWithBlacklistStatus);
+                    jobIdsWithBlacklistStatus,
+                    adrJobTypeId);
 
                 // Get blacklist status for each job (single query)
                 var today = DateTime.UtcNow.Date;
@@ -2874,12 +2935,12 @@ public class AdrController : ControllerBase
     [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
     [ProducesResponseType(typeof(BulkCredentialVerificationResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<BulkCredentialVerificationResult>> VerifyAllCredentials(CancellationToken cancellationToken)
+    public async Task<ActionResult<BulkCredentialVerificationResult>> VerifyAllCredentials(CancellationToken cancellationToken, int? testrun=null)
     {
         try
         {
             _logger.LogInformation("BULK credential verification for ALL accounts triggered by {User}", User.Identity?.Name ?? "Unknown");
-            var result = await _orchestratorService.VerifyAllAccountCredentialsAsync(null, cancellationToken);
+            var result = await _orchestratorService.VerifyAllAccountCredentialsAsync(null, cancellationToken, testrun);
             return Ok(result);
         }
         catch (Exception ex)
@@ -3323,44 +3384,51 @@ public class AdrController : ControllerBase
                     .Take(pageSize);
             }
             
-            var dbHistory = await pagedQuery
-                .Select(r => new AdrOrchestrationStatus
+            var dbRuns = await pagedQuery.ToListAsync();
+            
+            // Map to AdrOrchestrationStatus with Duration values restored from database
+            var dbHistory = dbRuns.Select(r => new AdrOrchestrationStatus
+            {
+                RequestId = r.RequestId,
+                RequestedBy = r.RequestedBy,
+                RequestedAt = r.RequestedDateTime,
+                StartedAt = r.StartedDateTime,
+                CompletedAt = r.CompletedDateTime,
+                Status = r.Status,
+                CurrentStep = r.CurrentStep,
+                ErrorMessage = r.ErrorMessage,
+                SyncResult = r.SyncAccountsInserted.HasValue ? new AdrAccountSyncResult
                 {
-                    RequestId = r.RequestId,
-                    RequestedBy = r.RequestedBy,
-                    RequestedAt = r.RequestedDateTime,
-                    StartedAt = r.StartedDateTime,
-                    CompletedAt = r.CompletedDateTime,
-                    Status = r.Status,
-                    CurrentStep = r.CurrentStep,
-                    ErrorMessage = r.ErrorMessage,
-                    SyncResult = r.SyncAccountsInserted.HasValue ? new AdrAccountSyncResult
-                    {
-                        AccountsInserted = r.SyncAccountsInserted ?? 0,
-                        AccountsUpdated = r.SyncAccountsUpdated ?? 0
-                    } : null,
-                    JobCreationResult = r.JobsCreated.HasValue ? new JobCreationResult
-                    {
-                        JobsCreated = r.JobsCreated ?? 0,
-                        JobsSkipped = r.JobsSkipped ?? 0
-                    } : null,
-                    RebillResult = r.CredentialsVerified.HasValue ? new RebillResult
-                    {
-                        RebillRequestsSent = r.CredentialsVerified ?? 0,
-                        RebillRequestsFailed = r.CredentialsFailed ?? 0
-                    } : null,
-                    ScrapeResult = r.ScrapingRequested.HasValue ? new ScrapeResult
-                    {
-                        ScrapesRequested = r.ScrapingRequested ?? 0,
-                        ScrapesFailed = r.ScrapingFailed ?? 0
-                    } : null,
-                    StatusCheckResult = r.StatusesChecked.HasValue ? new StatusCheckResult
-                    {
-                        JobsCompleted = r.StatusesChecked ?? 0,
-                        JobsNeedingReview = r.StatusesFailed ?? 0
-                    } : null
-                })
-                .ToListAsync();
+                    AccountsInserted = r.SyncAccountsInserted ?? 0,
+                    AccountsUpdated = r.SyncAccountsUpdated ?? 0,
+                    SyncStartDateTime = r.StartedDateTime ?? r.RequestedDateTime,
+                    SyncEndDateTime = r.StartedDateTime?.AddSeconds(r.SyncDurationSeconds ?? 0) ?? r.RequestedDateTime
+                } : null,
+                JobCreationResult = r.JobsCreated.HasValue ? new JobCreationResult
+                {
+                    JobsCreated = r.JobsCreated ?? 0,
+                    JobsSkipped = r.JobsSkipped ?? 0,
+                    Duration = r.JobCreationDurationSeconds.HasValue ? TimeSpan.FromSeconds(r.JobCreationDurationSeconds.Value) : TimeSpan.Zero
+                } : null,
+                RebillResult = r.CredentialsVerified.HasValue ? new RebillResult
+                {
+                    RebillRequestsSent = r.CredentialsVerified ?? 0,
+                    RebillRequestsFailed = r.CredentialsFailed ?? 0,
+                    Duration = r.RebillDurationSeconds.HasValue ? TimeSpan.FromSeconds(r.RebillDurationSeconds.Value) : TimeSpan.Zero
+                } : null,
+                ScrapeResult = r.ScrapingRequested.HasValue ? new ScrapeResult
+                {
+                    ScrapesRequested = r.ScrapingRequested ?? 0,
+                    ScrapesFailed = r.ScrapingFailed ?? 0,
+                    Duration = r.ScrapingDurationSeconds.HasValue ? TimeSpan.FromSeconds(r.ScrapingDurationSeconds.Value) : TimeSpan.Zero
+                } : null,
+                StatusCheckResult = r.StatusesChecked.HasValue ? new StatusCheckResult
+                {
+                    JobsCompleted = r.StatusesChecked ?? 0,
+                    JobsNeedingReview = r.StatusesFailed ?? 0,
+                    Duration = r.StatusCheckDurationSeconds.HasValue ? TimeSpan.FromSeconds(r.StatusCheckDurationSeconds.Value) : TimeSpan.Zero
+                } : null
+            }).ToList();
             
             if (dbHistory.Any())
             {
@@ -5225,7 +5293,7 @@ public class ManualScrapeRequest
     public bool IsHighPriority { get; set; }
     
     /// <summary>
-    /// ADR Request Type: 1 = Vendor Credential Check, 2 = ADR Download Request (default)
+    /// ADR Request Type: 1 = Vendor Credential Check, 2 = ADR Download Request (default), 3 = Rebill Check
     /// </summary>
     public int RequestType { get; set; } = 2;
 }

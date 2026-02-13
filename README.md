@@ -76,7 +76,7 @@ SchedulerPlatform is a comprehensive job scheduling system that enables organiza
 - **Dashboard API**: New `DashboardController` with endpoints for overview statistics, execution trends, status breakdown, and performance metrics
 - **Cancel Execution**: `POST /api/jobexecutions/{id}/cancel` endpoint for programmatically cancelling running jobs
 
-### ADR (Automated Data Retrieval) Process (December 2025)
+### ADR (Automated Document Retrieval) Process (December 2025)
 
 The ADR Process is a comprehensive automated invoice scraping system that retrieves billing documents from vendor portals. It orchestrates the entire workflow from account synchronization through credential verification to invoice download.
 

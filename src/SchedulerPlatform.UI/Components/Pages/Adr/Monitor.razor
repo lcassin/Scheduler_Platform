@@ -201,9 +201,18 @@
                                         </MudItem>
                                         <MudItem xs="12" md="6">
                                             <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Status</MudText>
-                                            <MudChip T="string" Size="Size.Medium" Color="@GetStatusColor(_lastCompletedRun.Status)" Class="mb-3">
-                                                @_lastCompletedRun.Status
-                                            </MudChip>
+                                            @if (_lastCompletedRun.Status == "Interrupted")
+                                            {
+                                                <MudChip T="string" Size="Size.Medium" Style="background-color: #ab47bc; color: white;" Class="mb-3">
+                                                    @_lastCompletedRun.Status
+                                                </MudChip>
+                                            }
+                                            else
+                                            {
+                                                <MudChip T="string" Size="Size.Medium" Color="@GetStatusColor(_lastCompletedRun.Status)" Class="mb-3">
+                                                    @_lastCompletedRun.Status
+                                                </MudChip>
+                                            }
                                             
                                             <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Completed At</MudText>
                                             <MudText Typo="Typo.body1" Class="mb-3">@FormatDateTime(_lastCompletedRun.CompletedAt, "MM/dd/yyyy hh:mm:ss tt")</MudText>
@@ -232,7 +241,8 @@
                                                 @if (_lastCompletedRun.SyncResult != null)
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                        @_lastCompletedRun.SyncResult.AccountsInserted inserted, @_lastCompletedRun.SyncResult.AccountsUpdated updated
+                                                        <span style="color: var(--mud-palette-success);">@_lastCompletedRun.SyncResult.AccountsInserted inserted</span>,
+                                                        <span style="color: var(--mud-palette-success);">@_lastCompletedRun.SyncResult.AccountsUpdated updated</span>
                                                     </MudText>
                                                 }
                                                 else
@@ -253,7 +263,8 @@
                                                 @if (_lastCompletedRun.JobCreationResult != null)
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                        @_lastCompletedRun.JobCreationResult.JobsCreated created, @_lastCompletedRun.JobCreationResult.JobsSkipped skipped
+                                                        <span style="color: var(--mud-palette-success);">@_lastCompletedRun.JobCreationResult.JobsCreated created</span>,
+                                                        @_lastCompletedRun.JobCreationResult.JobsSkipped skipped
                                                     </MudText>
                                                 }
                                                 else
@@ -266,15 +277,17 @@
                                             <ItemContent>
                                                 <MudText Typo="Typo.body2">
                                                     Process Rebill
-                                                    @if (_lastCompletedRun.CredentialVerificationResult?.Duration.TotalSeconds > 0)
+                                                    @if (_lastCompletedRun.RebillResult?.Duration.TotalSeconds > 0)
                                                     {
-                                                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-2">@FormatDuration(_lastCompletedRun.CredentialVerificationResult.Duration)</MudChip>
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-2">@FormatDuration(_lastCompletedRun.RebillResult.Duration)</MudChip>
                                                     }
                                                 </MudText>
-                                                @if (_lastCompletedRun.CredentialVerificationResult != null)
+                                                @if (_lastCompletedRun.RebillResult != null)
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                        @_lastCompletedRun.CredentialVerificationResult.CredentialsVerified verified, @_lastCompletedRun.CredentialVerificationResult.CredentialsFailed failed
+                                                        <span style="color: var(--mud-palette-success);">@_lastCompletedRun.RebillResult.RebillRequestsSent sent</span>,
+                                                        <span style="color: var(--mud-palette-error);">@_lastCompletedRun.RebillResult.RebillRequestsFailed failed</span>,
+                                                        @_lastCompletedRun.RebillResult.AccountsSkipped skipped
                                                     </MudText>
                                                 }
                                                 else
@@ -295,7 +308,8 @@
                                                 @if (_lastCompletedRun.StatusCheckResult != null)
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                        @_lastCompletedRun.StatusCheckResult.JobsCompleted completed, @_lastCompletedRun.StatusCheckResult.JobsNeedingReview need review
+                                                        <span style="color: var(--mud-palette-success);">@_lastCompletedRun.StatusCheckResult.JobsCompleted completed</span>,
+                                                        <span style="color: var(--mud-palette-warning);">@_lastCompletedRun.StatusCheckResult.JobsNeedingReview need review</span>
                                                     </MudText>
                                                 }
                                                 else
@@ -316,7 +330,9 @@
                                                 @if (_lastCompletedRun.ScrapeResult != null)
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                        @_lastCompletedRun.ScrapeResult.ScrapesRequested ADR requests sent, @_lastCompletedRun.ScrapeResult.ScrapesCompleted completed
+                                                        <span style="color: var(--mud-palette-success);">@_lastCompletedRun.ScrapeResult.ScrapesRequested ADR requests sent</span>,
+                                                        <span style="color: var(--mud-palette-success);">@_lastCompletedRun.ScrapeResult.ScrapesCompleted completed</span>,
+                                                        <span style="color: var(--mud-palette-error);">@_lastCompletedRun.ScrapeResult.ScrapesFailed failed</span>
                                                     </MudText>
                                                 }
                                                 else
@@ -386,9 +402,18 @@
                             </MudItem>
                             <MudItem xs="12" md="6">
                                 <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Status</MudText>
-                                <MudChip T="string" Size="Size.Medium" Color="@GetStatusColor(_currentStatus.Status.Status)" Class="mb-3">
-                                    @_currentStatus.Status.Status
-                                </MudChip>
+                                                                @if (_currentStatus.Status.Status == "Interrupted")
+                                                                {
+                                                                    <MudChip T="string" Size="Size.Medium" Style="background-color: #ab47bc; color: white;" Class="mb-3">
+                                                                        @_currentStatus.Status.Status
+                                                                    </MudChip>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <MudChip T="string" Size="Size.Medium" Color="@GetStatusColor(_currentStatus.Status.Status)" Class="mb-3">
+                                                                        @_currentStatus.Status.Status
+                                                                    </MudChip>
+                                                                }
                                 
                                 <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Current Step</MudText>
                                 <MudText Typo="Typo.body1" Class="mb-3">
@@ -501,13 +526,13 @@
                                                     <MudProgressLinear Color="Color.Info" Value="@(_currentStatus.Status.CurrentStepProgress * 100.0 / _currentStatus.Status.CurrentStepTotal)" Class="mt-1" />
                                                 }
                                             }
-                                            else if (_currentStatus.Status.CredentialVerificationResult != null)
+                                            else if (_currentStatus.Status.RebillResult != null)
                                             {
                                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                    @_currentStatus.Status.CredentialVerificationResult.CredentialsVerified verified, @_currentStatus.Status.CredentialVerificationResult.CredentialsFailed failed
-                                                    @if (_currentStatus.Status.CredentialVerificationResult.Duration.TotalSeconds > 0)
+                                                    @_currentStatus.Status.RebillResult.RebillRequestsSent sent, @_currentStatus.Status.RebillResult.RebillRequestsFailed failed, @_currentStatus.Status.RebillResult.AccountsSkipped skipped
+                                                    @if (_currentStatus.Status.RebillResult.Duration.TotalSeconds > 0)
                                                     {
-                                                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-2">@FormatDuration(_currentStatus.Status.CredentialVerificationResult.Duration)</MudChip>
+                                                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-2">@FormatDuration(_currentStatus.Status.RebillResult.Duration)</MudChip>
                                                     }
                                                 </MudText>
                                             }
@@ -780,7 +805,14 @@
                 <MudTd DataLabel="Started At">@(context.StartedAt.HasValue ? ConvertToUserTime(context.StartedAt.Value).ToString("hh:mm:ss tt") : "N/A")</MudTd>
                 <MudTd DataLabel="Completed At">@(context.CompletedAt.HasValue ? ConvertToUserTime(context.CompletedAt.Value).ToString("hh:mm:ss tt") : "N/A")</MudTd>
                 <MudTd DataLabel="Status">
-                    <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">@context.Status</MudChip>
+                    @if (context.Status == "Interrupted")
+                    {
+                        <MudChip T="string" Size="Size.Small" Style="background-color: #ab47bc; color: white;">@context.Status</MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">@context.Status</MudChip>
+                    }
                 </MudTd>
                 <MudTd DataLabel="Duration">
                     @if (context.StartedAt.HasValue && context.CompletedAt.HasValue)
@@ -840,9 +872,18 @@
                 </MudItem>
                 <MudItem xs="12" md="6">
                     <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Status</MudText>
-                    <MudChip T="string" Size="Size.Medium" Color="@GetStatusColor(_selectedRun.Status)" Class="mb-3">
-                        @_selectedRun.Status
-                    </MudChip>
+                    @if (_selectedRun.Status == "Interrupted")
+                    {
+                        <MudChip T="string" Size="Size.Medium" Style="background-color: #ab47bc; color: white;" Class="mb-3">
+                            @_selectedRun.Status
+                        </MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Medium" Color="@GetStatusColor(_selectedRun.Status)" Class="mb-3">
+                            @_selectedRun.Status
+                        </MudChip>
+                    }
                     
                     <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Started At</MudText>
                     <MudText Typo="Typo.body1" Class="mb-3">@(_selectedRun.StartedAt.HasValue ? FormatDateTime(_selectedRun.StartedAt, "MM/dd/yyyy hh:mm:ss tt") : "N/A")</MudText>
@@ -874,8 +915,13 @@
                         @if (_selectedRun.SyncResult != null)
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                @_selectedRun.SyncResult.AccountsInserted inserted, @_selectedRun.SyncResult.AccountsUpdated updated
+                                <span style="color: var(--mud-palette-success);">@_selectedRun.SyncResult.AccountsInserted inserted</span>,
+                                <span style="color: var(--mud-palette-success);">@_selectedRun.SyncResult.AccountsUpdated updated</span>
                             </MudText>
+                            @if (_selectedRun.SyncResult.Duration.TotalSeconds > 0)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="mt-1">@FormatDuration(_selectedRun.SyncResult.Duration)</MudChip>
+                            }
                             @if (_selectedRun.SyncResult.Errors > 0)
                             {
                                 <MudText Typo="Typo.caption" Color="Color.Error">
@@ -895,8 +941,13 @@
                         @if (_selectedRun.JobCreationResult != null)
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                @_selectedRun.JobCreationResult.JobsCreated created, @_selectedRun.JobCreationResult.JobsSkipped skipped
+                                <span style="color: var(--mud-palette-success);">@_selectedRun.JobCreationResult.JobsCreated created</span>,
+                                @_selectedRun.JobCreationResult.JobsSkipped skipped
                             </MudText>
+                            @if (_selectedRun.JobCreationResult.Duration.TotalSeconds > 0)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="mt-1">@FormatDuration(_selectedRun.JobCreationResult.Duration)</MudChip>
+                            }
                             @if (_selectedRun.JobCreationResult.Errors > 0)
                             {
                                 <MudText Typo="Typo.caption" Color="Color.Error">
@@ -913,16 +964,21 @@
                 <MudTimelineItem Color="@GetSelectedRunStepColor("Processing rebill")" Icon="@Icons.Material.Filled.CheckCircle">
                     <ItemContent>
                         <MudText Typo="Typo.body2"><strong>Process Rebill</strong></MudText>
-                        @if (_selectedRun.CredentialVerificationResult != null)
+                        @if (_selectedRun.RebillResult != null)
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                <span style="color: var(--mud-palette-success);">@_selectedRun.CredentialVerificationResult.CredentialsVerified verified</span>,
-                                <span style="color: var(--mud-palette-error);">@_selectedRun.CredentialVerificationResult.CredentialsFailed failed</span>
+                                <span style="color: var(--mud-palette-success);">@_selectedRun.RebillResult.RebillRequestsSent sent</span>,
+                                <span style="color: var(--mud-palette-error);">@_selectedRun.RebillResult.RebillRequestsFailed failed</span>,
+                                @_selectedRun.RebillResult.AccountsSkipped skipped
                             </MudText>
-                            @if (_selectedRun.CredentialVerificationResult.Errors > 0)
+                            @if (_selectedRun.RebillResult.Duration.TotalSeconds > 0)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="mt-1">@FormatDuration(_selectedRun.RebillResult.Duration)</MudChip>
+                            }
+                            @if (_selectedRun.RebillResult.Errors > 0)
                             {
                                 <MudText Typo="Typo.caption" Color="Color.Error">
-                                    @_selectedRun.CredentialVerificationResult.Errors errors
+                                    @_selectedRun.RebillResult.Errors errors
                                 </MudText>
                             }
                         }
@@ -942,6 +998,10 @@
                                 <span style="color: var(--mud-palette-success);">@_selectedRun.StatusCheckResult.JobsCompleted completed</span>,
                                 <span style="color: var(--mud-palette-warning);">@_selectedRun.StatusCheckResult.JobsNeedingReview need review</span>
                             </MudText>
+                            @if (_selectedRun.StatusCheckResult.Duration.TotalSeconds > 0)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="mt-1">@FormatDuration(_selectedRun.StatusCheckResult.Duration)</MudChip>
+                            }
                             @if (_selectedRun.StatusCheckResult.Errors > 0)
                             {
                                 <MudText Typo="Typo.caption" Color="Color.Error">
@@ -965,6 +1025,10 @@
                                 <span style="color: var(--mud-palette-success);">@_selectedRun.ScrapeResult.ScrapesCompleted completed</span>,
                                 <span style="color: var(--mud-palette-error);">@_selectedRun.ScrapeResult.ScrapesFailed failed</span>
                             </MudText>
+                            @if (_selectedRun.ScrapeResult.Duration.TotalSeconds > 0)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="mt-1">@FormatDuration(_selectedRun.ScrapeResult.Duration)</MudChip>
+                            }
                             @if (_selectedRun.ScrapeResult.Errors > 0)
                             {
                                 <MudText Typo="Typo.caption" Color="Color.Error">

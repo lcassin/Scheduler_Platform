@@ -219,10 +219,44 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
             .ToListAsync();
     }
 
-    public async Task<IEnumerable<AdrAccount>> GetAllActiveAccountsForCredentialCheckAsync()
+    public async Task<IEnumerable<AdrAccount>> GetAllActiveAccountsForCredentialCheckAsync(int? testrun=null)
     {
+		var result = Enumerable.Empty<AdrAccount>();
+		if (testrun.HasValue)
+		{
+			result = await _dbSet
+			.Where(a => !a.IsDeleted && a.CredentialId > 0).Take(testrun.Value).ToListAsync();
+		} else {
+			result = await _dbSet
+			.Where(a => !a.IsDeleted && a.CredentialId > 0)
+			.ToListAsync(); 
+		}
+        return result;
+    }
+
+    public async Task<IEnumerable<AdrAccount>> GetAccountsForRebillByDayOfWeekAsync(DayOfWeek dayOfWeek)
+    {
+        // SQL Server's DATEPART(dw, date) returns 1=Sunday, 2=Monday, ..., 7=Saturday
+        // .NET's DayOfWeek enum is 0=Sunday, 1=Monday, ..., 6=Saturday
+        // So we need to add 1 to convert from .NET to SQL Server
+        var sqlDayOfWeek = (int)dayOfWeek + 1;
+        
+        // Use raw SQL for the day of week calculation since EF Core can't translate DayOfWeek
+        // This filters at the database level, avoiding loading 170k+ accounts into memory
         return await _dbSet
-            .Where(a => !a.IsDeleted && a.CredentialId > 0)
+            .FromSqlRaw(@"
+                SELECT a.* 
+                FROM AdrAccount a
+                WHERE a.IsDeleted = 0 
+                  AND a.CredentialId > 0
+                  AND (
+                      -- Use OverriddenDateTime if manually overridden, otherwise use ExpectedNextDateTime
+                      (a.IsManuallyOverridden = 1 AND a.OverriddenDateTime IS NOT NULL AND DATEPART(dw, a.OverriddenDateTime) = {0})
+                      OR
+                      (a.IsManuallyOverridden = 0 AND a.ExpectedNextDateTime IS NOT NULL AND DATEPART(dw, a.ExpectedNextDateTime) = {0})
+                      OR
+                      (a.IsManuallyOverridden = 1 AND a.OverriddenDateTime IS NULL AND a.ExpectedNextDateTime IS NOT NULL AND DATEPART(dw, a.ExpectedNextDateTime) = {0})
+                  )", sqlDayOfWeek)
             .ToListAsync();
     }
 }

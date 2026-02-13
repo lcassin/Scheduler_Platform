@@ -71,7 +71,7 @@ The platform uses Cass Information Systems branding:
 
 ## Recent Updates (December 2025)
 
-- **ADR (Automated Data Retrieval) Process**: Complete implementation of automated invoice scraping from vendor portals
+- **ADR (Automated Document Retrieval) Process**: Complete implementation of automated invoice scraping from vendor portals
   - New entities: AdrAccount, AdrJob, AdrJobExecution, AdrOrchestrationRun
   - 4-step orchestration workflow: Sync Accounts → Create Jobs → Verify Credentials → Process Scraping → Check Statuses
   - Real-time Job Monitor page with progress tracking
