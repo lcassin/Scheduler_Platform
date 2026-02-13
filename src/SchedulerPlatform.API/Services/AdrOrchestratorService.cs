@@ -2252,9 +2252,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 else if (apiResult.IsError)
                 {
                     result.Errors++;
-                    if (result.ErrorMessages.Count < 100) // Limit error messages to prevent huge response
+                    if (result.ErrorMessages.Count < 100)
                     {
-                        result.ErrorMessages.Add($"Account {accountInfo.AccountId} (CredentialId: {accountInfo.CredentialId}): {apiResult.ErrorMessage}");
+                        var requestInfo = !string.IsNullOrEmpty(apiResult.RequestPayload) 
+                            ? $" Request: {apiResult.RequestPayload}" 
+                            : "";
+                        result.ErrorMessages.Add($"Account {accountInfo.AccountId} (CredentialId: {accountInfo.CredentialId}): {apiResult.ErrorMessage}{requestInfo}");
                     }
                 }
                 else
