@@ -20,26 +20,61 @@ public partial class NewDocumentDialog : Window
         PopulateRecentFilesList();
     }
 
+    private static readonly string RecentFilesPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "MermaidEditor", "recent.json");
+
     private void LoadRecentFiles()
     {
         try
         {
-            var recentFilePath = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "MermaidEditor",
-                "recent.txt");
-
-            if (File.Exists(recentFilePath))
+            if (File.Exists(RecentFilesPath))
             {
-                _recentFiles = File.ReadAllLines(recentFilePath)
-                    .Where(f => !string.IsNullOrWhiteSpace(f) && File.Exists(f))
-                    .Take(10)
-                    .ToList();
+                var json = File.ReadAllText(RecentFilesPath);
+                var allFiles = System.Text.Json.JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+                
+                // Check for missing files
+                var existingFiles = allFiles.Where(f => !string.IsNullOrWhiteSpace(f) && File.Exists(f)).ToList();
+                var missingFiles = allFiles.Where(f => !string.IsNullOrWhiteSpace(f) && !File.Exists(f)).ToList();
+                
+                if (missingFiles.Count > 0)
+                {
+                    var fileNames = string.Join("\n", missingFiles.Select(f => Path.GetFileName(f)));
+                    var result = System.Windows.MessageBox.Show(
+                        $"The following recent files no longer exist:\n\n{fileNames}\n\nRemove them from the recent files list?",
+                        "Missing Files", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                    
+                    if (result == MessageBoxResult.Yes)
+                    {
+                        // Save the cleaned list
+                        SaveRecentFiles(existingFiles);
+                    }
+                }
+                
+                _recentFiles = existingFiles.Take(10).ToList();
             }
         }
         catch
         {
             // Ignore errors loading recent files
+        }
+    }
+
+    private void SaveRecentFiles(List<string> files)
+    {
+        try
+        {
+            var directory = Path.GetDirectoryName(RecentFilesPath);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+            var json = System.Text.Json.JsonSerializer.Serialize(files);
+            File.WriteAllText(RecentFilesPath, json);
+        }
+        catch
+        {
+            // Silently fail if we can't save recent files
         }
     }
 
@@ -591,88 +626,7 @@ quadrantChart
 
     private void Requirement_Click(object sender, RoutedEventArgs e)
     {
-        SetTemplateAndClose(@"---
-config:
-  theme: default
----
-requirementDiagram
-
-    requirement User_Authentication {
-        id: REQ-001
-        text: The system shall authenticate users
-        risk: high
-        verifymethod: test
-    }
-
-    requirement Password_Policy {
-        id: REQ-002
-        text: Passwords must be at least 8 characters
-        risk: medium
-        verifymethod: inspection
-    }
-
-    requirement Session_Management {
-        id: REQ-003
-        text: Sessions shall expire after 30 minutes
-        risk: medium
-        verifymethod: test
-    }
-
-    functionalRequirement Login_Page {
-        id: REQ-004
-        text: System shall provide a login page
-        risk: low
-        verifymethod: demonstration
-    }
-
-    performanceRequirement Response_Time {
-        id: REQ-005
-        text: Login shall complete within 2 seconds
-        risk: medium
-        verifymethod: test
-    }
-
-    interfaceRequirement API_Auth {
-        id: REQ-006
-        text: API shall support OAuth 2.0
-        risk: high
-        verifymethod: inspection
-    }
-
-    element Auth_Module {
-        type: module
-        docRef: AUTH-DOC-001
-    }
-
-    element Login_Component {
-        type: component
-        docRef: LOGIN-DOC-001
-    }
-
-    User_Authentication - traces -> Password_Policy
-    User_Authentication - traces -> Session_Management
-    User_Authentication - contains -> Login_Page
-    Login_Page - derives -> Response_Time
-    Auth_Module - satisfies -> User_Authentication
-    Login_Component - satisfies -> Login_Page
-    API_Auth - refines -> User_Authentication
-
-    %% Requirement types:
-    %% requirement - Generic requirement
-    %% functionalRequirement - Functional requirement
-    %% performanceRequirement - Performance requirement
-    %% interfaceRequirement - Interface requirement
-    %% physicalRequirement - Physical requirement
-    %% designConstraint - Design constraint
-
-    %% Relationship types:
-    %% contains - Parent contains child
-    %% copies - Copies another requirement
-    %% derives - Derived from another
-    %% satisfies - Element satisfies requirement
-    %% verifies - Element verifies requirement
-    %% refines - Refines another requirement
-    %% traces - Traces to another requirement");
+        SetTemplateAndClose("---\r\nconfig:\r\n    theme: default\r\n---\r\nrequirementDiagram\r\n\r\n    requirement test_req {\r\n    id: 1\r\n    text: the test text.\r\n    risk: high\r\n    verifymethod: test\r\n    }\r\n\r\n    functionalRequirement test_req2 {\r\n    id: 1.1\r\n    text: the second test text.\r\n    risk: low\r\n    verifymethod: inspection\r\n    }\r\n\r\n    performanceRequirement test_req3 {\r\n    id: 1.2\r\n    text: the third test text.\r\n    risk: medium\r\n    verifymethod: demonstration\r\n    }\r\n\r\n    element test_entity {\r\n    type: simulation\r\n    }\r\n\r\n    element test_entity2 {\r\n    type: word doc\r\n    docRef: reqs/test_entity\r\n    }\r\n\r\n    test_entity - satisfies -> test_req2\r\n    test_req - traces -> test_req2\r\n    test_req - contains -> test_req3\r\n\r\n    %% Requirement types:\r\n    %% requirement - Generic requirement\r\n    %% functionalRequirement - Functional requirement\r\n    %% performanceRequirement - Performance requirement\r\n    %% interfaceRequirement - Interface requirement\r\n    %% physicalRequirement - Physical requirement\r\n    %% designConstraint - Design constraint\r\n\r\n    %% Relationship types:\r\n    %% contains - Parent contains child\r\n    %% copies - Copies another requirement\r\n    %% derives - Derived from another\r\n    %% satisfies - Element satisfies requirement\r\n    %% verifies - Element verifies requirement\r\n    %% refines - Refines another requirement\r\n    %% traces - Traces to another requirement");
     }
 
     private void C4_Click(object sender, RoutedEventArgs e)

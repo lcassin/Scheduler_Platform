@@ -57,6 +57,17 @@ public class StatusCheckResult
     public TimeSpan Duration { get; set; }
 }
 
+public class RebillResult
+{
+    public int AccountsProcessed { get; set; }
+    public int RebillRequestsSent { get; set; }
+    public int RebillRequestsFailed { get; set; }
+    public int AccountsSkipped { get; set; }
+    public int Errors { get; set; }
+    public List<string> ErrorMessages { get; set; } = new();
+    public TimeSpan Duration { get; set; }
+}
+
 public class FullCycleResult
 {
     public AdrAccountSyncResult? SyncResult { get; set; }
@@ -181,7 +192,7 @@ public class AdrOrchestrationStatus
     // Results from each step
     public AdrAccountSyncResult? SyncResult { get; set; }
     public JobCreationResult? JobCreationResult { get; set; }
-    public CredentialVerificationResult? CredentialVerificationResult { get; set; }
+    public RebillResult? RebillResult { get; set; }
     public ScrapeResult? ScrapeResult { get; set; }
     public StatusCheckResult? StatusCheckResult { get; set; }
 }

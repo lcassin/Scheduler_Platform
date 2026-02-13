@@ -440,7 +440,7 @@ protected override async Task OnInitializedAsync()
 
 ### ADR UI Pages
 
-The ADR (Automated Data Retrieval) section provides pages for managing automated invoice scraping from vendor portals. Access requires `adr:view` permission; editing requires `adr:edit`; orchestration requires `adr:execute`.
+The ADR (Automated Document Retrieval) section provides pages for managing automated invoice scraping from vendor portals. Access requires `adr:view` permission; editing requires `adr:edit`; orchestration requires `adr:execute`.
 
 #### Adr/Monitor.razor
 **Purpose**: Real-time monitoring of ADR orchestration runs with progress tracking.

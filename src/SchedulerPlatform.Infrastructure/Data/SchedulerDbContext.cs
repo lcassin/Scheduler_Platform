@@ -346,8 +346,14 @@ public class SchedulerDbContext : DbContext
                             .HasForeignKey(e => e.AdrAccountRuleId)
                             .OnDelete(DeleteBehavior.NoAction);
             
+            entity.HasOne(e => e.AdrJobType)
+                .WithMany()
+                .HasForeignKey(e => e.AdrJobTypeId)
+                .OnDelete(DeleteBehavior.NoAction);
+            
             entity.HasIndex(e => e.AdrAccountId);
             entity.HasIndex(e => e.AdrAccountRuleId);
+            entity.HasIndex(e => e.AdrJobTypeId);
             entity.HasIndex(e => e.VMAccountId);
             entity.HasIndex(e => e.CredentialId);
             entity.HasIndex(e => e.Status);

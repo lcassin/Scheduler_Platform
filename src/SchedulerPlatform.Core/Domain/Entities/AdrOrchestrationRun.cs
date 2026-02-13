@@ -65,20 +65,25 @@ public class AdrOrchestrationRun : BaseEntity
     public int? SyncAccountsInserted { get; set; }
     public int? SyncAccountsUpdated { get; set; }
     public int? SyncAccountsTotal { get; set; }
+    public double? SyncDurationSeconds { get; set; }
     
     // Step 2: Create Jobs results
     public int? JobsCreated { get; set; }
     public int? JobsSkipped { get; set; }
+    public double? JobCreationDurationSeconds { get; set; }
     
     // Step 3: Process Rebill results (replaces Verify Credentials)
     public int? CredentialsVerified { get; set; }
     public int? CredentialsFailed { get; set; }
+    public double? RebillDurationSeconds { get; set; }
     
     // Step 4: Process Scraping results
     public int? ScrapingRequested { get; set; }
     public int? ScrapingFailed { get; set; }
+    public double? ScrapingDurationSeconds { get; set; }
     
     // Step 5: Check Statuses results
     public int? StatusesChecked { get; set; }
     public int? StatusesFailed { get; set; }
+    public double? StatusCheckDurationSeconds { get; set; }
 }

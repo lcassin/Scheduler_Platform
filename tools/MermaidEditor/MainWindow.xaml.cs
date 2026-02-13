@@ -332,6 +332,7 @@ Console.WriteLine(""Hello, World!"");
             "<Word>classDiagram</Word><Word>stateDiagram</Word><Word>erDiagram</Word>" +
             "<Word>journey</Word><Word>gantt</Word><Word>pie</Word><Word>mindmap</Word>" +
             "<Word>timeline</Word><Word>gitGraph</Word><Word>quadrantChart</Word>" +
+            "<Word>requirementDiagram</Word><Word>C4Context</Word><Word>C4Container</Word><Word>C4Component</Word><Word>C4Dynamic</Word><Word>C4Deployment</Word>" +
             "</Keywords>" +
             "<Keywords color=\"Keyword\">" +
             "<Word>subgraph</Word><Word>end</Word><Word>direction</Word>" +
@@ -340,6 +341,10 @@ Console.WriteLine(""Hello, World!"");
             "<Word>opt</Word><Word>par</Word><Word>critical</Word><Word>break</Word><Word>rect</Word>" +
             "<Word>class</Word><Word>state</Word><Word>section</Word><Word>title</Word>" +
             "<Word>TB</Word><Word>TD</Word><Word>BT</Word><Word>RL</Word><Word>LR</Word>" +
+            "<Word>requirement</Word><Word>functionalRequirement</Word><Word>performanceRequirement</Word>" +
+            "<Word>interfaceRequirement</Word><Word>physicalRequirement</Word><Word>designConstraint</Word>" +
+            "<Word>element</Word><Word>satisfies</Word><Word>traces</Word><Word>contains</Word>" +
+            "<Word>derives</Word><Word>refines</Word><Word>verifies</Word><Word>copies</Word>" +
             "</Keywords>" +
             "</RuleSet>" +
             "</SyntaxDefinition>";
@@ -1154,15 +1159,40 @@ Console.WriteLine(""Hello, World!"");
                 const svgWidth = svg.width.baseVal.value || bbox.width + 40;
                 const svgHeight = svg.height.baseVal.value || bbox.height + 40;
                 
+                // Check for canvas size limits (browsers typically limit to ~16384 pixels or ~268M total pixels)
+                const canvasWidth = svgWidth * scale;
+                const canvasHeight = svgHeight * scale;
+                const totalPixels = canvasWidth * canvasHeight;
+                const maxPixels = 268000000; // ~268 million pixels (browser limit)
+                const maxDimension = 16384; // Max single dimension
+                
+                if (canvasWidth > maxDimension || canvasHeight > maxDimension || totalPixels > maxPixels) {{
+                    // Calculate the maximum safe scale
+                    const maxScaleByDimension = Math.min(maxDimension / svgWidth, maxDimension / svgHeight);
+                    const maxScaleByPixels = Math.sqrt(maxPixels / (svgWidth * svgHeight));
+                    const maxSafeScale = Math.floor(Math.min(maxScaleByDimension, maxScaleByPixels));
+                    
+                    window.chrome.webview.postMessage({{ 
+                        type: 'pngExportError', 
+                        error: 'Image too large for ' + scale + 'x export (' + Math.round(canvasWidth) + 'x' + Math.round(canvasHeight) + ' pixels). Try ' + maxSafeScale + 'x or lower resolution, or export as SVG instead.' 
+                    }});
+                    return;
+                }}
+                
                 // Set explicit dimensions on the clone
                 svgClone.setAttribute('width', svgWidth);
                 svgClone.setAttribute('height', svgHeight);
                 
                 // Create a canvas with scaled dimensions
                 const canvas = document.createElement('canvas');
-                canvas.width = svgWidth * scale;
-                canvas.height = svgHeight * scale;
+                canvas.width = canvasWidth;
+                canvas.height = canvasHeight;
                 const ctx = canvas.getContext('2d');
+                
+                if (!ctx) {{
+                    window.chrome.webview.postMessage({{ type: 'pngExportError', error: 'Failed to create canvas context. Image may be too large.' }});
+                    return;
+                }}
                 
                 // Fill with white background
                 ctx.fillStyle = 'white';
@@ -1175,12 +1205,20 @@ Console.WriteLine(""Hello, World!"");
                 
                 const img = new Image();
                 img.onload = function() {{
-                    ctx.scale(scale, scale);
-                    ctx.drawImage(img, 0, 0);
-                    
-                    // Convert to base64 PNG and send via postMessage
-                    const pngData = canvas.toDataURL('image/png');
-                    window.chrome.webview.postMessage({{ type: 'pngExport', data: pngData }});
+                    try {{
+                        ctx.scale(scale, scale);
+                        ctx.drawImage(img, 0, 0);
+                        
+                        // Convert to base64 PNG and send via postMessage
+                        const pngData = canvas.toDataURL('image/png');
+                        if (!pngData || pngData === 'data:,') {{
+                            window.chrome.webview.postMessage({{ type: 'pngExportError', error: 'Canvas export failed. Image may be too large for this resolution. Try a lower scale or export as SVG.' }});
+                            return;
+                        }}
+                        window.chrome.webview.postMessage({{ type: 'pngExport', data: pngData }});
+                    }} catch (drawError) {{
+                        window.chrome.webview.postMessage({{ type: 'pngExportError', error: 'Failed to draw image: ' + drawError.message }});
+                    }}
                 }};
                 img.onerror = function(e) {{
                     window.chrome.webview.postMessage({{ type: 'pngExportError', error: 'Failed to load SVG as image: ' + (e.message || 'unknown error') }});
@@ -3413,6 +3451,7 @@ Console.WriteLine(""Hello, World!"");
             "<Word>classDiagram</Word><Word>stateDiagram</Word><Word>erDiagram</Word>" +
             "<Word>journey</Word><Word>gantt</Word><Word>pie</Word><Word>mindmap</Word>" +
             "<Word>timeline</Word><Word>gitGraph</Word><Word>quadrantChart</Word>" +
+            "<Word>requirementDiagram</Word><Word>C4Context</Word><Word>C4Container</Word><Word>C4Component</Word><Word>C4Dynamic</Word><Word>C4Deployment</Word>" +
             "</Keywords>" +
             "<Keywords color=\"Keyword\">" +
             "<Word>subgraph</Word><Word>end</Word><Word>direction</Word>" +
@@ -3421,6 +3460,10 @@ Console.WriteLine(""Hello, World!"");
             "<Word>opt</Word><Word>par</Word><Word>critical</Word><Word>break</Word><Word>rect</Word>" +
             "<Word>class</Word><Word>state</Word><Word>section</Word><Word>title</Word>" +
             "<Word>TB</Word><Word>TD</Word><Word>BT</Word><Word>RL</Word><Word>LR</Word>" +
+            "<Word>requirement</Word><Word>functionalRequirement</Word><Word>performanceRequirement</Word>" +
+            "<Word>interfaceRequirement</Word><Word>physicalRequirement</Word><Word>designConstraint</Word>" +
+            "<Word>element</Word><Word>satisfies</Word><Word>traces</Word><Word>contains</Word>" +
+            "<Word>derives</Word><Word>refines</Word><Word>verifies</Word><Word>copies</Word>" +
             "</Keywords>" +
             "</RuleSet>" +
             "</SyntaxDefinition>";

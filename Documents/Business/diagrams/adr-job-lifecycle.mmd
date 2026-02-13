@@ -1,17 +1,13 @@
 flowchart LR
     subgraph "Job Status Flow"
-        Pending([Pending]) --> CredVerified([Credential Verified])
-        Pending --> CredFailed([Credential Failed])
-        CredVerified --> RequestSent([ADR Request Sent])
-        CredFailed --> RequestSent
+        Pending([Pending]) --> RequestSent([ADR Request Sent])
+        Pending --> NeedsReview([Needs Review])
         RequestSent --> Completed([Completed])
         RequestSent --> Failed([Failed])
-        RequestSent --> NeedsReview([Needs Review])
+        RequestSent --> NeedsReview
     end
     
     style Pending fill:#9e9e9e,color:white
-    style CredVerified fill:#4CAF50,color:white
-    style CredFailed fill:#ff9800,color:white
     style RequestSent fill:#2196F3,color:white
     style Completed fill:#4CAF50,color:white
     style Failed fill:#f44336,color:white
