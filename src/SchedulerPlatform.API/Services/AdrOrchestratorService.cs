@@ -2168,6 +2168,29 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 return result;
             }
 
+            // Create a single tracking job for this bulk run
+            var firstAccount = allAccounts.First();
+            var trackingJob = new AdrJob
+            {
+                AdrAccountId = firstAccount.Id,
+                VMAccountId = firstAccount.VMAccountId,
+                VMAccountNumber = firstAccount.VMAccountNumber,
+                PrimaryVendorCode = firstAccount.PrimaryVendorCode,
+                MasterVendorCode = firstAccount.MasterVendorCode,
+                CredentialId = firstAccount.CredentialId,
+                BillingPeriodStartDateTime = DateTime.UtcNow.Date,
+                BillingPeriodEndDateTime = DateTime.UtcNow.Date,
+                Status = "BulkCredentialVerification",
+                CreatedDateTime = DateTime.UtcNow,
+                CreatedBy = "System - Bulk Credential Verification",
+                ModifiedDateTime = DateTime.UtcNow,
+                ModifiedBy = "System - Bulk Credential Verification"
+            };
+            await _unitOfWork.AdrJobs.AddAsync(trackingJob);
+            await _unitOfWork.SaveChangesAsync();
+            var trackingJobId = trackingJob.Id;
+            _logger.LogInformation("Created tracking job {JobId} for bulk credential verification run", trackingJobId);
+
             // Build list of accounts to process with their credential info
             var accountsToProcess = allAccounts
                 .Select(a => (AccountId: a.Id, CredentialId: a.CredentialId, VMAccountId: a.VMAccountId, InterfaceAccountId: a.InterfaceAccountId))
@@ -2186,14 +2209,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 await semaphore.WaitAsync(cancellationToken);
                 try
                 {
-                    // Call ADR API with AttemptLogin request type
-                    // Note: We pass 0 for jobId since this is a bulk check not tied to a specific job
                     var apiResult = await CallAdrApiAsync(
                         AdrRequestType.AttemptLogin,
                         accountInfo.CredentialId,
-                        null, // No date range for credential check
                         null,
-                        0, // No job ID - this is a bulk account check
+                        null,
+                        trackingJobId,
                         accountInfo.VMAccountId,
                         accountInfo.InterfaceAccountId,
                         cancellationToken);
@@ -2279,9 +2300,16 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             stopwatch.Stop();
             result.Duration = stopwatch.Elapsed;
 
+            // Update tracking job with final status
+            trackingJob.Status = result.Errors > 0 ? "CompletedWithErrors" : "Complete";
+            trackingJob.ErrorMessage = $"Processed: {result.AccountsProcessed}, Verified: {result.CredentialsVerified}, Failed: {result.CredentialsFailed}, Errors: {result.Errors}";
+            trackingJob.ModifiedDateTime = DateTime.UtcNow;
+            await _unitOfWork.AdrJobs.UpdateAsync(trackingJob);
+            await _unitOfWork.SaveChangesAsync();
+
             _logger.LogInformation(
-                "BULK credential verification completed in {Duration}. Processed: {Processed}, Verified: {Verified}, Failed: {Failed}, Errors: {Errors}",
-                result.Duration, result.AccountsProcessed, result.CredentialsVerified, result.CredentialsFailed, result.Errors);
+                "BULK credential verification completed in {Duration}. Processed: {Processed}, Verified: {Verified}, Failed: {Failed}, Errors: {Errors}, TrackingJobId: {JobId}",
+                result.Duration, result.AccountsProcessed, result.CredentialsVerified, result.CredentialsFailed, result.Errors, trackingJobId);
 
             return result;
         }
@@ -2875,8 +2903,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             {
                 ADRRequestTypeId = (int)requestType,
                 CredentialId = credentialId,
-                StartDate = startDate?.ToString("yyyy-MM-dd"),
-                EndDate = endDate?.ToString("yyyy-MM-dd"),
+                StartDate = startDate?.ToString("yyyy-MM-dd") ?? "",
+                EndDate = endDate?.ToString("yyyy-MM-dd") ?? "",
                 SourceApplicationName = sourceApplicationName,
                 RecipientEmail = recipientEmail,
                 JobId = jobId,
