@@ -2202,8 +2202,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     var apiResult = await CallAdrApiAsync(
                         AdrRequestType.AttemptLogin,
                         accountInfo.CredentialId,
-                        null,
-                        null,
+                        DateTime.UtcNow.Date.AddDays(-1),
+                        DateTime.UtcNow.Date.AddDays(1),
                         trackingJobId,
                         accountInfo.VMAccountId,
                         accountInfo.InterfaceAccountId,
