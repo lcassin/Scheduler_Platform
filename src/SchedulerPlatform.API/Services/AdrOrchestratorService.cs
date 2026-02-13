@@ -33,7 +33,7 @@ public interface IAdrOrchestratorService
     /// <param name="progressCallback">Optional callback to report progress (current, total)</param>
     /// <param name="cancellationToken">Cancellation token for the operation</param>
     /// <returns>Results of the bulk credential verification operation</returns>
-    Task<BulkCredentialVerificationResult> VerifyAllAccountCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
+    Task<BulkCredentialVerificationResult> VerifyAllAccountCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, int? testrun=null);
     
     /// <summary>
     /// Processes weekly rebill checks for accounts whose expected billing day of week matches today.
@@ -2142,7 +2142,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// this method checks ALL accounts with valid CredentialIds regardless of scheduling.
     /// Note: This does NOT respect test mode limits as it's intended for one-time bulk operations.
     /// </summary>
-    public async Task<BulkCredentialVerificationResult> VerifyAllAccountCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    public async Task<BulkCredentialVerificationResult> VerifyAllAccountCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, int? testrun=null)
     {
         var result = new BulkCredentialVerificationResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -2153,7 +2153,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             _logger.LogInformation("Starting BULK credential verification for ALL accounts with {MaxParallel} parallel workers", maxParallel);
 
             // Get ALL active accounts with valid credentials (not limited by scheduling or test mode)
-            var allAccounts = (await _unitOfWork.AdrAccounts.GetAllActiveAccountsForCredentialCheckAsync()).ToList();
+            var allAccounts = (await _unitOfWork.AdrAccounts.GetAllActiveAccountsForCredentialCheckAsync(testrun)).ToList();
             var totalAccounts = allAccounts.Count;
             
             _logger.LogInformation("Found {Count} active accounts with valid credentials for bulk verification", totalAccounts);

@@ -2935,12 +2935,12 @@ public class AdrController : ControllerBase
     [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
     [ProducesResponseType(typeof(BulkCredentialVerificationResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<BulkCredentialVerificationResult>> VerifyAllCredentials(CancellationToken cancellationToken)
+    public async Task<ActionResult<BulkCredentialVerificationResult>> VerifyAllCredentials(CancellationToken cancellationToken, int? testrun=null)
     {
         try
         {
             _logger.LogInformation("BULK credential verification for ALL accounts triggered by {User}", User.Identity?.Name ?? "Unknown");
-            var result = await _orchestratorService.VerifyAllAccountCredentialsAsync(null, cancellationToken);
+            var result = await _orchestratorService.VerifyAllAccountCredentialsAsync(null, cancellationToken, testrun);
             return Ok(result);
         }
         catch (Exception ex)

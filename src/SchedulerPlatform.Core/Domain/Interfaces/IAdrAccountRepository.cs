@@ -35,7 +35,7 @@ public interface IAdrAccountRepository : IRepository<AdrAccount>
     /// This is used for one-time bulk operations to check all existing credentials.
     /// </summary>
     /// <returns>All non-deleted accounts with CredentialId > 0</returns>
-    Task<IEnumerable<AdrAccount>> GetAllActiveAccountsForCredentialCheckAsync();
+    Task<IEnumerable<AdrAccount>> GetAllActiveAccountsForCredentialCheckAsync(int? testrun=null);
     
     /// <summary>
     /// Gets accounts for weekly rebill processing where the expected billing day of week matches the specified day.

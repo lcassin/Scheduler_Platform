@@ -219,11 +219,19 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
             .ToListAsync();
     }
 
-    public async Task<IEnumerable<AdrAccount>> GetAllActiveAccountsForCredentialCheckAsync()
+    public async Task<IEnumerable<AdrAccount>> GetAllActiveAccountsForCredentialCheckAsync(int? testrun=null)
     {
-        return await _dbSet
-            .Where(a => !a.IsDeleted && a.CredentialId > 0)
-            .ToListAsync();
+		var result = Enumerable.Empty<AdrAccount>();
+		if (testrun.HasValue)
+		{
+			result = await _dbSet
+			.Where(a => !a.IsDeleted && a.CredentialId > 0).Take(testrun.Value).ToListAsync();
+		} else {
+			result = await _dbSet
+			.Where(a => !a.IsDeleted && a.CredentialId > 0)
+			.ToListAsync(); 
+		}
+        return result;
     }
 
     public async Task<IEnumerable<AdrAccount>> GetAccountsForRebillByDayOfWeekAsync(DayOfWeek dayOfWeek)
