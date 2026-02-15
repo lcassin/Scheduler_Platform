@@ -751,6 +751,22 @@
                     </MenuItem.Icon>
                 </MenuItem>
                 <Separator/>
+                <MenuItem Header="_Print">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE749;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                    <MenuItem x:Name="PrintPreviewMenuItem" Header="Print _Preview..." Click="PrintPreview_Click" InputGestureText="Ctrl+P">
+                        <MenuItem.Icon>
+                            <TextBlock Text="&#xE749;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                        </MenuItem.Icon>
+                    </MenuItem>
+                    <MenuItem x:Name="PrintCodeMenuItem" Header="Print _Code..." Click="PrintCode_Click">
+                        <MenuItem.Icon>
+                            <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                        </MenuItem.Icon>
+                    </MenuItem>
+                </MenuItem>
+                <Separator/>
                 <MenuItem Header="E_xit" Click="Exit_Click" InputGestureText="Alt+F4">
                     <MenuItem.Icon>
                         <TextBlock Text="&#xE8BB;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>

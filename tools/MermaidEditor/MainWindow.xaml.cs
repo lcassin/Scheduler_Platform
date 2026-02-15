@@ -3172,6 +3172,197 @@ Console.WriteLine(""Hello, World!"");
         Close();
     }
 
+    private async void PrintPreview_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_webViewInitialized) return;
+
+        try
+        {
+            // Capture the current diagram/markdown as an image
+            var pngBase64 = await CaptureDiagramAsPng();
+            if (string.IsNullOrEmpty(pngBase64))
+            {
+                MessageBox.Show("Unable to capture the preview for printing.", "Print Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // Convert base64 to BitmapSource
+            var pngBytes = Convert.FromBase64String(pngBase64);
+            using var stream = new MemoryStream(pngBytes);
+            var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+            bitmap.BeginInit();
+            bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+            bitmap.StreamSource = stream;
+            bitmap.EndInit();
+            bitmap.Freeze();
+
+            // Get document title for print job
+            var documentTitle = _activeDocument?.DisplayName ?? "Untitled";
+            if (documentTitle.EndsWith(".mmd") || documentTitle.EndsWith(".md"))
+                documentTitle = Path.GetFileNameWithoutExtension(documentTitle);
+
+            // Show print preview dialog
+            var printDialog = new PrintPreviewDialog(bitmap, documentTitle);
+            printDialog.Owner = this;
+            printDialog.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Error preparing print preview: {ex.Message}", "Print Error", 
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async Task<string?> CaptureDiagramAsPng()
+    {
+        if (!_webViewInitialized) return null;
+
+        try
+        {
+            // Use JavaScript to capture the rendered content as PNG
+            var script = @"
+                (async function() {
+                    const container = document.querySelector('.mermaid') || document.querySelector('.markdown-body') || document.body;
+                    if (!container) return null;
+                    
+                    // For Mermaid diagrams, try to get the SVG
+                    const svg = container.querySelector('svg');
+                    if (svg) {
+                        // Clone the SVG and set explicit dimensions
+                        const clone = svg.cloneNode(true);
+                        const bbox = svg.getBBox();
+                        const width = Math.max(svg.clientWidth || bbox.width, bbox.width + 20);
+                        const height = Math.max(svg.clientHeight || bbox.height, bbox.height + 20);
+                        
+                        clone.setAttribute('width', width);
+                        clone.setAttribute('height', height);
+                        clone.setAttribute('viewBox', `${bbox.x - 10} ${bbox.y - 10} ${width} ${height}`);
+                        
+                        // Serialize SVG to string
+                        const serializer = new XMLSerializer();
+                        const svgString = serializer.serializeToString(clone);
+                        
+                        // Create canvas and draw SVG
+                        const canvas = document.createElement('canvas');
+                        const scale = 2; // Higher resolution for printing
+                        canvas.width = width * scale;
+                        canvas.height = height * scale;
+                        const ctx = canvas.getContext('2d');
+                        ctx.scale(scale, scale);
+                        ctx.fillStyle = 'white';
+                        ctx.fillRect(0, 0, width, height);
+                        
+                        // Create image from SVG
+                        const img = new Image();
+                        const svgBlob = new Blob([svgString], {type: 'image/svg+xml;charset=utf-8'});
+                        const url = URL.createObjectURL(svgBlob);
+                        
+                        return new Promise((resolve) => {
+                            img.onload = function() {
+                                ctx.drawImage(img, 0, 0);
+                                URL.revokeObjectURL(url);
+                                resolve(canvas.toDataURL('image/png').split(',')[1]);
+                            };
+                            img.onerror = function() {
+                                URL.revokeObjectURL(url);
+                                resolve(null);
+                            };
+                            img.src = url;
+                        });
+                    }
+                    
+                    // For Markdown or other content, use html2canvas approach
+                    // Fall back to capturing the viewport
+                    return null;
+                })();
+            ";
+
+            var result = await PreviewWebView.CoreWebView2.ExecuteScriptAsync(script);
+            
+            // Parse the result - it will be a JSON string or "null"
+            if (result != "null" && !string.IsNullOrEmpty(result))
+            {
+                // Remove surrounding quotes from JSON string
+                var base64 = result.Trim('"');
+                if (!string.IsNullOrEmpty(base64) && base64 != "null")
+                {
+                    return base64;
+                }
+            }
+
+            // Fallback: Use WebView2's CapturePreviewAsync
+            using var memoryStream = new MemoryStream();
+            await PreviewWebView.CoreWebView2.CapturePreviewAsync(
+                CoreWebView2CapturePreviewImageFormat.Png, memoryStream);
+            memoryStream.Position = 0;
+            return Convert.ToBase64String(memoryStream.ToArray());
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private void PrintCode_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var printDialog = new System.Windows.Controls.PrintDialog();
+            
+            if (printDialog.ShowDialog() == true)
+            {
+                // Get the code from the editor
+                var code = CodeEditor.Text;
+                var documentTitle = _activeDocument?.DisplayName ?? "Untitled";
+
+                // Create a FlowDocument for printing with word wrap
+                var flowDocument = new System.Windows.Documents.FlowDocument();
+                flowDocument.PageWidth = printDialog.PrintableAreaWidth;
+                flowDocument.PageHeight = printDialog.PrintableAreaHeight;
+                flowDocument.PagePadding = new Thickness(50); // 0.5 inch margins
+                flowDocument.ColumnWidth = double.MaxValue; // Single column
+
+                // Add title
+                var titleParagraph = new System.Windows.Documents.Paragraph(
+                    new System.Windows.Documents.Run(documentTitle))
+                {
+                    FontSize = 16,
+                    FontWeight = FontWeights.Bold,
+                    Margin = new Thickness(0, 0, 0, 20)
+                };
+                flowDocument.Blocks.Add(titleParagraph);
+
+                // Add code with word wrap - split by lines to preserve line breaks
+                var lines = code.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
+                foreach (var line in lines)
+                {
+                    var paragraph = new System.Windows.Documents.Paragraph(
+                        new System.Windows.Documents.Run(string.IsNullOrEmpty(line) ? " " : line))
+                    {
+                        FontFamily = new System.Windows.Media.FontFamily("Consolas, Courier New, monospace"),
+                        FontSize = 10,
+                        Margin = new Thickness(0, 0, 0, 2),
+                        TextAlignment = System.Windows.TextAlignment.Left
+                    };
+                    flowDocument.Blocks.Add(paragraph);
+                }
+
+                // Create a DocumentPaginator for the FlowDocument
+                var paginator = ((System.Windows.Documents.IDocumentPaginatorSource)flowDocument).DocumentPaginator;
+                paginator.PageSize = new System.Windows.Size(printDialog.PrintableAreaWidth, printDialog.PrintableAreaHeight);
+
+                // Print the document
+                printDialog.PrintDocument(paginator, $"Code: {documentTitle}");
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Error printing code: {ex.Message}", "Print Error", 
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     private bool _isUpdatingZoomSlider = false;
     
     private async void ZoomIn_Click(object sender, RoutedEventArgs e)
