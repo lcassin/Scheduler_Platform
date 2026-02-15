@@ -1,8 +1,10 @@
 using System.IO;
 using System.Printing;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
+using System.Windows.Interop;
 using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -14,6 +16,12 @@ namespace MermaidEditor;
 
 public partial class PrintPreviewDialog : Window
 {
+    // P/Invoke for dark title bar
+    [DllImport("dwmapi.dll", PreserveSig = true)]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+    
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+    private const int DWMWA_CAPTION_COLOR = 35;
     private readonly BitmapSource _diagramImage;
     private readonly string _documentTitle;
     private int _currentPage = 1;
@@ -34,7 +42,42 @@ public partial class PrintPreviewDialog : Window
         _pageWidth = 8.5 * 96; // 8.5 inches at 96 DPI
         _pageHeight = 11 * 96; // 11 inches at 96 DPI
         
+        SourceInitialized += PrintPreviewDialog_SourceInitialized;
         Loaded += PrintPreviewDialog_Loaded;
+    }
+
+    private void PrintPreviewDialog_SourceInitialized(object? sender, EventArgs e)
+    {
+        UpdateTitleBarTheme();
+    }
+
+    private void UpdateTitleBarTheme()
+    {
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd != IntPtr.Zero)
+            {
+                var isDark = ThemeManager.IsDarkTheme;
+                int darkModeValue = isDark ? 1 : 0;
+                DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkModeValue, sizeof(int));
+                
+                // Set caption color based on theme
+                var colors = ThemeManager.GetThemeColors(ThemeManager.CurrentTheme);
+                int captionColor = ColorToInt(colors.Background);
+                DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ref captionColor, sizeof(int));
+            }
+        }
+        catch
+        {
+            // Silently fail if DWM API is not available
+        }
+    }
+
+    private static int ColorToInt(System.Windows.Media.Color color)
+    {
+        // Color format is 0x00BBGGRR (BGR, not RGB)
+        return (color.B << 16) | (color.G << 8) | color.R;
     }
 
     private void PrintPreviewDialog_Loaded(object sender, RoutedEventArgs e)
