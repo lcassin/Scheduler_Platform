@@ -130,29 +130,38 @@ public partial class PrintPreviewDialog : Window
         double printableHeight = effectivePageHeight - (2 * _marginSize);
 
         // Calculate scale based on scaling option
+        // Note: CapturePreviewAsync captures at screen DPI, so we need to account for that
         double imageWidth = _diagramImage.PixelWidth;
         double imageHeight = _diagramImage.PixelHeight;
+        
+        // Get the actual DPI of the image (WebView2 captures at screen DPI, typically 96 or higher)
+        double imageDpiX = _diagramImage.DpiX > 0 ? _diagramImage.DpiX : 96;
+        double imageDpiY = _diagramImage.DpiY > 0 ? _diagramImage.DpiY : 96;
+        
+        // Convert image dimensions to 96 DPI equivalent for consistent calculations
+        double normalizedImageWidth = imageWidth * 96 / imageDpiX;
+        double normalizedImageHeight = imageHeight * 96 / imageDpiY;
 
         if (FitToPageRadio?.IsChecked == true)
         {
-            // Scale to fit entire image on one page
-            double scaleX = printableWidth / imageWidth;
-            double scaleY = printableHeight / imageHeight;
-            _scale = Math.Min(scaleX, scaleY);
+            // Scale to fit entire image on one page (never exceed 100%)
+            double scaleX = printableWidth / normalizedImageWidth;
+            double scaleY = printableHeight / normalizedImageHeight;
+            _scale = Math.Min(Math.Min(scaleX, scaleY), 1.0);
             _totalPages = 1;
         }
         else if (FitToWidthRadio?.IsChecked == true)
         {
-            // Scale to fit width, may span multiple pages vertically
-            _scale = printableWidth / imageWidth;
-            double scaledHeight = imageHeight * _scale;
+            // Scale to fit width, may span multiple pages vertically (never exceed 100%)
+            _scale = Math.Min(printableWidth / normalizedImageWidth, 1.0);
+            double scaledHeight = normalizedImageHeight * _scale;
             _totalPages = (int)Math.Ceiling(scaledHeight / printableHeight);
         }
         else // Actual size
         {
             _scale = 1.0;
-            int pagesWide = (int)Math.Ceiling(imageWidth / printableWidth);
-            int pagesHigh = (int)Math.Ceiling(imageHeight / printableHeight);
+            int pagesWide = (int)Math.Ceiling(normalizedImageWidth / printableWidth);
+            int pagesHigh = (int)Math.Ceiling(normalizedImageHeight / printableHeight);
             _totalPages = pagesWide * pagesHigh;
         }
 
@@ -172,8 +181,14 @@ public partial class PrintPreviewDialog : Window
 
     private void GeneratePreviewPages(double pageWidth, double pageHeight, double printableWidth, double printableHeight)
     {
-        double scaledImageWidth = _diagramImage.PixelWidth * _scale;
-        double scaledImageHeight = _diagramImage.PixelHeight * _scale;
+        // Use normalized dimensions for consistent scaling
+        double imageDpiX = _diagramImage.DpiX > 0 ? _diagramImage.DpiX : 96;
+        double imageDpiY = _diagramImage.DpiY > 0 ? _diagramImage.DpiY : 96;
+        double normalizedImageWidth = _diagramImage.PixelWidth * 96 / imageDpiX;
+        double normalizedImageHeight = _diagramImage.PixelHeight * 96 / imageDpiY;
+        
+        double scaledImageWidth = normalizedImageWidth * _scale;
+        double scaledImageHeight = normalizedImageHeight * _scale;
 
         // Preview scale factor (to fit in the preview area)
         double previewScale = Math.Min(400 / pageWidth, 500 / pageHeight);
@@ -352,31 +367,33 @@ public partial class PrintPreviewDialog : Window
         var pageSize = new System.Windows.Size(printDialog.PrintableAreaWidth, printDialog.PrintableAreaHeight);
         
         // Calculate printable area
-        double printableWidth = pageSize.Width - (2 * _marginSize / 96 * 96); // Convert to printer DPI
-        double printableHeight = pageSize.Height - (2 * _marginSize / 96 * 96);
+        double printableWidth = pageSize.Width - (2 * _marginSize);
+        double printableHeight = pageSize.Height - (2 * _marginSize);
 
-        // Calculate scale
-        double imageWidth = _diagramImage.PixelWidth;
-        double imageHeight = _diagramImage.PixelHeight;
+        // Use normalized dimensions for consistent scaling
+        double imageDpiX = _diagramImage.DpiX > 0 ? _diagramImage.DpiX : 96;
+        double imageDpiY = _diagramImage.DpiY > 0 ? _diagramImage.DpiY : 96;
+        double normalizedImageWidth = _diagramImage.PixelWidth * 96 / imageDpiX;
+        double normalizedImageHeight = _diagramImage.PixelHeight * 96 / imageDpiY;
         double scale;
 
         if (FitToPageRadio?.IsChecked == true)
         {
-            double scaleX = printableWidth / imageWidth;
-            double scaleY = printableHeight / imageHeight;
-            scale = Math.Min(scaleX, scaleY);
+            double scaleX = printableWidth / normalizedImageWidth;
+            double scaleY = printableHeight / normalizedImageHeight;
+            scale = Math.Min(Math.Min(scaleX, scaleY), 1.0);
         }
         else if (FitToWidthRadio?.IsChecked == true)
         {
-            scale = printableWidth / imageWidth;
+            scale = Math.Min(printableWidth / normalizedImageWidth, 1.0);
         }
         else
         {
             scale = 1.0;
         }
 
-        double scaledWidth = imageWidth * scale;
-        double scaledHeight = imageHeight * scale;
+        double scaledWidth = normalizedImageWidth * scale;
+        double scaledHeight = normalizedImageHeight * scale;
 
         // Create visual for printing
         if (FitToPageRadio?.IsChecked == true || (FitToWidthRadio?.IsChecked == true && scaledHeight <= printableHeight))
