@@ -3219,49 +3219,7 @@ Console.WriteLine(""Hello, World!"");
 
         try
         {
-            // For Mermaid diagrams, use high-res SVG-to-canvas export to capture full diagram
-            if (_currentRenderMode == RenderMode.Mermaid)
-            {
-                // Create a TaskCompletionSource to await the callback
-                _pngExportTcs = new TaskCompletionSource<string>();
-                
-                // Trigger the export at 2x resolution for print quality (result comes via postMessage callback)
-                await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.exportPngHighRes(2)");
-                
-                // Wait for the callback with a timeout
-                var timeoutTask = Task.Delay(30000); // 30 second timeout
-                var completedTask = await Task.WhenAny(_pngExportTcs.Task, timeoutTask);
-                
-                if (completedTask == timeoutTask)
-                {
-                    _pngExportTcs = null;
-                    // Fall back to viewport capture
-                    return await CaptureViewportAsPngBytes();
-                }
-                
-                var dataUrl = await _pngExportTcs.Task;
-                _pngExportTcs = null;
-                
-                if (!string.IsNullOrEmpty(dataUrl) && dataUrl.StartsWith("data:image/png;base64,"))
-                {
-                    var base64Data = dataUrl.Substring("data:image/png;base64,".Length);
-                    return Convert.FromBase64String(base64Data);
-                }
-            }
-            
-            // For Markdown or fallback, use viewport capture
-            return await CaptureViewportAsPngBytes();
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private async Task<byte[]?> CaptureViewportAsPngBytes()
-    {
-        try
-        {
+            // Use WebView2's CapturePreviewAsync for reliable capture
             using var memoryStream = new MemoryStream();
             await PreviewWebView.CoreWebView2.CapturePreviewAsync(
                 CoreWebView2CapturePreviewImageFormat.Png, memoryStream);
