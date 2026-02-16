@@ -906,16 +906,12 @@ Console.WriteLine(""Hello, World!"");
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             display: inline-block;
-            min-width: 2000px;
         }}
         #diagram.has-error {{
-            min-width: auto;
             max-width: calc(100vw - 60px);
         }}
         #diagram svg {{
             display: block;
-            max-width: none !important;
-            min-width: 100% !important;
         }}
         .error {{
             color: #d32f2f;
@@ -954,43 +950,8 @@ Console.WriteLine(""Hello, World!"");
             const diagram = document.getElementById('diagram');
             const svg = document.querySelector('#diagram svg');
             
-            // Fix SVG and container dimensions after render
-            if (svg) {{
-                // Get actual SVG dimensions
-                let svgWidth = 0;
-                let svgHeight = 0;
-                
-                // Try viewBox first
-                const viewBox = svg.getAttribute('viewBox');
-                if (viewBox) {{
-                    const parts = viewBox.split(' ');
-                    if (parts.length === 4) {{
-                        svgWidth = parseFloat(parts[2]);
-                        svgHeight = parseFloat(parts[3]);
-                    }}
-                }}
-                
-                // Fall back to getBBox
-                if (svgWidth === 0 || svgHeight === 0) {{
-                    try {{
-                        const bbox = svg.getBBox();
-                        svgWidth = bbox.width + 40;
-                        svgHeight = bbox.height + 40;
-                    }} catch (e) {{ }}
-                }}
-                
-                // Set SVG dimensions
-                if (svgWidth > 0 && svgHeight > 0) {{
-                    svg.style.width = svgWidth + 'px';
-                    svg.style.height = svgHeight + 'px';
-                    svg.style.minWidth = svgWidth + 'px';
-                    svg.style.minHeight = svgHeight + 'px';
-                    
-                    // Shrink container to fit SVG (remove the large min-width)
-                    diagram.style.minWidth = 'auto';
-                    diagram.style.width = 'auto';
-                }}
-            }}
+            // Let SVG render at its natural size - no forced dimensions
+            // The container will size itself based on the SVG content
             
             panzoomInstance = panzoom(diagram, {{
                 maxZoom: 10,
@@ -3677,16 +3638,12 @@ Console.WriteLine(""Hello, World!"");
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             display: inline-block;
-            min-width: 2000px;
         }}
         #diagram.has-error {{
-            min-width: auto;
             max-width: calc(100vw - 60px);
         }}
         #diagram svg {{
             display: block;
-            max-width: none !important;
-            min-width: 100% !important;
         }}
     </style>
 </head>
@@ -3702,38 +3659,7 @@ Console.WriteLine(""Hello, World!"");
             const diagram = document.getElementById('diagram');
             const svg = document.querySelector('#diagram svg');
             
-            // Fix SVG and container dimensions after render
-            if (svg) {{
-                let svgWidth = 0;
-                let svgHeight = 0;
-                
-                const viewBox = svg.getAttribute('viewBox');
-                if (viewBox) {{
-                    const parts = viewBox.split(' ');
-                    if (parts.length === 4) {{
-                        svgWidth = parseFloat(parts[2]);
-                        svgHeight = parseFloat(parts[3]);
-                    }}
-                }}
-                
-                if (svgWidth === 0 || svgHeight === 0) {{
-                    try {{
-                        const bbox = svg.getBBox();
-                        svgWidth = bbox.width + 40;
-                        svgHeight = bbox.height + 40;
-                    }} catch (e) {{ }}
-                }}
-                
-                if (svgWidth > 0 && svgHeight > 0) {{
-                    svg.style.width = svgWidth + 'px';
-                    svg.style.height = svgHeight + 'px';
-                    svg.style.minWidth = svgWidth + 'px';
-                    svg.style.minHeight = svgHeight + 'px';
-                    
-                    diagram.style.minWidth = 'auto';
-                    diagram.style.width = 'auto';
-                }}
-            }}
+            // Let SVG render at its natural size - no forced dimensions
             
             if (diagram) {{
                 window.panzoomInstance = panzoom(diagram, {{
