@@ -228,7 +228,9 @@ public class AdrService : IAdrService
         int? adrJobTypeId = null,
         DateTime? modifiedAfter = null,
         DateTime? modifiedBefore = null,
-        string? orchestrationRequestId = null)
+        string? orchestrationRequestId = null,
+        int? executionRequestTypeId = null,
+        bool? executionIsError = null)
     {
         var queryParams = new List<string>
         {
@@ -285,6 +287,12 @@ public class AdrService : IAdrService
 
         if (!string.IsNullOrWhiteSpace(orchestrationRequestId))
             queryParams.Add($"orchestrationRequestId={Uri.EscapeDataString(orchestrationRequestId)}");
+
+        if (executionRequestTypeId.HasValue)
+            queryParams.Add($"executionRequestTypeId={executionRequestTypeId.Value}");
+
+        if (executionIsError.HasValue)
+            queryParams.Add($"executionIsError={executionIsError.Value.ToString().ToLower()}");
 
         var query = "?" + string.Join("&", queryParams);
         var response = await _httpClient.GetAsync($"adr/jobs{query}");

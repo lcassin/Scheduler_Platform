@@ -34,6 +34,14 @@
         {
             <span> | Status: @_filterStatus</span>
         }
+        @if (_filterExecutionRequestTypeId.HasValue)
+        {
+            <span> | Step: @GetRequestTypeName(_filterExecutionRequestTypeId.Value)</span>
+        }
+        @if (_filterExecutionIsError == true)
+        {
+            <span> | Errors only</span>
+        }
     </MudAlert>
 }
 
@@ -406,9 +414,19 @@
     [SupplyParameterFromQuery(Name = "orchestrationRequestId")]
     public string? OrchestrationRequestIdParam { get; set; }
 
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "executionRequestTypeId")]
+    public string? ExecutionRequestTypeIdParam { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "executionIsError")]
+    public string? ExecutionIsErrorParam { get; set; }
+
     private DateTime? _filterModifiedAfter;
     private DateTime? _filterModifiedBefore;
     private string? _filterRequestId;
+    private int? _filterExecutionRequestTypeId;
+    private bool? _filterExecutionIsError;
 
     private bool _hasOrchestrationFilter;
 
@@ -450,7 +468,15 @@
         {
             _filterRequestId = OrchestrationRequestIdParam;
         }
-        _hasOrchestrationFilter = !string.IsNullOrEmpty(_filterRequestId) || _filterModifiedAfter.HasValue || _filterModifiedBefore.HasValue;
+        if (!string.IsNullOrEmpty(ExecutionRequestTypeIdParam) && int.TryParse(ExecutionRequestTypeIdParam, out var execReqType))
+        {
+            _filterExecutionRequestTypeId = execReqType;
+        }
+        if (!string.IsNullOrEmpty(ExecutionIsErrorParam) && bool.TryParse(ExecutionIsErrorParam, out var execIsError))
+        {
+            _filterExecutionIsError = execIsError;
+        }
+        _hasOrchestrationFilter = !string.IsNullOrEmpty(_filterRequestId) || _filterModifiedAfter.HasValue || _filterModifiedBefore.HasValue || _filterExecutionRequestTypeId.HasValue || _filterExecutionIsError.HasValue;
 
         _testModeStatus = await AdrService.GetTestModeStatusAsync();
         _loading = false;
@@ -463,6 +489,8 @@
         _filterStatus = null;
         _selectedStatus = "";
         _filterRequestId = null;
+        _filterExecutionRequestTypeId = null;
+        _filterExecutionIsError = null;
         _hasOrchestrationFilter = false;
         Navigation.NavigateTo("/adr/jobs");
     }
@@ -499,7 +527,9 @@
                 _selectedAdrJobTypeId,
                 _filterModifiedAfter,
                 _filterModifiedBefore,
-                _filterRequestId);
+                _filterRequestId,
+                _filterExecutionRequestTypeId,
+                _filterExecutionIsError);
 
             return new TableData<AdrJob>
             {
@@ -959,6 +989,16 @@
             _isRefiring = false;
         }
     }
+
+    private string GetRequestTypeName(int requestTypeId) => requestTypeId switch
+    {
+        1 => "Credential Verification",
+        2 => "ADR Request",
+        3 => "Rebill",
+        4 => "Status Check",
+        5 => "Job Creation",
+        _ => $"Type {requestTypeId}"
+    };
 
     private async Task CheckJobStatus(AdrJob job)
     {

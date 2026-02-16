@@ -1660,6 +1660,8 @@ public class AdrController : ControllerBase
     /// <param name="modifiedAfter">Optional filter to return jobs modified after this date/time (UTC). Used for orchestration run tracking.</param>
     /// <param name="modifiedBefore">Optional filter to return jobs modified before this date/time (UTC). Used for orchestration run tracking.</param>
     /// <param name="orchestrationRequestId">Optional filter to return jobs that have an execution record for this orchestration run RequestId.</param>
+    /// <param name="executionRequestTypeId">Optional filter to return jobs that have an execution record with this AdrRequestTypeId (1=AttemptLogin, 2=DownloadInvoice, 3=Rebill, 4=StatusCheck, 5=JobCreation).</param>
+    /// <param name="executionIsError">Optional filter to return jobs that have an execution record where IsError matches this value.</param>
     /// <returns>A paginated list of ADR jobs.</returns>
     /// <response code="200">Returns the paginated list of ADR jobs.</response>
     /// <response code="500">An error occurred while retrieving ADR jobs.</response>
@@ -1687,7 +1689,9 @@ public class AdrController : ControllerBase
         [FromQuery] bool sortDescending = true,
         [FromQuery] DateTime? modifiedAfter = null,
         [FromQuery] DateTime? modifiedBefore = null,
-        [FromQuery] string? orchestrationRequestId = null)
+        [FromQuery] string? orchestrationRequestId = null,
+        [FromQuery] int? executionRequestTypeId = null,
+        [FromQuery] bool? executionIsError = null)
     {
             try
             {
@@ -1785,7 +1789,9 @@ public class AdrController : ControllerBase
                     adrJobTypeId,
                     modifiedAfter,
                     modifiedBefore,
-                    orchestrationRequestId);
+                    orchestrationRequestId,
+                    executionRequestTypeId,
+                    executionIsError);
 
                 // Get blacklist status for each job (single query)
                 var today = DateTime.UtcNow.Date;
