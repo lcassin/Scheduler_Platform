@@ -227,7 +227,8 @@ public class AdrService : IAdrService
         bool sortDescending = true,
         int? adrJobTypeId = null,
         DateTime? modifiedAfter = null,
-        DateTime? modifiedBefore = null)
+        DateTime? modifiedBefore = null,
+        string? orchestrationRequestId = null)
     {
         var queryParams = new List<string>
         {
@@ -281,6 +282,9 @@ public class AdrService : IAdrService
 
         if (modifiedBefore.HasValue)
             queryParams.Add($"modifiedBefore={modifiedBefore.Value:o}");
+
+        if (!string.IsNullOrWhiteSpace(orchestrationRequestId))
+            queryParams.Add($"orchestrationRequestId={Uri.EscapeDataString(orchestrationRequestId)}");
 
         var query = "?" + string.Join("&", queryParams);
         var response = await _httpClient.GetAsync($"adr/jobs{query}");

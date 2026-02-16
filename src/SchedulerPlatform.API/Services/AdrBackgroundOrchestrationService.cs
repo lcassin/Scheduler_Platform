@@ -432,7 +432,8 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                         s.CurrentStepProgress = progress;
                         s.CurrentStepTotal = total;
                     }),
-                    token);
+                    token,
+                    orchestrationRequestId: request.RequestId);
                 _queue.UpdateStatus(request.RequestId, s => s.JobCreationResult = jobResult);
                 
                 _logger.LogInformation(
@@ -468,7 +469,8 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                         }
                         s.CurrentStepTotal = total;
                     }),
-                    token);
+                    token,
+                    orchestrationRequestId: request.RequestId);
                 _queue.UpdateStatus(request.RequestId, s => 
                 {
                     s.CurrentStepPhase = null;
@@ -522,7 +524,8 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                             }
                             s.CurrentStepTotal = total;
                         }),
-                        token);
+                        token,
+                        orchestrationRequestId: request.RequestId);
                 }
                 else
                 {
@@ -547,7 +550,8 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                             }
                             s.CurrentStepTotal = total;
                         }),
-                        token);
+                        token,
+                        orchestrationRequestId: request.RequestId);
                 }
                 _queue.UpdateStatus(request.RequestId, s => 
                 {
@@ -588,7 +592,8 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                         }
                         s.CurrentStepTotal = total;
                     }),
-                    token);
+                    token,
+                    orchestrationRequestId: request.RequestId);
                 _queue.UpdateStatus(request.RequestId, s => 
                 {
                     s.CurrentStepPhase = null;

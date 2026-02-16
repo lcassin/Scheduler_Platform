@@ -1659,6 +1659,7 @@ public class AdrController : ControllerBase
     /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
     /// <param name="modifiedAfter">Optional filter to return jobs modified after this date/time (UTC). Used for orchestration run tracking.</param>
     /// <param name="modifiedBefore">Optional filter to return jobs modified before this date/time (UTC). Used for orchestration run tracking.</param>
+    /// <param name="orchestrationRequestId">Optional filter to return jobs that have an execution record for this orchestration run RequestId.</param>
     /// <returns>A paginated list of ADR jobs.</returns>
     /// <response code="200">Returns the paginated list of ADR jobs.</response>
     /// <response code="500">An error occurred while retrieving ADR jobs.</response>
@@ -1685,7 +1686,8 @@ public class AdrController : ControllerBase
         [FromQuery] string? sortColumn = null,
         [FromQuery] bool sortDescending = true,
         [FromQuery] DateTime? modifiedAfter = null,
-        [FromQuery] DateTime? modifiedBefore = null)
+        [FromQuery] DateTime? modifiedBefore = null,
+        [FromQuery] string? orchestrationRequestId = null)
     {
             try
             {
@@ -1782,7 +1784,8 @@ public class AdrController : ControllerBase
                     jobIdsWithBlacklistStatus,
                     adrJobTypeId,
                     modifiedAfter,
-                    modifiedBefore);
+                    modifiedBefore,
+                    orchestrationRequestId);
 
                 // Get blacklist status for each job (single query)
                 var today = DateTime.UtcNow.Date;

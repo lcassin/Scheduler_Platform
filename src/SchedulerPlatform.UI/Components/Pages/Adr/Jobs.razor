@@ -22,7 +22,11 @@
 {
     <MudAlert Severity="Severity.Info" Class="mb-4" Icon="@Icons.Material.Filled.FilterAlt" CloseIconClicked="ClearOrchestrationFilter" ShowCloseIcon="true">
         <strong>Filtered by orchestration run:</strong>
-        @if (_filterModifiedAfter.HasValue && _filterModifiedBefore.HasValue)
+        @if (!string.IsNullOrEmpty(_filterRequestId))
+        {
+            <span> Request ID: @_filterRequestId[..Math.Min(8, _filterRequestId.Length)]...</span>
+        }
+        else if (_filterModifiedAfter.HasValue && _filterModifiedBefore.HasValue)
         {
             <span> @_filterModifiedAfter.Value.ToString("g") — @_filterModifiedBefore.Value.ToString("g") (UTC)</span>
         }
@@ -398,8 +402,13 @@
     [SupplyParameterFromQuery(Name = "modifiedBefore")]
     public string? ModifiedBeforeParam { get; set; }
 
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "orchestrationRequestId")]
+    public string? OrchestrationRequestIdParam { get; set; }
+
     private DateTime? _filterModifiedAfter;
     private DateTime? _filterModifiedBefore;
+    private string? _filterRequestId;
 
     private bool _hasOrchestrationFilter;
 
@@ -437,7 +446,11 @@
         {
             _filterModifiedBefore = modBefore;
         }
-        _hasOrchestrationFilter = _filterModifiedAfter.HasValue || _filterModifiedBefore.HasValue;
+        if (!string.IsNullOrEmpty(OrchestrationRequestIdParam))
+        {
+            _filterRequestId = OrchestrationRequestIdParam;
+        }
+        _hasOrchestrationFilter = !string.IsNullOrEmpty(_filterRequestId) || _filterModifiedAfter.HasValue || _filterModifiedBefore.HasValue;
 
         _testModeStatus = await AdrService.GetTestModeStatusAsync();
         _loading = false;
@@ -449,6 +462,7 @@
         _filterModifiedBefore = null;
         _filterStatus = null;
         _selectedStatus = "";
+        _filterRequestId = null;
         _hasOrchestrationFilter = false;
         Navigation.NavigateTo("/adr/jobs");
     }
@@ -484,7 +498,8 @@
                 sortDescending,
                 _selectedAdrJobTypeId,
                 _filterModifiedAfter,
-                _filterModifiedBefore);
+                _filterModifiedBefore,
+                _filterRequestId);
 
             return new TableData<AdrJob>
             {

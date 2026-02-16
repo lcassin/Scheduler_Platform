@@ -31,7 +31,8 @@ public interface IAdrJobRepository : IRepository<AdrJob>
                 List<int>? jobIds = null,
                 int? adrJobTypeId = null,
                 DateTime? modifiedAfter = null,
-                DateTime? modifiedBefore = null);
+                DateTime? modifiedBefore = null,
+                string? orchestrationRequestId = null);
     Task<int> GetTotalCountAsync(int? adrAccountId = null);
     Task<int> GetCountByStatusAsync(string status);
     Task<int> GetCountByStatusAndIdsAsync(string status, HashSet<int> jobIds);
