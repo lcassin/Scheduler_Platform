@@ -56,7 +56,8 @@ public interface IAdrService
             bool sortDescending = true,
             int? adrJobTypeId = null,
             DateTime? modifiedAfter = null,
-            DateTime? modifiedBefore = null);
+            DateTime? modifiedBefore = null,
+            string? orchestrationRequestId = null);
     Task<AdrJob?> GetJobAsync(int id);
     Task<List<AdrJob>> GetJobsByAccountAsync(int adrAccountId);
     Task<AdrJobStats> GetJobStatsAsync(int? lastOrchestrationRuns = null);

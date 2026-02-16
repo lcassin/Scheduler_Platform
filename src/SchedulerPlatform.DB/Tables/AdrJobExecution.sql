@@ -14,6 +14,7 @@
     [ErrorMessage]         NVARCHAR (MAX) NULL,
     [ApiResponse]          NVARCHAR (MAX) NULL,
     [RequestPayload]       NVARCHAR (MAX) NULL,
+    [OrchestrationRequestId] NVARCHAR (450) NULL,
     [CreatedDateTime]      DATETIME2 (7)  NOT NULL,
     [ModifiedDateTime]     DATETIME2 (7)  NOT NULL,
     [CreatedBy]            NVARCHAR (MAX) NOT NULL,
@@ -42,4 +43,10 @@ CREATE NONCLUSTERED INDEX [IX_AdrJobExecution_IsSuccess]
 GO
 CREATE NONCLUSTERED INDEX [IX_AdrJobExecution_StartDateTime]
     ON [dbo].[AdrJobExecution]([StartDateTime] ASC);
+
+
+GO
+CREATE NONCLUSTERED INDEX [IX_AdrJobExecution_OrchestrationRequestId]
+    ON [dbo].[AdrJobExecution]([OrchestrationRequestId] ASC)
+    WHERE [OrchestrationRequestId] IS NOT NULL;
 

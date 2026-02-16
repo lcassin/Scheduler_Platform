@@ -10,18 +10,18 @@ namespace SchedulerPlatform.API.Services;
 
 public interface IAdrOrchestratorService
 {
-    Task<JobCreationResult> CreateJobsForDueAccountsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
-    Task<CredentialVerificationResult> VerifyCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
-    Task<ScrapeResult> ProcessScrapingAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
-    Task<StatusCheckResult> CheckPendingStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
-    Task<StatusCheckResult> CheckAllScrapedStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
+    Task<JobCreationResult> CreateJobsForDueAccountsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null);
+    Task<CredentialVerificationResult> VerifyCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null);
+    Task<ScrapeResult> ProcessScrapingAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null);
+    Task<StatusCheckResult> CheckPendingStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null);
+    Task<StatusCheckResult> CheckAllScrapedStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null);
     /// <summary>
     /// Finalizes stale pending jobs that missed their processing window.
     /// Jobs in Pending or CredentialCheckInProgress status with NextRangeEndDateTime in the past
     /// are marked as Cancelled and their rules are advanced to the next billing cycle.
     /// This does NOT call any ADR APIs (no cost incurred).
     /// </summary>
-    Task<StalePendingJobsResult> FinalizeStalePendingJobsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
+    Task<StalePendingJobsResult> FinalizeStalePendingJobsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null);
     
     /// <summary>
     /// Runs credential verification (AttemptLogin) for ALL active accounts in the system.
@@ -44,7 +44,7 @@ public interface IAdrOrchestratorService
     /// <param name="progressCallback">Optional callback to report progress (current, total)</param>
     /// <param name="cancellationToken">Cancellation token for the operation</param>
     /// <returns>Results of the rebill processing operation</returns>
-    Task<RebillResult> ProcessRebillAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
+    Task<RebillResult> ProcessRebillAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null);
     
     /// <summary>
     /// Fires a rebill check for a single account.
@@ -427,7 +427,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
     #region Step 2: Job Creation
 
-    public async Task<JobCreationResult> CreateJobsForDueAccountsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    public async Task<JobCreationResult> CreateJobsForDueAccountsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null)
     {
         var result = new JobCreationResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -594,7 +594,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
     #region Step 3: Credential Verification
 
-    public async Task<CredentialVerificationResult> VerifyCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    public async Task<CredentialVerificationResult> VerifyCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null)
     {
         var result = new CredentialVerificationResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -664,7 +664,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.ModifiedDateTime = DateTime.UtcNow;
                     job.ModifiedBy = "System Created";
 
-                    var execution = await CreateExecutionAsync(job.Id, (int)AdrRequestType.AttemptLogin, saveChanges: false);
+                    var execution = await CreateExecutionAsync(job.Id, (int)AdrRequestType.AttemptLogin, saveChanges: false, orchestrationRequestId: orchestrationRequestId);
                     executionsByJobId[job.Id] = execution;
                     
                     markedCount++;
@@ -916,7 +916,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
     #region Step 4: Invoice Scraping
 
-    public async Task<ScrapeResult> ProcessScrapingAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    public async Task<ScrapeResult> ProcessScrapingAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null)
     {
         var result = new ScrapeResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -978,7 +978,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.ModifiedDateTime = DateTime.UtcNow;
                     job.ModifiedBy = "System Created";
 
-                    var execution = await CreateExecutionAsync(job.Id, (int)AdrRequestType.DownloadInvoice, saveChanges: false);
+                    var execution = await CreateExecutionAsync(job.Id, (int)AdrRequestType.DownloadInvoice, saveChanges: false, orchestrationRequestId: orchestrationRequestId);
                     executionsByJobId[job.Id] = execution;
                     
                     markedCount++;
@@ -1235,7 +1235,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
     #region Status Checking
 
-    public async Task<StatusCheckResult> CheckPendingStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    public async Task<StatusCheckResult> CheckPendingStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null)
     {
         var result = new StatusCheckResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -1595,7 +1595,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// This is used by the "Check Statuses Only" button to check status for all ScrapeRequested jobs
     /// since there's no cost to check status from the ADR API.
     /// </summary>
-    public async Task<StatusCheckResult> CheckAllScrapedStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    public async Task<StatusCheckResult> CheckAllScrapedStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null)
     {
         var result = new StatusCheckResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -2020,7 +2020,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// are marked as Cancelled and their rules are advanced to the next billing cycle.
     /// This does NOT call any ADR APIs (no cost incurred).
     /// </summary>
-    public async Task<StalePendingJobsResult> FinalizeStalePendingJobsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    public async Task<StalePendingJobsResult> FinalizeStalePendingJobsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null)
     {
         var result = new StalePendingJobsResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -2327,7 +2327,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// Rebill checks look for updated invoices, partial invoices, and off-cycle invoices.
     /// OPTIMIZED: Uses bulk job lookup, dictionary-based account lookup, and batched saves.
     /// </summary>
-    public async Task<RebillResult> ProcessRebillAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    public async Task<RebillResult> ProcessRebillAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null)
     {
         var result = new RebillResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -2564,6 +2564,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         AdrRequestTypeId = (int)AdrRequestType.Rebill,
                         StartDateTime = DateTime.UtcNow,
                         EndDateTime = DateTime.UtcNow,
+                        OrchestrationRequestId = orchestrationRequestId,
                         AdrStatusId = apiResult.StatusId,
                         AdrStatusDescription = apiResult.StatusDescription,
                         AdrIndexId = apiResult.IndexId,
@@ -2782,13 +2783,14 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
     #region Private Helper Methods
 
-    private async Task<AdrJobExecution> CreateExecutionAsync(int adrJobId, int adrRequestTypeId, bool saveChanges = true)
+    private async Task<AdrJobExecution> CreateExecutionAsync(int adrJobId, int adrRequestTypeId, bool saveChanges = true, string? orchestrationRequestId = null)
     {
         var execution = new AdrJobExecution
         {
             AdrJobId = adrJobId,
             AdrRequestTypeId = adrRequestTypeId,
             StartDateTime = DateTime.UtcNow,
+            OrchestrationRequestId = orchestrationRequestId,
             CreatedDateTime = DateTime.UtcNow,
             CreatedBy = "System Created",
             ModifiedDateTime = DateTime.UtcNow,

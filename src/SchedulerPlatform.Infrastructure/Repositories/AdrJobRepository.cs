@@ -196,7 +196,8 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             List<int>? jobIds = null,
             int? adrJobTypeId = null,
             DateTime? modifiedAfter = null,
-            DateTime? modifiedBefore = null)
+            DateTime? modifiedBefore = null,
+            string? orchestrationRequestId = null)
         {
             // Filter by both job.IsDeleted AND account.IsDeleted to exclude jobs for deleted accounts
             var query = _dbSet.Where(j => !j.IsDeleted && j.AdrAccount != null && !j.AdrAccount.IsDeleted);
@@ -294,6 +295,14 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             if (modifiedBefore.HasValue)
             {
                 query = query.Where(j => j.ModifiedDateTime <= modifiedBefore.Value);
+            }
+
+            if (!string.IsNullOrWhiteSpace(orchestrationRequestId))
+            {
+                query = query.Where(j => _context.AdrJobExecutions.Any(e =>
+                    e.AdrJobId == j.Id &&
+                    !e.IsDeleted &&
+                    e.OrchestrationRequestId == orchestrationRequestId));
             }
 
             int totalCount;

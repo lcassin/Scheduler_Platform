@@ -109,12 +109,12 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
 
         if (modifiedAfter.HasValue)
         {
-            query = query.Where(a => a.ModifiedDateTime >= modifiedAfter.Value);
+            query = query.Where(a => a.LastSyncedDateTime.HasValue && a.LastSyncedDateTime.Value >= modifiedAfter.Value);
         }
 
         if (modifiedBefore.HasValue)
         {
-            query = query.Where(a => a.ModifiedDateTime <= modifiedBefore.Value);
+            query = query.Where(a => a.LastSyncedDateTime.HasValue && a.LastSyncedDateTime.Value <= modifiedBefore.Value);
         }
 
         var totalCount = await query.CountAsync();
