@@ -31,6 +31,8 @@ public partial class PrintPreviewDialog : Window
     private double _marginSize = 96; // 1 inch in pixels (96 DPI)
     private double _scale = 1.0;
     private List<BitmapSource> _pageImages = new();
+    private PrintQueue? _selectedPrinter;
+    private double _printerMinMargin = 0; // Minimum margin supported by printer
 
     public PrintPreviewDialog(BitmapSource diagramImage, string documentTitle)
     {
@@ -44,6 +46,106 @@ public partial class PrintPreviewDialog : Window
         
         SourceInitialized += PrintPreviewDialog_SourceInitialized;
         Loaded += PrintPreviewDialog_Loaded;
+        
+        // Populate printer list
+        PopulatePrinterList();
+    }
+
+    private void PopulatePrinterList()
+    {
+        try
+        {
+            var printServer = new LocalPrintServer();
+            var printQueues = printServer.GetPrintQueues(new[] { EnumeratedPrintQueueTypes.Local, EnumeratedPrintQueueTypes.Connections });
+            
+            foreach (var queue in printQueues)
+            {
+                PrinterCombo.Items.Add(new ComboBoxItem { Content = queue.Name, Tag = queue });
+            }
+            
+            // Select default printer
+            var defaultPrinter = printServer.DefaultPrintQueue;
+            if (defaultPrinter != null)
+            {
+                for (int i = 0; i < PrinterCombo.Items.Count; i++)
+                {
+                    if (PrinterCombo.Items[i] is ComboBoxItem item && item.Tag is PrintQueue pq && pq.Name == defaultPrinter.Name)
+                    {
+                        PrinterCombo.SelectedIndex = i;
+                        _selectedPrinter = pq;
+                        UpdatePrinterMinMargins();
+                        break;
+                    }
+                }
+            }
+            else if (PrinterCombo.Items.Count > 0)
+            {
+                PrinterCombo.SelectedIndex = 0;
+            }
+        }
+        catch
+        {
+            // If we can't enumerate printers, add a placeholder
+            PrinterCombo.Items.Add(new ComboBoxItem { Content = "(Select printer when printing)", IsEnabled = false });
+            PrinterCombo.SelectedIndex = 0;
+        }
+    }
+
+    private void PrinterCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (PrinterCombo.SelectedItem is ComboBoxItem item && item.Tag is PrintQueue queue)
+        {
+            _selectedPrinter = queue;
+            UpdatePrinterMinMargins();
+            ValidateMargins();
+            UpdatePreview();
+        }
+    }
+
+    private void UpdatePrinterMinMargins()
+    {
+        if (_selectedPrinter == null) return;
+        
+        try
+        {
+            var capabilities = _selectedPrinter.GetPrintCapabilities();
+            if (capabilities.PageImageableArea != null)
+            {
+                // Get the unprintable margins (origin is the top-left of printable area)
+                double leftMargin = capabilities.PageImageableArea.OriginWidth;
+                double topMargin = capabilities.PageImageableArea.OriginHeight;
+                
+                // Calculate right and bottom margins
+                double pageWidth = capabilities.OrientedPageMediaWidth ?? _pageWidth;
+                double pageHeight = capabilities.OrientedPageMediaHeight ?? _pageHeight;
+                double printableWidth = capabilities.PageImageableArea.ExtentWidth;
+                double printableHeight = capabilities.PageImageableArea.ExtentHeight;
+                
+                double rightMargin = pageWidth - leftMargin - printableWidth;
+                double bottomMargin = pageHeight - topMargin - printableHeight;
+                
+                // Use the largest minimum margin
+                _printerMinMargin = Math.Max(Math.Max(leftMargin, topMargin), Math.Max(rightMargin, bottomMargin));
+            }
+        }
+        catch
+        {
+            _printerMinMargin = 0;
+        }
+    }
+
+    private void ValidateMargins()
+    {
+        if (_printerMinMargin > 0 && _marginSize < _printerMinMargin)
+        {
+            double minMarginInches = _printerMinMargin / 96.0;
+            MarginWarningText.Text = $"Warning: Selected printer requires minimum {minMarginInches:F2}\" margins. Content may be clipped.";
+            MarginWarningText.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            MarginWarningText.Visibility = Visibility.Collapsed;
+        }
     }
 
     private void PrintPreviewDialog_SourceInitialized(object? sender, EventArgs e)
@@ -147,6 +249,7 @@ public partial class PrintPreviewDialog : Window
                     _marginSize = 0;
                     break;
             }
+            ValidateMargins();
             UpdatePreview();
         }
     }
@@ -385,6 +488,12 @@ public partial class PrintPreviewDialog : Window
     private void Print_Click(object sender, RoutedEventArgs e)
     {
         var printDialog = new System.Windows.Controls.PrintDialog();
+        
+        // Set selected printer if available
+        if (_selectedPrinter != null)
+        {
+            printDialog.PrintQueue = _selectedPrinter;
+        }
         
         // Set default page settings
         if (LandscapeRadio?.IsChecked == true)

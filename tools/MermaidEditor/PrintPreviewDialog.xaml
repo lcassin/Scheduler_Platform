@@ -69,6 +69,13 @@
                     <TextBlock Text="Print Settings" FontSize="18" FontWeight="Bold" 
                                Foreground="{DynamicResource ThemeForegroundBrush}" Margin="0,0,0,16"/>
                     
+                    <!-- Printer Selection -->
+                    <GroupBox Header="Printer">
+                        <StackPanel Margin="8">
+                            <ComboBox x:Name="PrinterCombo" SelectionChanged="PrinterCombo_SelectionChanged"/>
+                        </StackPanel>
+                    </GroupBox>
+                    
                     <!-- Page Size -->
                     <GroupBox Header="Page Size">
                         <StackPanel Margin="8">
@@ -113,6 +120,9 @@
                                 <ComboBoxItem Content="Wide (1.5 inch)"/>
                                 <ComboBoxItem Content="None"/>
                             </ComboBox>
+                            <TextBlock x:Name="MarginWarningText" Text="" TextWrapping="Wrap"
+                                       Foreground="#FFB74D" FontSize="11" Margin="0,4,0,0"
+                                       Visibility="Collapsed"/>
                         </StackPanel>
                     </GroupBox>
                     
