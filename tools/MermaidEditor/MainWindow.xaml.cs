@@ -863,15 +863,12 @@ Console.WriteLine(""Hello, World!"");
                 // Otherwise, preserve the current pan/zoom position for normal edits
                 if (_isSwitchingDocuments)
                 {
-                    // Update diagram and apply the document's zoom level
+                    // Update diagram and pass the document's zoom level as second parameter
+                    // This ensures the correct zoom is applied after the async render completes
                     await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
                         (function() {{
                             if (typeof updateDiagram === 'function') {{
-                                updateDiagram({escapedCode});
-                            }}
-                            // Apply the document's zoom level after updating
-                            if (typeof window.setZoom === 'function') {{
-                                window.setZoom({_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)});
+                                updateDiagram({escapedCode}, {_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)});
                             }}
                         }})();
                     ");
@@ -1250,9 +1247,11 @@ Console.WriteLine(""Hello, World!"");
         }};
         
         // Update diagram content without reloading the page (preserves pan/zoom position)
-        window.updateDiagram = function(newCode) {{
+        // Optional targetZoom parameter allows overriding the zoom level (used when switching documents)
+        window.updateDiagram = function(newCode, targetZoom) {{
             // Save current panzoom transform (only zoom level, not position - position causes issues when diagram size changes)
-            let savedZoom = currentZoom;
+            // If targetZoom is provided, use that instead of the current zoom (for document switching)
+            let savedZoom = (typeof targetZoom === 'number') ? targetZoom : currentZoom;
             let savedTransform = null;
             if (panzoomInstance) {{
                 savedTransform = panzoomInstance.getTransform();
