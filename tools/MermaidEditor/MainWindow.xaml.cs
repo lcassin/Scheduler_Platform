@@ -859,15 +859,36 @@ Console.WriteLine(""Hello, World!"");
         {
             try
             {
-                // Update diagram without reloading the page - pan/zoom position is preserved
-                await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
-                    (function() {{
-                        if (typeof updateDiagram === 'function') {{
-                            updateDiagram({escapedCode});
-                        }}
-                    }})();
-                ");
+                // When switching documents, we need to apply the document's zoom level
+                // Otherwise, preserve the current pan/zoom position for normal edits
+                if (_isSwitchingDocuments)
+                {
+                    // Update diagram and apply the document's zoom level
+                    await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
+                        (function() {{
+                            if (typeof updateDiagram === 'function') {{
+                                updateDiagram({escapedCode});
+                            }}
+                            // Apply the document's zoom level after updating
+                            if (typeof window.setZoom === 'function') {{
+                                window.setZoom({_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)});
+                            }}
+                        }})();
+                    ");
+                }
+                else
+                {
+                    // Update diagram without reloading the page - pan/zoom position is preserved
+                    await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
+                        (function() {{
+                            if (typeof updateDiagram === 'function') {{
+                                updateDiagram({escapedCode});
+                            }}
+                        }})();
+                    ");
+                }
                 StatusText.Text = "Mermaid rendered";
+                UpdateZoomUI();
                 return;
             }
             catch
@@ -4902,12 +4923,13 @@ Console.WriteLine(""Hello, World!"");
         UpdateExportMenuVisibility();
         UpdateUndoRedoState();
         
-        _isSwitchingDocuments = false;
-        
         // Re-render preview for the new document
         // This will trigger NavigateToString which resets _hasNavigatedAway to false
         // and keeps the back button disabled for fresh renders
+        // Note: _isSwitchingDocuments stays true during RenderPreview() so zoom can be restored
         RenderPreview();
+        
+        _isSwitchingDocuments = false;
     }
     
     /// <summary>
