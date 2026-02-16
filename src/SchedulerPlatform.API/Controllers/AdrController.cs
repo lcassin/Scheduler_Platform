@@ -72,6 +72,8 @@ public class AdrController : ControllerBase
     /// <param name="pageSize">Number of items per page (default: 20).</param>
     /// <param name="sortColumn">Column name to sort by.</param>
     /// <param name="sortDescending">Whether to sort in descending order.</param>
+    /// <param name="modifiedAfter">Optional filter to return accounts modified after this date/time (UTC). Used for orchestration run tracking.</param>
+    /// <param name="modifiedBefore">Optional filter to return accounts modified before this date/time (UTC). Used for orchestration run tracking.</param>
     /// <returns>A paginated list of ADR accounts with job status information.</returns>
     /// <response code="200">Returns the list of ADR accounts.</response>
     /// <response code="500">An error occurred while retrieving ADR accounts.</response>
@@ -92,7 +94,9 @@ public class AdrController : ControllerBase
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20,
         [FromQuery] string? sortColumn = null,
-        [FromQuery] bool sortDescending = false)
+        [FromQuery] bool sortDescending = false,
+        [FromQuery] DateTime? modifiedAfter = null,
+        [FromQuery] DateTime? modifiedBefore = null)
     {
         try
         {
@@ -227,7 +231,9 @@ public class AdrController : ControllerBase
                 sortDescending,
                 combinedAccountIds,
                 primaryVendorCode,
-                masterVendorCode);
+                masterVendorCode,
+                modifiedAfter,
+                modifiedBefore);
 
             // Get account IDs from the current page
             var accountIds = items.Select(a => a.Id).ToList();
@@ -1651,6 +1657,8 @@ public class AdrController : ControllerBase
     /// <param name="adrJobTypeId">Optional job type ID filter (1 = Credential Check, 2 = Download Invoice, 3 = Rebill).</param>
     /// <param name="sortColumn">Column name to sort by.</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
+    /// <param name="modifiedAfter">Optional filter to return jobs modified after this date/time (UTC). Used for orchestration run tracking.</param>
+    /// <param name="modifiedBefore">Optional filter to return jobs modified before this date/time (UTC). Used for orchestration run tracking.</param>
     /// <returns>A paginated list of ADR jobs.</returns>
     /// <response code="200">Returns the paginated list of ADR jobs.</response>
     /// <response code="500">An error occurred while retrieving ADR jobs.</response>
@@ -1675,7 +1683,9 @@ public class AdrController : ControllerBase
         [FromQuery] string? blacklistStatus = null,
         [FromQuery] int? adrJobTypeId = null,
         [FromQuery] string? sortColumn = null,
-        [FromQuery] bool sortDescending = true)
+        [FromQuery] bool sortDescending = true,
+        [FromQuery] DateTime? modifiedAfter = null,
+        [FromQuery] DateTime? modifiedBefore = null)
     {
             try
             {
@@ -1770,7 +1780,9 @@ public class AdrController : ControllerBase
                     sortColumn,
                     sortDescending,
                     jobIdsWithBlacklistStatus,
-                    adrJobTypeId);
+                    adrJobTypeId,
+                    modifiedAfter,
+                    modifiedBefore);
 
                 // Get blacklist status for each job (single query)
                 var today = DateTime.UtcNow.Date;
