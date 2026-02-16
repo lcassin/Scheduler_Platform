@@ -20,6 +20,17 @@
     </MudAlert>
 }
 
+@if (_hasOrchestrationFilter)
+{
+    <MudAlert Severity="Severity.Info" Class="mb-4" Icon="@Icons.Material.Filled.FilterAlt" CloseIconClicked="ClearOrchestrationFilter" ShowCloseIcon="true">
+        <strong>Filtered by orchestration run:</strong>
+        @if (_filterModifiedAfter.HasValue && _filterModifiedBefore.HasValue)
+        {
+            <span> @_filterModifiedAfter.Value.ToString("g") — @_filterModifiedBefore.Value.ToString("g") (UTC)</span>
+        }
+    </MudAlert>
+}
+
 <MudPaper Class="pa-4">
     <MudGrid Class="mb-4" Spacing="2">
         <MudItem xs="12" md="3">
@@ -387,31 +398,26 @@
     private DateTime? _filterModifiedAfter;
     private DateTime? _filterModifiedBefore;
 
+    private bool _hasOrchestrationFilter;
+
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            // Load test mode status for banner display
-            _testModeStatus = await AdrService.GetTestModeStatusAsync();
-            
-            // Apply query parameters if provided (e.g., from "View Account" action on Jobs page or Dashboard chart click)
             if (!string.IsNullOrEmpty(AccountNumberParam))
             {
                 _searchTerm = AccountNumberParam;
             }
-            
             if (!string.IsNullOrEmpty(NextRunStatusParam))
             {
                 _selectedNextRunStatus = NextRunStatusParam;
                 _filterNextRunStatus = NextRunStatusParam;
             }
-            
             if (!string.IsNullOrEmpty(BlacklistStatusParam))
             {
                 _selectedBlacklistStatus = BlacklistStatusParam;
                 _filterBlacklistStatus = BlacklistStatusParam;
             }
-
             if (!string.IsNullOrEmpty(ModifiedAfterParam) && DateTime.TryParse(ModifiedAfterParam, null, System.Globalization.DateTimeStyles.RoundtripKind, out var modAfter))
             {
                 _filterModifiedAfter = modAfter;
@@ -420,13 +426,12 @@
             {
                 _filterModifiedBefore = modBefore;
             }
-            
+            _hasOrchestrationFilter = _filterModifiedAfter.HasValue || _filterModifiedBefore.HasValue;
+
+            _testModeStatus = await AdrService.GetTestModeStatusAsync();
             _clients = await ClientService.GetClientsAsync();
-            
-                        // Check if user has permission to update ADR accounts (for editing billing data)
-                        _canEditBilling = await PermissionService.CanUpdateAsync("adr");
-                        // Check if user has permission to execute manual ADR requests (Editors, Admins, Super Admins)
-                        _canExecuteManualScrape = await PermissionService.CanUpdateAsync("adr");
+            _canEditBilling = await PermissionService.CanUpdateAsync("adr");
+            _canExecuteManualScrape = await PermissionService.CanUpdateAsync("adr");
         }
         catch (Exception ex)
         {
@@ -436,6 +441,14 @@
         {
             _loading = false;
         }
+    }
+
+    private void ClearOrchestrationFilter()
+    {
+        _filterModifiedAfter = null;
+        _filterModifiedBefore = null;
+        _hasOrchestrationFilter = false;
+        Navigation.NavigateTo("/adr/accounts");
     }
 
     private async Task<TableData<AdrAccount>> ServerReload(TableState state, CancellationToken cancellationToken)

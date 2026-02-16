@@ -18,6 +18,21 @@
     </MudAlert>
 }
 
+@if (_hasOrchestrationFilter)
+{
+    <MudAlert Severity="Severity.Info" Class="mb-4" Icon="@Icons.Material.Filled.FilterAlt" CloseIconClicked="ClearOrchestrationFilter" ShowCloseIcon="true">
+        <strong>Filtered by orchestration run:</strong>
+        @if (_filterModifiedAfter.HasValue && _filterModifiedBefore.HasValue)
+        {
+            <span> @_filterModifiedAfter.Value.ToString("g") — @_filterModifiedBefore.Value.ToString("g") (UTC)</span>
+        }
+        @if (!string.IsNullOrEmpty(_filterStatus))
+        {
+            <span> | Status: @_filterStatus</span>
+        }
+    </MudAlert>
+}
+
 <MudPaper Class="pa-4">
         <MudGrid Class="mb-4" Spacing="2">
             <MudItem xs="12" md="2">
@@ -386,11 +401,10 @@
     private DateTime? _filterModifiedAfter;
     private DateTime? _filterModifiedBefore;
 
+    private bool _hasOrchestrationFilter;
+
     protected override async Task OnInitializedAsync()
     {
-        // Load test mode status for banner display
-        _testModeStatus = await AdrService.GetTestModeStatusAsync();
-        
         if (!string.IsNullOrEmpty(PrimaryVendorCodeParam))
         {
             _searchPrimaryVendorCode = PrimaryVendorCodeParam;
@@ -401,18 +415,15 @@
             _searchAccountNumber = AccountNumberParam;
             _filterAccountNumber = AccountNumberParam;
         }
-        // Handle latestPerAccount parameter - defaults to true if not specified
         if (!string.IsNullOrEmpty(LatestPerAccountParam) && bool.TryParse(LatestPerAccountParam, out var latestPerAccount))
         {
             _showLatestPerAccount = latestPerAccount;
         }
-        // Handle status parameter (e.g., from Dashboard chart click)
         if (!string.IsNullOrEmpty(StatusParam))
         {
             _selectedStatus = StatusParam;
             _filterStatus = StatusParam;
         }
-        // Handle blacklist status parameter
         if (!string.IsNullOrEmpty(BlacklistStatusParam))
         {
             _selectedBlacklistStatus = BlacklistStatusParam;
@@ -426,7 +437,20 @@
         {
             _filterModifiedBefore = modBefore;
         }
+        _hasOrchestrationFilter = _filterModifiedAfter.HasValue || _filterModifiedBefore.HasValue;
+
+        _testModeStatus = await AdrService.GetTestModeStatusAsync();
         _loading = false;
+    }
+
+    private void ClearOrchestrationFilter()
+    {
+        _filterModifiedAfter = null;
+        _filterModifiedBefore = null;
+        _filterStatus = null;
+        _selectedStatus = "";
+        _hasOrchestrationFilter = false;
+        Navigation.NavigateTo("/adr/jobs");
     }
 
     private async Task<TableData<AdrJob>> ServerReload(TableState state, CancellationToken cancellationToken)
