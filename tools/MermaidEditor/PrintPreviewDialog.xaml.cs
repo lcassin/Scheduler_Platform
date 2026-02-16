@@ -136,6 +136,8 @@ public partial class PrintPreviewDialog : Window
 
     private void ValidateMargins()
     {
+        if (MarginWarningText == null) return;
+        
         if (_printerMinMargin > 0 && _marginSize < _printerMinMargin)
         {
             double minMarginInches = _printerMinMargin / 96.0;
