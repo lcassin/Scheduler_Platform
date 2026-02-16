@@ -5,11 +5,14 @@
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource ThemeBackgroundBrush}">
     
-    <Window.Resources>
-        <Style TargetType="Label">
-            <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
-        </Style>
-        <Style TargetType="ComboBox">
+        <Window.Resources>
+            <!-- Override system colors for ComboBox popup background -->
+            <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="#2D2D30"/>
+        
+            <Style TargetType="Label">
+                <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
+            </Style>
+            <Style TargetType="ComboBox">
             <Setter Property="Background" Value="{DynamicResource ThemeToolbarBackgroundBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}"/>
