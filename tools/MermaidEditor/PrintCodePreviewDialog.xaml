@@ -5,32 +5,37 @@
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource ThemeBackgroundBrush}">
     
-        <Window.Resources>
-            <!-- Override system colors for ComboBox popup background -->
-            <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="#2D2D30"/>
+            <Window.Resources>
+                <!-- Override system colors for ComboBox popup and selection -->
+                <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="#2D2D30"/>
+                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#3E3E42"/>
+                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#F1F1F1"/>
+                <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}" Color="#3E3E42"/>
         
-            <Style TargetType="Label">
+                <Style TargetType="Label">
+                    <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
+                </Style>
+                <Style TargetType="ComboBox">
+                <Setter Property="Background" Value="{DynamicResource ThemeToolbarBackgroundBrush}"/>
                 <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}"/>
+                <Setter Property="Padding" Value="8,4"/>
             </Style>
-            <Style TargetType="ComboBox">
-            <Setter Property="Background" Value="{DynamicResource ThemeToolbarBackgroundBrush}"/>
-            <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}"/>
-            <Setter Property="Padding" Value="8,4"/>
-        </Style>
-        <Style TargetType="ComboBoxItem">
-            <Setter Property="Background" Value="{DynamicResource ThemeMenuBackgroundBrush}"/>
-            <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
-            <Setter Property="Padding" Value="8,4"/>
-            <Style.Triggers>
-                <Trigger Property="IsHighlighted" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource ThemeToolbarBackgroundBrush}"/>
-                </Trigger>
-                <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource ThemeToolbarBackgroundBrush}"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
+            <Style TargetType="ComboBoxItem">
+                <Setter Property="Background" Value="{DynamicResource ThemeMenuBackgroundBrush}"/>
+                <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
+                <Setter Property="Padding" Value="8,4"/>
+                <Style.Triggers>
+                    <Trigger Property="IsHighlighted" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource ThemeToolbarBackgroundBrush}"/>
+                        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
+                    </Trigger>
+                    <Trigger Property="IsSelected" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource ThemeToolbarBackgroundBrush}"/>
+                        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
         <Style TargetType="Button">
             <Setter Property="Background" Value="{DynamicResource ThemeToolbarBackgroundBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
