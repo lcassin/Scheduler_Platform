@@ -3229,17 +3229,64 @@ Console.WriteLine(""Hello, World!"");
 
         try
         {
-            // Use WebView2's CapturePreviewAsync for reliable capture
-            using var memoryStream = new MemoryStream();
-            await PreviewWebView.CoreWebView2.CapturePreviewAsync(
-                CoreWebView2CapturePreviewImageFormat.Png, memoryStream);
-            memoryStream.Position = 0;
-            return memoryStream.ToArray();
+            // For Mermaid diagrams, use high-res SVG export to capture full diagram
+            if (_currentRenderMode == RenderMode.Mermaid)
+            {
+                // Use scale 2 for print preview (good balance of quality and performance)
+                _pngExportTcs = new TaskCompletionSource<string>();
+                
+                await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.exportPngHighRes(2)");
+                
+                // Wait for the callback with a timeout
+                var timeoutTask = Task.Delay(15000); // 15 second timeout
+                var completedTask = await Task.WhenAny(_pngExportTcs.Task, timeoutTask);
+                
+                if (completedTask == timeoutTask)
+                {
+                    _pngExportTcs = null;
+                    // Fall back to viewport capture on timeout
+                    return await CaptureViewportAsPngBytes();
+                }
+                
+                var dataUrl = await _pngExportTcs.Task;
+                _pngExportTcs = null;
+                
+                if (!string.IsNullOrEmpty(dataUrl) && dataUrl.StartsWith("data:image/png;base64,"))
+                {
+                    var base64Data = dataUrl.Substring("data:image/png;base64,".Length);
+                    return Convert.FromBase64String(base64Data);
+                }
+                
+                // Fall back to viewport capture if high-res export fails
+                return await CaptureViewportAsPngBytes();
+            }
+            else
+            {
+                // For Markdown, use viewport capture
+                return await CaptureViewportAsPngBytes();
+            }
         }
         catch
         {
-            return null;
+            // Fall back to viewport capture on any error
+            try
+            {
+                return await CaptureViewportAsPngBytes();
+            }
+            catch
+            {
+                return null;
+            }
         }
+    }
+
+    private async Task<byte[]?> CaptureViewportAsPngBytes()
+    {
+        using var memoryStream = new MemoryStream();
+        await PreviewWebView.CoreWebView2.CapturePreviewAsync(
+            CoreWebView2CapturePreviewImageFormat.Png, memoryStream);
+        memoryStream.Position = 0;
+        return memoryStream.ToArray();
     }
 
     private void PrintCode_Click(object sender, RoutedEventArgs e)
