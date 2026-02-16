@@ -912,12 +912,6 @@ Console.WriteLine(""Hello, World!"");
         }}
         #diagram svg {{
             display: block;
-            /* Override Mermaid's inline width styles for gantt charts */
-            width: auto !important;
-            min-width: auto !important;
-            max-width: none !important;
-            height: auto !important;
-            min-height: auto !important;
         }}
         .error {{
             color: #d32f2f;
@@ -959,10 +953,13 @@ Console.WriteLine(""Hello, World!"");
             // Auto-size the container to fit the actual SVG content
             if (svg) {{
                 try {{
-                    // Remove Mermaid's inline width/min-width styles that cause gantt charts to be very wide
-                    svg.style.width = '';
-                    svg.style.minWidth = '';
-                    svg.style.maxWidth = '';
+                    // Actually remove Mermaid's inline width/min-width styles using removeProperty
+                    // Setting to '' doesn't work - must use removeProperty to truly remove inline styles
+                    svg.style.removeProperty('width');
+                    svg.style.removeProperty('min-width');
+                    svg.style.removeProperty('max-width');
+                    svg.style.removeProperty('height');
+                    svg.style.removeProperty('min-height');
                     
                     // Get dimensions from viewBox if available (more reliable for gantt charts)
                     const viewBox = svg.getAttribute('viewBox');
@@ -3707,10 +3704,13 @@ Console.WriteLine(""Hello, World!"");
             // Auto-size the container to fit the actual SVG content
             if (svg) {{
                 try {{
-                    // Remove Mermaid's inline width/min-width styles that cause gantt charts to be very wide
-                    svg.style.width = '';
-                    svg.style.minWidth = '';
-                    svg.style.maxWidth = '';
+                    // Actually remove Mermaid's inline width/min-width styles using removeProperty
+                    // Setting to '' doesn't work - must use removeProperty to truly remove inline styles
+                    svg.style.removeProperty('width');
+                    svg.style.removeProperty('min-width');
+                    svg.style.removeProperty('max-width');
+                    svg.style.removeProperty('height');
+                    svg.style.removeProperty('min-height');
                     
                     // Get dimensions from viewBox if available (more reliable for gantt charts)
                     const viewBox = svg.getAttribute('viewBox');
