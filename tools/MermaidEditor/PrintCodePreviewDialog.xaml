@@ -5,37 +5,86 @@
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource ThemeBackgroundBrush}">
     
-            <Window.Resources>
-                <!-- Override system colors for ComboBox popup and selection -->
-                <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="#2D2D30"/>
-                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#3E3E42"/>
-                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#F1F1F1"/>
-                <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}" Color="#3E3E42"/>
+                <Window.Resources>
+                    <!-- Override system colors for ComboBox popup and selection -->
+                    <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="#3E3E42"/>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#007ACC"/>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#FFFFFF"/>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}" Color="#3E3E42"/>
+                    <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="#F1F1F1"/>
         
-                <Style TargetType="Label">
-                    <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
+                    <!-- Dark ComboBox Toggle Button Template -->
+                    <ControlTemplate x:Key="DarkComboBoxToggleButton" TargetType="ToggleButton">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition/>
+                                <ColumnDefinition Width="20"/>
+                            </Grid.ColumnDefinitions>
+                            <Border x:Name="Border" Grid.ColumnSpan="2" Background="#3E3E42" BorderBrush="#555555" BorderThickness="1" CornerRadius="2"/>
+                            <Border Grid.Column="0" Background="#3E3E42" BorderBrush="Transparent" BorderThickness="0" CornerRadius="2,0,0,2"/>
+                            <Path x:Name="Arrow" Grid.Column="1" Fill="#F1F1F1" HorizontalAlignment="Center" VerticalAlignment="Center" Data="M 0 0 L 4 4 L 8 0 Z"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="#4E4E52"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Border" Property="Background" Value="#4E4E52"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+        
+                    <!-- Dark ComboBox Template -->
+                    <ControlTemplate x:Key="DarkComboBoxTemplate" TargetType="ComboBox">
+                        <Grid>
+                            <ToggleButton x:Name="ToggleButton" Template="{StaticResource DarkComboBoxToggleButton}" 
+                                          Focusable="False" IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" 
+                                          ClickMode="Press"/>
+                            <ContentPresenter x:Name="ContentSite" IsHitTestVisible="False" 
+                                              Content="{TemplateBinding SelectionBoxItem}" 
+                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" 
+                                              ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}" 
+                                              Margin="8,4,28,4" VerticalAlignment="Center" HorizontalAlignment="Left">
+                                <ContentPresenter.Resources>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="#F1F1F1"/>
+                                    </Style>
+                                </ContentPresenter.Resources>
+                            </ContentPresenter>
+                            <Popup x:Name="Popup" Placement="Bottom" IsOpen="{TemplateBinding IsDropDownOpen}" 
+                                   AllowsTransparency="True" Focusable="False" PopupAnimation="Slide">
+                                <Grid x:Name="DropDown" SnapsToDevicePixels="True" MinWidth="{TemplateBinding ActualWidth}" MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                    <Border x:Name="DropDownBorder" Background="#2D2D30" BorderBrush="#555555" BorderThickness="1"/>
+                                    <ScrollViewer Margin="2" SnapsToDevicePixels="True">
+                                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                    </ScrollViewer>
+                                </Grid>
+                            </Popup>
+                        </Grid>
+                    </ControlTemplate>
+        
+                    <Style TargetType="Label">
+                        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
+                    </Style>
+                    <Style TargetType="ComboBox">
+                    <Setter Property="Template" Value="{StaticResource DarkComboBoxTemplate}"/>
+                    <Setter Property="Foreground" Value="#F1F1F1"/>
                 </Style>
-                <Style TargetType="ComboBox">
-                <Setter Property="Background" Value="{DynamicResource ThemeToolbarBackgroundBrush}"/>
-                <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
-                <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}"/>
-                <Setter Property="Padding" Value="8,4"/>
-            </Style>
-            <Style TargetType="ComboBoxItem">
-                <Setter Property="Background" Value="{DynamicResource ThemeMenuBackgroundBrush}"/>
-                <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
-                <Setter Property="Padding" Value="8,4"/>
-                <Style.Triggers>
-                    <Trigger Property="IsHighlighted" Value="True">
-                        <Setter Property="Background" Value="{DynamicResource ThemeToolbarBackgroundBrush}"/>
-                        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
-                    </Trigger>
-                    <Trigger Property="IsSelected" Value="True">
-                        <Setter Property="Background" Value="{DynamicResource ThemeToolbarBackgroundBrush}"/>
-                        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
-                    </Trigger>
-                </Style.Triggers>
-            </Style>
+                <Style TargetType="ComboBoxItem">
+                    <Setter Property="Background" Value="#2D2D30"/>
+                    <Setter Property="Foreground" Value="#F1F1F1"/>
+                    <Setter Property="Padding" Value="8,4"/>
+                    <Style.Triggers>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter Property="Background" Value="#007ACC"/>
+                            <Setter Property="Foreground" Value="#FFFFFF"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Background" Value="#3E3E42"/>
+                            <Setter Property="Foreground" Value="#F1F1F1"/>
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
         <Style TargetType="Button">
             <Setter Property="Background" Value="{DynamicResource ThemeToolbarBackgroundBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
