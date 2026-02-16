@@ -2204,6 +2204,16 @@ Console.WriteLine(""Hello, World!"");
                 }
                 
                 UpdateExportMenuVisibility();
+                
+                // Auto fit to window after template loads
+                _ = Dispatcher.InvokeAsync(async () =>
+                {
+                    await Task.Delay(500); // Wait for render to complete
+                    if (_webViewInitialized)
+                    {
+                        await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.fitToWindow()");
+                    }
+                });
             }
         }
     }
@@ -5135,6 +5145,16 @@ Console.WriteLine(""Hello, World!"");
                     _currentRenderMode = _activeDocument.RenderMode;
                     UpdateExportMenuVisibility();
                     RenderPreview();
+                    
+                    // Auto fit to window after template loads
+                    _ = Dispatcher.InvokeAsync(async () =>
+                    {
+                        await Task.Delay(500); // Wait for render to complete
+                        if (_webViewInitialized)
+                        {
+                            await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.fitToWindow()");
+                        }
+                    });
                 }
             }
             // If no template selected, keep the blank document
