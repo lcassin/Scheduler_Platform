@@ -1,11 +1,19 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Interop;
 
 namespace MermaidEditor;
 
 public partial class NewDocumentDialog : Window
 {
+    [DllImport("dwmapi.dll", PreserveSig = true)]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+    private const int DWMWA_CAPTION_COLOR = 35;
+
     public string? SelectedTemplate { get; private set; }
     public bool IsMermaid { get; private set; } = true;
     public bool OpenExistingFile { get; private set; } = false;
@@ -16,8 +24,42 @@ public partial class NewDocumentDialog : Window
     public NewDocumentDialog()
     {
         InitializeComponent();
+        SourceInitialized += NewDocumentDialog_SourceInitialized;
         LoadRecentFiles();
         PopulateRecentFilesList();
+    }
+
+    private void NewDocumentDialog_SourceInitialized(object? sender, EventArgs e)
+    {
+        UpdateTitleBarTheme();
+    }
+
+    private void UpdateTitleBarTheme()
+    {
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd != IntPtr.Zero)
+            {
+                var isDark = ThemeManager.IsDarkTheme;
+                int darkModeValue = isDark ? 1 : 0;
+                DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkModeValue, sizeof(int));
+
+                var colors = ThemeManager.GetThemeColors(ThemeManager.CurrentTheme);
+                int captionColor = ColorToInt(colors.Background);
+                DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ref captionColor, sizeof(int));
+            }
+        }
+        catch
+        {
+            // Silently fail if DWM API is not available
+        }
+    }
+
+    private static int ColorToInt(System.Windows.Media.Color color)
+    {
+        // Color format is 0x00BBGGRR (BGR, not RGB)
+        return (color.B << 16) | (color.G << 8) | color.R;
     }
 
     private static readonly string RecentFilesPath = Path.Combine(
