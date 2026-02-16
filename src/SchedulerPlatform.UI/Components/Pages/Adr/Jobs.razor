@@ -230,9 +230,11 @@
                 </MudTd>
                                 <MudTd DataLabel="Status">
                                     <div class="d-flex align-center gap-1">
-                                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
-                                            @context.Status
-                                        </MudChip>
+                                        <MudTooltip Text="@GetJobStatusExplanation(context)" Placement="Placement.Top">
+                                            <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
+                                                @GetStatusDisplayName(context.Status)
+                                            </MudChip>
+                                        </MudTooltip>
                                         @if (context.IsManualRequest)
                                         {
                                             <MudTooltip Text="@($"Manual request: {context.ManualRequestReason ?? "No reason provided"}")">
@@ -562,6 +564,43 @@
         "NeedsReview" => Color.Warning,
         _ => Color.Default
     };
+
+    private string GetStatusDisplayName(string status) => status switch
+    {
+        "ScrapeRequested" => "ADR Request Sent",
+        "ScrapeFailed" => "ADR Request Failed",
+        "ScrapeInProgress" => "ADR Request In Progress",
+        "CredentialCheckInProgress" => "Credential Check In Progress",
+        "CredentialVerified" => "Credential Verified",
+        "CredentialFailed" => "Credential Failed",
+        "StatusCheckInProgress" => "Status Check In Progress",
+        "NoInvoiceFound" => "No Invoice Found",
+        "NeedsReview" => "Needs Review",
+        _ => status
+    };
+
+    private string GetJobStatusExplanation(AdrJob job)
+    {
+        return job.Status switch
+        {
+            "Pending" => "This job has been created and is waiting to be processed. Credential verification will begin when the job enters the processing window.",
+            "CredentialCheckInProgress" => "Credentials are currently being verified with the vendor to confirm the account login is valid.",
+            "CredentialVerified" => "Credentials were verified successfully. The job is ready for the ADR request to be sent.",
+            "CredentialFailed" => "Credential verification failed. The vendor may have rejected the login or the credentials may be outdated.",
+            "ScrapeInProgress" => "An ADR request is currently being processed by the vendor.",
+            "ScrapeRequested" => "An ADR request has been sent to the vendor and is awaiting a response. Status will be checked periodically.",
+            "ScrapeFailed" => "The ADR request failed. The vendor may be experiencing issues or the request was rejected.",
+            "StatusCheckInProgress" => "The system is checking the status of the ADR request with the vendor.",
+            "NoInvoiceFound" => "The vendor reported no invoice found for the requested billing period. This may mean the invoice hasn't been posted yet.",
+            "Failed" => job.RetryCount < 5
+                ? $"The job failed during processing (retry {job.RetryCount} of 5). It will be retried automatically."
+                : "The job has failed and reached the maximum number of retries. Manual intervention may be required.",
+            "Completed" => "The job completed successfully. The invoice was downloaded and processed.",
+            "NeedsReview" => "The job requires manual review. The vendor may have returned unexpected results or partial data.",
+            "Cancelled" => "The job was cancelled and will not be processed further.",
+            _ => $"Job status: {job.Status}"
+        };
+    }
 
     private Color GetAdrStatusColor(int statusId) => statusId switch
     {

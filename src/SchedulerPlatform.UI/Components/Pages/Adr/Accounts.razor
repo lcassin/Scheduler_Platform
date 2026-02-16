@@ -241,9 +241,11 @@
                 <MudTd DataLabel="Historical Status">
                     @if (!string.IsNullOrEmpty(context.HistoricalBillingStatus))
                     {
-                        <MudChip T="string" Size="Size.Small" Color="@GetHistoricalStatusColor(context.HistoricalBillingStatus)">
-                            @context.HistoricalBillingStatus
-                        </MudChip>
+                        <MudTooltip Text="@GetHistoricalStatusExplanation(context)" Placement="Placement.Top">
+                            <MudChip T="string" Size="Size.Small" Color="@GetHistoricalStatusColor(context.HistoricalBillingStatus)">
+                                @context.HistoricalBillingStatus
+                            </MudChip>
+                        </MudTooltip>
                     }
                 </MudTd>
                 <MudTd DataLabel="Next Run">
@@ -267,21 +269,27 @@
                 <MudTd DataLabel="Run Status">
                     @if (!string.IsNullOrEmpty(context.NextRunStatus))
                     {
-                        <MudChip T="string" Size="Size.Small" Color="@GetNextRunStatusColor(context.NextRunStatus)">
-                            @context.NextRunStatus
-                        </MudChip>
+                        <MudTooltip Text="@GetNextRunStatusExplanation(context)" Placement="Placement.Top">
+                            <MudChip T="string" Size="Size.Small" Color="@GetNextRunStatusColor(context.NextRunStatus)">
+                                @context.NextRunStatus
+                            </MudChip>
+                        </MudTooltip>
                     }
                 </MudTd>
                 <MudTd DataLabel="Job Status">
                     @if (!string.IsNullOrEmpty(context.CurrentJobStatus))
                     {
-                        <MudChip T="string" Size="Size.Small" Color="@GetJobStatusColor(context.CurrentJobStatus)">
-                            @GetJobStatusDisplayName(context.CurrentJobStatus)
-                        </MudChip>
+                        <MudTooltip Text="@GetJobStatusExplanation(context)" Placement="Placement.Top">
+                            <MudChip T="string" Size="Size.Small" Color="@GetJobStatusColor(context.CurrentJobStatus)">
+                                @GetJobStatusDisplayName(context.CurrentJobStatus)
+                            </MudChip>
+                        </MudTooltip>
                     }
                     else
                     {
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">No Job</MudText>
+                        <MudTooltip Text="No job has been created for this account yet. Jobs are created when an account is due for processing." Placement="Placement.Top">
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">No Job</MudText>
+                        </MudTooltip>
                     }
                 </MudTd>
                                 <MudTd DataLabel="Actions">
@@ -601,6 +609,64 @@
         "Due Now" => Color.Info,
         _ => Color.Default
     };
+
+    private string GetHistoricalStatusExplanation(AdrAccount account)
+    {
+        var status = account.HistoricalBillingStatus ?? "";
+        var lastInvoice = account.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? "N/A";
+        var nextRun = account.NextRunDateTime?.ToString("MM/dd/yyyy") ?? "N/A";
+        return status switch
+        {
+            "Due Soon" => $"Based on billing history, this account's next invoice is expected soon. Last invoice: {lastInvoice}, Next run: {nextRun}.",
+            "Overdue" => $"Based on billing history, this account's invoice is past its expected date. Last invoice: {lastInvoice}, Next run: {nextRun}. The invoice may be delayed or the billing pattern may have changed.",
+            "Due Now" => $"Based on billing history, this account's invoice should be available now. Last invoice: {lastInvoice}, Next run: {nextRun}.",
+            "Missing" => "This account has no billing history or its history cannot be determined. It may need research before processing.",
+            _ => $"Historical status: {status}. Last invoice: {lastInvoice}, Next run: {nextRun}."
+        };
+    }
+
+    private string GetNextRunStatusExplanation(AdrAccount account)
+    {
+        var status = account.NextRunStatus ?? "";
+        var nextRun = account.NextRunDateTime?.ToString("MM/dd/yyyy") ?? "N/A";
+        var daysUntil = account.DaysUntilNextRun;
+        return status switch
+        {
+            "Run Now" => $"This account is due for processing now. Next run date: {nextRun}. The orchestrator will pick it up on the next run.",
+            "Due Soon" => $"This account will be due for processing soon ({daysUntil} days). Next run date: {nextRun}. This reflects the billing cycle timing, not the job outcome.",
+            "Upcoming" => $"This account is scheduled but not yet due ({daysUntil} days). Next run date: {nextRun}.",
+            "Future" => $"This account's next run is further out ({daysUntil} days). Next run date: {nextRun}.",
+            _ => $"Run status: {status}. Next run date: {nextRun}."
+        };
+    }
+
+    private string GetJobStatusExplanation(AdrAccount account)
+    {
+        var status = account.CurrentJobStatus ?? "";
+        var nextRunStatus = account.NextRunStatus ?? "";
+        var contextNote = "";
+        if ((nextRunStatus == "Due Soon" || nextRunStatus == "Upcoming") && (status == "Failed" || status == "NeedsReview" || status == "Completed"))
+        {
+            contextNote = " Note: Run Status reflects when the next billing cycle is due, while Job Status shows the outcome of the most recent job. These are independent.";
+        }
+        return status switch
+        {
+            "Pending" => $"A job has been created and is waiting to be processed.{contextNote}",
+            "CredentialCheckInProgress" => $"Credentials are currently being verified with the vendor.{contextNote}",
+            "CredentialVerified" => $"Credentials have been verified successfully. The job is ready for the ADR request.{contextNote}",
+            "CredentialFailed" => $"Credential verification failed. The vendor may have rejected the login or there may be a configuration issue.{contextNote}",
+            "ScrapeInProgress" => $"An ADR request is currently being processed by the vendor.{contextNote}",
+            "ScrapeRequested" => $"An ADR request has been sent to the vendor and is awaiting a response.{contextNote}",
+            "ScrapeFailed" => $"The ADR request failed. The vendor may be experiencing issues or the request was rejected.{contextNote}",
+            "StatusCheckInProgress" => $"The system is checking the status of the ADR request with the vendor.{contextNote}",
+            "NoInvoiceFound" => $"The vendor reported no invoice found for the requested billing period.{contextNote}",
+            "Failed" => $"The job failed during processing. This could be due to credential issues, vendor errors, or processing failures. It will be retried automatically if retries remain.{contextNote}",
+            "Completed" => $"The job completed successfully. The invoice was downloaded and processed.{contextNote}",
+            "NeedsReview" => $"The job requires manual review. The vendor may have returned unexpected results or partial data.{contextNote}",
+            "Cancelled" => $"The job was cancelled.{contextNote}",
+            _ => $"Job status: {status}.{contextNote}"
+        };
+    }
 
     private string GetBlacklistTooltip(AdrAccount account, bool isCurrent)
     {
