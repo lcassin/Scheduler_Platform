@@ -457,6 +457,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             var dueAccountsList = dueAccounts.ToList();
             var totalAccounts = dueAccountsList.Count;
             var batchSize = config.BatchSize;
+            var createdJobsBatch = new List<AdrJob>();
             _logger.LogInformation("Processing {Count} due accounts in batches of {BatchSize}", totalAccounts, batchSize);
 
             // Report initial progress (0 of total)
@@ -530,6 +531,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     };
 
                     await _unitOfWork.AdrJobs.AddAsync(job);
+                    createdJobsBatch.Add(job);
                     result.JobsCreated++;
                     processedSinceLastSave++;
 
@@ -537,6 +539,30 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     if (processedSinceLastSave >= batchSize)
                     {
                         await _unitOfWork.SaveChangesAsync();
+                        
+                        if (!string.IsNullOrEmpty(orchestrationRequestId) && createdJobsBatch.Count > 0)
+                        {
+                            foreach (var createdJob in createdJobsBatch)
+                            {
+                                var execution = new AdrJobExecution
+                                {
+                                    AdrJobId = createdJob.Id,
+                                    AdrRequestTypeId = (int)AdrRequestType.JobCreation,
+                                    StartDateTime = DateTime.UtcNow,
+                                    EndDateTime = DateTime.UtcNow,
+                                    OrchestrationRequestId = orchestrationRequestId,
+                                    IsSuccess = true,
+                                    CreatedDateTime = DateTime.UtcNow,
+                                    CreatedBy = "System Created",
+                                    ModifiedDateTime = DateTime.UtcNow,
+                                    ModifiedBy = "System Created"
+                                };
+                                await _unitOfWork.AdrJobExecutions.AddAsync(execution);
+                            }
+                            await _unitOfWork.SaveChangesAsync();
+                            createdJobsBatch.Clear();
+                        }
+                        
                         _logger.LogDebug("Job creation batch {BatchNumber} saved: {Count} jobs created so far", 
                             batchNumber, result.JobsCreated);
                         processedSinceLastSave = 0;
@@ -568,6 +594,30 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             if (processedSinceLastSave > 0)
             {
                 await _unitOfWork.SaveChangesAsync();
+            }
+
+            // Create execution records for remaining jobs in the last partial batch
+            if (!string.IsNullOrEmpty(orchestrationRequestId) && createdJobsBatch.Count > 0)
+            {
+                foreach (var createdJob in createdJobsBatch)
+                {
+                    var execution = new AdrJobExecution
+                    {
+                        AdrJobId = createdJob.Id,
+                        AdrRequestTypeId = (int)AdrRequestType.JobCreation,
+                        StartDateTime = DateTime.UtcNow,
+                        EndDateTime = DateTime.UtcNow,
+                        OrchestrationRequestId = orchestrationRequestId,
+                        IsSuccess = true,
+                        CreatedDateTime = DateTime.UtcNow,
+                        CreatedBy = "System Created",
+                        ModifiedDateTime = DateTime.UtcNow,
+                        ModifiedBy = "System Created"
+                    };
+                    await _unitOfWork.AdrJobExecutions.AddAsync(execution);
+                }
+                await _unitOfWork.SaveChangesAsync();
+                createdJobsBatch.Clear();
             }
 
             result.BlacklistedCount = blacklistedCount;
@@ -1543,6 +1593,30 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     // the entity is already tracked by EF (loaded from same DbContext)
                     job.ModifiedDateTime = DateTime.UtcNow;
                     job.ModifiedBy = "System Created";
+
+                    // Create tracking execution record for this status check
+                    if (!string.IsNullOrEmpty(orchestrationRequestId))
+                    {
+                        var execution = new AdrJobExecution
+                        {
+                            AdrJobId = jobId,
+                            AdrRequestTypeId = (int)AdrRequestType.StatusCheck,
+                            StartDateTime = DateTime.UtcNow,
+                            EndDateTime = DateTime.UtcNow,
+                            OrchestrationRequestId = orchestrationRequestId,
+                            AdrStatusId = statusResult.StatusId,
+                            AdrStatusDescription = statusResult.StatusDescription,
+                            IsSuccess = !statusResult.IsError,
+                            IsError = statusResult.IsError,
+                            IsFinal = statusResult.IsFinal,
+                            CreatedDateTime = DateTime.UtcNow,
+                            CreatedBy = "System Created",
+                            ModifiedDateTime = DateTime.UtcNow,
+                            ModifiedBy = "System Created"
+                        };
+                        await _unitOfWork.AdrJobExecutions.AddAsync(execution);
+                    }
+
                     processedSinceLastSave++;
 
                     if (processedSinceLastSave >= GetBatchSize())
@@ -1956,6 +2030,30 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     // the entity is already tracked by EF (loaded from same DbContext)
                     job.ModifiedDateTime = DateTime.UtcNow;
                     job.ModifiedBy = "System Created";
+
+                    // Create tracking execution record for this manual status check
+                    if (!string.IsNullOrEmpty(orchestrationRequestId))
+                    {
+                        var execution = new AdrJobExecution
+                        {
+                            AdrJobId = jobId,
+                            AdrRequestTypeId = (int)AdrRequestType.StatusCheck,
+                            StartDateTime = DateTime.UtcNow,
+                            EndDateTime = DateTime.UtcNow,
+                            OrchestrationRequestId = orchestrationRequestId,
+                            AdrStatusId = statusResult.StatusId,
+                            AdrStatusDescription = statusResult.StatusDescription,
+                            IsSuccess = !statusResult.IsError,
+                            IsError = statusResult.IsError,
+                            IsFinal = statusResult.IsFinal,
+                            CreatedDateTime = DateTime.UtcNow,
+                            CreatedBy = "System Created",
+                            ModifiedDateTime = DateTime.UtcNow,
+                            ModifiedBy = "System Created"
+                        };
+                        await _unitOfWork.AdrJobExecutions.AddAsync(execution);
+                    }
+
                     processedSinceLastSave++;
 
                     if (processedSinceLastSave >= GetBatchSize())
