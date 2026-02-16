@@ -50,7 +50,9 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
         bool sortDescending = false,
         List<int>? accountIdsFilter = null,
         string? primaryVendorCode = null,
-        string? masterVendorCode = null)
+        string? masterVendorCode = null,
+        DateTime? modifiedAfter = null,
+        DateTime? modifiedBefore = null)
     {
         var query = _dbSet.Where(a => !a.IsDeleted);
 
@@ -103,6 +105,16 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
                 (a.ClientName != null && a.ClientName.Contains(searchTerm)) ||
                 (a.PrimaryVendorCode != null && a.PrimaryVendorCode.Contains(searchTerm)) ||
                 (a.MasterVendorCode != null && a.MasterVendorCode.Contains(searchTerm)));
+        }
+
+        if (modifiedAfter.HasValue)
+        {
+            query = query.Where(a => a.ModifiedDateTime >= modifiedAfter.Value);
+        }
+
+        if (modifiedBefore.HasValue)
+        {
+            query = query.Where(a => a.ModifiedDateTime <= modifiedBefore.Value);
         }
 
         var totalCount = await query.CountAsync();

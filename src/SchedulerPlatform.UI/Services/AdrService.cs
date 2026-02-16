@@ -27,7 +27,9 @@ public class AdrService : IAdrService
         string? primaryVendorCode = null,
         string? masterVendorCode = null,
         string? sortColumn = null,
-        bool sortDescending = false)
+        bool sortDescending = false,
+        DateTime? modifiedAfter = null,
+        DateTime? modifiedBefore = null)
     {
         var queryParams = new List<string>
         {
@@ -66,6 +68,12 @@ public class AdrService : IAdrService
             queryParams.Add($"sortColumn={Uri.EscapeDataString(sortColumn)}");
 
         queryParams.Add($"sortDescending={sortDescending.ToString().ToLower()}");
+
+        if (modifiedAfter.HasValue)
+            queryParams.Add($"modifiedAfter={modifiedAfter.Value:o}");
+
+        if (modifiedBefore.HasValue)
+            queryParams.Add($"modifiedBefore={modifiedBefore.Value:o}");
 
         var query = "?" + string.Join("&", queryParams);
         var response = await _httpClient.GetAsync($"adr/accounts{query}");
@@ -217,7 +225,9 @@ public class AdrService : IAdrService
         string? blacklistStatus = null,
         string? sortColumn = null,
         bool sortDescending = true,
-        int? adrJobTypeId = null)
+        int? adrJobTypeId = null,
+        DateTime? modifiedAfter = null,
+        DateTime? modifiedBefore = null)
     {
         var queryParams = new List<string>
         {
@@ -265,6 +275,12 @@ public class AdrService : IAdrService
             queryParams.Add($"sortColumn={Uri.EscapeDataString(sortColumn)}");
 
         queryParams.Add($"sortDescending={sortDescending.ToString().ToLower()}");
+
+        if (modifiedAfter.HasValue)
+            queryParams.Add($"modifiedAfter={modifiedAfter.Value:o}");
+
+        if (modifiedBefore.HasValue)
+            queryParams.Add($"modifiedBefore={modifiedBefore.Value:o}");
 
         var query = "?" + string.Join("&", queryParams);
         var response = await _httpClient.GetAsync($"adr/jobs{query}");

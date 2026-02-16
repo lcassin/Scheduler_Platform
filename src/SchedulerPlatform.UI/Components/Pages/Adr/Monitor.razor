@@ -241,8 +241,8 @@
                                                 @if (_lastCompletedRun.SyncResult != null)
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                        <span style="color: var(--mud-palette-success);">@_lastCompletedRun.SyncResult.AccountsInserted inserted</span>,
-                                                        <span style="color: var(--mud-palette-success);">@_lastCompletedRun.SyncResult.AccountsUpdated updated</span>
+                                                        <MudLink Href="@GetAccountsLinkForRun(_lastCompletedRun)" Underline="Underline.Always" Style="color: var(--mud-palette-success);">@_lastCompletedRun.SyncResult.AccountsInserted inserted</MudLink>,
+                                                        <MudLink Href="@GetAccountsLinkForRun(_lastCompletedRun)" Underline="Underline.Always" Style="color: var(--mud-palette-success);">@_lastCompletedRun.SyncResult.AccountsUpdated updated</MudLink>
                                                     </MudText>
                                                 }
                                                 else
@@ -263,7 +263,7 @@
                                                 @if (_lastCompletedRun.JobCreationResult != null)
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                        <span style="color: var(--mud-palette-success);">@_lastCompletedRun.JobCreationResult.JobsCreated created</span>,
+                                                        <MudLink Href="@GetJobsLinkForRun(_lastCompletedRun, "Pending")" Underline="Underline.Always" Style="color: var(--mud-palette-success);">@_lastCompletedRun.JobCreationResult.JobsCreated created</MudLink>,
                                                         @_lastCompletedRun.JobCreationResult.JobsSkipped skipped
                                                     </MudText>
                                                 }
@@ -285,8 +285,8 @@
                                                 @if (_lastCompletedRun.RebillResult != null)
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                        <span style="color: var(--mud-palette-success);">@_lastCompletedRun.RebillResult.RebillRequestsSent sent</span>,
-                                                        <span style="color: var(--mud-palette-error);">@_lastCompletedRun.RebillResult.RebillRequestsFailed failed</span>,
+                                                        <MudLink Href="@GetJobsLinkForRun(_lastCompletedRun)" Underline="Underline.Always" Style="color: var(--mud-palette-success);">@_lastCompletedRun.RebillResult.RebillRequestsSent sent</MudLink>,
+                                                        <MudLink Href="@GetJobsLinkForRun(_lastCompletedRun)" Underline="Underline.Always" Style="color: var(--mud-palette-error);">@_lastCompletedRun.RebillResult.RebillRequestsFailed failed</MudLink>,
                                                         @_lastCompletedRun.RebillResult.AccountsSkipped skipped
                                                     </MudText>
                                                 }
@@ -308,8 +308,8 @@
                                                 @if (_lastCompletedRun.StatusCheckResult != null)
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                        <span style="color: var(--mud-palette-success);">@_lastCompletedRun.StatusCheckResult.JobsCompleted completed</span>,
-                                                        <span style="color: var(--mud-palette-warning);">@_lastCompletedRun.StatusCheckResult.JobsNeedingReview need review</span>
+                                                        <MudLink Href="@GetJobsLinkForRun(_lastCompletedRun, "Completed")" Underline="Underline.Always" Style="color: var(--mud-palette-success);">@_lastCompletedRun.StatusCheckResult.JobsCompleted completed</MudLink>,
+                                                        <MudLink Href="@GetJobsLinkForRun(_lastCompletedRun, "NeedsReview")" Underline="Underline.Always" Style="color: var(--mud-palette-warning);">@_lastCompletedRun.StatusCheckResult.JobsNeedingReview need review</MudLink>
                                                     </MudText>
                                                 }
                                                 else
@@ -330,9 +330,9 @@
                                                 @if (_lastCompletedRun.ScrapeResult != null)
                                                 {
                                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                        <span style="color: var(--mud-palette-success);">@_lastCompletedRun.ScrapeResult.ScrapesRequested ADR requests sent</span>,
-                                                        <span style="color: var(--mud-palette-success);">@_lastCompletedRun.ScrapeResult.ScrapesCompleted completed</span>,
-                                                        <span style="color: var(--mud-palette-error);">@_lastCompletedRun.ScrapeResult.ScrapesFailed failed</span>
+                                                        <MudLink Href="@GetJobsLinkForRun(_lastCompletedRun, "ScrapeRequested")" Underline="Underline.Always" Style="color: var(--mud-palette-success);">@_lastCompletedRun.ScrapeResult.ScrapesRequested ADR requests sent</MudLink>,
+                                                        <MudLink Href="@GetJobsLinkForRun(_lastCompletedRun, "Completed")" Underline="Underline.Always" Style="color: var(--mud-palette-success);">@_lastCompletedRun.ScrapeResult.ScrapesCompleted completed</MudLink>,
+                                                        <MudLink Href="@GetJobsLinkForRun(_lastCompletedRun)" Underline="Underline.Always" Style="color: var(--mud-palette-error);">@_lastCompletedRun.ScrapeResult.ScrapesFailed failed</MudLink>
                                                     </MudText>
                                                 }
                                                 else
@@ -475,7 +475,7 @@
                                         else if (_currentStatus.Status.SyncResult != null)
                                         {
                                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                @_currentStatus.Status.SyncResult.AccountsInserted inserted, @_currentStatus.Status.SyncResult.AccountsUpdated updated
+                                                <MudLink Href="@GetAccountsLinkForRun(_currentStatus.Status)" Underline="Underline.Always" Color="Color.Secondary">@_currentStatus.Status.SyncResult.AccountsInserted inserted</MudLink>, <MudLink Href="@GetAccountsLinkForRun(_currentStatus.Status)" Underline="Underline.Always" Color="Color.Secondary">@_currentStatus.Status.SyncResult.AccountsUpdated updated</MudLink>
                                                 @if (_currentStatus.Status.SyncResult.Duration.TotalSeconds > 0)
                                                 {
                                                     <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-2">@FormatDuration(_currentStatus.Status.SyncResult.Duration)</MudChip>
@@ -497,7 +497,7 @@
                                         else if (_currentStatus.Status.JobCreationResult != null)
                                         {
                                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                @_currentStatus.Status.JobCreationResult.JobsCreated created, @_currentStatus.Status.JobCreationResult.JobsSkipped skipped
+                                                <MudLink Href="@GetJobsLinkForRun(_currentStatus.Status, "Pending")" Underline="Underline.Always" Color="Color.Secondary">@_currentStatus.Status.JobCreationResult.JobsCreated created</MudLink>, @_currentStatus.Status.JobCreationResult.JobsSkipped skipped
                                                 @if (_currentStatus.Status.JobCreationResult.Duration.TotalSeconds > 0)
                                                 {
                                                     <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-2">@FormatDuration(_currentStatus.Status.JobCreationResult.Duration)</MudChip>
@@ -529,7 +529,7 @@
                                             else if (_currentStatus.Status.RebillResult != null)
                                             {
                                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                    @_currentStatus.Status.RebillResult.RebillRequestsSent sent, @_currentStatus.Status.RebillResult.RebillRequestsFailed failed, @_currentStatus.Status.RebillResult.AccountsSkipped skipped
+                                                    <MudLink Href="@GetJobsLinkForRun(_currentStatus.Status)" Underline="Underline.Always" Style="color: var(--mud-palette-success);">@_currentStatus.Status.RebillResult.RebillRequestsSent sent</MudLink>, <MudLink Href="@GetJobsLinkForRun(_currentStatus.Status)" Underline="Underline.Always" Style="color: var(--mud-palette-error);">@_currentStatus.Status.RebillResult.RebillRequestsFailed failed</MudLink>, @_currentStatus.Status.RebillResult.AccountsSkipped skipped
                                                     @if (_currentStatus.Status.RebillResult.Duration.TotalSeconds > 0)
                                                     {
                                                         <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-2">@FormatDuration(_currentStatus.Status.RebillResult.Duration)</MudChip>
@@ -571,7 +571,7 @@
                                             else if (_currentStatus.Status.StatusCheckResult != null)
                                             {
                                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                    @_currentStatus.Status.StatusCheckResult.JobsCompleted completed, @_currentStatus.Status.StatusCheckResult.JobsNeedingReview need review
+                                                    <MudLink Href="@GetJobsLinkForRun(_currentStatus.Status, "Completed")" Underline="Underline.Always" Style="color: var(--mud-palette-success);">@_currentStatus.Status.StatusCheckResult.JobsCompleted completed</MudLink>, <MudLink Href="@GetJobsLinkForRun(_currentStatus.Status, "NeedsReview")" Underline="Underline.Always" Style="color: var(--mud-palette-warning);">@_currentStatus.Status.StatusCheckResult.JobsNeedingReview need review</MudLink>
                                                     @if (_currentStatus.Status.StatusCheckResult.Duration.TotalSeconds > 0)
                                                     {
                                                         <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-2">@FormatDuration(_currentStatus.Status.StatusCheckResult.Duration)</MudChip>
@@ -603,7 +603,7 @@
                                             else if (_currentStatus.Status.ScrapeResult != null)
                                             {
                                                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                                    @_currentStatus.Status.ScrapeResult.ScrapesRequested ADR requests sent, @_currentStatus.Status.ScrapeResult.ScrapesCompleted completed
+                                                    <MudLink Href="@GetJobsLinkForRun(_currentStatus.Status, "ScrapeRequested")" Underline="Underline.Always" Color="Color.Secondary">@_currentStatus.Status.ScrapeResult.ScrapesRequested ADR requests sent</MudLink>, <MudLink Href="@GetJobsLinkForRun(_currentStatus.Status, "Completed")" Underline="Underline.Always" Style="color: var(--mud-palette-success);">@_currentStatus.Status.ScrapeResult.ScrapesCompleted completed</MudLink>
                                                     @if (_currentStatus.Status.ScrapeResult.Duration.TotalSeconds > 0)
                                                     {
                                                         <MudChip T="string" Size="Size.Small" Color="Color.Default" Class="ml-2">@FormatDuration(_currentStatus.Status.ScrapeResult.Duration)</MudChip>
@@ -904,6 +904,28 @@
             {
                 <MudAlert Severity="Severity.Error" Class="my-3">@_selectedRun.ErrorMessage</MudAlert>
             }
+
+            @if (_selectedRun.StartedAt.HasValue)
+            {
+                <MudDivider Class="my-4" />
+                <MudText Typo="Typo.subtitle1" Class="mb-3">Affected Resources</MudText>
+                <div class="d-flex gap-3 mb-3">
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Work"
+                               Size="Size.Small"
+                               Href="@GetJobsLinkForRun(_selectedRun)">
+                        View Jobs
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.AccountBox"
+                               Size="Size.Small"
+                               Href="@GetAccountsLinkForRun(_selectedRun)">
+                        View Accounts
+                    </MudButton>
+                </div>
+            }
             
             <MudDivider Class="my-4" />
             <MudText Typo="Typo.subtitle1" Class="mb-3">Step Results</MudText>
@@ -915,8 +937,8 @@
                         @if (_selectedRun.SyncResult != null)
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                <span style="color: var(--mud-palette-success);">@_selectedRun.SyncResult.AccountsInserted inserted</span>,
-                                <span style="color: var(--mud-palette-success);">@_selectedRun.SyncResult.AccountsUpdated updated</span>
+                                <MudLink Href="@GetAccountsLinkForRun(_selectedRun)" Underline="Underline.Always" Style="color: var(--mud-palette-success);">@_selectedRun.SyncResult.AccountsInserted inserted</MudLink>,
+                                <MudLink Href="@GetAccountsLinkForRun(_selectedRun)" Underline="Underline.Always" Style="color: var(--mud-palette-success);">@_selectedRun.SyncResult.AccountsUpdated updated</MudLink>
                             </MudText>
                             @if (_selectedRun.SyncResult.Duration.TotalSeconds > 0)
                             {
@@ -941,7 +963,7 @@
                         @if (_selectedRun.JobCreationResult != null)
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                <span style="color: var(--mud-palette-success);">@_selectedRun.JobCreationResult.JobsCreated created</span>,
+                                <MudLink Href="@GetJobsLinkForRun(_selectedRun, "Pending")" Underline="Underline.Always" Style="color: var(--mud-palette-success);">@_selectedRun.JobCreationResult.JobsCreated created</MudLink>,
                                 @_selectedRun.JobCreationResult.JobsSkipped skipped
                             </MudText>
                             @if (_selectedRun.JobCreationResult.Duration.TotalSeconds > 0)
@@ -967,8 +989,8 @@
                         @if (_selectedRun.RebillResult != null)
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                <span style="color: var(--mud-palette-success);">@_selectedRun.RebillResult.RebillRequestsSent sent</span>,
-                                <span style="color: var(--mud-palette-error);">@_selectedRun.RebillResult.RebillRequestsFailed failed</span>,
+                                <MudLink Href="@GetJobsLinkForRun(_selectedRun)" Underline="Underline.Always" Style="color: var(--mud-palette-success);">@_selectedRun.RebillResult.RebillRequestsSent sent</MudLink>,
+                                <MudLink Href="@GetJobsLinkForRun(_selectedRun)" Underline="Underline.Always" Style="color: var(--mud-palette-error);">@_selectedRun.RebillResult.RebillRequestsFailed failed</MudLink>,
                                 @_selectedRun.RebillResult.AccountsSkipped skipped
                             </MudText>
                             @if (_selectedRun.RebillResult.Duration.TotalSeconds > 0)
@@ -994,9 +1016,9 @@
                         @if (_selectedRun.StatusCheckResult != null)
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                @_selectedRun.StatusCheckResult.JobsChecked checked,
-                                <span style="color: var(--mud-palette-success);">@_selectedRun.StatusCheckResult.JobsCompleted completed</span>,
-                                <span style="color: var(--mud-palette-warning);">@_selectedRun.StatusCheckResult.JobsNeedingReview need review</span>
+                                <MudLink Href="@GetJobsLinkForRun(_selectedRun)" Underline="Underline.Always" Color="Color.Secondary">@_selectedRun.StatusCheckResult.JobsChecked checked</MudLink>,
+                                <MudLink Href="@GetJobsLinkForRun(_selectedRun, "Completed")" Underline="Underline.Always" Style="color: var(--mud-palette-success);">@_selectedRun.StatusCheckResult.JobsCompleted completed</MudLink>,
+                                <MudLink Href="@GetJobsLinkForRun(_selectedRun, "NeedsReview")" Underline="Underline.Always" Style="color: var(--mud-palette-warning);">@_selectedRun.StatusCheckResult.JobsNeedingReview need review</MudLink>
                             </MudText>
                             @if (_selectedRun.StatusCheckResult.Duration.TotalSeconds > 0)
                             {
@@ -1021,9 +1043,9 @@
                         @if (_selectedRun.ScrapeResult != null)
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                @_selectedRun.ScrapeResult.ScrapesRequested ADR requests sent,
-                                <span style="color: var(--mud-palette-success);">@_selectedRun.ScrapeResult.ScrapesCompleted completed</span>,
-                                <span style="color: var(--mud-palette-error);">@_selectedRun.ScrapeResult.ScrapesFailed failed</span>
+                                <MudLink Href="@GetJobsLinkForRun(_selectedRun, "ScrapeRequested")" Underline="Underline.Always" Color="Color.Secondary">@_selectedRun.ScrapeResult.ScrapesRequested ADR requests sent</MudLink>,
+                                <MudLink Href="@GetJobsLinkForRun(_selectedRun, "Completed")" Underline="Underline.Always" Style="color: var(--mud-palette-success);">@_selectedRun.ScrapeResult.ScrapesCompleted completed</MudLink>,
+                                <MudLink Href="@GetJobsLinkForRun(_selectedRun, "ScrapeFailed")" Underline="Underline.Always" Style="color: var(--mud-palette-error);">@_selectedRun.ScrapeResult.ScrapesFailed failed</MudLink>
                             </MudText>
                             @if (_selectedRun.ScrapeResult.Duration.TotalSeconds > 0)
                             {
@@ -1794,6 +1816,23 @@
         _selectedRun = run;
         _showRunDetailsDialog = true;
         StateHasChanged();
+    }
+
+    private string GetJobsLinkForRun(AdrOrchestrationStatus run, string? status = null)
+    {
+        var modifiedAfter = run.StartedAt?.ToString("o") ?? "";
+        var modifiedBefore = run.CompletedAt?.ToString("o") ?? DateTime.UtcNow.ToString("o");
+        var url = $"/adr/jobs?modifiedAfter={Uri.EscapeDataString(modifiedAfter)}&modifiedBefore={Uri.EscapeDataString(modifiedBefore)}&latestPerAccount=false";
+        if (!string.IsNullOrEmpty(status))
+            url += $"&status={Uri.EscapeDataString(status)}";
+        return url;
+    }
+
+    private string GetAccountsLinkForRun(AdrOrchestrationStatus run)
+    {
+        var modifiedAfter = run.StartedAt?.ToString("o") ?? "";
+        var modifiedBefore = run.CompletedAt?.ToString("o") ?? DateTime.UtcNow.ToString("o");
+        return $"/adr/accounts?modifiedAfter={Uri.EscapeDataString(modifiedAfter)}&modifiedBefore={Uri.EscapeDataString(modifiedBefore)}";
     }
 
     public void Dispose()
