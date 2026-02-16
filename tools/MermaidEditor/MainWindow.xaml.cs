@@ -912,6 +912,12 @@ Console.WriteLine(""Hello, World!"");
         }}
         #diagram svg {{
             display: block;
+            /* Override Mermaid's inline width styles for gantt charts */
+            width: auto !important;
+            min-width: auto !important;
+            max-width: none !important;
+            height: auto !important;
+            min-height: auto !important;
         }}
         .error {{
             color: #d32f2f;
@@ -3673,6 +3679,12 @@ Console.WriteLine(""Hello, World!"");
         }}
         #diagram svg {{
             display: block;
+            /* Override Mermaid's inline width styles for gantt charts */
+            width: auto !important;
+            min-width: auto !important;
+            max-width: none !important;
+            height: auto !important;
+            min-height: auto !important;
         }}
     </style>
 </head>
