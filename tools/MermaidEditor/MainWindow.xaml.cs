@@ -953,15 +953,47 @@ Console.WriteLine(""Hello, World!"");
             // Auto-size the container to fit the actual SVG content
             if (svg) {{
                 try {{
-                    // Get the actual bounding box of the SVG content
-                    const bbox = svg.getBBox();
-                    if (bbox.width > 0 && bbox.height > 0) {{
-                        // Set SVG dimensions to just the content size (not including offset)
-                        const padding = 20;
-                        svg.setAttribute('width', bbox.width + padding);
-                        svg.setAttribute('height', bbox.height + padding);
-                        // Adjust viewBox to crop to just the content area
-                        svg.setAttribute('viewBox', `${{bbox.x - padding/2}} ${{bbox.y - padding/2}} ${{bbox.width + padding}} ${{bbox.height + padding}}`);
+                    // Check if this is a gantt chart by looking for gantt-specific elements
+                    const isGantt = svg.querySelector('.grid') !== null || 
+                                   svg.querySelector('.section') !== null ||
+                                   svg.id?.includes('mermaid') && svg.querySelector('rect.task') !== null;
+                    
+                    if (isGantt) {{
+                        // For gantt charts, find the actual content elements (excluding grid background)
+                        // Look for task bars, section labels, title, and axis
+                        const contentElements = svg.querySelectorAll('.task, .section, .titleText, .sectionTitle, text, .tick');
+                        if (contentElements.length > 0) {{
+                            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                            contentElements.forEach(el => {{
+                                try {{
+                                    const elBbox = el.getBBox();
+                                    if (elBbox.width > 0 && elBbox.height > 0) {{
+                                        minX = Math.min(minX, elBbox.x);
+                                        minY = Math.min(minY, elBbox.y);
+                                        maxX = Math.max(maxX, elBbox.x + elBbox.width);
+                                        maxY = Math.max(maxY, elBbox.y + elBbox.height);
+                                    }}
+                                }} catch (e) {{}}
+                            }});
+                            
+                            if (minX !== Infinity && maxX !== -Infinity) {{
+                                const padding = 40;
+                                const contentWidth = maxX - minX + padding;
+                                const contentHeight = maxY - minY + padding;
+                                svg.setAttribute('width', contentWidth);
+                                svg.setAttribute('height', contentHeight);
+                                svg.setAttribute('viewBox', `${{minX - padding/2}} ${{minY - padding/2}} ${{contentWidth}} ${{contentHeight}}`);
+                            }}
+                        }}
+                    }} else {{
+                        // For other diagrams, use standard getBBox approach
+                        const bbox = svg.getBBox();
+                        if (bbox.width > 0 && bbox.height > 0) {{
+                            const padding = 20;
+                            svg.setAttribute('width', bbox.width + padding);
+                            svg.setAttribute('height', bbox.height + padding);
+                            svg.setAttribute('viewBox', `${{bbox.x - padding/2}} ${{bbox.y - padding/2}} ${{bbox.width + padding}} ${{bbox.height + padding}}`);
+                        }}
                     }}
                 }} catch (e) {{
                     // getBBox may fail in some cases, just continue
@@ -3681,15 +3713,46 @@ Console.WriteLine(""Hello, World!"");
             // Auto-size the container to fit the actual SVG content
             if (svg) {{
                 try {{
-                    // Get the actual bounding box of the SVG content
-                    const bbox = svg.getBBox();
-                    if (bbox.width > 0 && bbox.height > 0) {{
-                        // Set SVG dimensions to just the content size (not including offset)
-                        const padding = 20;
-                        svg.setAttribute('width', bbox.width + padding);
-                        svg.setAttribute('height', bbox.height + padding);
-                        // Adjust viewBox to crop to just the content area
-                        svg.setAttribute('viewBox', `${{bbox.x - padding/2}} ${{bbox.y - padding/2}} ${{bbox.width + padding}} ${{bbox.height + padding}}`);
+                    // Check if this is a gantt chart by looking for gantt-specific elements
+                    const isGantt = svg.querySelector('.grid') !== null || 
+                                   svg.querySelector('.section') !== null ||
+                                   svg.id?.includes('mermaid') && svg.querySelector('rect.task') !== null;
+                    
+                    if (isGantt) {{
+                        // For gantt charts, find the actual content elements (excluding grid background)
+                        const contentElements = svg.querySelectorAll('.task, .section, .titleText, .sectionTitle, text, .tick');
+                        if (contentElements.length > 0) {{
+                            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                            contentElements.forEach(el => {{
+                                try {{
+                                    const elBbox = el.getBBox();
+                                    if (elBbox.width > 0 && elBbox.height > 0) {{
+                                        minX = Math.min(minX, elBbox.x);
+                                        minY = Math.min(minY, elBbox.y);
+                                        maxX = Math.max(maxX, elBbox.x + elBbox.width);
+                                        maxY = Math.max(maxY, elBbox.y + elBbox.height);
+                                    }}
+                                }} catch (e) {{}}
+                            }});
+                            
+                            if (minX !== Infinity && maxX !== -Infinity) {{
+                                const padding = 40;
+                                const contentWidth = maxX - minX + padding;
+                                const contentHeight = maxY - minY + padding;
+                                svg.setAttribute('width', contentWidth);
+                                svg.setAttribute('height', contentHeight);
+                                svg.setAttribute('viewBox', `${{minX - padding/2}} ${{minY - padding/2}} ${{contentWidth}} ${{contentHeight}}`);
+                            }}
+                        }}
+                    }} else {{
+                        // For other diagrams, use standard getBBox approach
+                        const bbox = svg.getBBox();
+                        if (bbox.width > 0 && bbox.height > 0) {{
+                            const padding = 20;
+                            svg.setAttribute('width', bbox.width + padding);
+                            svg.setAttribute('height', bbox.height + padding);
+                            svg.setAttribute('viewBox', `${{bbox.x - padding/2}} ${{bbox.y - padding/2}} ${{bbox.width + padding}} ${{bbox.height + padding}}`);
+                        }}
                     }}
                 }} catch (e) {{
                     // getBBox may fail in some cases, just continue
