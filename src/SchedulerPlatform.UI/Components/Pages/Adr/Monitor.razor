@@ -863,6 +863,28 @@
             {
                 <MudAlert Severity="Severity.Error" Class="my-3">@_selectedRun.ErrorMessage</MudAlert>
             }
+
+            @if (_selectedRun.StartedAt.HasValue)
+            {
+                <MudDivider Class="my-4" />
+                <MudText Typo="Typo.subtitle1" Class="mb-3">Affected Resources</MudText>
+                <div class="d-flex gap-3 mb-3">
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Work"
+                               Size="Size.Small"
+                               Href="@GetJobsLinkForRun(_selectedRun)">
+                        View Jobs
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.AccountBox"
+                               Size="Size.Small"
+                               Href="@GetAccountsLinkForRun(_selectedRun)">
+                        View Accounts
+                    </MudButton>
+                </div>
+            }
             
             <MudDivider Class="my-4" />
             <MudText Typo="Typo.subtitle1" Class="mb-3">Step Results</MudText>
@@ -1730,6 +1752,20 @@
         _selectedRun = run;
         _showRunDetailsDialog = true;
         StateHasChanged();
+    }
+
+    private string GetJobsLinkForRun(AdrOrchestrationStatus run)
+    {
+        var modifiedAfter = run.StartedAt?.ToString("o") ?? "";
+        var modifiedBefore = run.CompletedAt?.ToString("o") ?? DateTime.UtcNow.ToString("o");
+        return $"/adr/jobs?modifiedAfter={Uri.EscapeDataString(modifiedAfter)}&modifiedBefore={Uri.EscapeDataString(modifiedBefore)}&latestPerAccount=false";
+    }
+
+    private string GetAccountsLinkForRun(AdrOrchestrationStatus run)
+    {
+        var modifiedAfter = run.StartedAt?.ToString("o") ?? "";
+        var modifiedBefore = run.CompletedAt?.ToString("o") ?? DateTime.UtcNow.ToString("o");
+        return $"/adr/accounts?modifiedAfter={Uri.EscapeDataString(modifiedAfter)}&modifiedBefore={Uri.EscapeDataString(modifiedBefore)}";
     }
 
     public void Dispose()

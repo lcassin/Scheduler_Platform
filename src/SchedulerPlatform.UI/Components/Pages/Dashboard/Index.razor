@@ -321,6 +321,7 @@
                         <MudTh>Jobs Created</MudTh>
                         <MudTh>Credentials</MudTh>
                         <MudTh>ADR Requests</MudTh>
+                        <MudTh>Details</MudTh>
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd DataLabel="Date">@(_orchestrationHistoryFormattedDates.TryGetValue(context.RequestId, out var formattedDate) ? formattedDate : context.RequestedAt.ToString("MM/dd hh:mm tt"))</MudTd>
@@ -398,12 +399,176 @@
                                 <text>-</text>
                             }
                         </MudTd>
+                        <MudTd DataLabel="Details">
+                            <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small" Color="Color.Primary" OnClick="@(() => ShowDashboardRunDetails(context))" />
+                        </MudTd>
                     </RowTemplate>
                 </MudTable>
             }
         </MudPaper>
     </MudItem>
 </MudGrid>
+
+<MudDialog @bind-Visible="_showDashboardRunDetailsDialog" Options="@_dashboardDialogOptions">
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.History" Class="mr-2" />
+            Orchestration Run Details
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_dashboardSelectedRun != null)
+        {
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Request ID</MudText>
+                    <MudText Typo="Typo.body1" Class="mb-3">@_dashboardSelectedRun.RequestId</MudText>
+                    
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Requested By</MudText>
+                    <MudText Typo="Typo.body1" Class="mb-3">@_dashboardSelectedRun.RequestedBy</MudText>
+                    
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Requested At</MudText>
+                    <MudText Typo="Typo.body1" Class="mb-3">@FormatDashboardDateTime(_dashboardSelectedRun.RequestedAt)</MudText>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Status</MudText>
+                    <MudChip T="string" Size="Size.Medium" Color="@GetOrchestrationHistoryStatusColor(_dashboardSelectedRun.Status)" Class="mb-3">
+                        @_dashboardSelectedRun.Status
+                    </MudChip>
+                    
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Started At</MudText>
+                    <MudText Typo="Typo.body1" Class="mb-3">@(_dashboardSelectedRun.StartedAt.HasValue ? FormatDashboardDateTime(_dashboardSelectedRun.StartedAt.Value) : "N/A")</MudText>
+                    
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Completed At</MudText>
+                    <MudText Typo="Typo.body1" Class="mb-3">@(_dashboardSelectedRun.CompletedAt.HasValue ? FormatDashboardDateTime(_dashboardSelectedRun.CompletedAt.Value) : "N/A")</MudText>
+                    
+                    @if (_dashboardSelectedRun.StartedAt.HasValue && _dashboardSelectedRun.CompletedAt.HasValue)
+                    {
+                        var duration = _dashboardSelectedRun.CompletedAt.Value - _dashboardSelectedRun.StartedAt.Value;
+                        <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Duration</MudText>
+                        <MudText Typo="Typo.body1">@duration.ToString(@"hh\:mm\:ss")</MudText>
+                    }
+                </MudItem>
+            </MudGrid>
+            
+            @if (!string.IsNullOrEmpty(_dashboardSelectedRun.ErrorMessage))
+            {
+                <MudAlert Severity="Severity.Error" Class="my-3">@_dashboardSelectedRun.ErrorMessage</MudAlert>
+            }
+
+            @if (_dashboardSelectedRun.StartedAt.HasValue)
+            {
+                <MudDivider Class="my-4" />
+                <MudText Typo="Typo.subtitle1" Class="mb-3">Affected Resources</MudText>
+                <div class="d-flex gap-3 mb-3">
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.Work"
+                               Size="Size.Small"
+                               Href="@GetDashboardJobsLinkForRun(_dashboardSelectedRun)">
+                        View Jobs
+                    </MudButton>
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.AccountBox"
+                               Size="Size.Small"
+                               Href="@GetDashboardAccountsLinkForRun(_dashboardSelectedRun)">
+                        View Accounts
+                    </MudButton>
+                </div>
+            }
+            
+            <MudDivider Class="my-4" />
+            <MudText Typo="Typo.subtitle1" Class="mb-3">Step Results</MudText>
+            
+            <MudTimeline TimelinePosition="TimelinePosition.Start">
+                <MudTimelineItem Color="@GetDashboardStepColor(_dashboardSelectedRun, "Syncing accounts")" Icon="@Icons.Material.Filled.CheckCircle">
+                    <ItemContent>
+                        <MudText Typo="Typo.body2"><strong>Sync Accounts</strong></MudText>
+                        @if (_dashboardSelectedRun.SyncResult != null)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @_dashboardSelectedRun.SyncResult.AccountsInserted inserted, @_dashboardSelectedRun.SyncResult.AccountsUpdated updated
+                            </MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">No data</MudText>
+                        }
+                    </ItemContent>
+                </MudTimelineItem>
+                <MudTimelineItem Color="@GetDashboardStepColor(_dashboardSelectedRun, "Creating jobs")" Icon="@Icons.Material.Filled.CheckCircle">
+                    <ItemContent>
+                        <MudText Typo="Typo.body2"><strong>Create Jobs</strong></MudText>
+                        @if (_dashboardSelectedRun.JobCreationResult != null)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @_dashboardSelectedRun.JobCreationResult.JobsCreated created, @_dashboardSelectedRun.JobCreationResult.JobsSkipped skipped
+                            </MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">No data</MudText>
+                        }
+                    </ItemContent>
+                </MudTimelineItem>
+                <MudTimelineItem Color="@GetDashboardStepColor(_dashboardSelectedRun, "Processing rebill")" Icon="@Icons.Material.Filled.CheckCircle">
+                    <ItemContent>
+                        <MudText Typo="Typo.body2"><strong>Process Rebill</strong></MudText>
+                        @if (_dashboardSelectedRun.CredentialVerificationResult != null)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                <span style="color: var(--mud-palette-success);">@_dashboardSelectedRun.CredentialVerificationResult.CredentialsVerified verified</span>,
+                                <span style="color: var(--mud-palette-error);">@_dashboardSelectedRun.CredentialVerificationResult.CredentialsFailed failed</span>
+                            </MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">No data</MudText>
+                        }
+                    </ItemContent>
+                </MudTimelineItem>
+                <MudTimelineItem Color="@GetDashboardStepColor(_dashboardSelectedRun, "Checking statuses")" Icon="@Icons.Material.Filled.CheckCircle">
+                    <ItemContent>
+                        <MudText Typo="Typo.body2"><strong>Check Statuses</strong></MudText>
+                        @if (_dashboardSelectedRun.StatusCheckResult != null)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @_dashboardSelectedRun.StatusCheckResult.JobsChecked checked,
+                                <span style="color: var(--mud-palette-success);">@_dashboardSelectedRun.StatusCheckResult.JobsCompleted completed</span>,
+                                <span style="color: var(--mud-palette-warning);">@_dashboardSelectedRun.StatusCheckResult.JobsNeedingReview need review</span>
+                            </MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">No data</MudText>
+                        }
+                    </ItemContent>
+                </MudTimelineItem>
+                <MudTimelineItem Color="@GetDashboardStepColor(_dashboardSelectedRun, "Processing scraping")" Icon="@Icons.Material.Filled.CheckCircle">
+                    <ItemContent>
+                        <MudText Typo="Typo.body2"><strong>Send ADR Requests</strong></MudText>
+                        @if (_dashboardSelectedRun.ScrapeResult != null)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @_dashboardSelectedRun.ScrapeResult.ScrapesRequested ADR requests sent,
+                                <span style="color: var(--mud-palette-success);">@_dashboardSelectedRun.ScrapeResult.ScrapesCompleted completed</span>,
+                                <span style="color: var(--mud-palette-error);">@_dashboardSelectedRun.ScrapeResult.ScrapesFailed failed</span>
+                            </MudText>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">No data</MudText>
+                        }
+                    </ItemContent>
+                </MudTimelineItem>
+            </MudTimeline>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _showDashboardRunDetailsDialog = false)" Color="Color.Primary">Close</MudButton>
+    </DialogActions>
+</MudDialog>
 
 <MudText Typo="Typo.h5" Class="mt-6 mb-2">Scheduler Metrics</MudText>
 <MudPaper Class="pa-4 mb-4">
@@ -1265,6 +1430,77 @@
         // Status values are internal enum values: "Pending", "CredentialVerified", "ScrapeRequested", "Completed", "Failed", "NeedsReview"
         var encodedStatus = Uri.EscapeDataString(status);
         NavigationManager.NavigateTo($"/adr/jobs?status={encodedStatus}");
+    }
+
+    private bool _showDashboardRunDetailsDialog = false;
+    private AdrOrchestrationStatus? _dashboardSelectedRun;
+    private DialogOptions _dashboardDialogOptions = new DialogOptions 
+    { 
+        MaxWidth = MaxWidth.Medium, 
+        FullWidth = true,
+        CloseOnEscapeKey = true
+    };
+
+    private void ShowDashboardRunDetails(AdrOrchestrationStatus run)
+    {
+        _dashboardSelectedRun = run;
+        _showDashboardRunDetailsDialog = true;
+        StateHasChanged();
+    }
+
+    private string FormatDashboardDateTime(DateTime dateTime)
+    {
+        if (!_timezoneLoaded || string.IsNullOrEmpty(_browserTimeZone))
+            return dateTime.ToString("MM/dd/yyyy hh:mm:ss tt");
+        
+        try
+        {
+            var utcDt = dateTime.Kind == DateTimeKind.Unspecified 
+                ? DateTime.SpecifyKind(dateTime, DateTimeKind.Utc) 
+                : dateTime;
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(_browserTimeZone);
+            var localTime = TimeZoneInfo.ConvertTimeFromUtc(utcDt, tz);
+            return localTime.ToString("MM/dd/yyyy hh:mm:ss tt");
+        }
+        catch
+        {
+            return dateTime.ToString("MM/dd/yyyy hh:mm:ss tt");
+        }
+    }
+
+    private Color GetDashboardStepColor(AdrOrchestrationStatus run, string stepName)
+    {
+        var stepOrder = new[] { "Syncing accounts", "Creating jobs", "Processing rebill", "Checking statuses", "Processing scraping" };
+        var currentStepIndex = Array.IndexOf(stepOrder, run.CurrentStep);
+        var thisStepIndex = Array.IndexOf(stepOrder, stepName);
+
+        if (run.Status == "Completed") return Color.Success;
+        if (run.Status == "Failed")
+        {
+            if (thisStepIndex <= currentStepIndex) return thisStepIndex == currentStepIndex ? Color.Error : Color.Success;
+            return Color.Default;
+        }
+        if (run.Status == "Running" || run.Status == "InProgress")
+        {
+            if (thisStepIndex < currentStepIndex) return Color.Success;
+            if (thisStepIndex == currentStepIndex) return Color.Info;
+            return Color.Default;
+        }
+        return Color.Default;
+    }
+
+    private string GetDashboardJobsLinkForRun(AdrOrchestrationStatus run)
+    {
+        var modifiedAfter = run.StartedAt?.ToString("o") ?? "";
+        var modifiedBefore = run.CompletedAt?.ToString("o") ?? DateTime.UtcNow.ToString("o");
+        return $"/adr/jobs?modifiedAfter={Uri.EscapeDataString(modifiedAfter)}&modifiedBefore={Uri.EscapeDataString(modifiedBefore)}&latestPerAccount=false";
+    }
+
+    private string GetDashboardAccountsLinkForRun(AdrOrchestrationStatus run)
+    {
+        var modifiedAfter = run.StartedAt?.ToString("o") ?? "";
+        var modifiedBefore = run.CompletedAt?.ToString("o") ?? DateTime.UtcNow.ToString("o");
+        return $"/adr/accounts?modifiedAfter={Uri.EscapeDataString(modifiedAfter)}&modifiedBefore={Uri.EscapeDataString(modifiedBefore)}";
     }
 
     public void Dispose()

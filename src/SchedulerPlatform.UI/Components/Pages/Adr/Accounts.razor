@@ -368,6 +368,17 @@
     [SupplyParameterFromQuery(Name = "blacklistStatus")]
     public string? BlacklistStatusParam { get; set; }
 
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "modifiedAfter")]
+    public string? ModifiedAfterParam { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "modifiedBefore")]
+    public string? ModifiedBeforeParam { get; set; }
+
+    private DateTime? _filterModifiedAfter;
+    private DateTime? _filterModifiedBefore;
+
     protected override async Task OnInitializedAsync()
     {
         try
@@ -391,6 +402,15 @@
             {
                 _selectedBlacklistStatus = BlacklistStatusParam;
                 _filterBlacklistStatus = BlacklistStatusParam;
+            }
+
+            if (!string.IsNullOrEmpty(ModifiedAfterParam) && DateTime.TryParse(ModifiedAfterParam, null, System.Globalization.DateTimeStyles.RoundtripKind, out var modAfter))
+            {
+                _filterModifiedAfter = modAfter;
+            }
+            if (!string.IsNullOrEmpty(ModifiedBeforeParam) && DateTime.TryParse(ModifiedBeforeParam, null, System.Globalization.DateTimeStyles.RoundtripKind, out var modBefore))
+            {
+                _filterModifiedBefore = modBefore;
             }
             
             _clients = await ClientService.GetClientsAsync();
@@ -435,7 +455,9 @@
                 _filterPrimaryVendorCode,
                 _filterMasterVendorCode,
                 sortColumn,
-                sortDescending);
+                sortDescending,
+                _filterModifiedAfter,
+                _filterModifiedBefore);
 
             return new TableData<AdrAccount>
             {
