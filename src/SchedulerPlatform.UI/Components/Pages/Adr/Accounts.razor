@@ -24,7 +24,11 @@
 {
     <MudAlert Severity="Severity.Info" Class="mb-4" Icon="@Icons.Material.Filled.FilterAlt" CloseIconClicked="ClearOrchestrationFilter" ShowCloseIcon="true">
         <strong>Filtered by orchestration run:</strong>
-        @if (_filterModifiedAfter.HasValue && _filterModifiedBefore.HasValue)
+        @if (!string.IsNullOrEmpty(_filterOrchestrationRequestId))
+        {
+            <span> Request ID: @_filterOrchestrationRequestId</span>
+        }
+        else if (_filterModifiedAfter.HasValue && _filterModifiedBefore.HasValue)
         {
             <span> @_filterModifiedAfter.Value.ToString("g") — @_filterModifiedBefore.Value.ToString("g") (UTC)</span>
         }
@@ -395,8 +399,13 @@
     [SupplyParameterFromQuery(Name = "modifiedBefore")]
     public string? ModifiedBeforeParam { get; set; }
 
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "orchestrationRequestId")]
+    public string? OrchestrationRequestIdParam { get; set; }
+
     private DateTime? _filterModifiedAfter;
     private DateTime? _filterModifiedBefore;
+    private string? _filterOrchestrationRequestId;
 
     private bool _hasOrchestrationFilter;
 
@@ -426,7 +435,11 @@
             {
                 _filterModifiedBefore = modBefore;
             }
-            _hasOrchestrationFilter = _filterModifiedAfter.HasValue || _filterModifiedBefore.HasValue;
+            if (!string.IsNullOrEmpty(OrchestrationRequestIdParam))
+            {
+                _filterOrchestrationRequestId = OrchestrationRequestIdParam;
+            }
+            _hasOrchestrationFilter = !string.IsNullOrEmpty(_filterOrchestrationRequestId) || _filterModifiedAfter.HasValue || _filterModifiedBefore.HasValue;
 
             _testModeStatus = await AdrService.GetTestModeStatusAsync();
             _clients = await ClientService.GetClientsAsync();
@@ -447,6 +460,7 @@
     {
         _filterModifiedAfter = null;
         _filterModifiedBefore = null;
+        _filterOrchestrationRequestId = null;
         _hasOrchestrationFilter = false;
         Navigation.NavigateTo("/adr/accounts");
     }
@@ -478,7 +492,8 @@
                 sortColumn,
                 sortDescending,
                 _filterModifiedAfter,
-                _filterModifiedBefore);
+                _filterModifiedBefore,
+                _filterOrchestrationRequestId);
 
             return new TableData<AdrAccount>
             {

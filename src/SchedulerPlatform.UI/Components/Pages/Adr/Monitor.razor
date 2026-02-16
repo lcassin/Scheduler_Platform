@@ -2063,6 +2063,8 @@
 
     private string GetAccountsLinkForRun(AdrOrchestrationStatus run)
     {
+        if (!string.IsNullOrEmpty(run.RequestId))
+            return $"/adr/accounts?orchestrationRequestId={Uri.EscapeDataString(run.RequestId)}";
         var modifiedAfter = run.StartedAt?.ToString("o") ?? "";
         var modifiedBefore = run.CompletedAt?.ToString("o") ?? DateTime.UtcNow.ToString("o");
         return $"/adr/accounts?modifiedAfter={Uri.EscapeDataString(modifiedAfter)}&modifiedBefore={Uri.EscapeDataString(modifiedBefore)}";

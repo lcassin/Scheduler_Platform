@@ -74,6 +74,7 @@ public class AdrController : ControllerBase
     /// <param name="sortDescending">Whether to sort in descending order.</param>
     /// <param name="modifiedAfter">Optional filter to return accounts modified after this date/time (UTC). Used for orchestration run tracking.</param>
     /// <param name="modifiedBefore">Optional filter to return accounts modified before this date/time (UTC). Used for orchestration run tracking.</param>
+    /// <param name="orchestrationRequestId">Optional filter to return accounts that have jobs with execution records matching this orchestration run request ID.</param>
     /// <returns>A paginated list of ADR accounts with job status information.</returns>
     /// <response code="200">Returns the list of ADR accounts.</response>
     /// <response code="500">An error occurred while retrieving ADR accounts.</response>
@@ -96,7 +97,8 @@ public class AdrController : ControllerBase
         [FromQuery] string? sortColumn = null,
         [FromQuery] bool sortDescending = false,
         [FromQuery] DateTime? modifiedAfter = null,
-        [FromQuery] DateTime? modifiedBefore = null)
+        [FromQuery] DateTime? modifiedBefore = null,
+        [FromQuery] string? orchestrationRequestId = null)
     {
         try
         {
@@ -203,19 +205,23 @@ public class AdrController : ControllerBase
                 }
             }
             
-            // Combine job status and blacklist status filters if both are present
+            List<int>? accountIdsWithOrchestrationRun = null;
+            if (!string.IsNullOrWhiteSpace(orchestrationRequestId))
+            {
+                accountIdsWithOrchestrationRun = await _dbContext.AdrJobExecutions
+                    .Where(e => !e.IsDeleted && e.OrchestrationRequestId == orchestrationRequestId)
+                    .Select(e => e.AdrJob!.AdrAccountId)
+                    .Distinct()
+                    .ToListAsync();
+            }
+
+            // Combine all account ID filters
+            var allAccountIdFilters = new List<List<int>?> { accountIdsWithJobStatus, accountIdsWithBlacklistStatus, accountIdsWithOrchestrationRun };
+            var activeFilters = allAccountIdFilters.Where(f => f != null).Cast<List<int>>().ToList();
             List<int>? combinedAccountIds = null;
-            if (accountIdsWithJobStatus != null && accountIdsWithBlacklistStatus != null)
+            if (activeFilters.Count > 0)
             {
-                combinedAccountIds = accountIdsWithJobStatus.Intersect(accountIdsWithBlacklistStatus).ToList();
-            }
-            else if (accountIdsWithJobStatus != null)
-            {
-                combinedAccountIds = accountIdsWithJobStatus;
-            }
-            else if (accountIdsWithBlacklistStatus != null)
-            {
-                combinedAccountIds = accountIdsWithBlacklistStatus;
+                combinedAccountIds = activeFilters.Aggregate((a, b) => a.Intersect(b).ToList());
             }
 
             var (items, totalCount) = await _unitOfWork.AdrAccounts.GetPagedAsync(
