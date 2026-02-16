@@ -940,13 +940,9 @@ Console.WriteLine(""Hello, World!"");
         
         // Don't set theme here - let frontmatter config take precedence
         // Mermaid will parse ---config:--- frontmatter automatically
-        // Set gantt useWidth to fit container width for better rendering
         mermaid.initialize({{ 
             startOnLoad: true,
-            securityLevel: 'loose',
-            gantt: {{
-                useWidth: Math.min(window.innerWidth - 80, 1200)
-            }}
+            securityLevel: 'loose'
         }});
         
         mermaid.run().then(() => {{
@@ -954,8 +950,20 @@ Console.WriteLine(""Hello, World!"");
             const diagram = document.getElementById('diagram');
             const svg = document.querySelector('#diagram svg');
             
-            // Let SVG render at its natural size - no forced dimensions
-            // The container will size itself based on the SVG content
+            // Auto-size the container to fit the actual SVG content
+            if (svg) {{
+                try {{
+                    // Get the actual bounding box of the SVG content
+                    const bbox = svg.getBBox();
+                    if (bbox.width > 0 && bbox.height > 0) {{
+                        // Set SVG dimensions to match actual content
+                        svg.setAttribute('width', bbox.width + bbox.x + 20);
+                        svg.setAttribute('height', bbox.height + bbox.y + 20);
+                    }}
+                }} catch (e) {{
+                    // getBBox may fail in some cases, just continue
+                }}
+            }}
             
             panzoomInstance = panzoom(diagram, {{
                 maxZoom: 10,
@@ -3661,16 +3669,26 @@ Console.WriteLine(""Hello, World!"");
         mermaid.initialize({{ 
             startOnLoad: true, 
             theme: 'default', 
-            securityLevel: 'loose',
-            gantt: {{
-                useWidth: Math.min(window.innerWidth - 80, 1200)
-            }}
+            securityLevel: 'loose'
         }});
         mermaid.run().then(() => {{
             const diagram = document.getElementById('diagram');
             const svg = document.querySelector('#diagram svg');
             
-            // Let SVG render at its natural size - no forced dimensions
+            // Auto-size the container to fit the actual SVG content
+            if (svg) {{
+                try {{
+                    // Get the actual bounding box of the SVG content
+                    const bbox = svg.getBBox();
+                    if (bbox.width > 0 && bbox.height > 0) {{
+                        // Set SVG dimensions to match actual content
+                        svg.setAttribute('width', bbox.width + bbox.x + 20);
+                        svg.setAttribute('height', bbox.height + bbox.y + 20);
+                    }}
+                }} catch (e) {{
+                    // getBBox may fail in some cases, just continue
+                }}
+            }}
             
             if (diagram) {{
                 window.panzoomInstance = panzoom(diagram, {{
