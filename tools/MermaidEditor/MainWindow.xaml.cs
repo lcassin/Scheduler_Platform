@@ -953,42 +953,24 @@ Console.WriteLine(""Hello, World!"");
             // Auto-size the container to fit the actual SVG content
             if (svg) {{
                 try {{
-                    // Check if this is a gantt chart by looking for gantt-specific elements
-                    const isGantt = svg.querySelector('.grid') !== null || 
-                                   svg.querySelector('.section') !== null ||
-                                   svg.id?.includes('mermaid') && svg.querySelector('rect.task') !== null;
+                    // Remove Mermaid's inline width/min-width styles that cause gantt charts to be very wide
+                    svg.style.width = '';
+                    svg.style.minWidth = '';
+                    svg.style.maxWidth = '';
                     
-                    if (isGantt) {{
-                        // For gantt charts, find the actual content elements (excluding grid background)
-                        // Look for task bars, section labels, title, and axis
-                        const contentElements = svg.querySelectorAll('.task, .section, .titleText, .sectionTitle, text, .tick');
-                        if (contentElements.length > 0) {{
-                            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-                            contentElements.forEach(el => {{
-                                try {{
-                                    const elBbox = el.getBBox();
-                                    if (elBbox.width > 0 && elBbox.height > 0) {{
-                                        minX = Math.min(minX, elBbox.x);
-                                        minY = Math.min(minY, elBbox.y);
-                                        maxX = Math.max(maxX, elBbox.x + elBbox.width);
-                                        maxY = Math.max(maxY, elBbox.y + elBbox.height);
-                                    }}
-                                }} catch (e) {{}}
-                            }});
-                            
-                            if (minX !== Infinity && maxX !== -Infinity) {{
-                                const padding = 40;
-                                const contentWidth = maxX - minX + padding;
-                                const contentHeight = maxY - minY + padding;
-                                svg.setAttribute('width', contentWidth);
-                                svg.setAttribute('height', contentHeight);
-                                svg.setAttribute('viewBox', `${{minX - padding/2}} ${{minY - padding/2}} ${{contentWidth}} ${{contentHeight}}`);
-                            }}
+                    // Get dimensions from viewBox if available (more reliable for gantt charts)
+                    const viewBox = svg.getAttribute('viewBox');
+                    if (viewBox) {{
+                        const parts = viewBox.split(' ').map(Number);
+                        if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) {{
+                            const padding = 20;
+                            svg.setAttribute('width', parts[2] + padding);
+                            svg.setAttribute('height', parts[3] + padding);
                         }}
                     }} else {{
-                        // For other diagrams, use standard getBBox approach
+                        // Fall back to getBBox for diagrams without viewBox
                         const bbox = svg.getBBox();
-                        if (bbox.width > 0 && bbox.height > 0) {{
+                        if (bbox && bbox.width > 0 && bbox.height > 0) {{
                             const padding = 20;
                             svg.setAttribute('width', bbox.width + padding);
                             svg.setAttribute('height', bbox.height + padding);
@@ -3713,41 +3695,24 @@ Console.WriteLine(""Hello, World!"");
             // Auto-size the container to fit the actual SVG content
             if (svg) {{
                 try {{
-                    // Check if this is a gantt chart by looking for gantt-specific elements
-                    const isGantt = svg.querySelector('.grid') !== null || 
-                                   svg.querySelector('.section') !== null ||
-                                   svg.id?.includes('mermaid') && svg.querySelector('rect.task') !== null;
+                    // Remove Mermaid's inline width/min-width styles that cause gantt charts to be very wide
+                    svg.style.width = '';
+                    svg.style.minWidth = '';
+                    svg.style.maxWidth = '';
                     
-                    if (isGantt) {{
-                        // For gantt charts, find the actual content elements (excluding grid background)
-                        const contentElements = svg.querySelectorAll('.task, .section, .titleText, .sectionTitle, text, .tick');
-                        if (contentElements.length > 0) {{
-                            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-                            contentElements.forEach(el => {{
-                                try {{
-                                    const elBbox = el.getBBox();
-                                    if (elBbox.width > 0 && elBbox.height > 0) {{
-                                        minX = Math.min(minX, elBbox.x);
-                                        minY = Math.min(minY, elBbox.y);
-                                        maxX = Math.max(maxX, elBbox.x + elBbox.width);
-                                        maxY = Math.max(maxY, elBbox.y + elBbox.height);
-                                    }}
-                                }} catch (e) {{}}
-                            }});
-                            
-                            if (minX !== Infinity && maxX !== -Infinity) {{
-                                const padding = 40;
-                                const contentWidth = maxX - minX + padding;
-                                const contentHeight = maxY - minY + padding;
-                                svg.setAttribute('width', contentWidth);
-                                svg.setAttribute('height', contentHeight);
-                                svg.setAttribute('viewBox', `${{minX - padding/2}} ${{minY - padding/2}} ${{contentWidth}} ${{contentHeight}}`);
-                            }}
+                    // Get dimensions from viewBox if available (more reliable for gantt charts)
+                    const viewBox = svg.getAttribute('viewBox');
+                    if (viewBox) {{
+                        const parts = viewBox.split(' ').map(Number);
+                        if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) {{
+                            const padding = 20;
+                            svg.setAttribute('width', parts[2] + padding);
+                            svg.setAttribute('height', parts[3] + padding);
                         }}
                     }} else {{
-                        // For other diagrams, use standard getBBox approach
+                        // Fall back to getBBox for diagrams without viewBox
                         const bbox = svg.getBBox();
-                        if (bbox.width > 0 && bbox.height > 0) {{
+                        if (bbox && bbox.width > 0 && bbox.height > 0) {{
                             const padding = 20;
                             svg.setAttribute('width', bbox.width + padding);
                             svg.setAttribute('height', bbox.height + padding);
