@@ -52,7 +52,9 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
         string? primaryVendorCode = null,
         string? masterVendorCode = null,
         DateTime? modifiedAfter = null,
-        DateTime? modifiedBefore = null)
+        DateTime? modifiedBefore = null,
+        DateTime? createdAfter = null,
+        DateTime? createdBefore = null)
     {
         var query = _dbSet.Where(a => !a.IsDeleted);
 
@@ -115,6 +117,16 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
         if (modifiedBefore.HasValue)
         {
             query = query.Where(a => a.LastSyncedDateTime.HasValue && a.LastSyncedDateTime.Value <= modifiedBefore.Value);
+        }
+
+        if (createdAfter.HasValue)
+        {
+            query = query.Where(a => a.CreatedDateTime >= createdAfter.Value);
+        }
+
+        if (createdBefore.HasValue)
+        {
+            query = query.Where(a => a.CreatedDateTime < createdBefore.Value);
         }
 
         var totalCount = await query.CountAsync();

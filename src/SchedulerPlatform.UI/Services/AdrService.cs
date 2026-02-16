@@ -30,7 +30,9 @@ public class AdrService : IAdrService
         bool sortDescending = false,
         DateTime? modifiedAfter = null,
         DateTime? modifiedBefore = null,
-        string? orchestrationRequestId = null)
+        string? orchestrationRequestId = null,
+        DateTime? createdAfter = null,
+        DateTime? createdBefore = null)
     {
         var queryParams = new List<string>
         {
@@ -78,6 +80,12 @@ public class AdrService : IAdrService
 
         if (!string.IsNullOrWhiteSpace(orchestrationRequestId))
             queryParams.Add($"orchestrationRequestId={Uri.EscapeDataString(orchestrationRequestId)}");
+
+        if (createdAfter.HasValue)
+            queryParams.Add($"createdAfter={createdAfter.Value:o}");
+
+        if (createdBefore.HasValue)
+            queryParams.Add($"createdBefore={createdBefore.Value:o}");
 
         var query = "?" + string.Join("&", queryParams);
         var response = await _httpClient.GetAsync($"adr/accounts{query}");

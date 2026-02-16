@@ -21,7 +21,9 @@ public interface IAdrService
         bool sortDescending = false,
         DateTime? modifiedAfter = null,
         DateTime? modifiedBefore = null,
-        string? orchestrationRequestId = null);
+        string? orchestrationRequestId = null,
+        DateTime? createdAfter = null,
+        DateTime? createdBefore = null);
     
     Task<List<string>> GetPrimaryVendorCodesAsync(string? searchTerm = null, int limit = 50);
     Task<List<string>> GetMasterVendorCodesAsync(string? searchTerm = null, int limit = 50);

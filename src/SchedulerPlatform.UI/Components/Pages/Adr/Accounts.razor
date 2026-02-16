@@ -28,6 +28,14 @@
         {
             <span> Request ID: @_filterOrchestrationRequestId</span>
         }
+        else if (_filterCreatedAfter.HasValue && _filterCreatedBefore.HasValue)
+        {
+            <span> Accounts inserted: @_filterCreatedAfter.Value.ToString("g") — @_filterCreatedBefore.Value.ToString("g") (UTC)</span>
+        }
+        else if (_filterCreatedBefore.HasValue && _filterModifiedAfter.HasValue)
+        {
+            <span> Accounts updated: @_filterModifiedAfter.Value.ToString("g") — @_filterModifiedBefore?.ToString("g") (UTC)</span>
+        }
         else if (_filterModifiedAfter.HasValue && _filterModifiedBefore.HasValue)
         {
             <span> @_filterModifiedAfter.Value.ToString("g") — @_filterModifiedBefore.Value.ToString("g") (UTC)</span>
@@ -403,9 +411,19 @@
     [SupplyParameterFromQuery(Name = "orchestrationRequestId")]
     public string? OrchestrationRequestIdParam { get; set; }
 
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "createdAfter")]
+    public string? CreatedAfterParam { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "createdBefore")]
+    public string? CreatedBeforeParam { get; set; }
+
     private DateTime? _filterModifiedAfter;
     private DateTime? _filterModifiedBefore;
     private string? _filterOrchestrationRequestId;
+    private DateTime? _filterCreatedAfter;
+    private DateTime? _filterCreatedBefore;
 
     private bool _hasOrchestrationFilter;
 
@@ -439,7 +457,15 @@
             {
                 _filterOrchestrationRequestId = OrchestrationRequestIdParam;
             }
-            _hasOrchestrationFilter = !string.IsNullOrEmpty(_filterOrchestrationRequestId) || _filterModifiedAfter.HasValue || _filterModifiedBefore.HasValue;
+            if (!string.IsNullOrEmpty(CreatedAfterParam) && DateTime.TryParse(CreatedAfterParam, null, System.Globalization.DateTimeStyles.RoundtripKind, out var creAfter))
+            {
+                _filterCreatedAfter = creAfter;
+            }
+            if (!string.IsNullOrEmpty(CreatedBeforeParam) && DateTime.TryParse(CreatedBeforeParam, null, System.Globalization.DateTimeStyles.RoundtripKind, out var creBefore))
+            {
+                _filterCreatedBefore = creBefore;
+            }
+            _hasOrchestrationFilter = !string.IsNullOrEmpty(_filterOrchestrationRequestId) || _filterModifiedAfter.HasValue || _filterModifiedBefore.HasValue || _filterCreatedAfter.HasValue || _filterCreatedBefore.HasValue;
 
             _testModeStatus = await AdrService.GetTestModeStatusAsync();
             _clients = await ClientService.GetClientsAsync();
@@ -461,6 +487,8 @@
         _filterModifiedAfter = null;
         _filterModifiedBefore = null;
         _filterOrchestrationRequestId = null;
+        _filterCreatedAfter = null;
+        _filterCreatedBefore = null;
         _hasOrchestrationFilter = false;
         Navigation.NavigateTo("/adr/accounts");
     }
@@ -493,7 +521,9 @@
                 sortDescending,
                 _filterModifiedAfter,
                 _filterModifiedBefore,
-                _filterOrchestrationRequestId);
+                _filterOrchestrationRequestId,
+                _filterCreatedAfter,
+                _filterCreatedBefore);
 
             return new TableData<AdrAccount>
             {

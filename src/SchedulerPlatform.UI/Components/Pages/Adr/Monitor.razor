@@ -243,7 +243,7 @@
                                                     <MudText Typo="Typo.caption" Color="Color.Secondary">
                                                         @if (_lastCompletedRun.SyncResult.AccountsInserted > 0)
                                                         {
-                                                            <MudLink Href="@GetAccountsLinkForRun(_lastCompletedRun)" Underline="Underline.Always" Color="Color.Inherit" Style="color: var(--mud-palette-success); font-size: inherit;">@_lastCompletedRun.SyncResult.AccountsInserted inserted</MudLink>
+                                                            <MudLink Href="@GetInsertedAccountsLinkForRun(_lastCompletedRun)" Underline="Underline.Always" Color="Color.Inherit" Style="color: var(--mud-palette-success); font-size: inherit;">@_lastCompletedRun.SyncResult.AccountsInserted inserted</MudLink>
                                                         }
                                                         else
                                                         {
@@ -252,7 +252,7 @@
                                                         <span style="opacity: 0.5;"> · </span>
                                                         @if (_lastCompletedRun.SyncResult.AccountsUpdated > 0)
                                                         {
-                                                            <MudLink Href="@GetAccountsLinkForRun(_lastCompletedRun)" Underline="Underline.Always" Color="Color.Inherit" Style="color: var(--mud-palette-success); font-size: inherit;">@_lastCompletedRun.SyncResult.AccountsUpdated updated</MudLink>
+                                                            <MudLink Href="@GetUpdatedAccountsLinkForRun(_lastCompletedRun)" Underline="Underline.Always" Color="Color.Inherit" Style="color: var(--mud-palette-success); font-size: inherit;">@_lastCompletedRun.SyncResult.AccountsUpdated updated</MudLink>
                                                         }
                                                         else
                                                         {
@@ -552,7 +552,7 @@
                                             <MudText Typo="Typo.caption" Color="Color.Secondary">
                                                 @if (_currentStatus.Status.SyncResult.AccountsInserted > 0)
                                                 {
-                                                    <MudLink Href="@GetAccountsLinkForRun(_currentStatus.Status)" Underline="Underline.Always" Color="Color.Inherit" Style="color: var(--mud-palette-success); font-size: inherit;">@_currentStatus.Status.SyncResult.AccountsInserted inserted</MudLink>
+                                                    <MudLink Href="@GetInsertedAccountsLinkForRun(_currentStatus.Status)" Underline="Underline.Always" Color="Color.Inherit" Style="color: var(--mud-palette-success); font-size: inherit;">@_currentStatus.Status.SyncResult.AccountsInserted inserted</MudLink>
                                                 }
                                                 else
                                                 {
@@ -561,7 +561,7 @@
                                                 <span style="opacity: 0.5;"> · </span>
                                                 @if (_currentStatus.Status.SyncResult.AccountsUpdated > 0)
                                                 {
-                                                    <MudLink Href="@GetAccountsLinkForRun(_currentStatus.Status)" Underline="Underline.Always" Color="Color.Inherit" Style="color: var(--mud-palette-success); font-size: inherit;">@_currentStatus.Status.SyncResult.AccountsUpdated updated</MudLink>
+                                                    <MudLink Href="@GetUpdatedAccountsLinkForRun(_currentStatus.Status)" Underline="Underline.Always" Color="Color.Inherit" Style="color: var(--mud-palette-success); font-size: inherit;">@_currentStatus.Status.SyncResult.AccountsUpdated updated</MudLink>
                                                 }
                                                 else
                                                 {
@@ -1087,7 +1087,7 @@
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
                                 @if (_selectedRun.SyncResult.AccountsInserted > 0)
                                 {
-                                    <MudLink Href="@GetAccountsLinkForRun(_selectedRun)" Underline="Underline.Always" Color="Color.Inherit" Style="color: var(--mud-palette-success); font-size: inherit;">@_selectedRun.SyncResult.AccountsInserted inserted</MudLink>
+                                    <MudLink Href="@GetInsertedAccountsLinkForRun(_selectedRun)" Underline="Underline.Always" Color="Color.Inherit" Style="color: var(--mud-palette-success); font-size: inherit;">@_selectedRun.SyncResult.AccountsInserted inserted</MudLink>
                                 }
                                 else
                                 {
@@ -1096,7 +1096,7 @@
                                 <span style="opacity: 0.5;"> · </span>
                                 @if (_selectedRun.SyncResult.AccountsUpdated > 0)
                                 {
-                                    <MudLink Href="@GetAccountsLinkForRun(_selectedRun)" Underline="Underline.Always" Color="Color.Inherit" Style="color: var(--mud-palette-success); font-size: inherit;">@_selectedRun.SyncResult.AccountsUpdated updated</MudLink>
+                                    <MudLink Href="@GetUpdatedAccountsLinkForRun(_selectedRun)" Underline="Underline.Always" Color="Color.Inherit" Style="color: var(--mud-palette-success); font-size: inherit;">@_selectedRun.SyncResult.AccountsUpdated updated</MudLink>
                                 }
                                 else
                                 {
@@ -2068,6 +2068,21 @@
         var modifiedAfter = run.StartedAt?.ToString("o") ?? "";
         var modifiedBefore = run.CompletedAt?.ToString("o") ?? DateTime.UtcNow.ToString("o");
         return $"/adr/accounts?modifiedAfter={Uri.EscapeDataString(modifiedAfter)}&modifiedBefore={Uri.EscapeDataString(modifiedBefore)}";
+    }
+
+    private string GetInsertedAccountsLinkForRun(AdrOrchestrationStatus run)
+    {
+        var createdAfter = run.StartedAt?.ToString("o") ?? "";
+        var createdBefore = run.CompletedAt?.ToString("o") ?? DateTime.UtcNow.ToString("o");
+        return $"/adr/accounts?createdAfter={Uri.EscapeDataString(createdAfter)}&createdBefore={Uri.EscapeDataString(createdBefore)}";
+    }
+
+    private string GetUpdatedAccountsLinkForRun(AdrOrchestrationStatus run)
+    {
+        var modifiedAfter = run.StartedAt?.ToString("o") ?? "";
+        var modifiedBefore = run.CompletedAt?.ToString("o") ?? DateTime.UtcNow.ToString("o");
+        var createdBefore = run.StartedAt?.ToString("o") ?? "";
+        return $"/adr/accounts?modifiedAfter={Uri.EscapeDataString(modifiedAfter)}&modifiedBefore={Uri.EscapeDataString(modifiedBefore)}&createdBefore={Uri.EscapeDataString(createdBefore)}";
     }
 
     public void Dispose()

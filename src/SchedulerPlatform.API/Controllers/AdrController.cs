@@ -75,6 +75,8 @@ public class AdrController : ControllerBase
     /// <param name="modifiedAfter">Optional filter to return accounts modified after this date/time (UTC). Used for orchestration run tracking.</param>
     /// <param name="modifiedBefore">Optional filter to return accounts modified before this date/time (UTC). Used for orchestration run tracking.</param>
     /// <param name="orchestrationRequestId">Optional filter to return accounts that have jobs with execution records matching this orchestration run request ID.</param>
+    /// <param name="createdAfter">Optional filter to return accounts created after this date/time (UTC). Used for filtering accounts inserted during an orchestration run.</param>
+    /// <param name="createdBefore">Optional filter to return accounts created before this date/time (UTC). Used for filtering accounts that existed before an orchestration run.</param>
     /// <returns>A paginated list of ADR accounts with job status information.</returns>
     /// <response code="200">Returns the list of ADR accounts.</response>
     /// <response code="500">An error occurred while retrieving ADR accounts.</response>
@@ -98,7 +100,9 @@ public class AdrController : ControllerBase
         [FromQuery] bool sortDescending = false,
         [FromQuery] DateTime? modifiedAfter = null,
         [FromQuery] DateTime? modifiedBefore = null,
-        [FromQuery] string? orchestrationRequestId = null)
+        [FromQuery] string? orchestrationRequestId = null,
+        [FromQuery] DateTime? createdAfter = null,
+        [FromQuery] DateTime? createdBefore = null)
     {
         try
         {
@@ -239,7 +243,9 @@ public class AdrController : ControllerBase
                 primaryVendorCode,
                 masterVendorCode,
                 modifiedAfter,
-                modifiedBefore);
+                modifiedBefore,
+                createdAfter,
+                createdBefore);
 
             // Get account IDs from the current page
             var accountIds = items.Select(a => a.Id).ToList();

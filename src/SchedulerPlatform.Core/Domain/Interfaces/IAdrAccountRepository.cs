@@ -22,7 +22,9 @@ public interface IAdrAccountRepository : IRepository<AdrAccount>
         string? primaryVendorCode = null,
         string? masterVendorCode = null,
         DateTime? modifiedAfter = null,
-        DateTime? modifiedBefore = null);
+        DateTime? modifiedBefore = null,
+        DateTime? createdAfter = null,
+        DateTime? createdBefore = null);
     Task<int> GetTotalCountAsync(int? clientId = null);
     Task<int> GetCountByNextRunStatusAsync(string status, int? clientId = null);
     Task<int> GetCountByHistoricalStatusAsync(string status, int? clientId = null);
