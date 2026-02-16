@@ -940,9 +940,13 @@ Console.WriteLine(""Hello, World!"");
         
         // Don't set theme here - let frontmatter config take precedence
         // Mermaid will parse ---config:--- frontmatter automatically
+        // Set gantt useWidth to fit container width for better rendering
         mermaid.initialize({{ 
             startOnLoad: true,
-            securityLevel: 'loose'
+            securityLevel: 'loose',
+            gantt: {{
+                useWidth: Math.min(window.innerWidth - 80, 1200)
+            }}
         }});
         
         mermaid.run().then(() => {{
@@ -3654,7 +3658,14 @@ Console.WriteLine(""Hello, World!"");
         </div>
     </div>
     <script>
-        mermaid.initialize({{ startOnLoad: true, theme: 'default', securityLevel: 'loose' }});
+        mermaid.initialize({{ 
+            startOnLoad: true, 
+            theme: 'default', 
+            securityLevel: 'loose',
+            gantt: {{
+                useWidth: Math.min(window.innerWidth - 80, 1200)
+            }}
+        }});
         mermaid.run().then(() => {{
             const diagram = document.getElementById('diagram');
             const svg = document.querySelector('#diagram svg');
