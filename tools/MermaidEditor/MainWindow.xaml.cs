@@ -956,9 +956,12 @@ Console.WriteLine(""Hello, World!"");
                     // Get the actual bounding box of the SVG content
                     const bbox = svg.getBBox();
                     if (bbox.width > 0 && bbox.height > 0) {{
-                        // Set SVG dimensions to match actual content
-                        svg.setAttribute('width', bbox.width + bbox.x + 20);
-                        svg.setAttribute('height', bbox.height + bbox.y + 20);
+                        // Set SVG dimensions to just the content size (not including offset)
+                        const padding = 20;
+                        svg.setAttribute('width', bbox.width + padding);
+                        svg.setAttribute('height', bbox.height + padding);
+                        // Adjust viewBox to crop to just the content area
+                        svg.setAttribute('viewBox', `${{bbox.x - padding/2}} ${{bbox.y - padding/2}} ${{bbox.width + padding}} ${{bbox.height + padding}}`);
                     }}
                 }} catch (e) {{
                     // getBBox may fail in some cases, just continue
@@ -3681,9 +3684,12 @@ Console.WriteLine(""Hello, World!"");
                     // Get the actual bounding box of the SVG content
                     const bbox = svg.getBBox();
                     if (bbox.width > 0 && bbox.height > 0) {{
-                        // Set SVG dimensions to match actual content
-                        svg.setAttribute('width', bbox.width + bbox.x + 20);
-                        svg.setAttribute('height', bbox.height + bbox.y + 20);
+                        // Set SVG dimensions to just the content size (not including offset)
+                        const padding = 20;
+                        svg.setAttribute('width', bbox.width + padding);
+                        svg.setAttribute('height', bbox.height + padding);
+                        // Adjust viewBox to crop to just the content area
+                        svg.setAttribute('viewBox', `${{bbox.x - padding/2}} ${{bbox.y - padding/2}} ${{bbox.width + padding}} ${{bbox.height + padding}}`);
                     }}
                 }} catch (e) {{
                     // getBBox may fail in some cases, just continue
