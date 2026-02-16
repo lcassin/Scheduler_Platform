@@ -488,7 +488,7 @@
                         @if (_dashboardSelectedRun.SyncResult != null)
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                @_dashboardSelectedRun.SyncResult.AccountsInserted inserted, @_dashboardSelectedRun.SyncResult.AccountsUpdated updated
+                                <MudLink Href="@GetDashboardAccountsLinkForRun(_dashboardSelectedRun)" Underline="Underline.Always" Color="Color.Secondary">@_dashboardSelectedRun.SyncResult.AccountsInserted inserted</MudLink>, <MudLink Href="@GetDashboardAccountsLinkForRun(_dashboardSelectedRun)" Underline="Underline.Always" Color="Color.Secondary">@_dashboardSelectedRun.SyncResult.AccountsUpdated updated</MudLink>
                             </MudText>
                         }
                         else
@@ -503,7 +503,7 @@
                         @if (_dashboardSelectedRun.JobCreationResult != null)
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                @_dashboardSelectedRun.JobCreationResult.JobsCreated created, @_dashboardSelectedRun.JobCreationResult.JobsSkipped skipped
+                                <MudLink Href="@GetDashboardJobsLinkForRun(_dashboardSelectedRun, "Pending")" Underline="Underline.Always" Color="Color.Secondary">@_dashboardSelectedRun.JobCreationResult.JobsCreated created</MudLink>, @_dashboardSelectedRun.JobCreationResult.JobsSkipped skipped
                             </MudText>
                         }
                         else
@@ -518,8 +518,8 @@
                         @if (_dashboardSelectedRun.CredentialVerificationResult != null)
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                <span style="color: var(--mud-palette-success);">@_dashboardSelectedRun.CredentialVerificationResult.CredentialsVerified verified</span>,
-                                <span style="color: var(--mud-palette-error);">@_dashboardSelectedRun.CredentialVerificationResult.CredentialsFailed failed</span>
+                                <MudLink Href="@GetDashboardJobsLinkForRun(_dashboardSelectedRun, "CredentialVerified")" Underline="Underline.Always" Style="color: var(--mud-palette-success);">@_dashboardSelectedRun.CredentialVerificationResult.CredentialsVerified verified</MudLink>,
+                                <MudLink Href="@GetDashboardJobsLinkForRun(_dashboardSelectedRun, "CredentialFailed")" Underline="Underline.Always" Style="color: var(--mud-palette-error);">@_dashboardSelectedRun.CredentialVerificationResult.CredentialsFailed failed</MudLink>
                             </MudText>
                         }
                         else
@@ -534,9 +534,9 @@
                         @if (_dashboardSelectedRun.StatusCheckResult != null)
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                @_dashboardSelectedRun.StatusCheckResult.JobsChecked checked,
-                                <span style="color: var(--mud-palette-success);">@_dashboardSelectedRun.StatusCheckResult.JobsCompleted completed</span>,
-                                <span style="color: var(--mud-palette-warning);">@_dashboardSelectedRun.StatusCheckResult.JobsNeedingReview need review</span>
+                                <MudLink Href="@GetDashboardJobsLinkForRun(_dashboardSelectedRun)" Underline="Underline.Always" Color="Color.Secondary">@_dashboardSelectedRun.StatusCheckResult.JobsChecked checked</MudLink>,
+                                <MudLink Href="@GetDashboardJobsLinkForRun(_dashboardSelectedRun, "Completed")" Underline="Underline.Always" Style="color: var(--mud-palette-success);">@_dashboardSelectedRun.StatusCheckResult.JobsCompleted completed</MudLink>,
+                                <MudLink Href="@GetDashboardJobsLinkForRun(_dashboardSelectedRun, "NeedsReview")" Underline="Underline.Always" Style="color: var(--mud-palette-warning);">@_dashboardSelectedRun.StatusCheckResult.JobsNeedingReview need review</MudLink>
                             </MudText>
                         }
                         else
@@ -551,9 +551,9 @@
                         @if (_dashboardSelectedRun.ScrapeResult != null)
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                @_dashboardSelectedRun.ScrapeResult.ScrapesRequested ADR requests sent,
-                                <span style="color: var(--mud-palette-success);">@_dashboardSelectedRun.ScrapeResult.ScrapesCompleted completed</span>,
-                                <span style="color: var(--mud-palette-error);">@_dashboardSelectedRun.ScrapeResult.ScrapesFailed failed</span>
+                                <MudLink Href="@GetDashboardJobsLinkForRun(_dashboardSelectedRun, "ScrapeRequested")" Underline="Underline.Always" Color="Color.Secondary">@_dashboardSelectedRun.ScrapeResult.ScrapesRequested ADR requests sent</MudLink>,
+                                <MudLink Href="@GetDashboardJobsLinkForRun(_dashboardSelectedRun, "Completed")" Underline="Underline.Always" Style="color: var(--mud-palette-success);">@_dashboardSelectedRun.ScrapeResult.ScrapesCompleted completed</MudLink>,
+                                <MudLink Href="@GetDashboardJobsLinkForRun(_dashboardSelectedRun, "ScrapeFailed")" Underline="Underline.Always" Style="color: var(--mud-palette-error);">@_dashboardSelectedRun.ScrapeResult.ScrapesFailed failed</MudLink>
                             </MudText>
                         }
                         else
@@ -1489,11 +1489,14 @@
         return Color.Default;
     }
 
-    private string GetDashboardJobsLinkForRun(AdrOrchestrationStatus run)
+    private string GetDashboardJobsLinkForRun(AdrOrchestrationStatus run, string? status = null)
     {
         var modifiedAfter = run.StartedAt?.ToString("o") ?? "";
         var modifiedBefore = run.CompletedAt?.ToString("o") ?? DateTime.UtcNow.ToString("o");
-        return $"/adr/jobs?modifiedAfter={Uri.EscapeDataString(modifiedAfter)}&modifiedBefore={Uri.EscapeDataString(modifiedBefore)}&latestPerAccount=false";
+        var url = $"/adr/jobs?modifiedAfter={Uri.EscapeDataString(modifiedAfter)}&modifiedBefore={Uri.EscapeDataString(modifiedBefore)}&latestPerAccount=false";
+        if (!string.IsNullOrEmpty(status))
+            url += $"&status={Uri.EscapeDataString(status)}";
+        return url;
     }
 
     private string GetDashboardAccountsLinkForRun(AdrOrchestrationStatus run)
