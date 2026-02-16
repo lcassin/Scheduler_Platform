@@ -1670,7 +1670,12 @@ Console.WriteLine(""Hello, World!"");
                 if (messageType == "zoom" && message.RootElement.TryGetProperty("level", out var levelElement))
                 {
                     _currentZoom = levelElement.GetDouble();
-                    ZoomLevelText.Text = $"{_currentZoom * 100:F0}%";
+                    // Also update the active document's zoom so it's preserved when switching tabs
+                    if (_activeDocument != null)
+                    {
+                        _activeDocument.PreviewZoom = _currentZoom;
+                    }
+                    UpdateZoomUI();
                 }
                 else if (messageType == "pngExport" && message.RootElement.TryGetProperty("data", out var dataElement))
                 {
@@ -3328,6 +3333,11 @@ Console.WriteLine(""Hello, World!"");
     {
         if (!_webViewInitialized) return;
         _currentZoom = 1.0;
+        // Sync zoom to active document so it's preserved when switching tabs
+        if (_activeDocument != null)
+        {
+            _activeDocument.PreviewZoom = _currentZoom;
+        }
         await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.resetView()");
         UpdateZoomUI();
     }
@@ -3342,12 +3352,22 @@ Console.WriteLine(""Hello, World!"");
     {
         if (_isUpdatingZoomSlider || !_webViewInitialized) return;
         _currentZoom = e.NewValue / 100.0;
+        // Sync zoom to active document so it's preserved when switching tabs
+        if (_activeDocument != null)
+        {
+            _activeDocument.PreviewZoom = _currentZoom;
+        }
         await PreviewWebView.CoreWebView2.ExecuteScriptAsync($"window.setZoom({_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)})");
         ZoomLevelText.Text = $"{e.NewValue:F0}%";
     }
     
     private async Task ApplyZoom()
     {
+        // Sync zoom to active document so it's preserved when switching tabs
+        if (_activeDocument != null)
+        {
+            _activeDocument.PreviewZoom = _currentZoom;
+        }
         await PreviewWebView.CoreWebView2.ExecuteScriptAsync($"window.setZoom({_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)})");
         UpdateZoomUI();
     }
