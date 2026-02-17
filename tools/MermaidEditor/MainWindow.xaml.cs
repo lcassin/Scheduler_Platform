@@ -899,6 +899,23 @@ Console.WriteLine(""Hello, World!"");
             }
         }
 
+        // Get target positions for restoration when switching documents (full page reload path)
+        var targetScrollLeft = (_isSwitchingDocuments && _activeDocument != null) 
+            ? _activeDocument.PreviewScrollLeft.ToString(System.Globalization.CultureInfo.InvariantCulture) 
+            : "0";
+        var targetScrollTop = (_isSwitchingDocuments && _activeDocument != null) 
+            ? _activeDocument.PreviewScrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture) 
+            : "0";
+        var targetPanX = (_isSwitchingDocuments && _activeDocument != null) 
+            ? _activeDocument.PreviewPanX.ToString(System.Globalization.CultureInfo.InvariantCulture) 
+            : "0";
+        var targetPanY = (_isSwitchingDocuments && _activeDocument != null) 
+            ? _activeDocument.PreviewPanY.ToString(System.Globalization.CultureInfo.InvariantCulture) 
+            : "0";
+        var targetZoom = (_isSwitchingDocuments && _activeDocument != null) 
+            ? _activeDocument.PreviewZoom.ToString(System.Globalization.CultureInfo.InvariantCulture) 
+            : "1";
+
         var html = $@"<!DOCTYPE html>
 <html>
 <head>
@@ -967,6 +984,13 @@ Console.WriteLine(""Hello, World!"");
         window.panzoomInstance = null;
         window.currentZoom = {_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)};
         
+        // Target positions for restoration when switching documents
+        var targetScrollLeft = {targetScrollLeft};
+        var targetScrollTop = {targetScrollTop};
+        var targetPanX = {targetPanX};
+        var targetPanY = {targetPanY};
+        var targetZoom = {targetZoom};
+        
         // Don't set theme here - let frontmatter config take precedence
         // Mermaid will parse ---config:--- frontmatter automatically
         mermaid.initialize({{ 
@@ -1022,10 +1046,33 @@ Console.WriteLine(""Hello, World!"");
                 boundsPadding: 0.1
             }});
             
-            // Reset position to top-left after initialization
-            window.panzoomInstance.moveTo(0, 0);
-            window.panzoomInstance.zoomAbs(0, 0, 1);
-            window.currentZoom = 1;
+            // Restore zoom and pan position (use target values if switching documents, otherwise reset to default)
+            var restoreZoom = (targetPanX !== 0 || targetPanY !== 0 || targetZoom !== 1) ? targetZoom : 1;
+            var restorePanX = targetPanX;
+            var restorePanY = targetPanY;
+            
+            window.panzoomInstance.zoomAbs(0, 0, restoreZoom);
+            window.currentZoom = restoreZoom;
+            
+            // Use setTimeout to ensure panzoom is fully initialized before setting pan position
+            setTimeout(function() {{
+                window.panzoomInstance.moveTo(restorePanX, restorePanY);
+                
+                // Restore scroll position
+                if (targetScrollLeft !== 0 || targetScrollTop !== 0) {{
+                    container.scrollLeft = targetScrollLeft;
+                    container.scrollTop = targetScrollTop;
+                }}
+                
+                // Notify C# that diagram is ready
+                window.chrome.webview.postMessage({{ 
+                    type: 'diagramReady', 
+                    targetScrollLeft: targetScrollLeft, 
+                    targetScrollTop: targetScrollTop,
+                    targetPanX: restorePanX,
+                    targetPanY: restorePanY
+                }});
+            }}, 50);
             
             window.panzoomInstance.on('zoom', function(e) {{
                 window.currentZoom = e.getTransform().scale;
