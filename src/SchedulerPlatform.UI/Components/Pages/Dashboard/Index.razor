@@ -11,6 +11,8 @@
 @inject NavigationManager NavigationManager
 @inject IJSRuntime JSRuntime
 @inject IUserTimeZoneService TimeZoneService
+@inject IDialogService DialogService
+@inject IJobExecutionService ExecutionService
 @implements IDisposable
 
 <PageTitle>Dashboard</PageTitle>
@@ -865,6 +867,7 @@
                         <MudTh>Started</MudTh>
                         <MudTh>Ended</MudTh>
                         <MudTh>Duration</MudTh>
+                        <MudTh>Actions</MudTh>
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd DataLabel="Schedule Name">@context.ScheduleName</MudTd>
@@ -893,6 +896,12 @@
                             {
                                 <text>-</text>
                             }
+                        </MudTd>
+                        <MudTd DataLabel="Actions">
+                            <MudIconButton Icon="@Icons.Material.Filled.Visibility"
+                                           Size="Size.Small"
+                                           Color="Color.Primary"
+                                           OnClick="@(() => ViewExecutionDetails(context.Id))" />
                         </MudTd>
                     </RowTemplate>
                 </MudTable>
@@ -1486,6 +1495,37 @@
     private void NavigateToAllExecutions()
     {
         NavigationManager.NavigateTo("/executions");
+    }
+
+    private async Task ViewExecutionDetails(int executionId)
+    {
+        try
+        {
+            var execution = await ExecutionService.GetJobExecutionAsync(executionId);
+            if (execution == null)
+            {
+                Snackbar.Add("Execution not found", Severity.Error);
+                return;
+            }
+
+            var parameters = new DialogParameters
+            {
+                { "Execution", execution }
+            };
+
+            var options = new DialogOptions
+            {
+                MaxWidth = MaxWidth.Medium,
+                FullWidth = true,
+                CloseButton = true
+            };
+
+            await DialogService.ShowAsync<ExecutionDetailsDialog>("Job Execution Details", parameters, options);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading execution details: {ex.Message}", Severity.Error);
+        }
     }
 
     private void NavigateToExecutions(string? status = null)
