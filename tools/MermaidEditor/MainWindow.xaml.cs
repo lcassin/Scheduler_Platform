@@ -1347,11 +1347,15 @@ Console.WriteLine(""Hello, World!"");
                                 currentZoom = 1;
                             }}
                             
-                            // Restore container scroll position after a short delay to ensure layout is complete
+                            // Notify C# that diagram is ready, passing the target scroll position
+                            // C# will restore the scroll position to ensure proper timing
                             setTimeout(function() {{
-                                container.scrollLeft = savedScrollLeft;
-                                container.scrollTop = savedScrollTop;
-                            }}, 50);
+                                window.chrome.webview.postMessage({{ 
+                                    type: 'diagramReady', 
+                                    targetScrollLeft: savedScrollLeft, 
+                                    targetScrollTop: savedScrollTop 
+                                }});
+                            }}, 100);
                             
                             panzoomInstance.on('zoom', function(e) {{
                                 currentZoom = e.getTransform().scale;
@@ -1724,11 +1728,44 @@ Console.WriteLine(""Hello, World!"");
                     var elementType = message.RootElement.TryGetProperty("elementType", out var typeEl) ? typeEl.GetString() : "";
                     FindAndHighlightInEditor("", text, elementType);
                 }
+                else if (messageType == "diagramReady")
+                {
+                    // Diagram has finished rendering - restore scroll position from C#
+                    var scrollLeft = message.RootElement.TryGetProperty("targetScrollLeft", out var scrollLeftEl) ? scrollLeftEl.GetDouble() : 0;
+                    var scrollTop = message.RootElement.TryGetProperty("targetScrollTop", out var scrollTopEl) ? scrollTopEl.GetDouble() : 0;
+                    
+                    // Only restore if we have non-zero scroll values (indicating we're switching documents)
+                    if (scrollLeft > 0 || scrollTop > 0)
+                    {
+                        _ = RestorePreviewScrollPositionAsync(scrollLeft, scrollTop);
+                    }
+                }
             }
         }
         catch
         {
         }
+    }
+    
+    private async Task RestorePreviewScrollPositionAsync(double scrollLeft, double scrollTop)
+    {
+        if (!_webViewInitialized) return;
+        
+        try
+        {
+            // Use ExecuteScriptAsync to set the scroll position from C#
+            // This ensures proper timing after the diagram is fully rendered
+            await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
+                (function() {{
+                    var container = document.getElementById('container');
+                    if (container) {{
+                        container.scrollLeft = {scrollLeft.ToString(System.Globalization.CultureInfo.InvariantCulture)};
+                        container.scrollTop = {scrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture)};
+                    }}
+                }})();
+            ");
+        }
+        catch { }
     }
 
     private void FindAndHighlightInEditor(string? nodeId, string? text, string? elementType = null)
