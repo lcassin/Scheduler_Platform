@@ -5,7 +5,6 @@
 @using SchedulerPlatform.Core.Domain.Enums
 @using SchedulerPlatform.UI.Services
 @inject IDashboardService DashboardService
-@inject IClientService ClientService
 @inject IScheduleService ScheduleService
 @inject IAdrService AdrService
 @inject ISnackbar Snackbar
@@ -426,23 +425,7 @@
                 <MudSelectItem Value="720">Last 30 Days</MudSelectItem>
             </MudSelect>
         </MudItem>
-        <MudItem xs="12" md="3">
-            <MudAutocomplete T="Client" 
-                             Label="Filter by Client" 
-                             Value="_selectedClient"
-                             SearchFunc="SearchClients"
-                             ToStringFunc="@(c => c?.ClientName ?? "All Clients")"
-                             ValueChanged="OnClientFilterChanged"
-                             Variant="Variant.Outlined" 
-                             Margin="Margin.Dense" 
-                             Clearable="true"
-                             ResetValueOnEmptyText="true"
-                             CoerceText="false"
-                             CoerceValue="true"
-                             AdornmentIcon="@Icons.Material.Filled.Business"
-                             ShowProgressIndicator="true" />
-        </MudItem>
-        <MudItem xs="12" md="4">
+        <MudItem xs="12" md="7">
             <MudSelect T="JobStatus" 
                       @bind-Value="_selectedStatusesValue"
                       @bind-SelectedValues="SelectedStatuses"
@@ -465,7 +448,7 @@
             <MudIconButton Icon="@Icons.Material.Filled.Refresh" 
                           Color="Color.Primary" 
                           OnClick="RefreshData"
-                          Disabled="@(_overviewLoading || _statusLoading || _trendsLoading || _longestLoading || _missedLoading)"
+                          Disabled="@(_overviewLoading || _statusLoading || _trendsLoading || _longestLoading || _missedLoading || _recentExecutionsLoading)"
                           Title="Refresh Dashboard">
             </MudIconButton>
         </MudItem>
@@ -681,15 +664,84 @@
     </MudItem>
 </MudGrid>
 
+<MudGrid Class="mt-2 mb-4" Spacing="2">
+    <MudItem xs="12">
+        <MudPaper Class="pa-4">
+            <div class="d-flex justify-space-between align-center mb-4">
+                <MudText Typo="Typo.h6">Top 10 Schedule Executions</MudText>
+                @if (_recentExecutionsHasMore)
+                {
+                    <MudButton Variant="Variant.Text"
+                               Color="Color.Primary"
+                               EndIcon="@Icons.Material.Filled.ArrowForward"
+                               OnClick="NavigateToAllExecutions">
+                        View All Executions
+                    </MudButton>
+                }
+            </div>
+            @if (_recentExecutionsLoading && !_recentExecutions.Any())
+            {
+                <div class="d-flex justify-center py-4">
+                    <MudProgressCircular Color="Color.Primary" Size="Size.Small" Indeterminate="true" />
+                </div>
+            }
+            else if (!_recentExecutions.Any())
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Align="Align.Center">
+                    No executions found for the selected time period
+                </MudText>
+            }
+            else
+            {
+                <MudTable Items="_recentExecutions" Hover="true" Dense="true" Breakpoint="Breakpoint.Sm">
+                    <HeaderContent>
+                        <MudTh>Schedule Name</MudTh>
+                        <MudTh>Status</MudTh>
+                        <MudTh>Started</MudTh>
+                        <MudTh>Ended</MudTh>
+                        <MudTh>Duration</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Schedule Name">@context.ScheduleName</MudTd>
+                        <MudTd DataLabel="Status">
+                            <MudChip T="string" Size="Size.Small" Color="@GetExecutionStatusColor(context.Status)">
+                                @context.Status
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Started">@context.StartDateTime.ToString("MM/dd/yyyy hh:mm:ss tt")</MudTd>
+                        <MudTd DataLabel="Ended">
+                            @if (context.EndDateTime.HasValue)
+                            {
+                                @context.EndDateTime.Value.ToString("MM/dd/yyyy hh:mm:ss tt")
+                            }
+                            else
+                            {
+                                <MudText Typo="Typo.body2" Color="Color.Info">Running...</MudText>
+                            }
+                        </MudTd>
+                        <MudTd DataLabel="Duration">
+                            @if (context.DurationSeconds.HasValue)
+                            {
+                                @FormatDuration(context.DurationSeconds.Value)
+                            }
+                            else
+                            {
+                                <text>-</text>
+                            }
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            }
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
 @code {
     private DashboardOverview? _overview;
-    private List<Client> _clients = new();
     private int _refreshInterval = 60;
     private PeriodicTimer? _timer;
 
     private int _selectedTimeWindow = 24;
-    private Client? _selectedClient;
-    private int? _selectedClientId => _selectedClient?.Id;
     private JobStatus _selectedStatusesValue;
         private IEnumerable<JobStatus>? _selectedStatusesBackingField = null;
     
@@ -698,6 +750,7 @@
                 private bool _trendsLoading;
                 private bool _longestLoading;
                 private bool _missedLoading;
+                private bool _recentExecutionsLoading;
                 private bool _adrLoading;
                 private bool _initialLoadComplete;
                 private bool _timezoneLoaded;
@@ -745,6 +798,9 @@
     private List<PlotlyBarChart.ChartSeriesData> _longestSeriesPlotly = new();
     private string[] _longestLabels = Array.Empty<string>();
 
+    private List<RecentExecutionItem> _recentExecutions = new();
+    private bool _recentExecutionsHasMore;
+
     private string[] _adrAccountChartColors = new[]
     {
         "#f44336", // Run Now (Error/Red)
@@ -757,15 +813,6 @@
 
         protected override async Task OnInitializedAsync()
         {
-            try
-            {
-                _clients = await ClientService.GetClientsAsync();
-            }
-            catch (Exception ex)
-            {
-                Snackbar.Add($"Error loading clients: {ex.Message}", Severity.Error);
-            }
-
             StartAutoRefresh();
         }
 
@@ -828,28 +875,13 @@
         RefreshData();
     }
 
-    private async Task OnClientFilterChanged(Client? client)
-    {
-        _selectedClient = client;
-        RefreshData();
-    }
-
-    private async Task<IEnumerable<Client>> SearchClients(string value, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-            return _clients.Take(50);
-
-        return _clients
-            .Where(c => c.ClientName.Contains(value, StringComparison.OrdinalIgnoreCase))
-            .Take(50);
-    }
-
         private void RefreshData()
         {
             _ = LoadOverviewAsync();
             _ = LoadStatusBreakdownAsync();
             _ = LoadTrendsAsync();
             _ = LoadLongestAsync();
+            _ = LoadRecentExecutionsAsync();
             _ = LoadMissedSchedulesAsync();
             _ = LoadAdrStatsAsync();
             _ = LoadAdrJobStatsAsync();
@@ -863,7 +895,7 @@
             _overviewLoading = true;
             try
             {
-                _overview = await DashboardService.GetOverviewAsync(_selectedClientId, _selectedTimeWindow, _browserTimeZone);
+                _overview = await DashboardService.GetOverviewAsync(hours: _selectedTimeWindow, timezone: _browserTimeZone);
             }
             catch (Exception ex)
             {
@@ -883,7 +915,8 @@
         _statusLoading = true;
         try
         {
-            var statusData = await DashboardService.GetStatusBreakdownAsync(_selectedTimeWindow, _selectedClientId);
+            var statusList = _selectedStatusesBackingField?.ToList();
+            var statusData = await DashboardService.GetStatusBreakdownAsync(_selectedTimeWindow, statuses: statusList);
             _statusSeries = statusData;
             _statusData = statusData.Select(x => (double)x.Count).ToArray();
             _statusLabels = statusData.Select(x => x.Status.ToString()).ToArray();
@@ -921,7 +954,7 @@
         try
         {
             var statusList = _selectedStatusesBackingField?.ToList();
-            var trendsData = await DashboardService.GetExecutionTrendsAsync(_selectedTimeWindow, _selectedClientId, statusList);
+            var trendsData = await DashboardService.GetExecutionTrendsAsync(_selectedTimeWindow, statuses: statusList);
             
             _durationLabels = trendsData.Select(x => FormatDateLabel(x.Hour)).ToArray();
             _durationSeriesPlotly = new List<PlotlyLineChart.ChartSeriesData>
@@ -961,7 +994,7 @@
         try
         {
             var statusList = _selectedStatusesBackingField?.ToList();
-            var longestData = await DashboardService.GetTopLongestExecutionsAsync(10, _selectedTimeWindow, _selectedClientId, statusList);
+            var longestData = await DashboardService.GetTopLongestExecutionsAsync(10, _selectedTimeWindow, statuses: statusList);
             
             _longestLabels = longestData.Select(x => 
                 x.ScheduleName.Length > 30 
@@ -1242,6 +1275,54 @@
         NavigationManager.NavigateTo("/schedules");
     }
     
+    private async Task LoadRecentExecutionsAsync()
+    {
+        if (_recentExecutionsLoading) return;
+        _recentExecutionsLoading = true;
+        try
+        {
+            var statusList = _selectedStatusesBackingField?.ToList();
+            var result = await DashboardService.GetRecentExecutionsAsync(_selectedTimeWindow, statuses: statusList);
+            _recentExecutions = result.Items;
+            _recentExecutionsHasMore = result.HasMore;
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading recent executions: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _recentExecutionsLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private Color GetExecutionStatusColor(JobStatus status) => status switch
+    {
+        JobStatus.Completed => Color.Success,
+        JobStatus.Failed => Color.Error,
+        JobStatus.Running => Color.Info,
+        JobStatus.Retrying => Color.Warning,
+        JobStatus.Cancelled => Color.Default,
+        JobStatus.Scheduled => Color.Primary,
+        _ => Color.Default
+    };
+
+    private string FormatDuration(int totalSeconds)
+    {
+        var ts = TimeSpan.FromSeconds(totalSeconds);
+        if (ts.TotalHours >= 1)
+            return $"{(int)ts.TotalHours}h {ts.Minutes}m {ts.Seconds}s";
+        if (ts.TotalMinutes >= 1)
+            return $"{ts.Minutes}m {ts.Seconds}s";
+        return $"{ts.Seconds}s";
+    }
+
+    private void NavigateToAllExecutions()
+    {
+        NavigationManager.NavigateTo("/executions");
+    }
+
     private void NavigateToExecutions(string? status = null)
     {
         var url = "/executions";
