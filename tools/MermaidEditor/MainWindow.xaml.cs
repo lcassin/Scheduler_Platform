@@ -859,16 +859,18 @@ Console.WriteLine(""Hello, World!"");
         {
             try
             {
-                // When switching documents, we need to apply the document's zoom level
+                // When switching documents, we need to apply the document's zoom level and scroll position
                 // Otherwise, preserve the current pan/zoom position for normal edits
-                if (_isSwitchingDocuments)
+                if (_isSwitchingDocuments && _activeDocument != null)
                 {
-                    // Update diagram and pass the document's zoom level as second parameter
-                    // This ensures the correct zoom is applied after the async render completes
+                    // Update diagram and pass the document's zoom level and scroll position
+                    // This ensures the correct state is applied after the async render completes
+                    var scrollLeft = _activeDocument.PreviewScrollLeft.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var scrollTop = _activeDocument.PreviewScrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture);
                     await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
                         (function() {{
                             if (typeof updateDiagram === 'function') {{
-                                updateDiagram({escapedCode}, {_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)});
+                                updateDiagram({escapedCode}, {_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)}, {scrollLeft}, {scrollTop});
                             }}
                         }})();
                     ");
@@ -1248,7 +1250,8 @@ Console.WriteLine(""Hello, World!"");
         
         // Update diagram content without reloading the page (preserves pan/zoom position)
         // Optional targetZoom parameter allows overriding the zoom level (used when switching documents)
-        window.updateDiagram = function(newCode, targetZoom) {{
+        // Optional targetScrollLeft/targetScrollTop parameters allow overriding scroll position (used when switching documents)
+        window.updateDiagram = function(newCode, targetZoom, targetScrollLeft, targetScrollTop) {{
             // Save current panzoom transform (only zoom level, not position - position causes issues when diagram size changes)
             // If targetZoom is provided, use that instead of the current zoom (for document switching)
             let savedZoom = (typeof targetZoom === 'number') ? targetZoom : currentZoom;
@@ -1260,9 +1263,9 @@ Console.WriteLine(""Hello, World!"");
             const diagram = document.getElementById('diagram');
             const container = document.getElementById('container');
             
-            // Save scroll position of container
-            const savedScrollLeft = container.scrollLeft;
-            const savedScrollTop = container.scrollTop;
+            // Save scroll position of container (or use provided target scroll positions for document switching)
+            const savedScrollLeft = (typeof targetScrollLeft === 'number') ? targetScrollLeft : container.scrollLeft;
+            const savedScrollTop = (typeof targetScrollTop === 'number') ? targetScrollTop : container.scrollTop;
             
             // Clear existing content and add new mermaid code
             diagram.innerHTML = '<pre class=""mermaid"">' + newCode.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>';
@@ -3399,6 +3402,28 @@ Console.WriteLine(""Hello, World!"");
         ZoomLevelText.Text = $"{_currentZoom * 100:F0}%";
         _isUpdatingZoomSlider = false;
     }
+    
+    /// <summary>
+    /// Saves the current preview scroll position to the document model
+    /// </summary>
+    private async void SavePreviewScrollPosition(DocumentModel doc)
+    {
+        if (!_webViewInitialized || doc == null) return;
+        
+        try
+        {
+            var result = await PreviewWebView.CoreWebView2.ExecuteScriptAsync(
+                "JSON.stringify({ scrollLeft: document.getElementById('container')?.scrollLeft || 0, scrollTop: document.getElementById('container')?.scrollTop || 0 })");
+            
+            if (!string.IsNullOrEmpty(result) && result != "null")
+            {
+                var json = System.Text.Json.JsonDocument.Parse(result.Trim('"').Replace("\\\"", "\""));
+                doc.PreviewScrollLeft = json.RootElement.GetProperty("scrollLeft").GetDouble();
+                doc.PreviewScrollTop = json.RootElement.GetProperty("scrollTop").GetDouble();
+            }
+        }
+        catch { }
+    }
 
     private void SyntaxHelp_Click(object sender, RoutedEventArgs e)
     {
@@ -4879,9 +4904,14 @@ Console.WriteLine(""Hello, World!"");
             _activeDocument.CaretOffset = CodeEditor.CaretOffset;
             _activeDocument.VerticalScrollOffset = CodeEditor.VerticalOffset;
             _activeDocument.HorizontalScrollOffset = CodeEditor.HorizontalOffset;
+            _activeDocument.SelectionStart = CodeEditor.SelectionStart;
+            _activeDocument.SelectionLength = CodeEditor.SelectionLength;
             _activeDocument.PreviewZoom = _currentZoom;
             _activeDocument.HasNavigatedAway = _hasNavigatedAway;
             _activeDocument.IsSelected = false;
+            
+            // Save preview scroll position asynchronously
+            SavePreviewScrollPosition(_activeDocument);
         }
         
         // Switch to new document
@@ -4912,6 +4942,14 @@ Console.WriteLine(""Hello, World!"");
             CodeEditor.CaretOffset = Math.Min(doc.CaretOffset, doc.TextDocument.TextLength);
             CodeEditor.ScrollToVerticalOffset(doc.VerticalScrollOffset);
             CodeEditor.ScrollToHorizontalOffset(doc.HorizontalScrollOffset);
+            
+            // Restore selection if there was one
+            if (doc.SelectionLength > 0)
+            {
+                var selStart = Math.Min(doc.SelectionStart, doc.TextDocument.TextLength);
+                var selLength = Math.Min(doc.SelectionLength, doc.TextDocument.TextLength - selStart);
+                CodeEditor.Select(selStart, selLength);
+            }
         }
         catch { }
         
@@ -5369,10 +5407,14 @@ public class DocumentModel : System.ComponentModel.INotifyPropertyChanged
     public int CaretOffset { get; set; }
     public double VerticalScrollOffset { get; set; }
     public double HorizontalScrollOffset { get; set; }
+    public int SelectionStart { get; set; }
+    public int SelectionLength { get; set; }
     
     // Preview state
     public double PreviewZoom { get; set; } = 1.0;
     public bool HasNavigatedAway { get; set; }
+    public double PreviewScrollLeft { get; set; }
+    public double PreviewScrollTop { get; set; }
     
     // File change detection
     public DateTime LastKnownWriteTime { get; set; }
