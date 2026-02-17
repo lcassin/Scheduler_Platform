@@ -963,8 +963,9 @@ Console.WriteLine(""Hello, World!"");
         </div>
     </div>
     <script>
-        let panzoomInstance = null;
-        let currentZoom = {_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)};
+        // Use window-level variables so they can be accessed from C# via ExecuteScriptAsync
+        window.panzoomInstance = null;
+        window.currentZoom = {_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)};
         
         // Don't set theme here - let frontmatter config take precedence
         // Mermaid will parse ---config:--- frontmatter automatically
@@ -1013,7 +1014,7 @@ Console.WriteLine(""Hello, World!"");
                 }}
             }}
             
-            panzoomInstance = panzoom(diagram, {{
+            window.panzoomInstance = panzoom(diagram, {{
                 maxZoom: 10,
                 minZoom: 0.1,
                 initialZoom: 1,
@@ -1022,13 +1023,13 @@ Console.WriteLine(""Hello, World!"");
             }});
             
             // Reset position to top-left after initialization
-            panzoomInstance.moveTo(0, 0);
-            panzoomInstance.zoomAbs(0, 0, 1);
-            currentZoom = 1;
+            window.panzoomInstance.moveTo(0, 0);
+            window.panzoomInstance.zoomAbs(0, 0, 1);
+            window.currentZoom = 1;
             
-            panzoomInstance.on('zoom', function(e) {{
-                currentZoom = e.getTransform().scale;
-                window.chrome.webview.postMessage({{ type: 'zoom', level: currentZoom }});
+            window.panzoomInstance.on('zoom', function(e) {{
+                window.currentZoom = e.getTransform().scale;
+                window.chrome.webview.postMessage({{ type: 'zoom', level: window.currentZoom }});
             }});
             
             // Add click handlers to diagram nodes for click-to-highlight feature
@@ -1257,10 +1258,10 @@ Console.WriteLine(""Hello, World!"");
         window.updateDiagram = function(newCode, targetZoom, targetScrollLeft, targetScrollTop, targetPanX, targetPanY) {{
             // Save current panzoom transform (only zoom level, not position - position causes issues when diagram size changes)
             // If targetZoom is provided, use that instead of the current zoom (for document switching)
-            let savedZoom = (typeof targetZoom === 'number') ? targetZoom : currentZoom;
+            let savedZoom = (typeof targetZoom === 'number') ? targetZoom : window.currentZoom;
             let savedTransform = null;
-            if (panzoomInstance) {{
-                savedTransform = panzoomInstance.getTransform();
+            if (window.panzoomInstance) {{
+                savedTransform = window.panzoomInstance.getTransform();
             }}
             
             // Save pan position (or use provided target pan positions for document switching)
@@ -1284,9 +1285,9 @@ Console.WriteLine(""Hello, World!"");
             diagram.style.transform = '';
             
             // Destroy old panzoom instance
-            if (panzoomInstance) {{
-                panzoomInstance.dispose();
-                panzoomInstance = null;
+            if (window.panzoomInstance) {{
+                window.panzoomInstance.dispose();
+                window.panzoomInstance = null;
             }}
             
             // Re-render mermaid
@@ -1334,7 +1335,7 @@ Console.WriteLine(""Hello, World!"");
                             setupNodeClickHandlers(svg);
                             
                             // Re-create panzoom
-                            panzoomInstance = panzoom(diagram, {{
+                            window.panzoomInstance = panzoom(diagram, {{
                                 maxZoom: 10,
                                 minZoom: 0.1,
                                 initialZoom: 1,
@@ -1343,13 +1344,13 @@ Console.WriteLine(""Hello, World!"");
                             }});
                             
                             // Restore zoom level
-                            panzoomInstance.zoomAbs(0, 0, savedZoom);
-                            currentZoom = savedZoom;
+                            window.panzoomInstance.zoomAbs(0, 0, savedZoom);
+                            window.currentZoom = savedZoom;
                             
                             // Restore pan position (the drag/translate position)
                             // Use setTimeout to ensure panzoom is fully initialized
                             setTimeout(function() {{
-                                panzoomInstance.moveTo(savedPanX, savedPanY);
+                                window.panzoomInstance.moveTo(savedPanX, savedPanY);
                                 
                                 // Notify C# that diagram is ready, passing the target scroll and pan positions
                                 // C# will restore the scroll position to ensure proper timing
@@ -1362,9 +1363,9 @@ Console.WriteLine(""Hello, World!"");
                                 }});
                             }}, 50);
                             
-                            panzoomInstance.on('zoom', function(e) {{
-                                currentZoom = e.getTransform().scale;
-                                window.chrome.webview.postMessage({{ type: 'zoom', level: currentZoom }});
+                            window.panzoomInstance.on('zoom', function(e) {{
+                                window.currentZoom = e.getTransform().scale;
+                                window.chrome.webview.postMessage({{ type: 'zoom', level: window.currentZoom }});
                             }});
                         }});
                     }}
