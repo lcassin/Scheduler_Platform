@@ -88,19 +88,58 @@ This panel shows jobs organized by which phase of processing they are in.
 
 ### 1.5 Scheduler Metrics
 
-If your system also uses the Scheduler feature (for running automated tasks like stored procedures or API calls), you will see a **Scheduler Metrics** section.
+If your system also uses the Scheduler feature (for running automated tasks like stored procedures or API calls), you will see a **Scheduler Metrics** section. This section has its own filters, charts, and a recent executions grid.
+
+#### Filters
+
+At the top of the Scheduler Metrics section you will find two filters:
+
+| Filter | Options | What It Does |
+|--------|---------|--------------|
+| **Time Window** | Last 24 Hours, Last 7 Days, Last 30 Days | Controls the date range for all cards, charts, and the executions grid below. For example, selecting "Last 7 Days" shows data from the past week. |
+| **Filter by Status** | Failed, Running, Completed, Retrying, Cancelled | Lets you narrow down which execution statuses are shown. You can select multiple statuses. When nothing is selected, all statuses are included. |
+
+A **Refresh** button is also available to manually reload the data. The section auto-refreshes every 60 seconds.
+
+#### Overview Cards
 
 ![Scheduler Metrics](diagrams/status-guide-scheduler-metrics.png)
 
-| Metric | Color | What It Means |
-|--------|-------|---------------|
-| **Total Schedules** | Blue | The total number of scheduled tasks configured in the system, showing how many are enabled vs. disabled. |
-| **Running Now** | Green | The number of scheduled tasks that are actively running at this moment. "Peak concurrent" shows the most tasks that were running at the same time during the selected time window. |
-| **Completed Today** | Green | The number of scheduled tasks that finished successfully today. "Avg" shows the average time each task took to complete. |
-| **Failed Today** | Red | The number of scheduled tasks that failed today. "Total in window" shows how many tasks ran in the selected time window. |
-| **Missed Schedules** | Orange | Scheduled tasks that were supposed to run but did not. This could mean the system was down or the task could not start for some reason. |
+| Card | Color | What It Shows |
+|------|-------|---------------|
+| **Total Schedules** | Blue | The total number of scheduled tasks configured in the system, showing how many are enabled vs. disabled. Click to go to the Schedules page. |
+| **Running Now** | Blue | The number of scheduled tasks that are actively running at this moment. "Peak concurrent" shows the most tasks that were running at the same time during the selected time window. Click to view running executions. |
+| **Completed Today** | Green | The number of scheduled tasks that finished successfully today. "Avg" shows the average time each task took to complete. Click to view completed executions. |
+| **Failed Today** | Red | The number of scheduled tasks that failed today. "Total in window" shows how many tasks ran in the selected time window. Click to view failed executions. |
+| **Missed Schedules** | Orange | Scheduled tasks that were supposed to run but did not (in the last 24 hours). This could mean the system was down or the task could not start for some reason. Click to view details. |
 
-You can adjust the **Time Window** filter to look at different periods (e.g., last 24 hours, last 7 days).
+#### Charts
+
+Below the overview cards, four charts provide visual insight into schedule execution patterns:
+
+| Chart | Type | What It Shows |
+|-------|------|---------------|
+| **Status Breakdown** | Donut chart | A visual breakdown of execution statuses (Completed, Failed, Running, etc.) as percentages for the selected time window. Each slice represents one status, and the counts and percentages are listed below the chart. |
+| **Execution Duration Trends** | Line chart | Shows how long executions took over time within the selected time window. Helps identify if tasks are getting slower or faster. |
+| **Concurrent Executions Over Time** | Line chart | Shows how many tasks were running at the same time throughout the selected time window. Useful for spotting peak load times. |
+| **Top 10 Longest Running Schedules** | Bar chart | Shows the 10 schedules that took the longest to complete within the selected time window. Helps identify tasks that may need optimization. |
+
+All four charts respect the **Time Window** and **Filter by Status** selections. Changing either filter updates all charts automatically.
+
+#### Top 10 Schedule Executions Grid
+
+At the bottom of the Scheduler Metrics section, a table shows the **10 most recent schedule executions** for the selected time window, sorted by start time (newest first).
+
+| Column | What It Shows |
+|--------|---------------|
+| **Schedule Name** | The name of the scheduled task that ran. |
+| **Status** | The execution result, shown as a color-coded label (green for Completed, red for Failed, blue for Running, etc.). |
+| **Started** | The date and time the execution began. |
+| **Ended** | The date and time the execution finished. Shows "Running..." if still in progress. |
+| **Duration** | How long the execution took (e.g., "2m 37s"). |
+| **Actions** | A view details icon (eye icon) that opens a dialog with full execution details including: Execution ID, Schedule name, Status, Duration, Start/End times, Retry count, Triggered by, and any Output or Error messages. |
+
+If there are more than 10 executions in the selected time window, a **"View All Executions"** button appears that takes you to the full Executions page.
 
 ---
 
