@@ -1342,24 +1342,17 @@ Console.WriteLine(""Hello, World!"");
                                 boundsPadding: 0.1
                             }});
                             
-                            // Restore zoom level and pan position
-                            if (savedZoom !== 1) {{
-                                // First set zoom, then move to pan position
-                                panzoomInstance.zoomAbs(0, 0, savedZoom);
-                                currentZoom = savedZoom;
-                            }} else {{
-                                panzoomInstance.zoomAbs(0, 0, 1);
-                                currentZoom = 1;
-                            }}
+                            // Restore zoom level
+                            panzoomInstance.zoomAbs(0, 0, savedZoom);
+                            currentZoom = savedZoom;
                             
                             // Restore pan position (the drag/translate position)
-                            if (savedPanX !== 0 || savedPanY !== 0) {{
-                                panzoomInstance.moveTo(savedPanX, savedPanY);
-                            }}
-                            
-                            // Notify C# that diagram is ready, passing the target scroll and pan positions
-                            // C# will restore the scroll position to ensure proper timing
+                            // Use setTimeout to ensure panzoom is fully initialized
                             setTimeout(function() {{
+                                panzoomInstance.moveTo(savedPanX, savedPanY);
+                                
+                                // Notify C# that diagram is ready, passing the target scroll and pan positions
+                                // C# will restore the scroll position to ensure proper timing
                                 window.chrome.webview.postMessage({{ 
                                     type: 'diagramReady', 
                                     targetScrollLeft: savedScrollLeft, 
@@ -1367,7 +1360,7 @@ Console.WriteLine(""Hello, World!"");
                                     targetPanX: savedPanX,
                                     targetPanY: savedPanY
                                 }});
-                            }}, 100);
+                            }}, 50);
                             
                             panzoomInstance.on('zoom', function(e) {{
                                 currentZoom = e.getTransform().scale;
