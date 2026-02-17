@@ -1401,14 +1401,35 @@ Console.WriteLine(""Hello, World!"");
         {
             try
             {
-                // Update content without reloading the page - scroll position is naturally preserved
-                await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
-                    (function() {{
-                        const markdownContent = {escapedCode};
-                        document.getElementById('content').innerHTML = marked.parse(markdownContent);
-                        setupClickHandlers();
-                    }})();
-                ");
+                // When switching documents, restore the saved scroll position
+                // Otherwise, preserve the current scroll position for normal edits
+                if (_isSwitchingDocuments && _activeDocument != null)
+                {
+                    var scrollTop = _activeDocument.PreviewScrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var scrollLeft = _activeDocument.PreviewScrollLeft.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
+                        (function() {{
+                            const markdownContent = {escapedCode};
+                            document.getElementById('content').innerHTML = marked.parse(markdownContent);
+                            setupClickHandlers();
+                            // Restore scroll position after content is updated
+                            setTimeout(function() {{
+                                window.scrollTo({scrollLeft}, {scrollTop});
+                            }}, 50);
+                        }})();
+                    ");
+                }
+                else
+                {
+                    // Update content without reloading the page - scroll position is naturally preserved
+                    await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
+                        (function() {{
+                            const markdownContent = {escapedCode};
+                            document.getElementById('content').innerHTML = marked.parse(markdownContent);
+                            setupClickHandlers();
+                        }})();
+                    ");
+                }
                 StatusText.Text = "Markdown rendered";
                 return;
             }
@@ -3458,13 +3479,18 @@ Console.WriteLine(""Hello, World!"");
         try
         {
             // Get both scroll position and panzoom transform
+            // For Mermaid: use container element scroll and panzoom transform
+            // For Markdown: use window scroll (no panzoom)
             var result = await PreviewWebView.CoreWebView2.ExecuteScriptAsync(@"
                 (function() {
                     var container = document.getElementById('container');
                     var transform = window.panzoomInstance ? window.panzoomInstance.getTransform() : { x: 0, y: 0, scale: 1 };
+                    // For Mermaid diagrams, use container scroll; for Markdown, use window scroll
+                    var scrollLeft = container ? container.scrollLeft : window.scrollX;
+                    var scrollTop = container ? container.scrollTop : window.scrollY;
                     return JSON.stringify({ 
-                        scrollLeft: container?.scrollLeft || 0, 
-                        scrollTop: container?.scrollTop || 0,
+                        scrollLeft: scrollLeft || 0, 
+                        scrollTop: scrollTop || 0,
                         panX: transform.x || 0,
                         panY: transform.y || 0
                     });
