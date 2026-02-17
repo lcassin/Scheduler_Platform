@@ -1413,8 +1413,15 @@ Console.WriteLine(""Hello, World!"");
                             document.getElementById('content').innerHTML = marked.parse(markdownContent);
                             setupClickHandlers();
                             // Restore scroll position after content is updated
+                            // Try all methods since html/body can both have overflow:auto
                             setTimeout(function() {{
-                                window.scrollTo({scrollLeft}, {scrollTop});
+                                var x = {scrollLeft};
+                                var y = {scrollTop};
+                                window.scrollTo(x, y);
+                                document.documentElement.scrollLeft = x;
+                                document.documentElement.scrollTop = y;
+                                document.body.scrollLeft = x;
+                                document.body.scrollTop = y;
                             }}, 50);
                         }})();
                     ");
@@ -1832,11 +1839,18 @@ Console.WriteLine(""Hello, World!"");
         
         try
         {
-            // Use ExecuteScriptAsync to set the window scroll position for markdown
-            // Markdown uses window scroll, not a container element
+            // Use ExecuteScriptAsync to set the scroll position for markdown
+            // Try multiple methods since html/body can both have overflow:auto
             await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
                 (function() {{
-                    window.scrollTo({scrollLeft.ToString(System.Globalization.CultureInfo.InvariantCulture)}, {scrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture)});
+                    var x = {scrollLeft.ToString(System.Globalization.CultureInfo.InvariantCulture)};
+                    var y = {scrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture)};
+                    // Try all methods to ensure scroll is set
+                    window.scrollTo(x, y);
+                    document.documentElement.scrollLeft = x;
+                    document.documentElement.scrollTop = y;
+                    document.body.scrollLeft = x;
+                    document.body.scrollTop = y;
                 }})();
             ");
         }
@@ -3528,14 +3542,21 @@ Console.WriteLine(""Hello, World!"");
         {
             // Get both scroll position and panzoom transform
             // For Mermaid: use container element scroll and panzoom transform
-            // For Markdown: use window scroll (no panzoom)
+            // For Markdown: use window/document scroll (no panzoom)
             var result = await PreviewWebView.CoreWebView2.ExecuteScriptAsync(@"
                 (function() {
                     var container = document.getElementById('container');
                     var transform = window.panzoomInstance ? window.panzoomInstance.getTransform() : { x: 0, y: 0, scale: 1 };
-                    // For Mermaid diagrams, use container scroll; for Markdown, use window scroll
-                    var scrollLeft = container ? container.scrollLeft : window.scrollX;
-                    var scrollTop = container ? container.scrollTop : window.scrollY;
+                    var scrollLeft, scrollTop;
+                    if (container) {
+                        // Mermaid diagram - use container scroll
+                        scrollLeft = container.scrollLeft;
+                        scrollTop = container.scrollTop;
+                    } else {
+                        // Markdown - try multiple scroll sources (html/body can both have overflow:auto)
+                        scrollLeft = window.pageXOffset || document.documentElement.scrollLeft || document.body.scrollLeft || 0;
+                        scrollTop = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+                    }
                     return JSON.stringify({ 
                         scrollLeft: scrollLeft || 0, 
                         scrollTop: scrollTop || 0,
