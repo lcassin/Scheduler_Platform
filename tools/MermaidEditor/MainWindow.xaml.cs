@@ -859,18 +859,20 @@ Console.WriteLine(""Hello, World!"");
         {
             try
             {
-                // When switching documents, we need to apply the document's zoom level and scroll position
+                // When switching documents, we need to apply the document's zoom level, scroll position, and pan position
                 // Otherwise, preserve the current pan/zoom position for normal edits
                 if (_isSwitchingDocuments && _activeDocument != null)
                 {
-                    // Update diagram and pass the document's zoom level and scroll position
+                    // Update diagram and pass the document's zoom level, scroll position, and pan position
                     // This ensures the correct state is applied after the async render completes
                     var scrollLeft = _activeDocument.PreviewScrollLeft.ToString(System.Globalization.CultureInfo.InvariantCulture);
                     var scrollTop = _activeDocument.PreviewScrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var panX = _activeDocument.PreviewPanX.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var panY = _activeDocument.PreviewPanY.ToString(System.Globalization.CultureInfo.InvariantCulture);
                     await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
                         (function() {{
                             if (typeof updateDiagram === 'function') {{
-                                updateDiagram({escapedCode}, {_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)}, {scrollLeft}, {scrollTop});
+                                updateDiagram({escapedCode}, {_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)}, {scrollLeft}, {scrollTop}, {panX}, {panY});
                             }}
                         }})();
                     ");
@@ -1251,7 +1253,8 @@ Console.WriteLine(""Hello, World!"");
         // Update diagram content without reloading the page (preserves pan/zoom position)
         // Optional targetZoom parameter allows overriding the zoom level (used when switching documents)
         // Optional targetScrollLeft/targetScrollTop parameters allow overriding scroll position (used when switching documents)
-        window.updateDiagram = function(newCode, targetZoom, targetScrollLeft, targetScrollTop) {{
+        // Optional targetPanX/targetPanY parameters allow overriding pan position (used when switching documents)
+        window.updateDiagram = function(newCode, targetZoom, targetScrollLeft, targetScrollTop, targetPanX, targetPanY) {{
             // Save current panzoom transform (only zoom level, not position - position causes issues when diagram size changes)
             // If targetZoom is provided, use that instead of the current zoom (for document switching)
             let savedZoom = (typeof targetZoom === 'number') ? targetZoom : currentZoom;
@@ -1259,6 +1262,10 @@ Console.WriteLine(""Hello, World!"");
             if (panzoomInstance) {{
                 savedTransform = panzoomInstance.getTransform();
             }}
+            
+            // Save pan position (or use provided target pan positions for document switching)
+            let savedPanX = (typeof targetPanX === 'number') ? targetPanX : (savedTransform ? savedTransform.x : 0);
+            let savedPanY = (typeof targetPanY === 'number') ? targetPanY : (savedTransform ? savedTransform.y : 0);
             
             const diagram = document.getElementById('diagram');
             const container = document.getElementById('container');
@@ -1335,25 +1342,30 @@ Console.WriteLine(""Hello, World!"");
                                 boundsPadding: 0.1
                             }});
                             
-                            // Restore zoom level and approximate position
-                            if (savedTransform && savedZoom !== 1) {{
-                                // Only restore zoom, reset position to avoid misalignment
-                                panzoomInstance.moveTo(0, 0);
+                            // Restore zoom level and pan position
+                            if (savedZoom !== 1) {{
+                                // First set zoom, then move to pan position
                                 panzoomInstance.zoomAbs(0, 0, savedZoom);
                                 currentZoom = savedZoom;
                             }} else {{
-                                panzoomInstance.moveTo(0, 0);
                                 panzoomInstance.zoomAbs(0, 0, 1);
                                 currentZoom = 1;
                             }}
                             
-                            // Notify C# that diagram is ready, passing the target scroll position
+                            // Restore pan position (the drag/translate position)
+                            if (savedPanX !== 0 || savedPanY !== 0) {{
+                                panzoomInstance.moveTo(savedPanX, savedPanY);
+                            }}
+                            
+                            // Notify C# that diagram is ready, passing the target scroll and pan positions
                             // C# will restore the scroll position to ensure proper timing
                             setTimeout(function() {{
                                 window.chrome.webview.postMessage({{ 
                                     type: 'diagramReady', 
                                     targetScrollLeft: savedScrollLeft, 
-                                    targetScrollTop: savedScrollTop 
+                                    targetScrollTop: savedScrollTop,
+                                    targetPanX: savedPanX,
+                                    targetPanY: savedPanY
                                 }});
                             }}, 100);
                             
@@ -3443,7 +3455,7 @@ Console.WriteLine(""Hello, World!"");
     }
     
     /// <summary>
-    /// Saves the current preview scroll position to the document model
+    /// Saves the current preview scroll position and panzoom pan position to the document model
     /// </summary>
     private async Task SavePreviewScrollPositionAsync(DocumentModel doc)
     {
@@ -3451,14 +3463,27 @@ Console.WriteLine(""Hello, World!"");
         
         try
         {
-            var result = await PreviewWebView.CoreWebView2.ExecuteScriptAsync(
-                "JSON.stringify({ scrollLeft: document.getElementById('container')?.scrollLeft || 0, scrollTop: document.getElementById('container')?.scrollTop || 0 })");
+            // Get both scroll position and panzoom transform
+            var result = await PreviewWebView.CoreWebView2.ExecuteScriptAsync(@"
+                (function() {
+                    var container = document.getElementById('container');
+                    var transform = window.panzoomInstance ? window.panzoomInstance.getTransform() : { x: 0, y: 0, scale: 1 };
+                    return JSON.stringify({ 
+                        scrollLeft: container?.scrollLeft || 0, 
+                        scrollTop: container?.scrollTop || 0,
+                        panX: transform.x || 0,
+                        panY: transform.y || 0
+                    });
+                })()
+            ");
             
             if (!string.IsNullOrEmpty(result) && result != "null")
             {
                 var json = System.Text.Json.JsonDocument.Parse(result.Trim('"').Replace("\\\"", "\""));
                 doc.PreviewScrollLeft = json.RootElement.GetProperty("scrollLeft").GetDouble();
                 doc.PreviewScrollTop = json.RootElement.GetProperty("scrollTop").GetDouble();
+                doc.PreviewPanX = json.RootElement.GetProperty("panX").GetDouble();
+                doc.PreviewPanY = json.RootElement.GetProperty("panY").GetDouble();
             }
         }
         catch { }
@@ -5454,6 +5479,8 @@ public class DocumentModel : System.ComponentModel.INotifyPropertyChanged
     public bool HasNavigatedAway { get; set; }
     public double PreviewScrollLeft { get; set; }
     public double PreviewScrollTop { get; set; }
+    public double PreviewPanX { get; set; }
+    public double PreviewPanY { get; set; }
     
     // File change detection
     public DateTime LastKnownWriteTime { get; set; }
