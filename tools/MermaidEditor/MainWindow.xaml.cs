@@ -1347,9 +1347,11 @@ Console.WriteLine(""Hello, World!"");
                                 currentZoom = 1;
                             }}
                             
-                            // Restore container scroll position
-                            container.scrollLeft = savedScrollLeft;
-                            container.scrollTop = savedScrollTop;
+                            // Restore container scroll position after a short delay to ensure layout is complete
+                            setTimeout(function() {{
+                                container.scrollLeft = savedScrollLeft;
+                                container.scrollTop = savedScrollTop;
+                            }}, 50);
                             
                             panzoomInstance.on('zoom', function(e) {{
                                 currentZoom = e.getTransform().scale;
@@ -3406,7 +3408,7 @@ Console.WriteLine(""Hello, World!"");
     /// <summary>
     /// Saves the current preview scroll position to the document model
     /// </summary>
-    private async void SavePreviewScrollPosition(DocumentModel doc)
+    private async Task SavePreviewScrollPositionAsync(DocumentModel doc)
     {
         if (!_webViewInitialized || doc == null) return;
         
@@ -4892,7 +4894,7 @@ Console.WriteLine(""Hello, World!"");
     /// <summary>
     /// Switches to a different document
     /// </summary>
-    private void SwitchToDocument(DocumentModel doc)
+    private async void SwitchToDocument(DocumentModel doc)
     {
         if (_activeDocument == doc) return;
         
@@ -4910,8 +4912,8 @@ Console.WriteLine(""Hello, World!"");
             _activeDocument.HasNavigatedAway = _hasNavigatedAway;
             _activeDocument.IsSelected = false;
             
-            // Save preview scroll position asynchronously
-            SavePreviewScrollPosition(_activeDocument);
+            // Save preview scroll position - must await to ensure it's saved before switching
+            await SavePreviewScrollPositionAsync(_activeDocument);
         }
         
         // Switch to new document
