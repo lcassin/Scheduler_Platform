@@ -28,6 +28,7 @@
     private IList<ITrace> _data = new List<ITrace>();
     private Plotly.Blazor.Layout _layout = new Plotly.Blazor.Layout();
     private Plotly.Blazor.Config _config = new Plotly.Blazor.Config();
+    private bool _needsReact = false;
 
     private static readonly string[] DefaultColors = new[]
     {
@@ -42,6 +43,22 @@
     protected override void OnParametersSet()
     {
         BuildChart();
+        _needsReact = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_needsReact && _chart != null && !firstRender)
+        {
+            _needsReact = false;
+            try
+            {
+                await _chart.React();
+            }
+            catch
+            {
+            }
+        }
     }
 
     private void BuildChart()
