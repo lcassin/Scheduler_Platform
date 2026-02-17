@@ -250,17 +250,19 @@ public class AdrController : ControllerBase
             // Get account IDs from the current page
             var accountIds = items.Select(a => a.Id).ToList();
             
-            // Get rule override status for each account (single query)
+            // Get rule data for each account (override status + scheduling dates for display)
             var ruleOverrideStatuses = await _dbContext.AdrAccountRules
-                .Where(r => !r.IsDeleted && accountIds.Contains(r.AdrAccountId))
+                .Where(r => !r.IsDeleted && accountIds.Contains(r.AdrAccountId) && r.JobTypeId == 2)
                 .GroupBy(r => r.AdrAccountId)
                 .Select(g => new
                 {
                     AdrAccountId = g.Key,
-                    // Get the primary rule's override status (first rule per account)
                     RuleIsManuallyOverridden = g.OrderBy(r => r.Id).Select(r => r.IsManuallyOverridden).FirstOrDefault(),
                     RuleOverriddenBy = g.OrderBy(r => r.Id).Select(r => r.OverriddenBy).FirstOrDefault(),
-                    RuleOverriddenDateTime = g.OrderBy(r => r.Id).Select(r => r.OverriddenDateTime).FirstOrDefault()
+                    RuleOverriddenDateTime = g.OrderBy(r => r.Id).Select(r => r.OverriddenDateTime).FirstOrDefault(),
+                    RuleNextRunDateTime = g.OrderBy(r => r.Id).Select(r => r.NextRunDateTime).FirstOrDefault(),
+                    RuleNextRangeStartDateTime = g.OrderBy(r => r.Id).Select(r => r.NextRangeStartDateTime).FirstOrDefault(),
+                    RuleNextRangeEndDateTime = g.OrderBy(r => r.Id).Select(r => r.NextRangeEndDateTime).FirstOrDefault()
                 })
                 .ToListAsync();
             
@@ -361,49 +363,67 @@ public class AdrController : ControllerBase
             }
             
             // Map to response with job status
-            var itemsWithJobStatus = items.Select(a => new
+            // Prefer rule's NextRunDateTime over account's (account field may be stale between syncs)
+            var itemsWithJobStatus = items.Select(a =>
             {
-                a.Id,
-                a.VMAccountId,
-                a.VMAccountNumber,
-                a.InterfaceAccountId,
-                a.ClientId,
-                a.ClientName,
-                a.CredentialId,
-                a.PrimaryVendorCode,
-                a.MasterVendorCode,
-                a.PeriodType,
-                a.PeriodDays,
-                a.MedianDays,
-                a.InvoiceCount,
-                a.LastInvoiceDateTime,
-                a.ExpectedNextDateTime,
-                a.ExpectedRangeStartDateTime,
-                a.ExpectedRangeEndDateTime,
-                a.NextRunDateTime,
-                a.NextRangeStartDateTime,
-                a.NextRangeEndDateTime,
-                a.DaysUntilNextRun,
-                a.NextRunStatus,
-                a.HistoricalBillingStatus,
-                a.LastSyncedDateTime,
-                a.IsManuallyOverridden,
-                a.OverriddenBy,
-                a.OverriddenDateTime,
-                a.IsDeleted,
-                a.CreatedDateTime,
-                a.ModifiedDateTime,
-                CurrentJobStatus = jobStatusLookup.TryGetValue(a.Id, out var js) ? js.CurrentJobStatus : null,
-                LastCompletedDateTime = jobStatusLookup.TryGetValue(a.Id, out var js2) ? js2.LastCompletedDateTime : null,
-                RuleIsManuallyOverridden = ruleOverrideLookup.TryGetValue(a.Id, out var ro) && ro.RuleIsManuallyOverridden,
-                RuleOverriddenBy = ruleOverrideLookup.TryGetValue(a.Id, out var ro2) ? ro2.RuleOverriddenBy : null,
-                RuleOverriddenDateTime = ruleOverrideLookup.TryGetValue(a.Id, out var ro3) ? ro3.RuleOverriddenDateTime : null,
-                HasCurrentBlacklist = blacklistStatusLookup.TryGetValue(a.Id, out var bl) && bl.HasCurrent,
-                HasFutureBlacklist = blacklistStatusLookup.TryGetValue(a.Id, out var bl2) && bl2.HasFuture,
-                CurrentBlacklistCount = blacklistStatusLookup.TryGetValue(a.Id, out var bl3) ? bl3.CurrentCount : 0,
-                FutureBlacklistCount = blacklistStatusLookup.TryGetValue(a.Id, out var bl4) ? bl4.FutureCount : 0,
-                CurrentBlacklists = blacklistStatusLookup.TryGetValue(a.Id, out var bl5) ? bl5.CurrentSummaries : new List<BlacklistSummary>(),
-                FutureBlacklists = blacklistStatusLookup.TryGetValue(a.Id, out var bl6) ? bl6.FutureSummaries : new List<BlacklistSummary>()
+                var hasRule = ruleOverrideLookup.TryGetValue(a.Id, out var ruleData);
+                var nextRun = (hasRule && ruleData.RuleNextRunDateTime.HasValue)
+                    ? ruleData.RuleNextRunDateTime
+                    : a.NextRunDateTime;
+                var nextRangeStart = (hasRule && ruleData.RuleNextRangeStartDateTime.HasValue)
+                    ? ruleData.RuleNextRangeStartDateTime
+                    : a.NextRangeStartDateTime;
+                var nextRangeEnd = (hasRule && ruleData.RuleNextRangeEndDateTime.HasValue)
+                    ? ruleData.RuleNextRangeEndDateTime
+                    : a.NextRangeEndDateTime;
+                var daysUntilRun = nextRun.HasValue
+                    ? (int)(nextRun.Value.Date - DateTime.UtcNow.Date).TotalDays
+                    : a.DaysUntilNextRun;
+
+                return new
+                {
+                    a.Id,
+                    a.VMAccountId,
+                    a.VMAccountNumber,
+                    a.InterfaceAccountId,
+                    a.ClientId,
+                    a.ClientName,
+                    a.CredentialId,
+                    a.PrimaryVendorCode,
+                    a.MasterVendorCode,
+                    a.PeriodType,
+                    a.PeriodDays,
+                    a.MedianDays,
+                    a.InvoiceCount,
+                    a.LastInvoiceDateTime,
+                    a.ExpectedNextDateTime,
+                    a.ExpectedRangeStartDateTime,
+                    a.ExpectedRangeEndDateTime,
+                    NextRunDateTime = nextRun,
+                    NextRangeStartDateTime = nextRangeStart,
+                    NextRangeEndDateTime = nextRangeEnd,
+                    DaysUntilNextRun = daysUntilRun,
+                    a.NextRunStatus,
+                    a.HistoricalBillingStatus,
+                    a.LastSyncedDateTime,
+                    a.IsManuallyOverridden,
+                    a.OverriddenBy,
+                    a.OverriddenDateTime,
+                    a.IsDeleted,
+                    a.CreatedDateTime,
+                    a.ModifiedDateTime,
+                    CurrentJobStatus = jobStatusLookup.TryGetValue(a.Id, out var js) ? js.CurrentJobStatus : null,
+                    LastCompletedDateTime = jobStatusLookup.TryGetValue(a.Id, out var js2) ? js2.LastCompletedDateTime : null,
+                    RuleIsManuallyOverridden = hasRule && ruleData.RuleIsManuallyOverridden,
+                    RuleOverriddenBy = hasRule ? ruleData.RuleOverriddenBy : null,
+                    RuleOverriddenDateTime = hasRule ? ruleData.RuleOverriddenDateTime : null,
+                    HasCurrentBlacklist = blacklistStatusLookup.TryGetValue(a.Id, out var bl) && bl.HasCurrent,
+                    HasFutureBlacklist = blacklistStatusLookup.TryGetValue(a.Id, out var bl2) && bl2.HasFuture,
+                    CurrentBlacklistCount = blacklistStatusLookup.TryGetValue(a.Id, out var bl3) ? bl3.CurrentCount : 0,
+                    FutureBlacklistCount = blacklistStatusLookup.TryGetValue(a.Id, out var bl4) ? bl4.FutureCount : 0,
+                    CurrentBlacklists = blacklistStatusLookup.TryGetValue(a.Id, out var bl5) ? bl5.CurrentSummaries : new List<BlacklistSummary>(),
+                    FutureBlacklists = blacklistStatusLookup.TryGetValue(a.Id, out var bl6) ? bl6.FutureSummaries : new List<BlacklistSummary>()
+                };
             }).ToList();
 
             return Ok(new
