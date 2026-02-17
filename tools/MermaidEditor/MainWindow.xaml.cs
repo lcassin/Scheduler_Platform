@@ -1451,8 +1451,16 @@ Console.WriteLine(""Hello, World!"");
                 baseTag = $@"<base href=""https://{VirtualHostName}/"">";
             }
         }
+        
+        // Get target scroll position for restoration when switching documents
+        var targetScrollLeft = (_isSwitchingDocuments && _activeDocument != null) 
+            ? _activeDocument.PreviewScrollLeft.ToString(System.Globalization.CultureInfo.InvariantCulture) 
+            : "0";
+        var targetScrollTop = (_isSwitchingDocuments && _activeDocument != null) 
+            ? _activeDocument.PreviewScrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture) 
+            : "0";
 
-        var html = $@"<!DOCTYPE html>
+        var html = $@"<!DOCTYPE html
 <html>
 <head>
     <meta charset=""UTF-8"">
@@ -1703,6 +1711,17 @@ Console.WriteLine(""Hello, World!"");
                 }});
             }});
         }}
+        
+        // Notify C# that markdown is ready and pass target scroll position for restoration
+        var targetScrollLeft = {targetScrollLeft};
+        var targetScrollTop = {targetScrollTop};
+        setTimeout(function() {{
+            window.chrome.webview.postMessage({{ 
+                type: 'markdownReady', 
+                targetScrollLeft: targetScrollLeft, 
+                targetScrollTop: targetScrollTop 
+            }});
+        }}, 50);
     </script>
 </body>
 </html>";
@@ -1767,6 +1786,18 @@ Console.WriteLine(""Hello, World!"");
                         _ = RestorePreviewScrollPositionAsync(scrollLeft, scrollTop);
                     }
                 }
+                else if (messageType == "markdownReady")
+                {
+                    // Markdown has finished rendering - restore scroll position from C#
+                    var scrollLeft = message.RootElement.TryGetProperty("targetScrollLeft", out var scrollLeftEl) ? scrollLeftEl.GetDouble() : 0;
+                    var scrollTop = message.RootElement.TryGetProperty("targetScrollTop", out var scrollTopEl) ? scrollTopEl.GetDouble() : 0;
+                    
+                    // Only restore if we have non-zero scroll values (indicating we're switching documents)
+                    if (scrollLeft > 0 || scrollTop > 0)
+                    {
+                        _ = RestoreMarkdownScrollPositionAsync(scrollLeft, scrollTop);
+                    }
+                }
             }
         }
         catch
@@ -1789,6 +1820,23 @@ Console.WriteLine(""Hello, World!"");
                         container.scrollLeft = {scrollLeft.ToString(System.Globalization.CultureInfo.InvariantCulture)};
                         container.scrollTop = {scrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture)};
                     }}
+                }})();
+            ");
+        }
+        catch { }
+    }
+    
+    private async Task RestoreMarkdownScrollPositionAsync(double scrollLeft, double scrollTop)
+    {
+        if (!_webViewInitialized) return;
+        
+        try
+        {
+            // Use ExecuteScriptAsync to set the window scroll position for markdown
+            // Markdown uses window scroll, not a container element
+            await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
+                (function() {{
+                    window.scrollTo({scrollLeft.ToString(System.Globalization.CultureInfo.InvariantCulture)}, {scrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture)});
                 }})();
             ");
         }
