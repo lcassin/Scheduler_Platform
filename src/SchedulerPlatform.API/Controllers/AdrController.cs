@@ -2982,30 +2982,15 @@ public class AdrController : ControllerBase
     /// <param name="testrun">Optional limit on the number of accounts to process.</param>
     /// <returns>The queued request details including request ID for status tracking.</returns>
     /// <response code="200">Returns the queued orchestration request details.</response>
-    /// <response code="409">An orchestration is already running.</response>
     /// <response code="500">An error occurred while queuing bulk credential verification.</response>
     [HttpPost("orchestrate/verify-all-credentials")]
     [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<object>> VerifyAllCredentials(int? testrun=null)
     {
         try
         {
-            if (_orchestrationQueue.IsOrchestrationRunningInMemory())
-            {
-                var currentRun = _orchestrationQueue.GetCurrentRun();
-                return Conflict(new 
-                { 
-                    error = "An orchestration is already running", 
-                    message = "Only one orchestration can run at a time. Please wait for the current orchestration to complete.",
-                    currentRequestId = currentRun?.RequestId,
-                    currentStatus = currentRun?.Status,
-                    currentStep = currentRun?.CurrentStep
-                });
-            }
-
             var orchestrationRequest = new AdrOrchestrationRequest
             {
                 RequestedBy = User.Identity?.Name ?? "API",
