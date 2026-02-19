@@ -2294,71 +2294,71 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 .Select(a => (AccountId: a.Id, CredentialId: a.CredentialId, VMAccountId: a.VMAccountId, InterfaceAccountId: a.InterfaceAccountId))
                 .ToList();
 
-            _logger.LogInformation("Starting parallel API calls for {Count} accounts", accountsToProcess.Count);
+            const int bulkBatchSize = 25;
+            const int delayBetweenBatchesMs = 500;
 
-            // Call ADR API in parallel with semaphore to limit concurrency
+            _logger.LogInformation(
+                "Starting batched API calls for {Count} accounts (batch size: {BatchSize}, delay: {Delay}ms)",
+                accountsToProcess.Count, bulkBatchSize, delayBetweenBatchesMs);
+
             var apiResults = new ConcurrentDictionary<int, AdrApiResult>();
-            using var semaphore = new SemaphoreSlim(maxParallel, maxParallel);
             int completedApiCalls = 0;
             var totalApiCalls = accountsToProcess.Count;
 
-            var tasks = accountsToProcess.Select(async accountInfo =>
+            for (int batchStart = 0; batchStart < accountsToProcess.Count; batchStart += bulkBatchSize)
             {
-                await semaphore.WaitAsync(cancellationToken);
-                try
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var batch = accountsToProcess.Skip(batchStart).Take(bulkBatchSize).ToList();
+                var batchTasks = batch.Select(async accountInfo =>
                 {
-                    var apiResult = await CallAdrApiAsync(
-                        AdrRequestType.AttemptLogin,
-                        accountInfo.CredentialId,
-                        DateTime.UtcNow.Date.AddDays(-1),
-                        DateTime.UtcNow.Date.AddDays(1),
-                        trackingJobId,
-                        accountInfo.VMAccountId,
-                        accountInfo.InterfaceAccountId,
-                        cancellationToken);
-
-                    apiResults[accountInfo.AccountId] = apiResult;
-
-                    // Log and report progress every 100 completions or at the end
-                    var count = Interlocked.Increment(ref completedApiCalls);
-                    if (count % 100 == 0 || count == totalApiCalls)
+                    try
                     {
-                        progressCallback?.Invoke(count, totalApiCalls);
+                        var apiResult = await CallAdrApiAsync(
+                            AdrRequestType.AttemptLogin,
+                            accountInfo.CredentialId,
+                            DateTime.UtcNow.Date.AddDays(-1),
+                            DateTime.UtcNow.Date.AddDays(1),
+                            trackingJobId,
+                            accountInfo.VMAccountId,
+                            accountInfo.InterfaceAccountId,
+                            cancellationToken);
+
+                        apiResults[accountInfo.AccountId] = apiResult;
                     }
-                    if (count % 1000 == 0 || count == totalApiCalls)
+                    catch (OperationCanceledException)
                     {
-                        _logger.LogInformation(
-                            "Bulk credential verification API calls: {Completed}/{Total} completed ({Percent:F1}%)",
-                            count, totalApiCalls, (double)count / totalApiCalls * 100);
+                        throw;
                     }
-                }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error calling ADR API for account {AccountId}", accountInfo.AccountId);
-                    apiResults[accountInfo.AccountId] = new AdrApiResult
+                    catch (Exception ex)
                     {
-                        IsSuccess = false,
-                        IsError = true,
-                        ErrorMessage = ex.Message
-                    };
-
-                    var count = Interlocked.Increment(ref completedApiCalls);
-                    if (count % 100 == 0 || count == totalApiCalls)
-                    {
-                        progressCallback?.Invoke(count, totalApiCalls);
+                        _logger.LogError(ex, "Error calling ADR API for account {AccountId}", accountInfo.AccountId);
+                        apiResults[accountInfo.AccountId] = new AdrApiResult
+                        {
+                            IsSuccess = false,
+                            IsError = true,
+                            ErrorMessage = ex.Message
+                        };
                     }
-                }
-                finally
-                {
-                    semaphore.Release();
-                }
-            });
+                });
 
-            await Task.WhenAll(tasks);
+                await Task.WhenAll(batchTasks);
+
+                var count = Interlocked.Add(ref completedApiCalls, batch.Count);
+                progressCallback?.Invoke(count, totalApiCalls);
+
+                if (count % 1000 < bulkBatchSize || count == totalApiCalls)
+                {
+                    _logger.LogInformation(
+                        "Bulk credential verification API calls: {Completed}/{Total} completed ({Percent:F1}%)",
+                        count, totalApiCalls, (double)count / totalApiCalls * 100);
+                }
+
+                if (batchStart + bulkBatchSize < accountsToProcess.Count)
+                {
+                    await Task.Delay(delayBetweenBatchesMs, cancellationToken);
+                }
+            }
 
             _logger.LogInformation("Completed {Count} parallel API calls, tallying results", apiResults.Count);
 
