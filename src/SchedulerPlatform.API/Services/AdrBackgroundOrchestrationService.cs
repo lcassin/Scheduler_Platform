@@ -26,6 +26,17 @@ public class AdrOrchestrationRequest
     /// Used by the "Check Statuses Only" button for manual status checks.
     /// </summary>
     public bool CheckAllScrapedStatuses { get; set; } = false;
+    
+    /// <summary>
+    /// When true, runs bulk credential verification for ALL active accounts.
+    /// All other step flags are ignored when this is set.
+    /// </summary>
+    public bool RunBulkCredentialVerification { get; set; } = false;
+    
+    /// <summary>
+    /// Optional limit on the number of accounts to process during bulk credential verification.
+    /// </summary>
+    public int? TestRunLimit { get; set; }
 }
 
 /// <summary>
@@ -58,6 +69,7 @@ public class AdrOrchestrationStatus
     public RebillResult? RebillResult { get; set; }
     public ScrapeResult? ScrapeResult { get; set; }
     public StatusCheckResult? StatusCheckResult { get; set; }
+    public BulkCredentialVerificationResult? BulkCredentialVerificationResult { get; set; }
 }
 
 /// <summary>
@@ -372,6 +384,58 @@ public class AdrBackgroundOrchestrationService : BackgroundService
             using var scope = _scopeFactory.CreateScope();
             var syncService = scope.ServiceProvider.GetRequiredService<IAdrAccountSyncService>();
             var orchestratorService = scope.ServiceProvider.GetRequiredService<IAdrOrchestratorService>();
+
+            // Bulk credential verification runs as a standalone operation
+            if (request.RunBulkCredentialVerification)
+            {
+                _queue.UpdateStatus(request.RequestId, s => 
+                {
+                    s.CurrentStep = "Bulk credential verification";
+                    s.CurrentStepPhase = "Preparing";
+                    s.CurrentStepProgress = 0;
+                    s.CurrentStepTotal = 0;
+                });
+                _logger.LogInformation("Request {RequestId}: Starting bulk credential verification", request.RequestId);
+                
+                var bulkResult = await orchestratorService.VerifyAllAccountCredentialsAsync(
+                    (progress, total) => _queue.UpdateStatus(request.RequestId, s => 
+                    {
+                        if (progress < 0)
+                        {
+                            s.CurrentStepPhase = "Preparing";
+                            s.CurrentStepProgress = Math.Abs(progress);
+                        }
+                        else
+                        {
+                            s.CurrentStepPhase = "Calling API";
+                            s.CurrentStepProgress = progress;
+                        }
+                        s.CurrentStepTotal = total;
+                    }),
+                    token,
+                    request.TestRunLimit,
+                    orchestrationRequestId: request.RequestId);
+                _queue.UpdateStatus(request.RequestId, s => 
+                {
+                    s.CurrentStepPhase = null;
+                    s.BulkCredentialVerificationResult = bulkResult;
+                });
+                
+                _logger.LogInformation(
+                    "Request {RequestId}: Bulk credential verification completed. Processed: {Processed}, Verified: {Verified}, Failed: {Failed}",
+                    request.RequestId, bulkResult.AccountsProcessed, bulkResult.CredentialsVerified, bulkResult.CredentialsFailed);
+
+                _queue.UpdateStatus(request.RequestId, s =>
+                {
+                    s.Status = "Completed";
+                    s.CurrentStep = null;
+                    s.CompletedAt = DateTime.UtcNow;
+                });
+
+                _logger.LogInformation("Request {RequestId}: Bulk credential verification orchestration completed successfully", request.RequestId);
+                await SaveOrchestrationResultAsync(request.RequestId, dbRunId, "Completed", null, CancellationToken.None);
+                return;
+            }
 
             // Step 1: Sync accounts
             if (request.RunSync)
@@ -732,6 +796,12 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                     dbRun.StatusesChecked = memStatus.StatusCheckResult.JobsCompleted + memStatus.StatusCheckResult.JobsNeedingReview;
                     dbRun.StatusesFailed = memStatus.StatusCheckResult.JobsNeedingReview;
                     dbRun.StatusCheckDurationSeconds = memStatus.StatusCheckResult.Duration.TotalSeconds;
+                }
+                
+                if (memStatus.BulkCredentialVerificationResult != null)
+                {
+                    dbRun.CredentialsVerified = memStatus.BulkCredentialVerificationResult.CredentialsVerified;
+                    dbRun.CredentialsFailed = memStatus.BulkCredentialVerificationResult.CredentialsFailed;
                 }
             }
             
