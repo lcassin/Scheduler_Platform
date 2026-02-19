@@ -2424,8 +2424,8 @@ Console.WriteLine(""Hello, World!"");
     {
         var dialog = new OpenFileDialog
         {
-            Filter = "Mermaid Files (*.mmd;*.mermaid)|*.mmd;*.mermaid|Markdown Files (*.md)|*.md|All Files (*.*)|*.*",
-            Title = "Open Mermaid File"
+            Filter = "Mermaid & Markdown (*.mmd;*.mermaid;*.md)|*.mmd;*.mermaid;*.md|Mermaid Files (*.mmd;*.mermaid)|*.mmd;*.mermaid|Markdown Files (*.md)|*.md|All Files (*.*)|*.*",
+            Title = "Open File"
         };
 
         if (dialog.ShowDialog() == true)
