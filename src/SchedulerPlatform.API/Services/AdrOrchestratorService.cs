@@ -33,7 +33,7 @@ public interface IAdrOrchestratorService
     /// <param name="progressCallback">Optional callback to report progress (current, total)</param>
     /// <param name="cancellationToken">Cancellation token for the operation</param>
     /// <returns>Results of the bulk credential verification operation</returns>
-    Task<BulkCredentialVerificationResult> VerifyAllAccountCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, int? testrun=null);
+    Task<BulkCredentialVerificationResult> VerifyAllAccountCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, int? testrun=null, string? orchestrationRequestId = null);
     
     /// <summary>
     /// Processes weekly rebill checks for accounts whose expected billing day of week matches today.
@@ -2240,7 +2240,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// this method checks ALL accounts with valid CredentialIds regardless of scheduling.
     /// Note: This does NOT respect test mode limits as it's intended for one-time bulk operations.
     /// </summary>
-    public async Task<BulkCredentialVerificationResult> VerifyAllAccountCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, int? testrun=null)
+    public async Task<BulkCredentialVerificationResult> VerifyAllAccountCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, int? testrun=null, string? orchestrationRequestId = null)
     {
         var result = new BulkCredentialVerificationResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
