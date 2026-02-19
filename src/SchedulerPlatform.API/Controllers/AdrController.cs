@@ -2974,32 +2974,69 @@ public class AdrController : ControllerBase
 
     /// <summary>
     /// Triggers bulk credential verification for ALL active accounts in the system.
-    /// This is a one-time operation to check all existing credentials ahead of time,
-    /// regardless of scheduling or test mode limits. Use this to identify credential
-    /// issues before they affect scheduled jobs.
+    /// This is a long-running operation that runs in the background. Returns immediately
+    /// with a request ID that can be used to poll for status via the orchestrate/status/{requestId} endpoint.
     /// WARNING: This will call the ADR API for every active account with a valid CredentialId.
     /// For large systems (170k+ accounts), this operation may take several hours.
     /// </summary>
-    /// <param name="cancellationToken">Cancellation token for the operation.</param>
-    /// <returns>The bulk credential verification result including counts of verified and failed credentials.</returns>
-    /// <response code="200">Returns the bulk credential verification result.</response>
-    /// <response code="500">An error occurred during bulk credential verification.</response>
+    /// <param name="testrun">Optional limit on the number of accounts to process.</param>
+    /// <returns>The queued request details including request ID for status tracking.</returns>
+    /// <response code="200">Returns the queued orchestration request details.</response>
+    /// <response code="409">An orchestration is already running.</response>
+    /// <response code="500">An error occurred while queuing bulk credential verification.</response>
     [HttpPost("orchestrate/verify-all-credentials")]
     [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
-    [ProducesResponseType(typeof(BulkCredentialVerificationResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<BulkCredentialVerificationResult>> VerifyAllCredentials(CancellationToken cancellationToken, int? testrun=null)
+    public async Task<ActionResult<object>> VerifyAllCredentials(int? testrun=null)
     {
         try
         {
-            _logger.LogInformation("BULK credential verification for ALL accounts triggered by {User}", User.Identity?.Name ?? "Unknown");
-            var result = await _orchestratorService.VerifyAllAccountCredentialsAsync(null, cancellationToken, testrun);
-            return Ok(result);
+            if (_orchestrationQueue.IsOrchestrationRunningInMemory())
+            {
+                var currentRun = _orchestrationQueue.GetCurrentRun();
+                return Conflict(new 
+                { 
+                    error = "An orchestration is already running", 
+                    message = "Only one orchestration can run at a time. Please wait for the current orchestration to complete.",
+                    currentRequestId = currentRun?.RequestId,
+                    currentStatus = currentRun?.Status,
+                    currentStep = currentRun?.CurrentStep
+                });
+            }
+
+            var orchestrationRequest = new AdrOrchestrationRequest
+            {
+                RequestedBy = User.Identity?.Name ?? "API",
+                RunSync = false,
+                RunCreateJobs = false,
+                RunCredentialVerification = false,
+                RunScraping = false,
+                RunStatusCheck = false,
+                RunBulkCredentialVerification = true,
+                TestRunLimit = testrun
+            };
+
+            await _orchestrationQueue.QueueAsync(orchestrationRequest);
+
+            _logger.LogInformation(
+                "BULK credential verification queued with request ID {RequestId} by {User} (testrun={TestRun})",
+                orchestrationRequest.RequestId, orchestrationRequest.RequestedBy, testrun);
+
+            return Ok(new
+            {
+                message = "Bulk credential verification queued successfully. The job will run in the background.",
+                requestId = orchestrationRequest.RequestId,
+                requestedAt = orchestrationRequest.RequestedAt,
+                requestedBy = orchestrationRequest.RequestedBy,
+                statusEndpoint = $"/api/adr/orchestrate/status/{orchestrationRequest.RequestId}"
+            });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during bulk credential verification");
-            return StatusCode(500, new { error = "An error occurred during bulk credential verification", message = ex.Message });
+            _logger.LogError(ex, "Error queuing bulk credential verification");
+            return StatusCode(500, new { error = "An error occurred while queuing bulk credential verification", message = ex.Message });
         }
     }
 
