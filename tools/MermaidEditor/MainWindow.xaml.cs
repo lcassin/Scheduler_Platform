@@ -2380,6 +2380,8 @@ Console.WriteLine(""Hello, World!"");
         
         // Update export menu visibility based on file type
         UpdateExportMenuVisibility();
+        UpdateMarkdownFormattingVisibility();
+        UpdateZoomControlsVisibility();
     }
 
     private void New_Click(object sender, RoutedEventArgs e)
@@ -2547,6 +2549,12 @@ Console.WriteLine(""Hello, World!"");
         var isMarkdown = _currentRenderMode == RenderMode.Markdown;
         FormatMenu.Visibility = isMarkdown ? Visibility.Visible : Visibility.Collapsed;
         MarkdownFormattingToolbar.Visibility = isMarkdown ? Visibility.Visible : Visibility.Collapsed;
+    }
+    
+    private void UpdateZoomControlsVisibility()
+    {
+        var isMermaid = _currentRenderMode == RenderMode.Mermaid;
+        ZoomControlsPanel.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
     }
     
     private void FormatBold_Click(object sender, RoutedEventArgs e)
@@ -5498,6 +5506,7 @@ Console.WriteLine(""Hello, World!"");
         UpdateNavigationDropdown();
         UpdateExportMenuVisibility();
         UpdateMarkdownFormattingVisibility();
+        UpdateZoomControlsVisibility();
         UpdateUndoRedoState();
         
         // Re-render preview for the new document
@@ -5818,6 +5827,7 @@ Console.WriteLine(""Hello, World!"");
                     _currentRenderMode = _activeDocument.RenderMode;
                     UpdateExportMenuVisibility();
                     UpdateMarkdownFormattingVisibility();
+                    UpdateZoomControlsVisibility();
                     UpdateTitle();
                     RenderPreview();
                     

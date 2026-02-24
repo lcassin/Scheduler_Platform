@@ -1170,7 +1170,7 @@
             </StatusBarItem>
             <!-- Spacer to push zoom controls to the right -->
             <StatusBarItem HorizontalAlignment="Right" DockPanel.Dock="Right">
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel x:Name="ZoomControlsPanel" Orientation="Horizontal" VerticalAlignment="Center">
                     <!-- Fit to Window button -->
                     <Button x:Name="FitButton" Click="FitToWindow_Click" ToolTip="Fit to Window (Ctrl+F)" 
                             Style="{StaticResource StatusBarButtonStyle}" Margin="0,0,8,0">
