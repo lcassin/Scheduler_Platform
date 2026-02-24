@@ -1018,7 +1018,7 @@
                                 <TextBlock Text="&#xE8BA;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
                             </Button>
                             <Button x:Name="ExportWordToolbarButton" Click="ExportWord_Click" ToolTip="Export to Word (Ctrl+Shift+W)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
-                                <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                                <TextBlock Text="W" FontFamily="Segoe UI" FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
                             </Button>
                         </ToolBar>
                     </ToolBarTray>
