@@ -689,6 +689,9 @@
         <KeyBinding Gesture="Ctrl+Shift+G" Command="{Binding ExportSvgCommand}" />
         <KeyBinding Gesture="Ctrl+Shift+E" Command="{Binding ExportEmfCommand}" />
         <KeyBinding Gesture="Ctrl+Shift+W" Command="{Binding ExportWordCommand}" />
+        <KeyBinding Gesture="Ctrl+B" Command="{Binding FormatBoldCommand}" />
+        <KeyBinding Gesture="Ctrl+I" Command="{Binding FormatItalicCommand}" />
+        <KeyBinding Gesture="Ctrl+K" Command="{Binding FormatLinkCommand}" />
     </Window.InputBindings>
     
     <Grid>
@@ -782,6 +785,88 @@
                 <MenuItem x:Name="RedoMenuItem" Header="_Redo" Click="Redo_Click" InputGestureText="Ctrl+Y" IsEnabled="False">
                     <MenuItem.Icon>
                         <TextBlock Text="&#xE7A6;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+            </MenuItem>
+            <MenuItem x:Name="FormatMenu" Header="F_ormat" Style="{StaticResource TopLevelMenuItemStyle}" Visibility="Collapsed">
+                <MenuItem Header="_Bold" Click="FormatBold_Click" InputGestureText="Ctrl+B">
+                    <MenuItem.Icon>
+                        <TextBlock Text="B" FontFamily="Segoe UI" FontSize="14" FontWeight="Bold"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="_Italic" Click="FormatItalic_Click" InputGestureText="Ctrl+I">
+                    <MenuItem.Icon>
+                        <TextBlock Text="I" FontFamily="Segoe UI" FontSize="14" FontStyle="Italic"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="_Strikethrough" Click="FormatStrikethrough_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="S" FontFamily="Segoe UI" FontSize="14" TextDecorations="Strikethrough"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator/>
+                <MenuItem Header="Heading _1" Click="FormatH1_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="H1" FontFamily="Segoe UI" FontSize="12" FontWeight="Bold"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Heading _2" Click="FormatH2_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="H2" FontFamily="Segoe UI" FontSize="12" FontWeight="Bold"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Heading _3" Click="FormatH3_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="H3" FontFamily="Segoe UI" FontSize="12" FontWeight="Bold"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Heading _4" Click="FormatH4_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="H4" FontFamily="Segoe UI" FontSize="12" FontWeight="Bold"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator/>
+                <MenuItem Header="_Code (Inline)" Click="FormatInlineCode_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE943;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Code _Block" Click="FormatCodeBlock_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator/>
+                <MenuItem Header="Bulleted _List" Click="FormatBulletList_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE8FD;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="_Numbered List" Click="FormatNumberedList_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE8FD;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="_Quote" Click="FormatQuote_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE8AF;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator/>
+                <MenuItem Header="_Link" Click="FormatLink_Click" InputGestureText="Ctrl+K">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE71B;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="I_mage" Click="FormatImage_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xEB9F;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator/>
+                <MenuItem Header="Horizontal _Rule" Click="FormatHorizontalRule_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#x2015;" FontFamily="Segoe UI" FontSize="14"/>
                     </MenuItem.Icon>
                 </MenuItem>
             </MenuItem>
@@ -906,6 +991,61 @@
                                     <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
                                     <TextBlock Text="Word" Margin="4,0,0,0" VerticalAlignment="Center"/>
                                 </StackPanel>
+                            </Button>
+                        </ToolBar>
+                    </ToolBarTray>
+                </Border>
+                
+                <!-- Markdown Formatting Toolbar (only visible for markdown files) -->
+                <Border x:Name="MarkdownFormattingToolbar" Background="{DynamicResource ThemeToolbarBackgroundBrush}" CornerRadius="4" HorizontalAlignment="Left" Margin="6,0,0,0" Visibility="Collapsed">
+                    <ToolBarTray Background="Transparent">
+                        <ToolBar Band="1" BandIndex="1" Background="Transparent">
+                            <Button Click="FormatBold_Click" ToolTip="Bold (Ctrl+B)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="B" FontFamily="Segoe UI" FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
+                            </Button>
+                            <Button Click="FormatItalic_Click" ToolTip="Italic (Ctrl+I)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="I" FontFamily="Segoe UI" FontSize="14" FontStyle="Italic" VerticalAlignment="Center"/>
+                            </Button>
+                            <Button Click="FormatStrikethrough_Click" ToolTip="Strikethrough" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="S" FontFamily="Segoe UI" FontSize="14" TextDecorations="Strikethrough" VerticalAlignment="Center"/>
+                            </Button>
+                            <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="4,4"/>
+                            <Button Click="FormatH1_Click" ToolTip="Heading 1" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="H1" FontFamily="Segoe UI" FontSize="12" FontWeight="Bold" VerticalAlignment="Center"/>
+                            </Button>
+                            <Button Click="FormatH2_Click" ToolTip="Heading 2" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="H2" FontFamily="Segoe UI" FontSize="12" FontWeight="Bold" VerticalAlignment="Center"/>
+                            </Button>
+                            <Button Click="FormatH3_Click" ToolTip="Heading 3" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="H3" FontFamily="Segoe UI" FontSize="12" FontWeight="Bold" VerticalAlignment="Center"/>
+                            </Button>
+                            <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="4,4"/>
+                            <Button Click="FormatInlineCode_Click" ToolTip="Inline Code" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="&#xE943;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            </Button>
+                            <Button Click="FormatCodeBlock_Click" ToolTip="Code Block" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="{}{}" FontFamily="Consolas" FontSize="12" VerticalAlignment="Center"/>
+                            </Button>
+                            <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="4,4"/>
+                            <Button Click="FormatBulletList_Click" ToolTip="Bulleted List" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="&#xE8FD;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            </Button>
+                            <Button Click="FormatNumberedList_Click" ToolTip="Numbered List" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="1." FontFamily="Segoe UI" FontSize="12" FontWeight="Bold" VerticalAlignment="Center"/>
+                            </Button>
+                            <Button Click="FormatQuote_Click" ToolTip="Quote" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="&#xE8AF;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            </Button>
+                            <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="4,4"/>
+                            <Button Click="FormatLink_Click" ToolTip="Link (Ctrl+K)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="&#xE71B;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            </Button>
+                            <Button Click="FormatImage_Click" ToolTip="Image" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="&#xEB9F;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            </Button>
+                            <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="4,4"/>
+                            <Button Click="FormatHorizontalRule_Click" ToolTip="Horizontal Rule" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="&#x2015;" FontFamily="Segoe UI" FontSize="14" VerticalAlignment="Center"/>
                             </Button>
                         </ToolBar>
                     </ToolBarTray>

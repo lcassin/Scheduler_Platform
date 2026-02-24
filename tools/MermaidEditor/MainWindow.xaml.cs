@@ -119,6 +119,9 @@ Console.WriteLine(""Hello, World!"");
     public ICommand ExportSvgCommand { get; }
     public ICommand ExportEmfCommand { get; }
     public ICommand ExportWordCommand { get; }
+    public ICommand FormatBoldCommand { get; }
+    public ICommand FormatItalicCommand { get; }
+    public ICommand FormatLinkCommand { get; }
 
     public MainWindow()
     {
@@ -133,6 +136,9 @@ Console.WriteLine(""Hello, World!"");
         ExportSvgCommand = new RelayCommand(_ => ExportSvg_Click(this, new RoutedEventArgs()));
         ExportEmfCommand = new RelayCommand(_ => ExportEmf_Click(this, new RoutedEventArgs()));
         ExportWordCommand = new RelayCommand(_ => ExportWord_Click(this, new RoutedEventArgs()));
+        FormatBoldCommand = new RelayCommand(_ => FormatBold_Click(this, new RoutedEventArgs()));
+        FormatItalicCommand = new RelayCommand(_ => FormatItalic_Click(this, new RoutedEventArgs()));
+        FormatLinkCommand = new RelayCommand(_ => FormatLink_Click(this, new RoutedEventArgs()));
 
         _renderTimer = new DispatcherTimer
         {
@@ -2529,6 +2535,258 @@ Console.WriteLine(""Hello, World!"");
         }
     }
 
+    #region Markdown Formatting
+    
+    private void UpdateMarkdownFormattingVisibility()
+    {
+        var isMarkdown = _currentRenderMode == RenderMode.Markdown;
+        FormatMenu.Visibility = isMarkdown ? Visibility.Visible : Visibility.Collapsed;
+        MarkdownFormattingToolbar.Visibility = isMarkdown ? Visibility.Visible : Visibility.Collapsed;
+    }
+    
+    private void FormatBold_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        WrapSelectedText("**", "**");
+    }
+    
+    private void FormatItalic_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        WrapSelectedText("*", "*");
+    }
+    
+    private void FormatStrikethrough_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        WrapSelectedText("~~", "~~");
+    }
+    
+    private void FormatH1_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        ApplyLinePrefix("# ");
+    }
+    
+    private void FormatH2_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        ApplyLinePrefix("## ");
+    }
+    
+    private void FormatH3_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        ApplyLinePrefix("### ");
+    }
+    
+    private void FormatH4_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        ApplyLinePrefix("#### ");
+    }
+    
+    private void FormatInlineCode_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        WrapSelectedText("`", "`");
+    }
+    
+    private void FormatCodeBlock_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        WrapSelectedTextMultiline("```\n", "\n```");
+    }
+    
+    private void FormatBulletList_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        ApplyLinePrefix("- ");
+    }
+    
+    private void FormatNumberedList_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        ApplyLinePrefix("1. ");
+    }
+    
+    private void FormatQuote_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        ApplyLinePrefix("> ");
+    }
+    
+    private void FormatLink_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        
+        var selectedText = CodeEditor.SelectedText;
+        if (string.IsNullOrEmpty(selectedText))
+        {
+            InsertText("[link text](url)");
+        }
+        else
+        {
+            WrapSelectedText("[", "](url)");
+        }
+    }
+    
+    private void FormatImage_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        
+        var selectedText = CodeEditor.SelectedText;
+        if (string.IsNullOrEmpty(selectedText))
+        {
+            InsertText("![alt text](image-url)");
+        }
+        else
+        {
+            WrapSelectedText("![", "](image-url)");
+        }
+    }
+    
+    private void FormatHorizontalRule_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        
+        var doc = CodeEditor.Document;
+        var caretOffset = CodeEditor.CaretOffset;
+        var line = doc.GetLineByOffset(caretOffset);
+        
+        // Insert horizontal rule on a new line
+        var insertText = "\n\n---\n\n";
+        if (line.Offset == caretOffset && caretOffset > 0)
+        {
+            // Already at start of line
+            insertText = "\n---\n\n";
+        }
+        
+        doc.Insert(caretOffset, insertText);
+        CodeEditor.CaretOffset = caretOffset + insertText.Length;
+    }
+    
+    private void WrapSelectedText(string prefix, string suffix)
+    {
+        var doc = CodeEditor.Document;
+        var selectedText = CodeEditor.SelectedText;
+        var selectionStart = CodeEditor.SelectionStart;
+        var selectionLength = CodeEditor.SelectionLength;
+        
+        if (selectionLength > 0)
+        {
+            // Wrap selected text
+            var newText = prefix + selectedText + suffix;
+            doc.Replace(selectionStart, selectionLength, newText);
+            // Select the wrapped text (excluding markers)
+            CodeEditor.Select(selectionStart + prefix.Length, selectedText.Length);
+        }
+        else
+        {
+            // No selection - insert markers and place cursor between them
+            var caretOffset = CodeEditor.CaretOffset;
+            doc.Insert(caretOffset, prefix + suffix);
+            CodeEditor.CaretOffset = caretOffset + prefix.Length;
+        }
+    }
+    
+    private void WrapSelectedTextMultiline(string prefix, string suffix)
+    {
+        var doc = CodeEditor.Document;
+        var selectedText = CodeEditor.SelectedText;
+        var selectionStart = CodeEditor.SelectionStart;
+        var selectionLength = CodeEditor.SelectionLength;
+        
+        if (selectionLength > 0)
+        {
+            // Wrap selected text
+            var newText = prefix + selectedText + suffix;
+            doc.Replace(selectionStart, selectionLength, newText);
+            // Place cursor after the block
+            CodeEditor.CaretOffset = selectionStart + newText.Length;
+        }
+        else
+        {
+            // No selection - insert block and place cursor inside
+            var caretOffset = CodeEditor.CaretOffset;
+            doc.Insert(caretOffset, prefix + suffix);
+            CodeEditor.CaretOffset = caretOffset + prefix.Length;
+        }
+    }
+    
+    private void ApplyLinePrefix(string prefix)
+    {
+        var doc = CodeEditor.Document;
+        var selectionStart = CodeEditor.SelectionStart;
+        var selectionLength = CodeEditor.SelectionLength;
+        
+        if (selectionLength > 0)
+        {
+            // Apply prefix to each selected line
+            var startLine = doc.GetLineByOffset(selectionStart);
+            var endLine = doc.GetLineByOffset(selectionStart + selectionLength);
+            
+            // Process lines from bottom to top to preserve offsets
+            for (int lineNum = endLine.LineNumber; lineNum >= startLine.LineNumber; lineNum--)
+            {
+                var line = doc.GetLineByNumber(lineNum);
+                var lineText = doc.GetText(line.Offset, line.Length);
+                
+                // Remove existing heading/list prefixes before applying new one
+                var trimmedText = RemoveExistingPrefix(lineText);
+                var newLineText = prefix + trimmedText;
+                
+                doc.Replace(line.Offset, line.Length, newLineText);
+            }
+        }
+        else
+        {
+            // Apply to current line
+            var line = doc.GetLineByOffset(CodeEditor.CaretOffset);
+            var lineText = doc.GetText(line.Offset, line.Length);
+            
+            // Remove existing heading/list prefixes before applying new one
+            var trimmedText = RemoveExistingPrefix(lineText);
+            var newLineText = prefix + trimmedText;
+            
+            doc.Replace(line.Offset, line.Length, newLineText);
+            CodeEditor.CaretOffset = line.Offset + newLineText.Length;
+        }
+    }
+    
+    private string RemoveExistingPrefix(string text)
+    {
+        // Remove existing markdown prefixes (headings, lists, quotes)
+        var patterns = new[]
+        {
+            @"^#{1,6}\s+",      // Headings
+            @"^[-*+]\s+",       // Unordered lists
+            @"^\d+\.\s+",       // Ordered lists
+            @"^>\s*"            // Blockquotes
+        };
+        
+        foreach (var pattern in patterns)
+        {
+            var match = Regex.Match(text, pattern);
+            if (match.Success)
+            {
+                return text.Substring(match.Length);
+            }
+        }
+        
+        return text;
+    }
+    
+    private void InsertText(string text)
+    {
+        var doc = CodeEditor.Document;
+        var caretOffset = CodeEditor.CaretOffset;
+        doc.Insert(caretOffset, text);
+        CodeEditor.CaretOffset = caretOffset + text.Length;
+    }
+    
+    #endregion
+
     private async void ExportPng_Click(object sender, RoutedEventArgs e)
     {
         if (!_webViewInitialized) return;
@@ -3722,7 +3980,7 @@ Console.WriteLine(""Hello, World!"");
         });
         titlePanel.Children.Add(new TextBlock
         {
-            Text = "Version 2.2.0",
+            Text = "Version 2.3.0",
             FontSize = 14,
             Foreground = (SolidColorBrush)System.Windows.Application.Current.Resources["ThemeDisabledForegroundBrush"],
             Margin = new Thickness(0, 4, 0, 0)
@@ -5158,6 +5416,7 @@ Console.WriteLine(""Hello, World!"");
         UpdateTitle();
         UpdateNavigationDropdown();
         UpdateExportMenuVisibility();
+        UpdateMarkdownFormattingVisibility();
         UpdateUndoRedoState();
         
         // Re-render preview for the new document
