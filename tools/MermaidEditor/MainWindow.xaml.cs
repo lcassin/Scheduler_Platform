@@ -5817,6 +5817,8 @@ Console.WriteLine(""Hello, World!"");
                     _activeDocument.IsDirty = false;
                     _currentRenderMode = _activeDocument.RenderMode;
                     UpdateExportMenuVisibility();
+                    UpdateMarkdownFormattingVisibility();
+                    UpdateTitle();
                     RenderPreview();
                     
                     // Auto fit to window after template loads
