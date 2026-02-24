@@ -84,6 +84,11 @@ public partial class MainWindow : Window
     private FileSystemWatcher? _fileWatcher;
     private bool _isReloadingFile; // Prevent recursive change notifications during reload
     private bool _isSavingFile; // Prevent change notification when we save the file ourselves
+    
+    // Tab drag-and-drop
+    private System.Windows.Point _tabDragStartPoint;
+    private bool _isTabDragging;
+    private System.Windows.Controls.Border? _draggedTab;
 
     private const string DefaultMermaidCode= @"flowchart TD
     A[Start] --> B{Is it working?}
@@ -5085,14 +5090,49 @@ Console.WriteLine(""Hello, World!"");
         stackPanel.Children.Add(closeButton);
         tabBorder.Child = stackPanel;
         
-        // Handle click on the border
+        // Handle click and drag on the border
         tabBorder.MouseLeftButtonDown += (s, e) =>
         {
             if (s is System.Windows.Controls.Border border && border.Tag is DocumentModel clickedDoc)
             {
+                _tabDragStartPoint = e.GetPosition(DocumentTabsPanel);
+                _draggedTab = border;
+                _isTabDragging = false;
                 SwitchToDocument(clickedDoc);
             }
         };
+        
+        tabBorder.MouseMove += (s, e) =>
+        {
+            if (e.LeftButton == System.Windows.Input.MouseButtonState.Pressed && _draggedTab != null)
+            {
+                var currentPos = e.GetPosition(DocumentTabsPanel);
+                var diff = _tabDragStartPoint - currentPos;
+                
+                if (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
+                    Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance)
+                {
+                    _isTabDragging = true;
+                    tabBorder.Cursor = System.Windows.Input.Cursors.Hand;
+                    
+                    var data = new System.Windows.DataObject(typeof(DocumentModel), _draggedTab.Tag);
+                    System.Windows.DragDrop.DoDragDrop(_draggedTab, data, System.Windows.DragDropEffects.Move);
+                    
+                    _draggedTab = null;
+                    _isTabDragging = false;
+                }
+            }
+        };
+        
+        tabBorder.MouseLeftButtonUp += (s, e) =>
+        {
+            _draggedTab = null;
+            _isTabDragging = false;
+        };
+        
+        tabBorder.AllowDrop = true;
+        tabBorder.DragOver += TabBorder_DragOver;
+        tabBorder.Drop += TabBorder_Drop;
         
         // Add context menu for tab operations - uses XAML styles from Window.Resources
         var contextMenu = new System.Windows.Controls.ContextMenu();
@@ -5130,6 +5170,47 @@ Console.WriteLine(""Hello, World!"");
         DocumentTabsPanel.Children.Add(tabBorder);
         
         UpdateTabStyles();
+    }
+    
+    private void TabBorder_DragOver(object sender, System.Windows.DragEventArgs e)
+    {
+        if (e.Data.GetDataPresent(typeof(DocumentModel)))
+        {
+            e.Effects = System.Windows.DragDropEffects.Move;
+        }
+        else
+        {
+            e.Effects = System.Windows.DragDropEffects.None;
+        }
+        e.Handled = true;
+    }
+    
+    private void TabBorder_Drop(object sender, System.Windows.DragEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Border targetBorder && 
+            targetBorder.Tag is DocumentModel targetDoc &&
+            e.Data.GetDataPresent(typeof(DocumentModel)))
+        {
+            var draggedDoc = e.Data.GetData(typeof(DocumentModel)) as DocumentModel;
+            if (draggedDoc == null || draggedDoc == targetDoc) return;
+            
+            var draggedIndex = _openDocuments.IndexOf(draggedDoc);
+            var targetIndex = _openDocuments.IndexOf(targetDoc);
+            
+            if (draggedIndex < 0 || targetIndex < 0) return;
+            
+            // Reorder in the documents list
+            _openDocuments.RemoveAt(draggedIndex);
+            _openDocuments.Insert(targetIndex, draggedDoc);
+            
+            // Reorder in the UI panel
+            if (draggedDoc.TabBorder != null)
+            {
+                DocumentTabsPanel.Children.Remove(draggedDoc.TabBorder);
+                DocumentTabsPanel.Children.Insert(targetIndex, draggedDoc.TabBorder);
+            }
+        }
+        e.Handled = true;
     }
     
     /// <summary>
