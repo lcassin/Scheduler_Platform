@@ -82,13 +82,13 @@
                 Click="FindNext_Click" Margin="0,0,0,8"/>
         
         <!-- Replace row -->
-        <TextBlock Grid.Row="1" Grid.Column="0" Text="Replace:" 
+        <TextBlock x:Name="ReplaceLabelText" Grid.Row="1" Grid.Column="0" Text="Replace:" 
                    Foreground="{DynamicResource ThemeForegroundBrush}" 
                    VerticalAlignment="Center" Margin="0,0,8,8"/>
         <TextBox x:Name="ReplaceTextBox" Grid.Row="1" Grid.Column="1" 
                  Style="{StaticResource DialogTextBoxStyle}" 
                  Margin="0,0,8,8"/>
-        <Button Grid.Row="1" Grid.Column="2" Content="Replace" 
+        <Button x:Name="ReplaceButton" Grid.Row="1" Grid.Column="2" Content="Replace" 
                 Style="{StaticResource DialogButtonStyle}" 
                 Click="Replace_Click" Margin="0,0,0,8"/>
         
@@ -99,7 +99,7 @@
             <CheckBox x:Name="WholeWordCheckBox" Content="Whole word" 
                       Style="{StaticResource DialogCheckBoxStyle}"/>
         </StackPanel>
-        <Button Grid.Row="2" Grid.Column="2" Content="Replace All" 
+        <Button x:Name="ReplaceAllButton" Grid.Row="2" Grid.Column="2" Content="Replace All" 
                 Style="{StaticResource DialogButtonStyle}" 
                 Click="ReplaceAll_Click" Margin="0,0,0,8"/>
         

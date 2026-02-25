@@ -2556,41 +2556,39 @@ Console.WriteLine(""Hello, World!"");
     
     private void Find_Click(object sender, RoutedEventArgs e)
     {
-        // Open the built-in AvalonEdit search panel
-        var searchPanel = SearchPanel.Install(CodeEditor);
-        searchPanel.Open();
-        
-        // If there's selected text, use it as the search term
-        if (CodeEditor.SelectionLength > 0 && CodeEditor.SelectionLength < 100)
-        {
-            searchPanel.SearchPattern = CodeEditor.SelectedText;
-        }
+        // Open Find-only dialog (no Replace section)
+        OpenFindDialog(showReplace: false);
     }
     
     private void FindNext_Click(object sender, RoutedEventArgs e)
     {
-        // Trigger F3 key to find next using the search panel
-        var searchPanel = SearchPanel.Install(CodeEditor);
-        if (!searchPanel.IsClosed)
+        // If dialog is open, trigger find next; otherwise open Find dialog
+        if (_findReplaceDialog != null && _findReplaceDialog.IsLoaded)
         {
-            searchPanel.FindNext();
+            _findReplaceDialog.TriggerFindNext();
         }
         else
         {
-            searchPanel.Open();
+            OpenFindDialog(showReplace: false);
         }
     }
     
     private void FindReplace_Click(object sender, RoutedEventArgs e)
     {
-        // Close any existing dialog
+        // Open full Find and Replace dialog
+        OpenFindDialog(showReplace: true);
+    }
+    
+    private void OpenFindDialog(bool showReplace)
+    {
+        // Close existing dialog if switching modes
         if (_findReplaceDialog != null && _findReplaceDialog.IsLoaded)
         {
             _findReplaceDialog.Activate();
             return;
         }
         
-        _findReplaceDialog = new FindReplaceDialog(CodeEditor) { Owner = this };
+        _findReplaceDialog = new FindReplaceDialog(CodeEditor, showReplace) { Owner = this };
         _findReplaceDialog.Show();
     }
     

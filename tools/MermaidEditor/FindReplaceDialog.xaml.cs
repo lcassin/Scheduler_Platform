@@ -10,11 +10,24 @@ public partial class FindReplaceDialog : Window
 {
     private readonly TextEditor _editor;
     private int _lastSearchIndex = -1;
+    private readonly bool _showReplace;
     
-    public FindReplaceDialog(TextEditor editor)
+    public FindReplaceDialog(TextEditor editor, bool showReplace = true)
     {
         InitializeComponent();
         _editor = editor;
+        _showReplace = showReplace;
+        
+        // Configure dialog based on mode
+        if (!showReplace)
+        {
+            Title = "Find";
+            Height = 150;
+            ReplaceLabelText.Visibility = Visibility.Collapsed;
+            ReplaceTextBox.Visibility = Visibility.Collapsed;
+            ReplaceButton.Visibility = Visibility.Collapsed;
+            ReplaceAllButton.Visibility = Visibility.Collapsed;
+        }
         
         // Pre-populate with selected text if any
         if (_editor.SelectionLength > 0 && _editor.SelectionLength < 100)
@@ -219,5 +232,13 @@ public partial class FindReplaceDialog : Window
     private void Close_Click(object sender, RoutedEventArgs e)
     {
         Close();
+    }
+    
+    /// <summary>
+    /// Public method to trigger Find Next from external code (e.g., F3 key)
+    /// </summary>
+    public void TriggerFindNext()
+    {
+        FindNext_Click(this, new RoutedEventArgs());
     }
 }
