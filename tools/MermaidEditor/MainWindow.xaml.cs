@@ -16,6 +16,7 @@ using ICSharpCode.AvalonEdit.Document;
 using ICSharpCode.AvalonEdit.Editing;
 using ICSharpCode.AvalonEdit.Highlighting;
 using ICSharpCode.AvalonEdit.Highlighting.Xshd;
+using ICSharpCode.AvalonEdit.Search;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
 using System.Xml;
@@ -127,6 +128,8 @@ Console.WriteLine(""Hello, World!"");
     public ICommand FormatBoldCommand { get; }
     public ICommand FormatItalicCommand { get; }
     public ICommand FormatLinkCommand { get; }
+    public ICommand FindReplaceCommand { get; }
+    public ICommand FindNextCommand { get; }
 
     public MainWindow()
     {
@@ -144,6 +147,8 @@ Console.WriteLine(""Hello, World!"");
         FormatBoldCommand = new RelayCommand(_ => FormatBold_Click(this, new RoutedEventArgs()));
         FormatItalicCommand = new RelayCommand(_ => FormatItalic_Click(this, new RoutedEventArgs()));
         FormatLinkCommand = new RelayCommand(_ => FormatLink_Click(this, new RoutedEventArgs()));
+        FindReplaceCommand = new RelayCommand(_ => FindReplace_Click(this, new RoutedEventArgs()));
+        FindNextCommand = new RelayCommand(_ => FindNext_Click(this, new RoutedEventArgs()));
 
         _renderTimer = new DispatcherTimer
         {
@@ -327,6 +332,9 @@ Console.WriteLine(""Hello, World!"");
         };
 
         RegisterMermaidSyntaxHighlighting();
+        
+        // Install search panel for Find (Ctrl+F) and Find Next (F3)
+        SearchPanel.Install(CodeEditor);
     }
 
     private void RegisterMermaidSyntaxHighlighting()
@@ -2541,6 +2549,52 @@ Console.WriteLine(""Hello, World!"");
             UpdateUndoRedoState();
         }
     }
+
+    #region Find and Replace
+    
+    private FindReplaceDialog? _findReplaceDialog;
+    
+    private void Find_Click(object sender, RoutedEventArgs e)
+    {
+        // Open the built-in AvalonEdit search panel
+        var searchPanel = SearchPanel.Install(CodeEditor);
+        searchPanel.Open();
+        
+        // If there's selected text, use it as the search term
+        if (CodeEditor.SelectionLength > 0 && CodeEditor.SelectionLength < 100)
+        {
+            searchPanel.SearchPattern = CodeEditor.SelectedText;
+        }
+    }
+    
+    private void FindNext_Click(object sender, RoutedEventArgs e)
+    {
+        // Trigger F3 key to find next using the search panel
+        var searchPanel = SearchPanel.Install(CodeEditor);
+        if (!searchPanel.IsClosed)
+        {
+            searchPanel.FindNext();
+        }
+        else
+        {
+            searchPanel.Open();
+        }
+    }
+    
+    private void FindReplace_Click(object sender, RoutedEventArgs e)
+    {
+        // Close any existing dialog
+        if (_findReplaceDialog != null && _findReplaceDialog.IsLoaded)
+        {
+            _findReplaceDialog.Activate();
+            return;
+        }
+        
+        _findReplaceDialog = new FindReplaceDialog(CodeEditor) { Owner = this };
+        _findReplaceDialog.Show();
+    }
+    
+    #endregion
 
     #region Markdown Formatting
     
