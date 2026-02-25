@@ -16,7 +16,6 @@ using ICSharpCode.AvalonEdit.Document;
 using ICSharpCode.AvalonEdit.Editing;
 using ICSharpCode.AvalonEdit.Highlighting;
 using ICSharpCode.AvalonEdit.Highlighting.Xshd;
-using ICSharpCode.AvalonEdit.Search;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
 using System.Xml;
@@ -332,9 +331,6 @@ Console.WriteLine(""Hello, World!"");
         };
 
         RegisterMermaidSyntaxHighlighting();
-        
-        // Install search panel for Find (Ctrl+F) and Find Next (F3)
-        SearchPanel.Install(CodeEditor);
     }
 
     private void RegisterMermaidSyntaxHighlighting()
