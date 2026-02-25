@@ -1,6 +1,8 @@
+using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Interop;
 using ICSharpCode.AvalonEdit;
 using Key = System.Windows.Input.Key;
 
@@ -8,6 +10,12 @@ namespace MermaidEditor;
 
 public partial class FindReplaceDialog : Window
 {
+    [DllImport("dwmapi.dll", PreserveSig = true)]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+
+    private const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+    private const int DWMWA_CAPTION_COLOR = 35;
+
     private readonly TextEditor _editor;
     private int _lastSearchIndex = -1;
     private readonly bool _showReplace;
@@ -17,6 +25,9 @@ public partial class FindReplaceDialog : Window
         InitializeComponent();
         _editor = editor;
         _showReplace = showReplace;
+        
+        // Apply title bar theming
+        SourceInitialized += FindReplaceDialog_SourceInitialized;
         
         // Configure dialog based on mode
         if (!showReplace)
@@ -39,6 +50,39 @@ public partial class FindReplaceDialog : Window
         
         // Handle keyboard shortcuts
         KeyDown += FindReplaceDialog_KeyDown;
+    }
+    
+    private void FindReplaceDialog_SourceInitialized(object? sender, EventArgs e)
+    {
+        UpdateTitleBarTheme();
+    }
+
+    private void UpdateTitleBarTheme()
+    {
+        try
+        {
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd != IntPtr.Zero)
+            {
+                var isDark = ThemeManager.IsDarkTheme;
+                int darkModeValue = isDark ? 1 : 0;
+                DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref darkModeValue, sizeof(int));
+
+                var colors = ThemeManager.GetThemeColors(ThemeManager.CurrentTheme);
+                int captionColor = ColorToInt(colors.Background);
+                DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ref captionColor, sizeof(int));
+            }
+        }
+        catch
+        {
+            // Silently fail if DWM API is not available
+        }
+    }
+
+    private static int ColorToInt(System.Windows.Media.Color color)
+    {
+        // Color format is 0x00BBGGRR (BGR, not RGB)
+        return (color.B << 16) | (color.G << 8) | color.R;
     }
     
     private void FindReplaceDialog_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)

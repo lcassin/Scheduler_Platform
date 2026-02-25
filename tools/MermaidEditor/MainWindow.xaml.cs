@@ -3808,8 +3808,8 @@ Console.WriteLine(""Hello, World!"");
             }
             else
             {
-                // For Markdown, use viewport capture
-                return await CaptureViewportAsPngBytes();
+                // For Markdown, capture the full scrollable content
+                return await CaptureFullMarkdownAsPngBytes();
             }
         }
         catch
@@ -3823,6 +3823,67 @@ Console.WriteLine(""Hello, World!"");
             {
                 return null;
             }
+        }
+    }
+    
+    private async Task<byte[]?> CaptureFullMarkdownAsPngBytes()
+    {
+        try
+        {
+            // Use html2canvas to capture the full scrollable content
+            // First, inject html2canvas if not already present
+            var script = @"
+                (async function() {
+                    // Check if html2canvas is available, if not load it
+                    if (typeof html2canvas === 'undefined') {
+                        await new Promise((resolve, reject) => {
+                            const script = document.createElement('script');
+                            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+                            script.onload = resolve;
+                            script.onerror = reject;
+                            document.head.appendChild(script);
+                        });
+                    }
+                    
+                    // Get the content element
+                    const content = document.body;
+                    
+                    // Capture the full content
+                    const canvas = await html2canvas(content, {
+                        scale: 2,
+                        useCORS: true,
+                        allowTaint: true,
+                        backgroundColor: '#ffffff',
+                        windowWidth: content.scrollWidth,
+                        windowHeight: content.scrollHeight
+                    });
+                    
+                    return canvas.toDataURL('image/png');
+                })();
+            ";
+            
+            var result = await PreviewWebView.CoreWebView2.ExecuteScriptAsync(script);
+            
+            // The result is a JSON string, need to parse it
+            if (!string.IsNullOrEmpty(result) && result != "null")
+            {
+                // Remove surrounding quotes from JSON string
+                var dataUrl = result.Trim('"').Replace("\\u0022", "\"");
+                
+                if (dataUrl.StartsWith("data:image/png;base64,"))
+                {
+                    var base64Data = dataUrl.Substring("data:image/png;base64,".Length);
+                    return Convert.FromBase64String(base64Data);
+                }
+            }
+            
+            // Fall back to viewport capture
+            return await CaptureViewportAsPngBytes();
+        }
+        catch
+        {
+            // Fall back to viewport capture on error
+            return await CaptureViewportAsPngBytes();
         }
     }
 
