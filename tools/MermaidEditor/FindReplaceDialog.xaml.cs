@@ -33,7 +33,7 @@ public partial class FindReplaceDialog : Window
         if (!showReplace)
         {
             Title = "Find";
-            Height = 150;
+            Height = 180;
             ReplaceLabelText.Visibility = Visibility.Collapsed;
             ReplaceTextBox.Visibility = Visibility.Collapsed;
             ReplaceButton.Visibility = Visibility.Collapsed;

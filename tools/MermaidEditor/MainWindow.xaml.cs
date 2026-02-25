@@ -3830,51 +3830,67 @@ Console.WriteLine(""Hello, World!"");
     {
         try
         {
-            // Use html2canvas to capture the full scrollable content
-            // First, inject html2canvas if not already present
+            // Use callback pattern with postMessage (same as mermaid export)
+            _pngExportTcs = new TaskCompletionSource<string>();
+            
+            // Inject html2canvas and capture full content, sending result via postMessage
             var script = @"
                 (async function() {
-                    // Check if html2canvas is available, if not load it
-                    if (typeof html2canvas === 'undefined') {
-                        await new Promise((resolve, reject) => {
-                            const script = document.createElement('script');
-                            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-                            script.onload = resolve;
-                            script.onerror = reject;
-                            document.head.appendChild(script);
+                    try {
+                        // Check if html2canvas is available, if not load it
+                        if (typeof html2canvas === 'undefined') {
+                            await new Promise((resolve, reject) => {
+                                const script = document.createElement('script');
+                                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+                                script.onload = resolve;
+                                script.onerror = reject;
+                                document.head.appendChild(script);
+                            });
+                        }
+                        
+                        // Get the content element
+                        const content = document.getElementById('content') || document.body;
+                        
+                        // Capture the full content
+                        const canvas = await html2canvas(content, {
+                            scale: 2,
+                            useCORS: true,
+                            allowTaint: true,
+                            backgroundColor: '#ffffff',
+                            width: content.scrollWidth,
+                            height: content.scrollHeight,
+                            windowWidth: content.scrollWidth,
+                            windowHeight: content.scrollHeight
                         });
+                        
+                        const dataUrl = canvas.toDataURL('image/png');
+                        window.chrome.webview.postMessage({ type: 'pngExport', data: dataUrl });
+                    } catch (err) {
+                        window.chrome.webview.postMessage({ type: 'pngExportError', error: err.message });
                     }
-                    
-                    // Get the content element
-                    const content = document.body;
-                    
-                    // Capture the full content
-                    const canvas = await html2canvas(content, {
-                        scale: 2,
-                        useCORS: true,
-                        allowTaint: true,
-                        backgroundColor: '#ffffff',
-                        windowWidth: content.scrollWidth,
-                        windowHeight: content.scrollHeight
-                    });
-                    
-                    return canvas.toDataURL('image/png');
                 })();
             ";
             
-            var result = await PreviewWebView.CoreWebView2.ExecuteScriptAsync(script);
+            await PreviewWebView.CoreWebView2.ExecuteScriptAsync(script);
             
-            // The result is a JSON string, need to parse it
-            if (!string.IsNullOrEmpty(result) && result != "null")
+            // Wait for the callback with a timeout
+            var timeoutTask = Task.Delay(15000); // 15 second timeout
+            var completedTask = await Task.WhenAny(_pngExportTcs.Task, timeoutTask);
+            
+            if (completedTask == timeoutTask)
             {
-                // Remove surrounding quotes from JSON string
-                var dataUrl = result.Trim('"').Replace("\\u0022", "\"");
-                
-                if (dataUrl.StartsWith("data:image/png;base64,"))
-                {
-                    var base64Data = dataUrl.Substring("data:image/png;base64,".Length);
-                    return Convert.FromBase64String(base64Data);
-                }
+                _pngExportTcs = null;
+                // Fall back to viewport capture on timeout
+                return await CaptureViewportAsPngBytes();
+            }
+            
+            var dataUrl = await _pngExportTcs.Task;
+            _pngExportTcs = null;
+            
+            if (!string.IsNullOrEmpty(dataUrl) && dataUrl.StartsWith("data:image/png;base64,"))
+            {
+                var base64Data = dataUrl.Substring("data:image/png;base64,".Length);
+                return Convert.FromBase64String(base64Data);
             }
             
             // Fall back to viewport capture
@@ -3882,6 +3898,7 @@ Console.WriteLine(""Hello, World!"");
         }
         catch
         {
+            _pngExportTcs = null;
             // Fall back to viewport capture on error
             return await CaptureViewportAsPngBytes();
         }
