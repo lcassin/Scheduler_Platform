@@ -692,6 +692,8 @@
         <KeyBinding Gesture="Ctrl+B" Command="{Binding FormatBoldCommand}" />
         <KeyBinding Gesture="Ctrl+I" Command="{Binding FormatItalicCommand}" />
         <KeyBinding Gesture="Ctrl+K" Command="{Binding FormatLinkCommand}" />
+        <KeyBinding Gesture="Ctrl+H" Command="{Binding FindReplaceCommand}" />
+        <KeyBinding Gesture="F3" Command="{Binding FindNextCommand}" />
     </Window.InputBindings>
     
     <Grid>
@@ -785,6 +787,22 @@
                 <MenuItem x:Name="RedoMenuItem" Header="_Redo" Click="Redo_Click" InputGestureText="Ctrl+Y" IsEnabled="False">
                     <MenuItem.Icon>
                         <TextBlock Text="&#xE7A6;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator/>
+                <MenuItem Header="_Find..." Click="Find_Click" InputGestureText="Ctrl+F">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Find _Next" Click="FindNext_Click" InputGestureText="F3">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE72A;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Find and _Replace..." Click="FindReplace_Click" InputGestureText="Ctrl+H">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE8EE;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                     </MenuItem.Icon>
                 </MenuItem>
             </MenuItem>
