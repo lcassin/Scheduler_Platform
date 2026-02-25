@@ -24,6 +24,7 @@ public partial class PrintPreviewDialog : Window
     private const int DWMWA_CAPTION_COLOR = 35;
     private readonly BitmapSource _diagramImage;
     private readonly string _documentTitle;
+    private readonly bool _isMarkdown;
     private int _currentPage = 1;
     private int _totalPages = 1;
     private double _pageWidth;
@@ -34,11 +35,12 @@ public partial class PrintPreviewDialog : Window
     private PrintQueue? _selectedPrinter;
     private double _printerMinMargin = 0; // Minimum margin supported by printer
 
-    public PrintPreviewDialog(BitmapSource diagramImage, string documentTitle)
+    public PrintPreviewDialog(BitmapSource diagramImage, string documentTitle, bool isMarkdown = false)
     {
         InitializeComponent();
         _diagramImage = diagramImage;
         _documentTitle = documentTitle;
+        _isMarkdown = isMarkdown;
         
         // Set default page size (Letter)
         _pageWidth = 8.5 * 96; // 8.5 inches at 96 DPI
@@ -49,6 +51,13 @@ public partial class PrintPreviewDialog : Window
         
         // Populate printer list
         PopulatePrinterList();
+        
+        // For markdown, default to "Fit to page width" since content typically spans multiple pages
+        if (_isMarkdown)
+        {
+            FitToWidthRadio.IsChecked = true;
+            FitToPageRadio.IsChecked = false;
+        }
     }
 
     private void PopulatePrinterList()
@@ -431,14 +440,14 @@ public partial class PrintPreviewDialog : Window
         Canvas.SetTop(image, imageY);
         canvas.Children.Add(image);
 
-        // Draw margin guides (light gray dashed lines)
+        // Draw margin guides (more visible dashed lines)
         var marginRect = new WpfRectangle
         {
             Width = printableWidth * previewScale,
             Height = printableHeight * previewScale,
-            Stroke = WpfBrushes.LightGray,
-            StrokeDashArray = new DoubleCollection { 4, 2 },
-            StrokeThickness = 0.5
+            Stroke = new SolidColorBrush(System.Windows.Media.Color.FromRgb(180, 180, 180)),
+            StrokeDashArray = new DoubleCollection { 6, 3 },
+            StrokeThickness = 1.0
         };
         Canvas.SetLeft(marginRect, _marginSize * previewScale);
         Canvas.SetTop(marginRect, _marginSize * previewScale);

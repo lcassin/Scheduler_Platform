@@ -3757,8 +3757,9 @@ Console.WriteLine(""Hello, World!"");
             if (documentTitle.EndsWith(".mmd") || documentTitle.EndsWith(".md"))
                 documentTitle = Path.GetFileNameWithoutExtension(documentTitle);
 
-            // Show print preview dialog
-            var printDialog = new PrintPreviewDialog(bitmap, documentTitle);
+            // Show print preview dialog (pass isMarkdown flag for default scaling)
+            var isMarkdown = _currentRenderMode == RenderMode.Markdown;
+            var printDialog = new PrintPreviewDialog(bitmap, documentTitle, isMarkdown);
             printDialog.Owner = this;
             printDialog.ShowDialog();
         }
