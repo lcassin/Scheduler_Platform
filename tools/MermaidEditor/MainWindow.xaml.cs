@@ -329,8 +329,33 @@ Console.WriteLine(""Hello, World!"");
         {
             StatusText.Text = $"Line {CodeEditor.TextArea.Caret.Line}, Col {CodeEditor.TextArea.Caret.Column}";
         };
+        
+        // Intercept Ctrl+F and Ctrl+H before AvalonEdit handles them
+        CodeEditor.PreviewKeyDown += CodeEditor_PreviewKeyDown;
 
         RegisterMermaidSyntaxHighlighting();
+    }
+    
+    private void CodeEditor_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.F && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            // Ctrl+F - Open Find dialog
+            OpenFindDialog(showReplace: false);
+            e.Handled = true;
+        }
+        else if (e.Key == System.Windows.Input.Key.H && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            // Ctrl+H - Open Find and Replace dialog
+            OpenFindDialog(showReplace: true);
+            e.Handled = true;
+        }
+        else if (e.Key == System.Windows.Input.Key.F3 && Keyboard.Modifiers == ModifierKeys.None)
+        {
+            // F3 - Find Next
+            FindNext_Click(sender, new RoutedEventArgs());
+            e.Handled = true;
+        }
     }
 
     private void RegisterMermaidSyntaxHighlighting()
