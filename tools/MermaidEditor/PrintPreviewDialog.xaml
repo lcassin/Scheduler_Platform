@@ -222,10 +222,11 @@
                 
                 <!-- Preview Area -->
                 <Border Grid.Row="1" Background="#404040" CornerRadius="4">
-                    <ScrollViewer x:Name="PreviewScrollViewer" 
-                                  HorizontalScrollBarVisibility="Auto" 
-                                  VerticalScrollBarVisibility="Auto"
-                                  Padding="16">
+                        <ScrollViewer x:Name="PreviewScrollViewer" 
+                                      HorizontalScrollBarVisibility="Auto" 
+                                      VerticalScrollBarVisibility="Auto"
+                                      ScrollChanged="PreviewScrollViewer_ScrollChanged"
+                                      Padding="16">
                         <StackPanel x:Name="PreviewPagesPanel" HorizontalAlignment="Center">
                             <!-- Pages will be added here dynamically -->
                         </StackPanel>

@@ -407,6 +407,13 @@ public partial class PrintPreviewDialog : Window
             ClipToBounds = true
         };
 
+        // Clip to printable area (margins) so content doesn't extend beyond
+        canvas.Clip = new RectangleGeometry(new Rect(
+            _marginSize * previewScale, 
+            _marginSize * previewScale, 
+            printableWidth * previewScale, 
+            printableHeight * previewScale));
+
         // Create image for this page section
         var image = new WpfImage
         {
@@ -648,5 +655,42 @@ public partial class PrintPreviewDialog : Window
     {
         DialogResult = false;
         Close();
+    }
+
+    private void PreviewScrollViewer_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        if (PreviewPagesPanel.Children.Count == 0 || _totalPages <= 1)
+            return;
+
+        // Calculate which page is most visible based on scroll position
+        double scrollOffset = e.VerticalOffset;
+        double viewportHeight = e.ViewportHeight;
+        double viewportCenter = scrollOffset + (viewportHeight / 2);
+
+        // Find which page contains the center of the viewport
+        double cumulativeHeight = 0;
+        int visiblePage = 1;
+
+        for (int i = 0; i < PreviewPagesPanel.Children.Count; i++)
+        {
+            if (PreviewPagesPanel.Children[i] is FrameworkElement page)
+            {
+                double pageHeight = page.ActualHeight + page.Margin.Top + page.Margin.Bottom;
+                cumulativeHeight += pageHeight;
+
+                if (cumulativeHeight >= viewportCenter)
+                {
+                    visiblePage = i + 1;
+                    break;
+                }
+            }
+        }
+
+        // Update current page if changed
+        if (visiblePage != _currentPage)
+        {
+            _currentPage = visiblePage;
+            UpdatePageNavigation();
+        }
     }
 }
