@@ -6341,6 +6341,41 @@ Console.WriteLine(""Hello, World!"");
         }
     }
     
+    /// <summary>
+    /// Syncs the toggle button visual states with their actual states.
+    /// This is needed because WPF Style.Triggers with DynamicResource can sometimes
+    /// not update properly after dialogs close.
+    /// </summary>
+    private void SyncToggleButtonStates()
+    {
+        // Force re-evaluation of toggle button states by toggling IsChecked twice
+        // This ensures the Style.Triggers are re-evaluated
+        if (SplitViewToggle != null)
+        {
+            var state = SplitViewToggle.IsChecked;
+            SplitViewToggle.IsChecked = !state;
+            SplitViewToggle.IsChecked = state;
+        }
+        if (LineNumbersToggle != null)
+        {
+            var state = LineNumbersToggle.IsChecked;
+            LineNumbersToggle.IsChecked = !state;
+            LineNumbersToggle.IsChecked = state;
+        }
+        if (BracketMatchingToggle != null)
+        {
+            var state = BracketMatchingToggle.IsChecked;
+            BracketMatchingToggle.IsChecked = !state;
+            BracketMatchingToggle.IsChecked = state;
+        }
+        if (WordWrapToggle != null)
+        {
+            var state = WordWrapToggle.IsChecked;
+            WordWrapToggle.IsChecked = !state;
+            WordWrapToggle.IsChecked = state;
+        }
+    }
+    
     private void ShowStartupNewDocumentDialog()
     {
         var dialog = new NewDocumentDialog { Owner = this };
@@ -6436,6 +6471,11 @@ Console.WriteLine(""Hello, World!"");
             // If no template selected, keep the blank document
         }
         // If user cancelled dialog, keep the blank document
+        
+        // Sync toggle button visual states after dialog closes
+        // This is needed because WPF Style.Triggers with DynamicResource can sometimes
+        // not update properly after dialogs close
+        SyncToggleButtonStates();
     }
     
     #endregion
