@@ -705,10 +705,17 @@ Console.WriteLine(""Hello, World!"");
             foreach (var toolBar in toolBars)
             {
                 // Find the overflow button by looking for ToggleButton in the toolbar
+                // BUT skip our named toggle buttons (SplitViewToggle, LineNumbersToggle, etc.)
                 var toggleButtons = FindVisualChildren<System.Windows.Controls.Primitives.ToggleButton>(toolBar);
                 foreach (var toggleButton in toggleButtons)
                 {
-                    // Style the toggle button itself
+                    // Skip our custom toggle buttons - they have names
+                    if (!string.IsNullOrEmpty(toggleButton.Name))
+                    {
+                        continue;
+                    }
+                    
+                    // Style the overflow toggle button itself
                     toggleButton.Background = darkBrush;
                     toggleButton.Foreground = foregroundBrush;
                     toggleButton.BorderThickness = new Thickness(0);
