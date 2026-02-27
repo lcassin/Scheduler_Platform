@@ -1084,6 +1084,24 @@
                     </ToolBarTray>
                 </Border>
                 
+                <!-- View Toolbar (split view, line numbers, bracket matching) -->
+                <Border Background="{DynamicResource ThemeToolbarBackgroundBrush}" CornerRadius="4" HorizontalAlignment="Left" Margin="6,0,0,0">
+                    <ToolBarTray Background="Transparent">
+                        <ToolBar Band="1" BandIndex="1" Background="Transparent">
+                            <ToggleButton x:Name="SplitViewToggle" Click="SplitView_Click" ToolTip="Toggle Preview Panel" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4" IsChecked="True">
+                                <TextBlock Text="&#xE8A0;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            </ToggleButton>
+                            <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="4,4"/>
+                            <ToggleButton x:Name="LineNumbersToggle" Click="LineNumbers_Click" ToolTip="Toggle Line Numbers" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4" IsChecked="True">
+                                <TextBlock Text="&#xE8EC;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            </ToggleButton>
+                            <ToggleButton x:Name="BracketMatchingToggle" Click="BracketMatching_Click" ToolTip="Toggle Bracket Matching" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4" IsChecked="True">
+                                <TextBlock Text="{}{}" FontFamily="Consolas" FontSize="12" VerticalAlignment="Center"/>
+                            </ToggleButton>
+                        </ToolBar>
+                    </ToolBarTray>
+                </Border>
+                
                 <!-- Export Toolbar (icon-only) -->
                 <Border Background="{DynamicResource ThemeToolbarBackgroundBrush}" CornerRadius="4" HorizontalAlignment="Left" Margin="6,0,0,0">
                     <ToolBarTray Background="Transparent">
@@ -1108,11 +1126,11 @@
         </Border>
         
         <!-- Main Content - Split View -->
-        <Grid Grid.Row="2">
+        <Grid x:Name="MainContentGrid" Grid.Row="2">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" MinWidth="200"/>
-                <ColumnDefinition Width="5"/>
-                <ColumnDefinition Width="*" MinWidth="200"/>
+                <ColumnDefinition x:Name="SplitterColumn" Width="5"/>
+                <ColumnDefinition x:Name="PreviewColumn" Width="*" MinWidth="200"/>
             </Grid.ColumnDefinitions>
             
             <!-- Left Panel - Code Editor with Document Tabs -->

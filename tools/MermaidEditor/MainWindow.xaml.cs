@@ -331,6 +331,9 @@ Console.WriteLine(""Hello, World!"");
         CodeEditor.PreviewKeyDown += CodeEditor_PreviewKeyDown;
 
         RegisterMermaidSyntaxHighlighting();
+        
+        // Enable bracket highlighting by default
+        EnableBracketHighlighting();
     }
     
     private void CodeEditor_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -3161,6 +3164,97 @@ Console.WriteLine(""Hello, World!"");
         if (WordWrapToggle != null)
         {
             WordWrapToggle.IsChecked = CodeEditor.WordWrap;
+        }
+    }
+
+    #endregion
+
+    #region View Toolbar (Split View, Line Numbers, Bracket Matching)
+
+    private GridLength _savedPreviewColumnWidth = new GridLength(1, GridUnitType.Star);
+    private bool _isPreviewVisible = true;
+    private bool _isBracketMatchingEnabled = true;
+    private ICSharpCode.AvalonEdit.Rendering.IBackgroundRenderer? _bracketHighlighter;
+
+    private void SplitView_Click(object sender, RoutedEventArgs e)
+    {
+        _isPreviewVisible = !_isPreviewVisible;
+        
+        if (_isPreviewVisible)
+        {
+            // Show preview panel
+            PreviewColumn.Width = _savedPreviewColumnWidth;
+            PreviewColumn.MinWidth = 200;
+            SplitterColumn.Width = new GridLength(5);
+        }
+        else
+        {
+            // Hide preview panel - save current width first
+            _savedPreviewColumnWidth = PreviewColumn.Width;
+            PreviewColumn.Width = new GridLength(0);
+            PreviewColumn.MinWidth = 0;
+            SplitterColumn.Width = new GridLength(0);
+        }
+        
+        if (SplitViewToggle != null)
+        {
+            SplitViewToggle.IsChecked = _isPreviewVisible;
+        }
+    }
+
+    private void LineNumbers_Click(object sender, RoutedEventArgs e)
+    {
+        CodeEditor.ShowLineNumbers = !CodeEditor.ShowLineNumbers;
+        if (LineNumbersToggle != null)
+        {
+            LineNumbersToggle.IsChecked = CodeEditor.ShowLineNumbers;
+        }
+    }
+
+    private void BracketMatching_Click(object sender, RoutedEventArgs e)
+    {
+        _isBracketMatchingEnabled = !_isBracketMatchingEnabled;
+        
+        if (_isBracketMatchingEnabled)
+        {
+            EnableBracketHighlighting();
+        }
+        else
+        {
+            DisableBracketHighlighting();
+        }
+        
+        if (BracketMatchingToggle != null)
+        {
+            BracketMatchingToggle.IsChecked = _isBracketMatchingEnabled;
+        }
+    }
+
+    private void EnableBracketHighlighting()
+    {
+        if (_bracketHighlighter == null)
+        {
+            _bracketHighlighter = new BracketHighlightRenderer(CodeEditor.TextArea);
+            CodeEditor.TextArea.TextView.BackgroundRenderers.Add(_bracketHighlighter);
+        }
+        CodeEditor.TextArea.Caret.PositionChanged += Caret_PositionChanged_BracketHighlight;
+    }
+
+    private void DisableBracketHighlighting()
+    {
+        CodeEditor.TextArea.Caret.PositionChanged -= Caret_PositionChanged_BracketHighlight;
+        if (_bracketHighlighter != null)
+        {
+            CodeEditor.TextArea.TextView.BackgroundRenderers.Remove(_bracketHighlighter);
+            _bracketHighlighter = null;
+        }
+    }
+
+    private void Caret_PositionChanged_BracketHighlight(object? sender, EventArgs e)
+    {
+        if (_bracketHighlighter is BracketHighlightRenderer renderer)
+        {
+            renderer.UpdateBrackets(CodeEditor.Document, CodeEditor.CaretOffset);
         }
     }
 
@@ -6432,5 +6526,135 @@ public class DocumentModel : System.ComponentModel.INotifyPropertyChanged
     protected void OnPropertyChanged(string propertyName)
     {
         PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(propertyName));
+    }
+}
+
+/// <summary>
+/// Highlights matching brackets in the code editor
+/// </summary>
+public class BracketHighlightRenderer : ICSharpCode.AvalonEdit.Rendering.IBackgroundRenderer
+{
+    private readonly ICSharpCode.AvalonEdit.Editing.TextArea _textArea;
+    private int _openBracketOffset = -1;
+    private int _closeBracketOffset = -1;
+    
+    private static readonly Dictionary<char, char> BracketPairs = new()
+    {
+        { '(', ')' },
+        { '[', ']' },
+        { '{', '}' },
+        { '<', '>' }
+    };
+    
+    private static readonly Dictionary<char, char> ReverseBracketPairs = new()
+    {
+        { ')', '(' },
+        { ']', '[' },
+        { '}', '{' },
+        { '>', '<' }
+    };
+
+    public BracketHighlightRenderer(ICSharpCode.AvalonEdit.Editing.TextArea textArea)
+    {
+        _textArea = textArea;
+    }
+
+    public ICSharpCode.AvalonEdit.Rendering.KnownLayer Layer => ICSharpCode.AvalonEdit.Rendering.KnownLayer.Selection;
+
+    public void UpdateBrackets(ICSharpCode.AvalonEdit.Document.TextDocument document, int caretOffset)
+    {
+        _openBracketOffset = -1;
+        _closeBracketOffset = -1;
+        
+        if (caretOffset <= 0 || caretOffset > document.TextLength)
+        {
+            _textArea.TextView.InvalidateLayer(Layer);
+            return;
+        }
+        
+        // Check character before caret
+        char charBefore = document.GetCharAt(caretOffset - 1);
+        
+        if (BracketPairs.TryGetValue(charBefore, out char closingBracket))
+        {
+            // Found opening bracket, search forward for closing
+            _openBracketOffset = caretOffset - 1;
+            _closeBracketOffset = FindMatchingBracket(document, caretOffset, charBefore, closingBracket, 1);
+        }
+        else if (ReverseBracketPairs.TryGetValue(charBefore, out char openingBracket))
+        {
+            // Found closing bracket, search backward for opening
+            _closeBracketOffset = caretOffset - 1;
+            _openBracketOffset = FindMatchingBracket(document, caretOffset - 2, openingBracket, charBefore, -1);
+        }
+        
+        _textArea.TextView.InvalidateLayer(Layer);
+    }
+
+    private int FindMatchingBracket(ICSharpCode.AvalonEdit.Document.TextDocument document, int startOffset, char openBracket, char closeBracket, int direction)
+    {
+        int depth = 1;
+        int offset = startOffset;
+        
+        while (offset >= 0 && offset < document.TextLength)
+        {
+            char c = document.GetCharAt(offset);
+            
+            if (c == openBracket)
+            {
+                if (direction > 0) depth++;
+                else depth--;
+            }
+            else if (c == closeBracket)
+            {
+                if (direction > 0) depth--;
+                else depth++;
+            }
+            
+            if (depth == 0)
+                return offset;
+            
+            offset += direction;
+        }
+        
+        return -1;
+    }
+
+    public void Draw(ICSharpCode.AvalonEdit.Rendering.TextView textView, System.Windows.Media.DrawingContext drawingContext)
+    {
+        if (_openBracketOffset < 0 && _closeBracketOffset < 0)
+            return;
+        
+        var builder = new ICSharpCode.AvalonEdit.Rendering.BackgroundGeometryBuilder
+        {
+            CornerRadius = 1
+        };
+        
+        // Use a semi-transparent highlight color
+        var brush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(80, 128, 128, 255));
+        var pen = new System.Windows.Media.Pen(new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(180, 100, 100, 200)), 1);
+        
+        if (_openBracketOffset >= 0)
+        {
+            var segment = new ICSharpCode.AvalonEdit.Document.TextSegment { StartOffset = _openBracketOffset, Length = 1 };
+            builder.AddSegment(textView, segment);
+            var geometry = builder.CreateGeometry();
+            if (geometry != null)
+            {
+                drawingContext.DrawGeometry(brush, pen, geometry);
+            }
+            builder = new ICSharpCode.AvalonEdit.Rendering.BackgroundGeometryBuilder { CornerRadius = 1 };
+        }
+        
+        if (_closeBracketOffset >= 0)
+        {
+            var segment = new ICSharpCode.AvalonEdit.Document.TextSegment { StartOffset = _closeBracketOffset, Length = 1 };
+            builder.AddSegment(textView, segment);
+            var geometry = builder.CreateGeometry();
+            if (geometry != null)
+            {
+                drawingContext.DrawGeometry(brush, pen, geometry);
+            }
+        }
     }
 }
