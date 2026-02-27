@@ -319,8 +319,7 @@
                                 <Setter TargetName="border" Property="Background" Value="{DynamicResource ThemeHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#3D7ACC"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="#5A9AE8"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource ThemePurpleAccentBrush}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Foreground" Value="{DynamicResource ThemeDisabledForegroundBrush}"/>
