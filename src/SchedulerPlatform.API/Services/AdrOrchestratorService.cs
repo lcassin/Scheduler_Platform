@@ -2326,8 +2326,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         {
             _logger.LogInformation("Starting weekly rebill processing for day of week: {DayOfWeek}", todayDayOfWeek);
 
-            // Load blacklist entries for filtering
-            var blacklistEntries = await LoadBlacklistEntriesAsync("All");
+            // Load blacklist entries for filtering (both "All" and "Rebill" exclusion types)
+            var blacklistEntries = await LoadBlacklistEntriesAsync("Rebill");
 
             // Get accounts for rebill using optimized database query that filters by day of week
             // This avoids loading all 170k+ accounts into memory and filtering in-memory

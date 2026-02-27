@@ -117,10 +117,46 @@
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="Master Vendor Code">@context.MasterVendorCode</MudTd>
-                    <MudTd DataLabel="Primary Vendor Code">@context.PrimaryVendorCode</MudTd>
-                    <MudTd DataLabel="VM Account ID">@context.VMAccountId</MudTd>
-                    <MudTd DataLabel="Account Number">@context.VMAccountNumber</MudTd>
-                    <MudTd DataLabel="Credential ID">@context.CredentialId</MudTd>
+                    <MudTd DataLabel="Primary Vendor Code">
+                        @if (!string.IsNullOrEmpty(context.PrimaryVendorCode))
+                        {
+                            @context.PrimaryVendorCode
+                        }
+                        else if (!string.IsNullOrEmpty(context.MasterVendorCode))
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">All</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="VM Account ID">
+                        @if (context.VMAccountId.HasValue)
+                        {
+                            @context.VMAccountId
+                        }
+                        else if (!string.IsNullOrEmpty(context.MasterVendorCode) || !string.IsNullOrEmpty(context.PrimaryVendorCode))
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">All</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Account Number">
+                        @if (!string.IsNullOrEmpty(context.VMAccountNumber))
+                        {
+                            @context.VMAccountNumber
+                        }
+                        else if (!string.IsNullOrEmpty(context.MasterVendorCode) || !string.IsNullOrEmpty(context.PrimaryVendorCode))
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">All</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Credential ID">
+                        @if (context.CredentialId.HasValue)
+                        {
+                            @context.CredentialId
+                        }
+                        else if (!string.IsNullOrEmpty(context.MasterVendorCode) || !string.IsNullOrEmpty(context.PrimaryVendorCode) || context.VMAccountId.HasValue || !string.IsNullOrEmpty(context.VMAccountNumber))
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">All</MudChip>
+                        }
+                    </MudTd>
                     <MudTd DataLabel="Exclusion Type">
                         <MudChip T="string" Size="Size.Small" Color="@GetExclusionTypeColor(context.ExclusionType)">
                             @context.ExclusionType
@@ -236,8 +272,8 @@
                                Variant="Variant.Outlined"
                                Required="true">
                         <MudSelectItem Value="@("All")">All (Block all job types)</MudSelectItem>
-                        <MudSelectItem Value="@("CredentialCheck")">Credential Check Only</MudSelectItem>
-                        <MudSelectItem Value="@("Download")">Download Only</MudSelectItem>
+                        <MudSelectItem Value="@("Download")">ADR Request Only</MudSelectItem>
+                        <MudSelectItem Value="@("Rebill")">Rebill Only</MudSelectItem>
                     </MudSelect>
                 </MudItem>
                 <MudItem xs="12" sm="6">
@@ -615,8 +651,8 @@
         return exclusionType switch
         {
             "All" => Color.Error,
-            "CredentialCheck" => Color.Warning,
             "Download" => Color.Info,
+            "Rebill" => Color.Warning,
             _ => Color.Default
         };
     }
