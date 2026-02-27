@@ -195,6 +195,7 @@
         {
             <MudAlert Severity="Severity.Info" Class="mb-4">
                 At least one of the following must be provided: Master Vendor Code, Primary Vendor Code, VM Account ID, Account Number, or Credential ID.
+                Account Number and VM Account ID require a vendor code to prevent false matches across vendors.
             </MudAlert>
             <MudGrid>
                 <MudItem xs="12" sm="6">
@@ -213,13 +214,15 @@
                     <MudNumericField @bind-Value="_editingEntry.VMAccountId" 
                                      Label="VM Account ID" 
                                      Variant="Variant.Outlined"
-                                     HelperText="Match by VM account ID" />
+                                     Disabled="@(!HasVendorCode())"
+                                     HelperText="@(HasVendorCode() ? "Match by VM account ID" : "Requires a vendor code")" />
                 </MudItem>
                 <MudItem xs="12" sm="6">
                     <MudTextField @bind-Value="_editingEntry.VMAccountNumber" 
                                   Label="Account Number" 
                                   Variant="Variant.Outlined"
-                                  HelperText="Match by account number" />
+                                  Disabled="@(!HasVendorCode())"
+                                  HelperText="@(HasVendorCode() ? "Match by account number" : "Requires a vendor code")" />
                 </MudItem>
                 <MudItem xs="12" sm="6">
                     <MudNumericField @bind-Value="_editingEntry.CredentialId" 
@@ -500,6 +503,15 @@
                 return;
             }
             
+            // Validate that account-level criteria require a vendor code
+            if ((!string.IsNullOrWhiteSpace(_editingEntry.VMAccountNumber) || _editingEntry.VMAccountId.HasValue) &&
+                string.IsNullOrWhiteSpace(_editingEntry.MasterVendorCode) && 
+                string.IsNullOrWhiteSpace(_editingEntry.PrimaryVendorCode))
+            {
+                Snackbar.Add("Account Number and VM Account ID require a vendor code (Master or Primary) to prevent false matches across different vendors", Severity.Warning);
+                return;
+            }
+            
             if (string.IsNullOrWhiteSpace(_editingEntry.Reason))
             {
                 Snackbar.Add("Reason is required", Severity.Warning);
@@ -590,6 +602,13 @@
                 }
             }
         }
+
+    private bool HasVendorCode()
+    {
+        return _editingEntry != null && 
+               (!string.IsNullOrWhiteSpace(_editingEntry.MasterVendorCode) || 
+                !string.IsNullOrWhiteSpace(_editingEntry.PrimaryVendorCode));
+    }
 
     private Color GetExclusionTypeColor(string? exclusionType)
     {

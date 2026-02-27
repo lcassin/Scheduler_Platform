@@ -336,31 +336,49 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// <summary>
     /// Checks if an account matches any of the cached blacklist entries.
     /// Use this for batch operations after loading entries with LoadBlacklistEntriesAsync.
+    /// 
+    /// Matching logic:
+    /// - Account-level fields (VMAccountNumber, VMAccountId) require a vendor code match as well
+    ///   to prevent false positives when different vendors share the same account number.
+    /// - Vendor-level fields (PrimaryVendorCode, MasterVendorCode) match independently.
+    /// - CredentialId matches independently (credentials are already vendor-specific).
     /// </summary>
     private bool IsAccountBlacklistedCached(AdrAccount account, List<AdrAccountBlacklist> blacklistEntries)
     {
         foreach (var entry in blacklistEntries)
         {
-            // Check if this blacklist entry matches the account
             bool matches = false;
 
-            // Match by PrimaryVendorCode (if specified)
+            // Vendor-level matching: PrimaryVendorCode and MasterVendorCode match independently
+            bool hasVendorMatch = false;
             if (!string.IsNullOrEmpty(entry.PrimaryVendorCode) && entry.PrimaryVendorCode == account.PrimaryVendorCode)
-                matches = true;
-
-            // Match by MasterVendorCode (if specified)
+                hasVendorMatch = true;
             if (!string.IsNullOrEmpty(entry.MasterVendorCode) && entry.MasterVendorCode == account.MasterVendorCode)
-                matches = true;
+                hasVendorMatch = true;
 
-            // Match by VMAccountId (if specified)
-            if (entry.VMAccountId.HasValue && entry.VMAccountId == account.VMAccountId)
-                matches = true;
+            // Account-level matching: VMAccountNumber and VMAccountId require a vendor match
+            bool hasAccountCriteria = !string.IsNullOrEmpty(entry.VMAccountNumber) || entry.VMAccountId.HasValue;
 
-            // Match by VMAccountNumber (if specified)
-            if (!string.IsNullOrEmpty(entry.VMAccountNumber) && entry.VMAccountNumber == account.VMAccountNumber)
-                matches = true;
+            if (hasAccountCriteria)
+            {
+                // When account-level criteria are specified, require BOTH vendor match AND account match
+                // to prevent false positives from different vendors sharing the same account number
+                bool accountFieldMatches = false;
+                if (!string.IsNullOrEmpty(entry.VMAccountNumber) && entry.VMAccountNumber == account.VMAccountNumber)
+                    accountFieldMatches = true;
+                if (entry.VMAccountId.HasValue && entry.VMAccountId == account.VMAccountId)
+                    accountFieldMatches = true;
 
-            // Match by CredentialId (if specified)
+                if (accountFieldMatches && hasVendorMatch)
+                    matches = true;
+            }
+            else if (hasVendorMatch)
+            {
+                // Vendor-only entry: blocks all accounts under that vendor
+                matches = true;
+            }
+
+            // CredentialId matches independently (credentials are already vendor-specific)
             if (entry.CredentialId.HasValue && entry.CredentialId == account.CredentialId)
                 matches = true;
 
