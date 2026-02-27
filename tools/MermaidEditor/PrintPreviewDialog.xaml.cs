@@ -507,13 +507,13 @@ public partial class PrintPreviewDialog : Window
     {
         var printDialog = new System.Windows.Controls.PrintDialog();
         
-        // Set selected printer if available
+        // Set selected printer - use selected printer or default
         if (_selectedPrinter != null)
         {
             printDialog.PrintQueue = _selectedPrinter;
         }
         
-        // Set default page settings
+        // Apply orientation from our preview settings
         if (LandscapeRadio?.IsChecked == true)
         {
             printDialog.PrintTicket.PageOrientation = PageOrientation.Landscape;
@@ -523,12 +523,10 @@ public partial class PrintPreviewDialog : Window
             printDialog.PrintTicket.PageOrientation = PageOrientation.Portrait;
         }
 
-        if (printDialog.ShowDialog() == true)
-        {
-            PrintDocument(printDialog);
-            DialogResult = true;
-            Close();
-        }
+        // Print directly without showing system dialog (we already have our own preview)
+        PrintDocument(printDialog);
+        DialogResult = true;
+        Close();
     }
 
     private void PrintDocument(System.Windows.Controls.PrintDialog printDialog)

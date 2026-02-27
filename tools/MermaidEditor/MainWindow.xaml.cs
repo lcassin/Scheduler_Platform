@@ -91,10 +91,7 @@ public partial class MainWindow : Window
     private System.Windows.Controls.Border? _draggedTab;
 
     private const string DefaultMermaidCode= @"flowchart TD
-    A[Start] --> B{Is it working?}
-    B -->|Yes| C[Great!]
-    B -->|No| D[Debug]
-    D --> B";
+    A[Start] --> B[End]";
 
     private const string DefaultMarkdownCode = @"# Welcome to Markdown Editor
 
