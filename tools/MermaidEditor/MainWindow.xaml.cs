@@ -6618,26 +6618,48 @@ public class BracketHighlightRenderer : ICSharpCode.AvalonEdit.Rendering.IBackgr
         _openBracketOffset = -1;
         _closeBracketOffset = -1;
         
-        if (caretOffset <= 0 || caretOffset > document.TextLength)
+        if (caretOffset < 0 || caretOffset > document.TextLength)
         {
             _textArea.TextView.InvalidateLayer(Layer);
             return;
         }
         
-        // Check character before caret
-        char charBefore = document.GetCharAt(caretOffset - 1);
-        
-        if (BracketPairs.TryGetValue(charBefore, out char closingBracket))
+        // Check character before caret (cursor is after the bracket)
+        if (caretOffset > 0)
         {
-            // Found opening bracket, search forward for closing
-            _openBracketOffset = caretOffset - 1;
-            _closeBracketOffset = FindMatchingBracket(document, caretOffset, charBefore, closingBracket, 1);
+            char charBefore = document.GetCharAt(caretOffset - 1);
+            
+            if (BracketPairs.TryGetValue(charBefore, out char closingBracket))
+            {
+                // Found opening bracket, search forward for closing
+                _openBracketOffset = caretOffset - 1;
+                _closeBracketOffset = FindMatchingBracket(document, caretOffset, charBefore, closingBracket, 1);
+            }
+            else if (ReverseBracketPairs.TryGetValue(charBefore, out char openingBracket))
+            {
+                // Found closing bracket, search backward for opening
+                _closeBracketOffset = caretOffset - 1;
+                _openBracketOffset = FindMatchingBracket(document, caretOffset - 2, openingBracket, charBefore, -1);
+            }
         }
-        else if (ReverseBracketPairs.TryGetValue(charBefore, out char openingBracket))
+        
+        // Also check character at caret position (cursor is before the bracket)
+        if (_openBracketOffset < 0 && _closeBracketOffset < 0 && caretOffset < document.TextLength)
         {
-            // Found closing bracket, search backward for opening
-            _closeBracketOffset = caretOffset - 1;
-            _openBracketOffset = FindMatchingBracket(document, caretOffset - 2, openingBracket, charBefore, -1);
+            char charAt = document.GetCharAt(caretOffset);
+            
+            if (BracketPairs.TryGetValue(charAt, out char closingBracket))
+            {
+                // Found opening bracket, search forward for closing
+                _openBracketOffset = caretOffset;
+                _closeBracketOffset = FindMatchingBracket(document, caretOffset + 1, charAt, closingBracket, 1);
+            }
+            else if (ReverseBracketPairs.TryGetValue(charAt, out char openingBracket))
+            {
+                // Found closing bracket, search backward for opening
+                _closeBracketOffset = caretOffset;
+                _openBracketOffset = FindMatchingBracket(document, caretOffset - 1, openingBracket, charAt, -1);
+            }
         }
         
         _textArea.TextView.InvalidateLayer(Layer);
@@ -6682,9 +6704,9 @@ public class BracketHighlightRenderer : ICSharpCode.AvalonEdit.Rendering.IBackgr
             CornerRadius = 1
         };
         
-        // Use a semi-transparent highlight color
-        var brush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(80, 128, 128, 255));
-        var pen = new System.Windows.Media.Pen(new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(180, 100, 100, 200)), 1);
+        // Use a bright, visible highlight color that works on both light and dark themes
+        var brush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(160, 255, 215, 0)); // Gold/yellow background
+        var pen = new System.Windows.Media.Pen(new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(255, 255, 165, 0)), 2); // Orange border
         
         if (_openBracketOffset >= 0)
         {
