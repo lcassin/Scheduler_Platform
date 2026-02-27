@@ -3106,56 +3106,103 @@ Console.WriteLine(""Hello, World!"");
 
     private void MoveLineUp_Click(object sender, RoutedEventArgs e)
     {
-        var doc = CodeEditor.Document;
-        var caretLine = doc.GetLineByOffset(CodeEditor.CaretOffset);
-        
-        if (caretLine.LineNumber <= 1)
-            return; // Can't move first line up
-        
-        var prevLine = doc.GetLineByNumber(caretLine.LineNumber - 1);
-        var currentLineText = doc.GetText(caretLine.Offset, caretLine.Length);
-        var prevLineText = doc.GetText(prevLine.Offset, prevLine.Length);
-        
-        // Calculate new caret position
-        int caretColumn = CodeEditor.CaretOffset - caretLine.Offset;
-        
-        using (doc.RunUpdate())
+        try
         {
-            // Replace both lines
-            doc.Replace(prevLine.Offset, prevLine.Length + 1 + caretLine.Length, 
-                currentLineText + Environment.NewLine + prevLineText);
+            var doc = CodeEditor.Document;
+            if (doc.TextLength == 0) return;
+            
+            var caretLine = doc.GetLineByOffset(CodeEditor.CaretOffset);
+            int currentLineNumber = caretLine.LineNumber;
+            
+            if (currentLineNumber <= 1)
+                return; // Can't move first line up
+            
+            var prevLine = doc.GetLineByNumber(currentLineNumber - 1);
+            var currentLineText = doc.GetText(caretLine.Offset, caretLine.Length);
+            var prevLineText = doc.GetText(prevLine.Offset, prevLine.Length);
+            
+            // Calculate new caret position
+            int caretColumn = CodeEditor.CaretOffset - caretLine.Offset;
+            int prevLineOffset = prevLine.Offset;
+            int totalLength = prevLine.Length + 1 + caretLine.Length;
+            
+            using (doc.RunUpdate())
+            {
+                // Replace both lines
+                doc.Replace(prevLineOffset, totalLength, 
+                    currentLineText + Environment.NewLine + prevLineText);
+            }
+            
+            // Restore caret position on the moved line (now at previous line number)
+            var newLine = doc.GetLineByNumber(currentLineNumber - 1);
+            CodeEditor.CaretOffset = newLine.Offset + Math.Min(caretColumn, newLine.Length);
         }
-        
-        // Restore caret position on the moved line
-        var newLine = doc.GetLineByNumber(caretLine.LineNumber - 1);
-        CodeEditor.CaretOffset = newLine.Offset + Math.Min(caretColumn, newLine.Length);
+        catch (Exception)
+        {
+            // Silently ignore edge cases
+        }
     }
 
     private void MoveLineDown_Click(object sender, RoutedEventArgs e)
     {
-        var doc = CodeEditor.Document;
-        var caretLine = doc.GetLineByOffset(CodeEditor.CaretOffset);
-        
-        if (caretLine.LineNumber >= doc.LineCount)
-            return; // Can't move last line down
-        
-        var nextLine = doc.GetLineByNumber(caretLine.LineNumber + 1);
-        var currentLineText = doc.GetText(caretLine.Offset, caretLine.Length);
-        var nextLineText = doc.GetText(nextLine.Offset, nextLine.Length);
-        
-        // Calculate new caret position
-        int caretColumn = CodeEditor.CaretOffset - caretLine.Offset;
-        
-        using (doc.RunUpdate())
+        try
         {
-            // Replace both lines
-            doc.Replace(caretLine.Offset, caretLine.Length + 1 + nextLine.Length, 
-                nextLineText + Environment.NewLine + currentLineText);
+            var doc = CodeEditor.Document;
+            if (doc.TextLength == 0) return;
+            
+            var caretLine = doc.GetLineByOffset(CodeEditor.CaretOffset);
+            int currentLineNumber = caretLine.LineNumber;
+            int lineCount = doc.LineCount;
+            
+            if (currentLineNumber >= lineCount)
+                return; // Can't move last line down
+            
+            var nextLine = doc.GetLineByNumber(currentLineNumber + 1);
+            var currentLineText = doc.GetText(caretLine.Offset, caretLine.Length);
+            var nextLineText = doc.GetText(nextLine.Offset, nextLine.Length);
+            
+            // Calculate new caret position
+            int caretColumn = CodeEditor.CaretOffset - caretLine.Offset;
+            int currentLineOffset = caretLine.Offset;
+            int totalLength = caretLine.Length + 1 + nextLine.Length;
+            
+            // Check if we have enough content to swap (need the newline between lines)
+            if (currentLineOffset + totalLength > doc.TextLength)
+            {
+                // Last line doesn't have a trailing newline, adjust
+                totalLength = caretLine.Length + nextLine.Length;
+                if (nextLine.Length > 0)
+                {
+                    // There's content on the next line but no newline after current
+                    using (doc.RunUpdate())
+                    {
+                        doc.Replace(currentLineOffset, totalLength, 
+                            nextLineText + Environment.NewLine + currentLineText);
+                    }
+                }
+                else
+                {
+                    return; // Nothing to swap with
+                }
+            }
+            else
+            {
+                using (doc.RunUpdate())
+                {
+                    // Replace both lines
+                    doc.Replace(currentLineOffset, totalLength, 
+                        nextLineText + Environment.NewLine + currentLineText);
+                }
+            }
+            
+            // Restore caret position on the moved line (now at next line number)
+            var newLine = doc.GetLineByNumber(currentLineNumber + 1);
+            CodeEditor.CaretOffset = newLine.Offset + Math.Min(caretColumn, newLine.Length);
         }
-        
-        // Restore caret position on the moved line
-        var newLine = doc.GetLineByNumber(caretLine.LineNumber + 1);
-        CodeEditor.CaretOffset = newLine.Offset + Math.Min(caretColumn, newLine.Length);
+        catch (Exception)
+        {
+            // Silently ignore edge cases
+        }
     }
 
     private void WordWrap_Click(object sender, RoutedEventArgs e)
