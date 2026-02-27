@@ -3124,13 +3124,20 @@ Console.WriteLine(""Hello, World!"");
             // Calculate new caret position
             int caretColumn = CodeEditor.CaretOffset - caretLine.Offset;
             int prevLineOffset = prevLine.Offset;
-            int totalLength = prevLine.Length + 1 + caretLine.Length;
+            // Use DelimiterLength to handle both \n and \r\n correctly
+            int delimiterLength = prevLine.DelimiterLength;
+            int totalLength = prevLine.Length + delimiterLength + caretLine.Length;
+            
+            // Get the actual delimiter text to preserve it
+            string delimiter = delimiterLength > 0 
+                ? doc.GetText(prevLine.Offset + prevLine.Length, delimiterLength) 
+                : Environment.NewLine;
             
             using (doc.RunUpdate())
             {
-                // Replace both lines
+                // Replace both lines, preserving the original delimiter
                 doc.Replace(prevLineOffset, totalLength, 
-                    currentLineText + Environment.NewLine + prevLineText);
+                    currentLineText + delimiter + prevLineText);
             }
             
             // Restore caret position on the moved line (now at previous line number)
@@ -3164,35 +3171,27 @@ Console.WriteLine(""Hello, World!"");
             // Calculate new caret position
             int caretColumn = CodeEditor.CaretOffset - caretLine.Offset;
             int currentLineOffset = caretLine.Offset;
-            int totalLength = caretLine.Length + 1 + nextLine.Length;
+            // Use DelimiterLength to handle both \n and \r\n correctly
+            int delimiterLength = caretLine.DelimiterLength;
+            int totalLength = caretLine.Length + delimiterLength + nextLine.Length;
             
-            // Check if we have enough content to swap (need the newline between lines)
+            // Get the actual delimiter text to preserve it
+            string delimiter = delimiterLength > 0 
+                ? doc.GetText(caretLine.Offset + caretLine.Length, delimiterLength) 
+                : Environment.NewLine;
+            
+            // Check if we have enough content to swap
             if (currentLineOffset + totalLength > doc.TextLength)
             {
-                // Last line doesn't have a trailing newline, adjust
-                totalLength = caretLine.Length + nextLine.Length;
-                if (nextLine.Length > 0)
-                {
-                    // There's content on the next line but no newline after current
-                    using (doc.RunUpdate())
-                    {
-                        doc.Replace(currentLineOffset, totalLength, 
-                            nextLineText + Environment.NewLine + currentLineText);
-                    }
-                }
-                else
-                {
-                    return; // Nothing to swap with
-                }
+                // Adjust for edge case where calculation exceeds document length
+                totalLength = doc.TextLength - currentLineOffset;
             }
-            else
+            
+            using (doc.RunUpdate())
             {
-                using (doc.RunUpdate())
-                {
-                    // Replace both lines
-                    doc.Replace(currentLineOffset, totalLength, 
-                        nextLineText + Environment.NewLine + currentLineText);
-                }
+                // Replace both lines, preserving the original delimiter
+                doc.Replace(currentLineOffset, totalLength, 
+                    nextLineText + delimiter + currentLineText);
             }
             
             // Restore caret position on the moved line (now at next line number)
