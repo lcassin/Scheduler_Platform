@@ -3578,9 +3578,14 @@ Console.WriteLine(""Hello, World!"");
         UpdateMinimapViewport();
     }
 
+    private void MinimapViewport_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        UpdateMinimapViewport();
+    }
+
     private void UpdateMinimapViewport()
     {
-        if (MinimapEditor == null || CodeEditor == null || MinimapViewportCanvas == null || MinimapViewportIndicator == null)
+        if (MinimapEditor == null || CodeEditor == null || MinimapViewportCanvas == null || MinimapViewportIndicator == null || MinimapBorder == null)
             return;
 
         try
@@ -3597,8 +3602,8 @@ Console.WriteLine(""Hello, World!"");
             var visibleLines = textView.ActualHeight / textView.DefaultLineHeight;
             var firstVisibleLine = textView.ScrollOffset.Y / textView.DefaultLineHeight;
             
-            // Calculate viewport indicator position and size
-            var canvasHeight = MinimapViewportCanvas.ActualHeight;
+            // Use the MinimapBorder's actual height since Canvas doesn't stretch automatically
+            var canvasHeight = MinimapBorder.ActualHeight;
             
             if (totalMinimapHeight > 0 && canvasHeight > 0)
             {
@@ -3618,7 +3623,8 @@ Console.WriteLine(""Hello, World!"");
                 viewportHeight = Math.Max(10, Math.Min(viewportHeight, canvasHeight - viewportTop));
                 
                 Canvas.SetTop(MinimapViewportIndicator, viewportTop);
-                MinimapViewportIndicator.Width = MinimapWidth - 4;
+                Canvas.SetLeft(MinimapViewportIndicator, 2);
+                MinimapViewportIndicator.Width = MinimapWidth - 6;
                 MinimapViewportIndicator.Height = viewportHeight;
                 
                 // Scroll the minimap to show the current position
@@ -3658,12 +3664,12 @@ Console.WriteLine(""Hello, World!"");
 
     private void NavigateToMinimapPosition(double mouseY)
     {
-        if (MinimapEditor == null || CodeEditor == null || MinimapViewportCanvas == null)
+        if (MinimapEditor == null || CodeEditor == null || MinimapBorder == null)
             return;
 
         try
         {
-            var canvasHeight = MinimapViewportCanvas.ActualHeight;
+            var canvasHeight = MinimapBorder.ActualHeight;
             var totalLines = CodeEditor.Document.LineCount;
             var minimapTextView = MinimapEditor.TextArea.TextView;
             var totalMinimapHeight = totalLines * minimapTextView.DefaultLineHeight;
