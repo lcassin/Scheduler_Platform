@@ -2413,7 +2413,7 @@ Console.WriteLine(""Hello, World!"");
         // Update syntax highlighting based on mode
         if (_currentRenderMode == RenderMode.Markdown)
         {
-            CodeEditor.SyntaxHighlighting = null; // Use default for Markdown
+            RegisterMarkdownSyntaxHighlighting();
         }
         else
         {
@@ -2976,15 +2976,27 @@ Console.WriteLine(""Hello, World!"");
         var doc = CodeEditor.Document;
         var selection = CodeEditor.TextArea.Selection;
         
-        // Determine comment style based on render mode
-        string commentPrefix = _currentRenderMode == RenderMode.Mermaid ? "%% " : "<!-- ";
-        string commentSuffix = _currentRenderMode == RenderMode.Mermaid ? "" : " -->";
+        if (_currentRenderMode == RenderMode.Mermaid)
+        {
+            // Mermaid uses line-based comments (%%)
+            ToggleMermaidComment(doc, selection);
+        }
+        else
+        {
+            // Markdown uses block comments (<!-- -->)
+            ToggleMarkdownComment(doc, selection);
+        }
+    }
+
+    private void ToggleMermaidComment(ICSharpCode.AvalonEdit.Document.TextDocument doc, ICSharpCode.AvalonEdit.Editing.Selection selection)
+    {
+        string commentPrefix = "%% ";
         
         if (selection.IsEmpty)
         {
             // Toggle comment on current line
             var line = doc.GetLineByOffset(CodeEditor.CaretOffset);
-            ToggleLineComment(doc, line, commentPrefix, commentSuffix);
+            ToggleMermaidLineComment(doc, line, commentPrefix);
         }
         else
         {
@@ -2998,7 +3010,7 @@ Console.WriteLine(""Hello, World!"");
             {
                 var line = doc.GetLineByNumber(lineNum);
                 var lineText = doc.GetText(line.Offset, line.Length).TrimStart();
-                if (!IsLineCommented(lineText, commentPrefix, commentSuffix))
+                if (!lineText.StartsWith("%%"))
                 {
                     allCommented = false;
                     break;
@@ -3012,12 +3024,186 @@ Console.WriteLine(""Hello, World!"");
                     var line = doc.GetLineByNumber(lineNum);
                     if (allCommented)
                     {
-                        UncommentLine(doc, line, commentPrefix, commentSuffix);
+                        UncommentMermaidLine(doc, line);
                     }
                     else
                     {
-                        CommentLine(doc, line, commentPrefix, commentSuffix);
+                        CommentMermaidLine(doc, line, commentPrefix);
                     }
+                }
+            }
+        }
+    }
+
+    private void ToggleMermaidLineComment(ICSharpCode.AvalonEdit.Document.TextDocument doc, ICSharpCode.AvalonEdit.Document.DocumentLine line, string prefix)
+    {
+        var lineText = doc.GetText(line.Offset, line.Length);
+        var trimmedText = lineText.TrimStart();
+        
+        if (trimmedText.StartsWith("%%"))
+        {
+            UncommentMermaidLine(doc, line);
+        }
+        else
+        {
+            CommentMermaidLine(doc, line, prefix);
+        }
+    }
+
+    private void CommentMermaidLine(ICSharpCode.AvalonEdit.Document.TextDocument doc, ICSharpCode.AvalonEdit.Document.DocumentLine line, string prefix)
+    {
+        var lineText = doc.GetText(line.Offset, line.Length);
+        var trimmedText = lineText.TrimStart();
+        var leadingWhitespace = lineText.Substring(0, lineText.Length - trimmedText.Length);
+        
+        string newText = leadingWhitespace + prefix + trimmedText;
+        doc.Replace(line.Offset, line.Length, newText);
+    }
+
+    private void UncommentMermaidLine(ICSharpCode.AvalonEdit.Document.TextDocument doc, ICSharpCode.AvalonEdit.Document.DocumentLine line)
+    {
+        var lineText = doc.GetText(line.Offset, line.Length);
+        var trimmedText = lineText.TrimStart();
+        var leadingWhitespace = lineText.Substring(0, lineText.Length - trimmedText.Length);
+        
+        string newText;
+        if (trimmedText.StartsWith("%% "))
+        {
+            newText = leadingWhitespace + trimmedText.Substring(3);
+        }
+        else if (trimmedText.StartsWith("%%"))
+        {
+            newText = leadingWhitespace + trimmedText.Substring(2);
+        }
+        else
+        {
+            newText = lineText;
+        }
+        
+        doc.Replace(line.Offset, line.Length, newText);
+    }
+
+    private void ToggleMarkdownComment(ICSharpCode.AvalonEdit.Document.TextDocument doc, ICSharpCode.AvalonEdit.Editing.Selection selection)
+    {
+        if (selection.IsEmpty)
+        {
+            // No selection - try to find surrounding comment block or comment current line
+            int caretOffset = CodeEditor.CaretOffset;
+            string fullText = doc.Text;
+            
+            // Look for <!-- before cursor and --> after cursor
+            int commentStart = fullText.LastIndexOf("<!--", caretOffset);
+            int commentEnd = fullText.IndexOf("-->", caretOffset);
+            
+            // Also check if cursor is right after <!-- or right before -->
+            if (commentStart == -1 && caretOffset >= 4)
+            {
+                // Check if we're inside the <!-- marker itself
+                int checkStart = Math.Max(0, caretOffset - 4);
+                string nearText = fullText.Substring(checkStart, Math.Min(8, fullText.Length - checkStart));
+                int markerPos = nearText.IndexOf("<!--");
+                if (markerPos >= 0)
+                {
+                    commentStart = checkStart + markerPos;
+                }
+            }
+            
+            if (commentStart >= 0 && commentEnd >= 0 && commentEnd > commentStart)
+            {
+                // Check if there's no --> between commentStart and cursor (meaning we're inside a comment)
+                string textBetween = fullText.Substring(commentStart + 4, caretOffset - commentStart - 4);
+                if (!textBetween.Contains("-->"))
+                {
+                    // We're inside a comment block - uncomment it
+                    using (doc.RunUpdate())
+                    {
+                        // Remove --> first (to preserve offsets)
+                        doc.Remove(commentEnd, 3);
+                        // Remove <!-- (and optional space after)
+                        int removeLength = 4;
+                        if (commentStart + 4 < doc.TextLength && doc.GetCharAt(commentStart + 4) == ' ')
+                        {
+                            removeLength = 5;
+                        }
+                        doc.Remove(commentStart, removeLength);
+                    }
+                    return;
+                }
+            }
+            
+            // Not inside a comment - comment the current line
+            var line = doc.GetLineByOffset(caretOffset);
+            var lineText = doc.GetText(line.Offset, line.Length);
+            var trimmedText = lineText.TrimStart();
+            var leadingWhitespace = lineText.Substring(0, lineText.Length - trimmedText.Length);
+            
+            // Check if line is already a single-line comment
+            if (trimmedText.StartsWith("<!--") && trimmedText.TrimEnd().EndsWith("-->"))
+            {
+                // Uncomment single line
+                string content = trimmedText;
+                if (content.StartsWith("<!-- "))
+                    content = content.Substring(5);
+                else if (content.StartsWith("<!--"))
+                    content = content.Substring(4);
+                    
+                if (content.TrimEnd().EndsWith(" -->"))
+                    content = content.Substring(0, content.TrimEnd().Length - 4);
+                else if (content.TrimEnd().EndsWith("-->"))
+                    content = content.Substring(0, content.TrimEnd().Length - 3);
+                
+                doc.Replace(line.Offset, line.Length, leadingWhitespace + content);
+            }
+            else
+            {
+                // Comment single line
+                string newText = leadingWhitespace + "<!-- " + trimmedText + " -->";
+                doc.Replace(line.Offset, line.Length, newText);
+            }
+        }
+        else
+        {
+            // Has selection - use block comment for the entire selection
+            int startOffset = selection.SurroundingSegment.Offset;
+            int endOffset = selection.SurroundingSegment.EndOffset;
+            string selectedText = doc.GetText(startOffset, endOffset - startOffset);
+            
+            // Check if selection is already wrapped in a comment
+            string trimmedSelection = selectedText.Trim();
+            if (trimmedSelection.StartsWith("<!--") && trimmedSelection.EndsWith("-->"))
+            {
+                // Uncomment - remove the outer <!-- and -->
+                int commentStartInSelection = selectedText.IndexOf("<!--");
+                int commentEndInSelection = selectedText.LastIndexOf("-->");
+                
+                if (commentStartInSelection >= 0 && commentEndInSelection >= 0)
+                {
+                    using (doc.RunUpdate())
+                    {
+                        // Calculate actual positions
+                        int actualCommentStart = startOffset + commentStartInSelection;
+                        int actualCommentEnd = startOffset + commentEndInSelection;
+                        
+                        // Remove --> first
+                        doc.Remove(actualCommentEnd, 3);
+                        
+                        // Remove <!-- (and optional space)
+                        int removeLength = 4;
+                        if (actualCommentStart + 4 < doc.TextLength && doc.GetCharAt(actualCommentStart + 4) == ' ')
+                        {
+                            removeLength = 5;
+                        }
+                        doc.Remove(actualCommentStart, removeLength);
+                    }
+                }
+            }
+            else
+            {
+                // Comment - wrap entire selection with single <!-- -->
+                using (doc.RunUpdate())
+                {
+                    doc.Insert(endOffset, " -->");
+                    doc.Insert(startOffset, "<!-- ");
                 }
             }
         }
@@ -4936,6 +5122,47 @@ Console.WriteLine(""Hello, World!"");
             var definition = HighlightingLoader.Load(reader, HighlightingManager.Instance);
             HighlightingManager.Instance.RegisterHighlighting("Mermaid", new[] { ".mmd", ".mermaid" }, definition);
             CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
+        }
+        catch
+        {
+            // If syntax highlighting fails, continue without it
+        }
+    }
+
+    private void RegisterMarkdownSyntaxHighlighting()
+    {
+        var isDark = ThemeManager.IsDarkTheme;
+        
+        // Color values based on theme - green for comments like Mermaid
+        var commentColor = isDark ? "#6A9955" : "#008000";
+        var headingColor = isDark ? "#569CD6" : "#0000FF";
+        var boldColor = isDark ? "#CE9178" : "#A31515";
+        var linkColor = isDark ? "#4EC9B0" : "#008080";
+        var codeColor = isDark ? "#D7BA7D" : "#795E26";
+        
+        var xshd = "<?xml version=\"1.0\"?>" +
+            "<SyntaxDefinition name=\"Markdown\" xmlns=\"http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008\">" +
+            "<Color name=\"Comment\" foreground=\"" + commentColor + "\" />" +
+            "<Color name=\"Heading\" foreground=\"" + headingColor + "\" fontWeight=\"bold\" />" +
+            "<Color name=\"Bold\" foreground=\"" + boldColor + "\" fontWeight=\"bold\" />" +
+            "<Color name=\"Link\" foreground=\"" + linkColor + "\" />" +
+            "<Color name=\"Code\" foreground=\"" + codeColor + "\" />" +
+            "<RuleSet>" +
+            "<Span color=\"Comment\" multiline=\"true\" begin=\"&lt;!--\" end=\"--&gt;\" />" +
+            "<Rule color=\"Heading\">^#{1,6}\\s.*$</Rule>" +
+            "<Rule color=\"Bold\">\\*\\*[^*]+\\*\\*</Rule>" +
+            "<Rule color=\"Bold\">__[^_]+__</Rule>" +
+            "<Rule color=\"Code\">`[^`]+`</Rule>" +
+            "<Rule color=\"Link\">\\[[^\\]]+\\]\\([^)]+\\)</Rule>" +
+            "</RuleSet>" +
+            "</SyntaxDefinition>";
+
+        try
+        {
+            using var reader = new XmlTextReader(new StringReader(xshd));
+            var definition = HighlightingLoader.Load(reader, HighlightingManager.Instance);
+            HighlightingManager.Instance.RegisterHighlighting("Markdown", new[] { ".md", ".markdown" }, definition);
+            CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Markdown");
         }
         catch
         {
