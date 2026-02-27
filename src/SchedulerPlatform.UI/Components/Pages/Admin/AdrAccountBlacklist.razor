@@ -117,10 +117,46 @@
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="Master Vendor Code">@context.MasterVendorCode</MudTd>
-                    <MudTd DataLabel="Primary Vendor Code">@context.PrimaryVendorCode</MudTd>
-                    <MudTd DataLabel="VM Account ID">@context.VMAccountId</MudTd>
-                    <MudTd DataLabel="Account Number">@context.VMAccountNumber</MudTd>
-                    <MudTd DataLabel="Credential ID">@context.CredentialId</MudTd>
+                    <MudTd DataLabel="Primary Vendor Code">
+                        @if (!string.IsNullOrEmpty(context.PrimaryVendorCode))
+                        {
+                            @context.PrimaryVendorCode
+                        }
+                        else if (!string.IsNullOrEmpty(context.MasterVendorCode))
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">All</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="VM Account ID">
+                        @if (context.VMAccountId.HasValue)
+                        {
+                            @context.VMAccountId
+                        }
+                        else if (!string.IsNullOrEmpty(context.MasterVendorCode) || !string.IsNullOrEmpty(context.PrimaryVendorCode))
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">All</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Account Number">
+                        @if (!string.IsNullOrEmpty(context.VMAccountNumber))
+                        {
+                            @context.VMAccountNumber
+                        }
+                        else if (!string.IsNullOrEmpty(context.MasterVendorCode) || !string.IsNullOrEmpty(context.PrimaryVendorCode))
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">All</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Credential ID">
+                        @if (context.CredentialId.HasValue)
+                        {
+                            @context.CredentialId
+                        }
+                        else if (!string.IsNullOrEmpty(context.MasterVendorCode) || !string.IsNullOrEmpty(context.PrimaryVendorCode) || context.VMAccountId.HasValue || !string.IsNullOrEmpty(context.VMAccountNumber))
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">All</MudChip>
+                        }
+                    </MudTd>
                     <MudTd DataLabel="Exclusion Type">
                         <MudChip T="string" Size="Size.Small" Color="@GetExclusionTypeColor(context.ExclusionType)">
                             @context.ExclusionType
@@ -195,6 +231,7 @@
         {
             <MudAlert Severity="Severity.Info" Class="mb-4">
                 At least one of the following must be provided: Master Vendor Code, Primary Vendor Code, VM Account ID, Account Number, or Credential ID.
+                Account Number and VM Account ID require a vendor code to prevent false matches across vendors.
             </MudAlert>
             <MudGrid>
                 <MudItem xs="12" sm="6">
@@ -213,13 +250,15 @@
                     <MudNumericField @bind-Value="_editingEntry.VMAccountId" 
                                      Label="VM Account ID" 
                                      Variant="Variant.Outlined"
-                                     HelperText="Match by VM account ID" />
+                                     Disabled="@(!HasVendorCode())"
+                                     HelperText="@(HasVendorCode() ? "Match by VM account ID" : "Requires a vendor code")" />
                 </MudItem>
                 <MudItem xs="12" sm="6">
                     <MudTextField @bind-Value="_editingEntry.VMAccountNumber" 
                                   Label="Account Number" 
                                   Variant="Variant.Outlined"
-                                  HelperText="Match by account number" />
+                                  Disabled="@(!HasVendorCode())"
+                                  HelperText="@(HasVendorCode() ? "Match by account number" : "Requires a vendor code")" />
                 </MudItem>
                 <MudItem xs="12" sm="6">
                     <MudNumericField @bind-Value="_editingEntry.CredentialId" 
@@ -233,8 +272,8 @@
                                Variant="Variant.Outlined"
                                Required="true">
                         <MudSelectItem Value="@("All")">All (Block all job types)</MudSelectItem>
-                        <MudSelectItem Value="@("CredentialCheck")">Credential Check Only</MudSelectItem>
-                        <MudSelectItem Value="@("Download")">Download Only</MudSelectItem>
+                        <MudSelectItem Value="@("Download")">ADR Request Only</MudSelectItem>
+                        <MudSelectItem Value="@("Rebill")">Rebill Only</MudSelectItem>
                     </MudSelect>
                 </MudItem>
                 <MudItem xs="12" sm="6">
@@ -500,6 +539,15 @@
                 return;
             }
             
+            // Validate that account-level criteria require a vendor code
+            if ((!string.IsNullOrWhiteSpace(_editingEntry.VMAccountNumber) || _editingEntry.VMAccountId.HasValue) &&
+                string.IsNullOrWhiteSpace(_editingEntry.MasterVendorCode) && 
+                string.IsNullOrWhiteSpace(_editingEntry.PrimaryVendorCode))
+            {
+                Snackbar.Add("Account Number and VM Account ID require a vendor code (Master or Primary) to prevent false matches across different vendors", Severity.Warning);
+                return;
+            }
+            
             if (string.IsNullOrWhiteSpace(_editingEntry.Reason))
             {
                 Snackbar.Add("Reason is required", Severity.Warning);
@@ -591,13 +639,20 @@
             }
         }
 
+    private bool HasVendorCode()
+    {
+        return _editingEntry != null && 
+               (!string.IsNullOrWhiteSpace(_editingEntry.MasterVendorCode) || 
+                !string.IsNullOrWhiteSpace(_editingEntry.PrimaryVendorCode));
+    }
+
     private Color GetExclusionTypeColor(string? exclusionType)
     {
         return exclusionType switch
         {
             "All" => Color.Error,
-            "CredentialCheck" => Color.Warning,
             "Download" => Color.Info,
+            "Rebill" => Color.Warning,
             _ => Color.Default
         };
     }

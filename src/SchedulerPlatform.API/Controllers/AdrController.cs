@@ -4535,6 +4535,15 @@ public class AdrController : ControllerBase
                 return BadRequest("At least one exclusion criteria (MasterVendorCode, PrimaryVendorCode, VMAccountId, VMAccountNumber, or CredentialId) must be provided");
             }
             
+            // Account-level criteria (VMAccountNumber, VMAccountId) require a vendor code
+            // to prevent false matches across different vendors sharing the same account number
+            if ((!string.IsNullOrWhiteSpace(request.VMAccountNumber) || request.VMAccountId.HasValue) &&
+                string.IsNullOrWhiteSpace(request.MasterVendorCode) && 
+                string.IsNullOrWhiteSpace(request.PrimaryVendorCode))
+            {
+                return BadRequest("Account Number and VM Account ID require a vendor code (Master or Primary) to prevent false matches across different vendors");
+            }
+            
             // Both effective dates are required
             if (!request.EffectiveStartDate.HasValue)
             {
@@ -4639,6 +4648,15 @@ public class AdrController : ControllerBase
                 !entry.CredentialId.HasValue)
             {
                 return BadRequest("At least one exclusion criteria (MasterVendorCode, PrimaryVendorCode, VMAccountId, VMAccountNumber, or CredentialId) must be provided");
+            }
+            
+            // Account-level criteria (VMAccountNumber, VMAccountId) require a vendor code
+            // to prevent false matches across different vendors sharing the same account number
+            if ((!string.IsNullOrWhiteSpace(entry.VMAccountNumber) || entry.VMAccountId.HasValue) &&
+                string.IsNullOrWhiteSpace(entry.MasterVendorCode) && 
+                string.IsNullOrWhiteSpace(entry.PrimaryVendorCode))
+            {
+                return BadRequest("Account Number and VM Account ID require a vendor code (Master or Primary) to prevent false matches across different vendors");
             }
             
             // Validate both effective dates are set
