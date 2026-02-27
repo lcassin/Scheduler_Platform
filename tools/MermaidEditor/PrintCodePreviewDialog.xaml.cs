@@ -20,6 +20,8 @@ public partial class PrintCodePreviewDialog : Window
     private readonly string _code;
     private readonly string _documentTitle;
     private double _fontSize = 10;
+    private bool _showLineNumbers = false;
+    private bool _wordWrap = true;
     private FlowDocument? _flowDocument;
 
     public PrintCodePreviewDialog(string code, string documentTitle)
@@ -89,6 +91,18 @@ public partial class PrintCodePreviewDialog : Window
         }
     }
 
+    private void ShowLineNumbers_Changed(object sender, RoutedEventArgs e)
+    {
+        _showLineNumbers = ShowLineNumbersCheckBox?.IsChecked == true;
+        UpdatePreview();
+    }
+
+    private void WordWrap_Changed(object sender, RoutedEventArgs e)
+    {
+        _wordWrap = WordWrapCheckBox?.IsChecked == true;
+        UpdatePreview();
+    }
+
     private void UpdatePreview()
     {
         if (PreviewViewer == null) return;
@@ -97,10 +111,21 @@ public partial class PrintCodePreviewDialog : Window
         _flowDocument = new FlowDocument
         {
             PagePadding = new Thickness(50),
-            ColumnWidth = double.MaxValue,
             FontFamily = new System.Windows.Media.FontFamily("Consolas, Courier New, monospace"),
             FontSize = _fontSize
         };
+
+        // Set column width based on word wrap setting
+        // When word wrap is enabled, use a reasonable column width that allows wrapping
+        // When disabled, use MaxValue to prevent wrapping
+        if (_wordWrap)
+        {
+            _flowDocument.ColumnWidth = 600; // Allow text to wrap within reasonable width
+        }
+        else
+        {
+            _flowDocument.ColumnWidth = double.MaxValue;
+        }
 
         // Add title
         var titleParagraph = new Paragraph(new Run(_documentTitle))
@@ -114,15 +139,31 @@ public partial class PrintCodePreviewDialog : Window
 
         // Add code lines
         var lines = _code.Split(new[] { "\r\n", "\r", "\n" }, StringSplitOptions.None);
-        foreach (var line in lines)
+        int lineNumberWidth = lines.Length.ToString().Length;
+        
+        for (int i = 0; i < lines.Length; i++)
         {
-            var paragraph = new Paragraph(new Run(string.IsNullOrEmpty(line) ? " " : line))
+            var line = lines[i];
+            var paragraph = new Paragraph();
+            paragraph.FontSize = _fontSize;
+            paragraph.Margin = new Thickness(0, 0, 0, 2);
+            paragraph.TextAlignment = System.Windows.TextAlignment.Left;
+            paragraph.Foreground = System.Windows.Media.Brushes.Black;
+            
+            if (_showLineNumbers)
             {
-                FontSize = _fontSize,
-                Margin = new Thickness(0, 0, 0, 2),
-                TextAlignment = System.Windows.TextAlignment.Left,
-                Foreground = System.Windows.Media.Brushes.Black
-            };
+                // Add line number in gray
+                var lineNumber = (i + 1).ToString().PadLeft(lineNumberWidth) + "  ";
+                var lineNumberRun = new Run(lineNumber)
+                {
+                    Foreground = System.Windows.Media.Brushes.Gray
+                };
+                paragraph.Inlines.Add(lineNumberRun);
+            }
+            
+            // Add the code line
+            paragraph.Inlines.Add(new Run(string.IsNullOrEmpty(line) ? " " : line));
+            
             _flowDocument.Blocks.Add(paragraph);
         }
 

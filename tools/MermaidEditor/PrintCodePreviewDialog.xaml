@@ -124,6 +124,19 @@
                     </StackPanel>
                 </GroupBox>
                 
+                <!-- Options -->
+                <GroupBox Header="Options">
+                    <StackPanel Margin="8">
+                        <CheckBox x:Name="ShowLineNumbersCheckBox" Content="Show line numbers" 
+                                  Foreground="{DynamicResource ThemeForegroundBrush}"
+                                  Checked="ShowLineNumbers_Changed" Unchecked="ShowLineNumbers_Changed"
+                                  Margin="0,0,0,8"/>
+                        <CheckBox x:Name="WordWrapCheckBox" Content="Word wrap" IsChecked="True"
+                                  Foreground="{DynamicResource ThemeForegroundBrush}"
+                                  Checked="WordWrap_Changed" Unchecked="WordWrap_Changed"/>
+                    </StackPanel>
+                </GroupBox>
+                
                 <!-- Page Info -->
                 <Border Background="{DynamicResource ThemeToolbarBackgroundBrush}" 
                         CornerRadius="4" Padding="12" Margin="0,8,0,0">
