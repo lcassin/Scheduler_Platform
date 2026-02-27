@@ -308,8 +308,9 @@
                     <ControlTemplate TargetType="ToggleButton">
                         <Border x:Name="border" 
                                 Background="{TemplateBinding Background}" 
-                                BorderThickness="0"
-                                CornerRadius="2"
+                                BorderThickness="1"
+                                BorderBrush="Transparent"
+                                CornerRadius="3"
                                 Padding="{TemplateBinding Padding}">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
@@ -318,7 +319,8 @@
                                 <Setter TargetName="border" Property="Background" Value="{DynamicResource ThemeHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="{DynamicResource ThemeSelectedBrush}"/>
+                                <Setter TargetName="border" Property="Background" Value="#3D7ACC"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="#5A9AE8"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Foreground" Value="{DynamicResource ThemeDisabledForegroundBrush}"/>
@@ -1060,10 +1062,10 @@
                     <ToolBarTray Background="Transparent">
                         <ToolBar Band="1" BandIndex="1" Background="Transparent">
                             <Button Click="IndentLines_Click" ToolTip="Indent (Tab)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
-                                <TextBlock Text="&#xE290;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                                <TextBlock Text="&#xE291;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
                             </Button>
                             <Button Click="OutdentLines_Click" ToolTip="Outdent (Shift+Tab)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
-                                <TextBlock Text="&#xE291;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                                <TextBlock Text="&#xE290;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
                             </Button>
                             <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="4,4"/>
                             <Button Click="ToggleComment_Click" ToolTip="Toggle Comment (Ctrl+/)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
@@ -1078,7 +1080,7 @@
                             </Button>
                             <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="4,4"/>
                             <ToggleButton x:Name="WordWrapToggle" Click="WordWrap_Click" ToolTip="Toggle Word Wrap" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4">
-                                <TextBlock Text="&#xE8B3;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                                <TextBlock Text="&#xE1A5;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
                             </ToggleButton>
                         </ToolBar>
                     </ToolBarTray>
@@ -1093,7 +1095,7 @@
                             </ToggleButton>
                             <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="4,4"/>
                             <ToggleButton x:Name="LineNumbersToggle" Click="LineNumbers_Click" ToolTip="Toggle Line Numbers" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4" IsChecked="True">
-                                <TextBlock Text="&#xE8EC;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                                <TextBlock Text="123" FontFamily="Consolas" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
                             </ToggleButton>
                             <ToggleButton x:Name="BracketMatchingToggle" Click="BracketMatching_Click" ToolTip="Toggle Bracket Matching" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4" IsChecked="True">
                                 <TextBlock Text="{}{}" FontFamily="Consolas" FontSize="12" VerticalAlignment="Center"/>

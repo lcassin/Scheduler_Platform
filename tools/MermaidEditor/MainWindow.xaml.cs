@@ -623,6 +623,12 @@ Console.WriteLine(""Hello, World!"");
             // Load recent files
             LoadRecentFiles();
             
+            // Enable bracket highlighting by default (since toggle is checked by default)
+            if (_isBracketMatchingEnabled)
+            {
+                EnableBracketHighlighting();
+            }
+            
             // Show New Document dialog if no file was opened via command line
             if (_showNewDocumentDialogOnLoad)
             {
