@@ -3700,12 +3700,6 @@ Console.WriteLine(""Hello, World!"");
             MinimapViewportIndicator.Width = MinimapWidth - 6;
             MinimapViewportIndicator.Height = indicatorHeight;
             
-            // Diagnostic tooltip (hover over minimap to see values) - temporary for debugging
-            MinimapOverlayGrid.ToolTip = 
-                $"EditorExtent: {editorExtentH:F0}, EditorViewport: {editorViewportH:F0}, EditorOffset: {editorOffsetY:F0}\n" +
-                $"ViewportRatio: {viewportRatio:F4}, ScrollFrac: {scrollFraction:F4}\n" +
-                $"MinimapContentH: {minimapContentH:F0}, PanelH: {panelHeight:F0}, EffH: {effectiveHeight:F0}\n" +
-                $"IndicatorH: {indicatorHeight:F0}, IndicatorTop: {indicatorTop:F0}";
         }
         catch
         {
