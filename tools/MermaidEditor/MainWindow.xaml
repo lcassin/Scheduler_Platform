@@ -296,6 +296,39 @@
             </Setter>
         </Style>
         
+        <!-- ToolBar ToggleButton Style -->
+        <Style x:Key="ToolbarToggleButtonStyle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="border" 
+                                Background="{TemplateBinding Background}" 
+                                BorderThickness="0"
+                                CornerRadius="2"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource ThemeHoverBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource ThemeSelectedBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Foreground" Value="{DynamicResource ThemeDisabledForegroundBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        
         <!-- Status Bar Button Style -->
         <Style x:Key="StatusBarButtonStyle" TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
@@ -1018,6 +1051,35 @@
                             <Button Click="FormatHorizontalRule_Click" ToolTip="Horizontal Rule" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
                                 <TextBlock Text="&#x2015;" FontFamily="Segoe UI" FontSize="14" VerticalAlignment="Center"/>
                             </Button>
+                        </ToolBar>
+                    </ToolBarTray>
+                </Border>
+                
+                <!-- Edit Toolbar (indent, comment, move lines, word wrap) -->
+                <Border Background="{DynamicResource ThemeToolbarBackgroundBrush}" CornerRadius="4" HorizontalAlignment="Left" Margin="6,0,0,0">
+                    <ToolBarTray Background="Transparent">
+                        <ToolBar Band="1" BandIndex="1" Background="Transparent">
+                            <Button Click="IndentLines_Click" ToolTip="Indent (Tab)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="&#xE7FD;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            </Button>
+                            <Button Click="OutdentLines_Click" ToolTip="Outdent (Shift+Tab)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="&#xE7FC;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            </Button>
+                            <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="4,4"/>
+                            <Button Click="ToggleComment_Click" ToolTip="Toggle Comment (Ctrl+/)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="&#xE90A;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            </Button>
+                            <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="4,4"/>
+                            <Button Click="MoveLineUp_Click" ToolTip="Move Line Up (Alt+Up)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="&#xE74A;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            </Button>
+                            <Button Click="MoveLineDown_Click" ToolTip="Move Line Down (Alt+Down)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="&#xE74B;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            </Button>
+                            <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="4,4"/>
+                            <ToggleButton x:Name="WordWrapToggle" Click="WordWrap_Click" ToolTip="Toggle Word Wrap" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4">
+                                <TextBlock Text="&#xE8B3;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            </ToggleButton>
                         </ToolBar>
                     </ToolBarTray>
                 </Border>

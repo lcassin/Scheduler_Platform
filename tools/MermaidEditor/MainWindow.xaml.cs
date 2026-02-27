@@ -2870,6 +2870,302 @@ Console.WriteLine(""Hello, World!"");
     
     #endregion
 
+    #region Edit Toolbar (Indent, Comment, Move Lines, Word Wrap)
+
+    private void IndentLines_Click(object sender, RoutedEventArgs e)
+    {
+        var doc = CodeEditor.Document;
+        var selection = CodeEditor.TextArea.Selection;
+        
+        if (selection.IsEmpty)
+        {
+            // Indent current line
+            var line = doc.GetLineByOffset(CodeEditor.CaretOffset);
+            doc.Insert(line.Offset, "    ");
+        }
+        else
+        {
+            // Indent all selected lines
+            var startLine = doc.GetLineByOffset(selection.SurroundingSegment.Offset);
+            var endLine = doc.GetLineByOffset(selection.SurroundingSegment.EndOffset);
+            
+            using (doc.RunUpdate())
+            {
+                for (int lineNum = startLine.LineNumber; lineNum <= endLine.LineNumber; lineNum++)
+                {
+                    var line = doc.GetLineByNumber(lineNum);
+                    doc.Insert(line.Offset, "    ");
+                }
+            }
+        }
+    }
+
+    private void OutdentLines_Click(object sender, RoutedEventArgs e)
+    {
+        var doc = CodeEditor.Document;
+        var selection = CodeEditor.TextArea.Selection;
+        
+        if (selection.IsEmpty)
+        {
+            // Outdent current line
+            var line = doc.GetLineByOffset(CodeEditor.CaretOffset);
+            RemoveLeadingIndent(doc, line);
+        }
+        else
+        {
+            // Outdent all selected lines
+            var startLine = doc.GetLineByOffset(selection.SurroundingSegment.Offset);
+            var endLine = doc.GetLineByOffset(selection.SurroundingSegment.EndOffset);
+            
+            using (doc.RunUpdate())
+            {
+                for (int lineNum = startLine.LineNumber; lineNum <= endLine.LineNumber; lineNum++)
+                {
+                    var line = doc.GetLineByNumber(lineNum);
+                    RemoveLeadingIndent(doc, line);
+                }
+            }
+        }
+    }
+
+    private void RemoveLeadingIndent(ICSharpCode.AvalonEdit.Document.TextDocument doc, ICSharpCode.AvalonEdit.Document.DocumentLine line)
+    {
+        var lineText = doc.GetText(line.Offset, line.Length);
+        
+        // Remove up to 4 spaces or 1 tab from the beginning
+        if (lineText.StartsWith("    "))
+        {
+            doc.Remove(line.Offset, 4);
+        }
+        else if (lineText.StartsWith("\t"))
+        {
+            doc.Remove(line.Offset, 1);
+        }
+        else if (lineText.StartsWith("   "))
+        {
+            doc.Remove(line.Offset, 3);
+        }
+        else if (lineText.StartsWith("  "))
+        {
+            doc.Remove(line.Offset, 2);
+        }
+        else if (lineText.StartsWith(" "))
+        {
+            doc.Remove(line.Offset, 1);
+        }
+    }
+
+    private void ToggleComment_Click(object sender, RoutedEventArgs e)
+    {
+        var doc = CodeEditor.Document;
+        var selection = CodeEditor.TextArea.Selection;
+        
+        // Determine comment style based on render mode
+        string commentPrefix = _currentRenderMode == RenderMode.Mermaid ? "%% " : "<!-- ";
+        string commentSuffix = _currentRenderMode == RenderMode.Mermaid ? "" : " -->";
+        
+        if (selection.IsEmpty)
+        {
+            // Toggle comment on current line
+            var line = doc.GetLineByOffset(CodeEditor.CaretOffset);
+            ToggleLineComment(doc, line, commentPrefix, commentSuffix);
+        }
+        else
+        {
+            // Toggle comment on all selected lines
+            var startLine = doc.GetLineByOffset(selection.SurroundingSegment.Offset);
+            var endLine = doc.GetLineByOffset(selection.SurroundingSegment.EndOffset);
+            
+            // Check if all lines are already commented
+            bool allCommented = true;
+            for (int lineNum = startLine.LineNumber; lineNum <= endLine.LineNumber; lineNum++)
+            {
+                var line = doc.GetLineByNumber(lineNum);
+                var lineText = doc.GetText(line.Offset, line.Length).TrimStart();
+                if (!IsLineCommented(lineText, commentPrefix, commentSuffix))
+                {
+                    allCommented = false;
+                    break;
+                }
+            }
+            
+            using (doc.RunUpdate())
+            {
+                for (int lineNum = endLine.LineNumber; lineNum >= startLine.LineNumber; lineNum--)
+                {
+                    var line = doc.GetLineByNumber(lineNum);
+                    if (allCommented)
+                    {
+                        UncommentLine(doc, line, commentPrefix, commentSuffix);
+                    }
+                    else
+                    {
+                        CommentLine(doc, line, commentPrefix, commentSuffix);
+                    }
+                }
+            }
+        }
+    }
+
+    private bool IsLineCommented(string lineText, string prefix, string suffix)
+    {
+        if (_currentRenderMode == RenderMode.Mermaid)
+        {
+            return lineText.StartsWith("%%");
+        }
+        else
+        {
+            return lineText.StartsWith("<!--") && lineText.TrimEnd().EndsWith("-->");
+        }
+    }
+
+    private void ToggleLineComment(ICSharpCode.AvalonEdit.Document.TextDocument doc, ICSharpCode.AvalonEdit.Document.DocumentLine line, string prefix, string suffix)
+    {
+        var lineText = doc.GetText(line.Offset, line.Length);
+        var trimmedText = lineText.TrimStart();
+        var leadingWhitespace = lineText.Substring(0, lineText.Length - trimmedText.Length);
+        
+        if (IsLineCommented(trimmedText, prefix, suffix))
+        {
+            UncommentLine(doc, line, prefix, suffix);
+        }
+        else
+        {
+            CommentLine(doc, line, prefix, suffix);
+        }
+    }
+
+    private void CommentLine(ICSharpCode.AvalonEdit.Document.TextDocument doc, ICSharpCode.AvalonEdit.Document.DocumentLine line, string prefix, string suffix)
+    {
+        var lineText = doc.GetText(line.Offset, line.Length);
+        var trimmedText = lineText.TrimStart();
+        var leadingWhitespace = lineText.Substring(0, lineText.Length - trimmedText.Length);
+        
+        string newText;
+        if (_currentRenderMode == RenderMode.Mermaid)
+        {
+            newText = leadingWhitespace + prefix + trimmedText;
+        }
+        else
+        {
+            newText = leadingWhitespace + prefix + trimmedText + suffix;
+        }
+        
+        doc.Replace(line.Offset, line.Length, newText);
+    }
+
+    private void UncommentLine(ICSharpCode.AvalonEdit.Document.TextDocument doc, ICSharpCode.AvalonEdit.Document.DocumentLine line, string prefix, string suffix)
+    {
+        var lineText = doc.GetText(line.Offset, line.Length);
+        var trimmedText = lineText.TrimStart();
+        var leadingWhitespace = lineText.Substring(0, lineText.Length - trimmedText.Length);
+        
+        string newText;
+        if (_currentRenderMode == RenderMode.Mermaid)
+        {
+            // Remove %% prefix (with optional space)
+            if (trimmedText.StartsWith("%% "))
+            {
+                newText = leadingWhitespace + trimmedText.Substring(3);
+            }
+            else if (trimmedText.StartsWith("%%"))
+            {
+                newText = leadingWhitespace + trimmedText.Substring(2);
+            }
+            else
+            {
+                newText = lineText;
+            }
+        }
+        else
+        {
+            // Remove <!-- prefix and --> suffix
+            if (trimmedText.StartsWith("<!-- ") && trimmedText.TrimEnd().EndsWith(" -->"))
+            {
+                var content = trimmedText.Substring(5);
+                content = content.Substring(0, content.TrimEnd().Length - 4);
+                newText = leadingWhitespace + content;
+            }
+            else if (trimmedText.StartsWith("<!--") && trimmedText.TrimEnd().EndsWith("-->"))
+            {
+                var content = trimmedText.Substring(4);
+                content = content.Substring(0, content.TrimEnd().Length - 3);
+                newText = leadingWhitespace + content;
+            }
+            else
+            {
+                newText = lineText;
+            }
+        }
+        
+        doc.Replace(line.Offset, line.Length, newText);
+    }
+
+    private void MoveLineUp_Click(object sender, RoutedEventArgs e)
+    {
+        var doc = CodeEditor.Document;
+        var caretLine = doc.GetLineByOffset(CodeEditor.CaretOffset);
+        
+        if (caretLine.LineNumber <= 1)
+            return; // Can't move first line up
+        
+        var prevLine = doc.GetLineByNumber(caretLine.LineNumber - 1);
+        var currentLineText = doc.GetText(caretLine.Offset, caretLine.Length);
+        var prevLineText = doc.GetText(prevLine.Offset, prevLine.Length);
+        
+        // Calculate new caret position
+        int caretColumn = CodeEditor.CaretOffset - caretLine.Offset;
+        
+        using (doc.RunUpdate())
+        {
+            // Replace both lines
+            doc.Replace(prevLine.Offset, prevLine.Length + 1 + caretLine.Length, 
+                currentLineText + Environment.NewLine + prevLineText);
+        }
+        
+        // Restore caret position on the moved line
+        var newLine = doc.GetLineByNumber(caretLine.LineNumber - 1);
+        CodeEditor.CaretOffset = newLine.Offset + Math.Min(caretColumn, newLine.Length);
+    }
+
+    private void MoveLineDown_Click(object sender, RoutedEventArgs e)
+    {
+        var doc = CodeEditor.Document;
+        var caretLine = doc.GetLineByOffset(CodeEditor.CaretOffset);
+        
+        if (caretLine.LineNumber >= doc.LineCount)
+            return; // Can't move last line down
+        
+        var nextLine = doc.GetLineByNumber(caretLine.LineNumber + 1);
+        var currentLineText = doc.GetText(caretLine.Offset, caretLine.Length);
+        var nextLineText = doc.GetText(nextLine.Offset, nextLine.Length);
+        
+        // Calculate new caret position
+        int caretColumn = CodeEditor.CaretOffset - caretLine.Offset;
+        
+        using (doc.RunUpdate())
+        {
+            // Replace both lines
+            doc.Replace(caretLine.Offset, caretLine.Length + 1 + nextLine.Length, 
+                nextLineText + Environment.NewLine + currentLineText);
+        }
+        
+        // Restore caret position on the moved line
+        var newLine = doc.GetLineByNumber(caretLine.LineNumber + 1);
+        CodeEditor.CaretOffset = newLine.Offset + Math.Min(caretColumn, newLine.Length);
+    }
+
+    private void WordWrap_Click(object sender, RoutedEventArgs e)
+    {
+        CodeEditor.WordWrap = !CodeEditor.WordWrap;
+        if (WordWrapToggle != null)
+        {
+            WordWrapToggle.IsChecked = CodeEditor.WordWrap;
+        }
+    }
+
+    #endregion
+
     private async void ExportPng_Click(object sender, RoutedEventArgs e)
     {
         if (!_webViewInitialized) return;
