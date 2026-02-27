@@ -3605,16 +3605,15 @@ Console.WriteLine(""Hello, World!"");
             var panelHeight = MinimapOverlayGrid.ActualHeight;
             if (panelHeight <= 0) return;
             
-            // Get the ScrollViewer from the code editor for the most accurate scroll metrics
+            // Get the ScrollViewer from the code editor for ExtentHeight/ViewportHeight
             var editorScrollViewer = FindVisualChild<System.Windows.Controls.ScrollViewer>(CodeEditor);
             
-            double editorExtentH, editorViewportH, editorOffsetY;
+            double editorExtentH, editorViewportH;
             
             if (editorScrollViewer != null)
             {
                 editorExtentH = editorScrollViewer.ExtentHeight;
                 editorViewportH = editorScrollViewer.ViewportHeight;
-                editorOffsetY = editorScrollViewer.VerticalOffset;
             }
             else
             {
@@ -3622,8 +3621,12 @@ Console.WriteLine(""Hello, World!"");
                 var tv = CodeEditor.TextArea.TextView;
                 editorExtentH = tv.DocumentHeight;
                 editorViewportH = tv.ActualHeight;
-                editorOffsetY = tv.ScrollOffset.Y;
             }
+            
+            // IMPORTANT: Use CodeEditor.VerticalOffset for scroll position, NOT ScrollViewer.VerticalOffset.
+            // AvalonEdit implements IScrollInfo on the TextView, so the ScrollViewer wrapper's
+            // VerticalOffset stays at 0 while the actual scrolling happens internally.
+            var editorOffsetY = CodeEditor.VerticalOffset;
             
             if (editorExtentH <= 0) editorExtentH = 1;
             
@@ -3673,13 +3676,12 @@ Console.WriteLine(""Hello, World!"");
             MinimapViewportIndicator.Width = MinimapWidth - 6;
             MinimapViewportIndicator.Height = indicatorHeight;
             
-            // Diagnostic tooltip (hover over minimap to see values)
+            // Diagnostic tooltip (hover over minimap to see values) - temporary for debugging
             MinimapOverlayGrid.ToolTip = 
                 $"EditorExtent: {editorExtentH:F0}, EditorViewport: {editorViewportH:F0}, EditorOffset: {editorOffsetY:F0}\n" +
                 $"ViewportRatio: {viewportRatio:F4}, ScrollFrac: {scrollFraction:F4}\n" +
                 $"MinimapContentH: {minimapContentH:F0}, PanelH: {panelHeight:F0}, EffH: {effectiveHeight:F0}\n" +
-                $"IndicatorH: {indicatorHeight:F0}, IndicatorTop: {indicatorTop:F0}\n" +
-                $"SV found: {editorScrollViewer != null}, MiniSV found: {minimapScrollViewer != null}";
+                $"IndicatorH: {indicatorHeight:F0}, IndicatorTop: {indicatorTop:F0}";
         }
         catch
         {
