@@ -5128,25 +5128,16 @@ Console.WriteLine(""Hello, World!"");
         
         // Color values based on theme - green for comments like Mermaid
         var commentColor = isDark ? "#6A9955" : "#008000";
-        var headingColor = isDark ? "#569CD6" : "#0000FF";
-        var boldColor = isDark ? "#CE9178" : "#A31515";
-        var linkColor = isDark ? "#4EC9B0" : "#008080";
-        var codeColor = isDark ? "#D7BA7D" : "#795E26";
         
+        // Simplified XSHD - only HTML comments to avoid regex issues
         var xshd = "<?xml version=\"1.0\"?>" +
             "<SyntaxDefinition name=\"Markdown\" xmlns=\"http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008\">" +
             "<Color name=\"Comment\" foreground=\"" + commentColor + "\" />" +
-            "<Color name=\"Heading\" foreground=\"" + headingColor + "\" fontWeight=\"bold\" />" +
-            "<Color name=\"Bold\" foreground=\"" + boldColor + "\" fontWeight=\"bold\" />" +
-            "<Color name=\"Link\" foreground=\"" + linkColor + "\" />" +
-            "<Color name=\"Code\" foreground=\"" + codeColor + "\" />" +
             "<RuleSet>" +
-            "<Span color=\"Comment\" multiline=\"true\" begin=\"&lt;!--\" end=\"--&gt;\" />" +
-            "<Rule color=\"Heading\">^#{1,6}\\s.*$</Rule>" +
-            "<Rule color=\"Bold\">\\*\\*[^*]+\\*\\*</Rule>" +
-            "<Rule color=\"Bold\">__[^_]+__</Rule>" +
-            "<Rule color=\"Code\">`[^`]+`</Rule>" +
-            "<Rule color=\"Link\">\\[[^\\]]+\\]\\([^)]+\\)</Rule>" +
+            "<Span color=\"Comment\" multiline=\"true\">" +
+            "<Begin>&lt;!--</Begin>" +
+            "<End>--&gt;</End>" +
+            "</Span>" +
             "</RuleSet>" +
             "</SyntaxDefinition>";
 
