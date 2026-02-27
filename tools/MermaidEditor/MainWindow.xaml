@@ -1239,7 +1239,7 @@
                                 <Grid>
                                     <avalon:TextEditor x:Name="MinimapEditor"
                                              FontFamily="Consolas"
-                                             FontSize="1"
+                                             FontSize="2"
                                              Background="{DynamicResource ThemeEditorBackgroundBrush}"
                                              Foreground="{DynamicResource ThemeEditorForegroundBrush}"
                                              ShowLineNumbers="False"
@@ -1254,6 +1254,7 @@
                                           MouseLeftButtonDown="MinimapViewport_MouseLeftButtonDown"
                                           MouseMove="MinimapViewport_MouseMove"
                                           MouseLeftButtonUp="MinimapViewport_MouseLeftButtonUp"
+                                          MouseWheel="MinimapOverlay_MouseWheel"
                                           SizeChanged="MinimapViewport_SizeChanged">
                                         <Canvas x:Name="MinimapViewportCanvas" 
                                                 HorizontalAlignment="Stretch"

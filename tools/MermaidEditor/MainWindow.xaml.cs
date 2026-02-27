@@ -3600,28 +3600,51 @@ Console.WriteLine(""Hello, World!"");
             var visibleLines = textView.ActualHeight / textView.DefaultLineHeight;
             var firstVisibleLine = textView.ScrollOffset.Y / textView.DefaultLineHeight;
             
-            // Use the overlay grid's actual height (which fills the minimap area)
-            var canvasHeight = MinimapOverlayGrid.ActualHeight;
+            // Get the panel height and the actual minimap content height
+            var panelHeight = MinimapOverlayGrid.ActualHeight;
+            var minimapTextView = MinimapEditor.TextArea.TextView;
+            var minimapLineHeight = minimapTextView.DefaultLineHeight;
+            var totalMinimapContentHeight = totalLines * minimapLineHeight;
             
-            if (canvasHeight > 0 && totalLines > 0)
+            if (panelHeight > 0 && totalLines > 0)
             {
                 // Calculate viewport as proportion of total document
                 var viewportHeightRatio = visibleLines / totalLines;
-                viewportHeightRatio = Math.Min(1.0, Math.Max(0.01, viewportHeightRatio)); // Clamp between 1% and 100%
+                viewportHeightRatio = Math.Min(1.0, Math.Max(0.01, viewportHeightRatio));
                 
                 var viewportTopRatio = firstVisibleLine / totalLines;
                 viewportTopRatio = Math.Max(0, Math.Min(viewportTopRatio, 1.0 - viewportHeightRatio));
                 
-                var viewportHeight = viewportHeightRatio * canvasHeight;
-                var viewportTop = viewportTopRatio * canvasHeight;
+                double viewportHeight, viewportTop;
+                
+                if (totalMinimapContentHeight <= panelHeight)
+                {
+                    // Content fits within the panel - map viewport to content height, not panel height
+                    viewportHeight = viewportHeightRatio * totalMinimapContentHeight;
+                    viewportTop = viewportTopRatio * totalMinimapContentHeight;
+                    
+                    // No minimap scrolling needed - content fits
+                    MinimapEditor.ScrollToVerticalOffset(0);
+                }
+                else
+                {
+                    // Content exceeds panel - map viewport to panel height and scroll minimap
+                    viewportHeight = viewportHeightRatio * panelHeight;
+                    viewportTop = viewportTopRatio * panelHeight;
+                    
+                    // Scroll the minimap to keep the visible area aligned with the viewport indicator
+                    var minimapScrollOffset = (firstVisibleLine / totalLines) * (totalMinimapContentHeight - panelHeight);
+                    MinimapEditor.ScrollToVerticalOffset(minimapScrollOffset);
+                }
                 
                 // Ensure minimum height of 10px for visibility
                 viewportHeight = Math.Max(10, viewportHeight);
                 
-                // Ensure viewport doesn't exceed canvas bounds
-                if (viewportTop + viewportHeight > canvasHeight)
+                // Ensure viewport doesn't exceed bounds
+                var maxBound = Math.Min(totalMinimapContentHeight, panelHeight);
+                if (viewportTop + viewportHeight > maxBound)
                 {
-                    viewportTop = canvasHeight - viewportHeight;
+                    viewportTop = maxBound - viewportHeight;
                 }
                 viewportTop = Math.Max(0, viewportTop);
                 
@@ -3629,15 +3652,6 @@ Console.WriteLine(""Hello, World!"");
                 Canvas.SetLeft(MinimapViewportIndicator, 2);
                 MinimapViewportIndicator.Width = MinimapWidth - 6;
                 MinimapViewportIndicator.Height = viewportHeight;
-                
-                // Scroll the minimap to keep the visible area in view
-                var minimapTextView = MinimapEditor.TextArea.TextView;
-                var totalMinimapHeight = totalLines * minimapTextView.DefaultLineHeight;
-                if (totalMinimapHeight > canvasHeight)
-                {
-                    var minimapScrollOffset = (firstVisibleLine / totalLines) * (totalMinimapHeight - canvasHeight);
-                    MinimapEditor.ScrollToVerticalOffset(minimapScrollOffset);
-                }
             }
         }
         catch
@@ -3667,6 +3681,29 @@ Console.WriteLine(""Hello, World!"");
         MinimapViewportCanvas.ReleaseMouseCapture();
     }
 
+    private void MinimapOverlay_MouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+    {
+        if (CodeEditor == null) return;
+        
+        // Forward mouse wheel events to the code editor for scrolling
+        var textView = CodeEditor.TextArea.TextView;
+        var linesToScroll = 3.0; // Standard scroll amount
+        var scrollAmount = linesToScroll * textView.DefaultLineHeight;
+        
+        if (e.Delta > 0)
+        {
+            // Scroll up
+            CodeEditor.ScrollToVerticalOffset(CodeEditor.VerticalOffset - scrollAmount);
+        }
+        else
+        {
+            // Scroll down
+            CodeEditor.ScrollToVerticalOffset(CodeEditor.VerticalOffset + scrollAmount);
+        }
+        
+        e.Handled = true;
+    }
+
     private void NavigateToMinimapPosition(double mouseY)
     {
         if (MinimapEditor == null || CodeEditor == null || MinimapBorder == null)
@@ -3674,15 +3711,22 @@ Console.WriteLine(""Hello, World!"");
 
         try
         {
-            var canvasHeight = MinimapBorder.ActualHeight;
-            if (canvasHeight <= 0) return;
+            var panelHeight = MinimapBorder.ActualHeight;
+            if (panelHeight <= 0) return;
             
             var totalLines = (double)CodeEditor.Document.LineCount;
             if (totalLines <= 0) totalLines = 1;
             
+            // Get the actual minimap content height to determine the effective clickable area
+            var minimapTextView = MinimapEditor.TextArea.TextView;
+            var totalMinimapContentHeight = totalLines * minimapTextView.DefaultLineHeight;
+            var effectiveHeight = Math.Min(totalMinimapContentHeight, panelHeight);
+            
+            // Clamp mouse position to the effective content area
+            mouseY = Math.Max(0, Math.Min(mouseY, effectiveHeight));
+            
             // Calculate which line was clicked using proportional mapping
-            // mouseY / canvasHeight = targetLine / totalLines
-            var targetLine = (mouseY / canvasHeight) * totalLines;
+            var targetLine = (mouseY / effectiveHeight) * totalLines;
             
             // Center the view on the clicked line
             var textView = CodeEditor.TextArea.TextView;
