@@ -3410,6 +3410,17 @@ Console.WriteLine(""Hello, World!"");
         {
             WordWrapToggle.IsChecked = CodeEditor.WordWrap;
         }
+        
+        // Sync minimap word wrap with code editor
+        if (_isMinimapVisible && MinimapEditor != null)
+        {
+            MinimapEditor.WordWrap = CodeEditor.WordWrap;
+            // Deferred viewport update after layout recalculates with new wrapping
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
+            {
+                UpdateMinimapViewport();
+            }));
+        }
     }
 
     #endregion
@@ -3535,8 +3546,11 @@ Console.WriteLine(""Hello, World!"");
         MinimapColumn.Width = new GridLength(MinimapWidth);
         MinimapBorder.Visibility = Visibility.Visible;
         
-        // Copy the document to the minimap editor
+        // Copy the document to the minimap editor and sync settings
         SyncMinimapContent();
+        
+        // Sync word wrap setting with code editor
+        MinimapEditor.WordWrap = CodeEditor.WordWrap;
         
         // Set up event handlers for syncing
         CodeEditor.TextChanged += CodeEditor_TextChanged_Minimap;
