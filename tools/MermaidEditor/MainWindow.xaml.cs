@@ -3541,6 +3541,11 @@ Console.WriteLine(""Hello, World!"");
         // Set up event handlers for syncing
         CodeEditor.TextChanged += CodeEditor_TextChanged_Minimap;
         CodeEditor.TextArea.TextView.ScrollOffsetChanged += TextView_ScrollOffsetChanged_Minimap;
+        CodeEditor.TextArea.TextView.VisualLinesChanged += TextView_VisualLinesChanged_Minimap;
+        
+        // Also listen to the ScrollViewer's ScrollChanged routed event as a belt-and-suspenders approach
+        CodeEditor.AddHandler(System.Windows.Controls.ScrollViewer.ScrollChangedEvent, 
+            new System.Windows.Controls.ScrollChangedEventHandler(CodeEditor_ScrollChanged_Minimap));
         
         // Initial viewport update - immediate
         UpdateMinimapViewport();
@@ -3560,6 +3565,9 @@ Console.WriteLine(""Hello, World!"");
         // Remove event handlers
         CodeEditor.TextChanged -= CodeEditor_TextChanged_Minimap;
         CodeEditor.TextArea.TextView.ScrollOffsetChanged -= TextView_ScrollOffsetChanged_Minimap;
+        CodeEditor.TextArea.TextView.VisualLinesChanged -= TextView_VisualLinesChanged_Minimap;
+        CodeEditor.RemoveHandler(System.Windows.Controls.ScrollViewer.ScrollChangedEvent, 
+            new System.Windows.Controls.ScrollChangedEventHandler(CodeEditor_ScrollChanged_Minimap));
     }
 
     private void SyncMinimapContent()
@@ -3586,6 +3594,16 @@ Console.WriteLine(""Hello, World!"");
     }
 
     private void TextView_ScrollOffsetChanged_Minimap(object? sender, EventArgs e)
+    {
+        UpdateMinimapViewport();
+    }
+
+    private void TextView_VisualLinesChanged_Minimap(object? sender, EventArgs e)
+    {
+        UpdateMinimapViewport();
+    }
+
+    private void CodeEditor_ScrollChanged_Minimap(object sender, System.Windows.Controls.ScrollChangedEventArgs e)
     {
         UpdateMinimapViewport();
     }
@@ -3623,10 +3641,16 @@ Console.WriteLine(""Hello, World!"");
                 editorViewportH = tv.ActualHeight;
             }
             
-            // IMPORTANT: Use CodeEditor.VerticalOffset for scroll position, NOT ScrollViewer.VerticalOffset.
-            // AvalonEdit implements IScrollInfo on the TextView, so the ScrollViewer wrapper's
-            // VerticalOffset stays at 0 while the actual scrolling happens internally.
+            // Read scroll offset from multiple sources and use the best one.
+            // AvalonEdit's ScrollViewer.VerticalOffset stays at 0 (IScrollInfo bypass),
+            // so we try CodeEditor.VerticalOffset first, then fall back to TextView.ScrollOffset.Y.
             var editorOffsetY = CodeEditor.VerticalOffset;
+            if (editorOffsetY == 0)
+            {
+                // CodeEditor.VerticalOffset may not be updated yet during scroll events.
+                // Read directly from the TextView's ScrollOffset which is the source of truth.
+                editorOffsetY = CodeEditor.TextArea.TextView.ScrollOffset.Y;
+            }
             
             if (editorExtentH <= 0) editorExtentH = 1;
             
