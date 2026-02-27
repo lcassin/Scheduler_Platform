@@ -1108,6 +1108,9 @@
                             <ToggleButton x:Name="BracketMatchingToggle" Click="BracketMatching_Click" ToolTip="Toggle Bracket Matching" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4" IsChecked="True">
                                 <TextBlock Text="{}{}" FontFamily="Consolas" FontSize="12" VerticalAlignment="Center"/>
                             </ToggleButton>
+                            <ToggleButton x:Name="MinimapToggle" Click="Minimap_Click" ToolTip="Toggle Minimap" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4" IsChecked="False">
+                                <TextBlock Text="&#xE700;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            </ToggleButton>
                         </ToolBar>
                     </ToolBarTray>
                 </Border>
@@ -1211,15 +1214,56 @@
                         BorderThickness="0,0,1,0"
                         Background="{DynamicResource ThemeBackgroundBrush}">
                     <Border BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="0,0,0,1">
-                        <avalon:TextEditor x:Name="CodeEditor" 
-                                 FontFamily="Consolas"
-                                 FontSize="14"
-                                 Background="{DynamicResource ThemeEditorBackgroundBrush}"
-                                 Foreground="{DynamicResource ThemeEditorForegroundBrush}"
-                                 ShowLineNumbers="True"
-                                 WordWrap="False"
-                                 HorizontalScrollBarVisibility="Auto"
-                                 VerticalScrollBarVisibility="Auto"/>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition x:Name="MinimapColumn" Width="0"/>
+                            </Grid.ColumnDefinitions>
+                            <avalon:TextEditor x:Name="CodeEditor" 
+                                     Grid.Column="0"
+                                     FontFamily="Consolas"
+                                     FontSize="14"
+                                     Background="{DynamicResource ThemeEditorBackgroundBrush}"
+                                     Foreground="{DynamicResource ThemeEditorForegroundBrush}"
+                                     ShowLineNumbers="True"
+                                     WordWrap="False"
+                                     HorizontalScrollBarVisibility="Auto"
+                                     VerticalScrollBarVisibility="Auto"/>
+                            <!-- Minimap Panel -->
+                            <Border x:Name="MinimapBorder" 
+                                    Grid.Column="1" 
+                                    Background="{DynamicResource ThemeEditorBackgroundBrush}"
+                                    BorderBrush="{DynamicResource ThemeBorderBrush}"
+                                    BorderThickness="1,0,0,0"
+                                    Visibility="Collapsed">
+                                <Grid>
+                                    <avalon:TextEditor x:Name="MinimapEditor"
+                                             FontFamily="Consolas"
+                                             FontSize="1"
+                                             Background="{DynamicResource ThemeEditorBackgroundBrush}"
+                                             Foreground="{DynamicResource ThemeEditorForegroundBrush}"
+                                             ShowLineNumbers="False"
+                                             WordWrap="False"
+                                             IsReadOnly="True"
+                                             HorizontalScrollBarVisibility="Hidden"
+                                             VerticalScrollBarVisibility="Hidden"
+                                             IsHitTestVisible="False"/>
+                                    <!-- Viewport indicator overlay -->
+                                    <Canvas x:Name="MinimapViewportCanvas" 
+                                            Background="Transparent"
+                                            MouseLeftButtonDown="MinimapViewport_MouseLeftButtonDown"
+                                            MouseMove="MinimapViewport_MouseMove"
+                                            MouseLeftButtonUp="MinimapViewport_MouseLeftButtonUp">
+                                        <Border x:Name="MinimapViewportIndicator"
+                                                Background="#30FFFFFF"
+                                                BorderBrush="{DynamicResource ThemePurpleAccentBrush}"
+                                                BorderThickness="1"
+                                                CornerRadius="2"
+                                                IsHitTestVisible="False"/>
+                                    </Canvas>
+                                </Grid>
+                            </Border>
+                        </Grid>
                     </Border>
                 </Border>
             </Grid>

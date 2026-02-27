@@ -3319,6 +3319,198 @@ Console.WriteLine(""Hello, World!"");
 
     #endregion
 
+    #region Minimap
+
+    private bool _isMinimapVisible = false;
+    private bool _isMinimapDragging = false;
+    private const double MinimapWidth = 120;
+
+    private void Minimap_Click(object sender, RoutedEventArgs e)
+    {
+        _isMinimapVisible = !_isMinimapVisible;
+        
+        if (_isMinimapVisible)
+        {
+            ShowMinimap();
+        }
+        else
+        {
+            HideMinimap();
+        }
+        
+        if (MinimapToggle != null)
+        {
+            MinimapToggle.IsChecked = _isMinimapVisible;
+        }
+    }
+
+    private void ShowMinimap()
+    {
+        MinimapColumn.Width = new GridLength(MinimapWidth);
+        MinimapBorder.Visibility = Visibility.Visible;
+        
+        // Copy the document to the minimap editor
+        SyncMinimapContent();
+        
+        // Set up event handlers for syncing
+        CodeEditor.TextChanged += CodeEditor_TextChanged_Minimap;
+        CodeEditor.TextArea.TextView.ScrollOffsetChanged += TextView_ScrollOffsetChanged_Minimap;
+        
+        // Initial viewport update
+        UpdateMinimapViewport();
+    }
+
+    private void HideMinimap()
+    {
+        MinimapColumn.Width = new GridLength(0);
+        MinimapBorder.Visibility = Visibility.Collapsed;
+        
+        // Remove event handlers
+        CodeEditor.TextChanged -= CodeEditor_TextChanged_Minimap;
+        CodeEditor.TextArea.TextView.ScrollOffsetChanged -= TextView_ScrollOffsetChanged_Minimap;
+    }
+
+    private void SyncMinimapContent()
+    {
+        if (MinimapEditor != null && CodeEditor != null)
+        {
+            MinimapEditor.Text = CodeEditor.Text;
+            
+            // Apply the same syntax highlighting
+            MinimapEditor.SyntaxHighlighting = CodeEditor.SyntaxHighlighting;
+        }
+    }
+
+    private void CodeEditor_TextChanged_Minimap(object? sender, EventArgs e)
+    {
+        SyncMinimapContent();
+        UpdateMinimapViewport();
+    }
+
+    private void TextView_ScrollOffsetChanged_Minimap(object? sender, EventArgs e)
+    {
+        UpdateMinimapViewport();
+    }
+
+    private void UpdateMinimapViewport()
+    {
+        if (MinimapEditor == null || CodeEditor == null || MinimapViewportCanvas == null || MinimapViewportIndicator == null)
+            return;
+
+        try
+        {
+            var textView = CodeEditor.TextArea.TextView;
+            var minimapTextView = MinimapEditor.TextArea.TextView;
+            
+            // Get the total document height in the minimap
+            var totalLines = CodeEditor.Document.LineCount;
+            var minimapLineHeight = minimapTextView.DefaultLineHeight;
+            var totalMinimapHeight = totalLines * minimapLineHeight;
+            
+            // Get the visible area in the main editor
+            var visibleLines = textView.ActualHeight / textView.DefaultLineHeight;
+            var firstVisibleLine = textView.ScrollOffset.Y / textView.DefaultLineHeight;
+            
+            // Calculate viewport indicator position and size
+            var canvasHeight = MinimapViewportCanvas.ActualHeight;
+            
+            if (totalMinimapHeight > 0 && canvasHeight > 0)
+            {
+                var scale = canvasHeight / totalMinimapHeight;
+                
+                // If the document fits in the minimap, use full scale
+                if (totalMinimapHeight <= canvasHeight)
+                {
+                    scale = 1.0;
+                }
+                
+                var viewportTop = firstVisibleLine * minimapLineHeight * scale;
+                var viewportHeight = visibleLines * minimapLineHeight * scale;
+                
+                // Clamp values
+                viewportTop = Math.Max(0, Math.Min(viewportTop, canvasHeight - viewportHeight));
+                viewportHeight = Math.Max(10, Math.Min(viewportHeight, canvasHeight - viewportTop));
+                
+                Canvas.SetTop(MinimapViewportIndicator, viewportTop);
+                MinimapViewportIndicator.Width = MinimapWidth - 4;
+                MinimapViewportIndicator.Height = viewportHeight;
+                
+                // Scroll the minimap to show the current position
+                if (totalMinimapHeight > canvasHeight)
+                {
+                    var minimapScrollOffset = (firstVisibleLine / totalLines) * (totalMinimapHeight - canvasHeight);
+                    MinimapEditor.ScrollToVerticalOffset(minimapScrollOffset);
+                }
+            }
+        }
+        catch
+        {
+            // Ignore errors during viewport calculation
+        }
+    }
+
+    private void MinimapViewport_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        _isMinimapDragging = true;
+        MinimapViewportCanvas.CaptureMouse();
+        NavigateToMinimapPosition(e.GetPosition(MinimapViewportCanvas).Y);
+    }
+
+    private void MinimapViewport_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (_isMinimapDragging)
+        {
+            NavigateToMinimapPosition(e.GetPosition(MinimapViewportCanvas).Y);
+        }
+    }
+
+    private void MinimapViewport_MouseLeftButtonUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        _isMinimapDragging = false;
+        MinimapViewportCanvas.ReleaseMouseCapture();
+    }
+
+    private void NavigateToMinimapPosition(double mouseY)
+    {
+        if (MinimapEditor == null || CodeEditor == null || MinimapViewportCanvas == null)
+            return;
+
+        try
+        {
+            var canvasHeight = MinimapViewportCanvas.ActualHeight;
+            var totalLines = CodeEditor.Document.LineCount;
+            var minimapTextView = MinimapEditor.TextArea.TextView;
+            var totalMinimapHeight = totalLines * minimapTextView.DefaultLineHeight;
+            
+            // Calculate which line was clicked
+            double targetLine;
+            if (totalMinimapHeight <= canvasHeight)
+            {
+                // Document fits in minimap - direct mapping
+                targetLine = mouseY / minimapTextView.DefaultLineHeight;
+            }
+            else
+            {
+                // Document is larger - proportional mapping
+                var scale = canvasHeight / totalMinimapHeight;
+                targetLine = mouseY / (minimapTextView.DefaultLineHeight * scale);
+            }
+            
+            // Center the view on the clicked line
+            var textView = CodeEditor.TextArea.TextView;
+            var visibleLines = textView.ActualHeight / textView.DefaultLineHeight;
+            var targetScrollLine = Math.Max(0, targetLine - visibleLines / 2);
+            
+            CodeEditor.ScrollToVerticalOffset(targetScrollLine * textView.DefaultLineHeight);
+        }
+        catch
+        {
+            // Ignore navigation errors
+        }
+    }
+
+    #endregion
+
     private async void ExportPng_Click(object sender, RoutedEventArgs e)
     {
         if (!_webViewInitialized) return;
