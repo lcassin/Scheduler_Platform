@@ -3585,7 +3585,7 @@ Console.WriteLine(""Hello, World!"");
 
     private void UpdateMinimapViewport()
     {
-        if (MinimapEditor == null || CodeEditor == null || MinimapViewportCanvas == null || MinimapViewportIndicator == null || MinimapBorder == null)
+        if (MinimapEditor == null || CodeEditor == null || MinimapViewportCanvas == null || MinimapViewportIndicator == null || MinimapOverlayGrid == null)
             return;
 
         try
@@ -3600,21 +3600,30 @@ Console.WriteLine(""Hello, World!"");
             var visibleLines = textView.ActualHeight / textView.DefaultLineHeight;
             var firstVisibleLine = textView.ScrollOffset.Y / textView.DefaultLineHeight;
             
-            // Use the MinimapBorder's actual height
-            var canvasHeight = MinimapBorder.ActualHeight;
+            // Use the overlay grid's actual height (which fills the minimap area)
+            var canvasHeight = MinimapOverlayGrid.ActualHeight;
             
-            if (canvasHeight > 0)
+            if (canvasHeight > 0 && totalLines > 0)
             {
                 // Calculate viewport as proportion of total document
-                var viewportHeightRatio = Math.Min(1.0, visibleLines / totalLines);
+                var viewportHeightRatio = visibleLines / totalLines;
+                viewportHeightRatio = Math.Min(1.0, Math.Max(0.01, viewportHeightRatio)); // Clamp between 1% and 100%
+                
                 var viewportTopRatio = firstVisibleLine / totalLines;
+                viewportTopRatio = Math.Max(0, Math.Min(viewportTopRatio, 1.0 - viewportHeightRatio));
                 
                 var viewportHeight = viewportHeightRatio * canvasHeight;
                 var viewportTop = viewportTopRatio * canvasHeight;
                 
-                // Clamp values
-                viewportHeight = Math.Max(10, Math.Min(viewportHeight, canvasHeight));
-                viewportTop = Math.Max(0, Math.Min(viewportTop, canvasHeight - viewportHeight));
+                // Ensure minimum height of 10px for visibility
+                viewportHeight = Math.Max(10, viewportHeight);
+                
+                // Ensure viewport doesn't exceed canvas bounds
+                if (viewportTop + viewportHeight > canvasHeight)
+                {
+                    viewportTop = canvasHeight - viewportHeight;
+                }
+                viewportTop = Math.Max(0, viewportTop);
                 
                 Canvas.SetTop(MinimapViewportIndicator, viewportTop);
                 Canvas.SetLeft(MinimapViewportIndicator, 2);

@@ -1248,14 +1248,16 @@
                                              HorizontalScrollBarVisibility="Hidden"
                                              VerticalScrollBarVisibility="Hidden"
                                              IsHitTestVisible="False"/>
-                                    <!-- Viewport indicator overlay - use Border with Canvas inside for proper sizing -->
-                                    <Border Background="Transparent"
-                                            MouseLeftButtonDown="MinimapViewport_MouseLeftButtonDown"
-                                            MouseMove="MinimapViewport_MouseMove"
-                                            MouseLeftButtonUp="MinimapViewport_MouseLeftButtonUp"
-                                            SizeChanged="MinimapViewport_SizeChanged">
+                                    <!-- Viewport indicator overlay - use Grid with Canvas for proper sizing -->
+                                    <Grid x:Name="MinimapOverlayGrid"
+                                          Background="Transparent"
+                                          MouseLeftButtonDown="MinimapViewport_MouseLeftButtonDown"
+                                          MouseMove="MinimapViewport_MouseMove"
+                                          MouseLeftButtonUp="MinimapViewport_MouseLeftButtonUp"
+                                          SizeChanged="MinimapViewport_SizeChanged">
                                         <Canvas x:Name="MinimapViewportCanvas" 
-                                                ClipToBounds="True">
+                                                HorizontalAlignment="Stretch"
+                                                VerticalAlignment="Stretch">
                                             <Border x:Name="MinimapViewportIndicator"
                                                     Background="#50888888"
                                                     BorderBrush="{DynamicResource ThemePurpleAccentBrush}"
@@ -1263,7 +1265,7 @@
                                                     CornerRadius="2"
                                                     IsHitTestVisible="False"/>
                                         </Canvas>
-                                    </Border>
+                                    </Grid>
                                 </Grid>
                             </Border>
                         </Grid>
