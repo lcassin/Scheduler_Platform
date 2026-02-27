@@ -2457,7 +2457,7 @@ Console.WriteLine(""Hello, World!"");
                 }
                 else
                 {
-                    CodeEditor.SyntaxHighlighting = null;
+                    RegisterMarkdownSyntaxHighlighting();
                 }
                 
                 UpdateExportMenuVisibility();
@@ -3591,43 +3591,39 @@ Console.WriteLine(""Hello, World!"");
         try
         {
             var textView = CodeEditor.TextArea.TextView;
-            var minimapTextView = MinimapEditor.TextArea.TextView;
             
-            // Get the total document height in the minimap
-            var totalLines = CodeEditor.Document.LineCount;
-            var minimapLineHeight = minimapTextView.DefaultLineHeight;
-            var totalMinimapHeight = totalLines * minimapLineHeight;
+            // Get document info
+            var totalLines = (double)CodeEditor.Document.LineCount;
+            if (totalLines <= 0) totalLines = 1;
             
             // Get the visible area in the main editor
             var visibleLines = textView.ActualHeight / textView.DefaultLineHeight;
             var firstVisibleLine = textView.ScrollOffset.Y / textView.DefaultLineHeight;
             
-            // Use the MinimapBorder's actual height since Canvas doesn't stretch automatically
+            // Use the MinimapBorder's actual height
             var canvasHeight = MinimapBorder.ActualHeight;
             
-            if (totalMinimapHeight > 0 && canvasHeight > 0)
+            if (canvasHeight > 0)
             {
-                var scale = canvasHeight / totalMinimapHeight;
+                // Calculate viewport as proportion of total document
+                var viewportHeightRatio = Math.Min(1.0, visibleLines / totalLines);
+                var viewportTopRatio = firstVisibleLine / totalLines;
                 
-                // If the document fits in the minimap, use full scale
-                if (totalMinimapHeight <= canvasHeight)
-                {
-                    scale = 1.0;
-                }
-                
-                var viewportTop = firstVisibleLine * minimapLineHeight * scale;
-                var viewportHeight = visibleLines * minimapLineHeight * scale;
+                var viewportHeight = viewportHeightRatio * canvasHeight;
+                var viewportTop = viewportTopRatio * canvasHeight;
                 
                 // Clamp values
+                viewportHeight = Math.Max(10, Math.Min(viewportHeight, canvasHeight));
                 viewportTop = Math.Max(0, Math.Min(viewportTop, canvasHeight - viewportHeight));
-                viewportHeight = Math.Max(10, Math.Min(viewportHeight, canvasHeight - viewportTop));
                 
                 Canvas.SetTop(MinimapViewportIndicator, viewportTop);
                 Canvas.SetLeft(MinimapViewportIndicator, 2);
                 MinimapViewportIndicator.Width = MinimapWidth - 6;
                 MinimapViewportIndicator.Height = viewportHeight;
                 
-                // Scroll the minimap to show the current position
+                // Scroll the minimap to keep the visible area in view
+                var minimapTextView = MinimapEditor.TextArea.TextView;
+                var totalMinimapHeight = totalLines * minimapTextView.DefaultLineHeight;
                 if (totalMinimapHeight > canvasHeight)
                 {
                     var minimapScrollOffset = (firstVisibleLine / totalLines) * (totalMinimapHeight - canvasHeight);
@@ -3670,23 +3666,14 @@ Console.WriteLine(""Hello, World!"");
         try
         {
             var canvasHeight = MinimapBorder.ActualHeight;
-            var totalLines = CodeEditor.Document.LineCount;
-            var minimapTextView = MinimapEditor.TextArea.TextView;
-            var totalMinimapHeight = totalLines * minimapTextView.DefaultLineHeight;
+            if (canvasHeight <= 0) return;
             
-            // Calculate which line was clicked
-            double targetLine;
-            if (totalMinimapHeight <= canvasHeight)
-            {
-                // Document fits in minimap - direct mapping
-                targetLine = mouseY / minimapTextView.DefaultLineHeight;
-            }
-            else
-            {
-                // Document is larger - proportional mapping
-                var scale = canvasHeight / totalMinimapHeight;
-                targetLine = mouseY / (minimapTextView.DefaultLineHeight * scale);
-            }
+            var totalLines = (double)CodeEditor.Document.LineCount;
+            if (totalLines <= 0) totalLines = 1;
+            
+            // Calculate which line was clicked using proportional mapping
+            // mouseY / canvasHeight = targetLine / totalLines
+            var targetLine = (mouseY / canvasHeight) * totalLines;
             
             // Center the view on the clicked line
             var textView = CodeEditor.TextArea.TextView;
@@ -6522,6 +6509,16 @@ Console.WriteLine(""Hello, World!"");
             }
         }
         catch { }
+        
+        // Update syntax highlighting based on document type
+        if (doc.RenderMode == RenderMode.Markdown)
+        {
+            RegisterMarkdownSyntaxHighlighting();
+        }
+        else
+        {
+            CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
+        }
         
         // Update UI
         UpdateTabStyles();
