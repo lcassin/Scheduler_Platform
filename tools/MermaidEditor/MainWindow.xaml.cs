@@ -4155,6 +4155,80 @@ Console.WriteLine(""Hello, World!"");
         }
     }
 
+    private async void ExportPdf_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_webViewInitialized) return;
+
+        var dialog = new SaveFileDialog
+        {
+            Filter = "PDF Document (*.pdf)|*.pdf",
+            Title = "Export as PDF",
+            DefaultExt = ".pdf",
+            FileName = GetExportDefaultPath(".pdf")
+        };
+
+        if (dialog.ShowDialog() == true)
+        {
+            try
+            {
+                UpdateLastExportDirectory(dialog.FileName);
+                StatusText.Text = "Exporting PDF...";
+
+                // Use WebView2's built-in PrintToPdf for high-quality output
+                var printSettings = PreviewWebView.CoreWebView2.Environment.CreatePrintSettings();
+                printSettings.ShouldPrintBackgrounds = true;
+                printSettings.ShouldPrintHeaderAndFooter = false;
+
+                // For Mermaid diagrams, use landscape if diagram is wider than tall
+                if (_currentRenderMode == RenderMode.Mermaid)
+                {
+                    var dimsJson = await PreviewWebView.CoreWebView2.ExecuteScriptAsync(
+                        @"(function() {
+                            var svg = document.querySelector('svg');
+                            if (svg) {
+                                var bbox = svg.getBoundingClientRect();
+                                return JSON.stringify({ w: bbox.width, h: bbox.height });
+                            }
+                            return JSON.stringify({ w: 0, h: 0 });
+                        })()");
+
+                    if (dimsJson != "null" && !string.IsNullOrEmpty(dimsJson))
+                    {
+                        var unescaped = System.Text.Json.JsonSerializer.Deserialize<string>(dimsJson);
+                        if (unescaped != null)
+                        {
+                            var dims = System.Text.Json.JsonDocument.Parse(unescaped);
+                            var w = dims.RootElement.GetProperty("w").GetDouble();
+                            var h = dims.RootElement.GetProperty("h").GetDouble();
+                            if (w > h * 1.2)
+                            {
+                                printSettings.Orientation = CoreWebView2PrintOrientation.Landscape;
+                            }
+                        }
+                    }
+                }
+
+                var success = await PreviewWebView.CoreWebView2.PrintToPdfAsync(dialog.FileName, printSettings);
+
+                if (success)
+                {
+                    StatusText.Text = "Exported as PDF";
+                    MessageBox.Show("PDF exported successfully!", "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+                }
+                else
+                {
+                    MessageBox.Show("Failed to export PDF. The file may be in use.", "Export Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    StatusText.Text = "Export failed";
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to export PDF: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                StatusText.Text = "Export failed";
+            }
+        }
+    }
+
     private async void ExportWord_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new SaveFileDialog
@@ -4705,19 +4779,21 @@ Console.WriteLine(""Hello, World!"");
     private void UpdateExportMenuVisibility()
     {
         // Show diagram exports only for Mermaid files
-        // Show Word export for both (Mermaid embeds as PNG, Markdown converts to formatted doc)
+        // Show Word/PDF export for both (works for both Mermaid and Markdown)
         var isMermaid = _currentRenderMode == RenderMode.Mermaid;
         
         // Menu items
         ExportPngMenuItem.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
         ExportSvgMenuItem.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
         ExportEmfMenuItem.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
+        ExportPdfMenuItem.Visibility = Visibility.Visible; // Always visible - works for both
         ExportWordMenuItem.Visibility = Visibility.Visible; // Always visible - works for both
         
         // Toolbar buttons - PNG/SVG/EMF only make sense for Mermaid diagrams
         ExportPngToolbarButton.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
         ExportSvgToolbarButton.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
         ExportEmfToolbarButton.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
+        ExportPdfToolbarButton.Visibility = Visibility.Visible; // Always visible - works for both
         ExportWordToolbarButton.Visibility = Visibility.Visible; // Always visible - works for both
     }
 

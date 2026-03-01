@@ -793,6 +793,11 @@
                         <TextBlock Text="&#xE91B;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                     </MenuItem.Icon>
                 </MenuItem>
+                <MenuItem x:Name="ExportPdfMenuItem" Header="Export as _PDF..." Click="ExportPdf_Click" InputGestureText="Ctrl+Shift+D">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE9F9;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
                 <MenuItem x:Name="ExportWordMenuItem" Header="Export as _Word..." Click="ExportWord_Click" InputGestureText="Ctrl+Shift+W">
                     <MenuItem.Icon>
                         <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
@@ -1137,6 +1142,9 @@
                             </Button>
                             <Button x:Name="ExportEmfToolbarButton" Click="ExportEmf_Click" ToolTip="Export as EMF (Ctrl+Shift+E)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
                                 <TextBlock Text="EMF" FontFamily="Segoe UI" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
+                            </Button>
+                            <Button x:Name="ExportPdfToolbarButton" Click="ExportPdf_Click" ToolTip="Export as PDF (Ctrl+Shift+D)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="PDF" FontFamily="Segoe UI" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
                             </Button>
                             <Button x:Name="ExportWordToolbarButton" Click="ExportWord_Click" ToolTip="Export to Word (Ctrl+Shift+W)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
                                 <TextBlock Text="W" FontFamily="Segoe UI" FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
