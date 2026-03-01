@@ -848,6 +848,33 @@
                         <TextBlock Text="&#xE8EE;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                     </MenuItem.Icon>
                 </MenuItem>
+                <Separator/>
+                <MenuItem Header="_Indent" Click="IndentLines_Click" InputGestureText="Tab">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE291;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="O_utdent" Click="OutdentLines_Click" InputGestureText="Shift+Tab">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE290;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Toggle _Comment" Click="ToggleComment_Click" InputGestureText="Ctrl+/">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE90A;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator/>
+                <MenuItem Header="Move Line _Up" Click="MoveLineUp_Click" InputGestureText="Alt+Up">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE74A;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem Header="Move Line _Down" Click="MoveLineDown_Click" InputGestureText="Alt+Down">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE74B;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
             <MenuItem x:Name="FormatMenu" Header="F_ormat" Style="{StaticResource TopLevelMenuItemStyle}" Visibility="Collapsed">
                 <MenuItem Header="_Bold" Click="FormatBold_Click" InputGestureText="Ctrl+B">
@@ -957,6 +984,32 @@
                 <MenuItem Header="_Fit to Window" Click="FitToWindow_Click" InputGestureText="Ctrl+F">
                     <MenuItem.Icon>
                         <TextBlock Text="&#xE9A6;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator/>
+                <MenuItem x:Name="WordWrapMenuItem" Header="_Word Wrap" Click="WordWrap_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE1A5;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem x:Name="SplitViewMenuItem" Header="Toggle _Preview Panel" Click="SplitView_Click" IsChecked="True">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE8A0;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem x:Name="LineNumbersMenuItem" Header="Toggle _Line Numbers" Click="LineNumbers_Click" IsChecked="True">
+                    <MenuItem.Icon>
+                        <TextBlock Text="1" FontFamily="Consolas" FontSize="12" FontWeight="Bold"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem x:Name="BracketMatchingMenuItem" Header="Toggle _Bracket Matching" Click="BracketMatching_Click" IsChecked="True">
+                    <MenuItem.Icon>
+                        <TextBlock Text="{}{}" FontFamily="Consolas" FontSize="12"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <MenuItem x:Name="MinimapMenuItem" Header="Toggle _Minimap" Click="Minimap_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE700;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                     </MenuItem.Icon>
                 </MenuItem>
                 <Separator/>

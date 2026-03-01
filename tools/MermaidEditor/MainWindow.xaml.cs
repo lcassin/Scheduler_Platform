@@ -3482,6 +3482,10 @@ Console.WriteLine(""Hello, World!"");
         {
             WordWrapToggle.IsChecked = CodeEditor.WordWrap;
         }
+        if (WordWrapMenuItem != null)
+        {
+            WordWrapMenuItem.IsChecked = CodeEditor.WordWrap;
+        }
         
         // Sync minimap word wrap with code editor
         if (_isMinimapVisible && MinimapEditor != null)
@@ -3528,6 +3532,10 @@ Console.WriteLine(""Hello, World!"");
         {
             SplitViewToggle.IsChecked = _isPreviewVisible;
         }
+        if (SplitViewMenuItem != null)
+        {
+            SplitViewMenuItem.IsChecked = _isPreviewVisible;
+        }
     }
 
     private void LineNumbers_Click(object sender, RoutedEventArgs e)
@@ -3536,6 +3544,10 @@ Console.WriteLine(""Hello, World!"");
         if (LineNumbersToggle != null)
         {
             LineNumbersToggle.IsChecked = CodeEditor.ShowLineNumbers;
+        }
+        if (LineNumbersMenuItem != null)
+        {
+            LineNumbersMenuItem.IsChecked = CodeEditor.ShowLineNumbers;
         }
     }
 
@@ -3555,6 +3567,10 @@ Console.WriteLine(""Hello, World!"");
         if (BracketMatchingToggle != null)
         {
             BracketMatchingToggle.IsChecked = _isBracketMatchingEnabled;
+        }
+        if (BracketMatchingMenuItem != null)
+        {
+            BracketMatchingMenuItem.IsChecked = _isBracketMatchingEnabled;
         }
     }
 
@@ -3610,6 +3626,10 @@ Console.WriteLine(""Hello, World!"");
         if (MinimapToggle != null)
         {
             MinimapToggle.IsChecked = _isMinimapVisible;
+        }
+        if (MinimapMenuItem != null)
+        {
+            MinimapMenuItem.IsChecked = _isMinimapVisible;
         }
     }
 
