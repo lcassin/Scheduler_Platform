@@ -89,6 +89,15 @@ public partial class MainWindow : Window
     private System.Windows.Point _tabDragStartPoint;
     private bool _isTabDragging;
     private System.Windows.Controls.Border? _draggedTab;
+    
+    // Auto-save and session restore
+    private readonly DispatcherTimer _autoSaveTimer;
+    private bool _isAutoSaving; // Prevent re-entrancy during auto-save
+    private static readonly string AppDataFolder = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MermaidEditor");
+    private static readonly string AutoSaveFolder = Path.Combine(AppDataFolder, "AutoSave");
+    private static readonly string SessionFilePath = Path.Combine(AppDataFolder, "session.json");
+    private const int AutoSaveIntervalSeconds = 30;
 
     private const string DefaultMermaidCode= @"flowchart TD
     A[Start] --> B[End]";
@@ -151,6 +160,13 @@ Console.WriteLine(""Hello, World!"");
             Interval = TimeSpan.FromMilliseconds(500)
         };
         _renderTimer.Tick += RenderTimer_Tick;
+        
+        // Auto-save timer (fires every 30 seconds)
+        _autoSaveTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(AutoSaveIntervalSeconds)
+        };
+        _autoSaveTimer.Tick += AutoSaveTimer_Tick;
 
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
@@ -158,7 +174,7 @@ Console.WriteLine(""Hello, World!"");
 
         SetupCodeEditor();
         
-        // Initialize multi-document tab system
+        // Initialize multi-document tab system (includes session restore)
         InitializeDocumentTabs();
     }
 
@@ -630,11 +646,15 @@ Console.WriteLine(""Hello, World!"");
             }
             
             // Show New Document dialog if no file was opened via command line
+            // (skip if we restored a session)
             if (_showNewDocumentDialogOnLoad)
             {
                 _showNewDocumentDialogOnLoad = false;
                 ShowStartupNewDocumentDialog();
             }
+            
+            // Start auto-save timer
+            _autoSaveTimer.Start();
         }
         catch (Exception ex)
         {
@@ -817,6 +837,15 @@ Console.WriteLine(""Hello, World!"");
 
     private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
+        // Stop auto-save timer
+        _autoSaveTimer.Stop();
+        
+        // Save session state and auto-save content before prompting user
+        // This ensures we have a backup even if the user cancels or the app crashes later
+        SaveActiveDocumentState();
+        AutoSaveAllDocuments();
+        SaveSessionState();
+        
         // Check all open documents for unsaved changes
         var unsavedDocs = _openDocuments.Where(d => d.IsDirty).ToList();
         
@@ -837,12 +866,19 @@ Console.WriteLine(""Hello, World!"");
                         if (!SaveDocument(doc))
                         {
                             e.Cancel = true;
+                            _autoSaveTimer.Start(); // Restart timer if user cancels
                             return;
                         }
                     }
+                    // User saved all docs - update session to reflect saved state
+                    SaveSessionState();
                     break;
                 case MessageBoxResult.Cancel:
                     e.Cancel = true;
+                    _autoSaveTimer.Start(); // Restart timer if user cancels
+                    return;
+                case MessageBoxResult.No:
+                    // User chose not to save - session already saved above with dirty state
                     break;
             }
         }
@@ -865,6 +901,10 @@ Console.WriteLine(""Hello, World!"");
         UpdateUndoRedoState();
         _renderTimer.Stop();
         _renderTimer.Start();
+        
+        // Reset auto-save timer on text change so it fires 30s after last edit
+        _autoSaveTimer.Stop();
+        _autoSaveTimer.Start();
     }
     
     private void UpdateUndoRedoState()
@@ -6449,6 +6489,9 @@ Console.WriteLine(""Hello, World!"");
             }
         }
         
+        // Clean up temp file for this document
+        DeleteTempFile(doc);
+        
         // Remove the tab element (Border or Button)
         if (doc.TabBorder != null)
         {
@@ -6462,6 +6505,9 @@ Console.WriteLine(""Hello, World!"");
         // Remove from list
         var index = _openDocuments.IndexOf(doc);
         _openDocuments.Remove(doc);
+        
+        // Update session state after closing a document
+        SaveSessionState();
         
         // If this was the active document, switch to another
         if (doc == _activeDocument)
@@ -6556,6 +6602,9 @@ Console.WriteLine(""Hello, World!"");
             
             // Set up file watcher for the saved file
             SetupFileWatcher(doc.FilePath);
+            
+            // Clean up temp file now that content is saved to a real path
+            DeleteTempFile(doc);
             
             return true;
         }
@@ -6713,11 +6762,11 @@ Console.WriteLine(""Hello, World!"");
     /// </summary>
     private void InitializeDocumentTabs()
     {
-        // Create initial document
+        // Check for command-line file argument first (e.g., double-click to open a file)
         var args = Environment.GetCommandLineArgs();
         if (args.Length > 1 && File.Exists(args[1]))
         {
-            // Open file from command line
+            // Open file from command line - this takes priority over session restore
             var content = File.ReadAllText(args[1]);
             var doc = CreateNewDocument(args[1], content);
             doc.LastKnownWriteTime = File.GetLastWriteTimeUtc(args[1]);
@@ -6734,14 +6783,30 @@ Console.WriteLine(""Hello, World!"");
             }
             
             AddToRecentFiles(args[1]);
+            return;
         }
-        else
+        
+        // Try to restore previous session
+        if (RestoreSessionState())
         {
-            // Create a temporary blank document - the New Document dialog will be shown after window loads
-            var doc = CreateNewDocument();
-            SwitchToDocument(doc);
-            _showNewDocumentDialogOnLoad = true;
+            // Session restored successfully - update browser path from first saved document
+            var firstSavedDoc = _openDocuments.FirstOrDefault(d => !string.IsNullOrEmpty(d.FilePath));
+            if (firstSavedDoc != null)
+            {
+                var folder = Path.GetDirectoryName(firstSavedDoc.FilePath);
+                if (!string.IsNullOrEmpty(folder))
+                {
+                    _currentBrowserPath = folder;
+                }
+            }
+            return;
         }
+        
+        // No session to restore and no command-line file
+        // Create a temporary blank document - the New Document dialog will be shown after window loads
+        var newDoc = CreateNewDocument();
+        SwitchToDocument(newDoc);
+        _showNewDocumentDialogOnLoad = true;
     }
     
     private bool _showNewDocumentDialogOnLoad = false;
@@ -7029,6 +7094,301 @@ Console.WriteLine(""Hello, World!"");
     }
     
     #endregion
+    
+    #region Auto-Save and Session Restore
+    
+    /// <summary>
+    /// Auto-save timer tick handler - saves all dirty documents to temp files and persists session state
+    /// </summary>
+    private void AutoSaveTimer_Tick(object? sender, EventArgs e)
+    {
+        if (_isAutoSaving) return;
+        _isAutoSaving = true;
+        
+        try
+        {
+            SaveActiveDocumentState();
+            AutoSaveAllDocuments();
+            SaveSessionState();
+        }
+        catch
+        {
+            // Silently fail - auto-save should never interrupt the user
+        }
+        finally
+        {
+            _isAutoSaving = false;
+        }
+    }
+    
+    /// <summary>
+    /// Captures the active document's current editor state (caret, scroll, etc.)
+    /// so it's up-to-date before saving session state
+    /// </summary>
+    private void SaveActiveDocumentState()
+    {
+        if (_activeDocument == null) return;
+        
+        try
+        {
+            _activeDocument.CaretOffset = CodeEditor.CaretOffset;
+            _activeDocument.VerticalScrollOffset = CodeEditor.VerticalOffset;
+            _activeDocument.HorizontalScrollOffset = CodeEditor.HorizontalOffset;
+            _activeDocument.SelectionStart = CodeEditor.SelectionStart;
+            _activeDocument.SelectionLength = CodeEditor.SelectionLength;
+            _activeDocument.PreviewZoom = _currentZoom;
+            _activeDocument.HasNavigatedAway = _hasNavigatedAway;
+        }
+        catch
+        {
+            // Silently fail
+        }
+    }
+    
+    /// <summary>
+    /// Auto-saves all documents to temp files in the AutoSave directory.
+    /// For untitled documents: saves content to their assigned temp file.
+    /// For saved documents with unsaved changes: saves content to a temp backup file.
+    /// For clean saved documents: no temp file needed (content matches the real file).
+    /// </summary>
+    private void AutoSaveAllDocuments()
+    {
+        try
+        {
+            // Ensure the AutoSave directory exists
+            if (!Directory.Exists(AutoSaveFolder))
+            {
+                Directory.CreateDirectory(AutoSaveFolder);
+            }
+            
+            foreach (var doc in _openDocuments)
+            {
+                // Assign a temp file path if this document doesn't have one yet
+                if (string.IsNullOrEmpty(doc.TempFilePath))
+                {
+                    var ext = doc.RenderMode == RenderMode.Markdown ? ".md" : ".mmd";
+                    doc.TempFilePath = Path.Combine(AutoSaveFolder, $"autosave_{Guid.NewGuid():N}{ext}");
+                }
+                
+                // Always write to temp file for untitled docs, or dirty saved docs
+                if (string.IsNullOrEmpty(doc.FilePath) || doc.IsDirty)
+                {
+                    File.WriteAllText(doc.TempFilePath, doc.TextDocument.Text);
+                }
+            }
+        }
+        catch
+        {
+            // Silently fail - auto-save should never interrupt the user
+        }
+    }
+    
+    /// <summary>
+    /// Saves the current session state to session.json.
+    /// This records all open tabs, their file paths, temp file paths, and editor state.
+    /// </summary>
+    private void SaveSessionState()
+    {
+        try
+        {
+            if (!Directory.Exists(AppDataFolder))
+            {
+                Directory.CreateDirectory(AppDataFolder);
+            }
+            
+            var session = new SessionState
+            {
+                ActiveDocumentIndex = _activeDocument != null ? _openDocuments.IndexOf(_activeDocument) : 0,
+                Documents = _openDocuments.Select(doc => new SessionDocumentState
+                {
+                    FilePath = doc.FilePath,
+                    TempFilePath = doc.TempFilePath,
+                    RenderMode = doc.RenderMode.ToString(),
+                    IsDirty = doc.IsDirty,
+                    CaretOffset = doc.CaretOffset,
+                    VerticalScrollOffset = doc.VerticalScrollOffset,
+                    HorizontalScrollOffset = doc.HorizontalScrollOffset,
+                    PreviewZoom = doc.PreviewZoom,
+                    PreviewScrollLeft = doc.PreviewScrollLeft,
+                    PreviewScrollTop = doc.PreviewScrollTop,
+                    PreviewPanX = doc.PreviewPanX,
+                    PreviewPanY = doc.PreviewPanY
+                }).ToList()
+            };
+            
+            var options = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+            var json = System.Text.Json.JsonSerializer.Serialize(session, options);
+            File.WriteAllText(SessionFilePath, json);
+        }
+        catch
+        {
+            // Silently fail
+        }
+    }
+    
+    /// <summary>
+    /// Attempts to restore the previous session from session.json.
+    /// Returns true if a session was successfully restored, false otherwise.
+    /// </summary>
+    private bool RestoreSessionState()
+    {
+        try
+        {
+            if (!File.Exists(SessionFilePath))
+                return false;
+            
+            var json = File.ReadAllText(SessionFilePath);
+            var session = System.Text.Json.JsonSerializer.Deserialize<SessionState>(json);
+            
+            if (session == null || session.Documents.Count == 0)
+                return false;
+            
+            var restoredDocs = new List<DocumentModel>();
+            
+            foreach (var docState in session.Documents)
+            {
+                DocumentModel? doc = null;
+                
+                if (!string.IsNullOrEmpty(docState.FilePath) && File.Exists(docState.FilePath))
+                {
+                    // Saved file that still exists on disk
+                    string content;
+                    
+                    if (docState.IsDirty && !string.IsNullOrEmpty(docState.TempFilePath) && File.Exists(docState.TempFilePath))
+                    {
+                        // Has unsaved changes - restore from temp file
+                        content = File.ReadAllText(docState.TempFilePath);
+                    }
+                    else
+                    {
+                        // Clean file - read from disk
+                        content = File.ReadAllText(docState.FilePath);
+                    }
+                    
+                    doc = CreateNewDocument(docState.FilePath, content);
+                    doc.LastKnownWriteTime = File.GetLastWriteTimeUtc(docState.FilePath);
+                    doc.IsDirty = docState.IsDirty;
+                    doc.TempFilePath = docState.TempFilePath;
+                    
+                    // Set up file watcher for external change detection
+                    SetupFileWatcher(docState.FilePath);
+                    
+                    // Add to recent files
+                    AddToRecentFiles(docState.FilePath);
+                }
+                else if (!string.IsNullOrEmpty(docState.TempFilePath) && File.Exists(docState.TempFilePath))
+                {
+                    // Untitled document - restore from temp file
+                    var content = File.ReadAllText(docState.TempFilePath);
+                    doc = CreateNewDocument(null, content);
+                    doc.TempFilePath = docState.TempFilePath;
+                    doc.IsDirty = true; // Untitled docs are always considered dirty
+                }
+                else if (!string.IsNullOrEmpty(docState.FilePath))
+                {
+                    // Saved file that no longer exists - skip it
+                    continue;
+                }
+                else
+                {
+                    // No file path and no temp file - skip
+                    continue;
+                }
+                
+                if (doc != null)
+                {
+                    // Restore render mode
+                    if (Enum.TryParse<RenderMode>(docState.RenderMode, out var renderMode))
+                    {
+                        doc.RenderMode = renderMode;
+                    }
+                    
+                    // Restore editor state
+                    doc.CaretOffset = docState.CaretOffset;
+                    doc.VerticalScrollOffset = docState.VerticalScrollOffset;
+                    doc.HorizontalScrollOffset = docState.HorizontalScrollOffset;
+                    doc.PreviewZoom = docState.PreviewZoom;
+                    doc.PreviewScrollLeft = docState.PreviewScrollLeft;
+                    doc.PreviewScrollTop = docState.PreviewScrollTop;
+                    doc.PreviewPanX = docState.PreviewPanX;
+                    doc.PreviewPanY = docState.PreviewPanY;
+                    
+                    restoredDocs.Add(doc);
+                }
+            }
+            
+            if (restoredDocs.Count == 0)
+                return false;
+            
+            // Switch to the previously active document
+            var activeIndex = Math.Clamp(session.ActiveDocumentIndex, 0, restoredDocs.Count - 1);
+            SwitchToDocument(restoredDocs[activeIndex]);
+            
+            // Clean up orphaned temp files
+            CleanupOrphanedTempFiles();
+            
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+    
+    /// <summary>
+    /// Removes temp files from the AutoSave directory that are not referenced by any open document.
+    /// This prevents accumulation of stale temp files over time.
+    /// </summary>
+    private void CleanupOrphanedTempFiles()
+    {
+        try
+        {
+            if (!Directory.Exists(AutoSaveFolder))
+                return;
+            
+            // Collect all temp file paths currently in use
+            var activeTempFiles = new HashSet<string>(
+                _openDocuments
+                    .Where(d => !string.IsNullOrEmpty(d.TempFilePath))
+                    .Select(d => d.TempFilePath!),
+                StringComparer.OrdinalIgnoreCase);
+            
+            // Delete any temp files not in the active set
+            foreach (var file in Directory.GetFiles(AutoSaveFolder, "autosave_*"))
+            {
+                if (!activeTempFiles.Contains(file))
+                {
+                    try { File.Delete(file); } catch { }
+                }
+            }
+        }
+        catch
+        {
+            // Silently fail
+        }
+    }
+    
+    /// <summary>
+    /// Deletes a document's temp file if it exists.
+    /// Called when a document is closed or saved to a real file path.
+    /// </summary>
+    private void DeleteTempFile(DocumentModel doc)
+    {
+        if (!string.IsNullOrEmpty(doc.TempFilePath))
+        {
+            try
+            {
+                if (File.Exists(doc.TempFilePath))
+                {
+                    File.Delete(doc.TempFilePath);
+                }
+            }
+            catch { }
+            doc.TempFilePath = null;
+        }
+    }
+    
+    #endregion
 }
 
 public class MermaidCompletionData: ICompletionData
@@ -7154,6 +7514,9 @@ public class DocumentModel : System.ComponentModel.INotifyPropertyChanged
     // File change detection
     public DateTime LastKnownWriteTime { get; set; }
     public bool ExternalChangeDetected { get; set; }
+    
+    // Auto-save / session restore
+    public string? TempFilePath { get; set; }
     
     // UI element references for the tab
     public System.Windows.Controls.Button? TabButton { get; set; }
@@ -7321,4 +7684,33 @@ public class BracketHighlightRenderer : ICSharpCode.AvalonEdit.Rendering.IBackgr
             }
         }
     }
+}
+
+/// <summary>
+/// Represents the persisted session state for restoring tabs on startup
+/// </summary>
+public class SessionState
+{
+    public int Version { get; set; } = 1;
+    public int ActiveDocumentIndex { get; set; }
+    public List<SessionDocumentState> Documents { get; set; } = new();
+}
+
+/// <summary>
+/// Represents a single document's state within the session
+/// </summary>
+public class SessionDocumentState
+{
+    public string? FilePath { get; set; }
+    public string? TempFilePath { get; set; }
+    public string RenderMode { get; set; } = "Mermaid";
+    public bool IsDirty { get; set; }
+    public int CaretOffset { get; set; }
+    public double VerticalScrollOffset { get; set; }
+    public double HorizontalScrollOffset { get; set; }
+    public double PreviewZoom { get; set; } = 1.0;
+    public double PreviewScrollLeft { get; set; }
+    public double PreviewScrollTop { get; set; }
+    public double PreviewPanX { get; set; }
+    public double PreviewPanY { get; set; }
 }
