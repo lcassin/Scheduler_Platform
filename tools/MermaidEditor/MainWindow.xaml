@@ -930,6 +930,12 @@
                         <TextBlock Text="&#x2015;" FontFamily="Segoe UI" FontSize="14"/>
                     </MenuItem.Icon>
                 </MenuItem>
+                <Separator/>
+                <MenuItem Header="_Table..." Click="InsertTable_Click">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE80A;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
             </MenuItem>
             <MenuItem Header="_View" Style="{StaticResource TopLevelMenuItemStyle}">
                 <MenuItem Header="Zoom _In" Click="ZoomIn_Click" InputGestureText="Ctrl++">
@@ -1060,6 +1066,10 @@
                             <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="4,4"/>
                             <Button Click="FormatHorizontalRule_Click" ToolTip="Horizontal Rule" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
                                 <TextBlock Text="&#x2015;" FontFamily="Segoe UI" FontSize="14" VerticalAlignment="Center"/>
+                            </Button>
+                            <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="4,4"/>
+                            <Button Click="InsertTable_Click" ToolTip="Insert Table" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="&#xE80A;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
                             </Button>
                         </ToolBar>
                     </ToolBarTray>

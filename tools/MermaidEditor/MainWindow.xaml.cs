@@ -2805,6 +2805,38 @@ Console.WriteLine(""Hello, World!"");
         CodeEditor.CaretOffset = caretOffset + insertText.Length;
     }
     
+    private void InsertTable_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        
+        var dialog = new TableGeneratorDialog { Owner = this };
+        if (dialog.ShowDialog() == true && !string.IsNullOrEmpty(dialog.GeneratedMarkdown))
+        {
+            var doc = CodeEditor.Document;
+            var caretOffset = CodeEditor.CaretOffset;
+            var line = doc.GetLineByOffset(caretOffset);
+            
+            // Ensure table starts on a new line with blank line before it
+            var prefix = "";
+            if (caretOffset > 0)
+            {
+                var lineText = doc.GetText(line.Offset, line.Length);
+                if (!string.IsNullOrWhiteSpace(lineText))
+                {
+                    prefix = "\n\n";
+                }
+                else if (line.Offset > 0)
+                {
+                    prefix = "\n";
+                }
+            }
+            
+            var tableText = prefix + dialog.GeneratedMarkdown;
+            doc.Insert(caretOffset, tableText);
+            CodeEditor.CaretOffset = caretOffset + tableText.Length;
+        }
+    }
+    
     private void WrapSelectedText(string prefix, string suffix)
     {
         var doc = CodeEditor.Document;
