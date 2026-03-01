@@ -116,96 +116,99 @@
         
         <!-- Settings Panel -->
         <Border Grid.Column="0" Background="{DynamicResource ThemeMenuBackgroundBrush}" Padding="16">
-            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                <StackPanel>
-                    <TextBlock Text="Print Settings" FontSize="18" FontWeight="Bold" 
-                               Foreground="{DynamicResource ThemeForegroundBrush}" Margin="0,0,0,16"/>
-                    
-                    <!-- Printer Selection -->
-                    <GroupBox Header="Printer">
-                        <StackPanel Margin="8">
-                            <ComboBox x:Name="PrinterCombo" SelectionChanged="PrinterCombo_SelectionChanged"/>
-                        </StackPanel>
-                    </GroupBox>
-                    
-                    <!-- Page Size -->
-                    <GroupBox Header="Page Size">
-                        <StackPanel Margin="8">
-                            <ComboBox x:Name="PageSizeCombo" SelectionChanged="PageSizeCombo_SelectionChanged">
-                                <ComboBoxItem Content="Letter (8.5 x 11 in)" IsSelected="True"/>
-                                <ComboBoxItem Content="Legal (8.5 x 14 in)"/>
-                                <ComboBoxItem Content="A4 (210 x 297 mm)"/>
-                                <ComboBoxItem Content="A3 (297 x 420 mm)"/>
-                                <ComboBoxItem Content="Tabloid (11 x 17 in)"/>
-                            </ComboBox>
-                        </StackPanel>
-                    </GroupBox>
-                    
-                    <!-- Orientation -->
-                    <GroupBox Header="Orientation">
-                        <StackPanel Margin="8">
-                            <RadioButton x:Name="PortraitRadio" Content="Portrait" IsChecked="True" 
-                                         Checked="Orientation_Changed"/>
-                            <RadioButton x:Name="LandscapeRadio" Content="Landscape" 
-                                         Checked="Orientation_Changed"/>
-                        </StackPanel>
-                    </GroupBox>
-                    
-                    <!-- Scaling -->
-                    <GroupBox Header="Scaling">
-                        <StackPanel Margin="8">
-                            <RadioButton x:Name="FitToPageRadio" Content="Fit to single page" IsChecked="True"
-                                         Checked="Scaling_Changed"/>
-                            <RadioButton x:Name="FitToWidthRadio" Content="Fit to page width (may span multiple pages)"
-                                         Checked="Scaling_Changed"/>
-                            <RadioButton x:Name="ActualSizeRadio" Content="Actual size (100%)"
-                                         Checked="Scaling_Changed"/>
-                        </StackPanel>
-                    </GroupBox>
-                    
-                    <!-- Margins -->
-                    <GroupBox Header="Margins">
-                        <StackPanel Margin="8">
-                            <ComboBox x:Name="MarginsCombo" SelectionChanged="MarginsCombo_SelectionChanged">
-                                <ComboBoxItem Content="Normal (1 inch)" IsSelected="True"/>
-                                <ComboBoxItem Content="Narrow (0.5 inch)"/>
-                                <ComboBoxItem Content="Wide (1.5 inch)"/>
-                                <ComboBoxItem Content="None"/>
-                            </ComboBox>
-                            <TextBlock x:Name="MarginWarningText" Text="" TextWrapping="Wrap"
-                                       Foreground="#FFB74D" FontSize="11" Margin="0,4,0,0"
-                                       Visibility="Collapsed"/>
-                        </StackPanel>
-                    </GroupBox>
-                    
-                    <!-- Options -->
-                    <GroupBox Header="Options">
-                        <StackPanel Margin="8">
-                            <CheckBox x:Name="PrintBackgroundCheck" Content="Print background colors" IsChecked="True"
-                                      Checked="Options_Changed" Unchecked="Options_Changed"/>
-                            <CheckBox x:Name="CenterOnPageCheck" Content="Center on page" IsChecked="True"
-                                      Checked="Options_Changed" Unchecked="Options_Changed"/>
-                        </StackPanel>
-                    </GroupBox>
-                    
-                    <!-- Page Info -->
-                    <Border Background="{DynamicResource ThemeToolbarBackgroundBrush}" 
-                            CornerRadius="4" Padding="12" Margin="0,8,0,0">
-                        <StackPanel>
-                            <TextBlock x:Name="PageCountText" Text="Pages: 1" 
-                                       Foreground="{DynamicResource ThemeForegroundBrush}"/>
-                            <TextBlock x:Name="ScaleText" Text="Scale: 100%" 
-                                       Foreground="{DynamicResource ThemeForegroundBrush}" Margin="0,4,0,0"/>
-                        </StackPanel>
-                    </Border>
-                    
-                    <!-- Buttons -->
-                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,0">
-                        <Button x:Name="PrintButton" Content="Print" Click="Print_Click" IsDefault="True"/>
-                        <Button Content="Cancel" Click="Cancel_Click" IsCancel="True"/>
-                    </StackPanel>
+            <DockPanel LastChildFill="True">
+                <!-- Buttons pinned to bottom -->
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,0">
+                    <Button x:Name="PrintButton" Content="Print" Click="Print_Click" IsDefault="True"/>
+                    <Button Content="Cancel" Click="Cancel_Click" IsCancel="True"/>
                 </StackPanel>
-            </ScrollViewer>
+                
+                <!-- Page Info pinned above buttons -->
+                <Border DockPanel.Dock="Bottom" Background="{DynamicResource ThemeToolbarBackgroundBrush}" 
+                        CornerRadius="4" Padding="12" Margin="0,8,0,0">
+                    <StackPanel>
+                        <TextBlock x:Name="PageCountText" Text="Pages: 1" 
+                                   Foreground="{DynamicResource ThemeForegroundBrush}"/>
+                        <TextBlock x:Name="ScaleText" Text="Scale: 100%" 
+                                   Foreground="{DynamicResource ThemeForegroundBrush}" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Border>
+                
+                <!-- Scrollable settings area fills remaining space -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <TextBlock Text="Print Settings" FontSize="18" FontWeight="Bold" 
+                                   Foreground="{DynamicResource ThemeForegroundBrush}" Margin="0,0,0,16"/>
+                        
+                        <!-- Printer Selection -->
+                        <GroupBox Header="Printer">
+                            <StackPanel Margin="8">
+                                <ComboBox x:Name="PrinterCombo" SelectionChanged="PrinterCombo_SelectionChanged"/>
+                            </StackPanel>
+                        </GroupBox>
+                        
+                        <!-- Page Size -->
+                        <GroupBox Header="Page Size">
+                            <StackPanel Margin="8">
+                                <ComboBox x:Name="PageSizeCombo" SelectionChanged="PageSizeCombo_SelectionChanged">
+                                    <ComboBoxItem Content="Letter (8.5 x 11 in)" IsSelected="True"/>
+                                    <ComboBoxItem Content="Legal (8.5 x 14 in)"/>
+                                    <ComboBoxItem Content="A4 (210 x 297 mm)"/>
+                                    <ComboBoxItem Content="A3 (297 x 420 mm)"/>
+                                    <ComboBoxItem Content="Tabloid (11 x 17 in)"/>
+                                </ComboBox>
+                            </StackPanel>
+                        </GroupBox>
+                        
+                        <!-- Orientation -->
+                        <GroupBox Header="Orientation">
+                            <StackPanel Margin="8">
+                                <RadioButton x:Name="PortraitRadio" Content="Portrait" IsChecked="True" 
+                                             Checked="Orientation_Changed"/>
+                                <RadioButton x:Name="LandscapeRadio" Content="Landscape" 
+                                             Checked="Orientation_Changed"/>
+                            </StackPanel>
+                        </GroupBox>
+                        
+                        <!-- Scaling -->
+                        <GroupBox Header="Scaling">
+                            <StackPanel Margin="8">
+                                <RadioButton x:Name="FitToPageRadio" Content="Fit to single page" IsChecked="True"
+                                             Checked="Scaling_Changed"/>
+                                <RadioButton x:Name="FitToWidthRadio" Content="Fit to page width (may span multiple pages)"
+                                             Checked="Scaling_Changed"/>
+                                <RadioButton x:Name="ActualSizeRadio" Content="Actual size (100%)"
+                                             Checked="Scaling_Changed"/>
+                            </StackPanel>
+                        </GroupBox>
+                        
+                        <!-- Margins -->
+                        <GroupBox Header="Margins">
+                            <StackPanel Margin="8">
+                                <ComboBox x:Name="MarginsCombo" SelectionChanged="MarginsCombo_SelectionChanged">
+                                    <ComboBoxItem Content="Normal (1 inch)" IsSelected="True"/>
+                                    <ComboBoxItem Content="Narrow (0.5 inch)"/>
+                                    <ComboBoxItem Content="Wide (1.5 inch)"/>
+                                    <ComboBoxItem Content="None"/>
+                                </ComboBox>
+                                <TextBlock x:Name="MarginWarningText" Text="" TextWrapping="Wrap"
+                                           Foreground="#FFB74D" FontSize="11" Margin="0,4,0,0"
+                                           Visibility="Collapsed"/>
+                            </StackPanel>
+                        </GroupBox>
+                        
+                        <!-- Options -->
+                        <GroupBox Header="Options">
+                            <StackPanel Margin="8">
+                                <CheckBox x:Name="PrintBackgroundCheck" Content="Print background colors" IsChecked="True"
+                                          Checked="Options_Changed" Unchecked="Options_Changed"/>
+                                <CheckBox x:Name="CenterOnPageCheck" Content="Center on page" IsChecked="True"
+                                          Checked="Options_Changed" Unchecked="Options_Changed"/>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
+            </DockPanel>
         </Border>
         
         <!-- Preview Panel -->
