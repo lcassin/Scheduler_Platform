@@ -1,6 +1,8 @@
+using System.Globalization;
 using System.IO;
 using System.Printing;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -647,6 +649,242 @@ public partial class PrintPreviewDialog : Window
         canvas.Children.Add(image);
 
         return canvas;
+    }
+
+    private void SaveAsPdf_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Filter = "PDF Document (*.pdf)|*.pdf",
+            Title = "Save as PDF",
+            DefaultExt = ".pdf",
+            FileName = Path.GetFileNameWithoutExtension(_documentTitle) + ".pdf"
+        };
+
+        if (dialog.ShowDialog() != true)
+            return;
+
+        try
+        {
+            // Use the same page layout logic as printing
+            double effectivePageWidth = LandscapeRadio?.IsChecked == true ? _pageHeight : _pageWidth;
+            double effectivePageHeight = LandscapeRadio?.IsChecked == true ? _pageWidth : _pageHeight;
+            var pageSize = new System.Windows.Size(effectivePageWidth, effectivePageHeight);
+
+            double printableWidth = pageSize.Width - (2 * _marginSize);
+            double printableHeight = pageSize.Height - (2 * _marginSize);
+
+            // Calculate scale (same logic as PrintDocument)
+            double imageDpiX = _diagramImage.DpiX > 0 ? _diagramImage.DpiX : 96;
+            double imageDpiY = _diagramImage.DpiY > 0 ? _diagramImage.DpiY : 96;
+            double normalizedImageWidth = _diagramImage.PixelWidth * 96 / imageDpiX;
+            double normalizedImageHeight = _diagramImage.PixelHeight * 96 / imageDpiY;
+            double scale;
+
+            if (FitToPageRadio?.IsChecked == true)
+            {
+                double scaleX = printableWidth / normalizedImageWidth;
+                double scaleY = printableHeight / normalizedImageHeight;
+                scale = Math.Min(Math.Min(scaleX, scaleY), 1.0);
+            }
+            else if (FitToWidthRadio?.IsChecked == true)
+            {
+                scale = Math.Min(printableWidth / normalizedImageWidth, 1.0);
+            }
+            else
+            {
+                scale = 1.0;
+            }
+
+            double scaledWidth = normalizedImageWidth * scale;
+            double scaledHeight = normalizedImageHeight * scale;
+
+            // Generate page visuals
+            var pageVisuals = new List<Canvas>();
+
+            if (FitToPageRadio?.IsChecked == true || (FitToWidthRadio?.IsChecked == true && scaledHeight <= printableHeight))
+            {
+                pageVisuals.Add(CreatePrintVisual(pageSize, scaledWidth, scaledHeight, 0, printableWidth, printableHeight));
+            }
+            else
+            {
+                int totalPages = (int)Math.Ceiling(scaledHeight / printableHeight);
+                for (int page = 0; page < totalPages; page++)
+                {
+                    double yOffset = page * printableHeight;
+                    pageVisuals.Add(CreatePrintVisual(pageSize, scaledWidth, scaledHeight, yOffset, printableWidth, printableHeight));
+                }
+            }
+
+            // Render each page to a high-res bitmap and write PDF
+            const double renderDpi = 300;
+            double dpiScale = renderDpi / 96.0;
+
+            // Page size in PDF points (1 point = 1/72 inch)
+            double pdfPageWidthPt = effectivePageWidth / 96.0 * 72.0;
+            double pdfPageHeightPt = effectivePageHeight / 96.0 * 72.0;
+
+            var pageJpegData = new List<byte[]>();
+            var pagePixelWidths = new List<int>();
+            var pagePixelHeights = new List<int>();
+
+            foreach (var visual in pageVisuals)
+            {
+                // Force layout
+                visual.Measure(pageSize);
+                visual.Arrange(new Rect(pageSize));
+                visual.UpdateLayout();
+
+                int pixelWidth = (int)(pageSize.Width * dpiScale);
+                int pixelHeight = (int)(pageSize.Height * dpiScale);
+
+                var rtb = new RenderTargetBitmap(pixelWidth, pixelHeight, renderDpi, renderDpi, PixelFormats.Pbgra32);
+                rtb.Render(visual);
+
+                // Encode as JPEG for smaller file size
+                var encoder = new JpegBitmapEncoder { QualityLevel = 95 };
+                encoder.Frames.Add(BitmapFrame.Create(rtb));
+
+                using var ms = new MemoryStream();
+                encoder.Save(ms);
+                pageJpegData.Add(ms.ToArray());
+                pagePixelWidths.Add(pixelWidth);
+                pagePixelHeights.Add(pixelHeight);
+            }
+
+            // Write PDF file
+            WritePdf(dialog.FileName, pageJpegData, pagePixelWidths, pagePixelHeights, pdfPageWidthPt, pdfPageHeightPt);
+
+            System.Windows.MessageBox.Show("PDF saved successfully!", "Save Complete", MessageBoxButton.OK, MessageBoxImage.Information);
+            DialogResult = true;
+            Close();
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show($"Failed to save PDF: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    /// <summary>
+    /// Writes a valid PDF file with JPEG images as pages. No external dependencies required.
+    /// </summary>
+    private static void WritePdf(string filePath, List<byte[]> pageJpegData, List<int> pixelWidths, 
+        List<int> pixelHeights, double pageWidthPt, double pageHeightPt)
+    {
+        using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write);
+        var offsets = new List<long>(); // byte offsets of each object for xref table
+        int objNum = 1;
+
+        // Helper to write a string and track position
+        void Write(string s)
+        {
+            var bytes = Encoding.ASCII.GetBytes(s);
+            fs.Write(bytes, 0, bytes.Length);
+        }
+
+        void WriteBytes(byte[] data)
+        {
+            fs.Write(data, 0, data.Length);
+        }
+
+        string F(double v) => v.ToString("F2", CultureInfo.InvariantCulture);
+
+        // PDF Header
+        Write("%PDF-1.4\n");
+        // Binary comment to indicate binary content
+        Write("%\xe2\xe3\xcf\xd3\n");
+
+        int pageCount = pageJpegData.Count;
+
+        // Object layout:
+        // 1: Catalog
+        // 2: Pages
+        // 3..3+N-1: Page objects (one per page)
+        // 3+N..3+2N-1: Image XObjects (one per page)
+
+        int catalogObj = objNum++;
+        int pagesObj = objNum++;
+        int firstPageObj = objNum;
+        int[] pageObjs = new int[pageCount];
+        for (int i = 0; i < pageCount; i++)
+            pageObjs[i] = objNum++;
+        int[] imageObjs = new int[pageCount];
+        for (int i = 0; i < pageCount; i++)
+            imageObjs[i] = objNum++;
+
+        // Object 1: Catalog
+        offsets.Add(fs.Position);
+        Write($"{catalogObj} 0 obj\n<< /Type /Catalog /Pages {pagesObj} 0 R >>\nendobj\n");
+
+        // Object 2: Pages
+        offsets.Add(fs.Position);
+        var kids = string.Join(" ", pageObjs.Select(p => $"{p} 0 R"));
+        Write($"{pagesObj} 0 obj\n<< /Type /Pages /Kids [ {kids} ] /Count {pageCount} >>\nendobj\n");
+
+        // Page objects
+        for (int i = 0; i < pageCount; i++)
+        {
+            offsets.Add(fs.Position);
+            string imgName = $"Img{i}";
+            // Page content: draw image scaled to full page
+            string contentStream = $"q {F(pageWidthPt)} 0 0 {F(pageHeightPt)} 0 0 cm /{imgName} Do Q\n";
+            byte[] contentBytes = Encoding.ASCII.GetBytes(contentStream);
+
+            // We need a content stream object too
+            int contentObj = objNum++;
+
+            Write($"{pageObjs[i]} 0 obj\n");
+            Write("<< /Type /Page ");
+            Write($"/Parent {pagesObj} 0 R ");
+            Write($"/MediaBox [ 0 0 {F(pageWidthPt)} {F(pageHeightPt)} ] ");
+            Write($"/Contents {contentObj} 0 R ");
+            Write($"/Resources << /XObject << /{imgName} {imageObjs[i]} 0 R >> >> ");
+            Write(">>\nendobj\n");
+
+            // Content stream object (will be written after images in order, but we track offset)
+            // Actually, let's write it right after the page object
+            offsets.Add(fs.Position);
+            Write($"{contentObj} 0 obj\n");
+            Write($"<< /Length {contentBytes.Length} >>\n");
+            Write("stream\n");
+            WriteBytes(contentBytes);
+            Write("endstream\nendobj\n");
+        }
+
+        // Image XObjects
+        for (int i = 0; i < pageCount; i++)
+        {
+            offsets.Add(fs.Position);
+            byte[] jpeg = pageJpegData[i];
+            Write($"{imageObjs[i]} 0 obj\n");
+            Write("<< /Type /XObject /Subtype /Image ");
+            Write($"/Width {pixelWidths[i]} /Height {pixelHeights[i]} ");
+            Write("/ColorSpace /DeviceRGB /BitsPerComponent 8 ");
+            Write("/Filter /DCTDecode ");
+            Write($"/Length {jpeg.Length} ");
+            Write(">>\n");
+            Write("stream\n");
+            WriteBytes(jpeg);
+            Write("\nendstream\nendobj\n");
+        }
+
+        // Cross-reference table
+        long xrefStart = fs.Position;
+        int totalObjs = objNum; // objNum is now one past the last object
+        Write("xref\n");
+        Write($"0 {totalObjs}\n");
+        Write("0000000000 65535 f \n"); // free object entry
+        foreach (long offset in offsets)
+        {
+            Write($"{offset:D10} 00000 n \n");
+        }
+
+        // Trailer
+        Write("trailer\n");
+        Write($"<< /Size {totalObjs} /Root {catalogObj} 0 R >>\n");
+        Write("startxref\n");
+        Write($"{xrefStart}\n");
+        Write("%%EOF\n");
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e)
