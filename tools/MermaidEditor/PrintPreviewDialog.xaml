@@ -105,6 +105,28 @@
             <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
             <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}"/>
             <Setter Property="Margin" Value="0,0,0,8"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="GroupBox">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <!-- Header -->
+                            <TextBlock Grid.Row="0" Text="{TemplateBinding Header}" 
+                                       Foreground="{DynamicResource ThemeForegroundBrush}" 
+                                       FontSize="12" Margin="0,0,0,6"/>
+                            <!-- Content with single-line border -->
+                            <Border Grid.Row="1" 
+                                    BorderBrush="{DynamicResource ThemeBorderBrush}" 
+                                    BorderThickness="1" CornerRadius="4" Padding="4">
+                                <ContentPresenter/>
+                            </Border>
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
     </Window.Resources>
     
