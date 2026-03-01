@@ -4197,7 +4197,7 @@ Console.WriteLine(""Hello, World!"");
                         var unescaped = System.Text.Json.JsonSerializer.Deserialize<string>(dimsJson);
                         if (unescaped != null)
                         {
-                            var dims = System.Text.Json.JsonDocument.Parse(unescaped);
+                            using var dims = System.Text.Json.JsonDocument.Parse(unescaped);
                             var w = dims.RootElement.GetProperty("w").GetDouble();
                             var h = dims.RootElement.GetProperty("h").GetDouble();
                             if (w > h * 1.2)

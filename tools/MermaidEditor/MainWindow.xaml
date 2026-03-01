@@ -731,6 +731,7 @@
         <KeyBinding Gesture="Ctrl+Shift+P" Command="{Binding ExportPngCommand}" />
         <KeyBinding Gesture="Ctrl+Shift+G" Command="{Binding ExportSvgCommand}" />
         <KeyBinding Gesture="Ctrl+Shift+E" Command="{Binding ExportEmfCommand}" />
+        <KeyBinding Gesture="Ctrl+Shift+D" Command="{Binding ExportPdfCommand}" />
         <KeyBinding Gesture="Ctrl+Shift+W" Command="{Binding ExportWordCommand}" />
         <KeyBinding Gesture="Ctrl+B" Command="{Binding FormatBoldCommand}" />
         <KeyBinding Gesture="Ctrl+I" Command="{Binding FormatItalicCommand}" />
