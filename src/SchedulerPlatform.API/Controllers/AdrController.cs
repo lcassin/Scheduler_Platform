@@ -3026,6 +3026,146 @@ public class AdrController : ControllerBase
     }
 
     /// <summary>
+    /// Runs credential verification for a specific list of credential IDs.
+    /// Used for targeted fallout handling after bulk runs - only validates the specified credentials
+    /// rather than all accounts in the system. Accepts a JSON body with a list of credential IDs.
+    /// WARNING: Each credential ID may map to multiple accounts. The ADR API will be called
+    /// for every active account matching the provided credential IDs.
+    /// </summary>
+    /// <param name="request">Request containing the list of credential IDs to verify.</param>
+    /// <param name="cancellationToken">Cancellation token for the operation.</param>
+    /// <returns>The credential verification result including counts of verified and failed credentials.</returns>
+    /// <response code="200">Returns the targeted credential verification result.</response>
+    /// <response code="400">The request is invalid (empty or null credential ID list).</response>
+    /// <response code="500">An error occurred during credential verification.</response>
+    [HttpPost("orchestrate/verify-credentials-by-list")]
+    [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    [ProducesResponseType(typeof(BulkCredentialVerificationResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<BulkCredentialVerificationResult>> VerifyCredentialsByList([FromBody] VerifyCredentialsByListRequest request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (request?.CredentialIds == null || !request.CredentialIds.Any())
+            {
+                return BadRequest(new { error = "Credential ID list is required", message = "Please provide at least one credential ID to verify." });
+            }
+
+            var distinctIds = request.CredentialIds.Distinct().ToList();
+            _logger.LogInformation("Targeted credential verification for {Count} credential IDs triggered by {User}", 
+                distinctIds.Count, User.Identity?.Name ?? "Unknown");
+
+            var result = await _orchestratorService.VerifyCredentialsByListAsync(distinctIds, null, cancellationToken);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during targeted credential verification");
+            return StatusCode(500, new { error = "An error occurred during targeted credential verification", message = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Runs credential verification for credential IDs extracted from an uploaded Excel file.
+    /// The Excel file must contain a column named "CredentialId" (case-insensitive; also accepts
+    /// "Credential Id", "Credential_Id", "CredentialID"). Only the first matching column is used;
+    /// all other columns are ignored. Non-numeric values in the column are skipped.
+    /// Supported file formats: .xlsx (Excel).
+    /// </summary>
+    /// <param name="file">The Excel file containing credential IDs.</param>
+    /// <param name="cancellationToken">Cancellation token for the operation.</param>
+    /// <returns>The credential verification result including counts of verified and failed credentials.</returns>
+    /// <response code="200">Returns the targeted credential verification result.</response>
+    /// <response code="400">The file is missing, empty, not a valid Excel file, or contains no valid credential IDs.</response>
+    /// <response code="500">An error occurred during credential verification.</response>
+    [HttpPost("orchestrate/verify-credentials-from-file")]
+    [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
+    [ProducesResponseType(typeof(BulkCredentialVerificationResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [RequestSizeLimit(10_485_760)] // 10 MB limit
+    public async Task<ActionResult<BulkCredentialVerificationResult>> VerifyCredentialsFromFile(IFormFile file, CancellationToken cancellationToken)
+    {
+        try
+        {
+            if (file == null || file.Length == 0)
+            {
+                return BadRequest(new { error = "File is required", message = "Please upload an Excel file (.xlsx) containing credential IDs." });
+            }
+
+            var extension = Path.GetExtension(file.FileName)?.ToLowerInvariant();
+            if (extension != ".xlsx")
+            {
+                return BadRequest(new { error = "Invalid file format", message = "Only Excel files (.xlsx) are supported. Please upload a valid .xlsx file." });
+            }
+
+            // Parse credential IDs from Excel file
+            var credentialIds = new List<int>();
+            using (var stream = file.OpenReadStream())
+            {
+                using var workbook = new ClosedXML.Excel.XLWorkbook(stream);
+                var worksheet = workbook.Worksheets.First();
+                
+                // Find the CredentialId column (case-insensitive, flexible naming)
+                int credentialIdColumn = -1;
+                var headerRow = worksheet.Row(1);
+                var lastColumnUsed = worksheet.LastColumnUsed()?.ColumnNumber() ?? 0;
+                
+                for (int col = 1; col <= lastColumnUsed; col++)
+                {
+                    var headerValue = headerRow.Cell(col).GetString()?.Trim() ?? "";
+                    var normalized = headerValue.Replace(" ", "").Replace("_", "").ToLowerInvariant();
+                    if (normalized == "credentialid")
+                    {
+                        credentialIdColumn = col;
+                        break;
+                    }
+                }
+
+                if (credentialIdColumn == -1)
+                {
+                    return BadRequest(new { 
+                        error = "CredentialId column not found", 
+                        message = "The Excel file must contain a column named 'CredentialId' (also accepts 'Credential Id', 'Credential_Id', 'CredentialID'). Please check the column headers in your file." 
+                    });
+                }
+
+                // Read credential IDs from the column (skip header row)
+                var lastRowUsed = worksheet.LastRowUsed()?.RowNumber() ?? 1;
+                for (int row = 2; row <= lastRowUsed; row++)
+                {
+                    var cellValue = worksheet.Cell(row, credentialIdColumn).GetString()?.Trim();
+                    if (!string.IsNullOrEmpty(cellValue) && int.TryParse(cellValue, out var credentialId) && credentialId > 0)
+                    {
+                        credentialIds.Add(credentialId);
+                    }
+                }
+            }
+
+            if (!credentialIds.Any())
+            {
+                return BadRequest(new { 
+                    error = "No valid credential IDs found", 
+                    message = "The CredentialId column was found but contained no valid positive integer values. Please check the data in your file." 
+                });
+            }
+
+            var distinctIds = credentialIds.Distinct().ToList();
+            _logger.LogInformation("Targeted credential verification from file '{FileName}' with {Count} unique credential IDs triggered by {User}", 
+                file.FileName, distinctIds.Count, User.Identity?.Name ?? "Unknown");
+
+            var result = await _orchestratorService.VerifyCredentialsByListAsync(distinctIds, null, cancellationToken);
+            return Ok(result);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during credential verification from uploaded file");
+            return StatusCode(500, new { error = "An error occurred during credential verification from file", message = ex.Message });
+        }
+    }
+
+    /// <summary>
     /// Triggers manual ADR request processing for jobs that are ready (credential verified and at NextRunDate).
     /// </summary>
     /// <param name="cancellationToken">Cancellation token for the operation.</param>
@@ -5771,6 +5911,18 @@ public class TestModeStatusResponse
     /// Maximum number of rebill jobs per orchestration run when test mode is enabled.
     /// </summary>
     public int TestModeMaxRebillJobs { get; set; }
+}
+
+/// <summary>
+/// Request body for targeted credential verification by a list of credential IDs.
+/// </summary>
+public class VerifyCredentialsByListRequest
+{
+    /// <summary>
+    /// List of credential IDs to verify. Each credential ID may map to multiple accounts.
+    /// Duplicate values will be automatically de-duplicated before processing.
+    /// </summary>
+    public List<int> CredentialIds { get; set; } = new();
 }
 
 #endregion

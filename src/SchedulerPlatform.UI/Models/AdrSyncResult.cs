@@ -202,3 +202,13 @@ public class BlacklistCountsResult
     public int CurrentCount { get; set; }
     public int FutureCount { get; set; }
 }
+
+public class BulkCredentialVerificationResult
+{
+    public int AccountsProcessed { get; set; }
+    public int CredentialsVerified { get; set; }
+    public int CredentialsFailed { get; set; }
+    public int Errors { get; set; }
+    public List<string> ErrorMessages { get; set; } = new();
+    public TimeSpan Duration { get; set; }
+}
