@@ -36,6 +36,17 @@ public interface IAdrOrchestratorService
     Task<BulkCredentialVerificationResult> VerifyAllAccountCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, int? testrun=null);
     
     /// <summary>
+    /// Runs credential verification (AttemptLogin) for accounts matching a specific list of credential IDs.
+    /// Used for targeted fallout handling after bulk runs - only validates the specified credentials
+    /// rather than all accounts in the system.
+    /// </summary>
+    /// <param name="credentialIds">List of credential IDs to verify</param>
+    /// <param name="progressCallback">Optional callback to report progress (current, total)</param>
+    /// <param name="cancellationToken">Cancellation token for the operation</param>
+    /// <returns>Results of the targeted credential verification operation</returns>
+    Task<BulkCredentialVerificationResult> VerifyCredentialsByListAsync(List<int> credentialIds, Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
+    
+    /// <summary>
     /// Processes weekly rebill checks for accounts whose expected billing day of week matches today.
     /// Rebill checks look for updated invoices, partial invoices, and off-cycle invoices.
     /// Unlike regular ADR requests, rebill checks do NOT create Zendesk tickets when no document is found
@@ -2287,6 +2298,162 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             _logger.LogError(ex, "Bulk credential verification failed");
             result.Errors++;
             result.ErrorMessages.Add($"Bulk credential verification failed: {ex.Message}");
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Runs credential verification (AttemptLogin) for accounts matching a specific list of credential IDs.
+    /// Used for targeted fallout handling after bulk runs - only validates the specified credentials
+    /// rather than all accounts in the system. Reuses the same parallel verification pattern
+    /// as VerifyAllAccountCredentialsAsync but filters to only the provided credential IDs.
+    /// </summary>
+    public async Task<BulkCredentialVerificationResult> VerifyCredentialsByListAsync(List<int> credentialIds, Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    {
+        var result = new BulkCredentialVerificationResult();
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var maxParallel = GetMaxParallelRequests();
+
+        try
+        {
+            _logger.LogInformation("Starting targeted credential verification for {Count} credential IDs with {MaxParallel} parallel workers", credentialIds.Count, maxParallel);
+
+            // Get accounts matching the provided credential IDs (batched in 5,000 chunks at repository level)
+            var matchingAccounts = (await _unitOfWork.AdrAccounts.GetAccountsByCredentialIdsAsync(credentialIds)).ToList();
+            var totalAccounts = matchingAccounts.Count;
+            
+            _logger.LogInformation("Found {AccountCount} active accounts matching {CredentialCount} credential IDs for targeted verification", 
+                totalAccounts, credentialIds.Count);
+
+            // Report initial progress (0 of total)
+            progressCallback?.Invoke(0, totalAccounts);
+
+            if (!matchingAccounts.Any())
+            {
+                stopwatch.Stop();
+                result.Duration = stopwatch.Elapsed;
+                return result;
+            }
+
+            // Build list of accounts to process with their credential info
+            var accountsToProcess = matchingAccounts
+                .Select(a => (AccountId: a.Id, CredentialId: a.CredentialId, VMAccountId: a.VMAccountId, InterfaceAccountId: a.InterfaceAccountId))
+                .ToList();
+
+            _logger.LogInformation("Starting parallel API calls for {Count} accounts (targeted verification)", accountsToProcess.Count);
+
+            // Call ADR API in parallel with semaphore to limit concurrency
+            var apiResults = new ConcurrentDictionary<int, AdrApiResult>();
+            using var semaphore = new SemaphoreSlim(maxParallel, maxParallel);
+            int completedApiCalls = 0;
+            var totalApiCalls = accountsToProcess.Count;
+
+            var tasks = accountsToProcess.Select(async accountInfo =>
+            {
+                await semaphore.WaitAsync(cancellationToken);
+                try
+                {
+                    // Call ADR API with AttemptLogin request type
+                    // Note: We pass 0 for jobId since this is a targeted check not tied to a specific job
+                    var apiResult = await CallAdrApiAsync(
+                        AdrRequestType.AttemptLogin,
+                        accountInfo.CredentialId,
+                        null, // No date range for credential check
+                        null,
+                        0, // No job ID - this is a targeted account check
+                        accountInfo.VMAccountId,
+                        accountInfo.InterfaceAccountId,
+                        cancellationToken);
+
+                    apiResults[accountInfo.AccountId] = apiResult;
+
+                    // Log and report progress every 100 completions or at the end
+                    var count = Interlocked.Increment(ref completedApiCalls);
+                    if (count % 100 == 0 || count == totalApiCalls)
+                    {
+                        progressCallback?.Invoke(count, totalApiCalls);
+                    }
+                    if (count % 1000 == 0 || count == totalApiCalls)
+                    {
+                        _logger.LogInformation(
+                            "Targeted credential verification API calls: {Completed}/{Total} completed ({Percent:F1}%)",
+                            count, totalApiCalls, (double)count / totalApiCalls * 100);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error calling ADR API for account {AccountId} during targeted verification", accountInfo.AccountId);
+                    apiResults[accountInfo.AccountId] = new AdrApiResult
+                    {
+                        IsSuccess = false,
+                        IsError = true,
+                        ErrorMessage = ex.Message
+                    };
+
+                    var count = Interlocked.Increment(ref completedApiCalls);
+                    if (count % 100 == 0 || count == totalApiCalls)
+                    {
+                        progressCallback?.Invoke(count, totalApiCalls);
+                    }
+                }
+                finally
+                {
+                    semaphore.Release();
+                }
+            });
+
+            await Task.WhenAll(tasks);
+
+            _logger.LogInformation("Completed {Count} parallel API calls for targeted verification, tallying results", apiResults.Count);
+
+            // Tally results (no database updates needed - this is just a verification check)
+            foreach (var accountInfo in accountsToProcess)
+            {
+                result.AccountsProcessed++;
+
+                if (!apiResults.TryGetValue(accountInfo.AccountId, out var apiResult))
+                {
+                    result.Errors++;
+                    result.ErrorMessages.Add($"Account {accountInfo.AccountId}: No API result found");
+                    continue;
+                }
+
+                if (apiResult.IsSuccess)
+                {
+                    result.CredentialsVerified++;
+                }
+                else if (apiResult.IsError)
+                {
+                    result.Errors++;
+                    if (result.ErrorMessages.Count < 100) // Limit error messages to prevent huge response
+                    {
+                        result.ErrorMessages.Add($"Account {accountInfo.AccountId} (CredentialId: {accountInfo.CredentialId}): {apiResult.ErrorMessage}");
+                    }
+                }
+                else
+                {
+                    result.CredentialsFailed++;
+                }
+            }
+
+            stopwatch.Stop();
+            result.Duration = stopwatch.Elapsed;
+
+            _logger.LogInformation(
+                "Targeted credential verification completed in {Duration}. Processed: {Processed}, Verified: {Verified}, Failed: {Failed}, Errors: {Errors}",
+                result.Duration, result.AccountsProcessed, result.CredentialsVerified, result.CredentialsFailed, result.Errors);
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Targeted credential verification failed for {Count} credential IDs", credentialIds.Count);
+            result.Errors++;
+            result.ErrorMessages.Add($"Targeted credential verification failed: {ex.Message}");
             throw;
         }
     }

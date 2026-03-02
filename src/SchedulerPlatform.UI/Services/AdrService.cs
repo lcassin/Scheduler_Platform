@@ -706,6 +706,33 @@ public class AdrService : IAdrService
     }
 
     #endregion
+
+    #region Credential Validation by List
+
+    public async Task<BulkCredentialVerificationResult> VerifyCredentialsByListAsync(List<int> credentialIds)
+    {
+        var request = new { CredentialIds = credentialIds };
+        var response = await _httpClient.PostAsJsonAsync("adr/orchestrate/verify-credentials-by-list", request);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<BulkCredentialVerificationResult>();
+        return result ?? new BulkCredentialVerificationResult();
+    }
+
+    public async Task<BulkCredentialVerificationResult> VerifyCredentialsFromFileAsync(byte[] fileContent, string fileName)
+    {
+        using var content = new MultipartFormDataContent();
+        using var fileStreamContent = new ByteArrayContent(fileContent);
+        fileStreamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+        content.Add(fileStreamContent, "file", fileName);
+
+        var response = await _httpClient.PostAsync("adr/orchestrate/verify-credentials-from-file", content);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<BulkCredentialVerificationResult>();
+        return result ?? new BulkCredentialVerificationResult();
+    }
+
+    #endregion
 }
 
 internal class AdrConfigurationResponse

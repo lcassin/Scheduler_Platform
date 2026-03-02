@@ -38,6 +38,15 @@ public interface IAdrAccountRepository : IRepository<AdrAccount>
     Task<IEnumerable<AdrAccount>> GetAllActiveAccountsForCredentialCheckAsync(int? testrun=null);
     
     /// <summary>
+    /// Gets active accounts filtered by a specific list of credential IDs.
+    /// Used for targeted credential validation (e.g., fallout handling after bulk runs).
+    /// Processes in batches of 5,000 to avoid memory issues with large lists.
+    /// </summary>
+    /// <param name="credentialIds">List of credential IDs to filter by</param>
+    /// <returns>Active, non-deleted accounts matching the provided credential IDs</returns>
+    Task<IEnumerable<AdrAccount>> GetAccountsByCredentialIdsAsync(List<int> credentialIds);
+    
+    /// <summary>
     /// Gets accounts for weekly rebill processing where the expected billing day of week matches the specified day.
     /// Uses OverriddenDateTime if manually set, otherwise uses ExpectedNextDateTime.
     /// This is optimized to filter at the database level rather than loading all accounts into memory.
