@@ -45,7 +45,7 @@ public static class SvgIconHelper
     /// </summary>
     public static DrawingImage? GetDrawingImage(string svgFileName, Brush? fillBrush = null)
     {
-        var brush = fillBrush ?? new SolidColorBrush(Color.FromRgb(0xF1, 0xF1, 0xF1)); // Default light text color
+        var brush = fillBrush ?? new SolidColorBrush(ThemeManager.IsDarkTheme ? Color.FromRgb(0xF1, 0xF1, 0xF1) : Color.FromRgb(0x1E, 0x1E, 0x1E));
         var cacheKey = $"{svgFileName}_{brush}";
 
         if (_cache.TryGetValue(cacheKey, out var cached))
@@ -299,7 +299,7 @@ public static class SvgIconHelper
         if (lower == "#000000" || lower == "#000" || lower == "#212121" || lower == "#444"
             || lower == "#444444" || lower == "#101010")
         {
-            return new SolidColorBrush(Color.FromRgb(0xF1, 0xF1, 0xF1));
+            return new SolidColorBrush(ThemeManager.IsDarkTheme ? Color.FromRgb(0xF1, 0xF1, 0xF1) : Color.FromRgb(0x1E, 0x1E, 0x1E));
         }
 
         try

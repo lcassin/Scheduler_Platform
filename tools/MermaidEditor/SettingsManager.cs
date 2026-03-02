@@ -147,4 +147,7 @@ public class AppSettings
 
     [JsonPropertyName("aiModel")]
     public string AiModel { get; set; } = "gpt-4o"; // default model
+
+    [JsonPropertyName("aiEndpoint")]
+    public string AiEndpoint { get; set; } = ""; // Optional custom endpoint (e.g. Azure OpenAI)
 }

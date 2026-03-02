@@ -99,6 +99,7 @@ public partial class MainWindow : Window
     private static readonly string SessionFilePath = Path.Combine(AppDataFolder, "session.json");
     // Default auto-save interval; overridden by SettingsManager on load
     private int _autoSaveIntervalSeconds = 30;
+    private bool _lastCaretWasInComment = false;
 
     private const string DefaultMermaidCode= @"flowchart TD
     A[Start] --> B[End]";
@@ -137,6 +138,7 @@ Console.WriteLine(""Hello, World!"");
     public ICommand FindReplaceCommand { get; }
     public ICommand FindNextCommand { get; }
     public ICommand SettingsCommand { get; }
+    public ICommand AskAiCommand { get; }
 
     public MainWindow()
     {
@@ -157,6 +159,7 @@ Console.WriteLine(""Hello, World!"");
         FindReplaceCommand = new RelayCommand(_ => FindReplace_Click(this, new RoutedEventArgs()));
         FindNextCommand = new RelayCommand(_ => FindNext_Click(this, new RoutedEventArgs()));
         SettingsCommand = new RelayCommand(_ => Settings_Click(this, new RoutedEventArgs()));
+        AskAiCommand = new RelayCommand(_ => AskAi_Click(this, new RoutedEventArgs()));
 
         _renderTimer = new DispatcherTimer
         {
@@ -814,6 +817,9 @@ Console.WriteLine(""Hello, World!"");
                 // Markdown: check for <!-- --> single-line comments or lines starting with <!--
                 isComment = lineText.StartsWith("<!--");
             }
+
+            if (isComment == _lastCaretWasInComment) return;
+            _lastCaretWasInComment = isComment;
 
             if (isComment)
             {
@@ -5464,6 +5470,8 @@ Console.WriteLine(""Hello, World!"");
         UpdateEditorTheme();
         UpdateTitleBarTheme();
         UpdateTabStyles(); // Update tab colors for new theme
+        SvgIconHelper.ClearCache();
+        InitializeIcons();
         RenderPreview(); // Re-render preview with new theme
     }
 
@@ -5491,11 +5499,30 @@ Console.WriteLine(""Hello, World!"");
                 UpdateEditorTheme();
                 UpdateTitleBarTheme();
                 UpdateTabStyles();
+                SvgIconHelper.ClearCache();
+                InitializeIcons();
                 RenderPreview();
             }
 
             // Apply editor settings
             ApplySettingsToEditor();
+        }
+    }
+
+    private void AskAi_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new AskAiDialog
+        {
+            Owner = this,
+            EditorContent = CodeEditor.Text,
+            FileType = _currentRenderMode == RenderMode.Mermaid ? "Mermaid" : "Markdown"
+        };
+
+        if (dialog.ShowDialog() == true && !string.IsNullOrEmpty(dialog.TextToInsert))
+        {
+            // Insert the AI-generated text at the current cursor position
+            var offset = CodeEditor.CaretOffset;
+            CodeEditor.Document.Insert(offset, dialog.TextToInsert);
         }
     }
 
