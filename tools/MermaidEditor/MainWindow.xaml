@@ -80,28 +80,39 @@
                                 Padding="{TemplateBinding Padding}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="CheckMark"/>
                                     <ColumnDefinition Width="Auto" SharedSizeGroup="Icon"/>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto" SharedSizeGroup="Shortcut"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
+                                <!-- Checkmark glyph for IsChecked toggle menu items -->
+                                <Path x:Name="CheckMark"
+                                      Data="M 0 5 L 3 8 L 8 0"
+                                      Stroke="{DynamicResource ThemeForegroundBrush}"
+                                      StrokeThickness="1.5"
+                                      VerticalAlignment="Center"
+                                      Margin="0,0,4,0"
+                                      Width="10" Height="10"
+                                      Visibility="Collapsed"/>
                                 <ContentPresenter x:Name="Icon" 
+                                                  Grid.Column="1"
                                                   Content="{TemplateBinding Icon}" 
                                                   ContentSource="Icon"
                                                   VerticalAlignment="Center"
                                                   Width="16" Height="16"
                                                   Margin="0,0,8,0"/>
-                                <ContentPresenter Grid.Column="1" 
+                                <ContentPresenter Grid.Column="2" 
                                                   ContentSource="Header" 
                                                   RecognizesAccessKey="True"
                                                   VerticalAlignment="Center"/>
-                                <TextBlock Grid.Column="2" 
+                                <TextBlock Grid.Column="3" 
                                            Text="{TemplateBinding InputGestureText}"
                                            Foreground="{DynamicResource ThemeDisabledForegroundBrush}"
                                            Margin="24,0,0,0"
                                            VerticalAlignment="Center"/>
                                 <Path x:Name="SubMenuArrow" 
-                                      Grid.Column="3"
+                                      Grid.Column="4"
                                       Data="M 0 0 L 4 4 L 0 8 Z"
                                       Fill="{DynamicResource ThemeForegroundBrush}"
                                       VerticalAlignment="Center"
@@ -133,6 +144,9 @@
                             </Trigger>
                             <Trigger Property="Icon" Value="{x:Null}">
                                 <Setter TargetName="Icon" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -751,12 +765,12 @@
         <!-- Menu Bar -->
         <Menu Grid.Row="0" Grid.IsSharedSizeScope="True">
             <MenuItem Header="_File" Style="{StaticResource TopLevelMenuItemStyle}">
-                <MenuItem Header="_New" Click="New_Click" InputGestureText="Ctrl+N">
+                <MenuItem x:Name="NewMenuItem" Header="_New" Click="New_Click" InputGestureText="Ctrl+N">
                     <MenuItem.Icon>
                         <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                     </MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Header="_Open..." Click="Open_Click" InputGestureText="Ctrl+O">
+                <MenuItem x:Name="OpenMenuItem" Header="_Open..." Click="Open_Click" InputGestureText="Ctrl+O">
                     <MenuItem.Icon>
                         <TextBlock Text="&#xE8E5;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                     </MenuItem.Icon>
@@ -860,7 +874,7 @@
                         <TextBlock Text="&#xE290;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                     </MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Header="Toggle _Comment" Click="ToggleComment_Click" InputGestureText="Ctrl+/">
+                <MenuItem x:Name="ToggleCommentMenuItem" Header="Toggle _Comment" Click="ToggleComment_Click" InputGestureText="Ctrl+/">
                     <MenuItem.Icon>
                         <TextBlock Text="&#xE90A;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                     </MenuItem.Icon>
@@ -1030,18 +1044,18 @@
                 </MenuItem>
             </MenuItem>
             <MenuItem Header="_Help" Style="{StaticResource TopLevelMenuItemStyle}">
-                <MenuItem Header="Mermaid _Syntax Reference" Click="SyntaxHelp_Click">
+                <MenuItem x:Name="MermaidHelpMenuItem" Header="Mermaid _Syntax Reference" Click="SyntaxHelp_Click">
                     <MenuItem.Icon>
                         <TextBlock Text="&#xE897;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                     </MenuItem.Icon>
                 </MenuItem>
-                <MenuItem Header="M_arkdown Reference" Click="MarkdownHelp_Click">
+                <MenuItem x:Name="MarkdownHelpMenuItem" Header="M_arkdown Reference" Click="MarkdownHelp_Click">
                     <MenuItem.Icon>
                         <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                     </MenuItem.Icon>
                 </MenuItem>
                 <Separator/>
-                <MenuItem Header="_About" Click="About_Click">
+                <MenuItem x:Name="AboutMenuItem" Header="_About" Click="About_Click">
                     <MenuItem.Icon>
                         <TextBlock Text="&#xE946;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                     </MenuItem.Icon>
@@ -1052,20 +1066,40 @@
         <!-- Toolbar -->
         <Border Grid.Row="1" Background="{DynamicResource ThemeMenuBackgroundBrush}" Padding="6">
             <StackPanel Orientation="Horizontal">
-                <!-- Main Toolbar (icon-only) -->
+                <!-- File + Export Toolbar -->
                 <Border Background="{DynamicResource ThemeToolbarBackgroundBrush}" CornerRadius="4" HorizontalAlignment="Left">
                     <ToolBarTray Background="Transparent">
                         <ToolBar Band="1" BandIndex="1" Background="Transparent">
-                            <Button Click="New_Click" ToolTip="New (Ctrl+N)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                            <Button x:Name="NewToolbarButton" Click="New_Click" ToolTip="New (Ctrl+N)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
                                 <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
                             </Button>
-                            <Button Click="Open_Click" ToolTip="Open (Ctrl+O)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                            <Button x:Name="OpenToolbarButton" Click="Open_Click" ToolTip="Open (Ctrl+O)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
                                 <TextBlock Text="&#xE8E5;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
                             </Button>
-                            <Button Click="Save_Click" ToolTip="Save (Ctrl+S)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                            <Button x:Name="SaveToolbarButton" Click="Save_Click" ToolTip="Save (Ctrl+S)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
                                 <TextBlock Text="&#xE74E;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
                             </Button>
                             <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="4,4"/>
+                            <Button x:Name="ExportPngToolbarButton" Click="ExportPng_Click" ToolTip="Export as PNG (Ctrl+Shift+P)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="&#xEB9F;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            </Button>
+                            <Button x:Name="ExportSvgToolbarButton" Click="ExportSvg_Click" ToolTip="Export as SVG (Ctrl+Shift+G)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="SVG" FontFamily="Segoe UI" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
+                            </Button>
+                            <Button x:Name="ExportEmfToolbarButton" Click="ExportEmf_Click" ToolTip="Export as EMF (Ctrl+Shift+E)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="EMF" FontFamily="Segoe UI" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
+                            </Button>
+                            <Button x:Name="ExportWordToolbarButton" Click="ExportWord_Click" ToolTip="Export to Word (Ctrl+Shift+W)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="W" FontFamily="Segoe UI" FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
+                            </Button>
+                        </ToolBar>
+                    </ToolBarTray>
+                </Border>
+                
+                <!-- Undo/Redo Toolbar -->
+                <Border Background="{DynamicResource ThemeToolbarBackgroundBrush}" CornerRadius="4" HorizontalAlignment="Left" Margin="6,0,0,0">
+                    <ToolBarTray Background="Transparent">
+                        <ToolBar Band="1" BandIndex="1" Background="Transparent">
                             <Button x:Name="UndoButton" Click="Undo_Click" ToolTip="Undo (Ctrl+Z)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4" IsEnabled="False">
                                 <TextBlock Text="&#xE7A7;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
                             </Button>
@@ -1146,7 +1180,7 @@
                                 <TextBlock Text="&#xE290;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
                             </Button>
                             <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="4,4"/>
-                            <Button Click="ToggleComment_Click" ToolTip="Toggle Comment (Ctrl+/)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                            <Button x:Name="ToggleCommentToolbarButton" Click="ToggleComment_Click" ToolTip="Toggle Comment (Ctrl+/)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
                                 <TextBlock Text="&#xE90A;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
                             </Button>
                             <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="4,4"/>
@@ -1156,22 +1190,21 @@
                             <Button Click="MoveLineDown_Click" ToolTip="Move Line Down (Alt+Down)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
                                 <TextBlock Text="&#xE74B;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
                             </Button>
-                            <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="4,4"/>
-                            <ToggleButton x:Name="WordWrapToggle" Click="WordWrap_Click" ToolTip="Toggle Word Wrap" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4">
-                                <TextBlock Text="&#xE1A5;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                            </ToggleButton>
                         </ToolBar>
                     </ToolBarTray>
                 </Border>
                 
-                <!-- View Toolbar (split view, line numbers, bracket matching) -->
+                <!-- View/Toggle Toolbar (split view, line numbers, bracket matching, word wrap, minimap) -->
                 <Border Background="{DynamicResource ThemeToolbarBackgroundBrush}" CornerRadius="4" HorizontalAlignment="Left" Margin="6,0,0,0">
                     <ToolBarTray Background="Transparent">
                         <ToolBar Band="1" BandIndex="1" Background="Transparent">
+                            <ToggleButton x:Name="WordWrapToggle" Click="WordWrap_Click" ToolTip="Toggle Word Wrap" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4">
+                                <TextBlock Text="&#xE1A5;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            </ToggleButton>
+                            <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="4,4"/>
                             <ToggleButton x:Name="SplitViewToggle" Click="SplitView_Click" ToolTip="Toggle Preview Panel" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4" IsChecked="True">
                                 <TextBlock Text="&#xE8A0;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
                             </ToggleButton>
-                            <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="4,4"/>
                             <ToggleButton x:Name="LineNumbersToggle" Click="LineNumbers_Click" ToolTip="Toggle Line Numbers" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4" IsChecked="True">
                                 <TextBlock Text="123" FontFamily="Consolas" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
                             </ToggleButton>
@@ -1181,26 +1214,6 @@
                             <ToggleButton x:Name="MinimapToggle" Click="Minimap_Click" ToolTip="Toggle Minimap" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4" IsChecked="False">
                                 <TextBlock Text="&#xE700;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
                             </ToggleButton>
-                        </ToolBar>
-                    </ToolBarTray>
-                </Border>
-                
-                <!-- Export Toolbar (icon-only) -->
-                <Border Background="{DynamicResource ThemeToolbarBackgroundBrush}" CornerRadius="4" HorizontalAlignment="Left" Margin="6,0,0,0">
-                    <ToolBarTray Background="Transparent">
-                        <ToolBar Band="1" BandIndex="1" Background="Transparent">
-                            <Button x:Name="ExportPngToolbarButton" Click="ExportPng_Click" ToolTip="Export as PNG (Ctrl+Shift+P)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
-                                <TextBlock Text="&#xEB9F;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                            </Button>
-                            <Button x:Name="ExportSvgToolbarButton" Click="ExportSvg_Click" ToolTip="Export as SVG (Ctrl+Shift+G)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
-                                <TextBlock Text="SVG" FontFamily="Segoe UI" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
-                            </Button>
-                            <Button x:Name="ExportEmfToolbarButton" Click="ExportEmf_Click" ToolTip="Export as EMF (Ctrl+Shift+E)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
-                                <TextBlock Text="EMF" FontFamily="Segoe UI" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
-                            </Button>
-                            <Button x:Name="ExportWordToolbarButton" Click="ExportWord_Click" ToolTip="Export to Word (Ctrl+Shift+W)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
-                                <TextBlock Text="W" FontFamily="Segoe UI" FontSize="14" FontWeight="Bold" VerticalAlignment="Center"/>
-                            </Button>
                         </ToolBar>
                     </ToolBarTray>
                 </Border>

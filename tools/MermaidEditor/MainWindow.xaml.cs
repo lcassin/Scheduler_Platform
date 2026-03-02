@@ -640,6 +640,9 @@ Console.WriteLine(""Hello, World!"");
             // Style the toolbar overflow button programmatically
             StyleToolbarOverflowButtons();
             
+            // Initialize SVG icons for toolbar buttons and menu items
+            InitializeIcons();
+            
             // Load recent files
             LoadRecentFiles();
             
@@ -667,6 +670,143 @@ Console.WriteLine(""Hello, World!"");
         }
     }
     
+    #region SVG Icon Management
+
+    private const double IconSize = 18; // Slightly larger than the old 14px font icons
+    private const double MenuIconSize = 16; // Menu item icons stay at 16px
+
+    /// <summary>
+    /// Initializes all toolbar and menu SVG icons at startup.
+    /// Called from MainWindow_Loaded after the window is fully initialized.
+    /// </summary>
+    private void InitializeIcons()
+    {
+        try
+        {
+            // === File toolbar buttons ===
+            SetButtonIcon(NewToolbarButton, "new-file.svg", IconSize);
+            SetButtonIcon(OpenToolbarButton, "open-file.svg", IconSize);
+
+            // === Edit toolbar buttons ===
+            SetButtonIcon(ToggleCommentToolbarButton, "toggle-comment.svg", IconSize);
+
+            // === Export toolbar buttons ===
+            SetButtonIcon(ExportPngToolbarButton, "export-to-png.svg", IconSize);
+            SetButtonIcon(ExportSvgToolbarButton, "export-to-svg.svg", IconSize);
+            SetButtonIcon(ExportWordToolbarButton, "export-to-word.svg", IconSize);
+
+            // === Toggle toolbar buttons (set initial icon based on current state) ===
+            UpdateWordWrapIcons();
+            UpdateSplitViewIcons();
+            UpdateLineNumbersIcons();
+            UpdateBracketMatchingIcons();
+            UpdateMinimapIcons();
+
+            // === File menu items ===
+            SetMenuItemIcon(NewMenuItem, "new-file.svg");
+            SetMenuItemIcon(OpenMenuItem, "open-file.svg");
+
+            // === Edit menu items ===
+            SetMenuItemIcon(ToggleCommentMenuItem, "toggle-comment.svg");
+
+            // === Export menu items ===
+            SetMenuItemIcon(ExportPngMenuItem, "export-to-png.svg");
+            SetMenuItemIcon(ExportSvgMenuItem, "export-to-svg.svg");
+            SetMenuItemIcon(ExportWordMenuItem, "export-to-word.svg");
+
+            // === Help menu items ===
+            SetMenuItemIcon(MermaidHelpMenuItem, "help-mermaid-icon.svg");
+            SetMenuItemIcon(MarkdownHelpMenuItem, "markdown-help-icon.svg");
+            SetMenuItemIcon(AboutMenuItem, "about-icon.svg");
+        }
+        catch (Exception)
+        {
+            // Silently fail - icons are cosmetic, app still works with fallback text icons
+        }
+    }
+
+    /// <summary>
+    /// Sets the Content of a Button to an SVG icon Image.
+    /// </summary>
+    private static void SetButtonIcon(System.Windows.Controls.Primitives.ButtonBase? button, string svgFileName, double size)
+    {
+        if (button == null) return;
+        var icon = SvgIconHelper.CreateIcon(svgFileName, size);
+        if (icon != null)
+        {
+            button.Content = icon;
+        }
+    }
+
+    /// <summary>
+    /// Sets the Icon property of a MenuItem to an SVG icon Image.
+    /// </summary>
+    private static void SetMenuItemIcon(System.Windows.Controls.MenuItem? menuItem, string svgFileName, double size = MenuIconSize)
+    {
+        if (menuItem == null) return;
+        var icon = SvgIconHelper.CreateIcon(svgFileName, size);
+        if (icon != null)
+        {
+            menuItem.Icon = icon;
+        }
+    }
+
+    /// <summary>
+    /// Updates the Word Wrap toggle button and menu item icons based on current state.
+    /// Word wrap uses the same icon (word-wrap.svg) - toggle state shown by border.
+    /// </summary>
+    private void UpdateWordWrapIcons()
+    {
+        SetButtonIcon(WordWrapToggle, "word-wrap.svg", IconSize);
+        SetMenuItemIcon(WordWrapMenuItem, "word-wrap.svg");
+    }
+
+    /// <summary>
+    /// Updates the Split View (Preview Panel) toggle icons based on current state.
+    /// Uses preview-panel-open.svg when visible, preview-panel-closed.svg when hidden.
+    /// </summary>
+    private void UpdateSplitViewIcons()
+    {
+        var svgName = _isPreviewVisible ? "preview-panel-open.svg" : "preview-panel-closed.svg";
+        SetButtonIcon(SplitViewToggle, svgName, IconSize);
+        SetMenuItemIcon(SplitViewMenuItem, svgName);
+    }
+
+    /// <summary>
+    /// Updates the Line Numbers toggle icons based on current state.
+    /// Uses line-numbers-toggle-on.svg when visible, line-numbers-toggle-off.svg when hidden.
+    /// </summary>
+    private void UpdateLineNumbersIcons()
+    {
+        var svgName = CodeEditor.ShowLineNumbers ? "line-numbers-toggle-on.svg" : "line-numbers-toggle-off.svg";
+        SetButtonIcon(LineNumbersToggle, svgName, IconSize);
+        SetMenuItemIcon(LineNumbersMenuItem, svgName);
+    }
+
+    /// <summary>
+    /// Updates the Bracket Matching toggle icons based on current state.
+    /// Uses bracket-matching-toggle-on.svg when enabled, bracket-matching-toggle-off.svg when disabled.
+    /// </summary>
+    private void UpdateBracketMatchingIcons()
+    {
+        var svgName = _isBracketMatchingEnabled ? "bracket-matching-toggle-on.svg" : "bracket-matching-toggle-off.svg";
+        SetButtonIcon(BracketMatchingToggle, svgName, IconSize);
+        SetMenuItemIcon(BracketMatchingMenuItem, svgName);
+    }
+
+    /// <summary>
+    /// Updates the Minimap toggle icons based on current state.
+    /// Uses minimap-toggle-on.svg when visible, minimap-toggle-off.svg when hidden.
+    /// </summary>
+    private void UpdateMinimapIcons()
+    {
+        var svgName = _isMinimapVisible ? "minimap-toggle-on.svg" : "minimap-toggle-off.svg";
+        SetButtonIcon(MinimapToggle, svgName, IconSize);
+        SetMenuItemIcon(MinimapMenuItem, svgName);
+    }
+
+    #endregion
+
     private void CoreWebView2_NavigationCompleted(object? sender, Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
     {
         if (_isRenderingContent)
@@ -3491,6 +3631,9 @@ Console.WriteLine(""Hello, World!"");
             WordWrapMenuItem.IsChecked = CodeEditor.WordWrap;
         }
         
+        // Update toggle icons
+        UpdateWordWrapIcons();
+        
         // Sync minimap word wrap with code editor
         if (_isMinimapVisible && MinimapEditor != null)
         {
@@ -3540,6 +3683,9 @@ Console.WriteLine(""Hello, World!"");
         {
             SplitViewMenuItem.IsChecked = _isPreviewVisible;
         }
+        
+        // Update toggle icons
+        UpdateSplitViewIcons();
     }
 
     private void LineNumbers_Click(object sender, RoutedEventArgs e)
@@ -3553,6 +3699,9 @@ Console.WriteLine(""Hello, World!"");
         {
             LineNumbersMenuItem.IsChecked = CodeEditor.ShowLineNumbers;
         }
+        
+        // Update toggle icons
+        UpdateLineNumbersIcons();
     }
 
     private void BracketMatching_Click(object sender, RoutedEventArgs e)
@@ -3576,6 +3725,9 @@ Console.WriteLine(""Hello, World!"");
         {
             BracketMatchingMenuItem.IsChecked = _isBracketMatchingEnabled;
         }
+        
+        // Update toggle icons
+        UpdateBracketMatchingIcons();
     }
 
     private void EnableBracketHighlighting()
@@ -3635,6 +3787,9 @@ Console.WriteLine(""Hello, World!"");
         {
             MinimapMenuItem.IsChecked = _isMinimapVisible;
         }
+        
+        // Update toggle icons
+        UpdateMinimapIcons();
     }
 
     private void ShowMinimap()
