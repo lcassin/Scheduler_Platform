@@ -4,7 +4,7 @@ A visual IDE for editing Mermaid diagrams and Markdown files, built with WPF and
 
 ## Download
 
-**Download [MermaidEditorSetup-2.3.0.exe](Installer/MermaidEditorSetup-2.3.0.exe?raw=true)** - (Latest Stable) Windows installer (self-contained, no .NET runtime required)
+**Download [MermaidEditorSetup-3.0.0.exe](Installer/MermaidEditorSetup-3.0.0.exe?raw=true)** - (Latest Stable) Windows installer (self-contained, no .NET runtime required)
 
 ## Details
 
@@ -16,6 +16,10 @@ A visual IDE for editing Mermaid diagrams and Markdown files, built with WPF and
 - Navigation dropdown for quick section jumping
 - Undo/Redo support
 - Drag and drop file support
+- Auto-save with session restore (reopens tabs on startup, including untitled documents)
+- Spell check with squiggly underlines and right-click suggestions (markdown only)
+- Bracket matching with highlight
+- Minimap with viewport indicator and word wrap sync
 
 **Mermaid Diagram Support**
 - All Mermaid diagram types: flowchart, sequence, class, state, ER, gantt, pie, mindmap, timeline, gitGraph, journey, quadrantChart, requirementDiagram, C4 diagrams
@@ -33,12 +37,17 @@ A visual IDE for editing Mermaid diagrams and Markdown files, built with WPF and
 - SVG vector export
 - EMF vector export for Office applications
 - Word document export with embedded images
+- Save to PDF via Print Preview dialog
 
 **User Interface**
-- Visual Studio-style dark theme
+- Visual Studio-style dark/light theme with title bar theming
 - New Document dialog with templates for all diagram types
 - File browser with preview on selection
 - Purple accent styling on tabs and borders
+- Custom SVG toolbar icons with toggle state indicators
+- Settings/Configuration modal for editor defaults, theme, and AI integration
+- Table generator dialog for markdown files
+- Ask AI dialog with streaming chat, file attachments, and editor context
 
 ## Requirements
 
@@ -59,21 +68,35 @@ The application is built using the following technologies and patterns:
 - **Markdig** - Markdown parsing library
 - **OpenXML SDK** - Word document generation
 - **Svg.NET** - SVG parsing for EMF conversion
+- **WeCantSpell.Hunspell** - Spell checking with Hunspell dictionaries
 
 ### Project Structure
 
 ```
 MermaidEditor/
 ├── MainWindow.xaml           # Main application window UI
-├── MainWindow.xaml.cs        # Main window code-behind (3500+ lines)
+├── MainWindow.xaml.cs        # Main window code-behind (8000+ lines)
 ├── NewDocumentDialog.xaml    # New document template dialog
 ├── NewDocumentDialog.xaml.cs # Template dialog code-behind
+├── SettingsDialog.xaml       # Settings/Configuration dialog
+├── SettingsDialog.xaml.cs    # Settings dialog code-behind
+├── SettingsManager.cs        # Persistent settings management
+├── AskAiDialog.xaml          # Ask AI chat dialog
+├── AskAiDialog.xaml.cs       # AI dialog code-behind
+├── AiService.cs              # AI provider integration (OpenAI, Claude)
+├── SpellCheckService.cs      # Spell checking with Hunspell dictionaries
+├── SpellCheckBackgroundRenderer.cs # Squiggly underline renderer
+├── TableGeneratorDialog.xaml  # Table generator dialog
+├── ThemeManager.cs           # Theme management (dark/light)
+├── SvgIconHelper.cs          # SVG icon loading and theming
 ├── App.xaml                  # Application resources
 ├── App.xaml.cs               # Application startup
 ├── MermaidEditor.csproj      # Project file
 ├── app.ico                   # Application icon
 ├── LICENSE                   # GNU GPL v3 license
 ├── README.md                 # This file
+├── Icons/                    # Custom SVG toolbar icons
+├── Dictionaries/             # Hunspell spell check dictionaries
 ├── Resources/
 │   └── TemplateThumbnails/   # Template preview images (48x48 PNG)
 └── Installer/
@@ -176,7 +199,7 @@ The project includes an Inno Setup script to create a standalone Windows install
 
 4. Click Build > Compile (or press Ctrl+F9)
 
-5. The installer will be created at `bin\Installer\MermaidEditorSetup-1.7.exe`
+5. The installer will be created at `bin\Installer\MermaidEditorSetup-3.0.0.exe`
 
 ### Installer Features
 

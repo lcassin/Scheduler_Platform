@@ -377,6 +377,7 @@
                         <CheckBox x:Name="ShowLineNumbersDefaultCheck" Content="Show line numbers"/>
                         <CheckBox x:Name="ShowMinimapDefaultCheck" Content="Show minimap"/>
                         <CheckBox x:Name="BracketMatchingDefaultCheck" Content="Bracket matching"/>
+                        <CheckBox x:Name="SpellCheckEnabledCheck" Content="Spell check (markdown only)"/>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
