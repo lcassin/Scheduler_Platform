@@ -5,4 +5,8 @@
 <path fill="#444" d="M0 5h16v2h-16v-2z"></path>
 <path fill="#444" d="M0 9h16v2h-16v-2z"></path>
 <path fill="#444" d="M0 13h16v2h-16v-2z"></path>
+<!-- Small (x) in circle in lower-right to indicate minimap off -->
+<circle cx="13.5" cy="13.5" r="2.5" fill="none" stroke="#444" stroke-width="0.8"></circle>
+<line x1="12.25" y1="12.25" x2="14.75" y2="14.75" stroke="#444" stroke-width="0.8"></line>
+<line x1="14.75" y1="12.25" x2="12.25" y2="14.75" stroke="#444" stroke-width="0.8"></line>
 </svg>

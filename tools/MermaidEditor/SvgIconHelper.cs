@@ -292,7 +292,8 @@ public static class SvgIconHelper
 
         // Theme dark strokes to use the default icon color
         var lower = strokeAttr.ToLowerInvariant();
-        if (lower == "#000000" || lower == "#000" || lower == "#212121")
+        if (lower == "#000000" || lower == "#000" || lower == "#212121" || lower == "#444"
+            || lower == "#444444" || lower == "#101010")
         {
             return new SolidColorBrush(Color.FromRgb(0xF1, 0xF1, 0xF1));
         }
