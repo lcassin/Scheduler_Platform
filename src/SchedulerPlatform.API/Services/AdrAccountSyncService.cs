@@ -82,6 +82,10 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             _logger.LogInformation("Client sync complete. Created: {Created}, Updated: {Updated}", 
                 result.ClientsCreated, result.ClientsUpdated);
 
+            // Get external account count for accurate progress reporting
+            var externalAccountCount = await GetExternalAccountCountAsync(externalConnectionString, cancellationToken);
+            _logger.LogInformation("External VendorCred account count for progress: {Count}", externalAccountCount);
+
             // Step 3: Load existing local accounts into dictionary for lookups
             // We need this to determine updates vs inserts and for deletion detection
             // IMPORTANT: Include deleted accounts so they can be re-activated if credentials become active again
@@ -138,10 +142,11 @@ public class AdrAccountSyncService : IAdrAccountSyncService
 
             _logger.LogDebug("Loaded {Count} unique accounts from local database", existingAccounts.Count);
 
-            // Use local database count for progress reporting
-            // This includes both accounts to sync AND accounts to mark as deleted
-            var totalAccountCount = existingAccounts.Count;
-            _logger.LogDebug("Total accounts for progress tracking: {Count}", totalAccountCount);
+            // Use external VendorCred count for progress reporting
+            // This shows the actual number of active accounts being synced, not the local DB total (which includes deleted records)
+            var totalAccountCount = externalAccountCount > 0 ? externalAccountCount : existingAccounts.Count;
+            _logger.LogDebug("Total accounts for progress tracking: {Count} (external: {External}, local: {Local})", 
+                totalAccountCount, externalAccountCount, existingAccounts.Count);
             
             // Report initial progress (0 of total)
             progressCallback?.Invoke(0, totalAccountCount);
@@ -161,7 +166,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
 
             var query = GetAccountSyncQuery();
             await using var command = new SqlCommand(query, connection);
-            command.CommandTimeout = 300;
+            command.CommandTimeout = 600;
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
