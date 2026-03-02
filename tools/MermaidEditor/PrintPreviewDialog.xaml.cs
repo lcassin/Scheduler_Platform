@@ -832,10 +832,11 @@ public partial class PrintPreviewDialog : Window
         List<int> pixelHeights, double pageWidthPt, double pageHeightPt)
     {
         using var fs = new FileStream(filePath, FileMode.Create, FileAccess.Write);
-        var offsets = new List<long>(); // byte offsets of each object for xref table
+        // Map object number → byte offset for correct xref table
+        var objectOffsets = new Dictionary<int, long>();
         int objNum = 1;
 
-        // Helper to write a string and track position
+        // Helper to write a string
         void Write(string s)
         {
             var bytes = Encoding.ASCII.GetBytes(s);
@@ -856,66 +857,60 @@ public partial class PrintPreviewDialog : Window
 
         int pageCount = pageJpegData.Count;
 
-        // Object layout:
+        // Pre-allocate ALL object numbers upfront:
         // 1: Catalog
         // 2: Pages
-        // 3..3+N-1: Page objects (one per page)
-        // 3+N..3+2N-1: Image XObjects (one per page)
-
+        // Per page: page obj, content stream obj, image XObject
         int catalogObj = objNum++;
         int pagesObj = objNum++;
-        int firstPageObj = objNum;
         int[] pageObjs = new int[pageCount];
-        for (int i = 0; i < pageCount; i++)
-            pageObjs[i] = objNum++;
+        int[] contentObjs = new int[pageCount];
         int[] imageObjs = new int[pageCount];
         for (int i = 0; i < pageCount; i++)
+        {
+            pageObjs[i] = objNum++;
+            contentObjs[i] = objNum++;
             imageObjs[i] = objNum++;
+        }
 
         // Object 1: Catalog
-        offsets.Add(fs.Position);
+        objectOffsets[catalogObj] = fs.Position;
         Write($"{catalogObj} 0 obj\n<< /Type /Catalog /Pages {pagesObj} 0 R >>\nendobj\n");
 
         // Object 2: Pages
-        offsets.Add(fs.Position);
+        objectOffsets[pagesObj] = fs.Position;
         var kids = string.Join(" ", pageObjs.Select(p => $"{p} 0 R"));
         Write($"{pagesObj} 0 obj\n<< /Type /Pages /Kids [ {kids} ] /Count {pageCount} >>\nendobj\n");
 
-        // Page objects
+        // Write page objects, content streams, and image XObjects for each page
         for (int i = 0; i < pageCount; i++)
         {
-            offsets.Add(fs.Position);
             string imgName = $"Img{i}";
             // Page content: draw image scaled to full page
             string contentStream = $"q {F(pageWidthPt)} 0 0 {F(pageHeightPt)} 0 0 cm /{imgName} Do Q\n";
             byte[] contentBytes = Encoding.ASCII.GetBytes(contentStream);
 
-            // We need a content stream object too
-            int contentObj = objNum++;
-
+            // Page object
+            objectOffsets[pageObjs[i]] = fs.Position;
             Write($"{pageObjs[i]} 0 obj\n");
             Write("<< /Type /Page ");
             Write($"/Parent {pagesObj} 0 R ");
             Write($"/MediaBox [ 0 0 {F(pageWidthPt)} {F(pageHeightPt)} ] ");
-            Write($"/Contents {contentObj} 0 R ");
+            Write($"/Contents {contentObjs[i]} 0 R ");
             Write($"/Resources << /XObject << /{imgName} {imageObjs[i]} 0 R >> >> ");
             Write(">>\nendobj\n");
 
-            // Content stream object (will be written after images in order, but we track offset)
-            // Actually, let's write it right after the page object
-            offsets.Add(fs.Position);
-            Write($"{contentObj} 0 obj\n");
+            // Content stream object
+            objectOffsets[contentObjs[i]] = fs.Position;
+            Write($"{contentObjs[i]} 0 obj\n");
             Write($"<< /Length {contentBytes.Length} >>\n");
             Write("stream\n");
             WriteBytes(contentBytes);
             Write("endstream\nendobj\n");
-        }
 
-        // Image XObjects
-        for (int i = 0; i < pageCount; i++)
-        {
-            offsets.Add(fs.Position);
+            // Image XObject
             byte[] jpeg = pageJpegData[i];
+            objectOffsets[imageObjs[i]] = fs.Position;
             Write($"{imageObjs[i]} 0 obj\n");
             Write("<< /Type /XObject /Subtype /Image ");
             Write($"/Width {pixelWidths[i]} /Height {pixelHeights[i]} ");
@@ -930,13 +925,13 @@ public partial class PrintPreviewDialog : Window
 
         // Cross-reference table
         long xrefStart = fs.Position;
-        int totalObjs = objNum; // objNum is now one past the last object
+        int totalObjs = objNum; // objNum is one past the last object
         Write("xref\n");
         Write($"0 {totalObjs}\n");
-        Write("0000000000 65535 f \n"); // free object entry
-        foreach (long offset in offsets)
+        Write("0000000000 65535 f \n"); // free object entry (obj 0)
+        for (int i = 1; i < totalObjs; i++)
         {
-            Write($"{offset:D10} 00000 n \n");
+            Write($"{objectOffsets[i]:D10} 00000 n \n");
         }
 
         // Trailer
