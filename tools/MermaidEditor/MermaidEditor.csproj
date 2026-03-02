@@ -15,6 +15,8 @@
       <Resource Include="Resources\TemplateThumbnails\*.png" />
       <Resource Include="app.ico" />
       <EmbeddedResource Include="Icons\*.svg" />
+      <EmbeddedResource Include="Dictionaries\*.aff" />
+      <EmbeddedResource Include="Dictionaries\*.dic" />
     </ItemGroup>
 
     <ItemGroup>
@@ -27,6 +29,7 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3719.77" />
     <PackageReference Include="Svg" Version="3.4.7" />
     <PackageReference Include="System.Drawing.Common" Version="10.0.3" />
+    <PackageReference Include="WeCantSpell.Hunspell" Version="7.0.1" />
   </ItemGroup>
 
 </Project>

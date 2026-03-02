@@ -1028,6 +1028,11 @@
                         <TextBlock Text="&#xE700;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                     </MenuItem.Icon>
                 </MenuItem>
+                <MenuItem x:Name="SpellCheckMenuItem" Header="Toggle _Spell Check" Click="SpellCheck_Click" IsCheckable="True">
+                    <MenuItem.Icon>
+                        <TextBlock Text="ABC" FontFamily="Consolas" FontSize="10" FontWeight="Bold"/>
+                    </MenuItem.Icon>
+                </MenuItem>
                 <Separator/>
                 <MenuItem Header="_Settings..." Click="Settings_Click" InputGestureText="Ctrl+,">
                     <MenuItem.Icon>
@@ -1211,6 +1216,10 @@
                             </ToggleButton>
                             <ToggleButton x:Name="MinimapToggle" Click="Minimap_Click" ToolTip="Toggle Minimap" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4" IsChecked="False">
                                 <TextBlock Text="&#xE700;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            </ToggleButton>
+                            <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="4,4"/>
+                            <ToggleButton x:Name="SpellCheckToggle" Click="SpellCheck_Click" ToolTip="Toggle Spell Check" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4" IsChecked="True">
+                                <TextBlock Text="ABC" FontFamily="Consolas" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
                             </ToggleButton>
                         </ToolBar>
                     </ToolBarTray>

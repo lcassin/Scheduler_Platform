@@ -76,6 +76,7 @@ public partial class SettingsDialog : Window
         ShowLineNumbersDefaultCheck.IsChecked = settings.ShowLineNumbersDefault;
         ShowMinimapDefaultCheck.IsChecked = settings.ShowMinimapDefault;
         BracketMatchingDefaultCheck.IsChecked = settings.BracketMatchingDefault;
+        SpellCheckEnabledCheck.IsChecked = settings.SpellCheckEnabled;
 
         // Auto-save
         AutoSaveEnabledCheck.IsChecked = settings.AutoSaveEnabled;
@@ -106,6 +107,7 @@ public partial class SettingsDialog : Window
         settings.ShowLineNumbersDefault = ShowLineNumbersDefaultCheck.IsChecked == true;
         settings.ShowMinimapDefault = ShowMinimapDefaultCheck.IsChecked == true;
         settings.BracketMatchingDefault = BracketMatchingDefaultCheck.IsChecked == true;
+        settings.SpellCheckEnabled = SpellCheckEnabledCheck.IsChecked == true;
 
         // Auto-save
         settings.AutoSaveEnabled = AutoSaveEnabledCheck.IsChecked == true;

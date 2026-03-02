@@ -127,6 +127,9 @@ public class AppSettings
     [JsonPropertyName("bracketMatchingDefault")]
     public bool BracketMatchingDefault { get; set; } = true;
 
+    [JsonPropertyName("spellCheckEnabled")]
+    public bool SpellCheckEnabled { get; set; } = true;
+
     // ── Auto-save ──
     [JsonPropertyName("autoSaveIntervalSeconds")]
     public int AutoSaveIntervalSeconds { get; set; } = 30;

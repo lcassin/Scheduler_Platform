@@ -101,6 +101,11 @@ public partial class MainWindow : Window
     private int _autoSaveIntervalSeconds = 30;
     private bool _lastCaretWasInComment = false;
 
+    // Spell check
+    private SpellCheckService? _spellCheckService;
+    private SpellCheckBackgroundRenderer? _spellCheckRenderer;
+    private bool _isSpellCheckEnabled;
+
     private const string DefaultMermaidCode= @"flowchart TD
     A[Start] --> B[End]";
 
@@ -648,6 +653,9 @@ Console.WriteLine(""Hello, World!"");
             
             // Start auto-save timer
             _autoSaveTimer.Start();
+            
+            // Initialize spell check
+            await InitializeSpellCheckAsync();
         }
         catch (Exception ex)
         {
@@ -2665,6 +2673,16 @@ Console.WriteLine(""Hello, World!"");
         UpdateExportMenuVisibility();
         UpdateMarkdownFormattingVisibility();
         UpdateZoomControlsVisibility();
+
+        // Update spell check mermaid flag when switching file types
+        if (_spellCheckRenderer != null)
+        {
+            _spellCheckRenderer.IsMermaid = _currentRenderMode == RenderMode.Mermaid;
+            if (_isSpellCheckEnabled)
+            {
+                _spellCheckRenderer.InvalidateSpelling();
+            }
+        }
     }
 
     private void New_Click(object sender, RoutedEventArgs e)
@@ -4128,6 +4146,229 @@ Console.WriteLine(""Hello, World!"");
 
     #endregion
 
+    #region Spell Check
+
+    /// <summary>
+    /// Initializes the spell check service and renderer asynchronously.
+    /// Called from MainWindow_Loaded.
+    /// </summary>
+    private async Task InitializeSpellCheckAsync()
+    {
+        try
+        {
+            _spellCheckService = new SpellCheckService();
+            await _spellCheckService.LoadAsync();
+
+            if (_spellCheckService.IsLoaded)
+            {
+                _spellCheckRenderer = new SpellCheckBackgroundRenderer(CodeEditor, _spellCheckService);
+
+                // Apply spell check default from settings
+                _isSpellCheckEnabled = SettingsManager.Current.SpellCheckEnabled;
+                if (_isSpellCheckEnabled)
+                {
+                    EnableSpellCheck();
+                }
+
+                // Sync toggle UI
+                if (SpellCheckToggle != null) SpellCheckToggle.IsChecked = _isSpellCheckEnabled;
+                if (SpellCheckMenuItem != null) SpellCheckMenuItem.IsChecked = _isSpellCheckEnabled;
+                UpdateSpellCheckIcons();
+
+                // Set up right-click context menu for spelling suggestions
+                CodeEditor.TextArea.MouseRightButtonDown += TextArea_MouseRightButtonDown_SpellCheck;
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"SpellCheck init failed: {ex.Message}");
+        }
+    }
+
+    private void SpellCheck_Click(object sender, RoutedEventArgs e)
+    {
+        _isSpellCheckEnabled = !_isSpellCheckEnabled;
+
+        if (_isSpellCheckEnabled)
+        {
+            EnableSpellCheck();
+        }
+        else
+        {
+            DisableSpellCheck();
+        }
+
+        if (SpellCheckToggle != null) SpellCheckToggle.IsChecked = _isSpellCheckEnabled;
+        if (SpellCheckMenuItem != null) SpellCheckMenuItem.IsChecked = _isSpellCheckEnabled;
+
+        UpdateSpellCheckIcons();
+
+        // Save preference
+        SettingsManager.Current.SpellCheckEnabled = _isSpellCheckEnabled;
+        SettingsManager.Save();
+    }
+
+    private void EnableSpellCheck()
+    {
+        if (_spellCheckRenderer == null) return;
+
+        // Add renderer if not already added
+        if (!CodeEditor.TextArea.TextView.BackgroundRenderers.Contains(_spellCheckRenderer))
+        {
+            CodeEditor.TextArea.TextView.BackgroundRenderers.Add(_spellCheckRenderer);
+        }
+
+        // Update the mermaid flag
+        _spellCheckRenderer.IsMermaid = _currentRenderMode == RenderMode.Mermaid;
+
+        // Wire up text changed to trigger spell check
+        CodeEditor.TextChanged += CodeEditor_TextChanged_SpellCheck;
+
+        // Trigger initial spell check
+        _spellCheckRenderer.InvalidateSpelling();
+    }
+
+    private void DisableSpellCheck()
+    {
+        if (_spellCheckRenderer == null) return;
+
+        // Remove renderer
+        CodeEditor.TextArea.TextView.BackgroundRenderers.Remove(_spellCheckRenderer);
+
+        // Unhook text changed
+        CodeEditor.TextChanged -= CodeEditor_TextChanged_SpellCheck;
+
+        // Clear underlines
+        _spellCheckRenderer.Clear();
+    }
+
+    private void CodeEditor_TextChanged_SpellCheck(object? sender, EventArgs e)
+    {
+        _spellCheckRenderer?.InvalidateSpelling();
+    }
+
+    private void UpdateSpellCheckIcons()
+    {
+        // Use a simple "ABC" text icon with checkmark for spell check since we don't have a custom SVG
+        // The toggle state is shown by the ToggleButton border + IsChecked state
+        if (SpellCheckToggle != null)
+        {
+            var tb = new System.Windows.Controls.TextBlock
+            {
+                Text = "ABC",
+                FontSize = 10,
+                FontWeight = FontWeights.Bold,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = _isSpellCheckEnabled
+                    ? new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x4E, 0xC9, 0xB0)) // green when on
+                    : (SolidColorBrush)System.Windows.Application.Current.Resources["ThemeForegroundBrush"]
+            };
+            // Add a squiggly underline effect when enabled
+            if (_isSpellCheckEnabled)
+            {
+                tb.TextDecorations = new TextDecorationCollection
+                {
+                    new TextDecoration
+                    {
+                        Location = TextDecorationLocation.Underline,
+                        Pen = new System.Windows.Media.Pen(new SolidColorBrush(System.Windows.Media.Color.FromRgb(0xFF, 0x40, 0x40)), 1.2)
+                        {
+                            DashStyle = new System.Windows.Media.DashStyle(new[] { 1.0, 2.0 }, 0)
+                        }
+                    }
+                };
+            }
+            SpellCheckToggle.Content = tb;
+        }
+    }
+
+    /// <summary>
+    /// Handles right-click on the text area to show spelling suggestions in the context menu.
+    /// </summary>
+    private void TextArea_MouseRightButtonDown_SpellCheck(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (!_isSpellCheckEnabled || _spellCheckRenderer == null || _spellCheckService == null) return;
+
+        // Get the position under the mouse
+        var textView = CodeEditor.TextArea.TextView;
+        var pos = textView.GetPosition(e.GetPosition(textView) + textView.ScrollOffset);
+        if (pos == null) return;
+
+        var offset = CodeEditor.Document.GetOffset(pos.Value.Location);
+        var misspelled = _spellCheckRenderer.GetMisspelledWordAtOffset(offset);
+
+        if (misspelled == null) return;
+
+        // Build a context menu with suggestions
+        var contextMenu = new System.Windows.Controls.ContextMenu();
+
+        var suggestions = _spellCheckService.Suggest(misspelled.Word);
+        if (suggestions.Count > 0)
+        {
+            foreach (var suggestion in suggestions)
+            {
+                var menuItem = new System.Windows.Controls.MenuItem
+                {
+                    Header = suggestion,
+                    FontWeight = FontWeights.Bold
+                };
+                var capturedSuggestion = suggestion;
+                var capturedWord = misspelled;
+                menuItem.Click += (s, args) =>
+                {
+                    // Replace the misspelled word with the suggestion
+                    CodeEditor.Document.Replace(capturedWord.StartOffset, capturedWord.Length, capturedSuggestion);
+                };
+                contextMenu.Items.Add(menuItem);
+            }
+        }
+        else
+        {
+            var noSuggestions = new System.Windows.Controls.MenuItem
+            {
+                Header = "(No suggestions)",
+                IsEnabled = false
+            };
+            contextMenu.Items.Add(noSuggestions);
+        }
+
+        contextMenu.Items.Add(new System.Windows.Controls.Separator());
+
+        // "Add to Dictionary" option
+        var addItem = new System.Windows.Controls.MenuItem
+        {
+            Header = $"Add \"{misspelled.Word}\" to Dictionary"
+        };
+        var capturedMisspelled = misspelled;
+        addItem.Click += (s, args) =>
+        {
+            _spellCheckService.AddToCustomDictionary(capturedMisspelled.Word);
+            _spellCheckRenderer?.InvalidateSpelling();
+        };
+        contextMenu.Items.Add(addItem);
+
+        // "Ignore" option (just closes menu)
+        var ignoreItem = new System.Windows.Controls.MenuItem
+        {
+            Header = "Ignore"
+        };
+        contextMenu.Items.Add(ignoreItem);
+
+        // Show the context menu
+        CodeEditor.TextArea.ContextMenu = contextMenu;
+        contextMenu.IsOpen = true;
+
+        // Restore default context menu after this one closes
+        contextMenu.Closed += (s, args) =>
+        {
+            CodeEditor.TextArea.ContextMenu = null;
+        };
+
+        e.Handled = true;
+    }
+
+    #endregion
+
     private async void ExportPng_Click(object sender, RoutedEventArgs e)
     {
         if (!_webViewInitialized) return;
@@ -5400,7 +5641,7 @@ Console.WriteLine(""Hello, World!"");
         });
         titlePanel.Children.Add(new TextBlock
         {
-            Text = "Version 2.3.0",
+            Text = "Version 3.0.0",
             FontSize = 14,
             Foreground = (SolidColorBrush)System.Windows.Application.Current.Resources["ThemeDisabledForegroundBrush"],
             Margin = new Thickness(0, 4, 0, 0)
@@ -5585,6 +5826,20 @@ Console.WriteLine(""Hello, World!"");
         if (MinimapToggle != null) MinimapToggle.IsChecked = settings.ShowMinimapDefault;
         if (MinimapMenuItem != null) MinimapMenuItem.IsChecked = settings.ShowMinimapDefault;
         UpdateMinimapIcons();
+
+        // Spell check
+        _isSpellCheckEnabled = settings.SpellCheckEnabled;
+        if (_isSpellCheckEnabled)
+        {
+            EnableSpellCheck();
+        }
+        else
+        {
+            DisableSpellCheck();
+        }
+        if (SpellCheckToggle != null) SpellCheckToggle.IsChecked = _isSpellCheckEnabled;
+        if (SpellCheckMenuItem != null) SpellCheckMenuItem.IsChecked = _isSpellCheckEnabled;
+        UpdateSpellCheckIcons();
 
         // Auto-save
         _autoSaveIntervalSeconds = settings.AutoSaveIntervalSeconds;
