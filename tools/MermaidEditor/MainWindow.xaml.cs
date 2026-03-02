@@ -5329,6 +5329,50 @@ Console.WriteLine(""Hello, World!"");
         CodeEditor.FontFamily = new System.Windows.Media.FontFamily(settings.EditorFontFamily);
         CodeEditor.FontSize = settings.EditorFontSize;
 
+        // Word wrap
+        CodeEditor.WordWrap = settings.WordWrapDefault;
+        if (WordWrapToggle != null) WordWrapToggle.IsChecked = settings.WordWrapDefault;
+        if (WordWrapMenuItem != null) WordWrapMenuItem.IsChecked = settings.WordWrapDefault;
+        // Sync minimap word wrap
+        if (_isMinimapVisible && MinimapEditor != null)
+        {
+            MinimapEditor.WordWrap = settings.WordWrapDefault;
+        }
+
+        // Line numbers
+        CodeEditor.ShowLineNumbers = settings.ShowLineNumbersDefault;
+        if (LineNumbersToggle != null) LineNumbersToggle.IsChecked = settings.ShowLineNumbersDefault;
+        if (LineNumbersMenuItem != null) LineNumbersMenuItem.IsChecked = settings.ShowLineNumbersDefault;
+
+        // Bracket matching
+        _isBracketMatchingEnabled = settings.BracketMatchingDefault;
+        if (settings.BracketMatchingDefault)
+        {
+            EnableBracketHighlighting();
+        }
+        else
+        {
+            DisableBracketHighlighting();
+        }
+        if (BracketMatchingToggle != null) BracketMatchingToggle.IsChecked = settings.BracketMatchingDefault;
+        if (BracketMatchingMenuItem != null) BracketMatchingMenuItem.IsChecked = settings.BracketMatchingDefault;
+
+        // Minimap
+        if (settings.ShowMinimapDefault != _isMinimapVisible)
+        {
+            _isMinimapVisible = settings.ShowMinimapDefault;
+            if (_isMinimapVisible)
+            {
+                ShowMinimap();
+            }
+            else
+            {
+                HideMinimap();
+            }
+        }
+        if (MinimapToggle != null) MinimapToggle.IsChecked = settings.ShowMinimapDefault;
+        if (MinimapMenuItem != null) MinimapMenuItem.IsChecked = settings.ShowMinimapDefault;
+
         // Auto-save
         _autoSaveIntervalSeconds = settings.AutoSaveIntervalSeconds;
         _autoSaveTimer.Interval = TimeSpan.FromSeconds(_autoSaveIntervalSeconds);
@@ -6297,6 +6341,14 @@ Console.WriteLine(""Hello, World!"");
         if (!string.IsNullOrEmpty(filePath))
         {
             SetDocumentRenderModeFromFile(doc, filePath);
+        }
+        else
+        {
+            // Apply default file type from settings for untitled documents
+            var defaultType = SettingsManager.Current.DefaultFileType;
+            doc.RenderMode = string.Equals(defaultType, "Markdown", StringComparison.OrdinalIgnoreCase)
+                ? RenderMode.Markdown
+                : RenderMode.Mermaid;
         }
         
         doc.TextDocument.Text = content ?? (doc.RenderMode == RenderMode.Markdown ? DefaultMarkdownCode : DefaultMermaidCode);
