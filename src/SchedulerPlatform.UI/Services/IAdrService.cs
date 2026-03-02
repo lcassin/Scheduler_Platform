@@ -149,12 +149,12 @@ public interface IAdrService
     Task<BulkCredentialVerificationResult> VerifyCredentialsFromFileAsync(byte[] fileContent, string fileName);
     
     /// <summary>
-    /// Runs bulk credential verification (AttemptLogin) for ALL active accounts in the system.
-    /// This is a one-time bulk operation to check all existing credentials ahead of time.
+    /// Queues bulk credential verification (AttemptLogin) for ALL active accounts in the system.
+    /// This is a long-running background operation. Returns immediately with a request ID for status polling.
     /// </summary>
     /// <param name="testrun">Optional limit for test runs (e.g., 100 to test with first 100 accounts)</param>
-    /// <returns>Results of the bulk credential verification</returns>
-    Task<BulkCredentialVerificationResult> VerifyAllCredentialsAsync(int? testrun = null);
+    /// <returns>The queued orchestration response with requestId for status tracking</returns>
+    Task<BackgroundOrchestrationResponse> QueueBulkCredentialCheckAsync(int? testrun = null);
     
     /// <summary>
     /// Starts a background export operation for large datasets.
