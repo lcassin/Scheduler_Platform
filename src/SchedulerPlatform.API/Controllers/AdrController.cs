@@ -3001,40 +3001,85 @@ public class AdrController : ControllerBase
     /// The Excel file can contain columns named "CredentialId" and/or "AccountId" (case-insensitive;
     /// also accepts variations like "Credential Id", "Credential_Id", "Account Id", "Account_Id").
     /// At least one of these columns must be present. Both can be present in the same file.
-    /// Non-numeric values in columns are skipped. Supported file formats: .xlsx (Excel).
+    /// Non-numeric values in columns are skipped. Supported file formats: .xlsx (Excel) and .csv.
     /// </summary>
-    /// <param name="file">The Excel file containing credential IDs and/or account IDs.</param>
+    /// <param name="file">The Excel (.xlsx) or CSV (.csv) file containing credential IDs and/or account IDs.</param>
     /// <param name="cancellationToken">Cancellation token for the operation.</param>
     /// <returns>The credential verification result including counts of verified and failed credentials.</returns>
     /// <response code="200">Returns the targeted credential verification result.</response>
-    /// <response code="400">The file is missing, empty, not a valid Excel file, or contains no valid IDs.</response>
+    /// <response code="400">The file is missing, empty, not a valid Excel/CSV file, or contains no valid IDs.</response>
     /// <response code="500">An error occurred during credential verification.</response>
     [HttpPost("orchestrate/verify-credentials-from-file")]
     [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
     [ProducesResponseType(typeof(BulkCredentialVerificationResult), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    [RequestSizeLimit(10_485_760)] // 10 MB limit
+    [RequestSizeLimit(20_971_520)] // 20 MB limit
     public async Task<ActionResult<BulkCredentialVerificationResult>> VerifyCredentialsFromFile(IFormFile file, CancellationToken cancellationToken)
     {
         try
         {
             if (file == null || file.Length == 0)
             {
-                return BadRequest(new { error = "File is required", message = "Please upload an Excel file (.xlsx) containing credential IDs and/or account IDs." });
+                return BadRequest(new { error = "File is required", message = "Please upload an Excel (.xlsx) or CSV (.csv) file containing credential IDs and/or account IDs." });
             }
 
             var extension = Path.GetExtension(file.FileName)?.ToLowerInvariant();
-            if (extension != ".xlsx")
+            if (extension != ".xlsx" && extension != ".csv")
             {
-                return BadRequest(new { error = "Invalid file format", message = "Only Excel files (.xlsx) are supported. Please upload a valid .xlsx file." });
+                return BadRequest(new { error = "Invalid file format", message = "Only Excel (.xlsx) and CSV (.csv) files are supported." });
             }
 
-            // Parse credential IDs and account IDs from Excel file
+            // Parse credential IDs and account IDs from file
             var credentialIds = new List<int>();
             var accountIds = new List<int>();
-            using (var stream = file.OpenReadStream())
+            
+            if (extension == ".csv")
             {
+                // Parse CSV file
+                using var reader = new StreamReader(file.OpenReadStream());
+                var headerLine = await reader.ReadLineAsync();
+                if (string.IsNullOrWhiteSpace(headerLine))
+                {
+                    return BadRequest(new { error = "Empty file", message = "The CSV file is empty. Please provide a file with a header row and data." });
+                }
+
+                // Parse header columns
+                var headers = headerLine.Split(',').Select(h => h.Trim().Replace("\"", "").Replace(" ", "").Replace("_", "").ToLowerInvariant()).ToList();
+                int credentialIdColumn = headers.IndexOf("credentialid");
+                int accountIdColumn = headers.IndexOf("accountid");
+
+                if (credentialIdColumn == -1 && accountIdColumn == -1)
+                {
+                    return BadRequest(new { 
+                        error = "No recognized ID column found", 
+                        message = "The CSV file must contain at least one column named 'CredentialId' or 'AccountId' (also accepts variations like 'Credential Id', 'Account_Id', etc.). Please check the column headers in your file." 
+                    });
+                }
+
+                // Read data rows
+                string? line;
+                while ((line = await reader.ReadLineAsync()) != null)
+                {
+                    if (string.IsNullOrWhiteSpace(line)) continue;
+                    var fields = line.Split(',').Select(f => f.Trim().Replace("\"", "")).ToArray();
+
+                    if (credentialIdColumn != -1 && credentialIdColumn < fields.Length)
+                    {
+                        if (int.TryParse(fields[credentialIdColumn], out var credentialId) && credentialId > 0)
+                            credentialIds.Add(credentialId);
+                    }
+                    if (accountIdColumn != -1 && accountIdColumn < fields.Length)
+                    {
+                        if (int.TryParse(fields[accountIdColumn], out var accountId) && accountId > 0)
+                            accountIds.Add(accountId);
+                    }
+                }
+            }
+            else
+            {
+                // Parse Excel file
+                using var stream = file.OpenReadStream();
                 using var workbook = new ClosedXML.Excel.XLWorkbook(stream);
                 var worksheet = workbook.Worksheets.First();
                 
