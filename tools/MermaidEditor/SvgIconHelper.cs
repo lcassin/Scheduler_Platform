@@ -99,10 +99,10 @@ public static class SvgIconHelper
             var parts = viewBox.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length < 4) return null;
 
-            var vbX = double.Parse(parts[0]);
-            var vbY = double.Parse(parts[1]);
-            var vbWidth = double.Parse(parts[2]);
-            var vbHeight = double.Parse(parts[3]);
+            var vbX = ParseDouble(parts[0], 0);
+            var vbY = ParseDouble(parts[1], 0);
+            var vbWidth = ParseDouble(parts[2], 0);
+            var vbHeight = ParseDouble(parts[3], 0);
 
             var group = new DrawingGroup();
 
@@ -208,7 +208,11 @@ public static class SvgIconHelper
                     {
                         var polyGeom = ParsePolygonPoints(points);
                         if (polyGeom != null)
-                            group.Children.Add(new GeometryDrawing(elementFill, strokePen, polyGeom));
+                        {
+                            var fillAttr = element.Attribute("fill")?.Value;
+                            Brush? polyFill = fillAttr?.ToLowerInvariant() == "none" ? null : elementFill;
+                            group.Children.Add(new GeometryDrawing(polyFill, strokePen, polyGeom));
+                        }
                     }
                     catch { }
                 }

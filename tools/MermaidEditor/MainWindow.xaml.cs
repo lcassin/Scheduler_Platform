@@ -5520,11 +5520,13 @@ Console.WriteLine(""Hello, World!"");
         {
             MinimapEditor.WordWrap = settings.WordWrapDefault;
         }
+        UpdateWordWrapIcons();
 
         // Line numbers
         CodeEditor.ShowLineNumbers = settings.ShowLineNumbersDefault;
         if (LineNumbersToggle != null) LineNumbersToggle.IsChecked = settings.ShowLineNumbersDefault;
         if (LineNumbersMenuItem != null) LineNumbersMenuItem.IsChecked = settings.ShowLineNumbersDefault;
+        UpdateLineNumbersIcons();
 
         // Bracket matching
         _isBracketMatchingEnabled = settings.BracketMatchingDefault;
@@ -5538,6 +5540,7 @@ Console.WriteLine(""Hello, World!"");
         }
         if (BracketMatchingToggle != null) BracketMatchingToggle.IsChecked = settings.BracketMatchingDefault;
         if (BracketMatchingMenuItem != null) BracketMatchingMenuItem.IsChecked = settings.BracketMatchingDefault;
+        UpdateBracketMatchingIcons();
 
         // Minimap
         if (settings.ShowMinimapDefault != _isMinimapVisible)
@@ -5554,6 +5557,7 @@ Console.WriteLine(""Hello, World!"");
         }
         if (MinimapToggle != null) MinimapToggle.IsChecked = settings.ShowMinimapDefault;
         if (MinimapMenuItem != null) MinimapMenuItem.IsChecked = settings.ShowMinimapDefault;
+        UpdateMinimapIcons();
 
         // Auto-save
         _autoSaveIntervalSeconds = settings.AutoSaveIntervalSeconds;
