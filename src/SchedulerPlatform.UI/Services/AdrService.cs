@@ -762,8 +762,13 @@ public class AdrService : IAdrService
     {
         using var content = new MultipartFormDataContent();
         using var fileStreamContent = new ByteArrayContent(fileContent);
-        fileStreamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+
+        var extension = Path.GetExtension(fileName)?.ToLowerInvariant();
+        var mediaType = extension == ".csv"
+            ? "text/csv"
+            : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+        fileStreamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(mediaType);
         content.Add(fileStreamContent, "file", fileName);
 
         var response = await _httpClient.PostAsync("adr/orchestrate/verify-credentials-from-file", content);
