@@ -18,6 +18,33 @@
     </MudAlert>
 }
 
+@if (_hasOrchestrationFilter)
+{
+    <MudAlert Severity="Severity.Info" Class="mb-4" Icon="@Icons.Material.Filled.FilterAlt" CloseIconClicked="ClearOrchestrationFilter" ShowCloseIcon="true">
+        <strong>Filtered by orchestration run:</strong>
+        @if (!string.IsNullOrEmpty(_filterRequestId))
+        {
+            <span> Request ID: @_filterRequestId[..Math.Min(8, _filterRequestId.Length)]...</span>
+        }
+        else if (_filterModifiedAfter.HasValue && _filterModifiedBefore.HasValue)
+        {
+            <span> @_filterModifiedAfter.Value.ToString("g") — @_filterModifiedBefore.Value.ToString("g") (UTC)</span>
+        }
+        @if (!string.IsNullOrEmpty(_filterStatus))
+        {
+            <span> | Status: @_filterStatus</span>
+        }
+        @if (_filterExecutionRequestTypeId.HasValue)
+        {
+            <span> | Step: @GetRequestTypeName(_filterExecutionRequestTypeId.Value)</span>
+        }
+        @if (_filterExecutionIsError == true)
+        {
+            <span> | Errors only</span>
+        }
+    </MudAlert>
+}
+
 <MudPaper Class="pa-4">
         <MudGrid Class="mb-4" Spacing="2">
             <MudItem xs="12" md="2">
@@ -238,9 +265,11 @@
                 </MudTd>
                                 <MudTd DataLabel="Status">
                                     <div class="d-flex align-center gap-1">
-                                        <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
-                                            @context.Status
-                                        </MudChip>
+                                        <MudTooltip Text="@GetJobStatusExplanation(context)" Placement="Placement.Top">
+                                            <MudChip T="string" Size="Size.Small" Color="@GetStatusColor(context.Status)">
+                                                @GetStatusDisplayName(context.Status)
+                                            </MudChip>
+                                        </MudTooltip>
                                         @if (context.IsManualRequest)
                                         {
                                             <MudTooltip Text="@($"Manual request: {context.ManualRequestReason ?? "No reason provided"}")">
@@ -373,11 +402,36 @@
     [SupplyParameterFromQuery(Name = "blacklistStatus")]
     public string? BlacklistStatusParam { get; set; }
 
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "modifiedAfter")]
+    public string? ModifiedAfterParam { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "modifiedBefore")]
+    public string? ModifiedBeforeParam { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "orchestrationRequestId")]
+    public string? OrchestrationRequestIdParam { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "executionRequestTypeId")]
+    public string? ExecutionRequestTypeIdParam { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "executionIsError")]
+    public string? ExecutionIsErrorParam { get; set; }
+
+    private DateTime? _filterModifiedAfter;
+    private DateTime? _filterModifiedBefore;
+    private string? _filterRequestId;
+    private int? _filterExecutionRequestTypeId;
+    private bool? _filterExecutionIsError;
+
+    private bool _hasOrchestrationFilter;
+
     protected override async Task OnInitializedAsync()
     {
-        // Load test mode status for banner display
-        _testModeStatus = await AdrService.GetTestModeStatusAsync();
-        
         if (!string.IsNullOrEmpty(PrimaryVendorCodeParam))
         {
             _searchPrimaryVendorCode = PrimaryVendorCodeParam;
@@ -388,24 +442,57 @@
             _searchAccountNumber = AccountNumberParam;
             _filterAccountNumber = AccountNumberParam;
         }
-        // Handle latestPerAccount parameter - defaults to true if not specified
         if (!string.IsNullOrEmpty(LatestPerAccountParam) && bool.TryParse(LatestPerAccountParam, out var latestPerAccount))
         {
             _showLatestPerAccount = latestPerAccount;
         }
-        // Handle status parameter (e.g., from Dashboard chart click)
         if (!string.IsNullOrEmpty(StatusParam))
         {
             _selectedStatus = StatusParam;
             _filterStatus = StatusParam;
         }
-        // Handle blacklist status parameter
         if (!string.IsNullOrEmpty(BlacklistStatusParam))
         {
             _selectedBlacklistStatus = BlacklistStatusParam;
             _filterBlacklistStatus = BlacklistStatusParam;
         }
+        if (!string.IsNullOrEmpty(ModifiedAfterParam) && DateTime.TryParse(ModifiedAfterParam, null, System.Globalization.DateTimeStyles.RoundtripKind, out var modAfter))
+        {
+            _filterModifiedAfter = modAfter;
+        }
+        if (!string.IsNullOrEmpty(ModifiedBeforeParam) && DateTime.TryParse(ModifiedBeforeParam, null, System.Globalization.DateTimeStyles.RoundtripKind, out var modBefore))
+        {
+            _filterModifiedBefore = modBefore;
+        }
+        if (!string.IsNullOrEmpty(OrchestrationRequestIdParam))
+        {
+            _filterRequestId = OrchestrationRequestIdParam;
+        }
+        if (!string.IsNullOrEmpty(ExecutionRequestTypeIdParam) && int.TryParse(ExecutionRequestTypeIdParam, out var execReqType))
+        {
+            _filterExecutionRequestTypeId = execReqType;
+        }
+        if (!string.IsNullOrEmpty(ExecutionIsErrorParam) && bool.TryParse(ExecutionIsErrorParam, out var execIsError))
+        {
+            _filterExecutionIsError = execIsError;
+        }
+        _hasOrchestrationFilter = !string.IsNullOrEmpty(_filterRequestId) || _filterModifiedAfter.HasValue || _filterModifiedBefore.HasValue || _filterExecutionRequestTypeId.HasValue || _filterExecutionIsError.HasValue;
+
+        _testModeStatus = await AdrService.GetTestModeStatusAsync();
         _loading = false;
+    }
+
+    private void ClearOrchestrationFilter()
+    {
+        _filterModifiedAfter = null;
+        _filterModifiedBefore = null;
+        _filterStatus = null;
+        _selectedStatus = "";
+        _filterRequestId = null;
+        _filterExecutionRequestTypeId = null;
+        _filterExecutionIsError = null;
+        _hasOrchestrationFilter = false;
+        Navigation.NavigateTo("/adr/jobs");
     }
 
     private async Task<TableData<AdrJob>> ServerReload(TableState state, CancellationToken cancellationToken)
@@ -437,7 +524,12 @@
                 _filterBlacklistStatus,
                 sortColumn,
                 sortDescending,
-                _selectedAdrJobTypeId);
+                _selectedAdrJobTypeId,
+                _filterModifiedAfter,
+                _filterModifiedBefore,
+                _filterRequestId,
+                _filterExecutionRequestTypeId,
+                _filterExecutionIsError);
 
             return new TableData<AdrJob>
             {
@@ -552,6 +644,43 @@
         "NeedsReview" => Color.Warning,
         _ => Color.Default
     };
+
+    private string GetStatusDisplayName(string status) => status switch
+    {
+        "ScrapeRequested" => "ADR Request Sent",
+        "ScrapeFailed" => "ADR Request Failed",
+        "ScrapeInProgress" => "ADR Request In Progress",
+        "CredentialCheckInProgress" => "Credential Check In Progress",
+        "CredentialVerified" => "Credential Verified",
+        "CredentialFailed" => "Credential Failed",
+        "StatusCheckInProgress" => "Status Check In Progress",
+        "NoInvoiceFound" => "No Invoice Found",
+        "NeedsReview" => "Needs Review",
+        _ => status
+    };
+
+    private string GetJobStatusExplanation(AdrJob job)
+    {
+        return job.Status switch
+        {
+            "Pending" => "This job has been created and is waiting to be processed. Credential verification will begin when the job enters the processing window.",
+            "CredentialCheckInProgress" => "Credentials are currently being verified with the vendor to confirm the account login is valid.",
+            "CredentialVerified" => "Credentials were verified successfully. The job is ready for the ADR request to be sent.",
+            "CredentialFailed" => "Credential verification failed. The vendor may have rejected the login or the credentials may be outdated.",
+            "ScrapeInProgress" => "An ADR request is currently being processed by the vendor.",
+            "ScrapeRequested" => "An ADR request has been sent to the vendor and is awaiting a response. Status will be checked periodically.",
+            "ScrapeFailed" => "The ADR request failed. The vendor may be experiencing issues or the request was rejected.",
+            "StatusCheckInProgress" => "The system is checking the status of the ADR request with the vendor.",
+            "NoInvoiceFound" => "The vendor reported no invoice found for the requested billing period. This may mean the invoice hasn't been posted yet.",
+            "Failed" => job.RetryCount < 5
+                ? $"The job failed during processing (retry {job.RetryCount} of 5). It will be retried automatically."
+                : "The job has failed and reached the maximum number of retries. Manual intervention may be required.",
+            "Completed" => "The job completed successfully. The invoice was downloaded and processed.",
+            "NeedsReview" => "The job requires manual review. The vendor may have returned unexpected results or partial data.",
+            "Cancelled" => "The job was cancelled and will not be processed further.",
+            _ => $"Job status: {job.Status}"
+        };
+    }
 
     private Color GetAdrStatusColor(int statusId) => statusId switch
     {
@@ -860,6 +989,16 @@
             _isRefiring = false;
         }
     }
+
+    private string GetRequestTypeName(int requestTypeId) => requestTypeId switch
+    {
+        1 => "Credential Verification",
+        2 => "ADR Request",
+        3 => "Rebill",
+        4 => "Status Check",
+        5 => "Job Creation",
+        _ => $"Type {requestTypeId}"
+    };
 
     private async Task CheckJobStatus(AdrJob job)
     {

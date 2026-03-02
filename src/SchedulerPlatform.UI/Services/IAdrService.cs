@@ -18,7 +18,12 @@ public interface IAdrService
         string? primaryVendorCode = null,
         string? masterVendorCode = null,
         string? sortColumn = null,
-        bool sortDescending = false);
+        bool sortDescending = false,
+        DateTime? modifiedAfter = null,
+        DateTime? modifiedBefore = null,
+        string? orchestrationRequestId = null,
+        DateTime? createdAfter = null,
+        DateTime? createdBefore = null);
     
     Task<List<string>> GetPrimaryVendorCodesAsync(string? searchTerm = null, int limit = 50);
     Task<List<string>> GetMasterVendorCodesAsync(string? searchTerm = null, int limit = 50);
@@ -52,7 +57,12 @@ public interface IAdrService
             string? blacklistStatus = null,
             string? sortColumn = null,
             bool sortDescending = true,
-            int? adrJobTypeId = null);
+            int? adrJobTypeId = null,
+            DateTime? modifiedAfter = null,
+            DateTime? modifiedBefore = null,
+            string? orchestrationRequestId = null,
+            int? executionRequestTypeId = null,
+            bool? executionIsError = null);
     Task<AdrJob?> GetJobAsync(int id);
     Task<List<AdrJob>> GetJobsByAccountAsync(int adrAccountId);
     Task<AdrJobStats> GetJobStatsAsync(int? lastOrchestrationRuns = null);

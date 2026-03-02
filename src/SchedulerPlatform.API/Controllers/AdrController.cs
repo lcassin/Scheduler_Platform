@@ -72,6 +72,11 @@ public class AdrController : ControllerBase
     /// <param name="pageSize">Number of items per page (default: 20).</param>
     /// <param name="sortColumn">Column name to sort by.</param>
     /// <param name="sortDescending">Whether to sort in descending order.</param>
+    /// <param name="modifiedAfter">Optional filter to return accounts modified after this date/time (UTC). Used for orchestration run tracking.</param>
+    /// <param name="modifiedBefore">Optional filter to return accounts modified before this date/time (UTC). Used for orchestration run tracking.</param>
+    /// <param name="orchestrationRequestId">Optional filter to return accounts that have jobs with execution records matching this orchestration run request ID.</param>
+    /// <param name="createdAfter">Optional filter to return accounts created after this date/time (UTC). Used for filtering accounts inserted during an orchestration run.</param>
+    /// <param name="createdBefore">Optional filter to return accounts created before this date/time (UTC). Used for filtering accounts that existed before an orchestration run.</param>
     /// <returns>A paginated list of ADR accounts with job status information.</returns>
     /// <response code="200">Returns the list of ADR accounts.</response>
     /// <response code="500">An error occurred while retrieving ADR accounts.</response>
@@ -92,7 +97,12 @@ public class AdrController : ControllerBase
         [FromQuery] int pageNumber = 1,
         [FromQuery] int pageSize = 20,
         [FromQuery] string? sortColumn = null,
-        [FromQuery] bool sortDescending = false)
+        [FromQuery] bool sortDescending = false,
+        [FromQuery] DateTime? modifiedAfter = null,
+        [FromQuery] DateTime? modifiedBefore = null,
+        [FromQuery] string? orchestrationRequestId = null,
+        [FromQuery] DateTime? createdAfter = null,
+        [FromQuery] DateTime? createdBefore = null)
     {
         try
         {
@@ -199,19 +209,23 @@ public class AdrController : ControllerBase
                 }
             }
             
-            // Combine job status and blacklist status filters if both are present
+            List<int>? accountIdsWithOrchestrationRun = null;
+            if (!string.IsNullOrWhiteSpace(orchestrationRequestId))
+            {
+                accountIdsWithOrchestrationRun = await _dbContext.AdrJobExecutions
+                    .Where(e => !e.IsDeleted && e.OrchestrationRequestId == orchestrationRequestId)
+                    .Select(e => e.AdrJob!.AdrAccountId)
+                    .Distinct()
+                    .ToListAsync();
+            }
+
+            // Combine all account ID filters
+            var allAccountIdFilters = new List<List<int>?> { accountIdsWithJobStatus, accountIdsWithBlacklistStatus, accountIdsWithOrchestrationRun };
+            var activeFilters = allAccountIdFilters.Where(f => f != null).Cast<List<int>>().ToList();
             List<int>? combinedAccountIds = null;
-            if (accountIdsWithJobStatus != null && accountIdsWithBlacklistStatus != null)
+            if (activeFilters.Count > 0)
             {
-                combinedAccountIds = accountIdsWithJobStatus.Intersect(accountIdsWithBlacklistStatus).ToList();
-            }
-            else if (accountIdsWithJobStatus != null)
-            {
-                combinedAccountIds = accountIdsWithJobStatus;
-            }
-            else if (accountIdsWithBlacklistStatus != null)
-            {
-                combinedAccountIds = accountIdsWithBlacklistStatus;
+                combinedAccountIds = activeFilters.Aggregate((a, b) => a.Intersect(b).ToList());
             }
 
             var (items, totalCount) = await _unitOfWork.AdrAccounts.GetPagedAsync(
@@ -227,22 +241,28 @@ public class AdrController : ControllerBase
                 sortDescending,
                 combinedAccountIds,
                 primaryVendorCode,
-                masterVendorCode);
+                masterVendorCode,
+                modifiedAfter,
+                modifiedBefore,
+                createdAfter,
+                createdBefore);
 
             // Get account IDs from the current page
             var accountIds = items.Select(a => a.Id).ToList();
             
-            // Get rule override status for each account (single query)
+            // Get rule data for each account (override status + scheduling dates for display)
             var ruleOverrideStatuses = await _dbContext.AdrAccountRules
-                .Where(r => !r.IsDeleted && accountIds.Contains(r.AdrAccountId))
+                .Where(r => !r.IsDeleted && accountIds.Contains(r.AdrAccountId) && r.JobTypeId == 2)
                 .GroupBy(r => r.AdrAccountId)
                 .Select(g => new
                 {
                     AdrAccountId = g.Key,
-                    // Get the primary rule's override status (first rule per account)
                     RuleIsManuallyOverridden = g.OrderBy(r => r.Id).Select(r => r.IsManuallyOverridden).FirstOrDefault(),
                     RuleOverriddenBy = g.OrderBy(r => r.Id).Select(r => r.OverriddenBy).FirstOrDefault(),
-                    RuleOverriddenDateTime = g.OrderBy(r => r.Id).Select(r => r.OverriddenDateTime).FirstOrDefault()
+                    RuleOverriddenDateTime = g.OrderBy(r => r.Id).Select(r => r.OverriddenDateTime).FirstOrDefault(),
+                    RuleNextRunDateTime = g.OrderBy(r => r.Id).Select(r => r.NextRunDateTime).FirstOrDefault(),
+                    RuleNextRangeStartDateTime = g.OrderBy(r => r.Id).Select(r => r.NextRangeStartDateTime).FirstOrDefault(),
+                    RuleNextRangeEndDateTime = g.OrderBy(r => r.Id).Select(r => r.NextRangeEndDateTime).FirstOrDefault()
                 })
                 .ToListAsync();
             
@@ -343,49 +363,67 @@ public class AdrController : ControllerBase
             }
             
             // Map to response with job status
-            var itemsWithJobStatus = items.Select(a => new
+            // Prefer rule's NextRunDateTime over account's (account field may be stale between syncs)
+            var itemsWithJobStatus = items.Select(a =>
             {
-                a.Id,
-                a.VMAccountId,
-                a.VMAccountNumber,
-                a.InterfaceAccountId,
-                a.ClientId,
-                a.ClientName,
-                a.CredentialId,
-                a.PrimaryVendorCode,
-                a.MasterVendorCode,
-                a.PeriodType,
-                a.PeriodDays,
-                a.MedianDays,
-                a.InvoiceCount,
-                a.LastInvoiceDateTime,
-                a.ExpectedNextDateTime,
-                a.ExpectedRangeStartDateTime,
-                a.ExpectedRangeEndDateTime,
-                a.NextRunDateTime,
-                a.NextRangeStartDateTime,
-                a.NextRangeEndDateTime,
-                a.DaysUntilNextRun,
-                a.NextRunStatus,
-                a.HistoricalBillingStatus,
-                a.LastSyncedDateTime,
-                a.IsManuallyOverridden,
-                a.OverriddenBy,
-                a.OverriddenDateTime,
-                a.IsDeleted,
-                a.CreatedDateTime,
-                a.ModifiedDateTime,
-                CurrentJobStatus = jobStatusLookup.TryGetValue(a.Id, out var js) ? js.CurrentJobStatus : null,
-                LastCompletedDateTime = jobStatusLookup.TryGetValue(a.Id, out var js2) ? js2.LastCompletedDateTime : null,
-                RuleIsManuallyOverridden = ruleOverrideLookup.TryGetValue(a.Id, out var ro) && ro.RuleIsManuallyOverridden,
-                RuleOverriddenBy = ruleOverrideLookup.TryGetValue(a.Id, out var ro2) ? ro2.RuleOverriddenBy : null,
-                RuleOverriddenDateTime = ruleOverrideLookup.TryGetValue(a.Id, out var ro3) ? ro3.RuleOverriddenDateTime : null,
-                HasCurrentBlacklist = blacklistStatusLookup.TryGetValue(a.Id, out var bl) && bl.HasCurrent,
-                HasFutureBlacklist = blacklistStatusLookup.TryGetValue(a.Id, out var bl2) && bl2.HasFuture,
-                CurrentBlacklistCount = blacklistStatusLookup.TryGetValue(a.Id, out var bl3) ? bl3.CurrentCount : 0,
-                FutureBlacklistCount = blacklistStatusLookup.TryGetValue(a.Id, out var bl4) ? bl4.FutureCount : 0,
-                CurrentBlacklists = blacklistStatusLookup.TryGetValue(a.Id, out var bl5) ? bl5.CurrentSummaries : new List<BlacklistSummary>(),
-                FutureBlacklists = blacklistStatusLookup.TryGetValue(a.Id, out var bl6) ? bl6.FutureSummaries : new List<BlacklistSummary>()
+                var hasRule = ruleOverrideLookup.TryGetValue(a.Id, out var ruleData);
+                var nextRun = (hasRule && ruleData.RuleNextRunDateTime.HasValue)
+                    ? ruleData.RuleNextRunDateTime
+                    : a.NextRunDateTime;
+                var nextRangeStart = (hasRule && ruleData.RuleNextRangeStartDateTime.HasValue)
+                    ? ruleData.RuleNextRangeStartDateTime
+                    : a.NextRangeStartDateTime;
+                var nextRangeEnd = (hasRule && ruleData.RuleNextRangeEndDateTime.HasValue)
+                    ? ruleData.RuleNextRangeEndDateTime
+                    : a.NextRangeEndDateTime;
+                var daysUntilRun = nextRun.HasValue
+                    ? (int)(nextRun.Value.Date - DateTime.UtcNow.Date).TotalDays
+                    : a.DaysUntilNextRun;
+
+                return new
+                {
+                    a.Id,
+                    a.VMAccountId,
+                    a.VMAccountNumber,
+                    a.InterfaceAccountId,
+                    a.ClientId,
+                    a.ClientName,
+                    a.CredentialId,
+                    a.PrimaryVendorCode,
+                    a.MasterVendorCode,
+                    a.PeriodType,
+                    a.PeriodDays,
+                    a.MedianDays,
+                    a.InvoiceCount,
+                    a.LastInvoiceDateTime,
+                    a.ExpectedNextDateTime,
+                    a.ExpectedRangeStartDateTime,
+                    a.ExpectedRangeEndDateTime,
+                    NextRunDateTime = nextRun,
+                    NextRangeStartDateTime = nextRangeStart,
+                    NextRangeEndDateTime = nextRangeEnd,
+                    DaysUntilNextRun = daysUntilRun,
+                    a.NextRunStatus,
+                    a.HistoricalBillingStatus,
+                    a.LastSyncedDateTime,
+                    a.IsManuallyOverridden,
+                    a.OverriddenBy,
+                    a.OverriddenDateTime,
+                    a.IsDeleted,
+                    a.CreatedDateTime,
+                    a.ModifiedDateTime,
+                    CurrentJobStatus = jobStatusLookup.TryGetValue(a.Id, out var js) ? js.CurrentJobStatus : null,
+                    LastCompletedDateTime = jobStatusLookup.TryGetValue(a.Id, out var js2) ? js2.LastCompletedDateTime : null,
+                    RuleIsManuallyOverridden = hasRule && ruleData.RuleIsManuallyOverridden,
+                    RuleOverriddenBy = hasRule ? ruleData.RuleOverriddenBy : null,
+                    RuleOverriddenDateTime = hasRule ? ruleData.RuleOverriddenDateTime : null,
+                    HasCurrentBlacklist = blacklistStatusLookup.TryGetValue(a.Id, out var bl) && bl.HasCurrent,
+                    HasFutureBlacklist = blacklistStatusLookup.TryGetValue(a.Id, out var bl2) && bl2.HasFuture,
+                    CurrentBlacklistCount = blacklistStatusLookup.TryGetValue(a.Id, out var bl3) ? bl3.CurrentCount : 0,
+                    FutureBlacklistCount = blacklistStatusLookup.TryGetValue(a.Id, out var bl4) ? bl4.FutureCount : 0,
+                    CurrentBlacklists = blacklistStatusLookup.TryGetValue(a.Id, out var bl5) ? bl5.CurrentSummaries : new List<BlacklistSummary>(),
+                    FutureBlacklists = blacklistStatusLookup.TryGetValue(a.Id, out var bl6) ? bl6.FutureSummaries : new List<BlacklistSummary>()
+                };
             }).ToList();
 
             return Ok(new
@@ -1651,6 +1689,11 @@ public class AdrController : ControllerBase
     /// <param name="adrJobTypeId">Optional job type ID filter (1 = Credential Check, 2 = Download Invoice, 3 = Rebill).</param>
     /// <param name="sortColumn">Column name to sort by.</param>
     /// <param name="sortDescending">Whether to sort in descending order (default: true).</param>
+    /// <param name="modifiedAfter">Optional filter to return jobs modified after this date/time (UTC). Used for orchestration run tracking.</param>
+    /// <param name="modifiedBefore">Optional filter to return jobs modified before this date/time (UTC). Used for orchestration run tracking.</param>
+    /// <param name="orchestrationRequestId">Optional filter to return jobs that have an execution record for this orchestration run RequestId.</param>
+    /// <param name="executionRequestTypeId">Optional filter to return jobs that have an execution record with this AdrRequestTypeId (1=AttemptLogin, 2=DownloadInvoice, 3=Rebill, 4=StatusCheck, 5=JobCreation).</param>
+    /// <param name="executionIsError">Optional filter to return jobs that have an execution record where IsError matches this value.</param>
     /// <returns>A paginated list of ADR jobs.</returns>
     /// <response code="200">Returns the paginated list of ADR jobs.</response>
     /// <response code="500">An error occurred while retrieving ADR jobs.</response>
@@ -1675,7 +1718,12 @@ public class AdrController : ControllerBase
         [FromQuery] string? blacklistStatus = null,
         [FromQuery] int? adrJobTypeId = null,
         [FromQuery] string? sortColumn = null,
-        [FromQuery] bool sortDescending = true)
+        [FromQuery] bool sortDescending = true,
+        [FromQuery] DateTime? modifiedAfter = null,
+        [FromQuery] DateTime? modifiedBefore = null,
+        [FromQuery] string? orchestrationRequestId = null,
+        [FromQuery] int? executionRequestTypeId = null,
+        [FromQuery] bool? executionIsError = null)
     {
             try
             {
@@ -1770,7 +1818,12 @@ public class AdrController : ControllerBase
                     sortColumn,
                     sortDescending,
                     jobIdsWithBlacklistStatus,
-                    adrJobTypeId);
+                    adrJobTypeId,
+                    modifiedAfter,
+                    modifiedBefore,
+                    orchestrationRequestId,
+                    executionRequestTypeId,
+                    executionIsError);
 
                 // Get blacklist status for each job (single query)
                 var today = DateTime.UtcNow.Date;
@@ -2921,32 +2974,54 @@ public class AdrController : ControllerBase
 
     /// <summary>
     /// Triggers bulk credential verification for ALL active accounts in the system.
-    /// This is a one-time operation to check all existing credentials ahead of time,
-    /// regardless of scheduling or test mode limits. Use this to identify credential
-    /// issues before they affect scheduled jobs.
+    /// This is a long-running operation that runs in the background. Returns immediately
+    /// with a request ID that can be used to poll for status via the orchestrate/status/{requestId} endpoint.
     /// WARNING: This will call the ADR API for every active account with a valid CredentialId.
     /// For large systems (170k+ accounts), this operation may take several hours.
     /// </summary>
-    /// <param name="cancellationToken">Cancellation token for the operation.</param>
-    /// <returns>The bulk credential verification result including counts of verified and failed credentials.</returns>
-    /// <response code="200">Returns the bulk credential verification result.</response>
-    /// <response code="500">An error occurred during bulk credential verification.</response>
+    /// <param name="testrun">Optional limit on the number of accounts to process.</param>
+    /// <returns>The queued request details including request ID for status tracking.</returns>
+    /// <response code="200">Returns the queued orchestration request details.</response>
+    /// <response code="500">An error occurred while queuing bulk credential verification.</response>
     [HttpPost("orchestrate/verify-all-credentials")]
     [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
-    [ProducesResponseType(typeof(BulkCredentialVerificationResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<BulkCredentialVerificationResult>> VerifyAllCredentials(CancellationToken cancellationToken, int? testrun=null)
+    public async Task<ActionResult<object>> VerifyAllCredentials(int? testrun=null)
     {
         try
         {
-            _logger.LogInformation("BULK credential verification for ALL accounts triggered by {User}", User.Identity?.Name ?? "Unknown");
-            var result = await _orchestratorService.VerifyAllAccountCredentialsAsync(null, cancellationToken, testrun);
-            return Ok(result);
+            var orchestrationRequest = new AdrOrchestrationRequest
+            {
+                RequestedBy = User.Identity?.Name ?? "API",
+                RunSync = false,
+                RunCreateJobs = false,
+                RunCredentialVerification = false,
+                RunScraping = false,
+                RunStatusCheck = false,
+                RunBulkCredentialVerification = true,
+                TestRunLimit = testrun
+            };
+
+            await _orchestrationQueue.QueueAsync(orchestrationRequest);
+
+            _logger.LogInformation(
+                "BULK credential verification queued with request ID {RequestId} by {User} (testrun={TestRun})",
+                orchestrationRequest.RequestId, orchestrationRequest.RequestedBy, testrun);
+
+            return Ok(new
+            {
+                message = "Bulk credential verification queued successfully. The job will run in the background.",
+                requestId = orchestrationRequest.RequestId,
+                requestedAt = orchestrationRequest.RequestedAt,
+                requestedBy = orchestrationRequest.RequestedBy,
+                statusEndpoint = $"/api/adr/orchestrate/status/{orchestrationRequest.RequestId}"
+            });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during bulk credential verification");
-            return StatusCode(500, new { error = "An error occurred during bulk credential verification", message = ex.Message });
+            _logger.LogError(ex, "Error queuing bulk credential verification");
+            return StatusCode(500, new { error = "An error occurred while queuing bulk credential verification", message = ex.Message });
         }
     }
 
@@ -4667,6 +4742,15 @@ public class AdrController : ControllerBase
                 return BadRequest("At least one exclusion criteria (MasterVendorCode, PrimaryVendorCode, VMAccountId, VMAccountNumber, or CredentialId) must be provided");
             }
             
+            // Account-level criteria (VMAccountNumber, VMAccountId) require a vendor code
+            // to prevent false matches across different vendors sharing the same account number
+            if ((!string.IsNullOrWhiteSpace(request.VMAccountNumber) || request.VMAccountId.HasValue) &&
+                string.IsNullOrWhiteSpace(request.MasterVendorCode) && 
+                string.IsNullOrWhiteSpace(request.PrimaryVendorCode))
+            {
+                return BadRequest("Account Number and VM Account ID require a vendor code (Master or Primary) to prevent false matches across different vendors");
+            }
+            
             // Both effective dates are required
             if (!request.EffectiveStartDate.HasValue)
             {
@@ -4771,6 +4855,15 @@ public class AdrController : ControllerBase
                 !entry.CredentialId.HasValue)
             {
                 return BadRequest("At least one exclusion criteria (MasterVendorCode, PrimaryVendorCode, VMAccountId, VMAccountNumber, or CredentialId) must be provided");
+            }
+            
+            // Account-level criteria (VMAccountNumber, VMAccountId) require a vendor code
+            // to prevent false matches across different vendors sharing the same account number
+            if ((!string.IsNullOrWhiteSpace(entry.VMAccountNumber) || entry.VMAccountId.HasValue) &&
+                string.IsNullOrWhiteSpace(entry.MasterVendorCode) && 
+                string.IsNullOrWhiteSpace(entry.PrimaryVendorCode))
+            {
+                return BadRequest("Account Number and VM Account ID require a vendor code (Master or Primary) to prevent false matches across different vendors");
             }
             
             // Validate both effective dates are set

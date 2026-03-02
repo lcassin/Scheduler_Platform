@@ -84,12 +84,24 @@ public partial class MainWindow : Window
     private FileSystemWatcher? _fileWatcher;
     private bool _isReloadingFile; // Prevent recursive change notifications during reload
     private bool _isSavingFile; // Prevent change notification when we save the file ourselves
+    
+    // Tab drag-and-drop
+    private System.Windows.Point _tabDragStartPoint;
+    private bool _isTabDragging;
+    private System.Windows.Controls.Border? _draggedTab;
+    
+    // Auto-save and session restore
+    private readonly DispatcherTimer _autoSaveTimer;
+    private bool _isAutoSaving; // Prevent re-entrancy during auto-save
+    private static readonly string AppDataFolder = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MermaidEditor");
+    private static readonly string AutoSaveFolder = Path.Combine(AppDataFolder, "AutoSave");
+    private static readonly string SessionFilePath = Path.Combine(AppDataFolder, "session.json");
+    // Default auto-save interval; overridden by SettingsManager on load
+    private int _autoSaveIntervalSeconds = 30;
 
     private const string DefaultMermaidCode= @"flowchart TD
-    A[Start] --> B{Is it working?}
-    B -->|Yes| C[Great!]
-    B -->|No| D[Debug]
-    D --> B";
+    A[Start] --> B[End]";
 
     private const string DefaultMarkdownCode = @"# Welcome to Markdown Editor
 
@@ -119,6 +131,12 @@ Console.WriteLine(""Hello, World!"");
     public ICommand ExportSvgCommand { get; }
     public ICommand ExportEmfCommand { get; }
     public ICommand ExportWordCommand { get; }
+    public ICommand FormatBoldCommand { get; }
+    public ICommand FormatItalicCommand { get; }
+    public ICommand FormatLinkCommand { get; }
+    public ICommand FindReplaceCommand { get; }
+    public ICommand FindNextCommand { get; }
+    public ICommand SettingsCommand { get; }
 
     public MainWindow()
     {
@@ -133,12 +151,25 @@ Console.WriteLine(""Hello, World!"");
         ExportSvgCommand = new RelayCommand(_ => ExportSvg_Click(this, new RoutedEventArgs()));
         ExportEmfCommand = new RelayCommand(_ => ExportEmf_Click(this, new RoutedEventArgs()));
         ExportWordCommand = new RelayCommand(_ => ExportWord_Click(this, new RoutedEventArgs()));
+        FormatBoldCommand = new RelayCommand(_ => FormatBold_Click(this, new RoutedEventArgs()));
+        FormatItalicCommand = new RelayCommand(_ => FormatItalic_Click(this, new RoutedEventArgs()));
+        FormatLinkCommand = new RelayCommand(_ => FormatLink_Click(this, new RoutedEventArgs()));
+        FindReplaceCommand = new RelayCommand(_ => FindReplace_Click(this, new RoutedEventArgs()));
+        FindNextCommand = new RelayCommand(_ => FindNext_Click(this, new RoutedEventArgs()));
+        SettingsCommand = new RelayCommand(_ => Settings_Click(this, new RoutedEventArgs()));
 
         _renderTimer = new DispatcherTimer
         {
             Interval = TimeSpan.FromMilliseconds(500)
         };
         _renderTimer.Tick += RenderTimer_Tick;
+        
+        // Auto-save timer (interval configured via SettingsManager)
+        _autoSaveTimer = new DispatcherTimer
+        {
+            Interval = TimeSpan.FromSeconds(_autoSaveIntervalSeconds)
+        };
+        _autoSaveTimer.Tick += AutoSaveTimer_Tick;
 
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
@@ -146,7 +177,7 @@ Console.WriteLine(""Hello, World!"");
 
         SetupCodeEditor();
         
-        // Initialize multi-document tab system
+        // Initialize multi-document tab system (includes session restore)
         InitializeDocumentTabs();
     }
 
@@ -314,8 +345,36 @@ Console.WriteLine(""Hello, World!"");
         {
             StatusText.Text = $"Line {CodeEditor.TextArea.Caret.Line}, Col {CodeEditor.TextArea.Caret.Column}";
         };
+        
+        // Intercept Ctrl+F and Ctrl+H before AvalonEdit handles them
+        CodeEditor.PreviewKeyDown += CodeEditor_PreviewKeyDown;
 
         RegisterMermaidSyntaxHighlighting();
+        
+        // Enable bracket highlighting by default
+        EnableBracketHighlighting();
+    }
+    
+    private void CodeEditor_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.F && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            // Ctrl+F - Open Find dialog
+            OpenFindDialog(showReplace: false);
+            e.Handled = true;
+        }
+        else if (e.Key == System.Windows.Input.Key.H && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            // Ctrl+H - Open Find and Replace dialog
+            OpenFindDialog(showReplace: true);
+            e.Handled = true;
+        }
+        else if (e.Key == System.Windows.Input.Key.F3 && Keyboard.Modifiers == ModifierKeys.None)
+        {
+            // F3 - Find Next
+            FindNext_Click(sender, new RoutedEventArgs());
+            e.Handled = true;
+        }
     }
 
     private void RegisterMermaidSyntaxHighlighting()
@@ -562,8 +621,9 @@ Console.WriteLine(""Hello, World!"");
     {
         try
         {
-                // Load and apply saved theme
+                // Load unified settings (also loads theme via SettingsManager)
                 ThemeManager.LoadTheme();
+                ApplySettingsToEditor();
                 UpdateThemeMenuCheckmarks();
                 UpdateEditorTheme();
                 UpdateTitleBarTheme();
@@ -583,12 +643,22 @@ Console.WriteLine(""Hello, World!"");
             // Load recent files
             LoadRecentFiles();
             
+            // Enable bracket highlighting by default (since toggle is checked by default)
+            if (_isBracketMatchingEnabled)
+            {
+                EnableBracketHighlighting();
+            }
+            
             // Show New Document dialog if no file was opened via command line
+            // (skip if we restored a session)
             if (_showNewDocumentDialogOnLoad)
             {
                 _showNewDocumentDialogOnLoad = false;
                 ShowStartupNewDocumentDialog();
             }
+            
+            // Start auto-save timer
+            _autoSaveTimer.Start();
         }
         catch (Exception ex)
         {
@@ -659,10 +729,17 @@ Console.WriteLine(""Hello, World!"");
             foreach (var toolBar in toolBars)
             {
                 // Find the overflow button by looking for ToggleButton in the toolbar
+                // BUT skip our named toggle buttons (SplitViewToggle, LineNumbersToggle, etc.)
                 var toggleButtons = FindVisualChildren<System.Windows.Controls.Primitives.ToggleButton>(toolBar);
                 foreach (var toggleButton in toggleButtons)
                 {
-                    // Style the toggle button itself
+                    // Skip our custom toggle buttons - they have names
+                    if (!string.IsNullOrEmpty(toggleButton.Name))
+                    {
+                        continue;
+                    }
+                    
+                    // Style the overflow toggle button itself
                     toggleButton.Background = darkBrush;
                     toggleButton.Foreground = foregroundBrush;
                     toggleButton.BorderThickness = new Thickness(0);
@@ -764,6 +841,15 @@ Console.WriteLine(""Hello, World!"");
 
     private void MainWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
+        // Stop auto-save timer
+        _autoSaveTimer.Stop();
+        
+        // Save session state and auto-save content before prompting user
+        // This ensures we have a backup even if the user cancels or the app crashes later
+        SaveActiveDocumentState();
+        AutoSaveAllDocuments();
+        SaveSessionState();
+        
         // Check all open documents for unsaved changes
         var unsavedDocs = _openDocuments.Where(d => d.IsDirty).ToList();
         
@@ -784,12 +870,19 @@ Console.WriteLine(""Hello, World!"");
                         if (!SaveDocument(doc))
                         {
                             e.Cancel = true;
+                            _autoSaveTimer.Start(); // Restart timer if user cancels
                             return;
                         }
                     }
+                    // User saved all docs - update session to reflect saved state
+                    SaveSessionState();
                     break;
                 case MessageBoxResult.Cancel:
                     e.Cancel = true;
+                    _autoSaveTimer.Start(); // Restart timer if user cancels
+                    return;
+                case MessageBoxResult.No:
+                    // User chose not to save - session already saved above with dirty state
                     break;
             }
         }
@@ -812,6 +905,10 @@ Console.WriteLine(""Hello, World!"");
         UpdateUndoRedoState();
         _renderTimer.Stop();
         _renderTimer.Start();
+        
+        // Reset auto-save timer on text change so it fires 30s after last edit
+        _autoSaveTimer.Stop();
+        _autoSaveTimer.Start();
     }
     
     private void UpdateUndoRedoState()
@@ -859,15 +956,37 @@ Console.WriteLine(""Hello, World!"");
         {
             try
             {
-                // Update diagram without reloading the page - pan/zoom position is preserved
-                await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
-                    (function() {{
-                        if (typeof updateDiagram === 'function') {{
-                            updateDiagram({escapedCode});
-                        }}
-                    }})();
-                ");
+                // When switching documents, we need to apply the document's zoom level, scroll position, and pan position
+                // Otherwise, preserve the current pan/zoom position for normal edits
+                if (_isSwitchingDocuments && _activeDocument != null)
+                {
+                    // Update diagram and pass the document's zoom level, scroll position, and pan position
+                    // This ensures the correct state is applied after the async render completes
+                    var scrollLeft = _activeDocument.PreviewScrollLeft.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var scrollTop = _activeDocument.PreviewScrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var panX = _activeDocument.PreviewPanX.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var panY = _activeDocument.PreviewPanY.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
+                        (function() {{
+                            if (typeof updateDiagram === 'function') {{
+                                updateDiagram({escapedCode}, {_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)}, {scrollLeft}, {scrollTop}, {panX}, {panY});
+                            }}
+                        }})();
+                    ");
+                }
+                else
+                {
+                    // Update diagram without reloading the page - pan/zoom position is preserved
+                    await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
+                        (function() {{
+                            if (typeof updateDiagram === 'function') {{
+                                updateDiagram({escapedCode});
+                            }}
+                        }})();
+                    ");
+                }
                 StatusText.Text = "Mermaid rendered";
+                UpdateZoomUI();
                 return;
             }
             catch
@@ -876,6 +995,23 @@ Console.WriteLine(""Hello, World!"");
                 _mermaidPageLoaded = false;
             }
         }
+
+        // Get target positions for restoration when switching documents (full page reload path)
+        var targetScrollLeft = (_isSwitchingDocuments && _activeDocument != null) 
+            ? _activeDocument.PreviewScrollLeft.ToString(System.Globalization.CultureInfo.InvariantCulture) 
+            : "0";
+        var targetScrollTop = (_isSwitchingDocuments && _activeDocument != null) 
+            ? _activeDocument.PreviewScrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture) 
+            : "0";
+        var targetPanX = (_isSwitchingDocuments && _activeDocument != null) 
+            ? _activeDocument.PreviewPanX.ToString(System.Globalization.CultureInfo.InvariantCulture) 
+            : "0";
+        var targetPanY = (_isSwitchingDocuments && _activeDocument != null) 
+            ? _activeDocument.PreviewPanY.ToString(System.Globalization.CultureInfo.InvariantCulture) 
+            : "0";
+        var targetZoom = (_isSwitchingDocuments && _activeDocument != null) 
+            ? _activeDocument.PreviewZoom.ToString(System.Globalization.CultureInfo.InvariantCulture) 
+            : "1";
 
         var html = $@"<!DOCTYPE html>
 <html>
@@ -906,16 +1042,18 @@ Console.WriteLine(""Hello, World!"");
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             display: inline-block;
-            min-width: 2000px;
         }}
         #diagram.has-error {{
-            min-width: auto;
             max-width: calc(100vw - 60px);
         }}
         #diagram svg {{
             display: block;
+        }}
+        /* Override Mermaid's huge inline width styles ONLY for gantt charts */
+        #diagram svg[aria-roledescription=""gantt""] {{
+            width: auto !important;
+            min-width: auto !important;
             max-width: none !important;
-            min-width: 100% !important;
         }}
         .error {{
             color: #d32f2f;
@@ -939,8 +1077,16 @@ Console.WriteLine(""Hello, World!"");
         </div>
     </div>
     <script>
-        let panzoomInstance = null;
-        let currentZoom = {_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)};
+        // Use window-level variables so they can be accessed from C# via ExecuteScriptAsync
+        window.panzoomInstance = null;
+        window.currentZoom = {_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)};
+        
+        // Target positions for restoration when switching documents
+        var targetScrollLeft = {targetScrollLeft};
+        var targetScrollTop = {targetScrollTop};
+        var targetPanX = {targetPanX};
+        var targetPanY = {targetPanY};
+        var targetZoom = {targetZoom};
         
         // Don't set theme here - let frontmatter config take precedence
         // Mermaid will parse ---config:--- frontmatter automatically
@@ -954,45 +1100,42 @@ Console.WriteLine(""Hello, World!"");
             const diagram = document.getElementById('diagram');
             const svg = document.querySelector('#diagram svg');
             
-            // Fix SVG and container dimensions after render
+            // Auto-size the container to fit the actual SVG content
             if (svg) {{
-                // Get actual SVG dimensions
-                let svgWidth = 0;
-                let svgHeight = 0;
-                
-                // Try viewBox first
-                const viewBox = svg.getAttribute('viewBox');
-                if (viewBox) {{
-                    const parts = viewBox.split(' ');
-                    if (parts.length === 4) {{
-                        svgWidth = parseFloat(parts[2]);
-                        svgHeight = parseFloat(parts[3]);
-                    }}
-                }}
-                
-                // Fall back to getBBox
-                if (svgWidth === 0 || svgHeight === 0) {{
-                    try {{
-                        const bbox = svg.getBBox();
-                        svgWidth = bbox.width + 40;
-                        svgHeight = bbox.height + 40;
-                    }} catch (e) {{ }}
-                }}
-                
-                // Set SVG dimensions
-                if (svgWidth > 0 && svgHeight > 0) {{
-                    svg.style.width = svgWidth + 'px';
-                    svg.style.height = svgHeight + 'px';
-                    svg.style.minWidth = svgWidth + 'px';
-                    svg.style.minHeight = svgHeight + 'px';
+                try {{
+                    // Actually remove Mermaid's inline width/min-width styles using removeProperty
+                    // Setting to '' doesn't work - must use removeProperty to truly remove inline styles
+                    svg.style.removeProperty('width');
+                    svg.style.removeProperty('min-width');
+                    svg.style.removeProperty('max-width');
+                    svg.style.removeProperty('height');
+                    svg.style.removeProperty('min-height');
                     
-                    // Shrink container to fit SVG (remove the large min-width)
-                    diagram.style.minWidth = 'auto';
-                    diagram.style.width = 'auto';
+                    // Get dimensions from viewBox if available (more reliable for gantt charts)
+                    const viewBox = svg.getAttribute('viewBox');
+                    if (viewBox) {{
+                        const parts = viewBox.split(' ').map(Number);
+                        if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) {{
+                            const padding = 20;
+                            svg.setAttribute('width', parts[2] + padding);
+                            svg.setAttribute('height', parts[3] + padding);
+                        }}
+                    }} else {{
+                        // Fall back to getBBox for diagrams without viewBox
+                        const bbox = svg.getBBox();
+                        if (bbox && bbox.width > 0 && bbox.height > 0) {{
+                            const padding = 20;
+                            svg.setAttribute('width', bbox.width + padding);
+                            svg.setAttribute('height', bbox.height + padding);
+                            svg.setAttribute('viewBox', `${{bbox.x - padding/2}} ${{bbox.y - padding/2}} ${{bbox.width + padding}} ${{bbox.height + padding}}`);
+                        }}
+                    }}
+                }} catch (e) {{
+                    // getBBox may fail in some cases, just continue
                 }}
             }}
             
-            panzoomInstance = panzoom(diagram, {{
+            window.panzoomInstance = panzoom(diagram, {{
                 maxZoom: 10,
                 minZoom: 0.1,
                 initialZoom: 1,
@@ -1000,14 +1143,37 @@ Console.WriteLine(""Hello, World!"");
                 boundsPadding: 0.1
             }});
             
-            // Reset position to top-left after initialization
-            panzoomInstance.moveTo(0, 0);
-            panzoomInstance.zoomAbs(0, 0, 1);
-            currentZoom = 1;
+            // Restore zoom and pan position (use target values if switching documents, otherwise reset to default)
+            var restoreZoom = (targetPanX !== 0 || targetPanY !== 0 || targetZoom !== 1) ? targetZoom : 1;
+            var restorePanX = targetPanX;
+            var restorePanY = targetPanY;
             
-            panzoomInstance.on('zoom', function(e) {{
-                currentZoom = e.getTransform().scale;
-                window.chrome.webview.postMessage({{ type: 'zoom', level: currentZoom }});
+            window.panzoomInstance.zoomAbs(0, 0, restoreZoom);
+            window.currentZoom = restoreZoom;
+            
+            // Use setTimeout to ensure panzoom is fully initialized before setting pan position
+            setTimeout(function() {{
+                window.panzoomInstance.moveTo(restorePanX, restorePanY);
+                
+                // Restore scroll position
+                if (targetScrollLeft !== 0 || targetScrollTop !== 0) {{
+                    container.scrollLeft = targetScrollLeft;
+                    container.scrollTop = targetScrollTop;
+                }}
+                
+                // Notify C# that diagram is ready
+                window.chrome.webview.postMessage({{ 
+                    type: 'diagramReady', 
+                    targetScrollLeft: targetScrollLeft, 
+                    targetScrollTop: targetScrollTop,
+                    targetPanX: restorePanX,
+                    targetPanY: restorePanY
+                }});
+            }}, 50);
+            
+            window.panzoomInstance.on('zoom', function(e) {{
+                window.currentZoom = e.getTransform().scale;
+                window.chrome.webview.postMessage({{ type: 'zoom', level: window.currentZoom }});
             }});
             
             // Add click handlers to diagram nodes for click-to-highlight feature
@@ -1230,20 +1396,28 @@ Console.WriteLine(""Hello, World!"");
         }};
         
         // Update diagram content without reloading the page (preserves pan/zoom position)
-        window.updateDiagram = function(newCode) {{
+        // Optional targetZoom parameter allows overriding the zoom level (used when switching documents)
+        // Optional targetScrollLeft/targetScrollTop parameters allow overriding scroll position (used when switching documents)
+        // Optional targetPanX/targetPanY parameters allow overriding pan position (used when switching documents)
+        window.updateDiagram = function(newCode, targetZoom, targetScrollLeft, targetScrollTop, targetPanX, targetPanY) {{
             // Save current panzoom transform (only zoom level, not position - position causes issues when diagram size changes)
-            let savedZoom = currentZoom;
+            // If targetZoom is provided, use that instead of the current zoom (for document switching)
+            let savedZoom = (typeof targetZoom === 'number') ? targetZoom : window.currentZoom;
             let savedTransform = null;
-            if (panzoomInstance) {{
-                savedTransform = panzoomInstance.getTransform();
+            if (window.panzoomInstance) {{
+                savedTransform = window.panzoomInstance.getTransform();
             }}
+            
+            // Save pan position (or use provided target pan positions for document switching)
+            let savedPanX = (typeof targetPanX === 'number') ? targetPanX : (savedTransform ? savedTransform.x : 0);
+            let savedPanY = (typeof targetPanY === 'number') ? targetPanY : (savedTransform ? savedTransform.y : 0);
             
             const diagram = document.getElementById('diagram');
             const container = document.getElementById('container');
             
-            // Save scroll position of container
-            const savedScrollLeft = container.scrollLeft;
-            const savedScrollTop = container.scrollTop;
+            // Save scroll position of container (or use provided target scroll positions for document switching)
+            const savedScrollLeft = (typeof targetScrollLeft === 'number') ? targetScrollLeft : container.scrollLeft;
+            const savedScrollTop = (typeof targetScrollTop === 'number') ? targetScrollTop : container.scrollTop;
             
             // Clear existing content and add new mermaid code
             diagram.innerHTML = '<pre class=""mermaid"">' + newCode.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>';
@@ -1255,9 +1429,9 @@ Console.WriteLine(""Hello, World!"");
             diagram.style.transform = '';
             
             // Destroy old panzoom instance
-            if (panzoomInstance) {{
-                panzoomInstance.dispose();
-                panzoomInstance = null;
+            if (window.panzoomInstance) {{
+                window.panzoomInstance.dispose();
+                window.panzoomInstance = null;
             }}
             
             // Re-render mermaid
@@ -1305,7 +1479,7 @@ Console.WriteLine(""Hello, World!"");
                             setupNodeClickHandlers(svg);
                             
                             // Re-create panzoom
-                            panzoomInstance = panzoom(diagram, {{
+                            window.panzoomInstance = panzoom(diagram, {{
                                 maxZoom: 10,
                                 minZoom: 0.1,
                                 initialZoom: 1,
@@ -1313,25 +1487,29 @@ Console.WriteLine(""Hello, World!"");
                                 boundsPadding: 0.1
                             }});
                             
-                            // Restore zoom level and approximate position
-                            if (savedTransform && savedZoom !== 1) {{
-                                // Only restore zoom, reset position to avoid misalignment
-                                panzoomInstance.moveTo(0, 0);
-                                panzoomInstance.zoomAbs(0, 0, savedZoom);
-                                currentZoom = savedZoom;
-                            }} else {{
-                                panzoomInstance.moveTo(0, 0);
-                                panzoomInstance.zoomAbs(0, 0, 1);
-                                currentZoom = 1;
-                            }}
+                            // Restore zoom level
+                            window.panzoomInstance.zoomAbs(0, 0, savedZoom);
+                            window.currentZoom = savedZoom;
                             
-                            // Restore container scroll position
-                            container.scrollLeft = savedScrollLeft;
-                            container.scrollTop = savedScrollTop;
+                            // Restore pan position (the drag/translate position)
+                            // Use setTimeout to ensure panzoom is fully initialized
+                            setTimeout(function() {{
+                                window.panzoomInstance.moveTo(savedPanX, savedPanY);
+                                
+                                // Notify C# that diagram is ready, passing the target scroll and pan positions
+                                // C# will restore the scroll position to ensure proper timing
+                                window.chrome.webview.postMessage({{ 
+                                    type: 'diagramReady', 
+                                    targetScrollLeft: savedScrollLeft, 
+                                    targetScrollTop: savedScrollTop,
+                                    targetPanX: savedPanX,
+                                    targetPanY: savedPanY
+                                }});
+                            }}, 50);
                             
-                            panzoomInstance.on('zoom', function(e) {{
-                                currentZoom = e.getTransform().scale;
-                                window.chrome.webview.postMessage({{ type: 'zoom', level: currentZoom }});
+                            window.panzoomInstance.on('zoom', function(e) {{
+                                window.currentZoom = e.getTransform().scale;
+                                window.chrome.webview.postMessage({{ type: 'zoom', level: window.currentZoom }});
                             }});
                         }});
                     }}
@@ -1367,14 +1545,42 @@ Console.WriteLine(""Hello, World!"");
         {
             try
             {
-                // Update content without reloading the page - scroll position is naturally preserved
-                await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
-                    (function() {{
-                        const markdownContent = {escapedCode};
-                        document.getElementById('content').innerHTML = marked.parse(markdownContent);
-                        setupClickHandlers();
-                    }})();
-                ");
+                // When switching documents, restore the saved scroll position
+                // Otherwise, preserve the current scroll position for normal edits
+                if (_isSwitchingDocuments && _activeDocument != null)
+                {
+                    var scrollTop = _activeDocument.PreviewScrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var scrollLeft = _activeDocument.PreviewScrollLeft.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
+                        (function() {{
+                            const markdownContent = {escapedCode};
+                            document.getElementById('content').innerHTML = marked.parse(markdownContent);
+                            setupClickHandlers();
+                            // Restore scroll position after content is updated
+                            // Try all methods since html/body can both have overflow:auto
+                            setTimeout(function() {{
+                                var x = {scrollLeft};
+                                var y = {scrollTop};
+                                window.scrollTo(x, y);
+                                document.documentElement.scrollLeft = x;
+                                document.documentElement.scrollTop = y;
+                                document.body.scrollLeft = x;
+                                document.body.scrollTop = y;
+                            }}, 50);
+                        }})();
+                    ");
+                }
+                else
+                {
+                    // Update content without reloading the page - scroll position is naturally preserved
+                    await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
+                        (function() {{
+                            const markdownContent = {escapedCode};
+                            document.getElementById('content').innerHTML = marked.parse(markdownContent);
+                            setupClickHandlers();
+                        }})();
+                    ");
+                }
                 StatusText.Text = "Markdown rendered";
                 return;
             }
@@ -1396,8 +1602,16 @@ Console.WriteLine(""Hello, World!"");
                 baseTag = $@"<base href=""https://{VirtualHostName}/"">";
             }
         }
+        
+        // Get target scroll position for restoration when switching documents
+        var targetScrollLeft = (_isSwitchingDocuments && _activeDocument != null) 
+            ? _activeDocument.PreviewScrollLeft.ToString(System.Globalization.CultureInfo.InvariantCulture) 
+            : "0";
+        var targetScrollTop = (_isSwitchingDocuments && _activeDocument != null) 
+            ? _activeDocument.PreviewScrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture) 
+            : "0";
 
-        var html = $@"<!DOCTYPE html>
+        var html = $@"<!DOCTYPE html
 <html>
 <head>
     <meta charset=""UTF-8"">
@@ -1648,6 +1862,17 @@ Console.WriteLine(""Hello, World!"");
                 }});
             }});
         }}
+        
+        // Notify C# that markdown is ready and pass target scroll position for restoration
+        var targetScrollLeft = {targetScrollLeft};
+        var targetScrollTop = {targetScrollTop};
+        setTimeout(function() {{
+            window.chrome.webview.postMessage({{ 
+                type: 'markdownReady', 
+                targetScrollLeft: targetScrollLeft, 
+                targetScrollTop: targetScrollTop 
+            }});
+        }}, 50);
     </script>
 </body>
 </html>";
@@ -1671,7 +1896,12 @@ Console.WriteLine(""Hello, World!"");
                 if (messageType == "zoom" && message.RootElement.TryGetProperty("level", out var levelElement))
                 {
                     _currentZoom = levelElement.GetDouble();
-                    ZoomLevelText.Text = $"{_currentZoom * 100:F0}%";
+                    // Also update the active document's zoom so it's preserved when switching tabs
+                    if (_activeDocument != null)
+                    {
+                        _activeDocument.PreviewZoom = _currentZoom;
+                    }
+                    UpdateZoomUI();
                 }
                 else if (messageType == "pngExport" && message.RootElement.TryGetProperty("data", out var dataElement))
                 {
@@ -1695,11 +1925,80 @@ Console.WriteLine(""Hello, World!"");
                     var elementType = message.RootElement.TryGetProperty("elementType", out var typeEl) ? typeEl.GetString() : "";
                     FindAndHighlightInEditor("", text, elementType);
                 }
+                else if (messageType == "diagramReady")
+                {
+                    // Diagram has finished rendering - restore scroll position from C#
+                    var scrollLeft = message.RootElement.TryGetProperty("targetScrollLeft", out var scrollLeftEl) ? scrollLeftEl.GetDouble() : 0;
+                    var scrollTop = message.RootElement.TryGetProperty("targetScrollTop", out var scrollTopEl) ? scrollTopEl.GetDouble() : 0;
+                    
+                    // Only restore if we have non-zero scroll values (indicating we're switching documents)
+                    if (scrollLeft > 0 || scrollTop > 0)
+                    {
+                        _ = RestorePreviewScrollPositionAsync(scrollLeft, scrollTop);
+                    }
+                }
+                else if (messageType == "markdownReady")
+                {
+                    // Markdown has finished rendering - restore scroll position from C#
+                    var scrollLeft = message.RootElement.TryGetProperty("targetScrollLeft", out var scrollLeftEl) ? scrollLeftEl.GetDouble() : 0;
+                    var scrollTop = message.RootElement.TryGetProperty("targetScrollTop", out var scrollTopEl) ? scrollTopEl.GetDouble() : 0;
+                    
+                    // Only restore if we have non-zero scroll values (indicating we're switching documents)
+                    if (scrollLeft > 0 || scrollTop > 0)
+                    {
+                        _ = RestoreMarkdownScrollPositionAsync(scrollLeft, scrollTop);
+                    }
+                }
             }
         }
         catch
         {
         }
+    }
+    
+    private async Task RestorePreviewScrollPositionAsync(double scrollLeft, double scrollTop)
+    {
+        if (!_webViewInitialized) return;
+        
+        try
+        {
+            // Use ExecuteScriptAsync to set the scroll position from C#
+            // This ensures proper timing after the diagram is fully rendered
+            await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
+                (function() {{
+                    var container = document.getElementById('container');
+                    if (container) {{
+                        container.scrollLeft = {scrollLeft.ToString(System.Globalization.CultureInfo.InvariantCulture)};
+                        container.scrollTop = {scrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture)};
+                    }}
+                }})();
+            ");
+        }
+        catch { }
+    }
+    
+    private async Task RestoreMarkdownScrollPositionAsync(double scrollLeft, double scrollTop)
+    {
+        if (!_webViewInitialized) return;
+        
+        try
+        {
+            // Use ExecuteScriptAsync to set the scroll position for markdown
+            // Try multiple methods since html/body can both have overflow:auto
+            await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
+                (function() {{
+                    var x = {scrollLeft.ToString(System.Globalization.CultureInfo.InvariantCulture)};
+                    var y = {scrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture)};
+                    // Try all methods to ensure scroll is set
+                    window.scrollTo(x, y);
+                    document.documentElement.scrollLeft = x;
+                    document.documentElement.scrollTop = y;
+                    document.body.scrollLeft = x;
+                    document.body.scrollTop = y;
+                }})();
+            ");
+        }
+        catch { }
     }
 
     private void FindAndHighlightInEditor(string? nodeId, string? text, string? elementType = null)
@@ -2158,7 +2457,7 @@ Console.WriteLine(""Hello, World!"");
         // Update syntax highlighting based on mode
         if (_currentRenderMode == RenderMode.Markdown)
         {
-            CodeEditor.SyntaxHighlighting = null; // Use default for Markdown
+            RegisterMarkdownSyntaxHighlighting();
         }
         else
         {
@@ -2167,6 +2466,8 @@ Console.WriteLine(""Hello, World!"");
         
         // Update export menu visibility based on file type
         UpdateExportMenuVisibility();
+        UpdateMarkdownFormattingVisibility();
+        UpdateZoomControlsVisibility();
     }
 
     private void New_Click(object sender, RoutedEventArgs e)
@@ -2200,10 +2501,20 @@ Console.WriteLine(""Hello, World!"");
                 }
                 else
                 {
-                    CodeEditor.SyntaxHighlighting = null;
+                    RegisterMarkdownSyntaxHighlighting();
                 }
                 
                 UpdateExportMenuVisibility();
+                
+                // Auto fit to window after template loads
+                _ = Dispatcher.InvokeAsync(async () =>
+                {
+                    await Task.Delay(500); // Wait for render to complete
+                    if (_webViewInitialized)
+                    {
+                        await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.fitToWindow()");
+                    }
+                });
             }
         }
     }
@@ -2212,8 +2523,8 @@ Console.WriteLine(""Hello, World!"");
     {
         var dialog = new OpenFileDialog
         {
-            Filter = "Mermaid Files (*.mmd;*.mermaid)|*.mmd;*.mermaid|Markdown Files (*.md)|*.md|All Files (*.*)|*.*",
-            Title = "Open Mermaid File"
+            Filter = "Mermaid & Markdown (*.mmd;*.mermaid;*.md)|*.mmd;*.mermaid;*.md|Mermaid Files (*.mmd;*.mermaid)|*.mmd;*.mermaid|Markdown Files (*.md)|*.md|All Files (*.*)|*.*",
+            Title = "Open File"
         };
 
         if (dialog.ShowDialog() == true)
@@ -2316,6 +2627,1294 @@ Console.WriteLine(""Hello, World!"");
             UpdateUndoRedoState();
         }
     }
+
+    #region Find and Replace
+    
+    private FindReplaceDialog? _findReplaceDialog;
+    
+    private void Find_Click(object sender, RoutedEventArgs e)
+    {
+        // Open Find-only dialog (no Replace section)
+        OpenFindDialog(showReplace: false);
+    }
+    
+    private void FindNext_Click(object sender, RoutedEventArgs e)
+    {
+        // If dialog is open, trigger find next; otherwise open Find dialog
+        if (_findReplaceDialog != null && _findReplaceDialog.IsLoaded)
+        {
+            _findReplaceDialog.TriggerFindNext();
+        }
+        else
+        {
+            OpenFindDialog(showReplace: false);
+        }
+    }
+    
+    private void FindReplace_Click(object sender, RoutedEventArgs e)
+    {
+        // Open full Find and Replace dialog
+        OpenFindDialog(showReplace: true);
+    }
+    
+    private void OpenFindDialog(bool showReplace)
+    {
+        // Close existing dialog if switching modes
+        if (_findReplaceDialog != null && _findReplaceDialog.IsLoaded)
+        {
+            _findReplaceDialog.Activate();
+            return;
+        }
+        
+        _findReplaceDialog = new FindReplaceDialog(CodeEditor, showReplace) { Owner = this };
+        _findReplaceDialog.Show();
+    }
+    
+    #endregion
+
+    #region Markdown Formatting
+    
+    private void UpdateMarkdownFormattingVisibility()
+    {
+        var isMarkdown = _currentRenderMode == RenderMode.Markdown;
+        FormatMenu.Visibility = isMarkdown ? Visibility.Visible : Visibility.Collapsed;
+        MarkdownFormattingToolbar.Visibility = isMarkdown ? Visibility.Visible : Visibility.Collapsed;
+    }
+    
+    private void UpdateZoomControlsVisibility()
+    {
+        var isMermaid = _currentRenderMode == RenderMode.Mermaid;
+        ZoomControlsPanel.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
+    }
+    
+    private void FormatBold_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        WrapSelectedText("**", "**");
+    }
+    
+    private void FormatItalic_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        WrapSelectedText("*", "*");
+    }
+    
+    private void FormatStrikethrough_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        WrapSelectedText("~~", "~~");
+    }
+    
+    private void FormatH1_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        ApplyLinePrefix("# ");
+    }
+    
+    private void FormatH2_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        ApplyLinePrefix("## ");
+    }
+    
+    private void FormatH3_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        ApplyLinePrefix("### ");
+    }
+    
+    private void FormatH4_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        ApplyLinePrefix("#### ");
+    }
+    
+    private void FormatInlineCode_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        WrapSelectedText("`", "`");
+    }
+    
+    private void FormatCodeBlock_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        WrapSelectedTextMultiline("```\n", "\n```");
+    }
+    
+    private void FormatBulletList_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        ApplyLinePrefix("- ");
+    }
+    
+    private void FormatNumberedList_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        ApplyLinePrefix("1. ");
+    }
+    
+    private void FormatQuote_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        ApplyLinePrefix("> ");
+    }
+    
+    private void FormatLink_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        
+        var selectedText = CodeEditor.SelectedText;
+        if (string.IsNullOrEmpty(selectedText))
+        {
+            InsertText("[link text](url)");
+        }
+        else
+        {
+            WrapSelectedText("[", "](url)");
+        }
+    }
+    
+    private void FormatImage_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        
+        var selectedText = CodeEditor.SelectedText;
+        if (string.IsNullOrEmpty(selectedText))
+        {
+            InsertText("![alt text](image-url)");
+        }
+        else
+        {
+            WrapSelectedText("![", "](image-url)");
+        }
+    }
+    
+    private void FormatHorizontalRule_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        
+        var doc = CodeEditor.Document;
+        var caretOffset = CodeEditor.CaretOffset;
+        var line = doc.GetLineByOffset(caretOffset);
+        
+        // Insert horizontal rule on a new line
+        var insertText = "\n\n---\n\n";
+        if (line.Offset == caretOffset && caretOffset > 0)
+        {
+            // Already at start of line
+            insertText = "\n---\n\n";
+        }
+        
+        doc.Insert(caretOffset, insertText);
+        CodeEditor.CaretOffset = caretOffset + insertText.Length;
+    }
+    
+    private void InsertTable_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentRenderMode != RenderMode.Markdown) return;
+        
+        var dialog = new TableGeneratorDialog { Owner = this };
+        if (dialog.ShowDialog() == true && !string.IsNullOrEmpty(dialog.GeneratedMarkdown))
+        {
+            var doc = CodeEditor.Document;
+            var caretOffset = CodeEditor.CaretOffset;
+            var line = doc.GetLineByOffset(caretOffset);
+            
+            // Ensure table starts on a new line with blank line before it
+            var prefix = "";
+            if (caretOffset > 0)
+            {
+                var lineText = doc.GetText(line.Offset, line.Length);
+                if (!string.IsNullOrWhiteSpace(lineText))
+                {
+                    prefix = "\n\n";
+                }
+                else if (line.Offset > 0)
+                {
+                    prefix = "\n";
+                }
+            }
+            
+            var tableText = prefix + dialog.GeneratedMarkdown;
+            doc.Insert(caretOffset, tableText);
+            CodeEditor.CaretOffset = caretOffset + tableText.Length;
+        }
+    }
+    
+    private void WrapSelectedText(string prefix, string suffix)
+    {
+        var doc = CodeEditor.Document;
+        var selectedText = CodeEditor.SelectedText;
+        var selectionStart = CodeEditor.SelectionStart;
+        var selectionLength = CodeEditor.SelectionLength;
+        
+        if (selectionLength > 0)
+        {
+            // Wrap selected text
+            var newText = prefix + selectedText + suffix;
+            doc.Replace(selectionStart, selectionLength, newText);
+            // Select the wrapped text (excluding markers)
+            CodeEditor.Select(selectionStart + prefix.Length, selectedText.Length);
+        }
+        else
+        {
+            // No selection - insert markers and place cursor between them
+            var caretOffset = CodeEditor.CaretOffset;
+            doc.Insert(caretOffset, prefix + suffix);
+            CodeEditor.CaretOffset = caretOffset + prefix.Length;
+        }
+    }
+    
+    private void WrapSelectedTextMultiline(string prefix, string suffix)
+    {
+        var doc = CodeEditor.Document;
+        var selectedText = CodeEditor.SelectedText;
+        var selectionStart = CodeEditor.SelectionStart;
+        var selectionLength = CodeEditor.SelectionLength;
+        
+        if (selectionLength > 0)
+        {
+            // Wrap selected text
+            var newText = prefix + selectedText + suffix;
+            doc.Replace(selectionStart, selectionLength, newText);
+            // Place cursor after the block
+            CodeEditor.CaretOffset = selectionStart + newText.Length;
+        }
+        else
+        {
+            // No selection - insert block and place cursor inside
+            var caretOffset = CodeEditor.CaretOffset;
+            doc.Insert(caretOffset, prefix + suffix);
+            CodeEditor.CaretOffset = caretOffset + prefix.Length;
+        }
+    }
+    
+    private void ApplyLinePrefix(string prefix)
+    {
+        var doc = CodeEditor.Document;
+        var selectionStart = CodeEditor.SelectionStart;
+        var selectionLength = CodeEditor.SelectionLength;
+        
+        if (selectionLength > 0)
+        {
+            // Apply prefix to each selected line
+            var startLine = doc.GetLineByOffset(selectionStart);
+            var endLine = doc.GetLineByOffset(selectionStart + selectionLength);
+            
+            // Process lines from bottom to top to preserve offsets
+            for (int lineNum = endLine.LineNumber; lineNum >= startLine.LineNumber; lineNum--)
+            {
+                var line = doc.GetLineByNumber(lineNum);
+                var lineText = doc.GetText(line.Offset, line.Length);
+                
+                // Remove existing heading/list prefixes before applying new one
+                var trimmedText = RemoveExistingPrefix(lineText);
+                var newLineText = prefix + trimmedText;
+                
+                doc.Replace(line.Offset, line.Length, newLineText);
+            }
+        }
+        else
+        {
+            // Apply to current line
+            var line = doc.GetLineByOffset(CodeEditor.CaretOffset);
+            var lineText = doc.GetText(line.Offset, line.Length);
+            
+            // Remove existing heading/list prefixes before applying new one
+            var trimmedText = RemoveExistingPrefix(lineText);
+            var newLineText = prefix + trimmedText;
+            
+            doc.Replace(line.Offset, line.Length, newLineText);
+            CodeEditor.CaretOffset = line.Offset + newLineText.Length;
+        }
+    }
+    
+    private string RemoveExistingPrefix(string text)
+    {
+        // Remove existing markdown prefixes (headings, lists, quotes)
+        var patterns = new[]
+        {
+            @"^#{1,6}\s+",      // Headings
+            @"^[-*+]\s+",       // Unordered lists
+            @"^\d+\.\s+",       // Ordered lists
+            @"^>\s*"            // Blockquotes
+        };
+        
+        foreach (var pattern in patterns)
+        {
+            var match = Regex.Match(text, pattern);
+            if (match.Success)
+            {
+                return text.Substring(match.Length);
+            }
+        }
+        
+        return text;
+    }
+    
+    private void InsertText(string text)
+    {
+        var doc = CodeEditor.Document;
+        var caretOffset = CodeEditor.CaretOffset;
+        doc.Insert(caretOffset, text);
+        CodeEditor.CaretOffset = caretOffset + text.Length;
+    }
+    
+    #endregion
+
+    #region Edit Toolbar (Indent, Comment, Move Lines, Word Wrap)
+
+    private void IndentLines_Click(object sender, RoutedEventArgs e)
+    {
+        var doc = CodeEditor.Document;
+        var selection = CodeEditor.TextArea.Selection;
+        
+        if (selection.IsEmpty)
+        {
+            // Indent current line
+            var line = doc.GetLineByOffset(CodeEditor.CaretOffset);
+            doc.Insert(line.Offset, "    ");
+        }
+        else
+        {
+            // Indent all selected lines
+            var startLine = doc.GetLineByOffset(selection.SurroundingSegment.Offset);
+            var endLine = doc.GetLineByOffset(selection.SurroundingSegment.EndOffset);
+            
+            using (doc.RunUpdate())
+            {
+                for (int lineNum = startLine.LineNumber; lineNum <= endLine.LineNumber; lineNum++)
+                {
+                    var line = doc.GetLineByNumber(lineNum);
+                    doc.Insert(line.Offset, "    ");
+                }
+            }
+        }
+    }
+
+    private void OutdentLines_Click(object sender, RoutedEventArgs e)
+    {
+        var doc = CodeEditor.Document;
+        var selection = CodeEditor.TextArea.Selection;
+        
+        if (selection.IsEmpty)
+        {
+            // Outdent current line
+            var line = doc.GetLineByOffset(CodeEditor.CaretOffset);
+            RemoveLeadingIndent(doc, line);
+        }
+        else
+        {
+            // Outdent all selected lines
+            var startLine = doc.GetLineByOffset(selection.SurroundingSegment.Offset);
+            var endLine = doc.GetLineByOffset(selection.SurroundingSegment.EndOffset);
+            
+            using (doc.RunUpdate())
+            {
+                for (int lineNum = startLine.LineNumber; lineNum <= endLine.LineNumber; lineNum++)
+                {
+                    var line = doc.GetLineByNumber(lineNum);
+                    RemoveLeadingIndent(doc, line);
+                }
+            }
+        }
+    }
+
+    private void RemoveLeadingIndent(ICSharpCode.AvalonEdit.Document.TextDocument doc, ICSharpCode.AvalonEdit.Document.DocumentLine line)
+    {
+        var lineText = doc.GetText(line.Offset, line.Length);
+        
+        // Remove up to 4 spaces or 1 tab from the beginning
+        if (lineText.StartsWith("    "))
+        {
+            doc.Remove(line.Offset, 4);
+        }
+        else if (lineText.StartsWith("\t"))
+        {
+            doc.Remove(line.Offset, 1);
+        }
+        else if (lineText.StartsWith("   "))
+        {
+            doc.Remove(line.Offset, 3);
+        }
+        else if (lineText.StartsWith("  "))
+        {
+            doc.Remove(line.Offset, 2);
+        }
+        else if (lineText.StartsWith(" "))
+        {
+            doc.Remove(line.Offset, 1);
+        }
+    }
+
+    private void ToggleComment_Click(object sender, RoutedEventArgs e)
+    {
+        var doc = CodeEditor.Document;
+        var selection = CodeEditor.TextArea.Selection;
+        
+        if (_currentRenderMode == RenderMode.Mermaid)
+        {
+            // Mermaid uses line-based comments (%%)
+            ToggleMermaidComment(doc, selection);
+        }
+        else
+        {
+            // Markdown uses block comments (<!-- -->)
+            ToggleMarkdownComment(doc, selection);
+        }
+    }
+
+    private void ToggleMermaidComment(ICSharpCode.AvalonEdit.Document.TextDocument doc, ICSharpCode.AvalonEdit.Editing.Selection selection)
+    {
+        string commentPrefix = "%% ";
+        
+        if (selection.IsEmpty)
+        {
+            // Toggle comment on current line
+            var line = doc.GetLineByOffset(CodeEditor.CaretOffset);
+            ToggleMermaidLineComment(doc, line, commentPrefix);
+        }
+        else
+        {
+            // Toggle comment on all selected lines
+            var startLine = doc.GetLineByOffset(selection.SurroundingSegment.Offset);
+            var endLine = doc.GetLineByOffset(selection.SurroundingSegment.EndOffset);
+            
+            // Check if all lines are already commented
+            bool allCommented = true;
+            for (int lineNum = startLine.LineNumber; lineNum <= endLine.LineNumber; lineNum++)
+            {
+                var line = doc.GetLineByNumber(lineNum);
+                var lineText = doc.GetText(line.Offset, line.Length).TrimStart();
+                if (!lineText.StartsWith("%%"))
+                {
+                    allCommented = false;
+                    break;
+                }
+            }
+            
+            using (doc.RunUpdate())
+            {
+                for (int lineNum = endLine.LineNumber; lineNum >= startLine.LineNumber; lineNum--)
+                {
+                    var line = doc.GetLineByNumber(lineNum);
+                    if (allCommented)
+                    {
+                        UncommentMermaidLine(doc, line);
+                    }
+                    else
+                    {
+                        CommentMermaidLine(doc, line, commentPrefix);
+                    }
+                }
+            }
+        }
+    }
+
+    private void ToggleMermaidLineComment(ICSharpCode.AvalonEdit.Document.TextDocument doc, ICSharpCode.AvalonEdit.Document.DocumentLine line, string prefix)
+    {
+        var lineText = doc.GetText(line.Offset, line.Length);
+        var trimmedText = lineText.TrimStart();
+        
+        if (trimmedText.StartsWith("%%"))
+        {
+            UncommentMermaidLine(doc, line);
+        }
+        else
+        {
+            CommentMermaidLine(doc, line, prefix);
+        }
+    }
+
+    private void CommentMermaidLine(ICSharpCode.AvalonEdit.Document.TextDocument doc, ICSharpCode.AvalonEdit.Document.DocumentLine line, string prefix)
+    {
+        var lineText = doc.GetText(line.Offset, line.Length);
+        var trimmedText = lineText.TrimStart();
+        var leadingWhitespace = lineText.Substring(0, lineText.Length - trimmedText.Length);
+        
+        string newText = leadingWhitespace + prefix + trimmedText;
+        doc.Replace(line.Offset, line.Length, newText);
+    }
+
+    private void UncommentMermaidLine(ICSharpCode.AvalonEdit.Document.TextDocument doc, ICSharpCode.AvalonEdit.Document.DocumentLine line)
+    {
+        var lineText = doc.GetText(line.Offset, line.Length);
+        var trimmedText = lineText.TrimStart();
+        var leadingWhitespace = lineText.Substring(0, lineText.Length - trimmedText.Length);
+        
+        string newText;
+        if (trimmedText.StartsWith("%% "))
+        {
+            newText = leadingWhitespace + trimmedText.Substring(3);
+        }
+        else if (trimmedText.StartsWith("%%"))
+        {
+            newText = leadingWhitespace + trimmedText.Substring(2);
+        }
+        else
+        {
+            newText = lineText;
+        }
+        
+        doc.Replace(line.Offset, line.Length, newText);
+    }
+
+    private void ToggleMarkdownComment(ICSharpCode.AvalonEdit.Document.TextDocument doc, ICSharpCode.AvalonEdit.Editing.Selection selection)
+    {
+        if (selection.IsEmpty)
+        {
+            // No selection - try to find surrounding comment block or comment current line
+            int caretOffset = CodeEditor.CaretOffset;
+            string fullText = doc.Text;
+            
+            // Look for <!-- before cursor and --> after cursor
+            int commentStart = fullText.LastIndexOf("<!--", caretOffset);
+            int commentEnd = fullText.IndexOf("-->", caretOffset);
+            
+            // Also check if cursor is right after <!-- or right before -->
+            if (commentStart == -1 && caretOffset >= 4)
+            {
+                // Check if we're inside the <!-- marker itself
+                int checkStart = Math.Max(0, caretOffset - 4);
+                string nearText = fullText.Substring(checkStart, Math.Min(8, fullText.Length - checkStart));
+                int markerPos = nearText.IndexOf("<!--");
+                if (markerPos >= 0)
+                {
+                    commentStart = checkStart + markerPos;
+                }
+            }
+            
+            if (commentStart >= 0 && commentEnd >= 0 && commentEnd > commentStart)
+            {
+                // Check if there's no --> between commentStart and cursor (meaning we're inside a comment)
+                string textBetween = fullText.Substring(commentStart + 4, caretOffset - commentStart - 4);
+                if (!textBetween.Contains("-->"))
+                {
+                    // We're inside a comment block - uncomment it
+                    using (doc.RunUpdate())
+                    {
+                        // Remove --> first (to preserve offsets)
+                        doc.Remove(commentEnd, 3);
+                        // Remove <!-- (and optional space after)
+                        int removeLength = 4;
+                        if (commentStart + 4 < doc.TextLength && doc.GetCharAt(commentStart + 4) == ' ')
+                        {
+                            removeLength = 5;
+                        }
+                        doc.Remove(commentStart, removeLength);
+                    }
+                    return;
+                }
+            }
+            
+            // Not inside a comment - comment the current line
+            var line = doc.GetLineByOffset(caretOffset);
+            var lineText = doc.GetText(line.Offset, line.Length);
+            var trimmedText = lineText.TrimStart();
+            var leadingWhitespace = lineText.Substring(0, lineText.Length - trimmedText.Length);
+            
+            // Check if line is already a single-line comment
+            if (trimmedText.StartsWith("<!--") && trimmedText.TrimEnd().EndsWith("-->"))
+            {
+                // Uncomment single line
+                string content = trimmedText;
+                if (content.StartsWith("<!-- "))
+                    content = content.Substring(5);
+                else if (content.StartsWith("<!--"))
+                    content = content.Substring(4);
+                    
+                if (content.TrimEnd().EndsWith(" -->"))
+                    content = content.Substring(0, content.TrimEnd().Length - 4);
+                else if (content.TrimEnd().EndsWith("-->"))
+                    content = content.Substring(0, content.TrimEnd().Length - 3);
+                
+                doc.Replace(line.Offset, line.Length, leadingWhitespace + content);
+            }
+            else
+            {
+                // Comment single line
+                string newText = leadingWhitespace + "<!-- " + trimmedText + " -->";
+                doc.Replace(line.Offset, line.Length, newText);
+            }
+        }
+        else
+        {
+            // Has selection - use block comment for the entire selection
+            int startOffset = selection.SurroundingSegment.Offset;
+            int endOffset = selection.SurroundingSegment.EndOffset;
+            string selectedText = doc.GetText(startOffset, endOffset - startOffset);
+            
+            // Check if selection is already wrapped in a comment
+            string trimmedSelection = selectedText.Trim();
+            if (trimmedSelection.StartsWith("<!--") && trimmedSelection.EndsWith("-->"))
+            {
+                // Uncomment - remove the outer <!-- and -->
+                int commentStartInSelection = selectedText.IndexOf("<!--");
+                int commentEndInSelection = selectedText.LastIndexOf("-->");
+                
+                if (commentStartInSelection >= 0 && commentEndInSelection >= 0)
+                {
+                    using (doc.RunUpdate())
+                    {
+                        // Calculate actual positions
+                        int actualCommentStart = startOffset + commentStartInSelection;
+                        int actualCommentEnd = startOffset + commentEndInSelection;
+                        
+                        // Remove --> first
+                        doc.Remove(actualCommentEnd, 3);
+                        
+                        // Remove <!-- (and optional space)
+                        int removeLength = 4;
+                        if (actualCommentStart + 4 < doc.TextLength && doc.GetCharAt(actualCommentStart + 4) == ' ')
+                        {
+                            removeLength = 5;
+                        }
+                        doc.Remove(actualCommentStart, removeLength);
+                    }
+                }
+            }
+            else
+            {
+                // Comment - wrap entire selection with single <!-- -->
+                using (doc.RunUpdate())
+                {
+                    doc.Insert(endOffset, " -->");
+                    doc.Insert(startOffset, "<!-- ");
+                }
+            }
+        }
+    }
+
+    private bool IsLineCommented(string lineText, string prefix, string suffix)
+    {
+        if (_currentRenderMode == RenderMode.Mermaid)
+        {
+            return lineText.StartsWith("%%");
+        }
+        else
+        {
+            return lineText.StartsWith("<!--") && lineText.TrimEnd().EndsWith("-->");
+        }
+    }
+
+    private void ToggleLineComment(ICSharpCode.AvalonEdit.Document.TextDocument doc, ICSharpCode.AvalonEdit.Document.DocumentLine line, string prefix, string suffix)
+    {
+        var lineText = doc.GetText(line.Offset, line.Length);
+        var trimmedText = lineText.TrimStart();
+        var leadingWhitespace = lineText.Substring(0, lineText.Length - trimmedText.Length);
+        
+        if (IsLineCommented(trimmedText, prefix, suffix))
+        {
+            UncommentLine(doc, line, prefix, suffix);
+        }
+        else
+        {
+            CommentLine(doc, line, prefix, suffix);
+        }
+    }
+
+    private void CommentLine(ICSharpCode.AvalonEdit.Document.TextDocument doc, ICSharpCode.AvalonEdit.Document.DocumentLine line, string prefix, string suffix)
+    {
+        var lineText = doc.GetText(line.Offset, line.Length);
+        var trimmedText = lineText.TrimStart();
+        var leadingWhitespace = lineText.Substring(0, lineText.Length - trimmedText.Length);
+        
+        string newText;
+        if (_currentRenderMode == RenderMode.Mermaid)
+        {
+            newText = leadingWhitespace + prefix + trimmedText;
+        }
+        else
+        {
+            newText = leadingWhitespace + prefix + trimmedText + suffix;
+        }
+        
+        doc.Replace(line.Offset, line.Length, newText);
+    }
+
+    private void UncommentLine(ICSharpCode.AvalonEdit.Document.TextDocument doc, ICSharpCode.AvalonEdit.Document.DocumentLine line, string prefix, string suffix)
+    {
+        var lineText = doc.GetText(line.Offset, line.Length);
+        var trimmedText = lineText.TrimStart();
+        var leadingWhitespace = lineText.Substring(0, lineText.Length - trimmedText.Length);
+        
+        string newText;
+        if (_currentRenderMode == RenderMode.Mermaid)
+        {
+            // Remove %% prefix (with optional space)
+            if (trimmedText.StartsWith("%% "))
+            {
+                newText = leadingWhitespace + trimmedText.Substring(3);
+            }
+            else if (trimmedText.StartsWith("%%"))
+            {
+                newText = leadingWhitespace + trimmedText.Substring(2);
+            }
+            else
+            {
+                newText = lineText;
+            }
+        }
+        else
+        {
+            // Remove <!-- prefix and --> suffix
+            if (trimmedText.StartsWith("<!-- ") && trimmedText.TrimEnd().EndsWith(" -->"))
+            {
+                var content = trimmedText.Substring(5);
+                content = content.Substring(0, content.TrimEnd().Length - 4);
+                newText = leadingWhitespace + content;
+            }
+            else if (trimmedText.StartsWith("<!--") && trimmedText.TrimEnd().EndsWith("-->"))
+            {
+                var content = trimmedText.Substring(4);
+                content = content.Substring(0, content.TrimEnd().Length - 3);
+                newText = leadingWhitespace + content;
+            }
+            else
+            {
+                newText = lineText;
+            }
+        }
+        
+        doc.Replace(line.Offset, line.Length, newText);
+    }
+
+    private void MoveLineUp_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var doc = CodeEditor.Document;
+            if (doc.TextLength == 0) return;
+            
+            var caretLine = doc.GetLineByOffset(CodeEditor.CaretOffset);
+            int currentLineNumber = caretLine.LineNumber;
+            
+            if (currentLineNumber <= 1)
+                return; // Can't move first line up
+            
+            var prevLine = doc.GetLineByNumber(currentLineNumber - 1);
+            var currentLineText = doc.GetText(caretLine.Offset, caretLine.Length);
+            var prevLineText = doc.GetText(prevLine.Offset, prevLine.Length);
+            
+            // Calculate new caret position
+            int caretColumn = CodeEditor.CaretOffset - caretLine.Offset;
+            int prevLineOffset = prevLine.Offset;
+            // Use DelimiterLength to handle both \n and \r\n correctly
+            int delimiterLength = prevLine.DelimiterLength;
+            int totalLength = prevLine.Length + delimiterLength + caretLine.Length;
+            
+            // Get the actual delimiter text to preserve it
+            string delimiter = delimiterLength > 0 
+                ? doc.GetText(prevLine.Offset + prevLine.Length, delimiterLength) 
+                : Environment.NewLine;
+            
+            using (doc.RunUpdate())
+            {
+                // Replace both lines, preserving the original delimiter
+                doc.Replace(prevLineOffset, totalLength, 
+                    currentLineText + delimiter + prevLineText);
+            }
+            
+            // Restore caret position on the moved line (now at previous line number)
+            var newLine = doc.GetLineByNumber(currentLineNumber - 1);
+            CodeEditor.CaretOffset = newLine.Offset + Math.Min(caretColumn, newLine.Length);
+        }
+        catch (Exception)
+        {
+            // Silently ignore edge cases
+        }
+    }
+
+    private void MoveLineDown_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var doc = CodeEditor.Document;
+            if (doc.TextLength == 0) return;
+            
+            var caretLine = doc.GetLineByOffset(CodeEditor.CaretOffset);
+            int currentLineNumber = caretLine.LineNumber;
+            int lineCount = doc.LineCount;
+            
+            if (currentLineNumber >= lineCount)
+                return; // Can't move last line down
+            
+            var nextLine = doc.GetLineByNumber(currentLineNumber + 1);
+            var currentLineText = doc.GetText(caretLine.Offset, caretLine.Length);
+            var nextLineText = doc.GetText(nextLine.Offset, nextLine.Length);
+            
+            // Calculate new caret position
+            int caretColumn = CodeEditor.CaretOffset - caretLine.Offset;
+            int currentLineOffset = caretLine.Offset;
+            // Use DelimiterLength to handle both \n and \r\n correctly
+            int delimiterLength = caretLine.DelimiterLength;
+            int totalLength = caretLine.Length + delimiterLength + nextLine.Length;
+            
+            // Get the actual delimiter text to preserve it
+            string delimiter = delimiterLength > 0 
+                ? doc.GetText(caretLine.Offset + caretLine.Length, delimiterLength) 
+                : Environment.NewLine;
+            
+            // Check if we have enough content to swap
+            if (currentLineOffset + totalLength > doc.TextLength)
+            {
+                // Adjust for edge case where calculation exceeds document length
+                totalLength = doc.TextLength - currentLineOffset;
+            }
+            
+            using (doc.RunUpdate())
+            {
+                // Replace both lines, preserving the original delimiter
+                doc.Replace(currentLineOffset, totalLength, 
+                    nextLineText + delimiter + currentLineText);
+            }
+            
+            // Restore caret position on the moved line (now at next line number)
+            var newLine = doc.GetLineByNumber(currentLineNumber + 1);
+            CodeEditor.CaretOffset = newLine.Offset + Math.Min(caretColumn, newLine.Length);
+        }
+        catch (Exception)
+        {
+            // Silently ignore edge cases
+        }
+    }
+
+    private void WordWrap_Click(object sender, RoutedEventArgs e)
+    {
+        CodeEditor.WordWrap = !CodeEditor.WordWrap;
+        if (WordWrapToggle != null)
+        {
+            WordWrapToggle.IsChecked = CodeEditor.WordWrap;
+        }
+        if (WordWrapMenuItem != null)
+        {
+            WordWrapMenuItem.IsChecked = CodeEditor.WordWrap;
+        }
+        
+        // Sync minimap word wrap with code editor
+        if (_isMinimapVisible && MinimapEditor != null)
+        {
+            MinimapEditor.WordWrap = CodeEditor.WordWrap;
+            // Deferred viewport update after layout recalculates with new wrapping
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
+            {
+                UpdateMinimapViewport();
+            }));
+        }
+    }
+
+    #endregion
+
+    #region View Toolbar (Split View, Line Numbers, Bracket Matching)
+
+    private GridLength _savedPreviewColumnWidth = new GridLength(1, GridUnitType.Star);
+    private bool _isPreviewVisible = true;
+    private bool _isBracketMatchingEnabled = true;
+    private ICSharpCode.AvalonEdit.Rendering.IBackgroundRenderer? _bracketHighlighter;
+
+    private void SplitView_Click(object sender, RoutedEventArgs e)
+    {
+        _isPreviewVisible = !_isPreviewVisible;
+        
+        if (_isPreviewVisible)
+        {
+            // Show preview panel
+            PreviewColumn.Width = _savedPreviewColumnWidth;
+            PreviewColumn.MinWidth = 200;
+            SplitterColumn.Width = new GridLength(5);
+        }
+        else
+        {
+            // Hide preview panel - save current width first
+            _savedPreviewColumnWidth = PreviewColumn.Width;
+            PreviewColumn.Width = new GridLength(0);
+            PreviewColumn.MinWidth = 0;
+            SplitterColumn.Width = new GridLength(0);
+        }
+        
+        if (SplitViewToggle != null)
+        {
+            SplitViewToggle.IsChecked = _isPreviewVisible;
+        }
+        if (SplitViewMenuItem != null)
+        {
+            SplitViewMenuItem.IsChecked = _isPreviewVisible;
+        }
+    }
+
+    private void LineNumbers_Click(object sender, RoutedEventArgs e)
+    {
+        CodeEditor.ShowLineNumbers = !CodeEditor.ShowLineNumbers;
+        if (LineNumbersToggle != null)
+        {
+            LineNumbersToggle.IsChecked = CodeEditor.ShowLineNumbers;
+        }
+        if (LineNumbersMenuItem != null)
+        {
+            LineNumbersMenuItem.IsChecked = CodeEditor.ShowLineNumbers;
+        }
+    }
+
+    private void BracketMatching_Click(object sender, RoutedEventArgs e)
+    {
+        _isBracketMatchingEnabled = !_isBracketMatchingEnabled;
+        
+        if (_isBracketMatchingEnabled)
+        {
+            EnableBracketHighlighting();
+        }
+        else
+        {
+            DisableBracketHighlighting();
+        }
+        
+        if (BracketMatchingToggle != null)
+        {
+            BracketMatchingToggle.IsChecked = _isBracketMatchingEnabled;
+        }
+        if (BracketMatchingMenuItem != null)
+        {
+            BracketMatchingMenuItem.IsChecked = _isBracketMatchingEnabled;
+        }
+    }
+
+    private void EnableBracketHighlighting()
+    {
+        if (_bracketHighlighter == null)
+        {
+            _bracketHighlighter = new BracketHighlightRenderer(CodeEditor.TextArea);
+            CodeEditor.TextArea.TextView.BackgroundRenderers.Add(_bracketHighlighter);
+        }
+        CodeEditor.TextArea.Caret.PositionChanged += Caret_PositionChanged_BracketHighlight;
+    }
+
+    private void DisableBracketHighlighting()
+    {
+        CodeEditor.TextArea.Caret.PositionChanged -= Caret_PositionChanged_BracketHighlight;
+        if (_bracketHighlighter != null)
+        {
+            CodeEditor.TextArea.TextView.BackgroundRenderers.Remove(_bracketHighlighter);
+            _bracketHighlighter = null;
+        }
+    }
+
+    private void Caret_PositionChanged_BracketHighlight(object? sender, EventArgs e)
+    {
+        if (_bracketHighlighter is BracketHighlightRenderer renderer)
+        {
+            renderer.UpdateBrackets(CodeEditor.Document, CodeEditor.CaretOffset);
+        }
+    }
+
+    #endregion
+
+    #region Minimap
+
+    private bool _isMinimapVisible = false;
+    private bool _isMinimapDragging = false;
+    private const double MinimapWidth = 120;
+
+    private void Minimap_Click(object sender, RoutedEventArgs e)
+    {
+        _isMinimapVisible = !_isMinimapVisible;
+        
+        if (_isMinimapVisible)
+        {
+            ShowMinimap();
+        }
+        else
+        {
+            HideMinimap();
+        }
+        
+        if (MinimapToggle != null)
+        {
+            MinimapToggle.IsChecked = _isMinimapVisible;
+        }
+        if (MinimapMenuItem != null)
+        {
+            MinimapMenuItem.IsChecked = _isMinimapVisible;
+        }
+    }
+
+    private void ShowMinimap()
+    {
+        MinimapColumn.Width = new GridLength(MinimapWidth);
+        MinimapBorder.Visibility = Visibility.Visible;
+        
+        // Copy the document to the minimap editor and sync settings
+        SyncMinimapContent();
+        
+        // Sync word wrap setting with code editor
+        MinimapEditor.WordWrap = CodeEditor.WordWrap;
+        
+        // Set up event handlers for syncing
+        CodeEditor.TextChanged += CodeEditor_TextChanged_Minimap;
+        CodeEditor.TextArea.TextView.ScrollOffsetChanged += TextView_ScrollOffsetChanged_Minimap;
+        CodeEditor.TextArea.TextView.VisualLinesChanged += TextView_VisualLinesChanged_Minimap;
+        
+        // Also listen to the ScrollViewer's ScrollChanged routed event as a belt-and-suspenders approach
+        CodeEditor.AddHandler(System.Windows.Controls.ScrollViewer.ScrollChangedEvent, 
+            new System.Windows.Controls.ScrollChangedEventHandler(CodeEditor_ScrollChanged_Minimap));
+        
+        // Initial viewport update - immediate
+        UpdateMinimapViewport();
+        
+        // Deferred update after layout is complete (DocumentHeight needs a render pass)
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
+        {
+            UpdateMinimapViewport();
+        }));
+    }
+
+    private void HideMinimap()
+    {
+        MinimapColumn.Width = new GridLength(0);
+        MinimapBorder.Visibility = Visibility.Collapsed;
+        
+        // Remove event handlers
+        CodeEditor.TextChanged -= CodeEditor_TextChanged_Minimap;
+        CodeEditor.TextArea.TextView.ScrollOffsetChanged -= TextView_ScrollOffsetChanged_Minimap;
+        CodeEditor.TextArea.TextView.VisualLinesChanged -= TextView_VisualLinesChanged_Minimap;
+        CodeEditor.RemoveHandler(System.Windows.Controls.ScrollViewer.ScrollChangedEvent, 
+            new System.Windows.Controls.ScrollChangedEventHandler(CodeEditor_ScrollChanged_Minimap));
+    }
+
+    private void SyncMinimapContent()
+    {
+        if (MinimapEditor != null && CodeEditor != null)
+        {
+            MinimapEditor.Text = CodeEditor.Text;
+            
+            // Apply the same syntax highlighting
+            MinimapEditor.SyntaxHighlighting = CodeEditor.SyntaxHighlighting;
+        }
+    }
+
+    private void CodeEditor_TextChanged_Minimap(object? sender, EventArgs e)
+    {
+        SyncMinimapContent();
+        UpdateMinimapViewport();
+        
+        // Deferred update - DocumentHeight changes after layout pass
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
+        {
+            UpdateMinimapViewport();
+        }));
+    }
+
+    private void TextView_ScrollOffsetChanged_Minimap(object? sender, EventArgs e)
+    {
+        UpdateMinimapViewport();
+    }
+
+    private void TextView_VisualLinesChanged_Minimap(object? sender, EventArgs e)
+    {
+        UpdateMinimapViewport();
+    }
+
+    private void CodeEditor_ScrollChanged_Minimap(object sender, System.Windows.Controls.ScrollChangedEventArgs e)
+    {
+        UpdateMinimapViewport();
+    }
+
+    private void MinimapViewport_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        UpdateMinimapViewport();
+    }
+
+    private void UpdateMinimapViewport()
+    {
+        if (MinimapEditor == null || CodeEditor == null || MinimapViewportCanvas == null || MinimapViewportIndicator == null || MinimapOverlayGrid == null)
+            return;
+
+        try
+        {
+            var panelHeight = MinimapOverlayGrid.ActualHeight;
+            if (panelHeight <= 0) return;
+            
+            // Get the ScrollViewer from the code editor for ExtentHeight/ViewportHeight
+            var editorScrollViewer = FindVisualChild<System.Windows.Controls.ScrollViewer>(CodeEditor);
+            
+            double editorExtentH, editorViewportH;
+            
+            if (editorScrollViewer != null)
+            {
+                editorExtentH = editorScrollViewer.ExtentHeight;
+                editorViewportH = editorScrollViewer.ViewportHeight;
+            }
+            else
+            {
+                // Fallback to TextView properties
+                var tv = CodeEditor.TextArea.TextView;
+                editorExtentH = tv.DocumentHeight;
+                editorViewportH = tv.ActualHeight;
+            }
+            
+            // Read scroll offset from multiple sources and use the best one.
+            // AvalonEdit's ScrollViewer.VerticalOffset stays at 0 (IScrollInfo bypass),
+            // so we try CodeEditor.VerticalOffset first, then fall back to TextView.ScrollOffset.Y.
+            var editorOffsetY = CodeEditor.VerticalOffset;
+            if (editorOffsetY == 0)
+            {
+                // CodeEditor.VerticalOffset may not be updated yet during scroll events.
+                // Read directly from the TextView's ScrollOffset which is the source of truth.
+                editorOffsetY = CodeEditor.TextArea.TextView.ScrollOffset.Y;
+            }
+            
+            if (editorExtentH <= 0) editorExtentH = 1;
+            
+            // What fraction of the document is visible (0 to 1)
+            var viewportRatio = Math.Min(1.0, Math.Max(0.01, editorViewportH / editorExtentH));
+            
+            // How far we've scrolled (0 = top, 1 = bottom)
+            var maxScroll = Math.Max(0, editorExtentH - editorViewportH);
+            var scrollFraction = maxScroll > 0 ? Math.Max(0, Math.Min(1.0, editorOffsetY / maxScroll)) : 0;
+            
+            // Get minimap content height from its ScrollViewer too
+            var minimapScrollViewer = FindVisualChild<System.Windows.Controls.ScrollViewer>(MinimapEditor);
+            double minimapContentH;
+            if (minimapScrollViewer != null)
+            {
+                minimapContentH = minimapScrollViewer.ExtentHeight;
+            }
+            else
+            {
+                minimapContentH = MinimapEditor.TextArea.TextView.DocumentHeight;
+            }
+            if (minimapContentH <= 0) minimapContentH = 1;
+            
+            // Map viewport indicator to the effective display area
+            // Use the smaller of minimap content height and panel height
+            var effectiveHeight = Math.Min(minimapContentH, panelHeight);
+            
+            var indicatorHeight = viewportRatio * effectiveHeight;
+            indicatorHeight = Math.Max(10, indicatorHeight);
+            
+            var indicatorTop = scrollFraction * (effectiveHeight - indicatorHeight);
+            indicatorTop = Math.Max(0, Math.Min(indicatorTop, effectiveHeight - indicatorHeight));
+            
+            // Sync minimap scrolling
+            if (minimapContentH > panelHeight)
+            {
+                var maxMinimapScroll = minimapContentH - panelHeight;
+                MinimapEditor.ScrollToVerticalOffset(scrollFraction * maxMinimapScroll);
+            }
+            else
+            {
+                MinimapEditor.ScrollToVerticalOffset(0);
+            }
+            
+            Canvas.SetTop(MinimapViewportIndicator, indicatorTop);
+            Canvas.SetLeft(MinimapViewportIndicator, 2);
+            MinimapViewportIndicator.Width = MinimapWidth - 6;
+            MinimapViewportIndicator.Height = indicatorHeight;
+            
+        }
+        catch
+        {
+            // Ignore errors during viewport calculation
+        }
+    }
+
+    private void MinimapViewport_MouseLeftButtonDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        _isMinimapDragging = true;
+        MinimapViewportCanvas.CaptureMouse();
+        NavigateToMinimapPosition(e.GetPosition(MinimapViewportCanvas).Y);
+    }
+
+    private void MinimapViewport_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (_isMinimapDragging)
+        {
+            NavigateToMinimapPosition(e.GetPosition(MinimapViewportCanvas).Y);
+        }
+    }
+
+    private void MinimapViewport_MouseLeftButtonUp(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        _isMinimapDragging = false;
+        MinimapViewportCanvas.ReleaseMouseCapture();
+    }
+
+    private void MinimapOverlay_MouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+    {
+        if (CodeEditor == null) return;
+        
+        // Forward mouse wheel events to the code editor for scrolling
+        var textView = CodeEditor.TextArea.TextView;
+        var linesToScroll = 3.0; // Standard scroll amount
+        var scrollAmount = linesToScroll * textView.DefaultLineHeight;
+        
+        if (e.Delta > 0)
+        {
+            // Scroll up
+            CodeEditor.ScrollToVerticalOffset(CodeEditor.VerticalOffset - scrollAmount);
+        }
+        else
+        {
+            // Scroll down
+            CodeEditor.ScrollToVerticalOffset(CodeEditor.VerticalOffset + scrollAmount);
+        }
+        
+        e.Handled = true;
+    }
+
+    private void NavigateToMinimapPosition(double mouseY)
+    {
+        if (MinimapEditor == null || CodeEditor == null || MinimapBorder == null)
+            return;
+
+        try
+        {
+            var panelHeight = MinimapBorder.ActualHeight;
+            if (panelHeight <= 0) return;
+            
+            // Get scroll metrics from ScrollViewer for accuracy
+            var editorScrollViewer = FindVisualChild<System.Windows.Controls.ScrollViewer>(CodeEditor);
+            double editorExtentH, editorViewportH;
+            if (editorScrollViewer != null)
+            {
+                editorExtentH = editorScrollViewer.ExtentHeight;
+                editorViewportH = editorScrollViewer.ViewportHeight;
+            }
+            else
+            {
+                var tv = CodeEditor.TextArea.TextView;
+                editorExtentH = tv.DocumentHeight;
+                editorViewportH = tv.ActualHeight;
+            }
+            if (editorExtentH <= 0) return;
+            
+            var minimapScrollViewer = FindVisualChild<System.Windows.Controls.ScrollViewer>(MinimapEditor);
+            double minimapContentH = minimapScrollViewer != null 
+                ? minimapScrollViewer.ExtentHeight 
+                : MinimapEditor.TextArea.TextView.DocumentHeight;
+            if (minimapContentH <= 0) return;
+            
+            var effectiveHeight = Math.Min(minimapContentH, panelHeight);
+            mouseY = Math.Max(0, Math.Min(mouseY, effectiveHeight));
+            
+            // Convert click to a scroll fraction (0 to 1)
+            var indicatorHeight = Math.Min(1.0, editorViewportH / editorExtentH) * effectiveHeight;
+            indicatorHeight = Math.Max(10, indicatorHeight);
+            var clickFraction = mouseY / effectiveHeight;
+            
+            // Map to editor scroll position, centering on click
+            var maxEditorScroll = Math.Max(0, editorExtentH - editorViewportH);
+            var targetScroll = clickFraction * maxEditorScroll;
+            targetScroll = Math.Max(0, Math.Min(targetScroll, maxEditorScroll));
+            
+            CodeEditor.ScrollToVerticalOffset(targetScroll);
+        }
+        catch
+        {
+            // Ignore navigation errors
+        }
+    }
+
+    #endregion
 
     private async void ExportPng_Click(object sender, RoutedEventArgs e)
     {
@@ -3130,7 +4729,7 @@ Console.WriteLine(""Hello, World!"");
     private void UpdateExportMenuVisibility()
     {
         // Show diagram exports only for Mermaid files
-        // Show Word export for both (Mermaid embeds as PNG, Markdown converts to formatted doc)
+        // Show Word/PDF export for both (works for both Mermaid and Markdown)
         var isMermaid = _currentRenderMode == RenderMode.Mermaid;
         
         // Menu items
@@ -3172,6 +4771,212 @@ Console.WriteLine(""Hello, World!"");
         Close();
     }
 
+    private async void PrintPreview_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_webViewInitialized) return;
+
+        try
+        {
+            // Capture the current diagram/markdown as an image
+            var pngBytes = await CaptureDiagramAsPngBytes();
+            if (pngBytes == null || pngBytes.Length == 0)
+            {
+                MessageBox.Show("Unable to capture the preview for printing.", "Print Error", 
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // Convert bytes to BitmapSource
+            using var stream = new MemoryStream(pngBytes);
+            var bitmap = new System.Windows.Media.Imaging.BitmapImage();
+            bitmap.BeginInit();
+            bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+            bitmap.StreamSource = stream;
+            bitmap.EndInit();
+            bitmap.Freeze();
+
+            // Get document title for print job
+            var documentTitle = _activeDocument?.DisplayName ?? "Untitled";
+            if (documentTitle.EndsWith(".mmd") || documentTitle.EndsWith(".md"))
+                documentTitle = Path.GetFileNameWithoutExtension(documentTitle);
+
+            // Show print preview dialog (pass isMarkdown flag for default scaling)
+            var isMarkdown = _currentRenderMode == RenderMode.Markdown;
+            var printDialog = new PrintPreviewDialog(bitmap, documentTitle, isMarkdown);
+            printDialog.Owner = this;
+            printDialog.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Error preparing print preview: {ex.Message}", "Print Error", 
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    private async Task<byte[]?> CaptureDiagramAsPngBytes()
+    {
+        if (!_webViewInitialized) return null;
+
+        try
+        {
+            // For Mermaid diagrams, use high-res SVG export to capture full diagram
+            if (_currentRenderMode == RenderMode.Mermaid)
+            {
+                // Use scale 2 for print preview (good balance of quality and performance)
+                _pngExportTcs = new TaskCompletionSource<string>();
+                
+                await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.exportPngHighRes(2)");
+                
+                // Wait for the callback with a timeout
+                var timeoutTask = Task.Delay(15000); // 15 second timeout
+                var completedTask = await Task.WhenAny(_pngExportTcs.Task, timeoutTask);
+                
+                if (completedTask == timeoutTask)
+                {
+                    _pngExportTcs = null;
+                    // Fall back to viewport capture on timeout
+                    return await CaptureViewportAsPngBytes();
+                }
+                
+                var dataUrl = await _pngExportTcs.Task;
+                _pngExportTcs = null;
+                
+                if (!string.IsNullOrEmpty(dataUrl) && dataUrl.StartsWith("data:image/png;base64,"))
+                {
+                    var base64Data = dataUrl.Substring("data:image/png;base64,".Length);
+                    return Convert.FromBase64String(base64Data);
+                }
+                
+                // Fall back to viewport capture if high-res export fails
+                return await CaptureViewportAsPngBytes();
+            }
+            else
+            {
+                // For Markdown, capture the full scrollable content
+                return await CaptureFullMarkdownAsPngBytes();
+            }
+        }
+        catch
+        {
+            // Fall back to viewport capture on any error
+            try
+            {
+                return await CaptureViewportAsPngBytes();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+    }
+    
+    private async Task<byte[]?> CaptureFullMarkdownAsPngBytes()
+    {
+        try
+        {
+            // Use callback pattern with postMessage (same as mermaid export)
+            _pngExportTcs = new TaskCompletionSource<string>();
+            
+            // Inject html2canvas and capture full content, sending result via postMessage
+            var script = @"
+                (async function() {
+                    try {
+                        // Check if html2canvas is available, if not load it
+                        if (typeof html2canvas === 'undefined') {
+                            await new Promise((resolve, reject) => {
+                                const script = document.createElement('script');
+                                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+                                script.onload = resolve;
+                                script.onerror = reject;
+                                document.head.appendChild(script);
+                            });
+                        }
+                        
+                        // Get the content element
+                        const content = document.getElementById('content') || document.body;
+                        
+                        // Capture the full content
+                        const canvas = await html2canvas(content, {
+                            scale: 2,
+                            useCORS: true,
+                            allowTaint: true,
+                            backgroundColor: '#ffffff',
+                            width: content.scrollWidth,
+                            height: content.scrollHeight,
+                            windowWidth: content.scrollWidth,
+                            windowHeight: content.scrollHeight
+                        });
+                        
+                        const dataUrl = canvas.toDataURL('image/png');
+                        window.chrome.webview.postMessage({ type: 'pngExport', data: dataUrl });
+                    } catch (err) {
+                        window.chrome.webview.postMessage({ type: 'pngExportError', error: err.message });
+                    }
+                })();
+            ";
+            
+            await PreviewWebView.CoreWebView2.ExecuteScriptAsync(script);
+            
+            // Wait for the callback with a timeout
+            var timeoutTask = Task.Delay(15000); // 15 second timeout
+            var completedTask = await Task.WhenAny(_pngExportTcs.Task, timeoutTask);
+            
+            if (completedTask == timeoutTask)
+            {
+                _pngExportTcs = null;
+                // Fall back to viewport capture on timeout
+                return await CaptureViewportAsPngBytes();
+            }
+            
+            var dataUrl = await _pngExportTcs.Task;
+            _pngExportTcs = null;
+            
+            if (!string.IsNullOrEmpty(dataUrl) && dataUrl.StartsWith("data:image/png;base64,"))
+            {
+                var base64Data = dataUrl.Substring("data:image/png;base64,".Length);
+                return Convert.FromBase64String(base64Data);
+            }
+            
+            // Fall back to viewport capture
+            return await CaptureViewportAsPngBytes();
+        }
+        catch
+        {
+            _pngExportTcs = null;
+            // Fall back to viewport capture on error
+            return await CaptureViewportAsPngBytes();
+        }
+    }
+
+    private async Task<byte[]?> CaptureViewportAsPngBytes()
+    {
+        using var memoryStream = new MemoryStream();
+        await PreviewWebView.CoreWebView2.CapturePreviewAsync(
+            CoreWebView2CapturePreviewImageFormat.Png, memoryStream);
+        memoryStream.Position = 0;
+        return memoryStream.ToArray();
+    }
+
+    private void PrintCode_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            // Get the code from the editor
+            var code = CodeEditor.Text;
+            var documentTitle = _activeDocument?.DisplayName ?? "Untitled";
+
+            // Show print code preview dialog
+            var printCodeDialog = new PrintCodePreviewDialog(code, documentTitle);
+            printCodeDialog.Owner = this;
+            printCodeDialog.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Error printing code: {ex.Message}", "Print Error", 
+                MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     private bool _isUpdatingZoomSlider = false;
     
     private async void ZoomIn_Click(object sender, RoutedEventArgs e)
@@ -3192,6 +4997,11 @@ Console.WriteLine(""Hello, World!"");
     {
         if (!_webViewInitialized) return;
         _currentZoom = 1.0;
+        // Sync zoom to active document so it's preserved when switching tabs
+        if (_activeDocument != null)
+        {
+            _activeDocument.PreviewZoom = _currentZoom;
+        }
         await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.resetView()");
         UpdateZoomUI();
     }
@@ -3206,12 +5016,22 @@ Console.WriteLine(""Hello, World!"");
     {
         if (_isUpdatingZoomSlider || !_webViewInitialized) return;
         _currentZoom = e.NewValue / 100.0;
+        // Sync zoom to active document so it's preserved when switching tabs
+        if (_activeDocument != null)
+        {
+            _activeDocument.PreviewZoom = _currentZoom;
+        }
         await PreviewWebView.CoreWebView2.ExecuteScriptAsync($"window.setZoom({_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)})");
         ZoomLevelText.Text = $"{e.NewValue:F0}%";
     }
     
     private async Task ApplyZoom()
     {
+        // Sync zoom to active document so it's preserved when switching tabs
+        if (_activeDocument != null)
+        {
+            _activeDocument.PreviewZoom = _currentZoom;
+        }
         await PreviewWebView.CoreWebView2.ExecuteScriptAsync($"window.setZoom({_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)})");
         UpdateZoomUI();
     }
@@ -3222,6 +5042,53 @@ Console.WriteLine(""Hello, World!"");
         ZoomSlider.Value = _currentZoom * 100;
         ZoomLevelText.Text = $"{_currentZoom * 100:F0}%";
         _isUpdatingZoomSlider = false;
+    }
+    
+    /// <summary>
+    /// Saves the current preview scroll position and panzoom pan position to the document model
+    /// </summary>
+    private async Task SavePreviewScrollPositionAsync(DocumentModel doc)
+    {
+        if (!_webViewInitialized || doc == null) return;
+        
+        try
+        {
+            // Get both scroll position and panzoom transform
+            // For Mermaid: use container element scroll and panzoom transform
+            // For Markdown: use window/document scroll (no panzoom)
+            var result = await PreviewWebView.CoreWebView2.ExecuteScriptAsync(@"
+                (function() {
+                    var container = document.getElementById('container');
+                    var transform = window.panzoomInstance ? window.panzoomInstance.getTransform() : { x: 0, y: 0, scale: 1 };
+                    var scrollLeft, scrollTop;
+                    if (container) {
+                        // Mermaid diagram - use container scroll
+                        scrollLeft = container.scrollLeft;
+                        scrollTop = container.scrollTop;
+                    } else {
+                        // Markdown - try multiple scroll sources (html/body can both have overflow:auto)
+                        scrollLeft = window.pageXOffset || document.documentElement.scrollLeft || document.body.scrollLeft || 0;
+                        scrollTop = window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+                    }
+                    return JSON.stringify({ 
+                        scrollLeft: scrollLeft || 0, 
+                        scrollTop: scrollTop || 0,
+                        panX: transform.x || 0,
+                        panY: transform.y || 0
+                    });
+                })()
+            ");
+            
+            if (!string.IsNullOrEmpty(result) && result != "null")
+            {
+                var json = System.Text.Json.JsonDocument.Parse(result.Trim('"').Replace("\\\"", "\""));
+                doc.PreviewScrollLeft = json.RootElement.GetProperty("scrollLeft").GetDouble();
+                doc.PreviewScrollTop = json.RootElement.GetProperty("scrollTop").GetDouble();
+                doc.PreviewPanX = json.RootElement.GetProperty("panX").GetDouble();
+                doc.PreviewPanY = json.RootElement.GetProperty("panY").GetDouble();
+            }
+        }
+        catch { }
     }
 
     private void SyntaxHelp_Click(object sender, RoutedEventArgs e)
@@ -3321,7 +5188,7 @@ Console.WriteLine(""Hello, World!"");
         });
         titlePanel.Children.Add(new TextBlock
         {
-            Text = "Version 2.0.0",
+            Text = "Version 2.3.0",
             FontSize = 14,
             Foreground = (SolidColorBrush)System.Windows.Application.Current.Resources["ThemeDisabledForegroundBrush"],
             Margin = new Thickness(0, 4, 0, 0)
@@ -3430,6 +5297,95 @@ Console.WriteLine(""Hello, World!"");
         RegisterThemeSyntaxHighlighting();
     }
 
+    private void Settings_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SettingsDialog { Owner = this };
+        if (dialog.ShowDialog() == true && dialog.Saved)
+        {
+            // Apply theme change if needed
+            if (dialog.ThemeChanged)
+            {
+                UpdateThemeMenuCheckmarks();
+                UpdateEditorTheme();
+                UpdateTitleBarTheme();
+                UpdateTabStyles();
+                RenderPreview();
+            }
+
+            // Apply editor settings
+            ApplySettingsToEditor();
+        }
+    }
+
+    /// <summary>
+    /// Applies all settings from SettingsManager to the editor and auto-save timer.
+    /// Called on startup and after the Settings dialog is closed with OK.
+    /// </summary>
+    private void ApplySettingsToEditor()
+    {
+        var settings = SettingsManager.Current;
+
+        // Editor font
+        CodeEditor.FontFamily = new System.Windows.Media.FontFamily(settings.EditorFontFamily);
+        CodeEditor.FontSize = settings.EditorFontSize;
+
+        // Word wrap
+        CodeEditor.WordWrap = settings.WordWrapDefault;
+        if (WordWrapToggle != null) WordWrapToggle.IsChecked = settings.WordWrapDefault;
+        if (WordWrapMenuItem != null) WordWrapMenuItem.IsChecked = settings.WordWrapDefault;
+        // Sync minimap word wrap
+        if (_isMinimapVisible && MinimapEditor != null)
+        {
+            MinimapEditor.WordWrap = settings.WordWrapDefault;
+        }
+
+        // Line numbers
+        CodeEditor.ShowLineNumbers = settings.ShowLineNumbersDefault;
+        if (LineNumbersToggle != null) LineNumbersToggle.IsChecked = settings.ShowLineNumbersDefault;
+        if (LineNumbersMenuItem != null) LineNumbersMenuItem.IsChecked = settings.ShowLineNumbersDefault;
+
+        // Bracket matching
+        _isBracketMatchingEnabled = settings.BracketMatchingDefault;
+        if (settings.BracketMatchingDefault)
+        {
+            EnableBracketHighlighting();
+        }
+        else
+        {
+            DisableBracketHighlighting();
+        }
+        if (BracketMatchingToggle != null) BracketMatchingToggle.IsChecked = settings.BracketMatchingDefault;
+        if (BracketMatchingMenuItem != null) BracketMatchingMenuItem.IsChecked = settings.BracketMatchingDefault;
+
+        // Minimap
+        if (settings.ShowMinimapDefault != _isMinimapVisible)
+        {
+            _isMinimapVisible = settings.ShowMinimapDefault;
+            if (_isMinimapVisible)
+            {
+                ShowMinimap();
+            }
+            else
+            {
+                HideMinimap();
+            }
+        }
+        if (MinimapToggle != null) MinimapToggle.IsChecked = settings.ShowMinimapDefault;
+        if (MinimapMenuItem != null) MinimapMenuItem.IsChecked = settings.ShowMinimapDefault;
+
+        // Auto-save
+        _autoSaveIntervalSeconds = settings.AutoSaveIntervalSeconds;
+        _autoSaveTimer.Interval = TimeSpan.FromSeconds(_autoSaveIntervalSeconds);
+        if (settings.AutoSaveEnabled)
+        {
+            _autoSaveTimer.Start();
+        }
+        else
+        {
+            _autoSaveTimer.Stop();
+        }
+    }
+
     private void RegisterThemeSyntaxHighlighting()
     {
         var isDark = ThemeManager.IsDarkTheme;
@@ -3474,6 +5430,38 @@ Console.WriteLine(""Hello, World!"");
             var definition = HighlightingLoader.Load(reader, HighlightingManager.Instance);
             HighlightingManager.Instance.RegisterHighlighting("Mermaid", new[] { ".mmd", ".mermaid" }, definition);
             CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
+        }
+        catch
+        {
+            // If syntax highlighting fails, continue without it
+        }
+    }
+
+    private void RegisterMarkdownSyntaxHighlighting()
+    {
+        var isDark = ThemeManager.IsDarkTheme;
+        
+        // Color values based on theme - green for comments like Mermaid
+        var commentColor = isDark ? "#6A9955" : "#008000";
+        
+        // Simplified XSHD - only HTML comments to avoid regex issues
+        var xshd = "<?xml version=\"1.0\"?>" +
+            "<SyntaxDefinition name=\"Markdown\" xmlns=\"http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008\">" +
+            "<Color name=\"Comment\" foreground=\"" + commentColor + "\" />" +
+            "<RuleSet>" +
+            "<Span color=\"Comment\" multiline=\"true\">" +
+            "<Begin>&lt;!--</Begin>" +
+            "<End>--&gt;</End>" +
+            "</Span>" +
+            "</RuleSet>" +
+            "</SyntaxDefinition>";
+
+        try
+        {
+            using var reader = new XmlTextReader(new StringReader(xshd));
+            var definition = HighlightingLoader.Load(reader, HighlightingManager.Instance);
+            HighlightingManager.Instance.RegisterHighlighting("Markdown", new[] { ".md", ".markdown" }, definition);
+            CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Markdown");
         }
         catch
         {
@@ -3540,16 +5528,18 @@ Console.WriteLine(""Hello, World!"");
             border-radius: 8px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
             display: inline-block;
-            min-width: 2000px;
         }}
         #diagram.has-error {{
-            min-width: auto;
             max-width: calc(100vw - 60px);
         }}
         #diagram svg {{
             display: block;
+        }}
+        /* Override Mermaid's huge inline width styles ONLY for gantt charts */
+        #diagram svg[aria-roledescription=""gantt""] {{
+            width: auto !important;
+            min-width: auto !important;
             max-width: none !important;
-            min-width: 100% !important;
         }}
     </style>
 </head>
@@ -3560,41 +5550,47 @@ Console.WriteLine(""Hello, World!"");
         </div>
     </div>
     <script>
-        mermaid.initialize({{ startOnLoad: true, theme: 'default', securityLevel: 'loose' }});
+        mermaid.initialize({{ 
+            startOnLoad: true, 
+            theme: 'default', 
+            securityLevel: 'loose'
+        }});
         mermaid.run().then(() => {{
             const diagram = document.getElementById('diagram');
             const svg = document.querySelector('#diagram svg');
             
-            // Fix SVG and container dimensions after render
+            // Auto-size the container to fit the actual SVG content
             if (svg) {{
-                let svgWidth = 0;
-                let svgHeight = 0;
-                
-                const viewBox = svg.getAttribute('viewBox');
-                if (viewBox) {{
-                    const parts = viewBox.split(' ');
-                    if (parts.length === 4) {{
-                        svgWidth = parseFloat(parts[2]);
-                        svgHeight = parseFloat(parts[3]);
-                    }}
-                }}
-                
-                if (svgWidth === 0 || svgHeight === 0) {{
-                    try {{
-                        const bbox = svg.getBBox();
-                        svgWidth = bbox.width + 40;
-                        svgHeight = bbox.height + 40;
-                    }} catch (e) {{ }}
-                }}
-                
-                if (svgWidth > 0 && svgHeight > 0) {{
-                    svg.style.width = svgWidth + 'px';
-                    svg.style.height = svgHeight + 'px';
-                    svg.style.minWidth = svgWidth + 'px';
-                    svg.style.minHeight = svgHeight + 'px';
+                try {{
+                    // Actually remove Mermaid's inline width/min-width styles using removeProperty
+                    // Setting to '' doesn't work - must use removeProperty to truly remove inline styles
+                    svg.style.removeProperty('width');
+                    svg.style.removeProperty('min-width');
+                    svg.style.removeProperty('max-width');
+                    svg.style.removeProperty('height');
+                    svg.style.removeProperty('min-height');
                     
-                    diagram.style.minWidth = 'auto';
-                    diagram.style.width = 'auto';
+                    // Get dimensions from viewBox if available (more reliable for gantt charts)
+                    const viewBox = svg.getAttribute('viewBox');
+                    if (viewBox) {{
+                        const parts = viewBox.split(' ').map(Number);
+                        if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) {{
+                            const padding = 20;
+                            svg.setAttribute('width', parts[2] + padding);
+                            svg.setAttribute('height', parts[3] + padding);
+                        }}
+                    }} else {{
+                        // Fall back to getBBox for diagrams without viewBox
+                        const bbox = svg.getBBox();
+                        if (bbox && bbox.width > 0 && bbox.height > 0) {{
+                            const padding = 20;
+                            svg.setAttribute('width', bbox.width + padding);
+                            svg.setAttribute('height', bbox.height + padding);
+                            svg.setAttribute('viewBox', `${{bbox.x - padding/2}} ${{bbox.y - padding/2}} ${{bbox.width + padding}} ${{bbox.height + padding}}`);
+                        }}
+                    }}
+                }} catch (e) {{
+                    // getBBox may fail in some cases, just continue
                 }}
             }}
             
@@ -4346,6 +6342,14 @@ Console.WriteLine(""Hello, World!"");
         {
             SetDocumentRenderModeFromFile(doc, filePath);
         }
+        else
+        {
+            // Apply default file type from settings for untitled documents
+            var defaultType = SettingsManager.Current.DefaultFileType;
+            doc.RenderMode = string.Equals(defaultType, "Markdown", StringComparison.OrdinalIgnoreCase)
+                ? RenderMode.Markdown
+                : RenderMode.Mermaid;
+        }
         
         doc.TextDocument.Text = content ?? (doc.RenderMode == RenderMode.Markdown ? DefaultMarkdownCode : DefaultMermaidCode);
         doc.TextDocument.UndoStack.ClearAll(); // Clear undo history so users can't undo past the initial content
@@ -4418,14 +6422,49 @@ Console.WriteLine(""Hello, World!"");
         stackPanel.Children.Add(closeButton);
         tabBorder.Child = stackPanel;
         
-        // Handle click on the border
+        // Handle click and drag on the border
         tabBorder.MouseLeftButtonDown += (s, e) =>
         {
             if (s is System.Windows.Controls.Border border && border.Tag is DocumentModel clickedDoc)
             {
+                _tabDragStartPoint = e.GetPosition(DocumentTabsPanel);
+                _draggedTab = border;
+                _isTabDragging = false;
                 SwitchToDocument(clickedDoc);
             }
         };
+        
+        tabBorder.MouseMove += (s, e) =>
+        {
+            if (e.LeftButton == System.Windows.Input.MouseButtonState.Pressed && _draggedTab != null)
+            {
+                var currentPos = e.GetPosition(DocumentTabsPanel);
+                var diff = _tabDragStartPoint - currentPos;
+                
+                if (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
+                    Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance)
+                {
+                    _isTabDragging = true;
+                    tabBorder.Cursor = System.Windows.Input.Cursors.Hand;
+                    
+                    var data = new System.Windows.DataObject(typeof(DocumentModel), _draggedTab.Tag);
+                    System.Windows.DragDrop.DoDragDrop(_draggedTab, data, System.Windows.DragDropEffects.Move);
+                    
+                    _draggedTab = null;
+                    _isTabDragging = false;
+                }
+            }
+        };
+        
+        tabBorder.MouseLeftButtonUp += (s, e) =>
+        {
+            _draggedTab = null;
+            _isTabDragging = false;
+        };
+        
+        tabBorder.AllowDrop = true;
+        tabBorder.DragOver += TabBorder_DragOver;
+        tabBorder.Drop += TabBorder_Drop;
         
         // Add context menu for tab operations - uses XAML styles from Window.Resources
         var contextMenu = new System.Windows.Controls.ContextMenu();
@@ -4463,6 +6502,47 @@ Console.WriteLine(""Hello, World!"");
         DocumentTabsPanel.Children.Add(tabBorder);
         
         UpdateTabStyles();
+    }
+    
+    private void TabBorder_DragOver(object sender, System.Windows.DragEventArgs e)
+    {
+        if (e.Data.GetDataPresent(typeof(DocumentModel)))
+        {
+            e.Effects = System.Windows.DragDropEffects.Move;
+        }
+        else
+        {
+            e.Effects = System.Windows.DragDropEffects.None;
+        }
+        e.Handled = true;
+    }
+    
+    private void TabBorder_Drop(object sender, System.Windows.DragEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Border targetBorder && 
+            targetBorder.Tag is DocumentModel targetDoc &&
+            e.Data.GetDataPresent(typeof(DocumentModel)))
+        {
+            var draggedDoc = e.Data.GetData(typeof(DocumentModel)) as DocumentModel;
+            if (draggedDoc == null || draggedDoc == targetDoc) return;
+            
+            var draggedIndex = _openDocuments.IndexOf(draggedDoc);
+            var targetIndex = _openDocuments.IndexOf(targetDoc);
+            
+            if (draggedIndex < 0 || targetIndex < 0) return;
+            
+            // Reorder in the documents list
+            _openDocuments.RemoveAt(draggedIndex);
+            _openDocuments.Insert(targetIndex, draggedDoc);
+            
+            // Reorder in the UI panel
+            if (draggedDoc.TabBorder != null)
+            {
+                DocumentTabsPanel.Children.Remove(draggedDoc.TabBorder);
+                DocumentTabsPanel.Children.Insert(targetIndex, draggedDoc.TabBorder);
+            }
+        }
+        e.Handled = true;
     }
     
     /// <summary>
@@ -4562,6 +6642,9 @@ Console.WriteLine(""Hello, World!"");
             }
         }
         
+        // Clean up temp file for this document
+        DeleteTempFile(doc);
+        
         // Remove the tab element (Border or Button)
         if (doc.TabBorder != null)
         {
@@ -4575,6 +6658,9 @@ Console.WriteLine(""Hello, World!"");
         // Remove from list
         var index = _openDocuments.IndexOf(doc);
         _openDocuments.Remove(doc);
+        
+        // Update session state after closing a document
+        SaveSessionState();
         
         // If this was the active document, switch to another
         if (doc == _activeDocument)
@@ -4670,6 +6756,9 @@ Console.WriteLine(""Hello, World!"");
             // Set up file watcher for the saved file
             SetupFileWatcher(doc.FilePath);
             
+            // Clean up temp file now that content is saved to a real path
+            DeleteTempFile(doc);
+            
             return true;
         }
         catch (Exception ex)
@@ -4683,7 +6772,7 @@ Console.WriteLine(""Hello, World!"");
     /// <summary>
     /// Switches to a different document
     /// </summary>
-    private void SwitchToDocument(DocumentModel doc)
+    private async void SwitchToDocument(DocumentModel doc)
     {
         if (_activeDocument == doc) return;
         
@@ -4695,9 +6784,14 @@ Console.WriteLine(""Hello, World!"");
             _activeDocument.CaretOffset = CodeEditor.CaretOffset;
             _activeDocument.VerticalScrollOffset = CodeEditor.VerticalOffset;
             _activeDocument.HorizontalScrollOffset = CodeEditor.HorizontalOffset;
+            _activeDocument.SelectionStart = CodeEditor.SelectionStart;
+            _activeDocument.SelectionLength = CodeEditor.SelectionLength;
             _activeDocument.PreviewZoom = _currentZoom;
             _activeDocument.HasNavigatedAway = _hasNavigatedAway;
             _activeDocument.IsSelected = false;
+            
+            // Save preview scroll position - must await to ensure it's saved before switching
+            await SavePreviewScrollPositionAsync(_activeDocument);
         }
         
         // Switch to new document
@@ -4728,22 +6822,43 @@ Console.WriteLine(""Hello, World!"");
             CodeEditor.CaretOffset = Math.Min(doc.CaretOffset, doc.TextDocument.TextLength);
             CodeEditor.ScrollToVerticalOffset(doc.VerticalScrollOffset);
             CodeEditor.ScrollToHorizontalOffset(doc.HorizontalScrollOffset);
+            
+            // Restore selection if there was one
+            if (doc.SelectionLength > 0)
+            {
+                var selStart = Math.Min(doc.SelectionStart, doc.TextDocument.TextLength);
+                var selLength = Math.Min(doc.SelectionLength, doc.TextDocument.TextLength - selStart);
+                CodeEditor.Select(selStart, selLength);
+            }
         }
         catch { }
+        
+        // Update syntax highlighting based on document type
+        if (doc.RenderMode == RenderMode.Markdown)
+        {
+            RegisterMarkdownSyntaxHighlighting();
+        }
+        else
+        {
+            CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
+        }
         
         // Update UI
         UpdateTabStyles();
         UpdateTitle();
         UpdateNavigationDropdown();
         UpdateExportMenuVisibility();
+        UpdateMarkdownFormattingVisibility();
+        UpdateZoomControlsVisibility();
         UpdateUndoRedoState();
-        
-        _isSwitchingDocuments = false;
         
         // Re-render preview for the new document
         // This will trigger NavigateToString which resets _hasNavigatedAway to false
         // and keeps the back button disabled for fresh renders
+        // Note: _isSwitchingDocuments stays true during RenderPreview() so zoom can be restored
         RenderPreview();
+        
+        _isSwitchingDocuments = false;
     }
     
     /// <summary>
@@ -4800,11 +6915,11 @@ Console.WriteLine(""Hello, World!"");
     /// </summary>
     private void InitializeDocumentTabs()
     {
-        // Create initial document
+        // Check for command-line file argument first (e.g., double-click to open a file)
         var args = Environment.GetCommandLineArgs();
         if (args.Length > 1 && File.Exists(args[1]))
         {
-            // Open file from command line
+            // Open file from command line - this takes priority over session restore
             var content = File.ReadAllText(args[1]);
             var doc = CreateNewDocument(args[1], content);
             doc.LastKnownWriteTime = File.GetLastWriteTimeUtc(args[1]);
@@ -4821,14 +6936,30 @@ Console.WriteLine(""Hello, World!"");
             }
             
             AddToRecentFiles(args[1]);
+            return;
         }
-        else
+        
+        // Try to restore previous session
+        if (RestoreSessionState())
         {
-            // Create a temporary blank document - the New Document dialog will be shown after window loads
-            var doc = CreateNewDocument();
-            SwitchToDocument(doc);
-            _showNewDocumentDialogOnLoad = true;
+            // Session restored successfully - update browser path from first saved document
+            var firstSavedDoc = _openDocuments.FirstOrDefault(d => !string.IsNullOrEmpty(d.FilePath));
+            if (firstSavedDoc != null)
+            {
+                var folder = Path.GetDirectoryName(firstSavedDoc.FilePath);
+                if (!string.IsNullOrEmpty(folder))
+                {
+                    _currentBrowserPath = folder;
+                }
+            }
+            return;
         }
+        
+        // No session to restore and no command-line file
+        // Create a temporary blank document - the New Document dialog will be shown after window loads
+        var newDoc = CreateNewDocument();
+        SwitchToDocument(newDoc);
+        _showNewDocumentDialogOnLoad = true;
     }
     
     private bool _showNewDocumentDialogOnLoad = false;
@@ -4978,6 +7109,41 @@ Console.WriteLine(""Hello, World!"");
         }
     }
     
+    /// <summary>
+    /// Syncs the toggle button visual states with their actual states.
+    /// This is needed because WPF Style.Triggers with DynamicResource can sometimes
+    /// not update properly after dialogs close.
+    /// </summary>
+    private void SyncToggleButtonStates()
+    {
+        // Force re-evaluation of toggle button states by toggling IsChecked twice
+        // This ensures the Style.Triggers are re-evaluated
+        if (SplitViewToggle != null)
+        {
+            var state = SplitViewToggle.IsChecked;
+            SplitViewToggle.IsChecked = !state;
+            SplitViewToggle.IsChecked = state;
+        }
+        if (LineNumbersToggle != null)
+        {
+            var state = LineNumbersToggle.IsChecked;
+            LineNumbersToggle.IsChecked = !state;
+            LineNumbersToggle.IsChecked = state;
+        }
+        if (BracketMatchingToggle != null)
+        {
+            var state = BracketMatchingToggle.IsChecked;
+            BracketMatchingToggle.IsChecked = !state;
+            BracketMatchingToggle.IsChecked = state;
+        }
+        if (WordWrapToggle != null)
+        {
+            var state = WordWrapToggle.IsChecked;
+            WordWrapToggle.IsChecked = !state;
+            WordWrapToggle.IsChecked = state;
+        }
+    }
+    
     private void ShowStartupNewDocumentDialog()
     {
         var dialog = new NewDocumentDialog { Owner = this };
@@ -5054,12 +7220,325 @@ Console.WriteLine(""Hello, World!"");
                     _activeDocument.IsDirty = false;
                     _currentRenderMode = _activeDocument.RenderMode;
                     UpdateExportMenuVisibility();
+                    UpdateMarkdownFormattingVisibility();
+                    UpdateZoomControlsVisibility();
+                    UpdateTitle();
                     RenderPreview();
+                    
+                    // Auto fit to window after template loads
+                    _ = Dispatcher.InvokeAsync(async () =>
+                    {
+                        await Task.Delay(500); // Wait for render to complete
+                        if (_webViewInitialized)
+                        {
+                            await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.fitToWindow()");
+                        }
+                    });
                 }
             }
             // If no template selected, keep the blank document
         }
         // If user cancelled dialog, keep the blank document
+        
+        // Sync toggle button visual states after dialog closes
+        // This is needed because WPF Style.Triggers with DynamicResource can sometimes
+        // not update properly after dialogs close
+        SyncToggleButtonStates();
+    }
+    
+    #endregion
+    
+    #region Auto-Save and Session Restore
+    
+    /// <summary>
+    /// Auto-save timer tick handler - saves all dirty documents to temp files and persists session state
+    /// </summary>
+    private void AutoSaveTimer_Tick(object? sender, EventArgs e)
+    {
+        if (_isAutoSaving) return;
+        _isAutoSaving = true;
+        
+        try
+        {
+            SaveActiveDocumentState();
+            AutoSaveAllDocuments();
+            SaveSessionState();
+        }
+        catch
+        {
+            // Silently fail - auto-save should never interrupt the user
+        }
+        finally
+        {
+            _isAutoSaving = false;
+        }
+    }
+    
+    /// <summary>
+    /// Captures the active document's current editor state (caret, scroll, etc.)
+    /// so it's up-to-date before saving session state
+    /// </summary>
+    private void SaveActiveDocumentState()
+    {
+        if (_activeDocument == null) return;
+        
+        try
+        {
+            _activeDocument.CaretOffset = CodeEditor.CaretOffset;
+            _activeDocument.VerticalScrollOffset = CodeEditor.VerticalOffset;
+            _activeDocument.HorizontalScrollOffset = CodeEditor.HorizontalOffset;
+            _activeDocument.SelectionStart = CodeEditor.SelectionStart;
+            _activeDocument.SelectionLength = CodeEditor.SelectionLength;
+            _activeDocument.PreviewZoom = _currentZoom;
+            _activeDocument.HasNavigatedAway = _hasNavigatedAway;
+        }
+        catch
+        {
+            // Silently fail
+        }
+    }
+    
+    /// <summary>
+    /// Auto-saves all documents to temp files in the AutoSave directory.
+    /// For untitled documents: saves content to their assigned temp file.
+    /// For saved documents with unsaved changes: saves content to a temp backup file.
+    /// For clean saved documents: no temp file needed (content matches the real file).
+    /// </summary>
+    private void AutoSaveAllDocuments()
+    {
+        try
+        {
+            // Ensure the AutoSave directory exists
+            if (!Directory.Exists(AutoSaveFolder))
+            {
+                Directory.CreateDirectory(AutoSaveFolder);
+            }
+            
+            foreach (var doc in _openDocuments)
+            {
+                // Assign a temp file path if this document doesn't have one yet
+                if (string.IsNullOrEmpty(doc.TempFilePath))
+                {
+                    var ext = doc.RenderMode == RenderMode.Markdown ? ".md" : ".mmd";
+                    doc.TempFilePath = Path.Combine(AutoSaveFolder, $"autosave_{Guid.NewGuid():N}{ext}");
+                }
+                
+                // Always write to temp file for untitled docs, or dirty saved docs
+                if (string.IsNullOrEmpty(doc.FilePath) || doc.IsDirty)
+                {
+                    File.WriteAllText(doc.TempFilePath, doc.TextDocument.Text);
+                }
+            }
+        }
+        catch
+        {
+            // Silently fail - auto-save should never interrupt the user
+        }
+    }
+    
+    /// <summary>
+    /// Saves the current session state to session.json.
+    /// This records all open tabs, their file paths, temp file paths, and editor state.
+    /// </summary>
+    private void SaveSessionState()
+    {
+        try
+        {
+            if (!Directory.Exists(AppDataFolder))
+            {
+                Directory.CreateDirectory(AppDataFolder);
+            }
+            
+            var session = new SessionState
+            {
+                ActiveDocumentIndex = _activeDocument != null ? _openDocuments.IndexOf(_activeDocument) : 0,
+                Documents = _openDocuments.Select(doc => new SessionDocumentState
+                {
+                    FilePath = doc.FilePath,
+                    TempFilePath = doc.TempFilePath,
+                    RenderMode = doc.RenderMode.ToString(),
+                    IsDirty = doc.IsDirty,
+                    CaretOffset = doc.CaretOffset,
+                    VerticalScrollOffset = doc.VerticalScrollOffset,
+                    HorizontalScrollOffset = doc.HorizontalScrollOffset,
+                    PreviewZoom = doc.PreviewZoom,
+                    PreviewScrollLeft = doc.PreviewScrollLeft,
+                    PreviewScrollTop = doc.PreviewScrollTop,
+                    PreviewPanX = doc.PreviewPanX,
+                    PreviewPanY = doc.PreviewPanY
+                }).ToList()
+            };
+            
+            var options = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+            var json = System.Text.Json.JsonSerializer.Serialize(session, options);
+            File.WriteAllText(SessionFilePath, json);
+        }
+        catch
+        {
+            // Silently fail
+        }
+    }
+    
+    /// <summary>
+    /// Attempts to restore the previous session from session.json.
+    /// Returns true if a session was successfully restored, false otherwise.
+    /// </summary>
+    private bool RestoreSessionState()
+    {
+        try
+        {
+            if (!File.Exists(SessionFilePath))
+                return false;
+            
+            var json = File.ReadAllText(SessionFilePath);
+            var session = System.Text.Json.JsonSerializer.Deserialize<SessionState>(json);
+            
+            if (session == null || session.Documents.Count == 0)
+                return false;
+            
+            var restoredDocs = new List<DocumentModel>();
+            
+            foreach (var docState in session.Documents)
+            {
+                DocumentModel? doc = null;
+                
+                if (!string.IsNullOrEmpty(docState.FilePath) && File.Exists(docState.FilePath))
+                {
+                    // Saved file that still exists on disk
+                    string content;
+                    
+                    if (docState.IsDirty && !string.IsNullOrEmpty(docState.TempFilePath) && File.Exists(docState.TempFilePath))
+                    {
+                        // Has unsaved changes - restore from temp file
+                        content = File.ReadAllText(docState.TempFilePath);
+                    }
+                    else
+                    {
+                        // Clean file - read from disk
+                        content = File.ReadAllText(docState.FilePath);
+                    }
+                    
+                    doc = CreateNewDocument(docState.FilePath, content);
+                    doc.LastKnownWriteTime = File.GetLastWriteTimeUtc(docState.FilePath);
+                    doc.IsDirty = docState.IsDirty;
+                    doc.TempFilePath = docState.TempFilePath;
+                    
+                    // Set up file watcher for external change detection
+                    SetupFileWatcher(docState.FilePath);
+                    
+                    // Add to recent files
+                    AddToRecentFiles(docState.FilePath);
+                }
+                else if (!string.IsNullOrEmpty(docState.TempFilePath) && File.Exists(docState.TempFilePath))
+                {
+                    // Untitled document - restore from temp file
+                    var content = File.ReadAllText(docState.TempFilePath);
+                    doc = CreateNewDocument(null, content);
+                    doc.TempFilePath = docState.TempFilePath;
+                    doc.IsDirty = true; // Untitled docs are always considered dirty
+                }
+                else if (!string.IsNullOrEmpty(docState.FilePath))
+                {
+                    // Saved file that no longer exists - skip it
+                    continue;
+                }
+                else
+                {
+                    // No file path and no temp file - skip
+                    continue;
+                }
+                
+                if (doc != null)
+                {
+                    // Restore render mode
+                    if (Enum.TryParse<RenderMode>(docState.RenderMode, out var renderMode))
+                    {
+                        doc.RenderMode = renderMode;
+                    }
+                    
+                    // Restore editor state
+                    doc.CaretOffset = docState.CaretOffset;
+                    doc.VerticalScrollOffset = docState.VerticalScrollOffset;
+                    doc.HorizontalScrollOffset = docState.HorizontalScrollOffset;
+                    doc.PreviewZoom = docState.PreviewZoom;
+                    doc.PreviewScrollLeft = docState.PreviewScrollLeft;
+                    doc.PreviewScrollTop = docState.PreviewScrollTop;
+                    doc.PreviewPanX = docState.PreviewPanX;
+                    doc.PreviewPanY = docState.PreviewPanY;
+                    
+                    restoredDocs.Add(doc);
+                }
+            }
+            
+            if (restoredDocs.Count == 0)
+                return false;
+            
+            // Switch to the previously active document
+            var activeIndex = Math.Clamp(session.ActiveDocumentIndex, 0, restoredDocs.Count - 1);
+            SwitchToDocument(restoredDocs[activeIndex]);
+            
+            // Clean up orphaned temp files
+            CleanupOrphanedTempFiles();
+            
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+    
+    /// <summary>
+    /// Removes temp files from the AutoSave directory that are not referenced by any open document.
+    /// This prevents accumulation of stale temp files over time.
+    /// </summary>
+    private void CleanupOrphanedTempFiles()
+    {
+        try
+        {
+            if (!Directory.Exists(AutoSaveFolder))
+                return;
+            
+            // Collect all temp file paths currently in use
+            var activeTempFiles = new HashSet<string>(
+                _openDocuments
+                    .Where(d => !string.IsNullOrEmpty(d.TempFilePath))
+                    .Select(d => d.TempFilePath!),
+                StringComparer.OrdinalIgnoreCase);
+            
+            // Delete any temp files not in the active set
+            foreach (var file in Directory.GetFiles(AutoSaveFolder, "autosave_*"))
+            {
+                if (!activeTempFiles.Contains(file))
+                {
+                    try { File.Delete(file); } catch { }
+                }
+            }
+        }
+        catch
+        {
+            // Silently fail
+        }
+    }
+    
+    /// <summary>
+    /// Deletes a document's temp file if it exists.
+    /// Called when a document is closed or saved to a real file path.
+    /// </summary>
+    private void DeleteTempFile(DocumentModel doc)
+    {
+        if (!string.IsNullOrEmpty(doc.TempFilePath))
+        {
+            try
+            {
+                if (File.Exists(doc.TempFilePath))
+                {
+                    File.Delete(doc.TempFilePath);
+                }
+            }
+            catch { }
+            doc.TempFilePath = null;
+        }
     }
     
     #endregion
@@ -5174,14 +7653,23 @@ public class DocumentModel : System.ComponentModel.INotifyPropertyChanged
     public int CaretOffset { get; set; }
     public double VerticalScrollOffset { get; set; }
     public double HorizontalScrollOffset { get; set; }
+    public int SelectionStart { get; set; }
+    public int SelectionLength { get; set; }
     
     // Preview state
     public double PreviewZoom { get; set; } = 1.0;
     public bool HasNavigatedAway { get; set; }
+    public double PreviewScrollLeft { get; set; }
+    public double PreviewScrollTop { get; set; }
+    public double PreviewPanX { get; set; }
+    public double PreviewPanY { get; set; }
     
     // File change detection
     public DateTime LastKnownWriteTime { get; set; }
     public bool ExternalChangeDetected { get; set; }
+    
+    // Auto-save / session restore
+    public string? TempFilePath { get; set; }
     
     // UI element references for the tab
     public System.Windows.Controls.Button? TabButton { get; set; }
@@ -5197,4 +7685,185 @@ public class DocumentModel : System.ComponentModel.INotifyPropertyChanged
     {
         PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(propertyName));
     }
+}
+
+/// <summary>
+/// Highlights matching brackets in the code editor
+/// </summary>
+public class BracketHighlightRenderer : ICSharpCode.AvalonEdit.Rendering.IBackgroundRenderer
+{
+    private readonly ICSharpCode.AvalonEdit.Editing.TextArea _textArea;
+    private int _openBracketOffset = -1;
+    private int _closeBracketOffset = -1;
+    
+    private static readonly Dictionary<char, char> BracketPairs = new()
+    {
+        { '(', ')' },
+        { '[', ']' },
+        { '{', '}' },
+        { '<', '>' }
+    };
+    
+    private static readonly Dictionary<char, char> ReverseBracketPairs = new()
+    {
+        { ')', '(' },
+        { ']', '[' },
+        { '}', '{' },
+        { '>', '<' }
+    };
+
+    public BracketHighlightRenderer(ICSharpCode.AvalonEdit.Editing.TextArea textArea)
+    {
+        _textArea = textArea;
+    }
+
+    public ICSharpCode.AvalonEdit.Rendering.KnownLayer Layer => ICSharpCode.AvalonEdit.Rendering.KnownLayer.Selection;
+
+    public void UpdateBrackets(ICSharpCode.AvalonEdit.Document.TextDocument document, int caretOffset)
+    {
+        _openBracketOffset = -1;
+        _closeBracketOffset = -1;
+        
+        if (caretOffset < 0 || caretOffset > document.TextLength)
+        {
+            _textArea.TextView.InvalidateLayer(Layer);
+            return;
+        }
+        
+        // Check character before caret (cursor is after the bracket)
+        if (caretOffset > 0)
+        {
+            char charBefore = document.GetCharAt(caretOffset - 1);
+            
+            if (BracketPairs.TryGetValue(charBefore, out char closingBracket))
+            {
+                // Found opening bracket, search forward for closing
+                _openBracketOffset = caretOffset - 1;
+                _closeBracketOffset = FindMatchingBracket(document, caretOffset, charBefore, closingBracket, 1);
+            }
+            else if (ReverseBracketPairs.TryGetValue(charBefore, out char openingBracket))
+            {
+                // Found closing bracket, search backward for opening
+                _closeBracketOffset = caretOffset - 1;
+                _openBracketOffset = FindMatchingBracket(document, caretOffset - 2, openingBracket, charBefore, -1);
+            }
+        }
+        
+        // Also check character at caret position (cursor is before the bracket)
+        if (_openBracketOffset < 0 && _closeBracketOffset < 0 && caretOffset < document.TextLength)
+        {
+            char charAt = document.GetCharAt(caretOffset);
+            
+            if (BracketPairs.TryGetValue(charAt, out char closingBracket))
+            {
+                // Found opening bracket, search forward for closing
+                _openBracketOffset = caretOffset;
+                _closeBracketOffset = FindMatchingBracket(document, caretOffset + 1, charAt, closingBracket, 1);
+            }
+            else if (ReverseBracketPairs.TryGetValue(charAt, out char openingBracket))
+            {
+                // Found closing bracket, search backward for opening
+                _closeBracketOffset = caretOffset;
+                _openBracketOffset = FindMatchingBracket(document, caretOffset - 1, openingBracket, charAt, -1);
+            }
+        }
+        
+        _textArea.TextView.InvalidateLayer(Layer);
+    }
+
+    private int FindMatchingBracket(ICSharpCode.AvalonEdit.Document.TextDocument document, int startOffset, char openBracket, char closeBracket, int direction)
+    {
+        int depth = 1;
+        int offset = startOffset;
+        
+        while (offset >= 0 && offset < document.TextLength)
+        {
+            char c = document.GetCharAt(offset);
+            
+            if (c == openBracket)
+            {
+                if (direction > 0) depth++;
+                else depth--;
+            }
+            else if (c == closeBracket)
+            {
+                if (direction > 0) depth--;
+                else depth++;
+            }
+            
+            if (depth == 0)
+                return offset;
+            
+            offset += direction;
+        }
+        
+        return -1;
+    }
+
+    public void Draw(ICSharpCode.AvalonEdit.Rendering.TextView textView, System.Windows.Media.DrawingContext drawingContext)
+    {
+        if (_openBracketOffset < 0 && _closeBracketOffset < 0)
+            return;
+        
+        var builder = new ICSharpCode.AvalonEdit.Rendering.BackgroundGeometryBuilder
+        {
+            CornerRadius = 1
+        };
+        
+        // Use a bright, visible highlight color that works on both light and dark themes
+        var brush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(160, 255, 215, 0)); // Gold/yellow background
+        var pen = new System.Windows.Media.Pen(new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(255, 255, 165, 0)), 2); // Orange border
+        
+        if (_openBracketOffset >= 0)
+        {
+            var segment = new ICSharpCode.AvalonEdit.Document.TextSegment { StartOffset = _openBracketOffset, Length = 1 };
+            builder.AddSegment(textView, segment);
+            var geometry = builder.CreateGeometry();
+            if (geometry != null)
+            {
+                drawingContext.DrawGeometry(brush, pen, geometry);
+            }
+            builder = new ICSharpCode.AvalonEdit.Rendering.BackgroundGeometryBuilder { CornerRadius = 1 };
+        }
+        
+        if (_closeBracketOffset >= 0)
+        {
+            var segment = new ICSharpCode.AvalonEdit.Document.TextSegment { StartOffset = _closeBracketOffset, Length = 1 };
+            builder.AddSegment(textView, segment);
+            var geometry = builder.CreateGeometry();
+            if (geometry != null)
+            {
+                drawingContext.DrawGeometry(brush, pen, geometry);
+            }
+        }
+    }
+}
+
+/// <summary>
+/// Represents the persisted session state for restoring tabs on startup
+/// </summary>
+public class SessionState
+{
+    public int Version { get; set; } = 1;
+    public int ActiveDocumentIndex { get; set; }
+    public List<SessionDocumentState> Documents { get; set; } = new();
+}
+
+/// <summary>
+/// Represents a single document's state within the session
+/// </summary>
+public class SessionDocumentState
+{
+    public string? FilePath { get; set; }
+    public string? TempFilePath { get; set; }
+    public string RenderMode { get; set; } = "Mermaid";
+    public bool IsDirty { get; set; }
+    public int CaretOffset { get; set; }
+    public double VerticalScrollOffset { get; set; }
+    public double HorizontalScrollOffset { get; set; }
+    public double PreviewZoom { get; set; } = 1.0;
+    public double PreviewScrollLeft { get; set; }
+    public double PreviewScrollTop { get; set; }
+    public double PreviewPanX { get; set; }
+    public double PreviewPanY { get; set; }
 }

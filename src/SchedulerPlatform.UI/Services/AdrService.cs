@@ -27,7 +27,12 @@ public class AdrService : IAdrService
         string? primaryVendorCode = null,
         string? masterVendorCode = null,
         string? sortColumn = null,
-        bool sortDescending = false)
+        bool sortDescending = false,
+        DateTime? modifiedAfter = null,
+        DateTime? modifiedBefore = null,
+        string? orchestrationRequestId = null,
+        DateTime? createdAfter = null,
+        DateTime? createdBefore = null)
     {
         var queryParams = new List<string>
         {
@@ -66,6 +71,21 @@ public class AdrService : IAdrService
             queryParams.Add($"sortColumn={Uri.EscapeDataString(sortColumn)}");
 
         queryParams.Add($"sortDescending={sortDescending.ToString().ToLower()}");
+
+        if (modifiedAfter.HasValue)
+            queryParams.Add($"modifiedAfter={modifiedAfter.Value:o}");
+
+        if (modifiedBefore.HasValue)
+            queryParams.Add($"modifiedBefore={modifiedBefore.Value:o}");
+
+        if (!string.IsNullOrWhiteSpace(orchestrationRequestId))
+            queryParams.Add($"orchestrationRequestId={Uri.EscapeDataString(orchestrationRequestId)}");
+
+        if (createdAfter.HasValue)
+            queryParams.Add($"createdAfter={createdAfter.Value:o}");
+
+        if (createdBefore.HasValue)
+            queryParams.Add($"createdBefore={createdBefore.Value:o}");
 
         var query = "?" + string.Join("&", queryParams);
         var response = await _httpClient.GetAsync($"adr/accounts{query}");
@@ -217,7 +237,12 @@ public class AdrService : IAdrService
         string? blacklistStatus = null,
         string? sortColumn = null,
         bool sortDescending = true,
-        int? adrJobTypeId = null)
+        int? adrJobTypeId = null,
+        DateTime? modifiedAfter = null,
+        DateTime? modifiedBefore = null,
+        string? orchestrationRequestId = null,
+        int? executionRequestTypeId = null,
+        bool? executionIsError = null)
     {
         var queryParams = new List<string>
         {
@@ -265,6 +290,21 @@ public class AdrService : IAdrService
             queryParams.Add($"sortColumn={Uri.EscapeDataString(sortColumn)}");
 
         queryParams.Add($"sortDescending={sortDescending.ToString().ToLower()}");
+
+        if (modifiedAfter.HasValue)
+            queryParams.Add($"modifiedAfter={modifiedAfter.Value:o}");
+
+        if (modifiedBefore.HasValue)
+            queryParams.Add($"modifiedBefore={modifiedBefore.Value:o}");
+
+        if (!string.IsNullOrWhiteSpace(orchestrationRequestId))
+            queryParams.Add($"orchestrationRequestId={Uri.EscapeDataString(orchestrationRequestId)}");
+
+        if (executionRequestTypeId.HasValue)
+            queryParams.Add($"executionRequestTypeId={executionRequestTypeId.Value}");
+
+        if (executionIsError.HasValue)
+            queryParams.Add($"executionIsError={executionIsError.Value.ToString().ToLower()}");
 
         var query = "?" + string.Join("&", queryParams);
         var response = await _httpClient.GetAsync($"adr/jobs{query}");

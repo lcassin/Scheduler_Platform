@@ -1224,9 +1224,15 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
         existing.NextRunStatus = external.NextRunStatus;
         existing.HistoricalBillingStatus = external.HistoricalBillingStatus;
         
-        // NOTE: Scheduling configuration fields (PeriodType, PeriodDays, NextRunDateTime, NextRangeStartDateTime, 
-        // NextRangeEndDateTime) are now managed on AdrAccountRule, not AdrAccount.
-        // The SyncAccountRulesAsync method handles syncing these fields to rules.
+        // Update display date fields so the Accounts page shows dates consistent with calculated statuses.
+        // The authoritative scheduling config lives on AdrAccountRule, but AdrAccount retains these
+        // fields for display purposes. Without this update the displayed NextRunDateTime can go stale
+        // while NextRunStatus/DaysUntilNextRun are recalculated, causing mismatched statuses.
+        existing.PeriodType = external.PeriodType;
+        existing.PeriodDays = external.PeriodDays;
+        existing.NextRunDateTime = external.NextRunDateTime;
+        existing.NextRangeStartDateTime = external.NextRangeStartDateTime;
+        existing.NextRangeEndDateTime = external.NextRangeEndDateTime;
         
         // Re-activate deleted accounts if they appear in VendorCred again (credentials became active)
         existing.IsDeleted = false;
@@ -1262,6 +1268,13 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
             DaysUntilNextRun = external.DaysUntilNextRun,
             NextRunStatus = external.NextRunStatus,
             HistoricalBillingStatus = external.HistoricalBillingStatus,
+            // Display date fields (authoritative scheduling config is on AdrAccountRule,
+            // but Account retains these for consistent display on the Accounts page)
+            PeriodType = external.PeriodType,
+            PeriodDays = external.PeriodDays,
+            NextRunDateTime = external.NextRunDateTime,
+            NextRangeStartDateTime = external.NextRangeStartDateTime,
+            NextRangeEndDateTime = external.NextRangeEndDateTime,
             // Audit fields
             LastSyncedDateTime = DateTime.UtcNow,
             CreatedDateTime = DateTime.UtcNow,

@@ -20,6 +20,29 @@
     </MudAlert>
 }
 
+@if (_hasOrchestrationFilter)
+{
+    <MudAlert Severity="Severity.Info" Class="mb-4" Icon="@Icons.Material.Filled.FilterAlt" CloseIconClicked="ClearOrchestrationFilter" ShowCloseIcon="true">
+        <strong>Filtered by orchestration run:</strong>
+        @if (!string.IsNullOrEmpty(_filterOrchestrationRequestId))
+        {
+            <span> Request ID: @_filterOrchestrationRequestId</span>
+        }
+        else if (_filterCreatedAfter.HasValue && _filterCreatedBefore.HasValue)
+        {
+            <span> Accounts inserted: @_filterCreatedAfter.Value.ToString("g") — @_filterCreatedBefore.Value.ToString("g") (UTC)</span>
+        }
+        else if (_filterCreatedBefore.HasValue && _filterModifiedAfter.HasValue)
+        {
+            <span> Accounts updated: @_filterModifiedAfter.Value.ToString("g") — @_filterModifiedBefore?.ToString("g") (UTC)</span>
+        }
+        else if (_filterModifiedAfter.HasValue && _filterModifiedBefore.HasValue)
+        {
+            <span> @_filterModifiedAfter.Value.ToString("g") — @_filterModifiedBefore.Value.ToString("g") (UTC)</span>
+        }
+    </MudAlert>
+}
+
 <MudPaper Class="pa-4">
     <MudGrid Class="mb-4" Spacing="2">
         <MudItem xs="12" md="3">
@@ -241,9 +264,11 @@
                 <MudTd DataLabel="Historical Status">
                     @if (!string.IsNullOrEmpty(context.HistoricalBillingStatus))
                     {
-                        <MudChip T="string" Size="Size.Small" Color="@GetHistoricalStatusColor(context.HistoricalBillingStatus)">
-                            @context.HistoricalBillingStatus
-                        </MudChip>
+                        <MudTooltip Text="@GetHistoricalStatusExplanation(context)" Placement="Placement.Top">
+                            <MudChip T="string" Size="Size.Small" Color="@GetHistoricalStatusColor(context.HistoricalBillingStatus)">
+                                @context.HistoricalBillingStatus
+                            </MudChip>
+                        </MudTooltip>
                     }
                 </MudTd>
                 <MudTd DataLabel="Next Run">
@@ -267,21 +292,27 @@
                 <MudTd DataLabel="Run Status">
                     @if (!string.IsNullOrEmpty(context.NextRunStatus))
                     {
-                        <MudChip T="string" Size="Size.Small" Color="@GetNextRunStatusColor(context.NextRunStatus)">
-                            @context.NextRunStatus
-                        </MudChip>
+                        <MudTooltip Text="@GetNextRunStatusExplanation(context)" Placement="Placement.Top">
+                            <MudChip T="string" Size="Size.Small" Color="@GetNextRunStatusColor(context.NextRunStatus)">
+                                @context.NextRunStatus
+                            </MudChip>
+                        </MudTooltip>
                     }
                 </MudTd>
                 <MudTd DataLabel="Job Status">
                     @if (!string.IsNullOrEmpty(context.CurrentJobStatus))
                     {
-                        <MudChip T="string" Size="Size.Small" Color="@GetJobStatusColor(context.CurrentJobStatus)">
-                            @GetJobStatusDisplayName(context.CurrentJobStatus)
-                        </MudChip>
+                        <MudTooltip Text="@GetJobStatusExplanation(context)" Placement="Placement.Top">
+                            <MudChip T="string" Size="Size.Small" Color="@GetJobStatusColor(context.CurrentJobStatus)">
+                                @GetJobStatusDisplayName(context.CurrentJobStatus)
+                            </MudChip>
+                        </MudTooltip>
                     }
                     else
                     {
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">No Job</MudText>
+                        <MudTooltip Text="No job has been created for this account yet. Jobs are created when an account is due for processing." Placement="Placement.Top">
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">No Job</MudText>
+                        </MudTooltip>
                     }
                 </MudTd>
                                 <MudTd DataLabel="Actions">
@@ -368,37 +399,78 @@
     [SupplyParameterFromQuery(Name = "blacklistStatus")]
     public string? BlacklistStatusParam { get; set; }
 
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "modifiedAfter")]
+    public string? ModifiedAfterParam { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "modifiedBefore")]
+    public string? ModifiedBeforeParam { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "orchestrationRequestId")]
+    public string? OrchestrationRequestIdParam { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "createdAfter")]
+    public string? CreatedAfterParam { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "createdBefore")]
+    public string? CreatedBeforeParam { get; set; }
+
+    private DateTime? _filterModifiedAfter;
+    private DateTime? _filterModifiedBefore;
+    private string? _filterOrchestrationRequestId;
+    private DateTime? _filterCreatedAfter;
+    private DateTime? _filterCreatedBefore;
+
+    private bool _hasOrchestrationFilter;
+
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            // Load test mode status for banner display
-            _testModeStatus = await AdrService.GetTestModeStatusAsync();
-            
-            // Apply query parameters if provided (e.g., from "View Account" action on Jobs page or Dashboard chart click)
             if (!string.IsNullOrEmpty(AccountNumberParam))
             {
                 _searchTerm = AccountNumberParam;
             }
-            
             if (!string.IsNullOrEmpty(NextRunStatusParam))
             {
                 _selectedNextRunStatus = NextRunStatusParam;
                 _filterNextRunStatus = NextRunStatusParam;
             }
-            
             if (!string.IsNullOrEmpty(BlacklistStatusParam))
             {
                 _selectedBlacklistStatus = BlacklistStatusParam;
                 _filterBlacklistStatus = BlacklistStatusParam;
             }
-            
+            if (!string.IsNullOrEmpty(ModifiedAfterParam) && DateTime.TryParse(ModifiedAfterParam, null, System.Globalization.DateTimeStyles.RoundtripKind, out var modAfter))
+            {
+                _filterModifiedAfter = modAfter;
+            }
+            if (!string.IsNullOrEmpty(ModifiedBeforeParam) && DateTime.TryParse(ModifiedBeforeParam, null, System.Globalization.DateTimeStyles.RoundtripKind, out var modBefore))
+            {
+                _filterModifiedBefore = modBefore;
+            }
+            if (!string.IsNullOrEmpty(OrchestrationRequestIdParam))
+            {
+                _filterOrchestrationRequestId = OrchestrationRequestIdParam;
+            }
+            if (!string.IsNullOrEmpty(CreatedAfterParam) && DateTime.TryParse(CreatedAfterParam, null, System.Globalization.DateTimeStyles.RoundtripKind, out var creAfter))
+            {
+                _filterCreatedAfter = creAfter;
+            }
+            if (!string.IsNullOrEmpty(CreatedBeforeParam) && DateTime.TryParse(CreatedBeforeParam, null, System.Globalization.DateTimeStyles.RoundtripKind, out var creBefore))
+            {
+                _filterCreatedBefore = creBefore;
+            }
+            _hasOrchestrationFilter = !string.IsNullOrEmpty(_filterOrchestrationRequestId) || _filterModifiedAfter.HasValue || _filterModifiedBefore.HasValue || _filterCreatedAfter.HasValue || _filterCreatedBefore.HasValue;
+
+            _testModeStatus = await AdrService.GetTestModeStatusAsync();
             _clients = await ClientService.GetClientsAsync();
-            
-                        // Check if user has permission to update ADR accounts (for editing billing data)
-                        _canEditBilling = await PermissionService.CanUpdateAsync("adr");
-                        // Check if user has permission to execute manual ADR requests (Editors, Admins, Super Admins)
-                        _canExecuteManualScrape = await PermissionService.CanUpdateAsync("adr");
+            _canEditBilling = await PermissionService.CanUpdateAsync("adr");
+            _canExecuteManualScrape = await PermissionService.CanUpdateAsync("adr");
         }
         catch (Exception ex)
         {
@@ -408,6 +480,17 @@
         {
             _loading = false;
         }
+    }
+
+    private void ClearOrchestrationFilter()
+    {
+        _filterModifiedAfter = null;
+        _filterModifiedBefore = null;
+        _filterOrchestrationRequestId = null;
+        _filterCreatedAfter = null;
+        _filterCreatedBefore = null;
+        _hasOrchestrationFilter = false;
+        Navigation.NavigateTo("/adr/accounts");
     }
 
     private async Task<TableData<AdrAccount>> ServerReload(TableState state, CancellationToken cancellationToken)
@@ -435,7 +518,12 @@
                 _filterPrimaryVendorCode,
                 _filterMasterVendorCode,
                 sortColumn,
-                sortDescending);
+                sortDescending,
+                _filterModifiedAfter,
+                _filterModifiedBefore,
+                _filterOrchestrationRequestId,
+                _filterCreatedAfter,
+                _filterCreatedBefore);
 
             return new TableData<AdrAccount>
             {
@@ -579,6 +667,64 @@
         "Due Now" => Color.Info,
         _ => Color.Default
     };
+
+    private string GetHistoricalStatusExplanation(AdrAccount account)
+    {
+        var status = account.HistoricalBillingStatus ?? "";
+        var lastInvoice = account.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? "N/A";
+        var nextRun = account.NextRunDateTime?.ToString("MM/dd/yyyy") ?? "N/A";
+        return status switch
+        {
+            "Due Soon" => $"Based on billing history, this account's next invoice is expected soon. Last invoice: {lastInvoice}, Next run: {nextRun}.",
+            "Overdue" => $"Based on billing history, this account's invoice is past its expected date. Last invoice: {lastInvoice}, Next run: {nextRun}. The invoice may be delayed or the billing pattern may have changed.",
+            "Due Now" => $"Based on billing history, this account's invoice should be available now. Last invoice: {lastInvoice}, Next run: {nextRun}.",
+            "Missing" => "This account has no billing history or its history cannot be determined. It may need research before processing.",
+            _ => $"Historical status: {status}. Last invoice: {lastInvoice}, Next run: {nextRun}."
+        };
+    }
+
+    private string GetNextRunStatusExplanation(AdrAccount account)
+    {
+        var status = account.NextRunStatus ?? "";
+        var nextRun = account.NextRunDateTime?.ToString("MM/dd/yyyy") ?? "N/A";
+        var daysUntil = account.DaysUntilNextRun;
+        return status switch
+        {
+            "Run Now" => $"This account is due for processing now. Next run date: {nextRun}. The orchestrator will pick it up on the next run.",
+            "Due Soon" => $"This account will be due for processing soon ({daysUntil} days). Next run date: {nextRun}. This reflects the billing cycle timing, not the job outcome.",
+            "Upcoming" => $"This account is scheduled but not yet due ({daysUntil} days). Next run date: {nextRun}.",
+            "Future" => $"This account's next run is further out ({daysUntil} days). Next run date: {nextRun}.",
+            _ => $"Run status: {status}. Next run date: {nextRun}."
+        };
+    }
+
+    private string GetJobStatusExplanation(AdrAccount account)
+    {
+        var status = account.CurrentJobStatus ?? "";
+        var nextRunStatus = account.NextRunStatus ?? "";
+        var contextNote = "";
+        if ((nextRunStatus == "Due Soon" || nextRunStatus == "Upcoming") && (status == "Failed" || status == "NeedsReview" || status == "Completed"))
+        {
+            contextNote = " Note: Run Status reflects when the next billing cycle is due, while Job Status shows the outcome of the most recent job. These are independent.";
+        }
+        return status switch
+        {
+            "Pending" => $"A job has been created and is waiting to be processed.{contextNote}",
+            "CredentialCheckInProgress" => $"Credentials are currently being verified with the vendor.{contextNote}",
+            "CredentialVerified" => $"Credentials have been verified successfully. The job is ready for the ADR request.{contextNote}",
+            "CredentialFailed" => $"Credential verification failed. The vendor may have rejected the login or there may be a configuration issue.{contextNote}",
+            "ScrapeInProgress" => $"An ADR request is currently being processed by the vendor.{contextNote}",
+            "ScrapeRequested" => $"An ADR request has been sent to the vendor and is awaiting a response.{contextNote}",
+            "ScrapeFailed" => $"The ADR request failed. The vendor may be experiencing issues or the request was rejected.{contextNote}",
+            "StatusCheckInProgress" => $"The system is checking the status of the ADR request with the vendor.{contextNote}",
+            "NoInvoiceFound" => $"The vendor reported no invoice found for the requested billing period.{contextNote}",
+            "Failed" => $"The job failed during processing. This could be due to credential issues, vendor errors, or processing failures. It will be retried automatically if retries remain.{contextNote}",
+            "Completed" => $"The job completed successfully. The invoice was downloaded and processed.{contextNote}",
+            "NeedsReview" => $"The job requires manual review. The vendor may have returned unexpected results or partial data.{contextNote}",
+            "Cancelled" => $"The job was cancelled.{contextNote}",
+            _ => $"Job status: {status}.{contextNote}"
+        };
+    }
 
     private string GetBlacklistTooltip(AdrAccount account, bool isCurrent)
     {

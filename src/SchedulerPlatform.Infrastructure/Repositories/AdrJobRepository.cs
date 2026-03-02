@@ -194,7 +194,12 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             string? sortColumn = null,
             bool sortDescending = true,
             List<int>? jobIds = null,
-            int? adrJobTypeId = null)
+            int? adrJobTypeId = null,
+            DateTime? modifiedAfter = null,
+            DateTime? modifiedBefore = null,
+            string? orchestrationRequestId = null,
+            int? executionRequestTypeId = null,
+            bool? executionIsError = null)
         {
             // Filter by both job.IsDeleted AND account.IsDeleted to exclude jobs for deleted accounts
             var query = _dbSet.Where(j => !j.IsDeleted && j.AdrAccount != null && !j.AdrAccount.IsDeleted);
@@ -282,6 +287,27 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             if (adrJobTypeId.HasValue)
             {
                 query = query.Where(j => j.AdrJobTypeId == adrJobTypeId.Value);
+            }
+
+            if (modifiedAfter.HasValue)
+            {
+                query = query.Where(j => j.ModifiedDateTime >= modifiedAfter.Value);
+            }
+
+            if (modifiedBefore.HasValue)
+            {
+                query = query.Where(j => j.ModifiedDateTime <= modifiedBefore.Value);
+            }
+
+            var hasExecutionFilter = !string.IsNullOrWhiteSpace(orchestrationRequestId) || executionRequestTypeId.HasValue || executionIsError.HasValue;
+            if (hasExecutionFilter)
+            {
+                query = query.Where(j => _context.AdrJobExecutions.Any(e =>
+                    e.AdrJobId == j.Id &&
+                    !e.IsDeleted &&
+                    (orchestrationRequestId == null || e.OrchestrationRequestId == orchestrationRequestId) &&
+                    (!executionRequestTypeId.HasValue || e.AdrRequestTypeId == executionRequestTypeId.Value) &&
+                    (!executionIsError.HasValue || e.IsError == executionIsError.Value)));
             }
 
             int totalCount;

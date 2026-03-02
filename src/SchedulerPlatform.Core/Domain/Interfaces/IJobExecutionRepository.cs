@@ -19,7 +19,8 @@ public interface IJobExecutionRepository : IRepository<JobExecution>
     Task<int> GetTotalExecutionsCountAsync(DateTime startDate, int? clientId);
     Task<List<JobExecution>> GetExecutionsForPeakCalculationAsync(DateTime startDate, int? clientId);
     
-    Task<Dictionary<JobStatus, int>> GetStatusBreakdownAsync(DateTime startDate, int? clientId);
+    Task<Dictionary<JobStatus, int>> GetStatusBreakdownAsync(DateTime startDate, int? clientId, JobStatus[]? statuses = null);
+    Task<List<(int Id, string ScheduleName, DateTime StartDateTime, DateTime? EndDateTime, JobStatus Status, int? DurationSeconds)>> GetRecentExecutionsAsync(DateTime startDate, int? clientId, JobStatus[]? statuses = null, int limit = 10);
     Task<List<(int Year, int Month, int Day, int Hour, int ExecutionCount, double AvgDuration, int ConcurrentCount)>> GetExecutionTrendsAsync(DateTime startDate, int? clientId, JobStatus[] statuses);
     Task<List<(string ScheduleName, int DurationSeconds, DateTime StartDateTime, DateTime? EndDateTime)>> GetTopLongestAsync(DateTime startDate, int? clientId, JobStatus[] statuses, int limit);
 }

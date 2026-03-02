@@ -10,18 +10,18 @@ namespace SchedulerPlatform.API.Services;
 
 public interface IAdrOrchestratorService
 {
-    Task<JobCreationResult> CreateJobsForDueAccountsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
-    Task<CredentialVerificationResult> VerifyCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
-    Task<ScrapeResult> ProcessScrapingAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
-    Task<StatusCheckResult> CheckPendingStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
-    Task<StatusCheckResult> CheckAllScrapedStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
+    Task<JobCreationResult> CreateJobsForDueAccountsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null);
+    Task<CredentialVerificationResult> VerifyCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null);
+    Task<ScrapeResult> ProcessScrapingAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null);
+    Task<StatusCheckResult> CheckPendingStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null);
+    Task<StatusCheckResult> CheckAllScrapedStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null);
     /// <summary>
     /// Finalizes stale pending jobs that missed their processing window.
     /// Jobs in Pending or CredentialCheckInProgress status with NextRangeEndDateTime in the past
     /// are marked as Cancelled and their rules are advanced to the next billing cycle.
     /// This does NOT call any ADR APIs (no cost incurred).
     /// </summary>
-    Task<StalePendingJobsResult> FinalizeStalePendingJobsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
+    Task<StalePendingJobsResult> FinalizeStalePendingJobsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null);
     
     /// <summary>
     /// Runs credential verification (AttemptLogin) for ALL active accounts in the system.
@@ -33,7 +33,7 @@ public interface IAdrOrchestratorService
     /// <param name="progressCallback">Optional callback to report progress (current, total)</param>
     /// <param name="cancellationToken">Cancellation token for the operation</param>
     /// <returns>Results of the bulk credential verification operation</returns>
-    Task<BulkCredentialVerificationResult> VerifyAllAccountCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, int? testrun=null);
+    Task<BulkCredentialVerificationResult> VerifyAllAccountCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, int? testrun=null, string? orchestrationRequestId = null);
     
     /// <summary>
     /// Runs credential verification (AttemptLogin) for accounts matching specific lists of credential IDs
@@ -57,7 +57,7 @@ public interface IAdrOrchestratorService
     /// <param name="progressCallback">Optional callback to report progress (current, total)</param>
     /// <param name="cancellationToken">Cancellation token for the operation</param>
     /// <returns>Results of the rebill processing operation</returns>
-    Task<RebillResult> ProcessRebillAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
+    Task<RebillResult> ProcessRebillAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null);
     
     /// <summary>
     /// Fires a rebill check for a single account.
@@ -349,31 +349,49 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// <summary>
     /// Checks if an account matches any of the cached blacklist entries.
     /// Use this for batch operations after loading entries with LoadBlacklistEntriesAsync.
+    /// 
+    /// Matching logic:
+    /// - Account-level fields (VMAccountNumber, VMAccountId) require a vendor code match as well
+    ///   to prevent false positives when different vendors share the same account number.
+    /// - Vendor-level fields (PrimaryVendorCode, MasterVendorCode) match independently.
+    /// - CredentialId matches independently (credentials are already vendor-specific).
     /// </summary>
     private bool IsAccountBlacklistedCached(AdrAccount account, List<AdrAccountBlacklist> blacklistEntries)
     {
         foreach (var entry in blacklistEntries)
         {
-            // Check if this blacklist entry matches the account
             bool matches = false;
 
-            // Match by PrimaryVendorCode (if specified)
+            // Vendor-level matching: PrimaryVendorCode and MasterVendorCode match independently
+            bool hasVendorMatch = false;
             if (!string.IsNullOrEmpty(entry.PrimaryVendorCode) && entry.PrimaryVendorCode == account.PrimaryVendorCode)
-                matches = true;
-
-            // Match by MasterVendorCode (if specified)
+                hasVendorMatch = true;
             if (!string.IsNullOrEmpty(entry.MasterVendorCode) && entry.MasterVendorCode == account.MasterVendorCode)
-                matches = true;
+                hasVendorMatch = true;
 
-            // Match by VMAccountId (if specified)
-            if (entry.VMAccountId.HasValue && entry.VMAccountId == account.VMAccountId)
-                matches = true;
+            // Account-level matching: VMAccountNumber and VMAccountId require a vendor match
+            bool hasAccountCriteria = !string.IsNullOrEmpty(entry.VMAccountNumber) || entry.VMAccountId.HasValue;
 
-            // Match by VMAccountNumber (if specified)
-            if (!string.IsNullOrEmpty(entry.VMAccountNumber) && entry.VMAccountNumber == account.VMAccountNumber)
-                matches = true;
+            if (hasAccountCriteria)
+            {
+                // When account-level criteria are specified, require BOTH vendor match AND account match
+                // to prevent false positives from different vendors sharing the same account number
+                bool accountFieldMatches = false;
+                if (!string.IsNullOrEmpty(entry.VMAccountNumber) && entry.VMAccountNumber == account.VMAccountNumber)
+                    accountFieldMatches = true;
+                if (entry.VMAccountId.HasValue && entry.VMAccountId == account.VMAccountId)
+                    accountFieldMatches = true;
 
-            // Match by CredentialId (if specified)
+                if (accountFieldMatches && hasVendorMatch)
+                    matches = true;
+            }
+            else if (hasVendorMatch)
+            {
+                // Vendor-only entry: blocks all accounts under that vendor
+                matches = true;
+            }
+
+            // CredentialId matches independently (credentials are already vendor-specific)
             if (entry.CredentialId.HasValue && entry.CredentialId == account.CredentialId)
                 matches = true;
 
@@ -440,7 +458,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
     #region Step 2: Job Creation
 
-    public async Task<JobCreationResult> CreateJobsForDueAccountsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    public async Task<JobCreationResult> CreateJobsForDueAccountsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null)
     {
         var result = new JobCreationResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -470,6 +488,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             var dueAccountsList = dueAccounts.ToList();
             var totalAccounts = dueAccountsList.Count;
             var batchSize = config.BatchSize;
+            var createdJobsBatch = new List<AdrJob>();
             _logger.LogInformation("Processing {Count} due accounts in batches of {BatchSize}", totalAccounts, batchSize);
 
             // Report initial progress (0 of total)
@@ -543,6 +562,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     };
 
                     await _unitOfWork.AdrJobs.AddAsync(job);
+                    createdJobsBatch.Add(job);
                     result.JobsCreated++;
                     processedSinceLastSave++;
 
@@ -550,6 +570,30 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     if (processedSinceLastSave >= batchSize)
                     {
                         await _unitOfWork.SaveChangesAsync();
+                        
+                        if (!string.IsNullOrEmpty(orchestrationRequestId) && createdJobsBatch.Count > 0)
+                        {
+                            foreach (var createdJob in createdJobsBatch)
+                            {
+                                var execution = new AdrJobExecution
+                                {
+                                    AdrJobId = createdJob.Id,
+                                    AdrRequestTypeId = (int)AdrRequestType.JobCreation,
+                                    StartDateTime = DateTime.UtcNow,
+                                    EndDateTime = DateTime.UtcNow,
+                                    OrchestrationRequestId = orchestrationRequestId,
+                                    IsSuccess = true,
+                                    CreatedDateTime = DateTime.UtcNow,
+                                    CreatedBy = "System Created",
+                                    ModifiedDateTime = DateTime.UtcNow,
+                                    ModifiedBy = "System Created"
+                                };
+                                await _unitOfWork.AdrJobExecutions.AddAsync(execution);
+                            }
+                            await _unitOfWork.SaveChangesAsync();
+                            createdJobsBatch.Clear();
+                        }
+                        
                         _logger.LogDebug("Job creation batch {BatchNumber} saved: {Count} jobs created so far", 
                             batchNumber, result.JobsCreated);
                         processedSinceLastSave = 0;
@@ -583,6 +627,30 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 await _unitOfWork.SaveChangesAsync();
             }
 
+            // Create execution records for remaining jobs in the last partial batch
+            if (!string.IsNullOrEmpty(orchestrationRequestId) && createdJobsBatch.Count > 0)
+            {
+                foreach (var createdJob in createdJobsBatch)
+                {
+                    var execution = new AdrJobExecution
+                    {
+                        AdrJobId = createdJob.Id,
+                        AdrRequestTypeId = (int)AdrRequestType.JobCreation,
+                        StartDateTime = DateTime.UtcNow,
+                        EndDateTime = DateTime.UtcNow,
+                        OrchestrationRequestId = orchestrationRequestId,
+                        IsSuccess = true,
+                        CreatedDateTime = DateTime.UtcNow,
+                        CreatedBy = "System Created",
+                        ModifiedDateTime = DateTime.UtcNow,
+                        ModifiedBy = "System Created"
+                    };
+                    await _unitOfWork.AdrJobExecutions.AddAsync(execution);
+                }
+                await _unitOfWork.SaveChangesAsync();
+                createdJobsBatch.Clear();
+            }
+
             result.BlacklistedCount = blacklistedCount;
             
             stopwatch.Stop();
@@ -607,7 +675,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
     #region Step 3: Credential Verification
 
-    public async Task<CredentialVerificationResult> VerifyCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    public async Task<CredentialVerificationResult> VerifyCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null)
     {
         var result = new CredentialVerificationResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -677,7 +745,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.ModifiedDateTime = DateTime.UtcNow;
                     job.ModifiedBy = "System Created";
 
-                    var execution = await CreateExecutionAsync(job.Id, (int)AdrRequestType.AttemptLogin, saveChanges: false);
+                    var execution = await CreateExecutionAsync(job.Id, (int)AdrRequestType.AttemptLogin, saveChanges: false, orchestrationRequestId: orchestrationRequestId);
                     executionsByJobId[job.Id] = execution;
                     
                     markedCount++;
@@ -929,7 +997,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
     #region Step 4: Invoice Scraping
 
-    public async Task<ScrapeResult> ProcessScrapingAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    public async Task<ScrapeResult> ProcessScrapingAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null)
     {
         var result = new ScrapeResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -991,7 +1059,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.ModifiedDateTime = DateTime.UtcNow;
                     job.ModifiedBy = "System Created";
 
-                    var execution = await CreateExecutionAsync(job.Id, (int)AdrRequestType.DownloadInvoice, saveChanges: false);
+                    var execution = await CreateExecutionAsync(job.Id, (int)AdrRequestType.DownloadInvoice, saveChanges: false, orchestrationRequestId: orchestrationRequestId);
                     executionsByJobId[job.Id] = execution;
                     
                     markedCount++;
@@ -1248,7 +1316,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
     #region Status Checking
 
-    public async Task<StatusCheckResult> CheckPendingStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    public async Task<StatusCheckResult> CheckPendingStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null)
     {
         var result = new StatusCheckResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -1556,6 +1624,30 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     // the entity is already tracked by EF (loaded from same DbContext)
                     job.ModifiedDateTime = DateTime.UtcNow;
                     job.ModifiedBy = "System Created";
+
+                    // Create tracking execution record for this status check
+                    if (!string.IsNullOrEmpty(orchestrationRequestId))
+                    {
+                        var execution = new AdrJobExecution
+                        {
+                            AdrJobId = jobId,
+                            AdrRequestTypeId = (int)AdrRequestType.StatusCheck,
+                            StartDateTime = DateTime.UtcNow,
+                            EndDateTime = DateTime.UtcNow,
+                            OrchestrationRequestId = orchestrationRequestId,
+                            AdrStatusId = statusResult.StatusId,
+                            AdrStatusDescription = statusResult.StatusDescription,
+                            IsSuccess = !statusResult.IsError,
+                            IsError = statusResult.IsError,
+                            IsFinal = statusResult.IsFinal,
+                            CreatedDateTime = DateTime.UtcNow,
+                            CreatedBy = "System Created",
+                            ModifiedDateTime = DateTime.UtcNow,
+                            ModifiedBy = "System Created"
+                        };
+                        await _unitOfWork.AdrJobExecutions.AddAsync(execution);
+                    }
+
                     processedSinceLastSave++;
 
                     if (processedSinceLastSave >= GetBatchSize())
@@ -1608,7 +1700,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// This is used by the "Check Statuses Only" button to check status for all ScrapeRequested jobs
     /// since there's no cost to check status from the ADR API.
     /// </summary>
-    public async Task<StatusCheckResult> CheckAllScrapedStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    public async Task<StatusCheckResult> CheckAllScrapedStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null)
     {
         var result = new StatusCheckResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -1969,6 +2061,30 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     // the entity is already tracked by EF (loaded from same DbContext)
                     job.ModifiedDateTime = DateTime.UtcNow;
                     job.ModifiedBy = "System Created";
+
+                    // Create tracking execution record for this manual status check
+                    if (!string.IsNullOrEmpty(orchestrationRequestId))
+                    {
+                        var execution = new AdrJobExecution
+                        {
+                            AdrJobId = jobId,
+                            AdrRequestTypeId = (int)AdrRequestType.StatusCheck,
+                            StartDateTime = DateTime.UtcNow,
+                            EndDateTime = DateTime.UtcNow,
+                            OrchestrationRequestId = orchestrationRequestId,
+                            AdrStatusId = statusResult.StatusId,
+                            AdrStatusDescription = statusResult.StatusDescription,
+                            IsSuccess = !statusResult.IsError,
+                            IsError = statusResult.IsError,
+                            IsFinal = statusResult.IsFinal,
+                            CreatedDateTime = DateTime.UtcNow,
+                            CreatedBy = "System Created",
+                            ModifiedDateTime = DateTime.UtcNow,
+                            ModifiedBy = "System Created"
+                        };
+                        await _unitOfWork.AdrJobExecutions.AddAsync(execution);
+                    }
+
                     processedSinceLastSave++;
 
                     if (processedSinceLastSave >= GetBatchSize())
@@ -2033,7 +2149,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// are marked as Cancelled and their rules are advanced to the next billing cycle.
     /// This does NOT call any ADR APIs (no cost incurred).
     /// </summary>
-    public async Task<StalePendingJobsResult> FinalizeStalePendingJobsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    public async Task<StalePendingJobsResult> FinalizeStalePendingJobsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null)
     {
         var result = new StalePendingJobsResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -2155,7 +2271,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// this method checks ALL accounts with valid CredentialIds regardless of scheduling.
     /// Note: This does NOT respect test mode limits as it's intended for one-time bulk operations.
     /// </summary>
-    public async Task<BulkCredentialVerificationResult> VerifyAllAccountCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, int? testrun=null)
+    public async Task<BulkCredentialVerificationResult> VerifyAllAccountCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, int? testrun=null, string? orchestrationRequestId = null)
     {
         var result = new BulkCredentialVerificationResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -2241,72 +2357,74 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 })
                 .ToList();
 
-            _logger.LogInformation("Starting parallel API calls for {Count} accounts (bulk verification)", accountsToCall.Count);
+            const int bulkBatchSize = 25;
+            const int delayBetweenBatchesMs = 500;
 
-            // Step 3: Call ADR API in parallel with semaphore to limit concurrency
+            _logger.LogInformation(
+                "Starting batched API calls for {Count} accounts (batch size: {BatchSize}, delay: {Delay}ms)",
+                accountsToCall.Count, bulkBatchSize, delayBetweenBatchesMs);
+
+            // Step 3: Call ADR API in batches with delay between batches
             var apiResults = new ConcurrentDictionary<int, AdrApiResult>();
-            using var semaphore = new SemaphoreSlim(maxParallel, maxParallel);
             int completedApiCalls = 0;
             var totalApiCalls = accountsToCall.Count;
 
-            var tasks = accountsToCall.Select(async accountInfo =>
+            for (int batchStart = 0; batchStart < accountsToCall.Count; batchStart += bulkBatchSize)
             {
-                await semaphore.WaitAsync(cancellationToken);
-                try
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var batch = accountsToCall.Skip(batchStart).Take(bulkBatchSize).ToList();
+                var batchTasks = batch.Select(async accountInfo =>
                 {
-                    var apiResult = await CallAdrApiAsync(
-                        AdrRequestType.AttemptLogin,
-                        accountInfo.CredentialId,
-                        null, // No date range for credential check
-                        null,
-                        accountInfo.JobId, // Real job ID for tracking
-                        accountInfo.VMAccountId,
-                        accountInfo.InterfaceAccountId,
-                        cancellationToken);
-
-                    apiResults[accountInfo.AccountId] = apiResult;
-
-                    var count = Interlocked.Increment(ref completedApiCalls);
-                    if (count % 100 == 0 || count == totalApiCalls)
+                    try
                     {
-                        progressCallback?.Invoke(count, totalApiCalls);
+                        var apiResult = await CallAdrApiAsync(
+                            AdrRequestType.AttemptLogin,
+                            accountInfo.CredentialId,
+                            null, // No date range for credential check
+                            null,
+                            accountInfo.JobId, // Real job ID for tracking
+                            accountInfo.VMAccountId,
+                            accountInfo.InterfaceAccountId,
+                            cancellationToken);
+
+                        apiResults[accountInfo.AccountId] = apiResult;
                     }
-                    if (count % 1000 == 0 || count == totalApiCalls)
+                    catch (OperationCanceledException)
                     {
-                        _logger.LogInformation(
-                            "Bulk credential verification API calls: {Completed}/{Total} completed ({Percent:F1}%)",
-                            count, totalApiCalls, (double)count / totalApiCalls * 100);
+                        throw;
                     }
-                }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error calling ADR API for account {AccountId}", accountInfo.AccountId);
-                    apiResults[accountInfo.AccountId] = new AdrApiResult
+                    catch (Exception ex)
                     {
-                        IsSuccess = false,
-                        IsError = true,
-                        ErrorMessage = ex.Message
-                    };
-
-                    var count = Interlocked.Increment(ref completedApiCalls);
-                    if (count % 100 == 0 || count == totalApiCalls)
-                    {
-                        progressCallback?.Invoke(count, totalApiCalls);
+                        _logger.LogError(ex, "Error calling ADR API for account {AccountId}", accountInfo.AccountId);
+                        apiResults[accountInfo.AccountId] = new AdrApiResult
+                        {
+                            IsSuccess = false,
+                            IsError = true,
+                            ErrorMessage = ex.Message
+                        };
                     }
-                }
-                finally
+                });
+
+                await Task.WhenAll(batchTasks);
+
+                var count = Interlocked.Add(ref completedApiCalls, batch.Count);
+                progressCallback?.Invoke(count, totalApiCalls);
+
+                if (count % 1000 < bulkBatchSize || count == totalApiCalls)
                 {
-                    semaphore.Release();
+                    _logger.LogInformation(
+                        "Bulk credential verification API calls: {Completed}/{Total} completed ({Percent:F1}%)",
+                        count, totalApiCalls, (double)count / totalApiCalls * 100);
                 }
-            });
 
-            await Task.WhenAll(tasks);
+                if (batchStart + bulkBatchSize < accountsToCall.Count)
+                {
+                    await Task.Delay(delayBetweenBatchesMs, cancellationToken);
+                }
+            }
 
-            _logger.LogInformation("Completed {Count} parallel API calls for bulk verification, creating execution records", apiResults.Count);
+            _logger.LogInformation("Completed {Count} batched API calls for bulk verification, creating execution records", apiResults.Count);
 
             // Step 4: Create execution records sequentially (DbContext is not thread-safe)
             const int executionBatchSize = 500;
@@ -2400,7 +2518,10 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     result.Errors++;
                     if (result.ErrorMessages.Count < 100)
                     {
-                        result.ErrorMessages.Add($"Account {accountInfo.AccountId} (CredentialId: {accountInfo.CredentialId}): {apiResult.ErrorMessage}");
+                        var requestInfo = !string.IsNullOrEmpty(apiResult.RequestPayload) 
+                            ? $" Request: {apiResult.RequestPayload}" 
+                            : "";
+                        result.ErrorMessages.Add($"Account {accountInfo.AccountId} (CredentialId: {accountInfo.CredentialId}): {apiResult.ErrorMessage}{requestInfo}");
                     }
                 }
                 else
@@ -2735,7 +2856,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// Rebill checks look for updated invoices, partial invoices, and off-cycle invoices.
     /// OPTIMIZED: Uses bulk job lookup, dictionary-based account lookup, and batched saves.
     /// </summary>
-    public async Task<RebillResult> ProcessRebillAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    public async Task<RebillResult> ProcessRebillAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null)
     {
         var result = new RebillResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -2747,8 +2868,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         {
             _logger.LogInformation("Starting weekly rebill processing for day of week: {DayOfWeek}", todayDayOfWeek);
 
-            // Load blacklist entries for filtering
-            var blacklistEntries = await LoadBlacklistEntriesAsync("All");
+            // Load blacklist entries for filtering (both "All" and "Rebill" exclusion types)
+            var blacklistEntries = await LoadBlacklistEntriesAsync("Rebill");
 
             // Get accounts for rebill using optimized database query that filters by day of week
             // This avoids loading all 170k+ accounts into memory and filtering in-memory
@@ -2972,6 +3093,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         AdrRequestTypeId = (int)AdrRequestType.Rebill,
                         StartDateTime = DateTime.UtcNow,
                         EndDateTime = DateTime.UtcNow,
+                        OrchestrationRequestId = orchestrationRequestId,
                         AdrStatusId = apiResult.StatusId,
                         AdrStatusDescription = apiResult.StatusDescription,
                         AdrIndexId = apiResult.IndexId,
@@ -3190,13 +3312,14 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
     #region Private Helper Methods
 
-    private async Task<AdrJobExecution> CreateExecutionAsync(int adrJobId, int adrRequestTypeId, bool saveChanges = true)
+    private async Task<AdrJobExecution> CreateExecutionAsync(int adrJobId, int adrRequestTypeId, bool saveChanges = true, string? orchestrationRequestId = null)
     {
         var execution = new AdrJobExecution
         {
             AdrJobId = adrJobId,
             AdrRequestTypeId = adrRequestTypeId,
             StartDateTime = DateTime.UtcNow,
+            OrchestrationRequestId = orchestrationRequestId,
             CreatedDateTime = DateTime.UtcNow,
             CreatedBy = "System Created",
             ModifiedDateTime = DateTime.UtcNow,
@@ -3311,8 +3434,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             {
                 ADRRequestTypeId = (int)requestType,
                 CredentialId = credentialId,
-                StartDate = startDate?.ToString("yyyy-MM-dd"),
-                EndDate = endDate?.ToString("yyyy-MM-dd"),
+                StartDate = startDate?.ToString("yyyy-MM-dd") ?? "",
+                EndDate = endDate?.ToString("yyyy-MM-dd") ?? "",
                 SourceApplicationName = sourceApplicationName,
                 RecipientEmail = recipientEmail,
                 JobId = jobId,

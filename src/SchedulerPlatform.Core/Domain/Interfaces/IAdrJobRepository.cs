@@ -29,7 +29,12 @@ public interface IAdrJobRepository : IRepository<AdrJob>
                 string? sortColumn = null,
                 bool sortDescending = true,
                 List<int>? jobIds = null,
-                int? adrJobTypeId = null);
+                int? adrJobTypeId = null,
+                DateTime? modifiedAfter = null,
+                DateTime? modifiedBefore = null,
+                string? orchestrationRequestId = null,
+                int? executionRequestTypeId = null,
+                bool? executionIsError = null);
     Task<int> GetTotalCountAsync(int? adrAccountId = null);
     Task<int> GetCountByStatusAsync(string status);
     Task<int> GetCountByStatusAndIdsAsync(string status, HashSet<int> jobIds);
