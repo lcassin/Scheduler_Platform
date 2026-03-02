@@ -36,15 +36,17 @@ public interface IAdrOrchestratorService
     Task<BulkCredentialVerificationResult> VerifyAllAccountCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, int? testrun=null);
     
     /// <summary>
-    /// Runs credential verification (AttemptLogin) for accounts matching a specific list of credential IDs.
-    /// Used for targeted fallout handling after bulk runs - only validates the specified credentials
-    /// rather than all accounts in the system.
+    /// Runs credential verification (AttemptLogin) for accounts matching specific lists of credential IDs
+    /// and/or account IDs. Used for targeted fallout handling after bulk runs - only validates the
+    /// specified accounts rather than all accounts in the system. At least one list must be provided.
+    /// When both lists are provided, accounts from both are combined (union, de-duplicated).
     /// </summary>
-    /// <param name="credentialIds">List of credential IDs to verify</param>
+    /// <param name="credentialIds">Optional list of credential IDs to verify</param>
+    /// <param name="accountIds">Optional list of AdrAccount IDs to verify</param>
     /// <param name="progressCallback">Optional callback to report progress (current, total)</param>
     /// <param name="cancellationToken">Cancellation token for the operation</param>
     /// <returns>Results of the targeted credential verification operation</returns>
-    Task<BulkCredentialVerificationResult> VerifyCredentialsByListAsync(List<int> credentialIds, Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
+    Task<BulkCredentialVerificationResult> VerifyCredentialsByListAsync(List<int>? credentialIds = null, List<int>? accountIds = null, Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default);
     
     /// <summary>
     /// Processes weekly rebill checks for accounts whose expected billing day of week matches today.
@@ -2303,12 +2305,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     }
 
     /// <summary>
-    /// Runs credential verification (AttemptLogin) for accounts matching a specific list of credential IDs.
-    /// Used for targeted fallout handling after bulk runs - only validates the specified credentials
-    /// rather than all accounts in the system. Reuses the same parallel verification pattern
-    /// as VerifyAllAccountCredentialsAsync but filters to only the provided credential IDs.
+    /// Runs credential verification (AttemptLogin) for accounts matching specific lists of credential IDs
+    /// and/or account IDs. Used for targeted fallout handling after bulk runs. Reuses the same parallel
+    /// verification pattern as VerifyAllAccountCredentialsAsync. When both lists are provided,
+    /// accounts from both are combined (union, de-duplicated by AdrAccount.Id).
     /// </summary>
-    public async Task<BulkCredentialVerificationResult> VerifyCredentialsByListAsync(List<int> credentialIds, Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
+    public async Task<BulkCredentialVerificationResult> VerifyCredentialsByListAsync(List<int>? credentialIds = null, List<int>? accountIds = null, Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default)
     {
         var result = new BulkCredentialVerificationResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -2316,14 +2318,37 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
         try
         {
-            _logger.LogInformation("Starting targeted credential verification for {Count} credential IDs with {MaxParallel} parallel workers", credentialIds.Count, maxParallel);
+            var credCount = credentialIds?.Count ?? 0;
+            var acctCount = accountIds?.Count ?? 0;
+            _logger.LogInformation("Starting targeted credential verification for {CredCount} credential IDs and {AcctCount} account IDs with {MaxParallel} parallel workers", 
+                credCount, acctCount, maxParallel);
 
-            // Get accounts matching the provided credential IDs (batched in 5,000 chunks at repository level)
-            var matchingAccounts = (await _unitOfWork.AdrAccounts.GetAccountsByCredentialIdsAsync(credentialIds)).ToList();
+            // Get accounts matching the provided credential IDs and/or account IDs
+            // Both queries are batched in 5,000 chunks at the repository level
+            var matchingAccounts = new List<AdrAccount>();
+            
+            if (credentialIds != null && credentialIds.Count > 0)
+            {
+                var byCredential = await _unitOfWork.AdrAccounts.GetAccountsByCredentialIdsAsync(credentialIds);
+                matchingAccounts.AddRange(byCredential);
+            }
+            
+            if (accountIds != null && accountIds.Count > 0)
+            {
+                var byAccountId = await _unitOfWork.AdrAccounts.GetAccountsByIdsAsync(accountIds);
+                matchingAccounts.AddRange(byAccountId);
+            }
+            
+            // De-duplicate by AdrAccount.Id in case both lists overlap
+            matchingAccounts = matchingAccounts
+                .GroupBy(a => a.Id)
+                .Select(g => g.First())
+                .ToList();
+            
             var totalAccounts = matchingAccounts.Count;
             
-            _logger.LogInformation("Found {AccountCount} active accounts matching {CredentialCount} credential IDs for targeted verification", 
-                totalAccounts, credentialIds.Count);
+            _logger.LogInformation("Found {AccountCount} unique active accounts matching {CredCount} credential IDs and {AcctCount} account IDs for targeted verification", 
+                totalAccounts, credCount, acctCount);
 
             // Report initial progress (0 of total)
             progressCallback?.Invoke(0, totalAccounts);
@@ -2451,7 +2476,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Targeted credential verification failed for {Count} credential IDs", credentialIds.Count);
+            _logger.LogError(ex, "Targeted credential verification failed for {CredCount} credential IDs and {AcctCount} account IDs", 
+                credentialIds?.Count ?? 0, accountIds?.Count ?? 0);
             result.Errors++;
             result.ErrorMessages.Add($"Targeted credential verification failed: {ex.Message}");
             throw;

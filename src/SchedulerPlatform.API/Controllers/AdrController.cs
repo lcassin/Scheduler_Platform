@@ -2951,17 +2951,17 @@ public class AdrController : ControllerBase
     }
 
     /// <summary>
-    /// Runs credential verification for a specific list of credential IDs.
-    /// Used for targeted fallout handling after bulk runs - only validates the specified credentials
-    /// rather than all accounts in the system. Accepts a JSON body with a list of credential IDs.
-    /// WARNING: Each credential ID may map to multiple accounts. The ADR API will be called
-    /// for every active account matching the provided credential IDs.
+    /// Runs credential verification (AttemptLogin) for accounts matching specific lists of credential IDs
+    /// and/or account IDs. Used for targeted fallout handling after bulk runs - only validates the
+    /// specified accounts rather than all accounts in the system. Accepts a JSON body with lists of
+    /// credential IDs and/or account IDs. At least one list must be provided; both can be provided
+    /// to combine results. Duplicate IDs within each list are automatically de-duplicated.
     /// </summary>
-    /// <param name="request">Request containing the list of credential IDs to verify.</param>
+    /// <param name="request">Request containing the list(s) of credential IDs and/or account IDs to verify.</param>
     /// <param name="cancellationToken">Cancellation token for the operation.</param>
     /// <returns>The credential verification result including counts of verified and failed credentials.</returns>
     /// <response code="200">Returns the targeted credential verification result.</response>
-    /// <response code="400">The request is invalid (empty or null credential ID list).</response>
+    /// <response code="400">The request is invalid (no credential IDs or account IDs provided).</response>
     /// <response code="500">An error occurred during credential verification.</response>
     [HttpPost("orchestrate/verify-credentials-by-list")]
     [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
@@ -2972,16 +2972,21 @@ public class AdrController : ControllerBase
     {
         try
         {
-            if (request?.CredentialIds == null || !request.CredentialIds.Any())
+            var hasCredentialIds = request?.CredentialIds != null && request.CredentialIds.Any();
+            var hasAccountIds = request?.AccountIds != null && request.AccountIds.Any();
+            
+            if (!hasCredentialIds && !hasAccountIds)
             {
-                return BadRequest(new { error = "Credential ID list is required", message = "Please provide at least one credential ID to verify." });
+                return BadRequest(new { error = "At least one ID list is required", message = "Please provide at least one credential ID or account ID to verify." });
             }
 
-            var distinctIds = request.CredentialIds.Distinct().ToList();
-            _logger.LogInformation("Targeted credential verification for {Count} credential IDs triggered by {User}", 
-                distinctIds.Count, User.Identity?.Name ?? "Unknown");
+            var distinctCredentialIds = hasCredentialIds ? request!.CredentialIds.Distinct().ToList() : null;
+            var distinctAccountIds = hasAccountIds ? request!.AccountIds.Distinct().ToList() : null;
+            
+            _logger.LogInformation("Targeted credential verification for {CredCount} credential IDs and {AcctCount} account IDs triggered by {User}", 
+                distinctCredentialIds?.Count ?? 0, distinctAccountIds?.Count ?? 0, User.Identity?.Name ?? "Unknown");
 
-            var result = await _orchestratorService.VerifyCredentialsByListAsync(distinctIds, null, cancellationToken);
+            var result = await _orchestratorService.VerifyCredentialsByListAsync(distinctCredentialIds, distinctAccountIds, null, cancellationToken);
             return Ok(result);
         }
         catch (Exception ex)
@@ -2992,17 +2997,17 @@ public class AdrController : ControllerBase
     }
 
     /// <summary>
-    /// Runs credential verification for credential IDs extracted from an uploaded Excel file.
-    /// The Excel file must contain a column named "CredentialId" (case-insensitive; also accepts
-    /// "Credential Id", "Credential_Id", "CredentialID"). Only the first matching column is used;
-    /// all other columns are ignored. Non-numeric values in the column are skipped.
-    /// Supported file formats: .xlsx (Excel).
+    /// Runs credential verification for IDs extracted from an uploaded Excel file.
+    /// The Excel file can contain columns named "CredentialId" and/or "AccountId" (case-insensitive;
+    /// also accepts variations like "Credential Id", "Credential_Id", "Account Id", "Account_Id").
+    /// At least one of these columns must be present. Both can be present in the same file.
+    /// Non-numeric values in columns are skipped. Supported file formats: .xlsx (Excel).
     /// </summary>
-    /// <param name="file">The Excel file containing credential IDs.</param>
+    /// <param name="file">The Excel file containing credential IDs and/or account IDs.</param>
     /// <param name="cancellationToken">Cancellation token for the operation.</param>
     /// <returns>The credential verification result including counts of verified and failed credentials.</returns>
     /// <response code="200">Returns the targeted credential verification result.</response>
-    /// <response code="400">The file is missing, empty, not a valid Excel file, or contains no valid credential IDs.</response>
+    /// <response code="400">The file is missing, empty, not a valid Excel file, or contains no valid IDs.</response>
     /// <response code="500">An error occurred during credential verification.</response>
     [HttpPost("orchestrate/verify-credentials-from-file")]
     [Authorize(AuthenticationSchemes = "Bearer,SchedulerApiKey")]
@@ -3016,7 +3021,7 @@ public class AdrController : ControllerBase
         {
             if (file == null || file.Length == 0)
             {
-                return BadRequest(new { error = "File is required", message = "Please upload an Excel file (.xlsx) containing credential IDs." });
+                return BadRequest(new { error = "File is required", message = "Please upload an Excel file (.xlsx) containing credential IDs and/or account IDs." });
             }
 
             var extension = Path.GetExtension(file.FileName)?.ToLowerInvariant();
@@ -3025,15 +3030,17 @@ public class AdrController : ControllerBase
                 return BadRequest(new { error = "Invalid file format", message = "Only Excel files (.xlsx) are supported. Please upload a valid .xlsx file." });
             }
 
-            // Parse credential IDs from Excel file
+            // Parse credential IDs and account IDs from Excel file
             var credentialIds = new List<int>();
+            var accountIds = new List<int>();
             using (var stream = file.OpenReadStream())
             {
                 using var workbook = new ClosedXML.Excel.XLWorkbook(stream);
                 var worksheet = workbook.Worksheets.First();
                 
-                // Find the CredentialId column (case-insensitive, flexible naming)
+                // Find CredentialId and AccountId columns (case-insensitive, flexible naming)
                 int credentialIdColumn = -1;
+                int accountIdColumn = -1;
                 var headerRow = worksheet.Row(1);
                 var lastColumnUsed = worksheet.LastColumnUsed()?.ColumnNumber() ?? 0;
                 
@@ -3041,46 +3048,61 @@ public class AdrController : ControllerBase
                 {
                     var headerValue = headerRow.Cell(col).GetString()?.Trim() ?? "";
                     var normalized = headerValue.Replace(" ", "").Replace("_", "").ToLowerInvariant();
-                    if (normalized == "credentialid")
+                    if (normalized == "credentialid" && credentialIdColumn == -1)
                     {
                         credentialIdColumn = col;
-                        break;
+                    }
+                    else if (normalized == "accountid" && accountIdColumn == -1)
+                    {
+                        accountIdColumn = col;
                     }
                 }
 
-                if (credentialIdColumn == -1)
+                if (credentialIdColumn == -1 && accountIdColumn == -1)
                 {
                     return BadRequest(new { 
-                        error = "CredentialId column not found", 
-                        message = "The Excel file must contain a column named 'CredentialId' (also accepts 'Credential Id', 'Credential_Id', 'CredentialID'). Please check the column headers in your file." 
+                        error = "No recognized ID column found", 
+                        message = "The Excel file must contain at least one column named 'CredentialId' or 'AccountId' (also accepts variations like 'Credential Id', 'Account_Id', etc.). Please check the column headers in your file." 
                     });
                 }
 
-                // Read credential IDs from the column (skip header row)
+                // Read IDs from the columns (skip header row)
                 var lastRowUsed = worksheet.LastRowUsed()?.RowNumber() ?? 1;
                 for (int row = 2; row <= lastRowUsed; row++)
                 {
-                    var cellValue = worksheet.Cell(row, credentialIdColumn).GetString()?.Trim();
-                    if (!string.IsNullOrEmpty(cellValue) && int.TryParse(cellValue, out var credentialId) && credentialId > 0)
+                    if (credentialIdColumn != -1)
                     {
-                        credentialIds.Add(credentialId);
+                        var cellValue = worksheet.Cell(row, credentialIdColumn).GetString()?.Trim();
+                        if (!string.IsNullOrEmpty(cellValue) && int.TryParse(cellValue, out var credentialId) && credentialId > 0)
+                        {
+                            credentialIds.Add(credentialId);
+                        }
+                    }
+                    if (accountIdColumn != -1)
+                    {
+                        var cellValue = worksheet.Cell(row, accountIdColumn).GetString()?.Trim();
+                        if (!string.IsNullOrEmpty(cellValue) && int.TryParse(cellValue, out var accountId) && accountId > 0)
+                        {
+                            accountIds.Add(accountId);
+                        }
                     }
                 }
             }
 
-            if (!credentialIds.Any())
+            if (!credentialIds.Any() && !accountIds.Any())
             {
                 return BadRequest(new { 
-                    error = "No valid credential IDs found", 
-                    message = "The CredentialId column was found but contained no valid positive integer values. Please check the data in your file." 
+                    error = "No valid IDs found", 
+                    message = "The ID column(s) were found but contained no valid positive integer values. Please check the data in your file." 
                 });
             }
 
-            var distinctIds = credentialIds.Distinct().ToList();
-            _logger.LogInformation("Targeted credential verification from file '{FileName}' with {Count} unique credential IDs triggered by {User}", 
-                file.FileName, distinctIds.Count, User.Identity?.Name ?? "Unknown");
+            var distinctCredentialIds = credentialIds.Any() ? credentialIds.Distinct().ToList() : null;
+            var distinctAccountIds = accountIds.Any() ? accountIds.Distinct().ToList() : null;
+            _logger.LogInformation("Targeted credential verification from file '{FileName}' with {CredCount} unique credential IDs and {AcctCount} unique account IDs triggered by {User}", 
+                file.FileName, distinctCredentialIds?.Count ?? 0, distinctAccountIds?.Count ?? 0, User.Identity?.Name ?? "Unknown");
 
-            var result = await _orchestratorService.VerifyCredentialsByListAsync(distinctIds, null, cancellationToken);
+            var result = await _orchestratorService.VerifyCredentialsByListAsync(distinctCredentialIds, distinctAccountIds, null, cancellationToken);
             return Ok(result);
         }
         catch (Exception ex)
@@ -5821,15 +5843,22 @@ public class TestModeStatusResponse
 }
 
 /// <summary>
-/// Request body for targeted credential verification by a list of credential IDs.
+/// Request body for targeted credential verification by lists of credential IDs and/or account IDs.
+/// At least one list must be provided. Both can be provided to combine results.
 /// </summary>
 public class VerifyCredentialsByListRequest
 {
     /// <summary>
-    /// List of credential IDs to verify. Each credential ID may map to multiple accounts.
+    /// Optional list of credential IDs to verify. Each credential ID may map to multiple accounts.
     /// Duplicate values will be automatically de-duplicated before processing.
     /// </summary>
     public List<int> CredentialIds { get; set; } = new();
+    
+    /// <summary>
+    /// Optional list of AdrAccount IDs to verify directly.
+    /// Duplicate values will be automatically de-duplicated before processing.
+    /// </summary>
+    public List<int> AccountIds { get; set; } = new();
 }
 
 #endregion

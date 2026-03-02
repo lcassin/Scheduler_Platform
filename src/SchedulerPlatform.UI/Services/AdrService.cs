@@ -709,9 +709,9 @@ public class AdrService : IAdrService
 
     #region Credential Validation by List
 
-    public async Task<BulkCredentialVerificationResult> VerifyCredentialsByListAsync(List<int> credentialIds)
+    public async Task<BulkCredentialVerificationResult> VerifyCredentialsByListAsync(List<int>? credentialIds = null, List<int>? accountIds = null)
     {
-        var request = new { CredentialIds = credentialIds };
+        var request = new { CredentialIds = credentialIds ?? new List<int>(), AccountIds = accountIds ?? new List<int>() };
         var response = await _httpClient.PostAsJsonAsync("adr/orchestrate/verify-credentials-by-list", request);
         response.EnsureSuccessStatusCode();
         var result = await response.Content.ReadFromJsonAsync<BulkCredentialVerificationResult>();

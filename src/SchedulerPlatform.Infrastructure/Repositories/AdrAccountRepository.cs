@@ -252,6 +252,24 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
         return results;
     }
 
+    public async Task<IEnumerable<AdrAccount>> GetAccountsByIdsAsync(List<int> accountIds)
+    {
+        var results = new List<AdrAccount>();
+        
+        // Process in batches of 5,000 to avoid large IN clauses and memory issues
+        const int batchSize = 5000;
+        for (int i = 0; i < accountIds.Count; i += batchSize)
+        {
+            var batch = accountIds.Skip(i).Take(batchSize).ToList();
+            var batchResults = await _dbSet
+                .Where(a => !a.IsDeleted && a.CredentialId > 0 && batch.Contains(a.Id))
+                .ToListAsync();
+            results.AddRange(batchResults);
+        }
+        
+        return results;
+    }
+
     public async Task<IEnumerable<AdrAccount>> GetAccountsForRebillByDayOfWeekAsync(DayOfWeek dayOfWeek)
     {
         // SQL Server's DATEPART(dw, date) returns 1=Sunday, 2=Monday, ..., 7=Saturday

@@ -121,16 +121,17 @@ public interface IAdrService
     Task<TestModeStatus> GetTestModeStatusAsync();
     
     /// <summary>
-    /// Runs credential verification for a specific list of credential IDs.
-    /// Used for targeted fallout handling after bulk runs.
+    /// Runs credential verification for specific lists of credential IDs and/or account IDs.
+    /// Used for targeted fallout handling after bulk runs. At least one list must be provided.
     /// </summary>
-    /// <param name="credentialIds">List of credential IDs to verify</param>
+    /// <param name="credentialIds">Optional list of credential IDs to verify</param>
+    /// <param name="accountIds">Optional list of AdrAccount IDs to verify</param>
     /// <returns>Results of the targeted credential verification</returns>
-    Task<BulkCredentialVerificationResult> VerifyCredentialsByListAsync(List<int> credentialIds);
+    Task<BulkCredentialVerificationResult> VerifyCredentialsByListAsync(List<int>? credentialIds = null, List<int>? accountIds = null);
     
     /// <summary>
-    /// Runs credential verification for credential IDs extracted from an uploaded Excel file.
-    /// The API parses the Excel file and extracts credential IDs from a "CredentialId" column.
+    /// Runs credential verification for IDs extracted from an uploaded Excel file.
+    /// The API parses the Excel file and extracts IDs from "CredentialId" and/or "AccountId" columns.
     /// </summary>
     /// <param name="fileContent">The Excel file content as a byte array</param>
     /// <param name="fileName">The original file name</param>
