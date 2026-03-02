@@ -344,6 +344,7 @@ Console.WriteLine(""Hello, World!"");
         CodeEditor.TextArea.Caret.PositionChanged += (s, e) =>
         {
             StatusText.Text = $"Line {CodeEditor.TextArea.Caret.Line}, Col {CodeEditor.TextArea.Caret.Column}";
+            UpdateToggleCommentIconColor();
         };
         
         // Intercept Ctrl+F and Ctrl+H before AvalonEdit handles them
@@ -803,6 +804,70 @@ Console.WriteLine(""Hello, World!"");
         var svgName = _isMinimapVisible ? "minimap-toggle-on.svg" : "minimap-toggle-off.svg";
         SetButtonIcon(MinimapToggle, svgName, IconSize);
         SetMenuItemIcon(MinimapMenuItem, svgName);
+    }
+
+    /// <summary>
+    /// Checks if the current caret line is inside a comment and tints the toggle-comment
+    /// toolbar button and menu item icon green when it is.
+    /// </summary>
+    private void UpdateToggleCommentIconColor()
+    {
+        try
+        {
+            var doc = CodeEditor.Document;
+            if (doc == null) return;
+
+            var line = doc.GetLineByOffset(CodeEditor.CaretOffset);
+            var lineText = doc.GetText(line.Offset, line.Length).TrimStart();
+
+            bool isComment = false;
+            if (_currentRenderMode == RenderMode.Mermaid)
+            {
+                isComment = lineText.StartsWith("%%");
+            }
+            else
+            {
+                // Markdown: check for <!-- --> single-line comments or lines starting with <!--
+                isComment = lineText.StartsWith("<!--");
+            }
+
+            if (isComment)
+            {
+                var greenBrush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x4E, 0xC9, 0x4E)); // Bright green
+                SetButtonIconWithBrush(ToggleCommentToolbarButton, "toggle-comment.svg", IconSize, greenBrush);
+                SetMenuItemIconWithBrush(ToggleCommentMenuItem, "toggle-comment.svg", MenuIconSize, greenBrush);
+            }
+            else
+            {
+                // Revert to default theme color
+                SetButtonIcon(ToggleCommentToolbarButton, "toggle-comment.svg", IconSize);
+                SetMenuItemIcon(ToggleCommentMenuItem, "toggle-comment.svg");
+            }
+        }
+        catch
+        {
+            // Silently ignore - cosmetic feature
+        }
+    }
+
+    private static void SetButtonIconWithBrush(System.Windows.Controls.Primitives.ButtonBase? button, string svgFileName, double size, System.Windows.Media.Brush fillBrush)
+    {
+        if (button == null) return;
+        var icon = SvgIconHelper.CreateIcon(svgFileName, size, fillBrush);
+        if (icon != null)
+        {
+            button.Content = icon;
+        }
+    }
+
+    private static void SetMenuItemIconWithBrush(System.Windows.Controls.MenuItem? menuItem, string svgFileName, double size, System.Windows.Media.Brush fillBrush)
+    {
+        if (menuItem == null) return;
+        var icon = SvgIconHelper.CreateIcon(svgFileName, size, fillBrush);
+        if (icon != null)
+        {
+            menuItem.Icon = icon;
+        }
     }
 
     #endregion
