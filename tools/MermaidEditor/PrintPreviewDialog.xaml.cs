@@ -699,24 +699,7 @@ public partial class PrintPreviewDialog : Window
             double scaledWidth = normalizedImageWidth * scale;
             double scaledHeight = normalizedImageHeight * scale;
 
-            // Generate page visuals
-            var pageVisuals = new List<Canvas>();
-
-            if (FitToPageRadio?.IsChecked == true || (FitToWidthRadio?.IsChecked == true && scaledHeight <= printableHeight))
-            {
-                pageVisuals.Add(CreatePrintVisual(pageSize, scaledWidth, scaledHeight, 0, printableWidth, printableHeight));
-            }
-            else
-            {
-                int totalPages = (int)Math.Ceiling(scaledHeight / printableHeight);
-                for (int page = 0; page < totalPages; page++)
-                {
-                    double yOffset = page * printableHeight;
-                    pageVisuals.Add(CreatePrintVisual(pageSize, scaledWidth, scaledHeight, yOffset, printableWidth, printableHeight));
-                }
-            }
-
-            // Render each page to a high-res bitmap and write PDF
+            // Render each page using DrawingVisual (renders synchronously, no visual tree needed)
             const double renderDpi = 300;
             double dpiScale = renderDpi / 96.0;
 
@@ -728,18 +711,62 @@ public partial class PrintPreviewDialog : Window
             var pagePixelWidths = new List<int>();
             var pagePixelHeights = new List<int>();
 
-            foreach (var visual in pageVisuals)
+            // Determine page offsets
+            var pageOffsets = new List<double>();
+            if (FitToPageRadio?.IsChecked == true || (FitToWidthRadio?.IsChecked == true && scaledHeight <= printableHeight))
             {
-                // Force layout
-                visual.Measure(pageSize);
-                visual.Arrange(new Rect(pageSize));
-                visual.UpdateLayout();
+                pageOffsets.Add(0);
+            }
+            else
+            {
+                int totalPages = (int)Math.Ceiling(scaledHeight / printableHeight);
+                for (int page = 0; page < totalPages; page++)
+                    pageOffsets.Add(page * printableHeight);
+            }
+
+            foreach (double yOffset in pageOffsets)
+            {
+                // Use DrawingVisual with DrawingContext.DrawImage for reliable off-screen rendering
+                var drawingVisual = new DrawingVisual();
+                using (var dc = drawingVisual.RenderOpen())
+                {
+                    // Draw white background
+                    if (PrintBackgroundCheck?.IsChecked == true)
+                    {
+                        dc.DrawRectangle(WpfBrushes.White, null, new Rect(0, 0, pageSize.Width, pageSize.Height));
+                    }
+
+                    // Calculate image position
+                    double x = _marginSize;
+                    double y = _marginSize - yOffset;
+
+                    if (CenterOnPageCheck?.IsChecked == true)
+                    {
+                        if (FitToPageRadio?.IsChecked == true)
+                        {
+                            x = _marginSize + (printableWidth - scaledWidth) / 2;
+                            y = _marginSize + (printableHeight - scaledHeight) / 2;
+                        }
+                        else if (FitToWidthRadio?.IsChecked == true)
+                        {
+                            x = _marginSize + (printableWidth - scaledWidth) / 2;
+                        }
+                    }
+
+                    // Clip to printable area
+                    dc.PushClip(new RectangleGeometry(new Rect(_marginSize, _marginSize, printableWidth, printableHeight)));
+
+                    // Draw the image directly (synchronous, no visual tree dependency)
+                    dc.DrawImage(_diagramImage, new Rect(x, y, scaledWidth, scaledHeight));
+
+                    dc.Pop(); // pop clip
+                }
 
                 int pixelWidth = (int)(pageSize.Width * dpiScale);
                 int pixelHeight = (int)(pageSize.Height * dpiScale);
 
                 var rtb = new RenderTargetBitmap(pixelWidth, pixelHeight, renderDpi, renderDpi, PixelFormats.Pbgra32);
-                rtb.Render(visual);
+                rtb.Render(drawingVisual);
 
                 // Encode as JPEG for smaller file size
                 var encoder = new JpegBitmapEncoder { QualityLevel = 95 };

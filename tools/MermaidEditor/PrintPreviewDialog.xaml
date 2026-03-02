@@ -280,7 +280,7 @@
         <Border Grid.Column="0" Background="{DynamicResource ThemeMenuBackgroundBrush}" Padding="16">
             <DockPanel LastChildFill="True">
                 <!-- Buttons pinned to bottom -->
-                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,0">
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,4">
                     <Button x:Name="PrintButton" Content="Print" Click="Print_Click" IsDefault="True"/>
                     <Button x:Name="SaveAsPdfButton" Content="Save as PDF" Click="SaveAsPdf_Click"/>
                     <Button Content="Cancel" Click="Cancel_Click" IsCancel="True"/>
