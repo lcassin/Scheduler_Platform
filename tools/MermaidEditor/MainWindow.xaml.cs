@@ -676,7 +676,8 @@ Console.WriteLine(""Hello, World!"");
             // === Export toolbar buttons ===
             SetButtonIcon(ExportPngToolbarButton, "export-to-png.svg", IconSize);
             SetButtonIcon(ExportSvgToolbarButton, "export-to-svg.svg", IconSize);
-            SetButtonIcon(ExportWordToolbarButton, "export-to-word.svg", IconSize);
+            SetButtonIcon(ExportEmfToolbarButton, "export-to-emf.svg", IconSize);
+            SetButtonIcon(ExportWordToolbarButton, "microsoft-word.svg", IconSize);
 
             // === Toggle toolbar buttons (set initial icon based on current state) ===
             UpdateWordWrapIcons();
@@ -695,7 +696,8 @@ Console.WriteLine(""Hello, World!"");
             // === Export menu items ===
             SetMenuItemIcon(ExportPngMenuItem, "export-to-png.svg");
             SetMenuItemIcon(ExportSvgMenuItem, "export-to-svg.svg");
-            SetMenuItemIcon(ExportWordMenuItem, "export-to-word.svg");
+            SetMenuItemIcon(ExportEmfMenuItem, "export-to-emf.svg");
+            SetMenuItemIcon(ExportWordMenuItem, "microsoft-word.svg");
 
             // === Help menu items ===
             SetMenuItemIcon(MermaidHelpMenuItem, "help-mermaid-icon.svg");

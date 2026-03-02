@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- EMF export icon - matching style of file_png/file_svg from SVG Repo -->
+<svg width="800px" height="800px" viewBox="0 0 20 20" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    
+    <title>file_emf</title>
+    <desc>EMF file export icon</desc>
+    <defs>
+
+</defs>
+    <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="Dribbble-Light-Preview" transform="translate(-100.000000, -1359.000000)" fill="#000000">
+            <g id="icons" transform="translate(56.000000, 160.000000)">
+                <path d="M50,1211.0002 L44,1211.0002 L44,1219.0002 L50,1219.0002 L50,1217.0002 L46,1217.0002 L46,1216.0002 L49,1216.0002 L49,1214.0002 L46,1214.0002 L46,1213.0002 L50,1213.0002 L50,1211.0002 Z M60,1211.0002 L57,1211.0002 L55.5,1214.5002 L54,1211.0002 L51,1211.0002 L51,1219.0002 L53,1219.0002 L53,1214.5002 L55.5,1219.0002 L58,1214.5002 L58,1219.0002 L60,1219.0002 L60,1211.0002 Z M64,1213.0002 L62,1213.0002 L62,1214.5002 L64,1214.5002 L64,1216.5002 L62,1216.5002 L62,1219.0002 L60,1219.0002 L60,1211.0002 L64,1211.0002 L64,1213.0002 Z M64,1205.4382 L64,1209.0002 L62,1209.0002 L62,1207.0002 L56,1207.0002 L56,1201.0002 L46,1201.0002 L46,1209.0002 L44,1209.0002 L44,1199.0002 L57.979,1199.0002 L64,1205.4382 Z" id="file_emf">
+
+</path>
+            </g>
+        </g>
+    </g>
+</svg>
