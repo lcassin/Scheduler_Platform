@@ -62,8 +62,15 @@ public partial class PrintPreviewDialog : Window
         }
     }
 
+    private const string SaveToPdfPrinterName = "Save to PDF";
+
+    private bool IsSaveToPdfSelected => PrinterCombo.SelectedItem is ComboBoxItem item && item.Content?.ToString() == SaveToPdfPrinterName;
+
     private void PopulatePrinterList()
     {
+        // Add virtual "Save to PDF" printer as first item
+        PrinterCombo.Items.Add(new ComboBoxItem { Content = SaveToPdfPrinterName, Tag = null });
+
         try
         {
             var printServer = new LocalPrintServer();
@@ -74,8 +81,9 @@ public partial class PrintPreviewDialog : Window
                 PrinterCombo.Items.Add(new ComboBoxItem { Content = queue.Name, Tag = queue });
             }
             
-            // Select default printer
+            // Select default printer (prefer real printer over Save to PDF)
             var defaultPrinter = printServer.DefaultPrintQueue;
+            bool foundDefault = false;
             if (defaultPrinter != null)
             {
                 for (int i = 0; i < PrinterCombo.Items.Count; i++)
@@ -85,29 +93,47 @@ public partial class PrintPreviewDialog : Window
                         PrinterCombo.SelectedIndex = i;
                         _selectedPrinter = pq;
                         UpdatePrinterMinMargins();
+                        foundDefault = true;
                         break;
                     }
                 }
             }
-            else if (PrinterCombo.Items.Count > 0)
+            
+            // Fall back to "Save to PDF" if no default printer found
+            if (!foundDefault)
             {
                 PrinterCombo.SelectedIndex = 0;
             }
         }
         catch
         {
-            // If we can't enumerate printers, add a placeholder
-            PrinterCombo.Items.Add(new ComboBoxItem { Content = "(Select printer when printing)", IsEnabled = false });
+            // If we can't enumerate printers, "Save to PDF" is already there
             PrinterCombo.SelectedIndex = 0;
         }
     }
 
     private void PrinterCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (PrinterCombo.SelectedItem is ComboBoxItem item && item.Tag is PrintQueue queue)
+        if (PrinterCombo.SelectedItem is ComboBoxItem item)
         {
-            _selectedPrinter = queue;
-            UpdatePrinterMinMargins();
+            if (item.Tag is PrintQueue queue)
+            {
+                _selectedPrinter = queue;
+                UpdatePrinterMinMargins();
+            }
+            else
+            {
+                // Virtual printer (Save to PDF) - no hardware constraints
+                _selectedPrinter = null;
+                _printerMinMargin = 0;
+            }
+            
+            // Update button text based on selection
+            if (PrintButton != null)
+            {
+                PrintButton.Content = IsSaveToPdfSelected ? "Save as PDF" : "Print";
+            }
+            
             ValidateMargins();
             UpdatePreview();
         }
@@ -507,6 +533,13 @@ public partial class PrintPreviewDialog : Window
 
     private void Print_Click(object sender, RoutedEventArgs e)
     {
+        // Route to PDF save if "Save to PDF" virtual printer is selected
+        if (IsSaveToPdfSelected)
+        {
+            SaveAsPdf_Click(sender, e);
+            return;
+        }
+
         var printDialog = new System.Windows.Controls.PrintDialog();
         
         // Set selected printer - use selected printer or default
