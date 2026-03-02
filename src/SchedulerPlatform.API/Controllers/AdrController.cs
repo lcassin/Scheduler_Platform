@@ -380,6 +380,34 @@ public class AdrController : ControllerBase
                     ? (int)(nextRun.Value.Date - DateTime.UtcNow.Date).TotalDays
                     : a.DaysUntilNextRun;
 
+                // Recalculate NextRunStatus when the rule overrides NextRunDateTime
+                // so that the displayed status is consistent with the recalculated daysUntilRun.
+                string? nextRunStatus;
+                if (hasRule && ruleData.RuleNextRunDateTime.HasValue)
+                {
+                    if (a.HistoricalBillingStatus == "Missing")
+                    {
+                        nextRunStatus = "Missing";
+                    }
+                    else
+                    {
+                        var days = daysUntilRun ?? 0;
+                        var windowBefore = a.PeriodDays > 0 ? a.PeriodDays / 2 : 15;
+                        if (days <= 0)
+                            nextRunStatus = "Run Now";
+                        else if (days <= windowBefore)
+                            nextRunStatus = "Due Soon";
+                        else if (days <= 30)
+                            nextRunStatus = "Upcoming";
+                        else
+                            nextRunStatus = "Future";
+                    }
+                }
+                else
+                {
+                    nextRunStatus = a.NextRunStatus;
+                }
+
                 return new
                 {
                     a.Id,
@@ -403,7 +431,7 @@ public class AdrController : ControllerBase
                     NextRangeStartDateTime = nextRangeStart,
                     NextRangeEndDateTime = nextRangeEnd,
                     DaysUntilNextRun = daysUntilRun,
-                    a.NextRunStatus,
+                    NextRunStatus = nextRunStatus,
                     a.HistoricalBillingStatus,
                     a.LastSyncedDateTime,
                     a.IsManuallyOverridden,
