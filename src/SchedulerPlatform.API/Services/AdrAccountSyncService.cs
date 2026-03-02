@@ -156,7 +156,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             var schedulingDataLookup = new Dictionary<(long VMAccountId, string VMAccountNumber), SchedulingData>();
             int processedSinceLastSave = 0;
             int batchNumber = 1;
-            int totalProcessed = 0; // Track total for progress (sync + deletions)
+            int totalProcessed = 0; // Track total for progress (sync phase only)
 
             // Step 2: Stream external accounts and process in batches
             _logger.LogDebug("Streaming and processing accounts in batches of {BatchSize}", batchSize);
@@ -257,15 +257,12 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                     existingAccount.ModifiedBy = "System Created";
                     result.AccountsMarkedDeleted++;
                     deletedSinceLastSave++;
-                    totalProcessed++;
 
                     if (deletedSinceLastSave >= batchSize)
                     {
                         await _dbContext.SaveChangesAsync(cancellationToken);
                         _logger.LogDebug("Deletion batch saved: {Count} accounts marked deleted so far", 
                             result.AccountsMarkedDeleted);
-                        
-                        progressCallback?.Invoke(totalProcessed, totalAccountCount);
                         
                         deletedSinceLastSave = 0;
                     }
