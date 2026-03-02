@@ -97,7 +97,8 @@ public partial class MainWindow : Window
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "MermaidEditor");
     private static readonly string AutoSaveFolder = Path.Combine(AppDataFolder, "AutoSave");
     private static readonly string SessionFilePath = Path.Combine(AppDataFolder, "session.json");
-    private const int AutoSaveIntervalSeconds = 30;
+    // Default auto-save interval; overridden by SettingsManager on load
+    private int _autoSaveIntervalSeconds = 30;
 
     private const string DefaultMermaidCode= @"flowchart TD
     A[Start] --> B[End]";
@@ -135,6 +136,7 @@ Console.WriteLine(""Hello, World!"");
     public ICommand FormatLinkCommand { get; }
     public ICommand FindReplaceCommand { get; }
     public ICommand FindNextCommand { get; }
+    public ICommand SettingsCommand { get; }
 
     public MainWindow()
     {
@@ -154,6 +156,7 @@ Console.WriteLine(""Hello, World!"");
         FormatLinkCommand = new RelayCommand(_ => FormatLink_Click(this, new RoutedEventArgs()));
         FindReplaceCommand = new RelayCommand(_ => FindReplace_Click(this, new RoutedEventArgs()));
         FindNextCommand = new RelayCommand(_ => FindNext_Click(this, new RoutedEventArgs()));
+        SettingsCommand = new RelayCommand(_ => Settings_Click(this, new RoutedEventArgs()));
 
         _renderTimer = new DispatcherTimer
         {
@@ -161,10 +164,10 @@ Console.WriteLine(""Hello, World!"");
         };
         _renderTimer.Tick += RenderTimer_Tick;
         
-        // Auto-save timer (fires every 30 seconds)
+        // Auto-save timer (interval configured via SettingsManager)
         _autoSaveTimer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromSeconds(AutoSaveIntervalSeconds)
+            Interval = TimeSpan.FromSeconds(_autoSaveIntervalSeconds)
         };
         _autoSaveTimer.Tick += AutoSaveTimer_Tick;
 
@@ -618,8 +621,9 @@ Console.WriteLine(""Hello, World!"");
     {
         try
         {
-                // Load and apply saved theme
+                // Load unified settings (also loads theme via SettingsManager)
                 ThemeManager.LoadTheme();
+                ApplySettingsToEditor();
                 UpdateThemeMenuCheckmarks();
                 UpdateEditorTheme();
                 UpdateTitleBarTheme();
@@ -5291,6 +5295,51 @@ Console.WriteLine(""Hello, World!"");
         
         // Update syntax highlighting based on theme
         RegisterThemeSyntaxHighlighting();
+    }
+
+    private void Settings_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SettingsDialog { Owner = this };
+        if (dialog.ShowDialog() == true && dialog.Saved)
+        {
+            // Apply theme change if needed
+            if (dialog.ThemeChanged)
+            {
+                UpdateThemeMenuCheckmarks();
+                UpdateEditorTheme();
+                UpdateTitleBarTheme();
+                UpdateTabStyles();
+                RenderPreview();
+            }
+
+            // Apply editor settings
+            ApplySettingsToEditor();
+        }
+    }
+
+    /// <summary>
+    /// Applies all settings from SettingsManager to the editor and auto-save timer.
+    /// Called on startup and after the Settings dialog is closed with OK.
+    /// </summary>
+    private void ApplySettingsToEditor()
+    {
+        var settings = SettingsManager.Current;
+
+        // Editor font
+        CodeEditor.FontFamily = new System.Windows.Media.FontFamily(settings.EditorFontFamily);
+        CodeEditor.FontSize = settings.EditorFontSize;
+
+        // Auto-save
+        _autoSaveIntervalSeconds = settings.AutoSaveIntervalSeconds;
+        _autoSaveTimer.Interval = TimeSpan.FromSeconds(_autoSaveIntervalSeconds);
+        if (settings.AutoSaveEnabled)
+        {
+            _autoSaveTimer.Start();
+        }
+        else
+        {
+            _autoSaveTimer.Stop();
+        }
     }
 
     private void RegisterThemeSyntaxHighlighting()

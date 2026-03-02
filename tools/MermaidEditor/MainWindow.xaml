@@ -737,6 +737,7 @@
         <KeyBinding Gesture="Ctrl+K" Command="{Binding FormatLinkCommand}" />
         <KeyBinding Gesture="Ctrl+H" Command="{Binding FindReplaceCommand}" />
         <KeyBinding Gesture="F3" Command="{Binding FindNextCommand}" />
+        <KeyBinding Gesture="Ctrl+OemComma" Command="{Binding SettingsCommand}" />
     </Window.InputBindings>
     
     <Grid>
@@ -1020,6 +1021,12 @@
                     <MenuItem x:Name="ThemeDarkMenuItem" Header="_Dark" Click="ThemeDark_Click" IsCheckable="True" IsChecked="True"/>
                     <MenuItem x:Name="ThemeLightMenuItem" Header="_Light" Click="ThemeLight_Click" IsCheckable="True"/>
                     <MenuItem x:Name="ThemeTwilightMenuItem" Header="_Twilight" Click="ThemeTwilight_Click" IsCheckable="True"/>
+                </MenuItem>
+                <Separator/>
+                <MenuItem Header="_Settings..." Click="Settings_Click" InputGestureText="Ctrl+,">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
                 </MenuItem>
             </MenuItem>
             <MenuItem Header="_Help" Style="{StaticResource TopLevelMenuItemStyle}">
