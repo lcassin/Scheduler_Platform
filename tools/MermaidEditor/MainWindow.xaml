@@ -752,6 +752,7 @@
         <KeyBinding Gesture="Ctrl+H" Command="{Binding FindReplaceCommand}" />
         <KeyBinding Gesture="F3" Command="{Binding FindNextCommand}" />
         <KeyBinding Gesture="Ctrl+OemComma" Command="{Binding SettingsCommand}" />
+        <KeyBinding Gesture="Ctrl+Shift+A" Command="{Binding AskAiCommand}" />
     </Window.InputBindings>
     
     <Grid>
@@ -1028,18 +1029,15 @@
                     </MenuItem.Icon>
                 </MenuItem>
                 <Separator/>
-                <MenuItem Header="_Theme">
-                    <MenuItem.Icon>
-                        <TextBlock Text="&#xE790;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
-                    </MenuItem.Icon>
-                    <MenuItem x:Name="ThemeDarkMenuItem" Header="_Dark" Click="ThemeDark_Click" IsCheckable="True" IsChecked="True"/>
-                    <MenuItem x:Name="ThemeLightMenuItem" Header="_Light" Click="ThemeLight_Click" IsCheckable="True"/>
-                    <MenuItem x:Name="ThemeTwilightMenuItem" Header="_Twilight" Click="ThemeTwilight_Click" IsCheckable="True"/>
-                </MenuItem>
-                <Separator/>
                 <MenuItem Header="_Settings..." Click="Settings_Click" InputGestureText="Ctrl+,">
                     <MenuItem.Icon>
                         <TextBlock Text="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
+                    </MenuItem.Icon>
+                </MenuItem>
+                <Separator/>
+                <MenuItem x:Name="AskAiMenuItem" Header="_Ask AI..." Click="AskAi_Click" InputGestureText="Ctrl+Shift+A">
+                    <MenuItem.Icon>
+                        <TextBlock Text="&#xE945;" FontFamily="Segoe MDL2 Assets" FontSize="14"/>
                     </MenuItem.Icon>
                 </MenuItem>
             </MenuItem>
@@ -1214,6 +1212,17 @@
                             <ToggleButton x:Name="MinimapToggle" Click="Minimap_Click" ToolTip="Toggle Minimap" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4" IsChecked="False">
                                 <TextBlock Text="&#xE700;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
                             </ToggleButton>
+                        </ToolBar>
+                    </ToolBarTray>
+                </Border>
+                
+                <!-- Ask AI Toolbar -->
+                <Border Background="{DynamicResource ThemeToolbarBackgroundBrush}" CornerRadius="4" HorizontalAlignment="Left" Margin="6,0,0,0">
+                    <ToolBarTray Background="Transparent">
+                        <ToolBar Band="1" BandIndex="1" Background="Transparent">
+                            <Button x:Name="AskAiToolbarButton" Click="AskAi_Click" ToolTip="Ask AI (Ctrl+Shift+A)" Style="{StaticResource ToolbarButtonStyle}" Padding="6,4">
+                                <TextBlock Text="&#xE945;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            </Button>
                         </ToolBar>
                     </ToolBarTray>
                 </Border>

@@ -45,7 +45,7 @@ public static class SvgIconHelper
     /// </summary>
     public static DrawingImage? GetDrawingImage(string svgFileName, Brush? fillBrush = null)
     {
-        var brush = fillBrush ?? new SolidColorBrush(Color.FromRgb(0xF1, 0xF1, 0xF1)); // Default light text color
+        var brush = fillBrush ?? new SolidColorBrush(ThemeManager.IsDarkTheme ? Color.FromRgb(0xF1, 0xF1, 0xF1) : Color.FromRgb(0x1E, 0x1E, 0x1E));
         var cacheKey = $"{svgFileName}_{brush}";
 
         if (_cache.TryGetValue(cacheKey, out var cached))
@@ -99,10 +99,10 @@ public static class SvgIconHelper
             var parts = viewBox.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length < 4) return null;
 
-            var vbX = double.Parse(parts[0]);
-            var vbY = double.Parse(parts[1]);
-            var vbWidth = double.Parse(parts[2]);
-            var vbHeight = double.Parse(parts[3]);
+            var vbX = ParseDouble(parts[0], 0);
+            var vbY = ParseDouble(parts[1], 0);
+            var vbWidth = ParseDouble(parts[2], 0);
+            var vbHeight = ParseDouble(parts[3], 0);
 
             var group = new DrawingGroup();
 
@@ -208,7 +208,11 @@ public static class SvgIconHelper
                     {
                         var polyGeom = ParsePolygonPoints(points);
                         if (polyGeom != null)
-                            group.Children.Add(new GeometryDrawing(elementFill, strokePen, polyGeom));
+                        {
+                            var fillAttr = element.Attribute("fill")?.Value;
+                            Brush? polyFill = fillAttr?.ToLowerInvariant() == "none" ? null : elementFill;
+                            group.Children.Add(new GeometryDrawing(polyFill, strokePen, polyGeom));
+                        }
                     }
                     catch { }
                 }
@@ -292,9 +296,10 @@ public static class SvgIconHelper
 
         // Theme dark strokes to use the default icon color
         var lower = strokeAttr.ToLowerInvariant();
-        if (lower == "#000000" || lower == "#000" || lower == "#212121")
+        if (lower == "#000000" || lower == "#000" || lower == "#212121" || lower == "#444"
+            || lower == "#444444" || lower == "#101010")
         {
-            return new SolidColorBrush(Color.FromRgb(0xF1, 0xF1, 0xF1));
+            return new SolidColorBrush(ThemeManager.IsDarkTheme ? Color.FromRgb(0xF1, 0xF1, 0xF1) : Color.FromRgb(0x1E, 0x1E, 0x1E));
         }
 
         try

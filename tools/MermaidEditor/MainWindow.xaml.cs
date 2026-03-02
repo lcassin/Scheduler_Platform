@@ -99,6 +99,7 @@ public partial class MainWindow : Window
     private static readonly string SessionFilePath = Path.Combine(AppDataFolder, "session.json");
     // Default auto-save interval; overridden by SettingsManager on load
     private int _autoSaveIntervalSeconds = 30;
+    private bool _lastCaretWasInComment = false;
 
     private const string DefaultMermaidCode= @"flowchart TD
     A[Start] --> B[End]";
@@ -137,6 +138,7 @@ Console.WriteLine(""Hello, World!"");
     public ICommand FindReplaceCommand { get; }
     public ICommand FindNextCommand { get; }
     public ICommand SettingsCommand { get; }
+    public ICommand AskAiCommand { get; }
 
     public MainWindow()
     {
@@ -157,6 +159,7 @@ Console.WriteLine(""Hello, World!"");
         FindReplaceCommand = new RelayCommand(_ => FindReplace_Click(this, new RoutedEventArgs()));
         FindNextCommand = new RelayCommand(_ => FindNext_Click(this, new RoutedEventArgs()));
         SettingsCommand = new RelayCommand(_ => Settings_Click(this, new RoutedEventArgs()));
+        AskAiCommand = new RelayCommand(_ => AskAi_Click(this, new RoutedEventArgs()));
 
         _renderTimer = new DispatcherTimer
         {
@@ -211,25 +214,8 @@ Console.WriteLine(""Hello, World!"");
 
     private void MainWindow_SourceInitialized(object? sender, EventArgs e)
     {
-        // Enable dark title bar on Windows 10/11
-        try
-        {
-            var hwnd = new WindowInteropHelper(this).Handle;
-            if (hwnd != IntPtr.Zero)
-            {
-                int value = 1; // Enable dark mode
-                DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref value, sizeof(int));
-                
-                // Set caption color to dark gray (#1E1E1E) to override Windows accent color
-                // Color format is 0x00BBGGRR (BGR, not RGB)
-                int captionColor = 0x001E1E1E; // #1E1E1E in BGR format
-                DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ref captionColor, sizeof(int));
-            }
-        }
-        catch
-        {
-            // Silently fail if DWM API is not available (older Windows versions)
-        }
+        // Set title bar color based on current theme (loaded from settings)
+        UpdateTitleBarTheme();
     }
 
     private void LoadRecentFiles()
@@ -344,6 +330,7 @@ Console.WriteLine(""Hello, World!"");
         CodeEditor.TextArea.Caret.PositionChanged += (s, e) =>
         {
             StatusText.Text = $"Line {CodeEditor.TextArea.Caret.Line}, Col {CodeEditor.TextArea.Caret.Column}";
+            UpdateToggleCommentIconColor();
         };
         
         // Intercept Ctrl+F and Ctrl+H before AvalonEdit handles them
@@ -624,7 +611,6 @@ Console.WriteLine(""Hello, World!"");
                 // Load unified settings (also loads theme via SettingsManager)
                 ThemeManager.LoadTheme();
                 ApplySettingsToEditor();
-                UpdateThemeMenuCheckmarks();
                 UpdateEditorTheme();
                 UpdateTitleBarTheme();
                 UpdateTabStyles(); // Refresh tab styles after theme is loaded
@@ -693,7 +679,8 @@ Console.WriteLine(""Hello, World!"");
             // === Export toolbar buttons ===
             SetButtonIcon(ExportPngToolbarButton, "export-to-png.svg", IconSize);
             SetButtonIcon(ExportSvgToolbarButton, "export-to-svg.svg", IconSize);
-            SetButtonIcon(ExportWordToolbarButton, "export-to-word.svg", IconSize);
+            SetButtonIcon(ExportEmfToolbarButton, "export-to-emf.svg", IconSize);
+            SetButtonIcon(ExportWordToolbarButton, "microsoft-word.svg", IconSize);
 
             // === Toggle toolbar buttons (set initial icon based on current state) ===
             UpdateWordWrapIcons();
@@ -712,7 +699,8 @@ Console.WriteLine(""Hello, World!"");
             // === Export menu items ===
             SetMenuItemIcon(ExportPngMenuItem, "export-to-png.svg");
             SetMenuItemIcon(ExportSvgMenuItem, "export-to-svg.svg");
-            SetMenuItemIcon(ExportWordMenuItem, "export-to-word.svg");
+            SetMenuItemIcon(ExportEmfMenuItem, "export-to-emf.svg");
+            SetMenuItemIcon(ExportWordMenuItem, "microsoft-word.svg");
 
             // === Help menu items ===
             SetMenuItemIcon(MermaidHelpMenuItem, "help-mermaid-icon.svg");
@@ -803,6 +791,75 @@ Console.WriteLine(""Hello, World!"");
         var svgName = _isMinimapVisible ? "minimap-toggle-on.svg" : "minimap-toggle-off.svg";
         SetButtonIcon(MinimapToggle, svgName, IconSize);
         SetMenuItemIcon(MinimapMenuItem, svgName);
+    }
+
+    /// <summary>
+    /// Checks if the current caret line is inside a comment and tints the toggle-comment
+    /// toolbar button and menu item icon green when it is.
+    /// </summary>
+    private void UpdateToggleCommentIconColor()
+    {
+        try
+        {
+            var doc = CodeEditor.Document;
+            if (doc == null) return;
+
+            var line = doc.GetLineByOffset(CodeEditor.CaretOffset);
+            var lineText = doc.GetText(line.Offset, line.Length).TrimStart();
+
+            bool isComment = false;
+            if (_currentRenderMode == RenderMode.Mermaid)
+            {
+                isComment = lineText.StartsWith("%%");
+            }
+            else
+            {
+                // Markdown: check for <!-- --> single-line comments or lines starting with <!--
+                isComment = lineText.StartsWith("<!--");
+            }
+
+            if (isComment == _lastCaretWasInComment) return;
+            _lastCaretWasInComment = isComment;
+
+            if (isComment)
+            {
+                var greenBrush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x4E, 0xC9, 0x4E)); // Bright green
+                SetButtonIconWithBrush(ToggleCommentToolbarButton, "toggle-comment.svg", IconSize, greenBrush);
+                SetMenuItemIconWithBrush(ToggleCommentMenuItem, "toggle-comment.svg", MenuIconSize, greenBrush);
+                if (ToggleCommentMenuItem != null) ToggleCommentMenuItem.IsChecked = true;
+            }
+            else
+            {
+                // Revert to default theme color
+                SetButtonIcon(ToggleCommentToolbarButton, "toggle-comment.svg", IconSize);
+                SetMenuItemIcon(ToggleCommentMenuItem, "toggle-comment.svg");
+                if (ToggleCommentMenuItem != null) ToggleCommentMenuItem.IsChecked = false;
+            }
+        }
+        catch
+        {
+            // Silently ignore - cosmetic feature
+        }
+    }
+
+    private static void SetButtonIconWithBrush(System.Windows.Controls.Primitives.ButtonBase? button, string svgFileName, double size, System.Windows.Media.Brush fillBrush)
+    {
+        if (button == null) return;
+        var icon = SvgIconHelper.CreateIcon(svgFileName, size, fillBrush);
+        if (icon != null)
+        {
+            button.Content = icon;
+        }
+    }
+
+    private static void SetMenuItemIconWithBrush(System.Windows.Controls.MenuItem? menuItem, string svgFileName, double size, System.Windows.Media.Brush fillBrush)
+    {
+        if (menuItem == null) return;
+        var icon = SvgIconHelper.CreateIcon(svgFileName, size, fillBrush);
+        if (icon != null)
+        {
+            menuItem.Icon = icon;
+        }
     }
 
     #endregion
@@ -5407,36 +5464,15 @@ Console.WriteLine(""Hello, World!"");
         aboutWindow.ShowDialog();
     }
 
-    private void ThemeDark_Click(object sender, RoutedEventArgs e)
-    {
-        ApplyTheme(AppTheme.Dark);
-    }
-
-    private void ThemeLight_Click(object sender, RoutedEventArgs e)
-    {
-        ApplyTheme(AppTheme.Light);
-    }
-
-    private void ThemeTwilight_Click(object sender, RoutedEventArgs e)
-    {
-        ApplyTheme(AppTheme.Twilight);
-    }
-
     private void ApplyTheme(AppTheme theme)
     {
         ThemeManager.ApplyTheme(theme);
-        UpdateThemeMenuCheckmarks();
         UpdateEditorTheme();
         UpdateTitleBarTheme();
         UpdateTabStyles(); // Update tab colors for new theme
+        SvgIconHelper.ClearCache();
+        InitializeIcons();
         RenderPreview(); // Re-render preview with new theme
-    }
-
-    private void UpdateThemeMenuCheckmarks()
-    {
-        ThemeDarkMenuItem.IsChecked = ThemeManager.CurrentTheme == AppTheme.Dark;
-        ThemeLightMenuItem.IsChecked = ThemeManager.CurrentTheme == AppTheme.Light;
-        ThemeTwilightMenuItem.IsChecked = ThemeManager.CurrentTheme == AppTheme.Twilight;
     }
 
     private void UpdateEditorTheme()
@@ -5460,15 +5496,33 @@ Console.WriteLine(""Hello, World!"");
             // Apply theme change if needed
             if (dialog.ThemeChanged)
             {
-                UpdateThemeMenuCheckmarks();
                 UpdateEditorTheme();
                 UpdateTitleBarTheme();
                 UpdateTabStyles();
+                SvgIconHelper.ClearCache();
+                InitializeIcons();
                 RenderPreview();
             }
 
             // Apply editor settings
             ApplySettingsToEditor();
+        }
+    }
+
+    private void AskAi_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new AskAiDialog
+        {
+            Owner = this,
+            EditorContent = CodeEditor.Text,
+            FileType = _currentRenderMode == RenderMode.Mermaid ? "Mermaid" : "Markdown"
+        };
+
+        if (dialog.ShowDialog() == true && !string.IsNullOrEmpty(dialog.TextToInsert))
+        {
+            // Insert the AI-generated text at the current cursor position
+            var offset = CodeEditor.CaretOffset;
+            CodeEditor.Document.Insert(offset, dialog.TextToInsert);
         }
     }
 
@@ -5493,11 +5547,13 @@ Console.WriteLine(""Hello, World!"");
         {
             MinimapEditor.WordWrap = settings.WordWrapDefault;
         }
+        UpdateWordWrapIcons();
 
         // Line numbers
         CodeEditor.ShowLineNumbers = settings.ShowLineNumbersDefault;
         if (LineNumbersToggle != null) LineNumbersToggle.IsChecked = settings.ShowLineNumbersDefault;
         if (LineNumbersMenuItem != null) LineNumbersMenuItem.IsChecked = settings.ShowLineNumbersDefault;
+        UpdateLineNumbersIcons();
 
         // Bracket matching
         _isBracketMatchingEnabled = settings.BracketMatchingDefault;
@@ -5511,6 +5567,7 @@ Console.WriteLine(""Hello, World!"");
         }
         if (BracketMatchingToggle != null) BracketMatchingToggle.IsChecked = settings.BracketMatchingDefault;
         if (BracketMatchingMenuItem != null) BracketMatchingMenuItem.IsChecked = settings.BracketMatchingDefault;
+        UpdateBracketMatchingIcons();
 
         // Minimap
         if (settings.ShowMinimapDefault != _isMinimapVisible)
@@ -5527,6 +5584,7 @@ Console.WriteLine(""Hello, World!"");
         }
         if (MinimapToggle != null) MinimapToggle.IsChecked = settings.ShowMinimapDefault;
         if (MinimapMenuItem != null) MinimapMenuItem.IsChecked = settings.ShowMinimapDefault;
+        UpdateMinimapIcons();
 
         // Auto-save
         _autoSaveIntervalSeconds = settings.AutoSaveIntervalSeconds;
