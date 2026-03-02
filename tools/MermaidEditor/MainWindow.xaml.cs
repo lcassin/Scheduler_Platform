@@ -211,25 +211,8 @@ Console.WriteLine(""Hello, World!"");
 
     private void MainWindow_SourceInitialized(object? sender, EventArgs e)
     {
-        // Enable dark title bar on Windows 10/11
-        try
-        {
-            var hwnd = new WindowInteropHelper(this).Handle;
-            if (hwnd != IntPtr.Zero)
-            {
-                int value = 1; // Enable dark mode
-                DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref value, sizeof(int));
-                
-                // Set caption color to dark gray (#1E1E1E) to override Windows accent color
-                // Color format is 0x00BBGGRR (BGR, not RGB)
-                int captionColor = 0x001E1E1E; // #1E1E1E in BGR format
-                DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ref captionColor, sizeof(int));
-            }
-        }
-        catch
-        {
-            // Silently fail if DWM API is not available (older Windows versions)
-        }
+        // Set title bar color based on current theme (loaded from settings)
+        UpdateTitleBarTheme();
     }
 
     private void LoadRecentFiles()
@@ -625,7 +608,6 @@ Console.WriteLine(""Hello, World!"");
                 // Load unified settings (also loads theme via SettingsManager)
                 ThemeManager.LoadTheme();
                 ApplySettingsToEditor();
-                UpdateThemeMenuCheckmarks();
                 UpdateEditorTheme();
                 UpdateTitleBarTheme();
                 UpdateTabStyles(); // Refresh tab styles after theme is loaded
@@ -5474,36 +5456,13 @@ Console.WriteLine(""Hello, World!"");
         aboutWindow.ShowDialog();
     }
 
-    private void ThemeDark_Click(object sender, RoutedEventArgs e)
-    {
-        ApplyTheme(AppTheme.Dark);
-    }
-
-    private void ThemeLight_Click(object sender, RoutedEventArgs e)
-    {
-        ApplyTheme(AppTheme.Light);
-    }
-
-    private void ThemeTwilight_Click(object sender, RoutedEventArgs e)
-    {
-        ApplyTheme(AppTheme.Twilight);
-    }
-
     private void ApplyTheme(AppTheme theme)
     {
         ThemeManager.ApplyTheme(theme);
-        UpdateThemeMenuCheckmarks();
         UpdateEditorTheme();
         UpdateTitleBarTheme();
         UpdateTabStyles(); // Update tab colors for new theme
         RenderPreview(); // Re-render preview with new theme
-    }
-
-    private void UpdateThemeMenuCheckmarks()
-    {
-        ThemeDarkMenuItem.IsChecked = ThemeManager.CurrentTheme == AppTheme.Dark;
-        ThemeLightMenuItem.IsChecked = ThemeManager.CurrentTheme == AppTheme.Light;
-        ThemeTwilightMenuItem.IsChecked = ThemeManager.CurrentTheme == AppTheme.Twilight;
     }
 
     private void UpdateEditorTheme()
@@ -5527,7 +5486,6 @@ Console.WriteLine(""Hello, World!"");
             // Apply theme change if needed
             if (dialog.ThemeChanged)
             {
-                UpdateThemeMenuCheckmarks();
                 UpdateEditorTheme();
                 UpdateTitleBarTheme();
                 UpdateTabStyles();
