@@ -139,6 +139,14 @@ public interface IAdrService
     Task<BulkCredentialVerificationResult> VerifyCredentialsFromFileAsync(byte[] fileContent, string fileName);
     
     /// <summary>
+    /// Runs bulk credential verification (AttemptLogin) for ALL active accounts in the system.
+    /// This is a one-time bulk operation to check all existing credentials ahead of time.
+    /// </summary>
+    /// <param name="testrun">Optional limit for test runs (e.g., 100 to test with first 100 accounts)</param>
+    /// <returns>Results of the bulk credential verification</returns>
+    Task<BulkCredentialVerificationResult> VerifyAllCredentialsAsync(int? testrun = null);
+    
+    /// <summary>
     /// Starts a background export operation for large datasets.
     /// </summary>
     /// <param name="exportType">Type of export: accounts, jobs, rules, blacklist</param>

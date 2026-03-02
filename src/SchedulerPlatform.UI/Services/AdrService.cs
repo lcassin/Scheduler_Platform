@@ -737,6 +737,19 @@ public class AdrService : IAdrService
         return result ?? new BulkCredentialVerificationResult();
     }
 
+    public async Task<BulkCredentialVerificationResult> VerifyAllCredentialsAsync(int? testrun = null)
+    {
+        var url = "adr/orchestrate/verify-all-credentials";
+        if (testrun.HasValue)
+        {
+            url += $"?testrun={testrun.Value}";
+        }
+        var response = await _httpClient.PostAsync(url, null);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<BulkCredentialVerificationResult>();
+        return result ?? new BulkCredentialVerificationResult();
+    }
+
     #endregion
 }
 
