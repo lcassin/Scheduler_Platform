@@ -836,12 +836,14 @@ Console.WriteLine(""Hello, World!"");
                 var greenBrush = new SolidColorBrush(System.Windows.Media.Color.FromRgb(0x4E, 0xC9, 0x4E)); // Bright green
                 SetButtonIconWithBrush(ToggleCommentToolbarButton, "toggle-comment.svg", IconSize, greenBrush);
                 SetMenuItemIconWithBrush(ToggleCommentMenuItem, "toggle-comment.svg", MenuIconSize, greenBrush);
+                if (ToggleCommentMenuItem != null) ToggleCommentMenuItem.IsChecked = true;
             }
             else
             {
                 // Revert to default theme color
                 SetButtonIcon(ToggleCommentToolbarButton, "toggle-comment.svg", IconSize);
                 SetMenuItemIcon(ToggleCommentMenuItem, "toggle-comment.svg");
+                if (ToggleCommentMenuItem != null) ToggleCommentMenuItem.IsChecked = false;
             }
         }
         catch
