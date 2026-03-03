@@ -2063,9 +2063,10 @@ public class AdrController : ControllerBase
                     var jobIdSet = jobIds.ToHashSet();
                     
                     // Count jobs by status using a single GROUP BY query (instead of 7 separate queries)
-                    totalCount = jobIdSet.Count;
-                    var statusCounts = await _unitOfWork.AdrJobs.GetCountsByStatusAndIdsAsync(jobIdSet);
+                    // Exclude jobs belonging to currently-blacklisted accounts from stats.
+                    var statusCounts = await _unitOfWork.AdrJobs.GetCountsByStatusAndIdsAsync(jobIdSet, excludeBlacklisted: true);
                     
+                    totalCount = statusCounts.Values.Sum();
                     pendingCount = statusCounts.TryGetValue("Pending", out var p) ? p : 0;
                     credentialCheckRequestedCount = statusCounts.TryGetValue("CredentialCheckRequested", out var ccr) ? ccr : 0;
                     credentialCheckInProgressCount = statusCounts.TryGetValue("CredentialCheckInProgress", out var ccip) ? ccip : 0;
@@ -2090,7 +2091,9 @@ public class AdrController : ControllerBase
             else
             {
                 // PERFORMANCE: Single GroupBy query replaces 10 sequential COUNT queries.
-                var jobQuery = _dbContext.AdrJobs.Where(j => !j.IsDeleted);
+                // Exclude jobs belonging to currently-blacklisted accounts from stats.
+                var jobQuery = _dbContext.AdrJobs
+                    .Where(j => !j.IsDeleted && !j.AdrAccount.IsCurrentlyBlacklisted);
                 if (adrAccountId.HasValue)
                     jobQuery = jobQuery.Where(j => j.AdrAccountId == adrAccountId.Value);
 

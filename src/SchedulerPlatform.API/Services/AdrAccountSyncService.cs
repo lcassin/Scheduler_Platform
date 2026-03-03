@@ -280,6 +280,9 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             // so that only active accounts get flagged. Deleted/inactive accounts are skipped.
             await UpdateBlacklistFlagsAsync(subStepCallback, cancellationToken);
 
+            // Step 5b: Cancel/close non-terminal jobs for newly-blacklisted accounts
+            await CancelJobsForBlacklistedAccountsAsync(subStepCallback, cancellationToken);
+
             // Step 6: Sync AdrAccountRules using lightweight scheduling data
             // PERFORMANCE OPTIMIZATION: Detach account entities from change tracker before rule sync
             var accountsList = existingAccounts.Values.ToList();
@@ -733,6 +736,41 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
         subStepCallback?.Invoke("Updating blacklist flags", 4, 4);
         _logger.LogInformation("Blacklist flag update completed. Currently blacklisted: {Current}, Future blacklisted: {Future}",
             currentCount, futureCount);
+    }
+
+    /// <summary>
+    /// Cancels/closes all non-terminal jobs belonging to currently-blacklisted accounts.
+    /// Runs AFTER UpdateBlacklistFlagsAsync so that IsCurrentlyBlacklisted is up to date.
+    /// Uses raw SQL for performance — updates directly in the database without loading entities.
+    /// </summary>
+    private async Task CancelJobsForBlacklistedAccountsAsync(
+        Action<string, int, int>? subStepCallback,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Starting cancellation of jobs for blacklisted accounts");
+        subStepCallback?.Invoke("Cancelling blacklisted account jobs", 0, 1);
+
+        var now = DateTime.UtcNow;
+
+        // Cancel all non-terminal jobs where the account is currently blacklisted.
+        // Terminal statuses (Completed, Failed, Cancelled, NeedsReview) are left untouched.
+        var cancelSql = @"
+            UPDATE j
+            SET j.[Status] = 'Cancelled',
+                j.[ErrorMessage] = 'Account blacklisted during sync',
+                j.[ModifiedDateTime] = {0},
+                j.[ModifiedBy] = 'System - Blacklist Sync'
+            FROM [AdrJob] j
+            INNER JOIN [AdrAccount] a ON j.[AdrAccountId] = a.[Id]
+            WHERE a.[IsCurrentlyBlacklisted] = 1
+              AND j.[IsDeleted] = 0
+              AND j.[Status] IN ('Pending', 'CredentialCheckRequested', 'CredentialCheckInProgress', 
+                                  'CredentialVerified', 'CredentialFailed', 'ScrapeRequested', 
+                                  'ScrapeInProgress', 'StatusCheckInProgress')";
+
+        var cancelledCount = await _dbContext.Database.ExecuteSqlRawAsync(cancelSql, new object[] { now }, cancellationToken);
+        _logger.LogInformation("Cancelled {Count} non-terminal jobs for blacklisted accounts", cancelledCount);
+        subStepCallback?.Invoke("Cancelling blacklisted account jobs", 1, 1);
     }
 
     /// <summary>

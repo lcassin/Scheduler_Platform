@@ -445,14 +445,18 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             .CountAsync();
     }
 
-    public async Task<Dictionary<string, int>> GetCountsByStatusAndIdsAsync(HashSet<int> jobIds)
+    public async Task<Dictionary<string, int>> GetCountsByStatusAndIdsAsync(HashSet<int> jobIds, bool excludeBlacklisted = false)
     {
         if (!jobIds.Any())
             return new Dictionary<string, int>();
 
         // Single GROUP BY query instead of 7 separate COUNT queries
-        var results = await _dbSet
-            .Where(j => !j.IsDeleted && jobIds.Contains(j.Id))
+        var query = _dbSet.Where(j => !j.IsDeleted && jobIds.Contains(j.Id));
+        
+        if (excludeBlacklisted)
+            query = query.Where(j => !j.AdrAccount.IsCurrentlyBlacklisted);
+
+        var results = await query
             .GroupBy(j => j.Status)
             .Select(g => new { Status = g.Key, Count = g.Count() })
             .ToListAsync();
