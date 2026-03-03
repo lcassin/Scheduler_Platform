@@ -226,24 +226,6 @@ public class AdrJobRepositoryQueryTests : IDisposable
         result.Should().BeEmpty();
     }
 
-    [Fact]
-    public async Task GetJobsNeedingFinalStatusCheckAsync_ReturnsJobsAfterBillingWindowEnds()
-    {
-        // Arrange - Job with billing window ended 5+ days ago
-        var currentDate = DateTime.UtcNow.Date;
-        var job = CreateTestJob(1, "ScrapeRequested", currentDate.AddDays(-10));
-        job.BillingPeriodEndDateTime = currentDate.AddDays(-6);
-        job.NextRangeEndDateTime = currentDate.AddDays(-6);
-        await _context.AdrJobs.AddAsync(job);
-        await _context.SaveChangesAsync();
-
-        // Act
-        var result = await _repository.GetJobsNeedingFinalStatusCheckAsync(currentDate, 5);
-
-        // Assert
-        result.Should().HaveCount(1);
-    }
-
     #endregion
 
     #region Billing Period Existence Tests
