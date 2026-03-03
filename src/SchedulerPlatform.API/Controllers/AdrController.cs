@@ -3898,6 +3898,7 @@ public class AdrController : ControllerBase
             [FromQuery] string? accountNumber = null,
             [FromQuery] bool? isEnabled = null,
             [FromQuery] bool? isOverridden = null,
+            [FromQuery] string? blacklistStatus = null,
             [FromQuery] string? sortColumn = null,
             [FromQuery] bool sortDescending = false)
         {
@@ -3934,6 +3935,61 @@ public class AdrController : ControllerBase
                 if (isOverridden.HasValue)
                 {
                     query = query.Where(r => r.IsManuallyOverridden == isOverridden.Value);
+                }
+
+                // Blacklist filtering for rules: exclude rules for currently-blacklisted accounts
+                if (!string.IsNullOrWhiteSpace(blacklistStatus))
+                {
+                    var filterToday = DateTime.UtcNow.Date;
+                    var activeBlacklistsForRules = await _dbContext.AdrAccountBlacklists
+                        .Where(b => !b.IsDeleted && b.IsActive)
+                        .Where(b => !b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= filterToday)
+                        .ToListAsync();
+
+                    // Get all account IDs from the current query to match against blacklists
+                    var ruleAccountIds = await query.Select(r => r.AdrAccountId).Distinct().ToListAsync();
+                    var allRuleAccounts = await _dbContext.AdrAccounts
+                        .Where(a => ruleAccountIds.Contains(a.Id))
+                        .ToListAsync();
+
+                    HashSet<int> matchedAccountIds;
+                    if (blacklistStatus == "none")
+                    {
+                        // Exclude currently-blacklisted accounts
+                        var currentlyBlacklistedIds = allRuleAccounts
+                            .Where(a => activeBlacklistsForRules.Any(b =>
+                            {
+                                var matches = (!string.IsNullOrEmpty(b.PrimaryVendorCode) && b.PrimaryVendorCode == a.PrimaryVendorCode) ||
+                                              (b.VMAccountId.HasValue && b.VMAccountId == a.VMAccountId) ||
+                                              (!string.IsNullOrEmpty(b.VMAccountNumber) && b.VMAccountNumber == a.VMAccountNumber) ||
+                                              (b.CredentialId.HasValue && b.CredentialId == a.CredentialId);
+                                if (!matches) return false;
+                                return (!b.EffectiveStartDate.HasValue || b.EffectiveStartDate.Value <= filterToday) &&
+                                       (!b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= filterToday);
+                            }))
+                            .Select(a => a.Id)
+                            .ToHashSet();
+                        
+                        query = query.Where(r => !currentlyBlacklistedIds.Contains(r.AdrAccountId));
+                    }
+                    else if (blacklistStatus == "current")
+                    {
+                        matchedAccountIds = allRuleAccounts
+                            .Where(a => activeBlacklistsForRules.Any(b =>
+                            {
+                                var matches = (!string.IsNullOrEmpty(b.PrimaryVendorCode) && b.PrimaryVendorCode == a.PrimaryVendorCode) ||
+                                              (b.VMAccountId.HasValue && b.VMAccountId == a.VMAccountId) ||
+                                              (!string.IsNullOrEmpty(b.VMAccountNumber) && b.VMAccountNumber == a.VMAccountNumber) ||
+                                              (b.CredentialId.HasValue && b.CredentialId == a.CredentialId);
+                                if (!matches) return false;
+                                return (!b.EffectiveStartDate.HasValue || b.EffectiveStartDate.Value <= filterToday) &&
+                                       (!b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= filterToday);
+                            }))
+                            .Select(a => a.Id)
+                            .ToHashSet();
+                        
+                        query = query.Where(r => matchedAccountIds.Contains(r.AdrAccountId));
+                    }
                 }
             
                 var totalCount = await query.CountAsync();

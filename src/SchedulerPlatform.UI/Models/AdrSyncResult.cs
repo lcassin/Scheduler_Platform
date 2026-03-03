@@ -195,6 +195,7 @@ public class AdrOrchestrationStatus
     public RebillResult? RebillResult { get; set; }
     public ScrapeResult? ScrapeResult { get; set; }
     public StatusCheckResult? StatusCheckResult { get; set; }
+    public BulkCredentialVerificationResult? BulkCredentialVerificationResult { get; set; }
 }
 
 public class BlacklistCountsResult

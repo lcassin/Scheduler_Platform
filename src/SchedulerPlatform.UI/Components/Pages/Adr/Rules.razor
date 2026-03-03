@@ -76,7 +76,14 @@
                     <MudSelectItem Value="@((bool?)false)">Not Overridden</MudSelectItem>
                 </MudSelect>
             </MudItem>
-            <MudItem xs="12" md="4" Class="d-flex align-center justify-end gap-2">
+            <MudItem xs="12" md="2">
+                <MudSelect T="string" @bind-Value="_selectedBlacklistStatus" Label="Blacklist" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
+                    <MudSelectItem Value="@("none")">Not Blacklisted</MudSelectItem>
+                    <MudSelectItem Value="@("")">All (incl. Blacklisted)</MudSelectItem>
+                    <MudSelectItem Value="@("current")">Currently Blacklisted</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="3" Class="d-flex align-center justify-end gap-2">
                 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters" StartIcon="@Icons.Material.Filled.FilterAlt">
                     Apply
                 </MudButton>
@@ -219,6 +226,8 @@
     private string? _searchAccountNumber;
     private bool? _filterEnabled = true;
     private bool? _filterOverridden;
+    private string _selectedBlacklistStatus = "none";
+    private string? _filterBlacklistStatus = "none";
 
     protected override void OnInitialized()
     {
@@ -254,6 +263,8 @@
                 queryParams.Add($"isEnabled={_filterEnabled.Value}");
             if (_filterOverridden.HasValue)
                 queryParams.Add($"isOverridden={_filterOverridden.Value}");
+            if (!string.IsNullOrEmpty(_filterBlacklistStatus))
+                queryParams.Add($"blacklistStatus={Uri.EscapeDataString(_filterBlacklistStatus)}");
             
             var url = $"adr/rules?{string.Join("&", queryParams)}";
             var httpResponse = await HttpClientService.GetAsync(url);
@@ -284,6 +295,7 @@
 
     private async Task ApplyFilters()
     {
+        _filterBlacklistStatus = _selectedBlacklistStatus;
         if (_table != null)
         {
             await _table.ReloadServerData();
@@ -297,6 +309,8 @@
         _searchAccountNumber = null;
         _filterEnabled = true;
         _filterOverridden = null;
+        _selectedBlacklistStatus = "none";
+        _filterBlacklistStatus = "none";
         if (_table != null)
         {
             await _table.ReloadServerData();
@@ -377,6 +391,8 @@
                 filters["isEnabled"] = _filterEnabled.Value.ToString();
             if (_filterOverridden.HasValue)
                 filters["isOverridden"] = _filterOverridden.Value.ToString();
+            if (!string.IsNullOrEmpty(_filterBlacklistStatus))
+                filters["blacklistStatus"] = _filterBlacklistStatus;
 
             // Start background export
             Snackbar.Add("Starting export... This may take a few minutes for large datasets.", Severity.Info);
