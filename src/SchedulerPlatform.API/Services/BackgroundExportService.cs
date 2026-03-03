@@ -268,6 +268,7 @@ public class BackgroundExportService : BackgroundService
         request.Filters.TryGetValue("historicalStatus", out var historicalStatus);
         request.Filters.TryGetValue("primaryVendorCode", out var primaryVendorCode);
         request.Filters.TryGetValue("masterVendorCode", out var masterVendorCode);
+        request.Filters.TryGetValue("blacklistStatus", out var blacklistStatus);
         
         int? clientId = !string.IsNullOrEmpty(clientIdStr) && int.TryParse(clientIdStr, out var cid) ? cid : null;
 
@@ -296,6 +297,18 @@ public class BackgroundExportService : BackgroundService
 
         if (!string.IsNullOrWhiteSpace(masterVendorCode))
             query = query.Where(a => a.MasterVendorCode == masterVendorCode);
+
+        if (!string.IsNullOrWhiteSpace(blacklistStatus))
+        {
+            if (blacklistStatus == "none")
+                query = query.Where(a => !a.IsCurrentlyBlacklisted);
+            else if (blacklistStatus == "current")
+                query = query.Where(a => a.IsCurrentlyBlacklisted);
+            else if (blacklistStatus == "future")
+                query = query.Where(a => a.IsFutureBlacklisted);
+            else if (blacklistStatus == "any")
+                query = query.Where(a => a.IsCurrentlyBlacklisted || a.IsFutureBlacklisted);
+        }
 
         // Get count first so progress shows total while data is loading
         var totalCount = await query.CountAsync(cancellationToken);
@@ -334,41 +347,12 @@ public class BackgroundExportService : BackgroundService
             })
             .ToListAsync(cancellationToken);
 
-        // Get blacklist status
-        var today = DateTime.UtcNow.Date;
-        var activeBlacklists = await dbContext.AdrAccountBlacklists
-            .Where(b => !b.IsDeleted && b.IsActive)
-            .Where(b => !b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= today)
-            .ToListAsync(cancellationToken);
-
-        var blacklistStatusLookup = new Dictionary<int, (bool HasCurrent, bool HasFuture)>();
-        foreach (var item in exportData)
-        {
-            var account = item.Account;
-            var matchingBlacklists = activeBlacklists.Where(b =>
-            {
-                if (!string.IsNullOrEmpty(b.MasterVendorCode) && b.MasterVendorCode == account.MasterVendorCode)
-                    return true;
-                if (!string.IsNullOrEmpty(b.PrimaryVendorCode) && b.PrimaryVendorCode == account.PrimaryVendorCode)
-                    return true;
-                if (b.VMAccountId.HasValue && b.VMAccountId == account.VMAccountId)
-                    return true;
-                if (!string.IsNullOrEmpty(b.VMAccountNumber) && b.VMAccountNumber == account.VMAccountNumber)
-                    return true;
-                if (b.CredentialId.HasValue && b.CredentialId == account.CredentialId)
-                    return true;
-                return false;
-            }).ToList();
-
-            var hasCurrent = matchingBlacklists
-                .Any(b => (!b.EffectiveStartDate.HasValue || b.EffectiveStartDate.Value <= today) &&
-                          (!b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= today));
-
-            var hasFuture = matchingBlacklists
-                .Any(b => b.EffectiveStartDate.HasValue && b.EffectiveStartDate.Value > today);
-
-            blacklistStatusLookup[account.Id] = (hasCurrent, hasFuture);
-        }
+        // PERFORMANCE: Use denormalized blacklist flags from AdrAccount instead of loading
+        // all blacklist entries into memory and doing in-memory matching.
+        // Flags are updated during Account Sync.
+        var blacklistStatusLookup = exportData.ToDictionary(
+            item => item.Account.Id,
+            item => (HasCurrent: item.Account.IsCurrentlyBlacklisted, HasFuture: item.Account.IsFutureBlacklisted));
 
         var headers = new[] { "Account #", "VM Account ID", "Interface Account ID", "Client", "Master Vendor Code", "Primary Vendor Code", "Period Type", "Next Run", "Run Status", "Job Status", "Last Completed", "Historical Status", "Last Invoice", "Expected Next", "Account Overridden", "Account Overridden By", "Account Overridden Date", "Rule Overridden", "Rule Overridden By", "Rule Overridden Date", "Current Blacklist", "Future Blacklist" };
 
@@ -401,7 +385,7 @@ public class BackgroundExportService : BackgroundService
                         a.PrimaryVendorCode,
                         a.PeriodType,
                         a.NextRunDateTime,
-                        a.NextRunStatus,
+                        bl.HasCurrent ? "Blacklisted" : a.NextRunStatus,
                         item.CurrentJobStatus ?? "",
                         item.LastCompletedDateTime,
                         a.HistoricalBillingStatus,
@@ -427,7 +411,7 @@ public class BackgroundExportService : BackgroundService
                 {
                     var a = item.Account;
                     var bl = blacklistStatusLookup.TryGetValue(a.Id, out var blStatus) ? blStatus : (HasCurrent: false, HasFuture: false);
-                    return $"{ExcelExportHelper.CsvEscape(a.VMAccountNumber)},{a.VMAccountId},{ExcelExportHelper.CsvEscape(a.InterfaceAccountId)},{ExcelExportHelper.CsvEscape(a.ClientName)},{ExcelExportHelper.CsvEscape(a.MasterVendorCode)},{ExcelExportHelper.CsvEscape(a.PrimaryVendorCode)},{ExcelExportHelper.CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{ExcelExportHelper.CsvEscape(a.NextRunStatus)},{ExcelExportHelper.CsvEscape(item.CurrentJobStatus)},{item.LastCompletedDateTime?.ToString("MM/dd/yyyy") ?? ""},{ExcelExportHelper.CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.IsManuallyOverridden},{ExcelExportHelper.CsvEscape(a.OverriddenBy)},{a.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""},{(item.RuleIsManuallyOverridden ? "Yes" : "No")},{ExcelExportHelper.CsvEscape(item.RuleOverriddenBy)},{item.RuleOverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""},{(bl.HasCurrent ? "Yes" : "No")},{(bl.HasFuture ? "Yes" : "No")}";
+                    return $"{ExcelExportHelper.CsvEscape(a.VMAccountNumber)},{a.VMAccountId},{ExcelExportHelper.CsvEscape(a.InterfaceAccountId)},{ExcelExportHelper.CsvEscape(a.ClientName)},{ExcelExportHelper.CsvEscape(a.MasterVendorCode)},{ExcelExportHelper.CsvEscape(a.PrimaryVendorCode)},{ExcelExportHelper.CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{ExcelExportHelper.CsvEscape(bl.HasCurrent ? "Blacklisted" : a.NextRunStatus)},{ExcelExportHelper.CsvEscape(item.CurrentJobStatus)},{item.LastCompletedDateTime?.ToString("MM/dd/yyyy") ?? ""},{ExcelExportHelper.CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.IsManuallyOverridden},{ExcelExportHelper.CsvEscape(a.OverriddenBy)},{a.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""},{(item.RuleIsManuallyOverridden ? "Yes" : "No")},{ExcelExportHelper.CsvEscape(item.RuleOverriddenBy)},{item.RuleOverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""},{(bl.HasCurrent ? "Yes" : "No")},{(bl.HasFuture ? "Yes" : "No")}";
                 });
         }
 

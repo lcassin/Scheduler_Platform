@@ -583,60 +583,50 @@ public class AdrController : ControllerBase
     {
         try
         {
-            var totalAccounts = await _unitOfWork.AdrAccounts.GetTotalCountAsync(clientId);
-            var rawRunNowCount = await _unitOfWork.AdrAccounts.GetCountByNextRunStatusAsync("Run Now", clientId);
-            var rawDueSoonCount = await _unitOfWork.AdrAccounts.GetCountByNextRunStatusAsync("Due Soon", clientId);
-            var rawUpcomingCount = await _unitOfWork.AdrAccounts.GetCountByNextRunStatusAsync("Upcoming", clientId);
-            var rawFutureCount = await _unitOfWork.AdrAccounts.GetCountByNextRunStatusAsync("Future", clientId);
-            var rawMissingCount = await _unitOfWork.AdrAccounts.GetCountByHistoricalStatusAsync("Missing", clientId);
-            var activeJobsCount = await _unitOfWork.AdrJobs.GetActiveJobsCountAsync();
-
-            // PERFORMANCE: Use denormalized IsCurrentlyBlacklisted flag on AdrAccount
-            // instead of expensive blacklist table joins. Flags are updated during Account Sync.
-            var blacklistedAccountsQuery = _dbContext.AdrAccounts
-                .Where(a => !a.IsDeleted && a.IsCurrentlyBlacklisted);
-            
+            // PERFORMANCE: Single query with conditional aggregation replaces 10 sequential queries.
+            // Uses SUM(CASE WHEN ... THEN 1 ELSE 0 END) pattern for all account counts.
+            var accountQuery = _dbContext.AdrAccounts.Where(a => !a.IsDeleted);
             if (clientId.HasValue)
-                blacklistedAccountsQuery = blacklistedAccountsQuery.Where(a => a.ClientId == clientId.Value);
+                accountQuery = accountQuery.Where(a => a.ClientId == clientId.Value);
 
-            // Count blacklisted accounts per status bucket in a single SQL query
-            var blacklistedStatusCounts = await blacklistedAccountsQuery
-                .GroupBy(a => a.NextRunStatus)
-                .Select(g => new { Status = g.Key, Count = g.Count() })
-                .ToListAsync();
-            
-            var blacklistedCount = blacklistedStatusCounts.Sum(s => s.Count);
-            var blacklistedRunNow = blacklistedStatusCounts.FirstOrDefault(s => s.Status == "Run Now")?.Count ?? 0;
-            var blacklistedDueSoon = blacklistedStatusCounts.FirstOrDefault(s => s.Status == "Due Soon")?.Count ?? 0;
-            var blacklistedUpcoming = blacklistedStatusCounts.FirstOrDefault(s => s.Status == "Upcoming")?.Count ?? 0;
-            var blacklistedFuture = blacklistedStatusCounts.FirstOrDefault(s => s.Status == "Future")?.Count ?? 0;
-            
-            // Count blacklisted accounts with Missing historical status separately
-            var blacklistedMissing = await blacklistedAccountsQuery
-                .Where(a => a.HistoricalBillingStatus == "Missing")
-                .CountAsync();
+            var stats = await accountQuery
+                .GroupBy(a => 1)
+                .Select(g => new
+                {
+                    TotalAccounts = g.Count(),
+                    RunNow = g.Sum(a => a.NextRunStatus == "Run Now" ? 1 : 0),
+                    DueSoon = g.Sum(a => a.NextRunStatus == "Due Soon" ? 1 : 0),
+                    Upcoming = g.Sum(a => a.NextRunStatus == "Upcoming" ? 1 : 0),
+                    Future = g.Sum(a => a.NextRunStatus == "Future" ? 1 : 0),
+                    Missing = g.Sum(a => a.HistoricalBillingStatus == "Missing" ? 1 : 0),
+                    Blacklisted = g.Sum(a => a.IsCurrentlyBlacklisted ? 1 : 0),
+                    BlacklistedRunNow = g.Sum(a => a.IsCurrentlyBlacklisted && a.NextRunStatus == "Run Now" ? 1 : 0),
+                    BlacklistedDueSoon = g.Sum(a => a.IsCurrentlyBlacklisted && a.NextRunStatus == "Due Soon" ? 1 : 0),
+                    BlacklistedUpcoming = g.Sum(a => a.IsCurrentlyBlacklisted && a.NextRunStatus == "Upcoming" ? 1 : 0),
+                    BlacklistedFuture = g.Sum(a => a.IsCurrentlyBlacklisted && a.NextRunStatus == "Future" ? 1 : 0),
+                    BlacklistedMissing = g.Sum(a => a.IsCurrentlyBlacklisted && a.HistoricalBillingStatus == "Missing" ? 1 : 0)
+                })
+                .FirstOrDefaultAsync();
 
-            // PERFORMANCE: Count active jobs excluding blacklisted accounts
-            // Uses denormalized IsCurrentlyBlacklisted flag on AdrAccount
-            var blacklistedAccountIds = await blacklistedAccountsQuery
-                .Select(a => a.Id)
-                .ToListAsync();
-            
+            // Active jobs count (separate query since it's a different table)
             var activeStatuses = new[] { "Pending", "CredentialVerified", "ScrapeRequested" };
             var activeJobsExcludingBlacklisted = await _dbContext.AdrJobs
                 .Where(j => !j.IsDeleted && activeStatuses.Contains(j.Status))
-                .Where(j => !blacklistedAccountIds.Contains(j.AdrAccountId))
+                .Where(j => j.AdrAccount != null && !j.AdrAccount.IsCurrentlyBlacklisted)
                 .CountAsync();
+
+            var totalAccounts = stats?.TotalAccounts ?? 0;
+            var blacklistedCount = stats?.Blacklisted ?? 0;
 
             return Ok(new
             {
                 // Total accounts EXCLUDES blacklisted so it matches what clicking the tile shows
                 totalAccounts = totalAccounts - blacklistedCount,
-                runNowCount = rawRunNowCount - blacklistedRunNow,
-                dueSoonCount = rawDueSoonCount - blacklistedDueSoon,
-                upcomingCount = rawUpcomingCount - blacklistedUpcoming,
-                futureCount = rawFutureCount - blacklistedFuture,
-                missingCount = rawMissingCount - blacklistedMissing,
+                runNowCount = (stats?.RunNow ?? 0) - (stats?.BlacklistedRunNow ?? 0),
+                dueSoonCount = (stats?.DueSoon ?? 0) - (stats?.BlacklistedDueSoon ?? 0),
+                upcomingCount = (stats?.Upcoming ?? 0) - (stats?.BlacklistedUpcoming ?? 0),
+                futureCount = (stats?.Future ?? 0) - (stats?.BlacklistedFuture ?? 0),
+                missingCount = (stats?.Missing ?? 0) - (stats?.BlacklistedMissing ?? 0),
                 blacklistedCount,
                 overdueCount = 0, // Overdue is calculated based on ExpectedNextDateTime in the UI
                 activeJobsCount = activeJobsExcludingBlacklisted
@@ -2099,20 +2089,29 @@ public class AdrController : ControllerBase
             }
             else
             {
-                // Original behavior: count all jobs
-                totalCount = await _unitOfWork.AdrJobs.GetTotalCountAsync(adrAccountId);
-                pendingCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("Pending");
-                credentialCheckRequestedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("CredentialCheckRequested");
-                credentialCheckInProgressCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("CredentialCheckInProgress");
-                credentialVerifiedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("CredentialVerified");
-                credentialFailedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("CredentialFailed");
+                // PERFORMANCE: Single GroupBy query replaces 10 sequential COUNT queries.
+                var jobQuery = _dbContext.AdrJobs.Where(j => !j.IsDeleted);
+                if (adrAccountId.HasValue)
+                    jobQuery = jobQuery.Where(j => j.AdrAccountId == adrAccountId.Value);
+
+                var statusCounts = await jobQuery
+                    .GroupBy(j => j.Status)
+                    .Select(g => new { Status = g.Key, Count = g.Count() })
+                    .ToDictionaryAsync(x => x.Status ?? "", x => x.Count);
+
+                totalCount = statusCounts.Values.Sum();
+                pendingCount = statusCounts.TryGetValue("Pending", out var p2) ? p2 : 0;
+                credentialCheckRequestedCount = statusCounts.TryGetValue("CredentialCheckRequested", out var ccr2) ? ccr2 : 0;
+                credentialCheckInProgressCount = statusCounts.TryGetValue("CredentialCheckInProgress", out var ccip2) ? ccip2 : 0;
+                credentialVerifiedCount = statusCounts.TryGetValue("CredentialVerified", out var cv2) ? cv2 : 0;
+                credentialFailedCount = statusCounts.TryGetValue("CredentialFailed", out var cf2) ? cf2 : 0;
                 // Include StatusCheckInProgress in ScrapeRequested count - these are jobs mid-status-check
-                scrapeRequestedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("ScrapeRequested");
-                var statusCheckInProgressCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("StatusCheckInProgress");
-                scrapeRequestedCount += statusCheckInProgressCount;
-                completedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("Completed");
-                failedCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("Failed");
-                needsReviewCount = await _unitOfWork.AdrJobs.GetCountByStatusAsync("NeedsReview");
+                var sr2 = statusCounts.TryGetValue("ScrapeRequested", out var srVal2) ? srVal2 : 0;
+                var sci2 = statusCounts.TryGetValue("StatusCheckInProgress", out var sciVal2) ? sciVal2 : 0;
+                scrapeRequestedCount = sr2 + sci2;
+                completedCount = statusCounts.TryGetValue("Completed", out var c2) ? c2 : 0;
+                failedCount = statusCounts.TryGetValue("Failed", out var f2) ? f2 : 0;
+                needsReviewCount = statusCounts.TryGetValue("NeedsReview", out var nr2) ? nr2 : 0;
             }
 
             // Calculate phase breakdown counts

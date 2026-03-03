@@ -494,16 +494,15 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             // Report initial progress (0 of total)
             progressCallback?.Invoke(0, totalAccounts);
 
-            // PERFORMANCE OPTIMIZATION: Load blacklist entries once instead of N database queries
-            var blacklistEntries = await LoadBlacklistEntriesAsync("Download");
-            _logger.LogDebug("Loaded {Count} active blacklist entries for job creation", blacklistEntries.Count);
+            // PERFORMANCE: Use denormalized blacklist flags instead of loading blacklist entries
+            // and doing in-memory matching. Flags are updated during Account Sync.
 
             foreach (var account in dueAccountsList)
             {
                 try
                 {
-                    // Check if account is blacklisted before creating job (using cached entries)
-                    if (IsAccountBlacklistedCached(account, blacklistEntries))
+                    // Check if account is blacklisted using denormalized flag
+                    if (account.IsCurrentlyBlacklisted)
                     {
                         result.JobsSkipped++;
                         blacklistedCount++;
@@ -2868,8 +2867,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         {
             _logger.LogInformation("Starting weekly rebill processing for day of week: {DayOfWeek}", todayDayOfWeek);
 
-            // Load blacklist entries for filtering (both "All" and "Rebill" exclusion types)
-            var blacklistEntries = await LoadBlacklistEntriesAsync("Rebill");
+            // PERFORMANCE: Use denormalized blacklist flags instead of loading blacklist entries
 
             // Get accounts for rebill using optimized database query that filters by day of week
             // This avoids loading all 170k+ accounts into memory and filtering in-memory
@@ -2906,11 +2904,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 return result;
             }
 
-            // Filter out blacklisted accounts
+            // Filter out blacklisted accounts using denormalized flags
             var accountsToProcess = new List<AdrAccount>();
             foreach (var account in accountsForRebill)
             {
-                if (IsAccountBlacklistedCached(account, blacklistEntries))
+                if (account.IsCurrentlyBlacklisted)
                 {
                     result.AccountsSkipped++;
                     LogDetailedInfo("Skipping blacklisted account {VMAccountId} for rebill", account.VMAccountId);
