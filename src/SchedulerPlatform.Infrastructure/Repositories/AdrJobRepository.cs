@@ -193,16 +193,43 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             bool? isManualRequest = null,
             string? sortColumn = null,
             bool sortDescending = true,
-            List<int>? jobIds = null,
-            int? adrJobTypeId = null)
+            List<int>? includeAccountIds = null,
+            List<int>? excludeAccountIds = null,
+            int? adrJobTypeId = null,
+            DateTime? modifiedAfter = null,
+            DateTime? modifiedBefore = null,
+            string? orchestrationRequestId = null,
+            int? executionRequestTypeId = null,
+            bool? executionIsError = null,
+            string? blacklistStatus = null)
         {
             // Filter by both job.IsDeleted AND account.IsDeleted to exclude jobs for deleted accounts
             var query = _dbSet.Where(j => !j.IsDeleted && j.AdrAccount != null && !j.AdrAccount.IsDeleted);
             
-            // Filter by specific job IDs (used for blacklist filtering)
-            if (jobIds != null)
+            // Include only jobs belonging to specific accounts (used for blacklist "current"/"future"/"any" filtering)
+            if (includeAccountIds != null)
             {
-                query = query.Where(j => jobIds.Contains(j.Id));
+                query = query.Where(j => includeAccountIds.Contains(j.AdrAccountId));
+            }
+            
+            // Exclude jobs belonging to specific accounts (used for blacklist "none" filtering)
+            if (excludeAccountIds != null && excludeAccountIds.Count > 0)
+            {
+                query = query.Where(j => !excludeAccountIds.Contains(j.AdrAccountId));
+            }
+
+            // PERFORMANCE: Use denormalized blacklist flags directly in SQL WHERE clause
+            // via AdrAccount navigation property. This avoids loading account IDs into memory.
+            if (!string.IsNullOrWhiteSpace(blacklistStatus))
+            {
+                if (blacklistStatus == "none")
+                    query = query.Where(j => j.AdrAccount != null && !j.AdrAccount.IsCurrentlyBlacklisted);
+                else if (blacklistStatus == "current")
+                    query = query.Where(j => j.AdrAccount != null && j.AdrAccount.IsCurrentlyBlacklisted);
+                else if (blacklistStatus == "future")
+                    query = query.Where(j => j.AdrAccount != null && j.AdrAccount.IsFutureBlacklisted);
+                else if (blacklistStatus == "any")
+                    query = query.Where(j => j.AdrAccount != null && (j.AdrAccount.IsCurrentlyBlacklisted || j.AdrAccount.IsFutureBlacklisted));
             }
             
             // Filter by manual request status
@@ -221,16 +248,7 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
 
             if (!string.IsNullOrWhiteSpace(status))
             {
-                // "ScrapeRequested" is a status group that includes "StatusCheckInProgress"
-                // This matches the chart behavior which counts both statuses as "ADR Request Sent"
-                if (status == "ScrapeRequested")
-                {
-                    query = query.Where(j => j.Status == "ScrapeRequested" || j.Status == "StatusCheckInProgress");
-                }
-                else
-                {
-                    query = query.Where(j => j.Status == status);
-                }
+                query = query.Where(j => j.Status == status);
             }
 
             if (billingPeriodStart.HasValue)
@@ -282,6 +300,27 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             if (adrJobTypeId.HasValue)
             {
                 query = query.Where(j => j.AdrJobTypeId == adrJobTypeId.Value);
+            }
+
+            if (modifiedAfter.HasValue)
+            {
+                query = query.Where(j => j.ModifiedDateTime >= modifiedAfter.Value);
+            }
+
+            if (modifiedBefore.HasValue)
+            {
+                query = query.Where(j => j.ModifiedDateTime <= modifiedBefore.Value);
+            }
+
+            var hasExecutionFilter = !string.IsNullOrWhiteSpace(orchestrationRequestId) || executionRequestTypeId.HasValue || executionIsError.HasValue;
+            if (hasExecutionFilter)
+            {
+                query = query.Where(j => _context.AdrJobExecutions.Any(e =>
+                    e.AdrJobId == j.Id &&
+                    !e.IsDeleted &&
+                    (orchestrationRequestId == null || e.OrchestrationRequestId == orchestrationRequestId) &&
+                    (!executionRequestTypeId.HasValue || e.AdrRequestTypeId == executionRequestTypeId.Value) &&
+                    (!executionIsError.HasValue || e.IsError == executionIsError.Value)));
             }
 
             int totalCount;
@@ -406,14 +445,18 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             .CountAsync();
     }
 
-    public async Task<Dictionary<string, int>> GetCountsByStatusAndIdsAsync(HashSet<int> jobIds)
+    public async Task<Dictionary<string, int>> GetCountsByStatusAndIdsAsync(HashSet<int> jobIds, bool excludeBlacklisted = false)
     {
         if (!jobIds.Any())
             return new Dictionary<string, int>();
 
         // Single GROUP BY query instead of 7 separate COUNT queries
-        var results = await _dbSet
-            .Where(j => !j.IsDeleted && jobIds.Contains(j.Id))
+        var query = _dbSet.Where(j => !j.IsDeleted && jobIds.Contains(j.Id));
+        
+        if (excludeBlacklisted)
+            query = query.Where(j => !j.AdrAccount.IsCurrentlyBlacklisted);
+
+        var results = await query
             .GroupBy(j => j.Status)
             .Select(g => new { Status = g.Key, Count = g.Count() })
             .ToListAsync();

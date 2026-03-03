@@ -385,6 +385,7 @@ public class SchedulerDbContext : DbContext
             entity.Property(e => e.ErrorMessage).HasColumnType("nvarchar(max)");
             entity.Property(e => e.ApiResponse).HasColumnType("nvarchar(max)");
             entity.Property(e => e.RequestPayload).HasColumnType("nvarchar(max)");
+            entity.Property(e => e.OrchestrationRequestId).HasMaxLength(450);
             
             entity.HasOne(e => e.AdrJob)
                 .WithMany(j => j.AdrJobExecutions)
@@ -395,6 +396,7 @@ public class SchedulerDbContext : DbContext
             entity.HasIndex(e => e.StartDateTime);
             entity.HasIndex(e => e.AdrRequestTypeId);
             entity.HasIndex(e => e.IsSuccess);
+            entity.HasIndex(e => e.OrchestrationRequestId);
         });
 
         // ADR Orchestration Run entity configuration

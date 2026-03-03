@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg width="800px" height="800px" viewBox="0 0 16 16" version="1.1" xmlns="http://www.w3.org/2000/svg">
+<!-- Lines on left (main editor) - same as minimap-on -->
+<path fill="#444" d="M0 1h9v2h-9v-2z"></path>
+<path fill="#444" d="M0 5h9v2h-9v-2z"></path>
+<path fill="#444" d="M0 9h9v2h-9v-2z"></path>
+<path fill="#444" d="M0 13h9v2h-9v-2z"></path>
+<!-- Separator -->
+<path fill="#444" d="M10 0h0.5v16h-0.5v-16z"></path>
+<!-- Small dots on right (minimap) - same as minimap-on -->
+<path fill="#444" d="M12 1h4v1.5h-4v-1.5z"></path>
+<path fill="#444" d="M12 4h3v1.5h-3v-1.5z"></path>
+<path fill="#444" d="M12 7h4v1.5h-4v-1.5z"></path>
+<path fill="#444" d="M12 10h2.5v1.5h-2.5v-1.5z"></path>
+<!-- Bigger circle-X in lower-right to indicate minimap off -->
+<circle cx="13" cy="13" r="3" fill="#CC3333" stroke="#CC3333" stroke-width="0.5"></circle>
+<line x1="11.4" y1="11.4" x2="14.6" y2="14.6" stroke="#FFFFFF" stroke-width="1.3"></line>
+<line x1="14.6" y1="11.4" x2="11.4" y2="14.6" stroke="#FFFFFF" stroke-width="1.3"></line>
+</svg>

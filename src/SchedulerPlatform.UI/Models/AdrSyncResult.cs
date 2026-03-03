@@ -195,10 +195,23 @@ public class AdrOrchestrationStatus
     public RebillResult? RebillResult { get; set; }
     public ScrapeResult? ScrapeResult { get; set; }
     public StatusCheckResult? StatusCheckResult { get; set; }
+    public BulkCredentialVerificationResult? BulkCredentialVerificationResult { get; set; }
 }
 
 public class BlacklistCountsResult
 {
     public int CurrentCount { get; set; }
     public int FutureCount { get; set; }
+    public int CurrentAccountCount { get; set; }
+    public int FutureAccountCount { get; set; }
+}
+
+public class BulkCredentialVerificationResult
+{
+    public int AccountsProcessed { get; set; }
+    public int CredentialsVerified { get; set; }
+    public int CredentialsFailed { get; set; }
+    public int Errors { get; set; }
+    public List<string> ErrorMessages { get; set; } = new();
+    public TimeSpan Duration { get; set; }
 }
