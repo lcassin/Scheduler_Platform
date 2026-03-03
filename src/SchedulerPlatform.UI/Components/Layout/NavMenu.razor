@@ -21,11 +21,11 @@
             {
                 @if (report.OpenInNewTab)
                 {
-                    <MudNavLink Icon="@CustomIcons.OpenInNewTab" OnClick="@(() => OpenReportInNewTab(report.Url))">@report.Name</MudNavLink>
+                    <MudNavLink Icon="@CustomIcons.PowerBiReportList" OnClick="@(() => OpenReportInNewTab(report.Url))">@report.Name</MudNavLink>
                 }
                 else
                 {
-                    <MudNavLink Href="@report.Url" Icon="@CustomIcons.Assessment">@report.Name</MudNavLink>
+                    <MudNavLink Href="@report.Url" Icon="@CustomIcons.PowerBiReportList">@report.Name</MudNavLink>
                 }
             }
         </MudNavGroup>
