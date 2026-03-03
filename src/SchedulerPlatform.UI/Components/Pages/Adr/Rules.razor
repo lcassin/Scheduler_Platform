@@ -348,7 +348,7 @@
 
     private async Task ClearOverride(AccountRuleModel rule)
     {
-        var confirmed = await DialogService.ShowMessageBox(
+        var confirmed = await DialogService.ShowMessageBoxAsync(
             "Clear Override",
             $"Are you sure you want to clear the manual override for this rule? The rule will be updated by the next account sync.",
             yesText: "Clear Override",

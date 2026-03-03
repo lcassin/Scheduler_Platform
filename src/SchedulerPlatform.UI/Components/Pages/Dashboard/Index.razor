@@ -917,7 +917,7 @@
 
     private int _selectedTimeWindow = 24;
     private JobStatus _selectedStatusesValue;
-        private IEnumerable<JobStatus>? _selectedStatusesBackingField = null;
+        private IReadOnlyCollection<JobStatus>? _selectedStatusesBackingField = null;
     
                 private bool _overviewLoading;
                 private bool _statusLoading;
@@ -948,12 +948,12 @@
                 private string[] _adrJobChartColors = Array.Empty<string>();
                 private string[] _adrJobChartCustomData = Array.Empty<string>();
     
-        private IEnumerable<JobStatus>? SelectedStatuses
+        private IReadOnlyCollection<JobStatus>? SelectedStatuses
     {
         get => _selectedStatusesBackingField;
         set
         {
-            _selectedStatusesBackingField = value?.Any() == true ? value : null;
+            _selectedStatusesBackingField = value?.Any() == true ? value.ToList().AsReadOnly() : null;
             _ = InvokeAsync(RefreshData);
         }
     }

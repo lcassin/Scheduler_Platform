@@ -318,7 +318,7 @@
 
         private async Task DeleteJobType(JobTypeModel jobType)
         {
-            var result = await DialogService.ShowMessageBox(
+            var result = await DialogService.ShowMessageBoxAsync(
                 "Delete Job Type",
                 $"Are you sure you want to delete the job type '{jobType.Name}'? This action cannot be undone.",
                 yesText: "Delete",
