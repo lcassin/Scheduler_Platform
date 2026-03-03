@@ -338,7 +338,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="Font family:" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="FontFamilyCombo" Grid.Column="1">
+                            <ComboBox x:Name="FontFamilyCombo" Grid.Column="1" SelectionChanged="FontFamilyCombo_SelectionChanged">
                                 <ComboBoxItem Content="Consolas"/>
                                 <ComboBoxItem Content="Cascadia Code"/>
                                 <ComboBoxItem Content="Cascadia Mono"/>
@@ -356,8 +356,8 @@
                                 <ColumnDefinition Width="80"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="Font size:" Style="{StaticResource FieldLabel}"/>
-                            <TextBox x:Name="FontSizeTextBox" Grid.Column="1" Text="14"
-                                     PreviewTextInput="NumericOnly_PreviewTextInput"/>
+                                                        <TextBox x:Name="FontSizeTextBox" Grid.Column="1" Text="14"
+                                                                 PreviewTextInput="NumericOnly_PreviewTextInput" TextChanged="FontSizeTextBox_TextChanged"/>
                         </Grid>
 
                         <!-- Font Preview -->
