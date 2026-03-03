@@ -1866,6 +1866,7 @@ public class AdrController : ControllerBase
             {
                 // If filtering by blacklist status, we need to get the job IDs first
                 List<int>? jobIdsWithBlacklistStatus = null;
+                List<int>? excludeBlacklistedJobIds = null;
                 if (!string.IsNullOrWhiteSpace(blacklistStatus))
                 {
                     var filterToday = DateTime.UtcNow.Date;
@@ -1881,7 +1882,27 @@ public class AdrController : ControllerBase
                         .Select(j => new { j.Id, j.PrimaryVendorCode, j.VMAccountId, j.VMAccountNumber, j.CredentialId, AccountPrimaryVendorCode = j.AdrAccount != null ? j.AdrAccount.PrimaryVendorCode : null })
                         .ToListAsync();
                     
-                    if (blacklistStatus == "current")
+                    if (blacklistStatus == "none")
+                    {
+                        // Exclude currently-blacklisted jobs
+                        excludeBlacklistedJobIds = allJobs
+                            .Where(j => activeBlacklistsForFilter.Any(b =>
+                            {
+                                var jobPrimaryVendorCode = !string.IsNullOrEmpty(j.PrimaryVendorCode) ? j.PrimaryVendorCode : j.AccountPrimaryVendorCode;
+                                var matches = (!string.IsNullOrEmpty(b.PrimaryVendorCode) && b.PrimaryVendorCode == jobPrimaryVendorCode) ||
+                                              (b.VMAccountId.HasValue && b.VMAccountId == j.VMAccountId) ||
+                                              (!string.IsNullOrEmpty(b.VMAccountNumber) && b.VMAccountNumber == j.VMAccountNumber) ||
+                                              (b.CredentialId.HasValue && b.CredentialId == j.CredentialId);
+                                if (!matches) return false;
+                                
+                                var isCurrent = (!b.EffectiveStartDate.HasValue || b.EffectiveStartDate.Value <= filterToday) &&
+                                               (!b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= filterToday);
+                                return isCurrent;
+                            }))
+                            .Select(j => j.Id)
+                            .ToList();
+                    }
+                    else if (blacklistStatus == "current")
                     {
                         // Get jobs that are currently blacklisted
                         jobIdsWithBlacklistStatus = allJobs
@@ -1955,6 +1976,7 @@ public class AdrController : ControllerBase
                     sortColumn,
                     sortDescending,
                     jobIdsWithBlacklistStatus,
+                    excludeBlacklistedJobIds,
                     adrJobTypeId,
                     modifiedAfter,
                     modifiedBefore,
