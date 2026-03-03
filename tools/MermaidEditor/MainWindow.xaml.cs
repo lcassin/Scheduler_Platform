@@ -5666,7 +5666,14 @@ Console.WriteLine(""Hello, World!"");
                    "- Click-to-navigate between preview and code\n" +
                    "- Navigation dropdown for quick section jumping\n" +
                    "- Export to PNG, SVG, EMF, and Word\n" +
-                   "- Word export embeds images for Markdown files\n" +
+                   "- Save to PDF via Print Preview\n" +
+                   "- Auto-save with session restore\n" +
+                   "- Spell check with suggestions (markdown)\n" +
+                   "- Table generator dialog (markdown)\n" +
+                   "- Ask AI chat with file attachments\n" +
+                   "- Settings/Configuration with theme support\n" +
+                   "- Bracket matching and minimap\n" +
+                   "- Custom SVG toolbar icons\n" +
                    "- New document templates for all diagram types\n" +
                    "- File browser with preview on selection\n" +
                    "- Drag and drop file support\n" +
