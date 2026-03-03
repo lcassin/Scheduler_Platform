@@ -338,7 +338,7 @@
                                                                 </MudTd>
             </RowTemplate>
                         <NoRecordsContent>
-                            @if (_loading)
+                            @if (!_initialLoadComplete)
                             {
                                 <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
                             }
@@ -369,6 +369,7 @@
 @code {
     private MudTable<AdrJob> _table = null!;
     private bool _loading = true;
+    private bool _initialLoadComplete = false;
     private bool _isExporting = false;
     private bool _isRefiring = false;
     private bool _forceRefire = false;
@@ -565,6 +566,7 @@
         finally
         {
             _loading = false;
+            _initialLoadComplete = true;
         }
     }
 
