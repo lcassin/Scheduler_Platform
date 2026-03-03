@@ -194,7 +194,7 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             string? sortColumn = null,
             bool sortDescending = true,
             List<int>? jobIds = null,
-            List<int>? excludeJobIds = null,
+            List<int>? excludeAccountIds = null,
             int? adrJobTypeId = null,
             DateTime? modifiedAfter = null,
             DateTime? modifiedBefore = null,
@@ -211,10 +211,10 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                 query = query.Where(j => jobIds.Contains(j.Id));
             }
             
-            // Exclude specific job IDs (used for blacklist "none" filtering - exclude these)
-            if (excludeJobIds != null && excludeJobIds.Count > 0)
+            // Exclude jobs belonging to specific accounts (used for blacklist "none" filtering)
+            if (excludeAccountIds != null && excludeAccountIds.Count > 0)
             {
-                query = query.Where(j => !excludeJobIds.Contains(j.Id));
+                query = query.Where(j => !excludeAccountIds.Contains(j.AdrAccountId));
             }
             
             // Filter by manual request status
