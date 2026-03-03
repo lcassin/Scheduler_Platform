@@ -623,9 +623,22 @@ public class AdrController : ControllerBase
                 .Where(a => a.HistoricalBillingStatus == "Missing")
                 .CountAsync();
 
+            // PERFORMANCE: Count active jobs excluding blacklisted accounts
+            // Uses denormalized IsCurrentlyBlacklisted flag on AdrAccount
+            var blacklistedAccountIds = await blacklistedAccountsQuery
+                .Select(a => a.Id)
+                .ToListAsync();
+            
+            var activeStatuses = new[] { "Pending", "CredentialVerified", "ScrapeRequested" };
+            var activeJobsExcludingBlacklisted = await _dbContext.AdrJobs
+                .Where(j => !j.IsDeleted && activeStatuses.Contains(j.Status))
+                .Where(j => !blacklistedAccountIds.Contains(j.AdrAccountId))
+                .CountAsync();
+
             return Ok(new
             {
-                totalAccounts,
+                // Total accounts EXCLUDES blacklisted so it matches what clicking the tile shows
+                totalAccounts = totalAccounts - blacklistedCount,
                 runNowCount = rawRunNowCount - blacklistedRunNow,
                 dueSoonCount = rawDueSoonCount - blacklistedDueSoon,
                 upcomingCount = rawUpcomingCount - blacklistedUpcoming,
@@ -633,7 +646,7 @@ public class AdrController : ControllerBase
                 missingCount = rawMissingCount - blacklistedMissing,
                 blacklistedCount,
                 overdueCount = 0, // Overdue is calculated based on ExpectedNextDateTime in the UI
-                activeJobsCount
+                activeJobsCount = activeJobsExcludingBlacklisted
             });
         }
         catch (Exception ex)
