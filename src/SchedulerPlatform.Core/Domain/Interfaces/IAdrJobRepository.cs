@@ -28,7 +28,7 @@ public interface IAdrJobRepository : IRepository<AdrJob>
                 bool? isManualRequest = null,
                 string? sortColumn = null,
                 bool sortDescending = true,
-                List<int>? jobIds = null,
+                List<int>? includeAccountIds = null,
                 List<int>? excludeAccountIds = null,
                 int? adrJobTypeId = null,
                 DateTime? modifiedAfter = null,

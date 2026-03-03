@@ -1842,19 +1842,17 @@ public class AdrController : ControllerBase
             try
             {
                 // If filtering by blacklist status, match at account level (not job level)
-                // to avoid loading all jobs into memory. Account-level matching is much faster.
-                List<int>? jobIdsWithBlacklistStatus = null;
-                List<int>? excludeBlacklistedAccountIds = null;
+                // Pass only account IDs to the repository - never convert to job IDs (too many)
+                List<int>? includeAccountIds = null;
+                List<int>? excludeAccountIds = null;
                 if (!string.IsNullOrWhiteSpace(blacklistStatus))
                 {
                     var filterToday = DateTime.UtcNow.Date;
                     
-                    // Use SQL subquery to find blacklisted account IDs efficiently
-                    // This runs entirely in SQL - no need to load all accounts/jobs into memory
                     if (blacklistStatus == "none")
                     {
                         // Get account IDs that are currently blacklisted (to exclude their jobs)
-                        excludeBlacklistedAccountIds = await _dbContext.AdrAccounts
+                        excludeAccountIds = await _dbContext.AdrAccounts
                             .Where(a => !a.IsDeleted)
                             .Where(a => _dbContext.AdrAccountBlacklists.Any(b =>
                                 !b.IsDeleted && b.IsActive &&
@@ -1872,7 +1870,7 @@ public class AdrController : ControllerBase
                     else if (blacklistStatus == "current")
                     {
                         // Get account IDs that are currently blacklisted (to include only their jobs)
-                        var blacklistedAccountIds = await _dbContext.AdrAccounts
+                        includeAccountIds = await _dbContext.AdrAccounts
                             .Where(a => !a.IsDeleted)
                             .Where(a => _dbContext.AdrAccountBlacklists.Any(b =>
                                 !b.IsDeleted && b.IsActive &&
@@ -1886,17 +1884,11 @@ public class AdrController : ControllerBase
                                 )))
                             .Select(a => a.Id)
                             .ToListAsync();
-                        
-                        // Get job IDs for these blacklisted accounts
-                        jobIdsWithBlacklistStatus = await _dbContext.AdrJobs
-                            .Where(j => !j.IsDeleted && blacklistedAccountIds.Contains(j.AdrAccountId))
-                            .Select(j => j.Id)
-                            .ToListAsync();
                     }
                     else if (blacklistStatus == "future")
                     {
                         // Get account IDs that have a future blacklist scheduled
-                        var futureBlacklistedAccountIds = await _dbContext.AdrAccounts
+                        includeAccountIds = await _dbContext.AdrAccounts
                             .Where(a => !a.IsDeleted)
                             .Where(a => _dbContext.AdrAccountBlacklists.Any(b =>
                                 !b.IsDeleted && b.IsActive &&
@@ -1909,16 +1901,11 @@ public class AdrController : ControllerBase
                                 )))
                             .Select(a => a.Id)
                             .ToListAsync();
-                        
-                        jobIdsWithBlacklistStatus = await _dbContext.AdrJobs
-                            .Where(j => !j.IsDeleted && futureBlacklistedAccountIds.Contains(j.AdrAccountId))
-                            .Select(j => j.Id)
-                            .ToListAsync();
                     }
                     else if (blacklistStatus == "any")
                     {
                         // Get account IDs that have any blacklist (current or future)
-                        var anyBlacklistedAccountIds = await _dbContext.AdrAccounts
+                        includeAccountIds = await _dbContext.AdrAccounts
                             .Where(a => !a.IsDeleted)
                             .Where(a => _dbContext.AdrAccountBlacklists.Any(b =>
                                 !b.IsDeleted && b.IsActive &&
@@ -1930,11 +1917,6 @@ public class AdrController : ControllerBase
                                     (b.CredentialId.HasValue && b.CredentialId == a.CredentialId)
                                 )))
                             .Select(a => a.Id)
-                            .ToListAsync();
-                        
-                        jobIdsWithBlacklistStatus = await _dbContext.AdrJobs
-                            .Where(j => !j.IsDeleted && anyBlacklistedAccountIds.Contains(j.AdrAccountId))
-                            .Select(j => j.Id)
                             .ToListAsync();
                     }
                 }
@@ -1956,8 +1938,8 @@ public class AdrController : ControllerBase
                     isManualRequest,
                     sortColumn,
                     sortDescending,
-                    jobIdsWithBlacklistStatus,
-                    excludeBlacklistedAccountIds,
+                    includeAccountIds,
+                    excludeAccountIds,
                     adrJobTypeId,
                     modifiedAfter,
                     modifiedBefore,
