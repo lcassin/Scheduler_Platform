@@ -334,41 +334,12 @@ public class BackgroundExportService : BackgroundService
             })
             .ToListAsync(cancellationToken);
 
-        // Get blacklist status
-        var today = DateTime.UtcNow.Date;
-        var activeBlacklists = await dbContext.AdrAccountBlacklists
-            .Where(b => !b.IsDeleted && b.IsActive)
-            .Where(b => !b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= today)
-            .ToListAsync(cancellationToken);
-
-        var blacklistStatusLookup = new Dictionary<int, (bool HasCurrent, bool HasFuture)>();
-        foreach (var item in exportData)
-        {
-            var account = item.Account;
-            var matchingBlacklists = activeBlacklists.Where(b =>
-            {
-                if (!string.IsNullOrEmpty(b.MasterVendorCode) && b.MasterVendorCode == account.MasterVendorCode)
-                    return true;
-                if (!string.IsNullOrEmpty(b.PrimaryVendorCode) && b.PrimaryVendorCode == account.PrimaryVendorCode)
-                    return true;
-                if (b.VMAccountId.HasValue && b.VMAccountId == account.VMAccountId)
-                    return true;
-                if (!string.IsNullOrEmpty(b.VMAccountNumber) && b.VMAccountNumber == account.VMAccountNumber)
-                    return true;
-                if (b.CredentialId.HasValue && b.CredentialId == account.CredentialId)
-                    return true;
-                return false;
-            }).ToList();
-
-            var hasCurrent = matchingBlacklists
-                .Any(b => (!b.EffectiveStartDate.HasValue || b.EffectiveStartDate.Value <= today) &&
-                          (!b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= today));
-
-            var hasFuture = matchingBlacklists
-                .Any(b => b.EffectiveStartDate.HasValue && b.EffectiveStartDate.Value > today);
-
-            blacklistStatusLookup[account.Id] = (hasCurrent, hasFuture);
-        }
+        // PERFORMANCE: Use denormalized blacklist flags from AdrAccount instead of loading
+        // all blacklist entries into memory and doing in-memory matching.
+        // Flags are updated during Account Sync.
+        var blacklistStatusLookup = exportData.ToDictionary(
+            item => item.Account.Id,
+            item => (HasCurrent: item.Account.IsCurrentlyBlacklisted, HasFuture: item.Account.IsFutureBlacklisted));
 
         var headers = new[] { "Account #", "VM Account ID", "Interface Account ID", "Client", "Master Vendor Code", "Primary Vendor Code", "Period Type", "Next Run", "Run Status", "Job Status", "Last Completed", "Historical Status", "Last Invoice", "Expected Next", "Account Overridden", "Account Overridden By", "Account Overridden Date", "Rule Overridden", "Rule Overridden By", "Rule Overridden Date", "Current Blacklist", "Future Blacklist" };
 
