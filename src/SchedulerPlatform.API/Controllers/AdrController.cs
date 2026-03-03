@@ -617,15 +617,12 @@ public class AdrController : ControllerBase
                 .CountAsync();
 
             // PERFORMANCE: Count active jobs excluding blacklisted accounts
-            // Uses denormalized IsCurrentlyBlacklisted flag on AdrAccount
-            var blacklistedAccountIds = await blacklistedAccountsQuery
-                .Select(a => a.Id)
-                .ToListAsync();
-            
+            // Uses denormalized IsCurrentlyBlacklisted flag via AdrAccount navigation property
+            // directly in SQL — no account IDs loaded into memory.
             var activeStatuses = new[] { "Pending", "CredentialVerified", "ScrapeRequested" };
             var activeJobsExcludingBlacklisted = await _dbContext.AdrJobs
                 .Where(j => !j.IsDeleted && activeStatuses.Contains(j.Status))
-                .Where(j => !blacklistedAccountIds.Contains(j.AdrAccountId))
+                .Where(j => j.AdrAccount != null && !j.AdrAccount.IsCurrentlyBlacklisted)
                 .CountAsync();
 
             return Ok(new
