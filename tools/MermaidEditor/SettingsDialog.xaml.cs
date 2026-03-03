@@ -181,6 +181,16 @@ public partial class SettingsDialog : Window
         }
     }
 
+    private void FontFamilyCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        UpdateFontPreview();
+    }
+
+    private void FontSizeTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        UpdateFontPreview();
+    }
+
     private void NumericOnly_PreviewTextInput(object sender, TextCompositionEventArgs e)
     {
         e.Handled = !e.Text.All(char.IsDigit);
