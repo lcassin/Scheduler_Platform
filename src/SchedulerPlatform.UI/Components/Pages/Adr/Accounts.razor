@@ -934,7 +934,7 @@
         
         var rule = rules.First();
         
-        var confirmed = await DialogService.ShowMessageBox(
+        var confirmed = await DialogService.ShowMessageBoxAsync(
             "Clear Override",
             $"Are you sure you want to clear the manual override for account {account.VMAccountNumber}? The next sync will update rule data from the external source.",
             yesText: "Clear Override",

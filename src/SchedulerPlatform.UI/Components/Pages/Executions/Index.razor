@@ -304,7 +304,7 @@
 
     private async Task CancelExecution(JobExecution execution)
     {
-        bool? result = await DialogService.ShowMessageBox(
+        bool? result = await DialogService.ShowMessageBoxAsync(
             "Cancel Job Execution", 
             $"Are you sure you want to cancel the running job '{execution.ScheduleName}'?",
             yesText: "Cancel Job", 

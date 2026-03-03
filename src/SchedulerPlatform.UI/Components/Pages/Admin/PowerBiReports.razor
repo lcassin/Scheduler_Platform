@@ -337,7 +337,7 @@
 
     private async Task DeleteReport(PowerBiReportAdminDto report)
     {
-        var result = await DialogService.ShowMessageBox(
+        var result = await DialogService.ShowMessageBoxAsync(
             "Delete Report",
             $"Are you sure you want to delete the report '{report.Name}'? This action cannot be undone.",
             yesText: "Delete",

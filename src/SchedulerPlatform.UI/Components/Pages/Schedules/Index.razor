@@ -609,7 +609,7 @@
 	{
 		if (!_selectedIds.Any()) return;
 
-		var confirmed = await DialogService.ShowMessageBox(
+		var confirmed = await DialogService.ShowMessageBoxAsync(
 			"Re-run Selected Schedules",
 			$"Are you sure you want to re-run {_selectedIds.Count} schedule(s)? They will be executed with a {_delayMs}ms delay between each.",
 			yesText: "Re-run All", cancelText: "Cancel");
@@ -740,7 +740,7 @@
 
 	private async Task TriggerSchedule(Schedule schedule)
 	{
-		var confirmed = await DialogService.ShowMessageBox(
+		var confirmed = await DialogService.ShowMessageBoxAsync(
 			"Trigger Schedule",
 			$"Are you sure you want to trigger '{schedule.Name}' now?",
 			yesText: "Trigger", cancelText: "Cancel");
@@ -761,7 +761,7 @@
 
 	private async Task DeleteSchedule(Schedule schedule)
 	{
-		var confirmed = await DialogService.ShowMessageBox(
+		var confirmed = await DialogService.ShowMessageBoxAsync(
 			"Delete Schedule",
 			$"Are you sure you want to delete '{schedule.Name}'? This action cannot be undone.",
 			yesText: "Delete", cancelText: "Cancel");
