@@ -42,6 +42,10 @@ public class AdrAccount
     public string? RuleOverriddenBy { get; set; }
     public DateTime? RuleOverriddenDateTime { get; set; }
     
+    // Denormalized blacklist flags (from AdrAccount table, updated during sync)
+    public bool IsCurrentlyBlacklisted { get; set; }
+    public bool IsFutureBlacklisted { get; set; }
+    
     // Blacklist status fields - populated from matching blacklist entries
     public bool HasCurrentBlacklist { get; set; }
     public bool HasFutureBlacklist { get; set; }

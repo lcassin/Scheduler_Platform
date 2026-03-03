@@ -275,7 +275,12 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             
             progressCallback?.Invoke(totalAccountCount, totalAccountCount);
 
-            // Step 5: Sync AdrAccountRules using lightweight scheduling data
+            // Step 5: Update blacklist flags on active (non-deleted) accounts
+            // This runs AFTER we have determined the true active accounts (after deletion phase)
+            // so that only active accounts get flagged. Deleted/inactive accounts are skipped.
+            await UpdateBlacklistFlagsAsync(subStepCallback, cancellationToken);
+
+            // Step 6: Sync AdrAccountRules using lightweight scheduling data
             // PERFORMANCE OPTIMIZATION: Detach account entities from change tracker before rule sync
             var accountsList = existingAccounts.Values.ToList();
             foreach (var account in accountsList)
@@ -658,6 +663,76 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
 
         _logger.LogInformation("Rule sync completed. Created: {Created}, Updated: {Updated}, Skipped (overridden): {Skipped}",
             result.RulesCreated, result.RulesUpdated, result.RulesSkippedOverridden);
+    }
+
+    /// <summary>
+    /// Updates IsCurrentlyBlacklisted and IsFutureBlacklisted flags on all active (non-deleted) accounts
+    /// using raw SQL for maximum performance. This runs as a sub-step during Account Sync,
+    /// AFTER determining the true active accounts (deletion phase is complete).
+    /// Uses the same matching logic as the blacklist page but executes server-side in SQL.
+    /// </summary>
+    private async Task UpdateBlacklistFlagsAsync(
+        Action<string, int, int>? subStepCallback,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Starting blacklist flag update");
+        subStepCallback?.Invoke("Updating blacklist flags", 0, 4);
+
+        var today = DateTime.UtcNow.Date;
+
+        // Step 1: Reset all flags to false first (clean slate)
+        var resetSql = "UPDATE [AdrAccount] SET [IsCurrentlyBlacklisted] = 0, [IsFutureBlacklisted] = 0";
+        var resetCount = await _dbContext.Database.ExecuteSqlRawAsync(resetSql, cancellationToken);
+        _logger.LogDebug("Reset blacklist flags on {Count} accounts", resetCount);
+        subStepCallback?.Invoke("Updating blacklist flags", 1, 4);
+
+        // Step 2: Set IsCurrentlyBlacklisted for active accounts matching current blacklist entries
+        var currentSql = @"
+            UPDATE a
+            SET a.[IsCurrentlyBlacklisted] = 1
+            FROM [AdrAccount] a
+            WHERE a.[IsDeleted] = 0
+              AND EXISTS (
+                SELECT 1 FROM [AdrAccountBlacklist] b
+                WHERE b.[IsDeleted] = 0 AND b.[IsActive] = 1
+                  AND (b.[EffectiveStartDate] IS NULL OR b.[EffectiveStartDate] <= {0})
+                  AND (b.[EffectiveEndDate] IS NULL OR b.[EffectiveEndDate] >= {0})
+                  AND (
+                    (b.[PrimaryVendorCode] IS NOT NULL AND b.[PrimaryVendorCode] <> '' AND b.[PrimaryVendorCode] = a.[PrimaryVendorCode])
+                    OR (b.[VMAccountId] IS NOT NULL AND b.[VMAccountId] = a.[VMAccountId])
+                    OR (b.[VMAccountNumber] IS NOT NULL AND b.[VMAccountNumber] <> '' AND b.[VMAccountNumber] = a.[VMAccountNumber])
+                    OR (b.[CredentialId] IS NOT NULL AND b.[CredentialId] = a.[CredentialId])
+                  )
+              )";
+        var currentCount = await _dbContext.Database.ExecuteSqlRawAsync(currentSql, new object[] { today }, cancellationToken);
+        _logger.LogInformation("Set IsCurrentlyBlacklisted on {Count} accounts", currentCount);
+        subStepCallback?.Invoke("Updating blacklist flags", 2, 4);
+
+        // Step 3: Set IsFutureBlacklisted for active accounts matching future blacklist entries
+        var futureSql = @"
+            UPDATE a
+            SET a.[IsFutureBlacklisted] = 1
+            FROM [AdrAccount] a
+            WHERE a.[IsDeleted] = 0
+              AND EXISTS (
+                SELECT 1 FROM [AdrAccountBlacklist] b
+                WHERE b.[IsDeleted] = 0 AND b.[IsActive] = 1
+                  AND b.[EffectiveStartDate] IS NOT NULL AND b.[EffectiveStartDate] > {0}
+                  AND (
+                    (b.[PrimaryVendorCode] IS NOT NULL AND b.[PrimaryVendorCode] <> '' AND b.[PrimaryVendorCode] = a.[PrimaryVendorCode])
+                    OR (b.[VMAccountId] IS NOT NULL AND b.[VMAccountId] = a.[VMAccountId])
+                    OR (b.[VMAccountNumber] IS NOT NULL AND b.[VMAccountNumber] <> '' AND b.[VMAccountNumber] = a.[VMAccountNumber])
+                    OR (b.[CredentialId] IS NOT NULL AND b.[CredentialId] = a.[CredentialId])
+                  )
+              )";
+        var futureCount = await _dbContext.Database.ExecuteSqlRawAsync(futureSql, new object[] { today }, cancellationToken);
+        _logger.LogInformation("Set IsFutureBlacklisted on {Count} accounts", futureCount);
+        subStepCallback?.Invoke("Updating blacklist flags", 3, 4);
+
+        // Step 4: Done
+        subStepCallback?.Invoke("Updating blacklist flags", 4, 4);
+        _logger.LogInformation("Blacklist flag update completed. Currently blacklisted: {Current}, Future blacklisted: {Future}",
+            currentCount, futureCount);
     }
 
     /// <summary>
