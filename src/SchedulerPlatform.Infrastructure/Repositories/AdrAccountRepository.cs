@@ -55,7 +55,8 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
         DateTime? modifiedBefore = null,
         DateTime? createdAfter = null,
         DateTime? createdBefore = null,
-        List<int>? excludeAccountIds = null)
+        List<int>? excludeAccountIds = null,
+        string? blacklistStatus = null)
     {
         var query = _dbSet.Where(a => !a.IsDeleted);
 
@@ -134,6 +135,20 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
         if (excludeAccountIds != null && excludeAccountIds.Count > 0)
         {
             query = query.Where(a => !excludeAccountIds.Contains(a.Id));
+        }
+
+        // PERFORMANCE: Use denormalized blacklist flags directly in SQL WHERE clause.
+        // This avoids loading account IDs into memory and passing them as parameters.
+        if (!string.IsNullOrWhiteSpace(blacklistStatus))
+        {
+            if (blacklistStatus == "none")
+                query = query.Where(a => !a.IsCurrentlyBlacklisted);
+            else if (blacklistStatus == "current")
+                query = query.Where(a => a.IsCurrentlyBlacklisted);
+            else if (blacklistStatus == "future")
+                query = query.Where(a => a.IsFutureBlacklisted);
+            else if (blacklistStatus == "any")
+                query = query.Where(a => a.IsCurrentlyBlacklisted || a.IsFutureBlacklisted);
         }
 
         var totalCount = await query.CountAsync();

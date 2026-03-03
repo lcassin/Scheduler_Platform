@@ -200,7 +200,8 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             DateTime? modifiedBefore = null,
             string? orchestrationRequestId = null,
             int? executionRequestTypeId = null,
-            bool? executionIsError = null)
+            bool? executionIsError = null,
+            string? blacklistStatus = null)
         {
             // Filter by both job.IsDeleted AND account.IsDeleted to exclude jobs for deleted accounts
             var query = _dbSet.Where(j => !j.IsDeleted && j.AdrAccount != null && !j.AdrAccount.IsDeleted);
@@ -215,6 +216,20 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             if (excludeAccountIds != null && excludeAccountIds.Count > 0)
             {
                 query = query.Where(j => !excludeAccountIds.Contains(j.AdrAccountId));
+            }
+
+            // PERFORMANCE: Use denormalized blacklist flags directly in SQL WHERE clause
+            // via AdrAccount navigation property. This avoids loading account IDs into memory.
+            if (!string.IsNullOrWhiteSpace(blacklistStatus))
+            {
+                if (blacklistStatus == "none")
+                    query = query.Where(j => j.AdrAccount != null && !j.AdrAccount.IsCurrentlyBlacklisted);
+                else if (blacklistStatus == "current")
+                    query = query.Where(j => j.AdrAccount != null && j.AdrAccount.IsCurrentlyBlacklisted);
+                else if (blacklistStatus == "future")
+                    query = query.Where(j => j.AdrAccount != null && j.AdrAccount.IsFutureBlacklisted);
+                else if (blacklistStatus == "any")
+                    query = query.Where(j => j.AdrAccount != null && (j.AdrAccount.IsCurrentlyBlacklisted || j.AdrAccount.IsFutureBlacklisted));
             }
             
             // Filter by manual request status

@@ -151,45 +151,9 @@ public class AdrController : ControllerBase
                 }
             }
             
-            // PERFORMANCE: Use denormalized blacklist flags instead of expensive blacklist table subqueries.
-            // Flags are updated during Account Sync.
-            List<int>? accountIdsWithBlacklistStatus = null;
-            List<int>? excludeBlacklistedAccountIds = null;
-            if (!string.IsNullOrWhiteSpace(blacklistStatus))
-            {
-                if (blacklistStatus == "current")
-                {
-                    // Get accounts that are currently blacklisted
-                    accountIdsWithBlacklistStatus = await _dbContext.AdrAccounts
-                        .Where(a => !a.IsDeleted && a.IsCurrentlyBlacklisted)
-                        .Select(a => a.Id)
-                        .ToListAsync();
-                }
-                else if (blacklistStatus == "future")
-                {
-                    // Get accounts that have a future blacklist scheduled
-                    accountIdsWithBlacklistStatus = await _dbContext.AdrAccounts
-                        .Where(a => !a.IsDeleted && a.IsFutureBlacklisted)
-                        .Select(a => a.Id)
-                        .ToListAsync();
-                }
-                else if (blacklistStatus == "any")
-                {
-                    // Get accounts that have any blacklist (current or future)
-                    accountIdsWithBlacklistStatus = await _dbContext.AdrAccounts
-                        .Where(a => !a.IsDeleted && (a.IsCurrentlyBlacklisted || a.IsFutureBlacklisted))
-                        .Select(a => a.Id)
-                        .ToListAsync();
-                }
-                else if (blacklistStatus == "none")
-                {
-                    // Get currently-blacklisted account IDs to exclude
-                    excludeBlacklistedAccountIds = await _dbContext.AdrAccounts
-                        .Where(a => !a.IsDeleted && a.IsCurrentlyBlacklisted)
-                        .Select(a => a.Id)
-                        .ToListAsync();
-                }
-            }
+            // PERFORMANCE: blacklistStatus is now passed directly to the repository where it becomes
+            // a simple SQL WHERE clause on the denormalized flag columns (IsCurrentlyBlacklisted/IsFutureBlacklisted).
+            // No account IDs are loaded into memory — the filtering stays entirely in SQL.
             
             List<int>? accountIdsWithOrchestrationRun = null;
             if (!string.IsNullOrWhiteSpace(orchestrationRequestId))
@@ -201,8 +165,8 @@ public class AdrController : ControllerBase
                     .ToListAsync();
             }
 
-            // Combine all account ID filters
-            var allAccountIdFilters = new List<List<int>?> { accountIdsWithJobStatus, accountIdsWithBlacklistStatus, accountIdsWithOrchestrationRun };
+            // Combine all account ID filters (blacklist filtering is now handled directly in the repository)
+            var allAccountIdFilters = new List<List<int>?> { accountIdsWithJobStatus, accountIdsWithOrchestrationRun };
             var activeFilters = allAccountIdFilters.Where(f => f != null).Cast<List<int>>().ToList();
             List<int>? combinedAccountIds = null;
             if (activeFilters.Count > 0)
@@ -228,7 +192,7 @@ public class AdrController : ControllerBase
                 modifiedBefore,
                 createdAfter,
                 createdBefore,
-                excludeBlacklistedAccountIds);
+                blacklistStatus: blacklistStatus);
 
             // Get account IDs from the current page
             var accountIds = items.Select(a => a.Id).ToList();
@@ -1795,45 +1759,9 @@ public class AdrController : ControllerBase
     {
             try
             {
-                // PERFORMANCE: Use denormalized blacklist flags instead of expensive blacklist table subqueries.
-                // Flags are updated during Account Sync.
-                List<int>? includeAccountIds = null;
-                List<int>? excludeAccountIds = null;
-                if (!string.IsNullOrWhiteSpace(blacklistStatus))
-                {
-                    if (blacklistStatus == "none")
-                    {
-                        // Get account IDs that are currently blacklisted (to exclude their jobs)
-                        excludeAccountIds = await _dbContext.AdrAccounts
-                            .Where(a => !a.IsDeleted && a.IsCurrentlyBlacklisted)
-                            .Select(a => a.Id)
-                            .ToListAsync();
-                    }
-                    else if (blacklistStatus == "current")
-                    {
-                        // Get account IDs that are currently blacklisted (to include only their jobs)
-                        includeAccountIds = await _dbContext.AdrAccounts
-                            .Where(a => !a.IsDeleted && a.IsCurrentlyBlacklisted)
-                            .Select(a => a.Id)
-                            .ToListAsync();
-                    }
-                    else if (blacklistStatus == "future")
-                    {
-                        // Get account IDs that have a future blacklist scheduled
-                        includeAccountIds = await _dbContext.AdrAccounts
-                            .Where(a => !a.IsDeleted && a.IsFutureBlacklisted)
-                            .Select(a => a.Id)
-                            .ToListAsync();
-                    }
-                    else if (blacklistStatus == "any")
-                    {
-                        // Get account IDs that have any blacklist (current or future)
-                        includeAccountIds = await _dbContext.AdrAccounts
-                            .Where(a => !a.IsDeleted && (a.IsCurrentlyBlacklisted || a.IsFutureBlacklisted))
-                            .Select(a => a.Id)
-                            .ToListAsync();
-                    }
-                }
+                // PERFORMANCE: blacklistStatus is passed directly to the repository where it becomes
+                // a simple SQL WHERE clause on the denormalized flag columns via AdrAccount navigation property.
+                // No account IDs are loaded into memory — the filtering stays entirely in SQL.
                 
                 var (items, totalCount) = await _unitOfWork.AdrJobs.GetPagedAsync(
                     pageNumber,
@@ -1852,14 +1780,13 @@ public class AdrController : ControllerBase
                     isManualRequest,
                     sortColumn,
                     sortDescending,
-                    includeAccountIds,
-                    excludeAccountIds,
-                    adrJobTypeId,
-                    modifiedAfter,
-                    modifiedBefore,
-                    orchestrationRequestId,
-                    executionRequestTypeId,
-                    executionIsError);
+                    adrJobTypeId: adrJobTypeId,
+                    modifiedAfter: modifiedAfter,
+                    modifiedBefore: modifiedBefore,
+                    orchestrationRequestId: orchestrationRequestId,
+                    executionRequestTypeId: executionRequestTypeId,
+                    executionIsError: executionIsError,
+                    blacklistStatus: blacklistStatus);
 
                 // PERFORMANCE: Use denormalized blacklist flags from AdrAccount instead of loading
                 // all blacklist entries into memory and matching in-memory.
