@@ -28,12 +28,19 @@ public interface IAdrJobRepository : IRepository<AdrJob>
                 bool? isManualRequest = null,
                 string? sortColumn = null,
                 bool sortDescending = true,
-                List<int>? jobIds = null,
-                int? adrJobTypeId = null);
+                List<int>? includeAccountIds = null,
+                List<int>? excludeAccountIds = null,
+                int? adrJobTypeId = null,
+                DateTime? modifiedAfter = null,
+                DateTime? modifiedBefore = null,
+                string? orchestrationRequestId = null,
+                int? executionRequestTypeId = null,
+                bool? executionIsError = null,
+                string? blacklistStatus = null);
     Task<int> GetTotalCountAsync(int? adrAccountId = null);
     Task<int> GetCountByStatusAsync(string status);
     Task<int> GetCountByStatusAndIdsAsync(string status, HashSet<int> jobIds);
-    Task<Dictionary<string, int>> GetCountsByStatusAndIdsAsync(HashSet<int> jobIds);
+    Task<Dictionary<string, int>> GetCountsByStatusAndIdsAsync(HashSet<int> jobIds, bool excludeBlacklisted = false);
     Task<int> GetActiveJobsCountAsync();
     Task<bool> ExistsForBillingPeriodAsync(int adrAccountId, DateTime billingPeriodStart, DateTime billingPeriodEnd);
     Task<IEnumerable<AdrJob>> GetJobsNeedingDailyStatusCheckAsync(DateTime currentDate, int delayDays = 1);

@@ -50,7 +50,13 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
         bool sortDescending = false,
         List<int>? accountIdsFilter = null,
         string? primaryVendorCode = null,
-        string? masterVendorCode = null)
+        string? masterVendorCode = null,
+        DateTime? modifiedAfter = null,
+        DateTime? modifiedBefore = null,
+        DateTime? createdAfter = null,
+        DateTime? createdBefore = null,
+        List<int>? excludeAccountIds = null,
+        string? blacklistStatus = null)
     {
         var query = _dbSet.Where(a => !a.IsDeleted);
 
@@ -103,6 +109,46 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
                 (a.ClientName != null && a.ClientName.Contains(searchTerm)) ||
                 (a.PrimaryVendorCode != null && a.PrimaryVendorCode.Contains(searchTerm)) ||
                 (a.MasterVendorCode != null && a.MasterVendorCode.Contains(searchTerm)));
+        }
+
+        if (modifiedAfter.HasValue)
+        {
+            query = query.Where(a => a.LastSyncedDateTime.HasValue && a.LastSyncedDateTime.Value >= modifiedAfter.Value);
+        }
+
+        if (modifiedBefore.HasValue)
+        {
+            query = query.Where(a => a.LastSyncedDateTime.HasValue && a.LastSyncedDateTime.Value <= modifiedBefore.Value);
+        }
+
+        if (createdAfter.HasValue)
+        {
+            query = query.Where(a => a.CreatedDateTime >= createdAfter.Value);
+        }
+
+        if (createdBefore.HasValue)
+        {
+            query = query.Where(a => a.CreatedDateTime < createdBefore.Value);
+        }
+
+        // Exclude specific account IDs (used for blacklist "none" filter to exclude blacklisted accounts)
+        if (excludeAccountIds != null && excludeAccountIds.Count > 0)
+        {
+            query = query.Where(a => !excludeAccountIds.Contains(a.Id));
+        }
+
+        // PERFORMANCE: Use denormalized blacklist flags directly in SQL WHERE clause.
+        // This avoids loading account IDs into memory and passing them as parameters.
+        if (!string.IsNullOrWhiteSpace(blacklistStatus))
+        {
+            if (blacklistStatus == "none")
+                query = query.Where(a => !a.IsCurrentlyBlacklisted);
+            else if (blacklistStatus == "current")
+                query = query.Where(a => a.IsCurrentlyBlacklisted);
+            else if (blacklistStatus == "future")
+                query = query.Where(a => a.IsFutureBlacklisted);
+            else if (blacklistStatus == "any")
+                query = query.Where(a => a.IsCurrentlyBlacklisted || a.IsFutureBlacklisted);
         }
 
         var totalCount = await query.CountAsync();
@@ -232,6 +278,42 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
 			.ToListAsync(); 
 		}
         return result;
+    }
+
+    public async Task<IEnumerable<AdrAccount>> GetAccountsByCredentialIdsAsync(List<int> credentialIds)
+    {
+        var results = new List<AdrAccount>();
+        
+        // Process in batches of 5,000 to avoid large IN clauses and memory issues
+        const int batchSize = 5000;
+        for (int i = 0; i < credentialIds.Count; i += batchSize)
+        {
+            var batch = credentialIds.Skip(i).Take(batchSize).ToList();
+            var batchResults = await _dbSet
+                .Where(a => !a.IsDeleted && a.CredentialId > 0 && batch.Contains(a.CredentialId))
+                .ToListAsync();
+            results.AddRange(batchResults);
+        }
+        
+        return results;
+    }
+
+    public async Task<IEnumerable<AdrAccount>> GetAccountsByIdsAsync(List<int> accountIds)
+    {
+        var results = new List<AdrAccount>();
+        
+        // Process in batches of 5,000 to avoid large IN clauses and memory issues
+        const int batchSize = 5000;
+        for (int i = 0; i < accountIds.Count; i += batchSize)
+        {
+            var batch = accountIds.Skip(i).Take(batchSize).ToList();
+            var batchResults = await _dbSet
+                .Where(a => !a.IsDeleted && a.CredentialId > 0 && batch.Contains(a.Id))
+                .ToListAsync();
+            results.AddRange(batchResults);
+        }
+        
+        return results;
     }
 
     public async Task<IEnumerable<AdrAccount>> GetAccountsForRebillByDayOfWeekAsync(DayOfWeek dayOfWeek)

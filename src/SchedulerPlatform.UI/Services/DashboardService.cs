@@ -33,13 +33,21 @@ public class DashboardService : IDashboardService
         return await response.Content.ReadFromJsonAsync<DashboardOverview>();
     }
 
-    public async Task<List<StatusBreakdownItem>> GetStatusBreakdownAsync(int hours = 24, int? clientId = null)
+    public async Task<List<StatusBreakdownItem>> GetStatusBreakdownAsync(int hours = 24, int? clientId = null, List<JobStatus>? statuses = null)
     {
         var queryParams = new List<string> { $"hours={hours}" };
         
         if (clientId.HasValue)
         {
             queryParams.Add($"clientId={clientId.Value}");
+        }
+
+        if (statuses != null && statuses.Any())
+        {
+            foreach (var status in statuses)
+            {
+                queryParams.Add($"statuses={status}");
+            }
         }
         
         var query = "?" + string.Join("&", queryParams);
@@ -95,6 +103,37 @@ public class DashboardService : IDashboardService
         response.EnsureSuccessStatusCode();
         var result = await response.Content.ReadFromJsonAsync<List<TopLongestExecutionItem>>();
         return result ?? new List<TopLongestExecutionItem>();
+    }
+
+    public async Task<(List<RecentExecutionItem> Items, bool HasMore)> GetRecentExecutionsAsync(int hours = 24, int? clientId = null, List<JobStatus>? statuses = null, int limit = 10)
+    {
+        var queryParams = new List<string> { $"hours={hours}", $"limit={limit}" };
+
+        if (clientId.HasValue)
+        {
+            queryParams.Add($"clientId={clientId.Value}");
+        }
+
+        if (statuses != null && statuses.Any())
+        {
+            foreach (var status in statuses)
+            {
+                queryParams.Add($"statuses={status}");
+            }
+        }
+
+        var query = "?" + string.Join("&", queryParams);
+        var response = await _httpClient.GetAsync($"dashboard/recent-executions{query}");
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<List<RecentExecutionItem>>() ?? new List<RecentExecutionItem>();
+
+        var hasMore = false;
+        if (response.Headers.TryGetValues("X-Has-More", out var values))
+        {
+            bool.TryParse(values.FirstOrDefault(), out hasMore);
+        }
+
+        return (result, hasMore);
     }
 
     public async Task<List<InvalidScheduleInfo>> GetInvalidSchedulesAsync(int? clientId = null)

@@ -78,6 +78,13 @@ public class AdrJobExecution : BaseEntity
     /// </summary>
     public string? RequestPayload { get; set; }
     
+    /// <summary>
+    /// Orchestration run RequestId that triggered this execution.
+    /// Links to AdrOrchestrationRun.RequestId for tracking which run processed this job.
+    /// Null for executions created before this field was added or for manual API calls.
+    /// </summary>
+    public string? OrchestrationRequestId { get; set; }
+    
     // Navigation property
     [JsonIgnore]
     public AdrJob AdrJob { get; set; } = null!;

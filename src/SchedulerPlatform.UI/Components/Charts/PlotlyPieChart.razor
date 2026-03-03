@@ -45,19 +45,32 @@
     private string _chartId = $"plotly-pie-{Guid.NewGuid():N}";
     private DotNetObjectReference<PlotlyPieChart>? _dotNetRef;
     private bool _isSubscribed = false;
+    private bool _needsReact = false;
 
     protected override void OnParametersSet()
     {
         BuildChart();
+        _needsReact = true;
     }
     
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (_needsReact && _chart != null && !firstRender)
+        {
+            _needsReact = false;
+            try
+            {
+                await _chart.React();
+            }
+            catch
+            {
+            }
+        }
+
         if (OnSliceClick.HasDelegate && !_isSubscribed)
         {
             _dotNetRef ??= DotNetObjectReference.Create(this);
             
-            // Small delay to ensure Plotly has initialized the chart
             await Task.Delay(200);
             
             try
@@ -67,7 +80,6 @@
             }
             catch
             {
-                // Subscription failed - click events won't work but chart will still display
             }
         }
     }

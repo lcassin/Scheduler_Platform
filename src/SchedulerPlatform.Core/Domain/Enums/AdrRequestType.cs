@@ -20,5 +20,17 @@ public enum AdrRequestType
     /// Unlike DownloadInvoice, rebill checks do NOT create Zendesk tickets when no document is found
     /// (only creates tickets for credential failures).
     /// </summary>
-    Rebill = 3
+    Rebill = 3,
+    
+    /// <summary>
+    /// Status Check - tracking record for when a job's status was checked during orchestration.
+    /// Does not represent an external API call that costs money.
+    /// </summary>
+    StatusCheck = 4,
+    
+    /// <summary>
+    /// Job Creation - tracking record for when a job was created during orchestration.
+    /// Does not represent an external API call.
+    /// </summary>
+    JobCreation = 5
 }

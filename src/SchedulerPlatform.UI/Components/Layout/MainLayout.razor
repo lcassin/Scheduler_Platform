@@ -14,13 +14,13 @@
         <MudText Typo="Typo.h6">ADR Scheduler</MudText>
         <MudSpacer />
         <AuthorizeView>
-            <Authorized>
+            <Authorized Context="authContext">
                 <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
                     <ActivatorContent>
                         <MudButton Color="Color.Inherit" Variant="Variant.Text" EndIcon="@Icons.Material.Filled.ArrowDropDown">
                             <MudAvatar Size="Size.Small" Style="background-color: #ffffff; color: #3d5afe;" Class="mr-2">
                                 @{
-                                    var initials = GetInitials(GetDisplayName(context.User));
+                                    var initials = GetInitials(GetDisplayName(authContext.User));
                                     if (initials == "?")
                                     {
                                         <MudIcon Icon="@Icons.Material.Filled.Person" />
@@ -31,7 +31,7 @@
                                     }
                                 }
                             </MudAvatar>
-                            @GetDisplayName(context.User)
+                            @GetDisplayName(authContext.User)
                         </MudButton>
                     </ActivatorContent>
                     <ChildContent>
@@ -39,7 +39,7 @@
                             <div class="d-flex align-center mb-3">
                                 <MudAvatar Size="Size.Large" Style="background-color: #ffffff; color: #3d5afe;" Class="mr-3">
                                     @{
-                                        var largeInitials = GetInitials(GetDisplayName(context.User));
+                                        var largeInitials = GetInitials(GetDisplayName(authContext.User));
                                         if (largeInitials == "?")
                                         {
                                             <MudIcon Icon="@Icons.Material.Filled.Person" />
@@ -51,14 +51,14 @@
                                     }
                                 </MudAvatar>
                                 <div>
-                                    <MudText Typo="Typo.subtitle1">@GetDisplayName(context.User)</MudText>
-                                    <MudText Typo="Typo.body2" Color="Color.Secondary">@GetUserEmail(context.User)</MudText>
+                                    <MudText Typo="Typo.subtitle1">@GetDisplayName(authContext.User)</MudText>
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">@GetUserEmail(authContext.User)</MudText>
                                 </div>
                             </div>
                             <MudDivider Class="mb-2" />
                             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">Role</MudText>
-                            <MudText Typo="Typo.body2" Class="mb-2">@GetUserRole(context.User)</MudText>
-                            @if (IsSuperAdmin(context.User))
+                            <MudText Typo="Typo.body2" Class="mb-2">@GetUserRole(authContext.User)</MudText>
+                            @if (IsSuperAdmin(authContext.User))
                             {
                                 <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled">Super Admin</MudChip>
                             }

@@ -174,7 +174,7 @@
     {
         if (!_selectedItems.Any()) return;
 
-        var confirmed = await DialogService.ShowMessageBox(
+        var confirmed = await DialogService.ShowMessageBoxAsync(
             "Bulk Trigger Schedules",
             $"Are you sure you want to trigger {_selectedItems.Count} schedule(s)? They will be executed with a {_delayMs}ms delay between each.",
             yesText: "Trigger All", cancelText: "Cancel");
@@ -211,7 +211,7 @@
 
     private async Task TriggerSingle(MissedScheduleItem item)
     {
-        var confirmed = await DialogService.ShowMessageBox(
+        var confirmed = await DialogService.ShowMessageBoxAsync(
             "Trigger Schedule",
             $"Are you sure you want to trigger '{item.Name}' now?",
             yesText: "Trigger", cancelText: "Cancel");

@@ -110,6 +110,7 @@ public class DashboardController : ControllerBase
     /// </summary>
     /// <param name="hours">Number of hours to look back (default: 24).</param>
     /// <param name="clientId">Optional client ID to filter results.</param>
+    /// <param name="statuses">Optional array of job statuses to filter by.</param>
     /// <returns>A list of status counts with percentages.</returns>
     /// <response code="200">Returns the status breakdown.</response>
     /// <response code="500">An error occurred while retrieving status breakdown.</response>
@@ -118,13 +119,14 @@ public class DashboardController : ControllerBase
     [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<List<StatusBreakdownItem>>> GetStatusBreakdown(
         [FromQuery] int hours = 24,
-        [FromQuery] int? clientId = null)
+        [FromQuery] int? clientId = null,
+        [FromQuery] JobStatus[] statuses = null)
     {
         try
         {
             var startDate = DateTime.UtcNow.AddHours(-hours);
             
-            var statusCounts = await _unitOfWork.JobExecutions.GetStatusBreakdownAsync(startDate, clientId);
+            var statusCounts = await _unitOfWork.JobExecutions.GetStatusBreakdownAsync(startDate, clientId, statuses);
             var totalCount = statusCounts.Values.Sum();
 
             var breakdown = statusCounts
@@ -143,6 +145,52 @@ public class DashboardController : ControllerBase
         {
             _logger.LogError(ex, "Error getting status breakdown");
             return StatusCode(500, "Error retrieving status breakdown");
+        }
+    }
+
+    /// <summary>
+    /// Retrieves the most recent job executions within a time window, sorted by start date descending.
+    /// </summary>
+    /// <param name="hours">Number of hours to look back (default: 24).</param>
+    /// <param name="clientId">Optional client ID to filter results.</param>
+    /// <param name="statuses">Optional array of job statuses to filter by.</param>
+    /// <param name="limit">Maximum number of results to return (default: 10).</param>
+    /// <returns>A list of the most recent executions with status and duration details.</returns>
+    /// <response code="200">Returns the recent executions.</response>
+    /// <response code="500">An error occurred while retrieving recent executions.</response>
+    [HttpGet("recent-executions")]
+    [ProducesResponseType(typeof(List<RecentExecutionItem>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<List<RecentExecutionItem>>> GetRecentExecutions(
+        [FromQuery] int hours = 24,
+        [FromQuery] int? clientId = null,
+        [FromQuery] JobStatus[] statuses = null,
+        [FromQuery] int limit = 10)
+    {
+        try
+        {
+            var startDate = DateTime.UtcNow.AddHours(-hours);
+
+            var executionsData = await _unitOfWork.JobExecutions.GetRecentExecutionsAsync(startDate, clientId, statuses, limit + 1);
+
+            var recentExecutions = executionsData.Take(limit).Select(e => new RecentExecutionItem
+            {
+                Id = e.Id,
+                ScheduleName = e.ScheduleName,
+                StartDateTime = e.StartDateTime,
+                EndDateTime = e.EndDateTime,
+                Status = e.Status,
+                DurationSeconds = e.DurationSeconds
+            }).ToList();
+
+            Response.Headers["X-Has-More"] = (executionsData.Count > limit).ToString().ToLower();
+
+            return Ok(recentExecutions);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting recent executions");
+            return StatusCode(500, "Error retrieving recent executions");
         }
     }
 

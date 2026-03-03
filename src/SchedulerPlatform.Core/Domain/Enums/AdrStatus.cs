@@ -1,7 +1,24 @@
 namespace SchedulerPlatform.Core.Domain.Enums;
 
 /// <summary>
-/// ADR API status codes
+/// ADR API status codes - must match the ADRStatus table in the ADR database.
+/// Reference:
+///   1  Inserted                        IsError=0  IsFinal=0
+///   2  Inserted with Priority          IsError=0  IsFinal=0
+///   3  Invalid CredentialID            IsError=1  IsFinal=0
+///   4  Cannot Connect To VCM           IsError=1  IsFinal=0
+///   5  Cannot Insert Into Queue        IsError=1  IsFinal=0
+///   6  Sent To AI                      IsError=0  IsFinal=0
+///   7  Cannot Connect To AI            IsError=1  IsFinal=0
+///   8  Cannot Save Result              IsError=1  IsFinal=0
+///   9  Needs Human Review              IsError=1  IsFinal=1
+///  10  Received From AI                IsError=0  IsFinal=0
+///  11  Document Retrieval Complete     IsError=0  IsFinal=1
+///  12  AI Canceled                     IsError=0  IsFinal=1
+///  13  Login Attempt Succeeded         IsError=0  IsFinal=1
+///  14  No Documents Found              IsError=0  IsFinal=1
+///  15  Failed to Process All Documents IsError=1  IsFinal=0
+///  16  No Documents Processed          IsError=1  IsFinal=0
 /// </summary>
 public enum AdrStatus
 {
@@ -61,24 +78,29 @@ public enum AdrStatus
     Complete = 11,
     
     /// <summary>
-    /// Credential verification succeeded (used for credential checks, not scraping)
+    /// AI cancelled the request. Not an error. (IsFinal = true)
     /// </summary>
-    LoginAttemptSucceeded = 12,
+    AiCanceled = 12,
     
     /// <summary>
-    /// No documents found for this scrape attempt (NOT final - retry next day)
+    /// Credential verification succeeded (IsFinal = true). Used for credential check jobs.
     /// </summary>
-    NoDocumentsFound = 13,
+    LoginAttemptSucceeded = 13,
     
     /// <summary>
-    /// Partial failure - some documents may have succeeded but others failed (IsError = true, IsFinal = true)
+    /// No documents found for this scrape attempt. Not an error. (IsFinal = true)
     /// </summary>
-    FailedToProcessAllDocuments = 14,
+    NoDocumentsFound = 14,
     
     /// <summary>
-    /// No documents processed - status meaning TBD (NOT final)
+    /// Partial failure - some documents may have succeeded but others failed (IsError = true)
     /// </summary>
-    NoDocumentsProcessed = 15
+    FailedToProcessAllDocuments = 15,
+    
+    /// <summary>
+    /// No documents were processed (IsError = true)
+    /// </summary>
+    NoDocumentsProcessed = 16
 }
 
 /// <summary>
@@ -87,35 +109,36 @@ public enum AdrStatus
 public static class AdrStatusExtensions
 {
     /// <summary>
-    /// Returns true if this status indicates an error
+    /// Returns true if this status indicates an error (per ADR API IsError column)
     /// </summary>
     public static bool IsError(this AdrStatus status)
     {
         return status switch
         {
-            AdrStatus.InvalidCredentialId => true,
-            AdrStatus.CannotConnectToVcm => true,
-            AdrStatus.CannotInsertIntoQueue => true,
-            AdrStatus.CannotConnectToAi => true,
-            AdrStatus.CannotSaveResult => true,
-            AdrStatus.NeedsHumanReview => true,
-            AdrStatus.FailedToProcessAllDocuments => true,
+            AdrStatus.InvalidCredentialId => true,       // 3
+            AdrStatus.CannotConnectToVcm => true,        // 4
+            AdrStatus.CannotInsertIntoQueue => true,     // 5
+            AdrStatus.CannotConnectToAi => true,         // 7
+            AdrStatus.CannotSaveResult => true,          // 8
+            AdrStatus.NeedsHumanReview => true,          // 9
+            AdrStatus.FailedToProcessAllDocuments => true, // 15
+            AdrStatus.NoDocumentsProcessed => true,      // 16
             _ => false
         };
     }
     
     /// <summary>
-    /// Returns true if this status is final (no more processing needed)
+    /// Returns true if this status is final (per ADR API IsFinal column)
     /// </summary>
     public static bool IsFinal(this AdrStatus status)
     {
         return status switch
         {
-            AdrStatus.NeedsHumanReview => true,
-            AdrStatus.Complete => true,
-            AdrStatus.FailedToProcessAllDocuments => true,
-            // Note: LoginAttemptSucceeded (12) is NOT final for scraping context
-            // Note: NoDocumentsFound (13) is NOT final - retry next day
+            AdrStatus.NeedsHumanReview => true,          // 9
+            AdrStatus.Complete => true,                   // 11
+            AdrStatus.AiCanceled => true,                // 12 - not an error, but final
+            AdrStatus.LoginAttemptSucceeded => true,     // 13
+            AdrStatus.NoDocumentsFound => true,          // 14 - not an error, but final
             _ => false
         };
     }
@@ -137,10 +160,11 @@ public static class AdrStatusExtensions
             AdrStatus.CannotSaveResult => "Cannot Save Result",
             AdrStatus.NeedsHumanReview => "Needs Human Review",
             AdrStatus.ReceivedFromAi => "Received From AI",
-            AdrStatus.Complete => "Complete",
+            AdrStatus.Complete => "Document Retrieval Complete",
+            AdrStatus.AiCanceled => "AI Canceled",
             AdrStatus.LoginAttemptSucceeded => "Login Attempt Succeeded",
             AdrStatus.NoDocumentsFound => "No Documents Found",
-            AdrStatus.FailedToProcessAllDocuments => "Failed To Process All Documents",
+            AdrStatus.FailedToProcessAllDocuments => "Failed to Process All Documents",
             AdrStatus.NoDocumentsProcessed => "No Documents Processed",
             _ => "Unknown"
         };

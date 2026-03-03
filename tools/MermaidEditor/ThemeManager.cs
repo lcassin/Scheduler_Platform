@@ -25,6 +25,15 @@ public static class ThemeManager
     
     public static void LoadTheme()
     {
+        // First try loading from unified SettingsManager
+        SettingsManager.Load();
+        if (Enum.TryParse<AppTheme>(SettingsManager.Current.Theme, out var settingsTheme))
+        {
+            ApplyTheme(settingsTheme, false);
+            return;
+        }
+        
+        // Fall back to legacy theme.json
         try
         {
             if (File.Exists(SettingsPath))
@@ -118,6 +127,9 @@ public static class ThemeManager
         if (save)
         {
             SaveTheme();
+            // Also update unified settings
+            SettingsManager.Current.Theme = theme.ToString();
+            SettingsManager.Save();
         }
         
         ThemeChanged?.Invoke();

@@ -53,7 +53,13 @@
     <VisualStudioVersion Condition="'$(SSDTExists)' == ''">11.0</VisualStudioVersion>
   </PropertyGroup>
   <Import Condition="'$(SQLDBExtensionsRefPath)' != ''" Project="$(SQLDBExtensionsRefPath)\Microsoft.Data.Tools.Schema.SqlTasks.targets" />
-  <Import Condition="'$(SQLDBExtensionsRefPath)' == ''" Project="$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v$(VisualStudioVersion)\SSDT\Microsoft.Data.Tools.Schema.SqlTasks.targets" />
+  <Import Condition="'$(SQLDBExtensionsRefPath)' == '' AND '$(SSDTExists)' == 'True'" Project="$(MSBuildExtensionsPath)\Microsoft\VisualStudio\v$(VisualStudioVersion)\SSDT\Microsoft.Data.Tools.Schema.SqlTasks.targets" />
+  <!-- When SSDT is not installed (e.g. dotnet CLI), provide a no-op Build target so the solution build doesn't fail -->
+  <Target Condition="'$(SSDTExists)' != 'True' AND '$(SQLDBExtensionsRefPath)' == ''" Name="Build">
+    <Message Importance="high" Text="Skipping $(MSBuildProjectName) — SSDT targets not available outside Visual Studio." />
+  </Target>
+  <Target Condition="'$(SSDTExists)' != 'True' AND '$(SQLDBExtensionsRefPath)' == ''" Name="Rebuild" DependsOnTargets="Build" />
+  <Target Condition="'$(SSDTExists)' != 'True' AND '$(SQLDBExtensionsRefPath)' == ''" Name="Clean" />
   <ItemGroup>
     <Folder Include="Properties" />
   </ItemGroup>

@@ -27,7 +27,12 @@ public class AdrService : IAdrService
         string? primaryVendorCode = null,
         string? masterVendorCode = null,
         string? sortColumn = null,
-        bool sortDescending = false)
+        bool sortDescending = false,
+        DateTime? modifiedAfter = null,
+        DateTime? modifiedBefore = null,
+        string? orchestrationRequestId = null,
+        DateTime? createdAfter = null,
+        DateTime? createdBefore = null)
     {
         var queryParams = new List<string>
         {
@@ -66,6 +71,21 @@ public class AdrService : IAdrService
             queryParams.Add($"sortColumn={Uri.EscapeDataString(sortColumn)}");
 
         queryParams.Add($"sortDescending={sortDescending.ToString().ToLower()}");
+
+        if (modifiedAfter.HasValue)
+            queryParams.Add($"modifiedAfter={modifiedAfter.Value:o}");
+
+        if (modifiedBefore.HasValue)
+            queryParams.Add($"modifiedBefore={modifiedBefore.Value:o}");
+
+        if (!string.IsNullOrWhiteSpace(orchestrationRequestId))
+            queryParams.Add($"orchestrationRequestId={Uri.EscapeDataString(orchestrationRequestId)}");
+
+        if (createdAfter.HasValue)
+            queryParams.Add($"createdAfter={createdAfter.Value:o}");
+
+        if (createdBefore.HasValue)
+            queryParams.Add($"createdBefore={createdBefore.Value:o}");
 
         var query = "?" + string.Join("&", queryParams);
         var response = await _httpClient.GetAsync($"adr/accounts{query}");
@@ -217,7 +237,12 @@ public class AdrService : IAdrService
         string? blacklistStatus = null,
         string? sortColumn = null,
         bool sortDescending = true,
-        int? adrJobTypeId = null)
+        int? adrJobTypeId = null,
+        DateTime? modifiedAfter = null,
+        DateTime? modifiedBefore = null,
+        string? orchestrationRequestId = null,
+        int? executionRequestTypeId = null,
+        bool? executionIsError = null)
     {
         var queryParams = new List<string>
         {
@@ -265,6 +290,21 @@ public class AdrService : IAdrService
             queryParams.Add($"sortColumn={Uri.EscapeDataString(sortColumn)}");
 
         queryParams.Add($"sortDescending={sortDescending.ToString().ToLower()}");
+
+        if (modifiedAfter.HasValue)
+            queryParams.Add($"modifiedAfter={modifiedAfter.Value:o}");
+
+        if (modifiedBefore.HasValue)
+            queryParams.Add($"modifiedBefore={modifiedBefore.Value:o}");
+
+        if (!string.IsNullOrWhiteSpace(orchestrationRequestId))
+            queryParams.Add($"orchestrationRequestId={Uri.EscapeDataString(orchestrationRequestId)}");
+
+        if (executionRequestTypeId.HasValue)
+            queryParams.Add($"executionRequestTypeId={executionRequestTypeId.Value}");
+
+        if (executionIsError.HasValue)
+            queryParams.Add($"executionIsError={executionIsError.Value.ToString().ToLower()}");
 
         var query = "?" + string.Join("&", queryParams);
         var response = await _httpClient.GetAsync($"adr/jobs{query}");
@@ -703,6 +743,51 @@ public class AdrService : IAdrService
         if (!response.IsSuccessStatusCode)
             return null;
         return await response.Content.ReadAsByteArrayAsync();
+    }
+
+    #endregion
+
+    #region Credential Validation by List
+
+    public async Task<BulkCredentialVerificationResult> VerifyCredentialsByListAsync(List<int>? credentialIds = null, List<int>? accountIds = null)
+    {
+        var request = new { CredentialIds = credentialIds ?? new List<int>(), AccountIds = accountIds ?? new List<int>() };
+        var response = await _httpClient.PostAsJsonAsync("adr/orchestrate/verify-credentials-by-list", request);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<BulkCredentialVerificationResult>();
+        return result ?? new BulkCredentialVerificationResult();
+    }
+
+    public async Task<BulkCredentialVerificationResult> VerifyCredentialsFromFileAsync(byte[] fileContent, string fileName)
+    {
+        using var content = new MultipartFormDataContent();
+        using var fileStreamContent = new ByteArrayContent(fileContent);
+
+        var extension = Path.GetExtension(fileName)?.ToLowerInvariant();
+        var mediaType = extension == ".csv"
+            ? "text/csv"
+            : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+        fileStreamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(mediaType);
+        content.Add(fileStreamContent, "file", fileName);
+
+        var response = await _httpClient.PostAsync("adr/orchestrate/verify-credentials-from-file", content);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<BulkCredentialVerificationResult>();
+        return result ?? new BulkCredentialVerificationResult();
+    }
+
+    public async Task<BackgroundOrchestrationResponse> QueueBulkCredentialCheckAsync(int? testrun = null)
+    {
+        var url = "adr/orchestrate/verify-all-credentials";
+        if (testrun.HasValue)
+        {
+            url += $"?testrun={testrun.Value}";
+        }
+        var response = await _httpClient.PostAsync(url, null);
+        response.EnsureSuccessStatusCode();
+        var result = await response.Content.ReadFromJsonAsync<BackgroundOrchestrationResponse>();
+        return result ?? new BackgroundOrchestrationResponse();
     }
 
     #endregion

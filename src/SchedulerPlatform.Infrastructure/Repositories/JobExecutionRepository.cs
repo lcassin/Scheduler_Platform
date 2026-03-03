@@ -245,7 +245,7 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
         return await query.ToListAsync();
     }
 
-    public async Task<Dictionary<JobStatus, int>> GetStatusBreakdownAsync(DateTime startDate, int? clientId)
+    public async Task<Dictionary<JobStatus, int>> GetStatusBreakdownAsync(DateTime startDate, int? clientId, JobStatus[]? statuses = null)
     {
         var query = _dbSet.AsNoTracking()
             .Where(e => e.StartDateTime >= startDate)
@@ -256,12 +256,51 @@ public class JobExecutionRepository : Repository<JobExecution>, IJobExecutionRep
             query = query.Where(e => e.Schedule.ClientId == clientId.Value);
         }
 
+        if (statuses != null && statuses.Length > 0)
+        {
+            query = query.Where(e => statuses.Contains(e.Status));
+        }
+
         var grouped = await query
             .GroupBy(e => e.Status)
             .Select(g => new { Status = g.Key, Count = g.Count() })
             .ToListAsync();
 
         return grouped.ToDictionary(x => x.Status, x => x.Count);
+    }
+
+    public async Task<List<(int Id, string ScheduleName, DateTime StartDateTime, DateTime? EndDateTime, JobStatus Status, int? DurationSeconds)>> GetRecentExecutionsAsync(
+        DateTime startDate, int? clientId, JobStatus[]? statuses = null, int limit = 10)
+    {
+        var query = _dbSet.AsNoTracking()
+            .Where(e => e.StartDateTime >= startDate)
+            .Where(e => !e.Schedule.IsDeleted);
+
+        if (clientId.HasValue)
+        {
+            query = query.Where(e => e.Schedule.ClientId == clientId.Value);
+        }
+
+        if (statuses != null && statuses.Length > 0)
+        {
+            query = query.Where(e => statuses.Contains(e.Status));
+        }
+
+        var results = await query
+            .OrderByDescending(e => e.StartDateTime)
+            .Take(limit)
+            .Select(e => new
+            {
+                e.Id,
+                ScheduleName = e.Schedule.Name ?? "Unknown",
+                e.StartDateTime,
+                e.EndDateTime,
+                e.Status,
+                e.DurationSeconds
+            })
+            .ToListAsync();
+
+        return results.Select(x => (x.Id, x.ScheduleName, x.StartDateTime, x.EndDateTime, x.Status, x.DurationSeconds)).ToList();
     }
 
     public async Task<List<(int Year, int Month, int Day, int Hour, int ExecutionCount, double AvgDuration, int ConcurrentCount)>> GetExecutionTrendsAsync(

@@ -18,7 +18,12 @@ public interface IAdrService
         string? primaryVendorCode = null,
         string? masterVendorCode = null,
         string? sortColumn = null,
-        bool sortDescending = false);
+        bool sortDescending = false,
+        DateTime? modifiedAfter = null,
+        DateTime? modifiedBefore = null,
+        string? orchestrationRequestId = null,
+        DateTime? createdAfter = null,
+        DateTime? createdBefore = null);
     
     Task<List<string>> GetPrimaryVendorCodesAsync(string? searchTerm = null, int limit = 50);
     Task<List<string>> GetMasterVendorCodesAsync(string? searchTerm = null, int limit = 50);
@@ -52,7 +57,12 @@ public interface IAdrService
             string? blacklistStatus = null,
             string? sortColumn = null,
             bool sortDescending = true,
-            int? adrJobTypeId = null);
+            int? adrJobTypeId = null,
+            DateTime? modifiedAfter = null,
+            DateTime? modifiedBefore = null,
+            string? orchestrationRequestId = null,
+            int? executionRequestTypeId = null,
+            bool? executionIsError = null);
     Task<AdrJob?> GetJobAsync(int id);
     Task<List<AdrJob>> GetJobsByAccountAsync(int adrAccountId);
     Task<AdrJobStats> GetJobStatsAsync(int? lastOrchestrationRuns = null);
@@ -119,6 +129,32 @@ public interface IAdrService
     /// Gets the current test mode status from the ADR configuration.
     /// </summary>
     Task<TestModeStatus> GetTestModeStatusAsync();
+    
+    /// <summary>
+    /// Runs credential verification for specific lists of credential IDs and/or account IDs.
+    /// Used for targeted fallout handling after bulk runs. At least one list must be provided.
+    /// </summary>
+    /// <param name="credentialIds">Optional list of credential IDs to verify</param>
+    /// <param name="accountIds">Optional list of AdrAccount IDs to verify</param>
+    /// <returns>Results of the targeted credential verification</returns>
+    Task<BulkCredentialVerificationResult> VerifyCredentialsByListAsync(List<int>? credentialIds = null, List<int>? accountIds = null);
+    
+    /// <summary>
+    /// Runs credential verification for IDs extracted from an uploaded Excel file.
+    /// The API parses the Excel file and extracts IDs from "CredentialId" and/or "AccountId" columns.
+    /// </summary>
+    /// <param name="fileContent">The Excel file content as a byte array</param>
+    /// <param name="fileName">The original file name</param>
+    /// <returns>Results of the targeted credential verification</returns>
+    Task<BulkCredentialVerificationResult> VerifyCredentialsFromFileAsync(byte[] fileContent, string fileName);
+    
+    /// <summary>
+    /// Queues bulk credential verification (AttemptLogin) for ALL active accounts in the system.
+    /// This is a long-running background operation. Returns immediately with a request ID for status polling.
+    /// </summary>
+    /// <param name="testrun">Optional limit for test runs (e.g., 100 to test with first 100 accounts)</param>
+    /// <returns>The queued orchestration response with requestId for status tracking</returns>
+    Task<BackgroundOrchestrationResponse> QueueBulkCredentialCheckAsync(int? testrun = null);
     
     /// <summary>
     /// Starts a background export operation for large datasets.

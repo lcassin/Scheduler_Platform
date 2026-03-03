@@ -82,6 +82,10 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             _logger.LogInformation("Client sync complete. Created: {Created}, Updated: {Updated}", 
                 result.ClientsCreated, result.ClientsUpdated);
 
+            // Get external account count for accurate progress reporting
+            var externalAccountCount = await GetExternalAccountCountAsync(externalConnectionString, cancellationToken);
+            _logger.LogInformation("External VendorCred account count for progress: {Count}", externalAccountCount);
+
             // Step 3: Load existing local accounts into dictionary for lookups
             // We need this to determine updates vs inserts and for deletion detection
             // IMPORTANT: Include deleted accounts so they can be re-activated if credentials become active again
@@ -138,10 +142,11 @@ public class AdrAccountSyncService : IAdrAccountSyncService
 
             _logger.LogDebug("Loaded {Count} unique accounts from local database", existingAccounts.Count);
 
-            // Use local database count for progress reporting
-            // This includes both accounts to sync AND accounts to mark as deleted
-            var totalAccountCount = existingAccounts.Count;
-            _logger.LogDebug("Total accounts for progress tracking: {Count}", totalAccountCount);
+            // Use external VendorCred count for progress reporting
+            // This shows the actual number of active accounts being synced, not the local DB total (which includes deleted records)
+            var totalAccountCount = externalAccountCount > 0 ? externalAccountCount : existingAccounts.Count;
+            _logger.LogDebug("Total accounts for progress tracking: {Count} (external: {External}, local: {Local})", 
+                totalAccountCount, externalAccountCount, existingAccounts.Count);
             
             // Report initial progress (0 of total)
             progressCallback?.Invoke(0, totalAccountCount);
@@ -151,7 +156,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             var schedulingDataLookup = new Dictionary<(long VMAccountId, string VMAccountNumber), SchedulingData>();
             int processedSinceLastSave = 0;
             int batchNumber = 1;
-            int totalProcessed = 0; // Track total for progress (sync + deletions)
+            int totalProcessed = 0; // Track total for progress (sync phase only)
 
             // Step 2: Stream external accounts and process in batches
             _logger.LogDebug("Streaming and processing accounts in batches of {BatchSize}", batchSize);
@@ -161,7 +166,7 @@ public class AdrAccountSyncService : IAdrAccountSyncService
 
             var query = GetAccountSyncQuery();
             await using var command = new SqlCommand(query, connection);
-            command.CommandTimeout = 300;
+            command.CommandTimeout = 600;
 
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
             while (await reader.ReadAsync(cancellationToken))
@@ -252,15 +257,12 @@ public class AdrAccountSyncService : IAdrAccountSyncService
                     existingAccount.ModifiedBy = "System Created";
                     result.AccountsMarkedDeleted++;
                     deletedSinceLastSave++;
-                    totalProcessed++;
 
                     if (deletedSinceLastSave >= batchSize)
                     {
                         await _dbContext.SaveChangesAsync(cancellationToken);
                         _logger.LogDebug("Deletion batch saved: {Count} accounts marked deleted so far", 
                             result.AccountsMarkedDeleted);
-                        
-                        progressCallback?.Invoke(totalProcessed, totalAccountCount);
                         
                         deletedSinceLastSave = 0;
                     }
@@ -273,7 +275,15 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             
             progressCallback?.Invoke(totalAccountCount, totalAccountCount);
 
-            // Step 5: Sync AdrAccountRules using lightweight scheduling data
+            // Step 5: Update blacklist flags on active (non-deleted) accounts
+            // This runs AFTER we have determined the true active accounts (after deletion phase)
+            // so that only active accounts get flagged. Deleted/inactive accounts are skipped.
+            await UpdateBlacklistFlagsAsync(subStepCallback, cancellationToken);
+
+            // Step 5b: Cancel/close non-terminal jobs for newly-blacklisted accounts
+            await CancelJobsForBlacklistedAccountsAsync(subStepCallback, cancellationToken);
+
+            // Step 6: Sync AdrAccountRules using lightweight scheduling data
             // PERFORMANCE OPTIMIZATION: Detach account entities from change tracker before rule sync
             var accountsList = existingAccounts.Values.ToList();
             foreach (var account in accountsList)
@@ -656,6 +666,112 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
 
         _logger.LogInformation("Rule sync completed. Created: {Created}, Updated: {Updated}, Skipped (overridden): {Skipped}",
             result.RulesCreated, result.RulesUpdated, result.RulesSkippedOverridden);
+    }
+
+    /// <summary>
+    /// Updates IsCurrentlyBlacklisted and IsFutureBlacklisted flags on all active (non-deleted) accounts
+    /// using raw SQL for maximum performance. This runs as a sub-step during Account Sync,
+    /// AFTER determining the true active accounts (deletion phase is complete).
+    /// Uses the same matching logic as the blacklist page but executes server-side in SQL.
+    /// </summary>
+    private async Task UpdateBlacklistFlagsAsync(
+        Action<string, int, int>? subStepCallback,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Starting blacklist flag update");
+        subStepCallback?.Invoke("Updating blacklist flags", 0, 4);
+
+        var today = DateTime.UtcNow.Date;
+
+        // Step 1: Reset all flags to false first (clean slate)
+        var resetSql = "UPDATE [AdrAccount] SET [IsCurrentlyBlacklisted] = 0, [IsFutureBlacklisted] = 0 WHERE [IsCurrentlyBlacklisted] = 1 OR [IsFutureBlacklisted] = 1";
+        var resetCount = await _dbContext.Database.ExecuteSqlRawAsync(resetSql, Array.Empty<object>(), cancellationToken);
+        _logger.LogDebug("Reset blacklist flags on {Count} accounts", resetCount);
+        subStepCallback?.Invoke("Updating blacklist flags", 1, 4);
+
+        // Step 2: Set IsCurrentlyBlacklisted for active accounts matching current blacklist entries
+        var currentSql = @"
+            UPDATE a
+            SET a.[IsCurrentlyBlacklisted] = 1
+            FROM [AdrAccount] a
+            WHERE a.[IsDeleted] = 0
+              AND EXISTS (
+                SELECT 1 FROM [AdrAccountBlacklist] b
+                WHERE b.[IsDeleted] = 0 AND b.[IsActive] = 1
+                  AND (b.[EffectiveStartDate] IS NULL OR b.[EffectiveStartDate] <= {0})
+                  AND (b.[EffectiveEndDate] IS NULL OR b.[EffectiveEndDate] >= {0})
+                  AND (
+                    (b.[PrimaryVendorCode] IS NOT NULL AND b.[PrimaryVendorCode] <> '' AND b.[PrimaryVendorCode] = a.[PrimaryVendorCode])
+                    OR (b.[VMAccountId] IS NOT NULL AND b.[VMAccountId] = a.[VMAccountId])
+                    OR (b.[VMAccountNumber] IS NOT NULL AND b.[VMAccountNumber] <> '' AND b.[VMAccountNumber] = a.[VMAccountNumber])
+                    OR (b.[CredentialId] IS NOT NULL AND b.[CredentialId] = a.[CredentialId])
+                  )
+              )";
+        var currentCount = await _dbContext.Database.ExecuteSqlRawAsync(currentSql, new object[] { today }, cancellationToken);
+        _logger.LogInformation("Set IsCurrentlyBlacklisted on {Count} accounts", currentCount);
+        subStepCallback?.Invoke("Updating blacklist flags", 2, 4);
+
+        // Step 3: Set IsFutureBlacklisted for active accounts matching future blacklist entries
+        var futureSql = @"
+            UPDATE a
+            SET a.[IsFutureBlacklisted] = 1
+            FROM [AdrAccount] a
+            WHERE a.[IsDeleted] = 0
+              AND EXISTS (
+                SELECT 1 FROM [AdrAccountBlacklist] b
+                WHERE b.[IsDeleted] = 0 AND b.[IsActive] = 1
+                  AND b.[EffectiveStartDate] IS NOT NULL AND b.[EffectiveStartDate] > {0}
+                  AND (b.[EffectiveEndDate] IS NULL OR b.[EffectiveEndDate] >= b.[EffectiveStartDate])
+                  AND (
+                    (b.[PrimaryVendorCode] IS NOT NULL AND b.[PrimaryVendorCode] <> '' AND b.[PrimaryVendorCode] = a.[PrimaryVendorCode])
+                    OR (b.[VMAccountId] IS NOT NULL AND b.[VMAccountId] = a.[VMAccountId])
+                    OR (b.[VMAccountNumber] IS NOT NULL AND b.[VMAccountNumber] <> '' AND b.[VMAccountNumber] = a.[VMAccountNumber])
+                    OR (b.[CredentialId] IS NOT NULL AND b.[CredentialId] = a.[CredentialId])
+                  )
+              )";
+        var futureCount = await _dbContext.Database.ExecuteSqlRawAsync(futureSql, new object[] { today }, cancellationToken);
+        _logger.LogInformation("Set IsFutureBlacklisted on {Count} accounts", futureCount);
+        subStepCallback?.Invoke("Updating blacklist flags", 3, 4);
+
+        // Step 4: Done
+        subStepCallback?.Invoke("Updating blacklist flags", 4, 4);
+        _logger.LogInformation("Blacklist flag update completed. Currently blacklisted: {Current}, Future blacklisted: {Future}",
+            currentCount, futureCount);
+    }
+
+    /// <summary>
+    /// Cancels/closes all non-terminal jobs belonging to currently-blacklisted accounts.
+    /// Runs AFTER UpdateBlacklistFlagsAsync so that IsCurrentlyBlacklisted is up to date.
+    /// Uses raw SQL for performance — updates directly in the database without loading entities.
+    /// </summary>
+    private async Task CancelJobsForBlacklistedAccountsAsync(
+        Action<string, int, int>? subStepCallback,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Starting cancellation of jobs for blacklisted accounts");
+        subStepCallback?.Invoke("Cancelling blacklisted account jobs", 0, 1);
+
+        var now = DateTime.UtcNow;
+
+        // Cancel all non-terminal jobs where the account is currently blacklisted.
+        // Terminal statuses (Completed, Failed, Cancelled, NeedsReview) are left untouched.
+        var cancelSql = @"
+            UPDATE j
+            SET j.[Status] = 'Cancelled',
+                j.[ErrorMessage] = 'Account blacklisted during sync',
+                j.[ModifiedDateTime] = {0},
+                j.[ModifiedBy] = 'System - Blacklist Sync'
+            FROM [AdrJob] j
+            INNER JOIN [AdrAccount] a ON j.[AdrAccountId] = a.[AdrAccountId]
+            WHERE a.[IsCurrentlyBlacklisted] = 1
+              AND j.[IsDeleted] = 0
+              AND j.[Status] IN ('Pending', 'CredentialCheckRequested', 'CredentialCheckInProgress', 
+                                  'CredentialVerified', 'CredentialFailed', 'ScrapeRequested', 
+                                  'ScrapeInProgress', 'StatusCheckInProgress')";
+
+        var cancelledCount = await _dbContext.Database.ExecuteSqlRawAsync(cancelSql, new object[] { now }, cancellationToken);
+        _logger.LogInformation("Cancelled {Count} non-terminal jobs for blacklisted accounts", cancelledCount);
+        subStepCallback?.Invoke("Cancelling blacklisted account jobs", 1, 1);
     }
 
     /// <summary>
@@ -1222,9 +1338,15 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
         existing.NextRunStatus = external.NextRunStatus;
         existing.HistoricalBillingStatus = external.HistoricalBillingStatus;
         
-        // NOTE: Scheduling configuration fields (PeriodType, PeriodDays, NextRunDateTime, NextRangeStartDateTime, 
-        // NextRangeEndDateTime) are now managed on AdrAccountRule, not AdrAccount.
-        // The SyncAccountRulesAsync method handles syncing these fields to rules.
+        // Update display date fields so the Accounts page shows dates consistent with calculated statuses.
+        // The authoritative scheduling config lives on AdrAccountRule, but AdrAccount retains these
+        // fields for display purposes. Without this update the displayed NextRunDateTime can go stale
+        // while NextRunStatus/DaysUntilNextRun are recalculated, causing mismatched statuses.
+        existing.PeriodType = external.PeriodType;
+        existing.PeriodDays = external.PeriodDays;
+        existing.NextRunDateTime = external.NextRunDateTime;
+        existing.NextRangeStartDateTime = external.NextRangeStartDateTime;
+        existing.NextRangeEndDateTime = external.NextRangeEndDateTime;
         
         // Re-activate deleted accounts if they appear in VendorCred again (credentials became active)
         existing.IsDeleted = false;
@@ -1260,6 +1382,13 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
             DaysUntilNextRun = external.DaysUntilNextRun,
             NextRunStatus = external.NextRunStatus,
             HistoricalBillingStatus = external.HistoricalBillingStatus,
+            // Display date fields (authoritative scheduling config is on AdrAccountRule,
+            // but Account retains these for consistent display on the Accounts page)
+            PeriodType = external.PeriodType,
+            PeriodDays = external.PeriodDays,
+            NextRunDateTime = external.NextRunDateTime,
+            NextRangeStartDateTime = external.NextRangeStartDateTime,
+            NextRangeEndDateTime = external.NextRangeEndDateTime,
             // Audit fields
             LastSyncedDateTime = DateTime.UtcNow,
             CreatedDateTime = DateTime.UtcNow,
