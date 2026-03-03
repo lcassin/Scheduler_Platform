@@ -21,11 +21,11 @@
             {
                 @if (report.OpenInNewTab)
                 {
-                    <MudNavLink Icon="@Icons.Material.Filled.OpenInNew" OnClick="@(() => OpenReportInNewTab(report.Url))">@report.Name</MudNavLink>
+                    <MudNavLink Icon="@CustomIcons.OpenInNewTab" OnClick="@(() => OpenReportInNewTab(report.Url))">@report.Name</MudNavLink>
                 }
                 else
                 {
-                    <MudNavLink Href="@report.Url" Icon="@Icons.Material.Filled.Assessment">@report.Name</MudNavLink>
+                    <MudNavLink Href="@report.Url" Icon="@CustomIcons.Assessment">@report.Name</MudNavLink>
                 }
             }
         </MudNavGroup>
@@ -34,22 +34,22 @@
     <MudDivider Class="my-2" />
 
     <MudNavGroup Title="Scheduling" Icon="@CustomIcons.Scheduling" Expanded="false">
-        <MudNavLink Href="/schedules" Icon="@Icons.Material.Filled.Schedule" Match="NavLinkMatch.All">Schedules</MudNavLink>
-        <MudNavLink Href="/schedules/missed" Icon="@Icons.Material.Filled.Warning">Missed Schedules</MudNavLink>
-        <MudNavLink Href="/calendar" Icon="@Icons.Material.Filled.CalendarMonth">Calendar</MudNavLink>
-        <MudNavLink Href="/executions" Icon="@Icons.Material.Filled.History">Schedule Executions</MudNavLink>
+        <MudNavLink Href="/schedules" Icon="@CustomIcons.Schedules" Match="NavLinkMatch.All">Schedules</MudNavLink>
+        <MudNavLink Href="/schedules/missed" Icon="@CustomIcons.MissedSchedules">Missed Schedules</MudNavLink>
+        <MudNavLink Href="/calendar" Icon="@CustomIcons.Calendar">Calendar</MudNavLink>
+        <MudNavLink Href="/executions" Icon="@CustomIcons.ScheduleExecutions">Schedule Executions</MudNavLink>
     </MudNavGroup>
 
     @if (_canManageUsers)
     {
         <MudNavGroup Title="Admin" Icon="@CustomIcons.Admin" Expanded="false">
-            <MudNavLink Href="/admin/users" Icon="@Icons.Material.Filled.People">User Management</MudNavLink>
-            <MudNavLink Href="/admin/adr-configuration" Icon="@Icons.Material.Filled.Settings">ADR Configuration</MudNavLink>
-            <MudNavLink Href="/admin/adr-blacklist" Icon="@Icons.Material.Filled.Block">ADR Blacklist</MudNavLink>
-            <MudNavLink Href="/admin/credential-validation" Icon="@Icons.Material.Filled.VerifiedUser">Credential Validation</MudNavLink>
-            <MudNavLink Href="/admin/adr-job-types" Icon="@Icons.Material.Filled.Category">ADR Job Types</MudNavLink>
-            <MudNavLink Href="/admin/power-bi-reports" Icon="@Icons.Material.Filled.BarChart">Power BI Reports</MudNavLink>
-            <MudNavLink Href="/admin/logs" Icon="@Icons.Material.Filled.Article">API Logs</MudNavLink>
+            <MudNavLink Href="/admin/users" Icon="@CustomIcons.UserManagement">User Management</MudNavLink>
+            <MudNavLink Href="/admin/adr-configuration" Icon="@CustomIcons.Configuration">ADR Configuration</MudNavLink>
+            <MudNavLink Href="/admin/adr-blacklist" Icon="@CustomIcons.Blacklist">ADR Blacklist</MudNavLink>
+            <MudNavLink Href="/admin/credential-validation" Icon="@CustomIcons.CredentialValidation">Credential Validation</MudNavLink>
+            <MudNavLink Href="/admin/adr-job-types" Icon="@CustomIcons.AdrJobTypes">ADR Job Types</MudNavLink>
+            <MudNavLink Href="/admin/power-bi-reports" Icon="@CustomIcons.PowerBiReportList">Power BI Reports</MudNavLink>
+            <MudNavLink Href="/admin/logs" Icon="@CustomIcons.ApiLogs">API Logs</MudNavLink>
         </MudNavGroup>
     }
 </MudNavMenu>

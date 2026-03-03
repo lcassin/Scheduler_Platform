@@ -721,6 +721,7 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
                 SELECT 1 FROM [AdrAccountBlacklist] b
                 WHERE b.[IsDeleted] = 0 AND b.[IsActive] = 1
                   AND b.[EffectiveStartDate] IS NOT NULL AND b.[EffectiveStartDate] > {0}
+                  AND (b.[EffectiveEndDate] IS NULL OR b.[EffectiveEndDate] >= b.[EffectiveStartDate])
                   AND (
                     (b.[PrimaryVendorCode] IS NOT NULL AND b.[PrimaryVendorCode] <> '' AND b.[PrimaryVendorCode] = a.[PrimaryVendorCode])
                     OR (b.[VMAccountId] IS NOT NULL AND b.[VMAccountId] = a.[VMAccountId])

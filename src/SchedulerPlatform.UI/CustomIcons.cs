@@ -144,4 +144,83 @@ public static class CustomIcons
 	c0.519,0.519,0.805,1.208,0.805,1.942s-0.286,1.423-0.805,1.942L21.361,14.518z M19.674,12.831l-0.51-0.509l9.282-9.282l0.51,0.509
 	L19.674,12.831z""/></svg>";
 
+    /// <summary>Blacklist icon: Accounts icon with a circle-X overlay in the lower-right corner.</summary>
+    public const string Blacklist = @"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 60 60"" fill=""currentColor""><g>
+	<g>
+		<path d=""M59,20H29c-0.6,0-1,0.4-1,1v38c0,0.6,0.4,1,1,1h30c0.6,0,1-0.4,1-1V21C60,20.4,59.6,20,59,20z M58,22v6H30
+			c0-0.6,0-1.6,0-2h12v-2H30c0-0.2,0-2,0-2H58z M30,58c0,0,0-18.3,0-28h28v28H30z""/>
+		<rect x=""35"" y=""32"" width=""3"" height=""2""/>
+		<rect x=""40"" y=""32"" width=""3"" height=""2""/>
+		<rect x=""45"" y=""32"" width=""3"" height=""2""/>
+		<rect x=""50"" y=""32"" width=""3"" height=""2""/>
+		<rect x=""33"" y=""37"" width=""4"" height=""2""/>
+		<rect x=""39"" y=""37"" width=""4"" height=""2""/>
+		<rect x=""45"" y=""37"" width=""4"" height=""2""/>
+		<rect x=""51"" y=""37"" width=""4"" height=""2""/>
+		<rect x=""33"" y=""41"" width=""4"" height=""2""/>
+		<rect x=""39"" y=""41"" width=""4"" height=""2""/>
+		<rect x=""45"" y=""41"" width=""4"" height=""2""/>
+		<rect x=""51"" y=""41"" width=""4"" height=""2""/>
+		<rect x=""33"" y=""45"" width=""4"" height=""2""/>
+		<rect x=""39"" y=""45"" width=""4"" height=""2""/>
+		<rect x=""45"" y=""45"" width=""4"" height=""2""/>
+		<rect x=""51"" y=""45"" width=""4"" height=""2""/>
+		<rect x=""33"" y=""49"" width=""4"" height=""2""/>
+		<rect x=""39"" y=""49"" width=""4"" height=""2""/>
+		<rect x=""45"" y=""49"" width=""4"" height=""2""/>
+		<rect x=""51"" y=""49"" width=""4"" height=""2""/>
+		<rect x=""33"" y=""53"" width=""4"" height=""2""/>
+		<rect x=""39"" y=""53"" width=""4"" height=""2""/>
+		<rect x=""45"" y=""53"" width=""4"" height=""2""/>
+		<rect x=""51"" y=""53"" width=""4"" height=""2""/>
+		<path d=""M2,14h11c0.6,0,1-0.4,1-1V2h34v14h2V1c0-0.6-0.4-1-1-1H13l0,0c-0.1,0-0.2,0-0.3,0.1h-0.1c-0.1,0.1-0.2,0.1-0.3,0.2l-12,12
+			c-0.1,0.1-0.1,0.2-0.2,0.3v0.1C0.1,12.8,0,12.9,0,13l0,0v11h2C2,24,2,15.1,2,14z M12,12H3.4l4.3-4.3L12,3.4L12,12L12,12z""/>
+		<path d=""M25,43H14v-4v-5v-5c0-0.6-0.4-1-1-1H1c-0.6,0-1,0.4-1,1v5v5v5v5v5v5c0,0.6,0.4,1,1,1h12h12c0.6,0,1-0.4,1-1v-5v-5v-5
+			C26,43.4,25.6,43,25,43z M2,45h10v3H2V45z M12,43H2v-3h10V43z M12,38H2v-3h10V38z M2,50h10v3H2V50z M14,50h10v3H14V50z M24,48H14
+			v-3h10V48z M2,30h10v3H2V30z M2,55h10v3H2V55z M24,58H14v-3h10V58z""/>
+		<rect x=""38"" y=""5"" width=""7"" height=""2""/>
+		<rect x=""27"" y=""10"" width=""18"" height=""2""/>
+		<rect x=""44"" y=""24"" width=""3"" height=""2""/>
+	</g>
+</g>
+<circle cx=""51"" cy=""51"" r=""9"" fill=""currentColor""/>
+<line x1=""47"" y1=""47"" x2=""55"" y2=""55"" stroke=""var(--mud-palette-drawer-background, #27272f)"" stroke-width=""2.5"" stroke-linecap=""round""/>
+<line x1=""55"" y1=""47"" x2=""47"" y2=""55"" stroke=""var(--mud-palette-drawer-background, #27272f)"" stroke-width=""2.5"" stroke-linecap=""round""/>
+</svg>";
+
+    /// <summary>Credential validation - shield with checkmark</summary>
+    public const string CredentialValidation = @"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 24 24"" fill=""currentColor""><path d=""M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16l-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z""/></svg>";
+
+    /// <summary>API Logs - document with lines</summary>
+    public const string ApiLogs = @"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 24 24"" fill=""currentColor""><path d=""M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm4 18H6V4h7v5h5v11zm-3-7H7v-2h8v2zm0 4H7v-2h8v2zm-2-8H7V7h6v2z""/></svg>";
+
+    /// <summary>Power BI Report List (admin page)</summary>
+    public const string PowerBiReportList = @"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 24 24"" fill=""currentColor""><path d=""M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z""/></svg>";
+
+    /// <summary>ADR Job Types - shapes/categories</summary>
+    public const string AdrJobTypes = @"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 24 24"" fill=""currentColor""><path d=""M12 2l-5.5 9h11L12 2zm0 3.84L13.93 9h-3.87L12 5.84zM17.5 13c-2.49 0-4.5 2.01-4.5 4.5s2.01 4.5 4.5 4.5 4.5-2.01 4.5-4.5-2.01-4.5-4.5-4.5zm0 7c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5zM3 21.5h8v-8H3v8zm2-6h4v4H5v-4z""/></svg>";
+
+    /// <summary>Configuration - gear/cog</summary>
+    public const string Configuration = @"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 24 24"" fill=""currentColor""><path d=""M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z""/></svg>";
+
+    /// <summary>User Management - people group</summary>
+    public const string UserManagement = @"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 24 24"" fill=""currentColor""><path d=""M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z""/></svg>";
+
+    /// <summary>Schedule Executions - history/replay</summary>
+    public const string ScheduleExecutions = @"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 24 24"" fill=""currentColor""><path d=""M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z""/></svg>";
+
+    /// <summary>Schedules - clock</summary>
+    public const string Schedules = @"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 24 24"" fill=""currentColor""><path d=""M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z""/></svg>";
+
+    /// <summary>Calendar</summary>
+    public const string Calendar = @"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 24 24"" fill=""currentColor""><path d=""M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM9 10H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2z""/></svg>";
+
+    /// <summary>Missed Schedules - warning triangle</summary>
+    public const string MissedSchedules = @"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 24 24"" fill=""currentColor""><path d=""M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z""/></svg>";
+
+    /// <summary>Open in new tab</summary>
+    public const string OpenInNewTab = @"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 24 24"" fill=""currentColor""><path d=""M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z""/></svg>";
+
+    /// <summary>Assessment/report chart icon for Power BI report items</summary>
+    public const string Assessment = @"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 24 24"" fill=""currentColor""><path d=""M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z""/></svg>";
 }
