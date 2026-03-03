@@ -73,6 +73,7 @@ public class AdrAccountStats
     public int UpcomingCount { get; set; }
     public int FutureCount { get; set; }
     public int MissingCount { get; set; }
+    public int BlacklistedCount { get; set; }
     public int OverdueCount { get; set; }
     public int ActiveJobsCount { get; set; }
 }

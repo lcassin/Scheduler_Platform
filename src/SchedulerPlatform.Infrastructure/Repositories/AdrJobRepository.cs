@@ -194,6 +194,7 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             string? sortColumn = null,
             bool sortDescending = true,
             List<int>? jobIds = null,
+            List<int>? excludeJobIds = null,
             int? adrJobTypeId = null,
             DateTime? modifiedAfter = null,
             DateTime? modifiedBefore = null,
@@ -204,10 +205,16 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             // Filter by both job.IsDeleted AND account.IsDeleted to exclude jobs for deleted accounts
             var query = _dbSet.Where(j => !j.IsDeleted && j.AdrAccount != null && !j.AdrAccount.IsDeleted);
             
-            // Filter by specific job IDs (used for blacklist filtering)
+            // Filter by specific job IDs (used for blacklist filtering - include only these)
             if (jobIds != null)
             {
                 query = query.Where(j => jobIds.Contains(j.Id));
+            }
+            
+            // Exclude specific job IDs (used for blacklist "none" filtering - exclude these)
+            if (excludeJobIds != null && excludeJobIds.Count > 0)
+            {
+                query = query.Where(j => !excludeJobIds.Contains(j.Id));
             }
             
             // Filter by manual request status
@@ -226,16 +233,7 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
 
             if (!string.IsNullOrWhiteSpace(status))
             {
-                // "ScrapeRequested" is a status group that includes "StatusCheckInProgress"
-                // This matches the chart behavior which counts both statuses as "ADR Request Sent"
-                if (status == "ScrapeRequested")
-                {
-                    query = query.Where(j => j.Status == "ScrapeRequested" || j.Status == "StatusCheckInProgress");
-                }
-                else
-                {
-                    query = query.Where(j => j.Status == status);
-                }
+                query = query.Where(j => j.Status == status);
             }
 
             if (billingPeriodStart.HasValue)

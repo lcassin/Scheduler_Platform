@@ -187,6 +187,14 @@
                     <MudItem xs="6">
                         <MudText Typo="Typo.body2"><strong>Missing:</strong> @FormatNumber(_adrStats.MissingCount)</MudText>
                     </MudItem>
+                    <MudItem xs="6">
+                        <MudLink Href="/adr/accounts?nextRunStatus=Blacklisted" Style="text-decoration: none;">
+                            <MudText Typo="Typo.body2" Style="cursor: pointer;">
+                                <MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" Color="Color.Dark" Class="mr-1" Style="vertical-align: middle;" />
+                                <strong>Blacklisted:</strong> @FormatNumber(_adrStats.BlacklistedCount)
+                            </MudText>
+                        </MudLink>
+                    </MudItem>
                 </MudGrid>
                 @if (_blacklistCounts != null)
                 {
@@ -981,7 +989,8 @@
         "#ff9800", // Due Soon (Warning/Orange)
         "#26c6da", // Upcoming (Info/Teal)
         "#66bb6a", // Future (Success/Green)
-        "#f44336"  // Missing (Error/Red)
+        "#f44336", // Missing (Error/Red)
+        "#424242"  // Blacklisted (Dark Grey)
     };
 
 
@@ -1230,7 +1239,8 @@
                         _adrStats.DueSoonCount,
                         _adrStats.UpcomingCount,
                         _adrStats.FutureCount,
-                        _adrStats.MissingCount
+                        _adrStats.MissingCount,
+                        _adrStats.BlacklistedCount
                     };
                     _adrAccountChartLabels = new string[]
                     {
@@ -1238,7 +1248,8 @@
                         "Due Soon",
                         "Upcoming",
                         "Future",
-                        "Missing"
+                        "Missing",
+                        "Blacklisted"
                     };
                 }
                 

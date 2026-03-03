@@ -228,7 +228,7 @@
                 "Missing",
                 null,
                 null,
-                null,
+                "none", // Exclude currently-blacklisted accounts (blacklisted != missing)
                 null,
                 null,
                 sortColumn,
@@ -292,6 +292,7 @@
             if (!string.IsNullOrWhiteSpace(_searchTerm))
                 filters["searchTerm"] = _searchTerm;
             filters["historicalStatus"] = "Missing"; // Always filter for Missing accounts
+            filters["blacklistStatus"] = "none"; // Exclude currently-blacklisted accounts
 
             // Start background export
             Snackbar.Add("Starting export... This may take a few minutes for large datasets.", Severity.Info);

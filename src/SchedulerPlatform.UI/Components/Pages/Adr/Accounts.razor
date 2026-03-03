@@ -108,6 +108,7 @@
                 <MudSelectItem Value="@("Due Soon")">Due Soon</MudSelectItem>
                 <MudSelectItem Value="@("Upcoming")">Upcoming</MudSelectItem>
                 <MudSelectItem Value="@("Future")">Future</MudSelectItem>
+                <MudSelectItem Value="@("Blacklisted")">Blacklisted</MudSelectItem>
             </MudSelect>
         </MudItem>
         <MudItem xs="12" md="1">
@@ -146,7 +147,8 @@
         </MudItem>
         <MudItem xs="12" md="2">
             <MudSelect T="string" @bind-Value="_selectedBlacklistStatus" Label="Blacklist" Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true">
-                <MudSelectItem Value="@("")">All</MudSelectItem>
+                <MudSelectItem Value="@("none")">Not Blacklisted</MudSelectItem>
+                <MudSelectItem Value="@("")">All (incl. Blacklisted)</MudSelectItem>
                 <MudSelectItem Value="@("current")">Currently Blacklisted</MudSelectItem>
                 <MudSelectItem Value="@("future")">Future Blacklist</MudSelectItem>
                 <MudSelectItem Value="@("any")">Any Blacklist</MudSelectItem>
@@ -375,14 +377,14 @@
     private string _selectedHistoricalStatus = "";
     private string _selectedOverrideFilter = "";
     private string _selectedJobStatus = "";
-    private string _selectedBlacklistStatus = "";
+    private string _selectedBlacklistStatus = "none";
     private string? _selectedPrimaryVendorCode;
     private string? _selectedMasterVendorCode;
     private string? _filterNextRunStatus;
     private string? _filterHistoricalStatus;
     private bool? _filterIsOverridden;
     private string? _filterJobStatus;
-    private string? _filterBlacklistStatus;
+    private string? _filterBlacklistStatus = "none";
     private string? _filterPrimaryVendorCode;
     private string? _filterMasterVendorCode;
     private TestModeStatus? _testModeStatus;
@@ -444,6 +446,12 @@
             {
                 _selectedBlacklistStatus = BlacklistStatusParam;
                 _filterBlacklistStatus = BlacklistStatusParam;
+            }
+            // When navigating with nextRunStatus=Blacklisted, show blacklisted accounts
+            if (string.Equals(NextRunStatusParam, "Blacklisted", StringComparison.OrdinalIgnoreCase))
+            {
+                _selectedBlacklistStatus = "";
+                _filterBlacklistStatus = null;
             }
             if (!string.IsNullOrEmpty(ModifiedAfterParam) && DateTime.TryParse(ModifiedAfterParam, null, System.Globalization.DateTimeStyles.RoundtripKind, out var modAfter))
             {
@@ -570,7 +578,7 @@
         _filterHistoricalStatus = string.IsNullOrEmpty(_selectedHistoricalStatus) ? null : _selectedHistoricalStatus;
         _filterIsOverridden = string.IsNullOrEmpty(_selectedOverrideFilter) ? null : bool.Parse(_selectedOverrideFilter);
         _filterJobStatus = string.IsNullOrEmpty(_selectedJobStatus) ? null : _selectedJobStatus;
-        _filterBlacklistStatus = string.IsNullOrEmpty(_selectedBlacklistStatus) ? null : _selectedBlacklistStatus;
+        _filterBlacklistStatus = _selectedBlacklistStatus;
         _filterPrimaryVendorCode = string.IsNullOrEmpty(_selectedPrimaryVendorCode) ? null : _selectedPrimaryVendorCode;
         _filterMasterVendorCode = string.IsNullOrEmpty(_selectedMasterVendorCode) ? null : _selectedMasterVendorCode;
         await _table.ReloadServerData();
@@ -584,14 +592,14 @@
         _selectedHistoricalStatus = "";
         _selectedOverrideFilter = "";
         _selectedJobStatus = "";
-        _selectedBlacklistStatus = "";
+        _selectedBlacklistStatus = "none";
         _selectedPrimaryVendorCode = null;
         _selectedMasterVendorCode = null;
         _filterNextRunStatus = null;
         _filterHistoricalStatus = null;
         _filterIsOverridden = null;
         _filterJobStatus = null;
-        _filterBlacklistStatus = null;
+        _filterBlacklistStatus = "none";
         _filterPrimaryVendorCode = null;
         _filterMasterVendorCode = null;
         await _table.ReloadServerData();
@@ -633,6 +641,7 @@
         "Due Soon" => Color.Warning,
         "Upcoming" => Color.Info,
         "Future" => Color.Default,
+        "Blacklisted" => Color.Dark,
         _ => Color.Default
     };
 
@@ -694,6 +703,7 @@
             "Due Soon" => $"This account will be due for processing soon ({daysUntil} days). Next run date: {nextRun}. This reflects the billing cycle timing, not the job outcome.",
             "Upcoming" => $"This account is scheduled but not yet due ({daysUntil} days). Next run date: {nextRun}.",
             "Future" => $"This account's next run is further out ({daysUntil} days). Next run date: {nextRun}.",
+            "Blacklisted" => "This account is currently blacklisted and excluded from ADR processing. It will not be picked up by the orchestrator until the blacklist is removed.",
             _ => $"Run status: {status}. Next run date: {nextRun}."
         };
     }
