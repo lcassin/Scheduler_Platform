@@ -496,8 +496,10 @@ public static class CustomIcons
 </g>
 </svg>";
 
-    /// <summary>Missed Schedules - warning triangle</summary>
-    public const string MissedSchedules = @"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 24 24"" fill=""currentColor""><path d=""M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z""/></svg>";
+    /// <summary>Missed Schedules - warning triangle (same as MissingAccounts)</summary>
+    public const string MissedSchedules = @"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 32 32"" fill=""currentColor""><path id=""warning--01_1_"" d=""M31,29.36H1c-0.128,0-0.248-0.069-0.312-0.181c-0.064-0.111-0.064-0.248,0-0.359l15-26
+	c0.129-0.224,0.495-0.224,0.624,0l15,26c0.064,0.111,0.064,0.248,0,0.359S31.129,29.36,31,29.36z M1.624,28.64h28.753L16,3.72
+	L1.624,28.64z M16.36,20h-0.72V10h0.72V20z M16,23c-0.552,0-1,0.448-1,1s0.448,1,1,1s1-0.448,1-1S16.552,23,16,23z""/></svg>";
 
     /// <summary>Open in new tab</summary>
     public const string OpenInNewTab = @"<svg xmlns=""http://www.w3.org/2000/svg"" viewBox=""0 0 24 24"" fill=""currentColor""><path d=""M19 19H5V5h7V3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z""/></svg>";
