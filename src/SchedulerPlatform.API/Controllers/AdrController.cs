@@ -106,6 +106,15 @@ public class AdrController : ControllerBase
     {
         try
         {
+            // "Blacklisted" is a computed status (not stored in DB). When the user filters
+            // by nextRunStatus=Blacklisted, convert it to a blacklistStatus=current filter
+            // and clear nextRunStatus so the DB query doesn't try to match it.
+            if (string.Equals(nextRunStatus, "Blacklisted", StringComparison.OrdinalIgnoreCase))
+            {
+                blacklistStatus = "current";
+                nextRunStatus = null;
+            }
+
             // If filtering by job status, we need to get the account IDs first
             List<int>? accountIdsWithJobStatus = null;
             if (!string.IsNullOrWhiteSpace(jobStatus))
@@ -204,6 +213,31 @@ public class AdrController : ControllerBase
                             (b.VMAccountId.HasValue && b.VMAccountId == a.VMAccountId) ||
                             (!string.IsNullOrEmpty(b.VMAccountNumber) && b.VMAccountNumber == a.VMAccountNumber) ||
                             (b.CredentialId.HasValue && b.CredentialId == a.CredentialId)))
+                        .Select(a => a.Id)
+                        .ToList();
+                }
+                else if (blacklistStatus == "none")
+                {
+                    // Get accounts that are NOT currently blacklisted (used by Missing Accounts page
+                    // to exclude blacklisted accounts since blacklisted != missing)
+                    var currentlyBlacklistedIds = allAccounts
+                        .Where(a => activeBlacklistsForFilter.Any(b =>
+                        {
+                            var matches = (!string.IsNullOrEmpty(b.PrimaryVendorCode) && b.PrimaryVendorCode == a.PrimaryVendorCode) ||
+                                          (b.VMAccountId.HasValue && b.VMAccountId == a.VMAccountId) ||
+                                          (!string.IsNullOrEmpty(b.VMAccountNumber) && b.VMAccountNumber == a.VMAccountNumber) ||
+                                          (b.CredentialId.HasValue && b.CredentialId == a.CredentialId);
+                            if (!matches) return false;
+                            
+                            var isCurrent = (!b.EffectiveStartDate.HasValue || b.EffectiveStartDate.Value <= filterToday) &&
+                                           (!b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= filterToday);
+                            return isCurrent;
+                        }))
+                        .Select(a => a.Id)
+                        .ToHashSet();
+                    
+                    accountIdsWithBlacklistStatus = allAccounts
+                        .Where(a => !currentlyBlacklistedIds.Contains(a.Id))
                         .Select(a => a.Id)
                         .ToList();
                 }
@@ -408,6 +442,15 @@ public class AdrController : ControllerBase
                     nextRunStatus = a.NextRunStatus;
                 }
 
+                // Override NextRunStatus to "Blacklisted" for currently-blacklisted accounts.
+                // Blacklisted accounts should not appear as "Run Now", "Due Soon", or "Missing"
+                // since they are excluded from processing.
+                var isCurrentlyBlacklisted = blacklistStatusLookup.TryGetValue(a.Id, out var blStatus) && blStatus.HasCurrent;
+                if (isCurrentlyBlacklisted)
+                {
+                    nextRunStatus = "Blacklisted";
+                }
+
                 return new
                 {
                     a.Id,
@@ -599,21 +642,72 @@ public class AdrController : ControllerBase
         try
         {
             var totalAccounts = await _unitOfWork.AdrAccounts.GetTotalCountAsync(clientId);
-            var runNowCount = await _unitOfWork.AdrAccounts.GetCountByNextRunStatusAsync("Run Now", clientId);
-            var dueSoonCount = await _unitOfWork.AdrAccounts.GetCountByNextRunStatusAsync("Due Soon", clientId);
+            var rawRunNowCount = await _unitOfWork.AdrAccounts.GetCountByNextRunStatusAsync("Run Now", clientId);
+            var rawDueSoonCount = await _unitOfWork.AdrAccounts.GetCountByNextRunStatusAsync("Due Soon", clientId);
             var upcomingCount = await _unitOfWork.AdrAccounts.GetCountByNextRunStatusAsync("Upcoming", clientId);
             var futureCount = await _unitOfWork.AdrAccounts.GetCountByNextRunStatusAsync("Future", clientId);
-            var missingCount = await _unitOfWork.AdrAccounts.GetCountByHistoricalStatusAsync("Missing", clientId);
+            var rawMissingCount = await _unitOfWork.AdrAccounts.GetCountByHistoricalStatusAsync("Missing", clientId);
             var activeJobsCount = await _unitOfWork.AdrJobs.GetActiveJobsCountAsync();
+
+            // Determine how many currently-blacklisted accounts fall into each status bucket
+            // so we can subtract them from the counts (blacklisted accounts shouldn't inflate Run Now/Due Soon/Missing)
+            var today = DateTime.UtcNow.Date;
+            var activeBlacklists = await _dbContext.AdrAccountBlacklists
+                .Where(b => !b.IsDeleted && b.IsActive)
+                .Where(b => !b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= today)
+                .Where(b => !b.EffectiveStartDate.HasValue || b.EffectiveStartDate.Value <= today)
+                .ToListAsync();
+
+            var blacklistedCount = 0;
+            var blacklistedRunNow = 0;
+            var blacklistedDueSoon = 0;
+            var blacklistedMissing = 0;
+
+            if (activeBlacklists.Any())
+            {
+                // Get all active (non-deleted) accounts and check which ones match a current blacklist
+                var accountsQuery = _dbContext.AdrAccounts.Where(a => !a.IsDeleted);
+                if (clientId.HasValue)
+                    accountsQuery = accountsQuery.Where(a => a.ClientId == clientId.Value);
+
+                var accounts = await accountsQuery
+                    .Select(a => new { a.Id, a.PrimaryVendorCode, a.VMAccountId, a.VMAccountNumber, a.CredentialId, a.NextRunStatus, a.HistoricalBillingStatus })
+                    .ToListAsync();
+
+                foreach (var a in accounts)
+                {
+                    var isBlacklisted = activeBlacklists.Any(b =>
+                    {
+                        if (!string.IsNullOrEmpty(b.PrimaryVendorCode) && b.PrimaryVendorCode == a.PrimaryVendorCode)
+                            return true;
+                        if (b.VMAccountId.HasValue && b.VMAccountId == a.VMAccountId)
+                            return true;
+                        if (!string.IsNullOrEmpty(b.VMAccountNumber) && b.VMAccountNumber == a.VMAccountNumber)
+                            return true;
+                        if (b.CredentialId.HasValue && b.CredentialId == a.CredentialId)
+                            return true;
+                        return false;
+                    });
+
+                    if (isBlacklisted)
+                    {
+                        blacklistedCount++;
+                        if (a.NextRunStatus == "Run Now") blacklistedRunNow++;
+                        else if (a.NextRunStatus == "Due Soon") blacklistedDueSoon++;
+                        if (a.HistoricalBillingStatus == "Missing") blacklistedMissing++;
+                    }
+                }
+            }
 
             return Ok(new
             {
                 totalAccounts,
-                runNowCount,
-                dueSoonCount,
+                runNowCount = rawRunNowCount - blacklistedRunNow,
+                dueSoonCount = rawDueSoonCount - blacklistedDueSoon,
                 upcomingCount,
                 futureCount,
-                missingCount,
+                missingCount = rawMissingCount - blacklistedMissing,
+                blacklistedCount,
                 overdueCount = 0, // Overdue is calculated based on ExpectedNextDateTime in the UI
                 activeJobsCount
             });
@@ -1536,6 +1630,12 @@ public class AdrController : ControllerBase
     {
         try
         {
+            // "Blacklisted" is a computed status (not stored in DB). When exporting with
+            // nextRunStatus=Blacklisted, we need to filter to currently-blacklisted accounts instead.
+            var filterBlacklistedOnly = string.Equals(nextRunStatus, "Blacklisted", StringComparison.OrdinalIgnoreCase);
+            if (filterBlacklistedOnly)
+                nextRunStatus = null;
+
             // Build the base query for accounts (don't materialize yet)
             var accountsQuery = _dbContext.AdrAccounts.Where(a => !a.IsDeleted);
 
@@ -1632,6 +1732,13 @@ public class AdrController : ControllerBase
                 blacklistStatusLookup[account.Id] = (hasCurrent, hasFuture);
             }
 
+            // If filtering for "Blacklisted" status, only include currently-blacklisted accounts
+            if (filterBlacklistedOnly)
+            {
+                exportData = exportData.Where(item => 
+                    blacklistStatusLookup.TryGetValue(item.Account.Id, out var bl) && bl.HasCurrent).ToList();
+            }
+
             var headers = new[] { "Account #", "VM Account ID", "Interface Account ID", "Client", "Primary Vendor Code", "Master Vendor Code", "Period Type", "Next Run", "Run Status", "Job Status", "Last Completed", "Historical Status", "Last Invoice", "Expected Next", "Account Overridden", "Account Overridden By", "Account Overridden Date", "Rule Overridden", "Rule Overridden By", "Rule Overridden Date", "Current Blacklist", "Future Blacklist" };
 
             if (format.Equals("csv", StringComparison.OrdinalIgnoreCase))
@@ -1643,7 +1750,8 @@ public class AdrController : ControllerBase
                     {
                         var a = item.Account;
                         var bl = blacklistStatusLookup.TryGetValue(a.Id, out var blStatus) ? blStatus : (HasCurrent: false, HasFuture: false);
-                        return $"{ExcelExportHelper.CsvEscape(a.VMAccountNumber)},{a.VMAccountId},{ExcelExportHelper.CsvEscape(a.InterfaceAccountId)},{ExcelExportHelper.CsvEscape(a.ClientName)},{ExcelExportHelper.CsvEscape(a.PrimaryVendorCode)},{ExcelExportHelper.CsvEscape(a.MasterVendorCode)},{ExcelExportHelper.CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{ExcelExportHelper.CsvEscape(a.NextRunStatus)},{ExcelExportHelper.CsvEscape(item.CurrentJobStatus)},{item.LastCompletedDateTime?.ToString("MM/dd/yyyy") ?? ""},{ExcelExportHelper.CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.IsManuallyOverridden},{ExcelExportHelper.CsvEscape(a.OverriddenBy)},{a.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""},{(item.RuleIsManuallyOverridden ? "Yes" : "No")},{ExcelExportHelper.CsvEscape(item.RuleOverriddenBy)},{item.RuleOverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""},{(bl.HasCurrent ? "Yes" : "No")},{(bl.HasFuture ? "Yes" : "No")}";
+                        var runStatus = bl.HasCurrent ? "Blacklisted" : a.NextRunStatus;
+                        return $"{ExcelExportHelper.CsvEscape(a.VMAccountNumber)},{a.VMAccountId},{ExcelExportHelper.CsvEscape(a.InterfaceAccountId)},{ExcelExportHelper.CsvEscape(a.ClientName)},{ExcelExportHelper.CsvEscape(a.PrimaryVendorCode)},{ExcelExportHelper.CsvEscape(a.MasterVendorCode)},{ExcelExportHelper.CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{ExcelExportHelper.CsvEscape(runStatus)},{ExcelExportHelper.CsvEscape(item.CurrentJobStatus)},{item.LastCompletedDateTime?.ToString("MM/dd/yyyy") ?? ""},{ExcelExportHelper.CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.IsManuallyOverridden},{ExcelExportHelper.CsvEscape(a.OverriddenBy)},{a.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""},{(item.RuleIsManuallyOverridden ? "Yes" : "No")},{ExcelExportHelper.CsvEscape(item.RuleOverriddenBy)},{item.RuleOverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""},{(bl.HasCurrent ? "Yes" : "No")},{(bl.HasFuture ? "Yes" : "No")}";
                     });
                 return File(csvBytes, "text/csv", $"adr_accounts_{DateTime.UtcNow:yyyyMMddHHmmss}.csv");
             }
@@ -1658,6 +1766,7 @@ public class AdrController : ControllerBase
                 {
                     var a = item.Account;
                     var bl = blacklistStatusLookup.TryGetValue(a.Id, out var blStatus) ? blStatus : (HasCurrent: false, HasFuture: false);
+                    var runStatus = bl.HasCurrent ? "Blacklisted" : a.NextRunStatus;
                     return new object?[]
                     {
                         a.VMAccountNumber,
@@ -1668,7 +1777,7 @@ public class AdrController : ControllerBase
                         a.MasterVendorCode,
                         a.PeriodType,
                         a.NextRunDateTime,
-                        a.NextRunStatus,
+                        runStatus,
                         item.CurrentJobStatus ?? "",
                         item.LastCompletedDateTime,
                         a.HistoricalBillingStatus,

@@ -108,6 +108,7 @@
                 <MudSelectItem Value="@("Due Soon")">Due Soon</MudSelectItem>
                 <MudSelectItem Value="@("Upcoming")">Upcoming</MudSelectItem>
                 <MudSelectItem Value="@("Future")">Future</MudSelectItem>
+                <MudSelectItem Value="@("Blacklisted")">Blacklisted</MudSelectItem>
             </MudSelect>
         </MudItem>
         <MudItem xs="12" md="1">
@@ -633,6 +634,7 @@
         "Due Soon" => Color.Warning,
         "Upcoming" => Color.Info,
         "Future" => Color.Default,
+        "Blacklisted" => Color.Dark,
         _ => Color.Default
     };
 
@@ -694,6 +696,7 @@
             "Due Soon" => $"This account will be due for processing soon ({daysUntil} days). Next run date: {nextRun}. This reflects the billing cycle timing, not the job outcome.",
             "Upcoming" => $"This account is scheduled but not yet due ({daysUntil} days). Next run date: {nextRun}.",
             "Future" => $"This account's next run is further out ({daysUntil} days). Next run date: {nextRun}.",
+            "Blacklisted" => "This account is currently blacklisted and excluded from ADR processing. It will not be picked up by the orchestrator until the blacklist is removed.",
             _ => $"Run status: {status}. Next run date: {nextRun}."
         };
     }
