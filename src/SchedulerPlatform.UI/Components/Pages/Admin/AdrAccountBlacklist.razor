@@ -74,7 +74,7 @@
                     </MudSelect>
                 </MudItem>
                 <MudItem xs="12" md="4" Class="d-flex align-center justify-end gap-2">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadBlacklist" StartIcon="@Icons.Material.Filled.FilterAlt">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters" StartIcon="@Icons.Material.Filled.FilterAlt">
                         Apply
                     </MudButton>
                     <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ClearFilters" StartIcon="@Icons.Material.Filled.Clear">
@@ -88,20 +88,9 @@
             </MudGrid>
         </MudPaper>
 
-        @if (_loading)
-        {
-            <MudProgressCircular Indeterminate="true" />
-        }
-        else
-        {
-            <MudTable Items="@_blacklistEntries" 
-                      Hover="true" 
-                      Striped="true"
-                      Dense="true"
-                      Loading="@_loading"
-                      LoadingProgressColor="Color.Primary"
-                      SortLabel="@_sortColumn"
-                      SortLabelChanged="OnSortChanged">
+            <MudTable T="BlacklistEntryModel" ServerData="@ServerReload"
+                      @ref="_table" Hover="true" Dense="true"
+                      Loading="@_loading" LoadingProgressColor="Color.Primary">
                 <HeaderContent>
                     <MudTh><MudTableSortLabel SortLabel="MasterVendorCode" T="BlacklistEntryModel">Master Vendor Code</MudTableSortLabel></MudTh>
                     <MudTh><MudTableSortLabel SortLabel="PrimaryVendorCode" T="BlacklistEntryModel">Primary Vendor Code</MudTableSortLabel></MudTh>
@@ -208,17 +197,19 @@
                     </MudTd>
                 </RowTemplate>
                 <NoRecordsContent>
-                    <MudText>No blacklist entries found.</MudText>
+                    @if (!_initialLoadComplete)
+                    {
+                        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+                    }
+                    else
+                    {
+                        <MudText>No blacklist entries found.</MudText>
+                    }
                 </NoRecordsContent>
+                <PagerContent>
+                    <MudTablePager PageSizeOptions="new int[] { 50, 100, 200 }" />
+                </PagerContent>
             </MudTable>
-            
-            <div class="d-flex justify-center mt-4">
-                <MudPagination Count="@_totalPages" 
-                               Selected="@_currentPage" 
-                               SelectedChanged="OnPageChanged"
-                               Color="Color.Primary" />
-            </div>
-        }
     }
 </MudContainer>
 
@@ -328,9 +319,10 @@
 </MudDialog>
 
 @code {
-    private List<BlacklistEntryModel> _blacklistEntries = new();
+    private MudTable<BlacklistEntryModel> _table = null!;
     private BlacklistEntryModel? _editingEntry;
     private bool _loading = true;
+    private bool _initialLoadComplete = false;
     private bool _saving = false;
     private bool _hasAccess = false;
     private bool _dialogVisible = false;
@@ -341,11 +333,10 @@
     private string _filterStatus = "current";
     private bool _exporting = false;
     
-    private int _currentPage = 1;
-    private int _totalPages = 1;
-    private int _pageSize = 50;
-    private string _sortColumn = "EffectiveEndDate";
-    private SortDirection _sortDirection = SortDirection.Descending;
+    // Filters applied on Apply button click (not live)
+    private string? _filterMasterVendorCode;
+    private string? _filterPrimaryVendorCode;
+    private string? _filterAccountNumber;
 
         protected override async Task OnInitializedAsync()
         {
@@ -354,86 +345,81 @@
                          await PermissionService.CanUpdateAsync("admin") ||
                          await PermissionService.CanUpdateAsync("adr");
         
-            if (_hasAccess)
-            {
-                await LoadBlacklist();
-            }
-            else
+            if (!_hasAccess)
             {
                 _loading = false;
             }
+            // If _hasAccess, MudTable's ServerData will trigger the first load automatically
         }
 
-        private async Task LoadBlacklist()
+    private async Task<TableData<BlacklistEntryModel>> ServerReload(TableState state, CancellationToken cancellationToken)
+    {
+        _loading = true;
+        try
         {
-            _loading = true;
-            try
+            var pageNumber = state.Page + 1;
+            var pageSize = state.PageSize;
+            var sortDescending = state.SortDirection == SortDirection.Descending ||
+                                 (state.SortDirection == SortDirection.None && string.IsNullOrEmpty(state.SortLabel));
+            var sortColumn = string.IsNullOrEmpty(state.SortLabel) ? "EffectiveEndDate" : state.SortLabel;
+
+            var queryParams = new List<string>
             {
-                var sortDescending = _sortDirection == SortDirection.Descending;
-                var sortColumn = string.IsNullOrEmpty(_sortColumn) ? "EffectiveEndDate" : _sortColumn;
-                
-                var queryParams = new List<string>
-                {
-                    $"pageNumber={_currentPage}",
-                    $"pageSize={_pageSize}",
-                    $"status={_filterStatus}",
-                    $"sortColumn={Uri.EscapeDataString(sortColumn)}",
-                    $"sortDescending={sortDescending}"
-                };
-            
-                if (!string.IsNullOrWhiteSpace(_searchMasterVendorCode))
-                    queryParams.Add($"masterVendorCode={Uri.EscapeDataString(_searchMasterVendorCode)}");
-                if (!string.IsNullOrWhiteSpace(_searchPrimaryVendorCode))
-                    queryParams.Add($"primaryVendorCode={Uri.EscapeDataString(_searchPrimaryVendorCode)}");
-                if (!string.IsNullOrWhiteSpace(_searchAccountNumber))
-                    queryParams.Add($"accountNumber={Uri.EscapeDataString(_searchAccountNumber)}");
-            
-                var url = $"adr/blacklist?{string.Join("&", queryParams)}";
-                var httpResponse = await HttpClientService.GetAsync(url);
-                httpResponse.EnsureSuccessStatusCode();
-                var response = await httpResponse.Content.ReadFromJsonAsync<BlacklistPagedResponse>();
-            
-                if (response != null)
-                {
-                    _blacklistEntries = response.Items ?? new List<BlacklistEntryModel>();
-                    _totalPages = (int)Math.Ceiling((double)response.TotalCount / _pageSize);
-                }
-            }
-            catch (Exception ex)
+                $"pageNumber={pageNumber}",
+                $"pageSize={pageSize}",
+                $"status={_filterStatus}",
+                $"sortColumn={Uri.EscapeDataString(sortColumn)}",
+                $"sortDescending={sortDescending}"
+            };
+
+            if (!string.IsNullOrWhiteSpace(_filterMasterVendorCode))
+                queryParams.Add($"masterVendorCode={Uri.EscapeDataString(_filterMasterVendorCode)}");
+            if (!string.IsNullOrWhiteSpace(_filterPrimaryVendorCode))
+                queryParams.Add($"primaryVendorCode={Uri.EscapeDataString(_filterPrimaryVendorCode)}");
+            if (!string.IsNullOrWhiteSpace(_filterAccountNumber))
+                queryParams.Add($"accountNumber={Uri.EscapeDataString(_filterAccountNumber)}");
+
+            var url = $"adr/blacklist?{string.Join("&", queryParams)}";
+            var httpResponse = await HttpClientService.GetAsync(url);
+            httpResponse.EnsureSuccessStatusCode();
+            var response = await httpResponse.Content.ReadFromJsonAsync<BlacklistPagedResponse>();
+
+            return new TableData<BlacklistEntryModel>
             {
-                Snackbar.Add($"Error loading blacklist: {ex.Message}", Severity.Error);
-            }
-            finally
-            {
-                _loading = false;
-            }
+                Items = response?.Items ?? new List<BlacklistEntryModel>(),
+                TotalItems = response?.TotalCount ?? 0
+            };
         }
-        
-        private async Task OnSortChanged(string sortLabel)
+        catch (Exception ex)
         {
-            if (_sortColumn == sortLabel)
-            {
-                _sortDirection = _sortDirection == SortDirection.Ascending 
-                    ? SortDirection.Descending 
-                    : SortDirection.Ascending;
-            }
-            else
-            {
-                _sortColumn = sortLabel;
-                _sortDirection = sortLabel == "EffectiveEndDate" ? SortDirection.Descending : SortDirection.Ascending;
-            }
-            _currentPage = 1;
-            await LoadBlacklist();
+            Snackbar.Add($"Error loading blacklist: {ex.Message}", Severity.Error);
+            return new TableData<BlacklistEntryModel> { Items = new List<BlacklistEntryModel>(), TotalItems = 0 };
         }
+        finally
+        {
+            _loading = false;
+            _initialLoadComplete = true;
+        }
+    }
+
+    private async Task ApplyFilters()
+    {
+        _filterMasterVendorCode = _searchMasterVendorCode;
+        _filterPrimaryVendorCode = _searchPrimaryVendorCode;
+        _filterAccountNumber = _searchAccountNumber;
+        await _table.ReloadServerData();
+    }
 
     private async Task ClearFilters()
     {
         _searchMasterVendorCode = null;
         _searchPrimaryVendorCode = null;
         _searchAccountNumber = null;
+        _filterMasterVendorCode = null;
+        _filterPrimaryVendorCode = null;
+        _filterAccountNumber = null;
         _filterStatus = "current";
-        _currentPage = 1;
-        await LoadBlacklist();
+        await _table.ReloadServerData();
     }
 
     private async Task ExportBlacklist(string status)
@@ -444,12 +430,12 @@
         {
             var queryParams = new List<string> { $"status={status}" };
             
-            if (!string.IsNullOrWhiteSpace(_searchMasterVendorCode))
-                queryParams.Add($"masterVendorCode={Uri.EscapeDataString(_searchMasterVendorCode)}");
-            if (!string.IsNullOrWhiteSpace(_searchPrimaryVendorCode))
-                queryParams.Add($"primaryVendorCode={Uri.EscapeDataString(_searchPrimaryVendorCode)}");
-            if (!string.IsNullOrWhiteSpace(_searchAccountNumber))
-                queryParams.Add($"accountNumber={Uri.EscapeDataString(_searchAccountNumber)}");
+            if (!string.IsNullOrWhiteSpace(_filterMasterVendorCode))
+                queryParams.Add($"masterVendorCode={Uri.EscapeDataString(_filterMasterVendorCode)}");
+            if (!string.IsNullOrWhiteSpace(_filterPrimaryVendorCode))
+                queryParams.Add($"primaryVendorCode={Uri.EscapeDataString(_filterPrimaryVendorCode)}");
+            if (!string.IsNullOrWhiteSpace(_filterAccountNumber))
+                queryParams.Add($"accountNumber={Uri.EscapeDataString(_filterAccountNumber)}");
             
             var url = $"adr/blacklist/export?{string.Join("&", queryParams)}";
             var response = await HttpClientService.GetAsync(url);
@@ -482,11 +468,6 @@
         }
     }
 
-    private async Task OnPageChanged(int page)
-    {
-        _currentPage = page;
-        await LoadBlacklist();
-    }
 
     private void OpenAddDialog()
     {
@@ -590,7 +571,7 @@
                 {
                     Snackbar.Add(_editingEntry.Id > 0 ? "Entry updated successfully" : "Entry created successfully", Severity.Success);
                     CloseDialog();
-                    await LoadBlacklist();
+                    await _table.ReloadServerData();
                 }
                 else
                 {
@@ -624,7 +605,7 @@
                     if (response.IsSuccessStatusCode)
                     {
                         Snackbar.Add("Entry deleted successfully", Severity.Success);
-                        await LoadBlacklist();
+                        await _table.ReloadServerData();
                     }
                     else
                     {
