@@ -1447,10 +1447,10 @@ public class AdrController : ControllerBase
                             isSuccess = true;
                             
                             // Determine IsFinal and IsError based on StatusId
-                            // Final statuses: 3, 4, 5, 7, 8, 9, 11, 14
-                            // Error statuses: 3, 4, 5, 7, 8, 14
-                            var finalStatuses = new[] { 3, 4, 5, 7, 8, 9, 11, 14 };
-                            var errorStatuses = new[] { 3, 4, 5, 7, 8, 14 };
+                            // Final statuses: 3, 4, 5, 7, 8, 9, 11, 12, 14
+                            // Error statuses: 3, 4, 5, 7, 8, 12, 14 (12 = AI Canceled in scraping context)
+                            var finalStatuses = new[] { 3, 4, 5, 7, 8, 9, 11, 12, 14 };
+                            var errorStatuses = new[] { 3, 4, 5, 7, 8, 12, 14 };
                             isFinal = finalStatuses.Contains(apiResponse.StatusId);
                             isError = errorStatuses.Contains(apiResponse.StatusId);
                         }
@@ -1487,7 +1487,16 @@ public class AdrController : ControllerBase
                 // Update job status if we got a final status
                 if (isSuccess && isFinal)
                 {
-                    job.Status = isError ? "ScrapeFailed" : "Completed";
+                    if (statusId == 12)
+                    {
+                        // StatusId 12 = "AI Canceled" - mark as Cancelled with the description
+                        job.Status = "Failed";
+                        job.ErrorMessage = statusDescription ?? "AI Canceled";
+                    }
+                    else
+                    {
+                        job.Status = isError ? "Failed" : "Completed";
+                    }
                     job.ScrapingCompletedDateTime = DateTime.UtcNow;
                 }
                 job.AdrStatusId = statusId ?? job.AdrStatusId;

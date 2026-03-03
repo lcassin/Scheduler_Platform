@@ -61,7 +61,8 @@ public enum AdrStatus
     Complete = 11,
     
     /// <summary>
-    /// Credential verification succeeded (used for credential checks, not scraping)
+    /// Context-dependent: "Login Attempt Succeeded" for credential checks, "AI Canceled" for scraping.
+    /// Both meanings are final states.
     /// </summary>
     LoginAttemptSucceeded = 12,
     
@@ -113,8 +114,8 @@ public static class AdrStatusExtensions
         {
             AdrStatus.NeedsHumanReview => true,
             AdrStatus.Complete => true,
+            AdrStatus.LoginAttemptSucceeded => true, // Final in both contexts: credential check success or AI Canceled
             AdrStatus.FailedToProcessAllDocuments => true,
-            // Note: LoginAttemptSucceeded (12) is NOT final for scraping context
             // Note: NoDocumentsFound (13) is NOT final - retry next day
             _ => false
         };

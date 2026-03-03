@@ -1582,6 +1582,18 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             // Advance the rule to the next billing cycle using pre-loaded rules (no DB round-trip)
                             AdvanceRuleToNextCycleSync(job, rulesById);
                         }
+                        else if (statusResult.StatusId == 12)
+                        {
+                            // StatusId 12 in scraping context = "AI Canceled" (the AI cancelled the request)
+                            // Mark as Failed so it can be retried or reviewed
+                            job.Status = "Failed";
+                            job.ErrorMessage = statusResult.StatusDescription ?? "AI Canceled";
+                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                            result.JobsNeedingReview++;
+                            _logger.LogInformation(
+                                "Job {JobId}: AI Canceled (StatusId 12: {Description}), marking as Failed",
+                                job.Id, statusResult.StatusDescription);
+                        }
                         else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
                         {
                             // Don't set ScrapingCompletedDateTime - NeedsReview can be fixed downstream
@@ -1999,6 +2011,18 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             // and the job should be re-checked daily until it's resolved or window expires
                             job.Status = "NeedsReview";
                             result.JobsNeedingReview++;
+                        }
+                        else if (statusResult.StatusId == 12)
+                        {
+                            // StatusId 12 in scraping context = "AI Canceled" (the AI cancelled the request)
+                            // Mark as Failed so it can be retried or reviewed
+                            job.Status = "Failed";
+                            job.ErrorMessage = statusResult.StatusDescription ?? "AI Canceled";
+                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                            result.JobsNeedingReview++;
+                            _logger.LogInformation(
+                                "Job {JobId}: AI Canceled (StatusId 12: {Description}), marking as Failed",
+                                job.Id, statusResult.StatusDescription);
                         }
                         else if (statusResult.StatusId == 3 || statusResult.StatusId == 4 || statusResult.StatusId == 5 ||
                                  statusResult.StatusId == 7 || statusResult.StatusId == 8 || statusResult.StatusId == 14)
@@ -3685,8 +3709,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// - Final needs review: 9 (Needs Human Review)
     /// - Final errors: 3 (Invalid CredentialID), 4 (Cannot Connect To VCM), 5 (Cannot Insert Into Queue),
     ///                 7 (Cannot Connect To AI), 8 (Cannot Save Result), 14 (Failed To Process All Documents)
+    /// - Final context-dependent: 12 (Login Attempt Succeeded for credential checks, AI Canceled for scraping)
     /// - Still processing: 1 (Inserted), 2 (Inserted With Priority), 6 (Sent To AI), 10 (Received From AI),
-    ///                     12 (Login Attempt Succeeded), 13 (No Documents Found), 15 (No Documents Processed - TBD)
+    ///                     13 (No Documents Found), 15 (No Documents Processed - TBD)
     /// </summary>
     private static bool IsFinalStatus(int statusId)
     {
@@ -3694,6 +3719,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         {
             11 => true,  // Complete (Document Retrieval Complete)
             9 => true,   // Needs Human Review
+            12 => true,  // Login Attempt Succeeded (credential check) OR AI Canceled (scraping) - both are final
             3 => true,   // Invalid CredentialID (error - final)
             4 => true,   // Cannot Connect To VCM (error - final)
             5 => true,   // Cannot Insert Into Queue (error - final)
@@ -3701,7 +3727,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             8 => true,   // Cannot Save Result (error - final)
             14 => true,  // Failed To Process All Documents (error - final)
             _ => false   // 1 (Inserted), 2 (Inserted With Priority), 6 (Sent To AI), 10 (Received From AI),
-                         // 12 (Login Attempt Succeeded), 13 (No Documents Found - retry next day), 15 (No Documents Processed - TBD)
+                         // 13 (No Documents Found - retry next day), 15 (No Documents Processed - TBD)
         };
     }
 
