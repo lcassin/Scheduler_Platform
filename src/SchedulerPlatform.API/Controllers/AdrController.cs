@@ -276,18 +276,47 @@ public class AdrController : ControllerBase
             // Create a lookup dictionary
             var jobStatusLookup = currentJobStatuses.ToDictionary(x => x.AdrAccountId);
             
-            // Get blacklist status for each account (single query)
+            // PERFORMANCE: Use denormalized flags from the account records themselves for
+            // HasCurrent/HasFuture. Only load blacklist entry details for flagged accounts
+            // on the current page (not ALL entries from the blacklist table).
             var today = DateTime.UtcNow.Date;
-            var activeBlacklists = await _dbContext.AdrAccountBlacklists
-                .Where(b => !b.IsDeleted && b.IsActive)
-                .Where(b => !b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= today)
-                .ToListAsync();
+            
+            // Collect identifiers from flagged accounts on this page to find matching blacklist entries
+            var flaggedAccounts = items.Where(a => a.IsCurrentlyBlacklisted || a.IsFutureBlacklisted).ToList();
+            var pageVendorCodes = flaggedAccounts.Where(a => !string.IsNullOrEmpty(a.PrimaryVendorCode)).Select(a => a.PrimaryVendorCode!).Distinct().ToList();
+            var pageVMAccountIds = flaggedAccounts.Where(a => a.VMAccountId != 0).Select(a => a.VMAccountId).Distinct().ToList();
+            var pageVMAccountNumbers = flaggedAccounts.Where(a => !string.IsNullOrEmpty(a.VMAccountNumber)).Select(a => a.VMAccountNumber!).Distinct().ToList();
+            var pageCredentialIds = flaggedAccounts.Where(a => a.CredentialId != 0).Select(a => a.CredentialId).Distinct().ToList();
+            
+            // Only query blacklist entries if there are flagged accounts on this page
+            var matchingBlacklistEntries = new List<AdrAccountBlacklist>();
+            if (flaggedAccounts.Any())
+            {
+                matchingBlacklistEntries = await _dbContext.AdrAccountBlacklists
+                    .Where(b => !b.IsDeleted && b.IsActive)
+                    .Where(b => !b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= today)
+                    .Where(b =>
+                        (b.PrimaryVendorCode != null && b.PrimaryVendorCode != "" && pageVendorCodes.Contains(b.PrimaryVendorCode)) ||
+                        (b.VMAccountId.HasValue && pageVMAccountIds.Contains(b.VMAccountId.Value)) ||
+                        (b.VMAccountNumber != null && b.VMAccountNumber != "" && pageVMAccountNumbers.Contains(b.VMAccountNumber)) ||
+                        (b.CredentialId.HasValue && pageCredentialIds.Contains(b.CredentialId.Value))
+                    )
+                    .ToListAsync();
+            }
             
             // Build blacklist status lookup for each account
             var blacklistStatusLookup = new Dictionary<int, (bool HasCurrent, bool HasFuture, int CurrentCount, int FutureCount, List<BlacklistSummary> CurrentSummaries, List<BlacklistSummary> FutureSummaries)>();
             foreach (var account in items)
             {
-                var matchingBlacklists = activeBlacklists.Where(b =>
+                // Use denormalized flags for quick HasCurrent/HasFuture check
+                if (!account.IsCurrentlyBlacklisted && !account.IsFutureBlacklisted)
+                {
+                    blacklistStatusLookup[account.Id] = (false, false, 0, 0, new List<BlacklistSummary>(), new List<BlacklistSummary>());
+                    continue;
+                }
+                
+                // For flagged accounts, find the specific matching entries for detail display
+                var accountBlacklists = matchingBlacklistEntries.Where(b =>
                 {
                     if (!string.IsNullOrEmpty(b.PrimaryVendorCode) && b.PrimaryVendorCode == account.PrimaryVendorCode)
                         return true;
@@ -300,12 +329,12 @@ public class AdrController : ControllerBase
                     return false;
                 }).ToList();
                 
-                var currentBlacklists = matchingBlacklists
+                var currentBlacklists = accountBlacklists
                     .Where(b => (!b.EffectiveStartDate.HasValue || b.EffectiveStartDate.Value <= today) &&
                                 (!b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= today))
                     .ToList();
                 
-                var futureBlacklists = matchingBlacklists
+                var futureBlacklists = accountBlacklists
                     .Where(b => b.EffectiveStartDate.HasValue && b.EffectiveStartDate.Value > today)
                     .ToList();
                 
@@ -336,8 +365,8 @@ public class AdrController : ControllerBase
                 }).ToList();
                 
                 blacklistStatusLookup[account.Id] = (
-                    currentBlacklists.Any(),
-                    futureBlacklists.Any(),
+                    account.IsCurrentlyBlacklisted,
+                    account.IsFutureBlacklisted,
                     currentBlacklists.Count,
                     futureBlacklists.Count,
                     currentSummaries,
@@ -623,9 +652,22 @@ public class AdrController : ControllerBase
                 .Where(a => a.HistoricalBillingStatus == "Missing")
                 .CountAsync();
 
+            // PERFORMANCE: Count active jobs excluding blacklisted accounts
+            // Uses denormalized IsCurrentlyBlacklisted flag on AdrAccount
+            var blacklistedAccountIds = await blacklistedAccountsQuery
+                .Select(a => a.Id)
+                .ToListAsync();
+            
+            var activeStatuses = new[] { "Pending", "CredentialVerified", "ScrapeRequested" };
+            var activeJobsExcludingBlacklisted = await _dbContext.AdrJobs
+                .Where(j => !j.IsDeleted && activeStatuses.Contains(j.Status))
+                .Where(j => !blacklistedAccountIds.Contains(j.AdrAccountId))
+                .CountAsync();
+
             return Ok(new
             {
-                totalAccounts,
+                // Total accounts EXCLUDES blacklisted so it matches what clicking the tile shows
+                totalAccounts = totalAccounts - blacklistedCount,
                 runNowCount = rawRunNowCount - blacklistedRunNow,
                 dueSoonCount = rawDueSoonCount - blacklistedDueSoon,
                 upcomingCount = rawUpcomingCount - blacklistedUpcoming,
@@ -633,7 +675,7 @@ public class AdrController : ControllerBase
                 missingCount = rawMissingCount - blacklistedMissing,
                 blacklistedCount,
                 overdueCount = 0, // Overdue is calculated based on ExpectedNextDateTime in the UI
-                activeJobsCount
+                activeJobsCount = activeJobsExcludingBlacklisted
             });
         }
         catch (Exception ex)
