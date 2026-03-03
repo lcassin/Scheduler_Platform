@@ -202,6 +202,8 @@ public class BlacklistCountsResult
 {
     public int CurrentCount { get; set; }
     public int FutureCount { get; set; }
+    public int CurrentAccountCount { get; set; }
+    public int FutureAccountCount { get; set; }
 }
 
 public class BulkCredentialVerificationResult

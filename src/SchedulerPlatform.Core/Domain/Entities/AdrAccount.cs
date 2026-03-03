@@ -132,6 +132,21 @@ public class AdrAccount : BaseEntity
     public DateTime? LastSuccessfulDownloadDate { get; set; }
     
     /// <summary>
+    /// Denormalized flag: true when this account matches an active (current) blacklist entry.
+    /// Updated during Account Sync (after determining active accounts) so that all queries
+    /// can filter by this indexed column instead of running expensive blacklist table joins.
+    /// Only set on active (non-deleted) accounts.
+    /// </summary>
+    public bool IsCurrentlyBlacklisted { get; set; }
+    
+    /// <summary>
+    /// Denormalized flag: true when this account matches a future-dated blacklist entry.
+    /// Updated during Account Sync alongside IsCurrentlyBlacklisted.
+    /// Only set on active (non-deleted) accounts.
+    /// </summary>
+    public bool IsFutureBlacklisted { get; set; }
+    
+    /// <summary>
     /// Flag indicating if billing dates/frequency have been manually overridden.
     /// When true, account sync will skip updating: LastInvoiceDateTime, PeriodType, 
     /// PeriodDays, MedianDays, ExpectedNextDateTime, ExpectedRangeStartDateTime, ExpectedRangeEndDateTime
