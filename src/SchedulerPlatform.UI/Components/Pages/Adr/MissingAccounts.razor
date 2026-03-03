@@ -43,7 +43,20 @@
                              AdornmentIcon="@Icons.Material.Filled.Business"
                              AdornmentColor="Color.Primary" />
         </MudItem>
-        <MudItem xs="12" md="6" Class="d-flex align-center justify-end gap-2">
+        <MudItem xs="12" md="3">
+            <MudSelect T="string"
+                       @bind-Value="_selectedBlacklistStatus"
+                       Label="Blacklist"
+                       Variant="Variant.Outlined"
+                       Margin="Margin.Dense">
+                <MudSelectItem Value="@("none")">Not Blacklisted</MudSelectItem>
+                <MudSelectItem Value="@("current")">Currently Blacklisted</MudSelectItem>
+                <MudSelectItem Value="@("future")">Future Blacklisted</MudSelectItem>
+                <MudSelectItem Value="@("any")">Any Blacklisted</MudSelectItem>
+                <MudSelectItem Value="@string.Empty">All</MudSelectItem>
+            </MudSelect>
+        </MudItem>
+        <MudItem xs="12" md="3" Class="d-flex align-center justify-end gap-2">
             <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="ApplyFilters" StartIcon="@Icons.Material.Filled.FilterAlt">
                 Apply
             </MudButton>
@@ -92,6 +105,8 @@
                 <MudTh><MudTableSortLabel SortLabel="LastInvoiceDateTime" T="AdrAccount">Last Invoice</MudTableSortLabel></MudTh>
                 <MudTh><MudTableSortLabel SortLabel="ExpectedNextDateTime" T="AdrAccount">Expected Next</MudTableSortLabel></MudTh>
                 <MudTh>Days Overdue</MudTh>
+                <MudTh>Current Blacklist</MudTh>
+                <MudTh>Future Blacklist</MudTh>
                 <MudTh>Actions</MudTh>
             </HeaderContent>
             <RowTemplate>
@@ -148,6 +163,26 @@
                         }
                     }
                 </MudTd>
+                <MudTd DataLabel="Current Blacklist">
+                    @if (context.IsCurrentlyBlacklisted)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Error">Yes</MudChip>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">No</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Future Blacklist">
+                    @if (context.IsFutureBlacklisted)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning">Yes</MudChip>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">No</MudText>
+                    }
+                </MudTd>
                 <MudTd DataLabel="Actions">
                     <MudMenu Icon="@Icons.Material.Filled.MoreVert" Size="Size.Small">
                         <MudMenuItem Icon="@Icons.Material.Filled.Visibility" OnClick="() => ViewAccountDetails(context)">View Details</MudMenuItem>
@@ -187,7 +222,9 @@
     private bool _canExecuteManualRequest = false;
     private string? _searchTerm;
     private Client? _selectedClient;
+    private string _selectedBlacklistStatus = "none";
     private int? _filterClientId;
+    private string? _filterBlacklistStatus = "none";
 
     protected override async Task OnInitializedAsync()
     {
@@ -228,7 +265,7 @@
                 "Missing",
                 null,
                 null,
-                "none", // Exclude currently-blacklisted accounts (blacklisted != missing)
+                _filterBlacklistStatus,
                 null,
                 null,
                 sortColumn,
@@ -268,6 +305,7 @@
     private async Task ApplyFilters()
     {
         _filterClientId = _selectedClient?.Id;
+        _filterBlacklistStatus = string.IsNullOrWhiteSpace(_selectedBlacklistStatus) ? null : _selectedBlacklistStatus;
         await _table.ReloadServerData();
     }
 
@@ -275,7 +313,9 @@
     {
         _searchTerm = null;
         _selectedClient = null;
+        _selectedBlacklistStatus = "none";
         _filterClientId = null;
+        _filterBlacklistStatus = "none";
         await _table.ReloadServerData();
     }
 
@@ -292,7 +332,8 @@
             if (!string.IsNullOrWhiteSpace(_searchTerm))
                 filters["searchTerm"] = _searchTerm;
             filters["historicalStatus"] = "Missing"; // Always filter for Missing accounts
-            filters["blacklistStatus"] = "none"; // Exclude currently-blacklisted accounts
+            if (!string.IsNullOrWhiteSpace(_filterBlacklistStatus))
+                filters["blacklistStatus"] = _filterBlacklistStatus;
 
             // Start background export
             Snackbar.Add("Starting export... This may take a few minutes for large datasets.", Severity.Info);
