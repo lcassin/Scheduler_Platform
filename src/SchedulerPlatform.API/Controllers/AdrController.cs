@@ -1446,11 +1446,12 @@ public class AdrController : ControllerBase
                             statusDescription = apiResponse.Status;
                             isSuccess = true;
                             
-                            // Determine IsFinal and IsError based on StatusId
-                            // Final statuses: 3, 4, 5, 7, 8, 9, 11, 12, 14
-                            // Error statuses: 3, 4, 5, 7, 8, 12, 14 (12 = AI Canceled in scraping context)
-                            var finalStatuses = new[] { 3, 4, 5, 7, 8, 9, 11, 12, 14 };
-                            var errorStatuses = new[] { 3, 4, 5, 7, 8, 12, 14 };
+                            // Determine IsFinal and IsError based on ADR API status table
+                            // Final statuses (ADR IsFinal=1 + scheduler-terminal errors)
+                            // Error statuses (ADR IsError=1): 3, 4, 5, 7, 8, 9, 15, 16
+                            // Note: 12 (AI Canceled) and 14 (No Documents Found) are NOT errors
+                            var finalStatuses = new[] { 3, 4, 5, 7, 8, 9, 11, 12, 13, 14, 15, 16 };
+                            var errorStatuses = new[] { 3, 4, 5, 7, 8, 9, 15, 16 };
                             isFinal = finalStatuses.Contains(apiResponse.StatusId);
                             isError = errorStatuses.Contains(apiResponse.StatusId);
                         }
@@ -1489,9 +1490,13 @@ public class AdrController : ControllerBase
                 {
                     if (statusId == 12)
                     {
-                        // StatusId 12 = "AI Canceled" - mark as Cancelled with the description
-                        job.Status = "Failed";
-                        job.ErrorMessage = statusDescription ?? "AI Canceled";
+                        // StatusId 12 = "AI Canceled" - not an error, just cancelled by AI
+                        job.Status = "Cancelled";
+                    }
+                    else if (statusId == 14)
+                    {
+                        // StatusId 14 = "No Documents Found" - not an error
+                        job.Status = "NoInvoiceFound";
                     }
                     else
                     {

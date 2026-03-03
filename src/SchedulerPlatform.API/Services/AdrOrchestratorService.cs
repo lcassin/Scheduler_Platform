@@ -1532,12 +1532,22 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         // Handle credential verification status check
                         if (statusResult.StatusId == (int)AdrStatus.LoginAttemptSucceeded)
                         {
-                            // Credential verification succeeded
+                            // StatusId 13: Credential verification succeeded
                             job.Status = "CredentialVerified";
                             job.CredentialVerifiedDateTime = DateTime.UtcNow;
                             result.JobsCompleted++;
                             _logger.LogInformation(
-                                "Job {JobId}: Credential verification succeeded (StatusId 12)",
+                                "Job {JobId}: Credential verification succeeded (StatusId {StatusId})",
+                                job.Id, statusResult.StatusId);
+                        }
+                        else if (statusResult.StatusId == (int)AdrStatus.AiCanceled)
+                        {
+                            // StatusId 12: AI Canceled - not an error, but credential check didn't complete
+                            // Mark as CredentialFailed so it can be retried on next check
+                            job.Status = "CredentialFailed";
+                            result.JobsNeedingReview++;
+                            _logger.LogInformation(
+                                "Job {JobId}: AI Canceled during credential check (StatusId 12), marking as CredentialFailed for retry",
                                 job.Id);
                         }
                         else if (statusResult.IsError || statusResult.StatusId == 3 || statusResult.StatusId == 4 || 
@@ -1582,17 +1592,25 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             // Advance the rule to the next billing cycle using pre-loaded rules (no DB round-trip)
                             AdvanceRuleToNextCycleSync(job, rulesById);
                         }
-                        else if (statusResult.StatusId == 12)
+                        else if (statusResult.StatusId == (int)AdrStatus.AiCanceled)
                         {
-                            // StatusId 12 in scraping context = "AI Canceled" (the AI cancelled the request)
-                            // Mark as Failed so it can be retried or reviewed
-                            job.Status = "Failed";
-                            job.ErrorMessage = statusResult.StatusDescription ?? "AI Canceled";
+                            // StatusId 12: AI Canceled - not an error, AI just cancelled the request
+                            job.Status = "Cancelled";
+                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                            result.JobsCompleted++;
+                            _logger.LogInformation(
+                                "Job {JobId}: AI Canceled (StatusId 12: {Description}), marking as Cancelled",
+                                job.Id, statusResult.StatusDescription);
+                        }
+                        else if (statusResult.StatusId == (int)AdrStatus.NoDocumentsFound)
+                        {
+                            // StatusId 14: No Documents Found - not an error, just nothing to retrieve
+                            job.Status = "NoInvoiceFound";
                             job.ScrapingCompletedDateTime = DateTime.UtcNow;
                             result.JobsNeedingReview++;
                             _logger.LogInformation(
-                                "Job {JobId}: AI Canceled (StatusId 12: {Description}), marking as Failed",
-                                job.Id, statusResult.StatusDescription);
+                                "Job {JobId}: No Documents Found (StatusId 14), marking as NoInvoiceFound",
+                                job.Id);
                         }
                         else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
                         {
@@ -1953,12 +1971,22 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         // Handle credential verification status check
                         if (statusResult.StatusId == (int)AdrStatus.LoginAttemptSucceeded)
                         {
-                            // Credential verification succeeded
+                            // StatusId 13: Credential verification succeeded
                             job.Status = "CredentialVerified";
                             job.CredentialVerifiedDateTime = DateTime.UtcNow;
                             result.JobsCompleted++;
                             _logger.LogInformation(
-                                "Job {JobId}: Credential verification succeeded (StatusId 12)",
+                                "Job {JobId}: Credential verification succeeded (StatusId {StatusId})",
+                                job.Id, statusResult.StatusId);
+                        }
+                        else if (statusResult.StatusId == (int)AdrStatus.AiCanceled)
+                        {
+                            // StatusId 12: AI Canceled - not an error, but credential check didn't complete
+                            // Mark as CredentialFailed so it can be retried on next check
+                            job.Status = "CredentialFailed";
+                            result.JobsNeedingReview++;
+                            _logger.LogInformation(
+                                "Job {JobId}: AI Canceled during credential check (StatusId 12), marking as CredentialFailed for retry",
                                 job.Id);
                         }
                         else if (statusResult.IsError || statusResult.StatusId == 3 || statusResult.StatusId == 4 || 
@@ -2004,6 +2032,26 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             // Advance the rule to the next billing cycle using pre-loaded rules (no DB round-trip)
                             AdvanceRuleToNextCycleSync(job, rulesById);
                         }
+                        else if (statusResult.StatusId == (int)AdrStatus.AiCanceled)
+                        {
+                            // StatusId 12: AI Canceled - not an error, AI just cancelled the request
+                            job.Status = "Cancelled";
+                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                            result.JobsCompleted++;
+                            _logger.LogInformation(
+                                "Job {JobId}: AI Canceled (StatusId 12: {Description}), marking as Cancelled",
+                                job.Id, statusResult.StatusDescription);
+                        }
+                        else if (statusResult.StatusId == (int)AdrStatus.NoDocumentsFound)
+                        {
+                            // StatusId 14: No Documents Found - not an error, just nothing to retrieve
+                            job.Status = "NoInvoiceFound";
+                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                            result.JobsNeedingReview++;
+                            _logger.LogInformation(
+                                "Job {JobId}: No Documents Found (StatusId 14), marking as NoInvoiceFound",
+                                job.Id);
+                        }
                         else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
                         {
                             // StatusId 9: Needs Human Review
@@ -2012,28 +2060,18 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             job.Status = "NeedsReview";
                             result.JobsNeedingReview++;
                         }
-                        else if (statusResult.StatusId == 12)
-                        {
-                            // StatusId 12 in scraping context = "AI Canceled" (the AI cancelled the request)
-                            // Mark as Failed so it can be retried or reviewed
-                            job.Status = "Failed";
-                            job.ErrorMessage = statusResult.StatusDescription ?? "AI Canceled";
-                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
-                            result.JobsNeedingReview++;
-                            _logger.LogInformation(
-                                "Job {JobId}: AI Canceled (StatusId 12: {Description}), marking as Failed",
-                                job.Id, statusResult.StatusDescription);
-                        }
                         else if (statusResult.StatusId == 3 || statusResult.StatusId == 4 || statusResult.StatusId == 5 ||
-                                 statusResult.StatusId == 7 || statusResult.StatusId == 8 || statusResult.StatusId == 14)
+                                 statusResult.StatusId == 7 || statusResult.StatusId == 8 ||
+                                 statusResult.StatusId == 15 || statusResult.StatusId == 16)
                         {
-                            // Error statuses:
+                            // Error statuses (per ADR API IsError=1):
                             // StatusId 3: Invalid CredentialID
                             // StatusId 4: Cannot Connect To VCM
                             // StatusId 5: Cannot Insert Into Queue
                             // StatusId 7: Cannot Connect To AI
                             // StatusId 8: Cannot Save Result
-                            // StatusId 14: Failed To Process All Documents
+                            // StatusId 15: Failed to Process All Documents
+                            // StatusId 16: No Documents Processed
                             job.Status = "Failed";
                             job.ScrapingCompletedDateTime = DateTime.UtcNow;
                             result.Errors++;
@@ -3703,31 +3741,34 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     }
     
     /// <summary>
-    /// Determines if a StatusId represents a final state (job is done processing).
-    /// Based on ADR API status codes:
-    /// - Final success: 11 (Complete/Document Retrieval Complete)
-    /// - Final needs review: 9 (Needs Human Review)
-    /// - Final errors: 3 (Invalid CredentialID), 4 (Cannot Connect To VCM), 5 (Cannot Insert Into Queue),
-    ///                 7 (Cannot Connect To AI), 8 (Cannot Save Result), 14 (Failed To Process All Documents)
-    /// - Final context-dependent: 12 (Login Attempt Succeeded for credential checks, AI Canceled for scraping)
-    /// - Still processing: 1 (Inserted), 2 (Inserted With Priority), 6 (Sent To AI), 10 (Received From AI),
-    ///                     13 (No Documents Found), 15 (No Documents Processed - TBD)
+    /// Determines if a StatusId represents a final state for the scheduler (job is done processing).
+    /// This combines the ADR API's IsFinal=1 statuses with error statuses that the scheduler treats as terminal.
+    /// 
+    /// ADR API IsFinal=1: 9 (Needs Human Review), 11 (Complete), 12 (AI Canceled), 13 (Login Attempt Succeeded), 14 (No Documents Found)
+    /// Scheduler-terminal errors: 3 (Invalid CredentialID), 4 (Cannot Connect To VCM), 5 (Cannot Insert Into Queue),
+    ///                            7 (Cannot Connect To AI), 8 (Cannot Save Result), 15 (Failed to Process All Documents),
+    ///                            16 (No Documents Processed)
+    /// Still processing: 1 (Inserted), 2 (Inserted With Priority), 6 (Sent To AI), 10 (Received From AI)
     /// </summary>
     private static bool IsFinalStatus(int statusId)
     {
         return statusId switch
         {
-            11 => true,  // Complete (Document Retrieval Complete)
-            9 => true,   // Needs Human Review
-            12 => true,  // Login Attempt Succeeded (credential check) OR AI Canceled (scraping) - both are final
-            3 => true,   // Invalid CredentialID (error - final)
-            4 => true,   // Cannot Connect To VCM (error - final)
-            5 => true,   // Cannot Insert Into Queue (error - final)
-            7 => true,   // Cannot Connect To AI (error - final)
-            8 => true,   // Cannot Save Result (error - final)
-            14 => true,  // Failed To Process All Documents (error - final)
-            _ => false   // 1 (Inserted), 2 (Inserted With Priority), 6 (Sent To AI), 10 (Received From AI),
-                         // 13 (No Documents Found - retry next day), 15 (No Documents Processed - TBD)
+            // ADR API IsFinal=1 statuses
+            9 => true,   // Needs Human Review (IsError=1, IsFinal=1)
+            11 => true,  // Document Retrieval Complete (IsError=0, IsFinal=1)
+            12 => true,  // AI Canceled (IsError=0, IsFinal=1) - NOT an error
+            13 => true,  // Login Attempt Succeeded (IsError=0, IsFinal=1)
+            14 => true,  // No Documents Found (IsError=0, IsFinal=1) - NOT an error
+            // Error statuses the scheduler treats as terminal (ADR API IsFinal=0 but scheduler stops checking)
+            3 => true,   // Invalid CredentialID (IsError=1)
+            4 => true,   // Cannot Connect To VCM (IsError=1)
+            5 => true,   // Cannot Insert Into Queue (IsError=1)
+            7 => true,   // Cannot Connect To AI (IsError=1)
+            8 => true,   // Cannot Save Result (IsError=1)
+            15 => true,  // Failed to Process All Documents (IsError=1)
+            16 => true,  // No Documents Processed (IsError=1)
+            _ => false   // 1 (Inserted), 2 (Inserted With Priority), 6 (Sent To AI), 10 (Received From AI)
         };
     }
 
