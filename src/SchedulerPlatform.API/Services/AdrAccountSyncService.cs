@@ -681,7 +681,7 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
         var today = DateTime.UtcNow.Date;
 
         // Step 1: Reset all flags to false first (clean slate)
-        var resetSql = "UPDATE [AdrAccount] SET [IsCurrentlyBlacklisted] = 0, [IsFutureBlacklisted] = 0";
+        var resetSql = "UPDATE [AdrAccount] SET [IsCurrentlyBlacklisted] = 0, [IsFutureBlacklisted] = 0 WHERE [IsCurrentlyBlacklisted] = 1 OR [IsFutureBlacklisted] = 1";
         var resetCount = await _dbContext.Database.ExecuteSqlRawAsync(resetSql, Array.Empty<object>(), cancellationToken);
         _logger.LogDebug("Reset blacklist flags on {Count} accounts", resetCount);
         subStepCallback?.Invoke("Updating blacklist flags", 1, 4);

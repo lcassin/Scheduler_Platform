@@ -268,6 +268,7 @@ public class BackgroundExportService : BackgroundService
         request.Filters.TryGetValue("historicalStatus", out var historicalStatus);
         request.Filters.TryGetValue("primaryVendorCode", out var primaryVendorCode);
         request.Filters.TryGetValue("masterVendorCode", out var masterVendorCode);
+        request.Filters.TryGetValue("blacklistStatus", out var blacklistStatus);
         
         int? clientId = !string.IsNullOrEmpty(clientIdStr) && int.TryParse(clientIdStr, out var cid) ? cid : null;
 
@@ -296,6 +297,18 @@ public class BackgroundExportService : BackgroundService
 
         if (!string.IsNullOrWhiteSpace(masterVendorCode))
             query = query.Where(a => a.MasterVendorCode == masterVendorCode);
+
+        if (!string.IsNullOrWhiteSpace(blacklistStatus))
+        {
+            if (blacklistStatus == "none")
+                query = query.Where(a => !a.IsCurrentlyBlacklisted);
+            else if (blacklistStatus == "current")
+                query = query.Where(a => a.IsCurrentlyBlacklisted);
+            else if (blacklistStatus == "future")
+                query = query.Where(a => a.IsFutureBlacklisted);
+            else if (blacklistStatus == "any")
+                query = query.Where(a => a.IsCurrentlyBlacklisted || a.IsFutureBlacklisted);
+        }
 
         // Get count first so progress shows total while data is loading
         var totalCount = await query.CountAsync(cancellationToken);
@@ -372,7 +385,7 @@ public class BackgroundExportService : BackgroundService
                         a.PrimaryVendorCode,
                         a.PeriodType,
                         a.NextRunDateTime,
-                        a.NextRunStatus,
+                        bl.HasCurrent ? "Blacklisted" : a.NextRunStatus,
                         item.CurrentJobStatus ?? "",
                         item.LastCompletedDateTime,
                         a.HistoricalBillingStatus,
@@ -398,7 +411,7 @@ public class BackgroundExportService : BackgroundService
                 {
                     var a = item.Account;
                     var bl = blacklistStatusLookup.TryGetValue(a.Id, out var blStatus) ? blStatus : (HasCurrent: false, HasFuture: false);
-                    return $"{ExcelExportHelper.CsvEscape(a.VMAccountNumber)},{a.VMAccountId},{ExcelExportHelper.CsvEscape(a.InterfaceAccountId)},{ExcelExportHelper.CsvEscape(a.ClientName)},{ExcelExportHelper.CsvEscape(a.MasterVendorCode)},{ExcelExportHelper.CsvEscape(a.PrimaryVendorCode)},{ExcelExportHelper.CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{ExcelExportHelper.CsvEscape(a.NextRunStatus)},{ExcelExportHelper.CsvEscape(item.CurrentJobStatus)},{item.LastCompletedDateTime?.ToString("MM/dd/yyyy") ?? ""},{ExcelExportHelper.CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.IsManuallyOverridden},{ExcelExportHelper.CsvEscape(a.OverriddenBy)},{a.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""},{(item.RuleIsManuallyOverridden ? "Yes" : "No")},{ExcelExportHelper.CsvEscape(item.RuleOverriddenBy)},{item.RuleOverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""},{(bl.HasCurrent ? "Yes" : "No")},{(bl.HasFuture ? "Yes" : "No")}";
+                    return $"{ExcelExportHelper.CsvEscape(a.VMAccountNumber)},{a.VMAccountId},{ExcelExportHelper.CsvEscape(a.InterfaceAccountId)},{ExcelExportHelper.CsvEscape(a.ClientName)},{ExcelExportHelper.CsvEscape(a.MasterVendorCode)},{ExcelExportHelper.CsvEscape(a.PrimaryVendorCode)},{ExcelExportHelper.CsvEscape(a.PeriodType)},{a.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{ExcelExportHelper.CsvEscape(bl.HasCurrent ? "Blacklisted" : a.NextRunStatus)},{ExcelExportHelper.CsvEscape(item.CurrentJobStatus)},{item.LastCompletedDateTime?.ToString("MM/dd/yyyy") ?? ""},{ExcelExportHelper.CsvEscape(a.HistoricalBillingStatus)},{a.LastInvoiceDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.ExpectedNextDateTime?.ToString("MM/dd/yyyy") ?? ""},{a.IsManuallyOverridden},{ExcelExportHelper.CsvEscape(a.OverriddenBy)},{a.OverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""},{(item.RuleIsManuallyOverridden ? "Yes" : "No")},{ExcelExportHelper.CsvEscape(item.RuleOverriddenBy)},{item.RuleOverriddenDateTime?.ToString("MM/dd/yyyy HH:mm") ?? ""},{(bl.HasCurrent ? "Yes" : "No")},{(bl.HasFuture ? "Yes" : "No")}";
                 });
         }
 
