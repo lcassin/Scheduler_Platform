@@ -338,20 +338,27 @@
                                                                 </MudTd>
             </RowTemplate>
                         <NoRecordsContent>
-                            <MudText Align="Align.Center" Class="my-8">
-                                <MudIcon Icon="@Icons.Material.Filled.Work" Size="Size.Large" Class="mb-2" />
-                                <MudText Typo="Typo.h6">No jobs found</MudText>
-                                <MudText Typo="Typo.body2" Class="mb-4">
-                                    @if (!string.IsNullOrEmpty(_filterPrimaryVendorCode) || !string.IsNullOrEmpty(_filterAccountNumber) || !string.IsNullOrEmpty(_filterStatus))
-                                    {
-                                        <span>Try adjusting your filters.</span>
-                                    }
-                                    else
-                                    {
-                                        <span>No ADR jobs have been created yet. Jobs are created automatically when accounts are due for processing.</span>
-                                    }
+                            @if (_loading)
+                            {
+                                <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+                            }
+                            else
+                            {
+                                <MudText Align="Align.Center" Class="my-8">
+                                    <MudIcon Icon="@Icons.Material.Filled.Work" Size="Size.Large" Class="mb-2" />
+                                    <MudText Typo="Typo.h6">No jobs found</MudText>
+                                    <MudText Typo="Typo.body2" Class="mb-4">
+                                        @if (!string.IsNullOrEmpty(_filterPrimaryVendorCode) || !string.IsNullOrEmpty(_filterAccountNumber) || !string.IsNullOrEmpty(_filterStatus))
+                                        {
+                                            <span>Try adjusting your filters.</span>
+                                        }
+                                        else
+                                        {
+                                            <span>No ADR jobs have been created yet. Jobs are created automatically when accounts are due for processing.</span>
+                                        }
+                                    </MudText>
                                 </MudText>
-                            </MudText>
+                            }
                         </NoRecordsContent>
             <PagerContent>
                 <MudTablePager PageSizeOptions="new int[] { 50, 100, 200 }" />
