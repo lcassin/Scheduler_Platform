@@ -762,7 +762,7 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
                 j.[ModifiedDateTime] = {0},
                 j.[ModifiedBy] = 'System - Blacklist Sync'
             FROM [AdrJob] j
-            INNER JOIN [AdrAccount] a ON j.[AdrAccountId] = a.[Id]
+            INNER JOIN [AdrAccount] a ON j.[AdrAccountId] = a.[AdrAccountId]
             WHERE a.[IsCurrentlyBlacklisted] = 1
               AND j.[IsDeleted] = 0
               AND j.[Status] IN ('Pending', 'CredentialCheckRequested', 'CredentialCheckInProgress', 
