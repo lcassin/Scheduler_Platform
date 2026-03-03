@@ -67,7 +67,16 @@
 
     private async Task LoadPermissionsAsync()
     {
-        _canManageUsers = await PermissionService.CanReadAsync("users:manage");
+        try
+        {
+            _canManageUsers = await PermissionService.CanReadAsync("users:manage");
+        }
+        catch
+        {
+            // Default to showing Admin menu if permission check fails
+            // (individual admin pages have their own authorization checks)
+            _canManageUsers = true;
+        }
     }
 
     private async Task LoadPowerBiReportsAsync()
