@@ -193,8 +193,8 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             bool? isManualRequest = null,
             string? sortColumn = null,
             bool sortDescending = true,
-            List<int>? jobIds = null,
-            List<int>? excludeJobIds = null,
+            List<int>? includeAccountIds = null,
+            List<int>? excludeAccountIds = null,
             int? adrJobTypeId = null,
             DateTime? modifiedAfter = null,
             DateTime? modifiedBefore = null,
@@ -205,16 +205,16 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
             // Filter by both job.IsDeleted AND account.IsDeleted to exclude jobs for deleted accounts
             var query = _dbSet.Where(j => !j.IsDeleted && j.AdrAccount != null && !j.AdrAccount.IsDeleted);
             
-            // Filter by specific job IDs (used for blacklist filtering - include only these)
-            if (jobIds != null)
+            // Include only jobs belonging to specific accounts (used for blacklist "current"/"future"/"any" filtering)
+            if (includeAccountIds != null)
             {
-                query = query.Where(j => jobIds.Contains(j.Id));
+                query = query.Where(j => includeAccountIds.Contains(j.AdrAccountId));
             }
             
-            // Exclude specific job IDs (used for blacklist "none" filtering - exclude these)
-            if (excludeJobIds != null && excludeJobIds.Count > 0)
+            // Exclude jobs belonging to specific accounts (used for blacklist "none" filtering)
+            if (excludeAccountIds != null && excludeAccountIds.Count > 0)
             {
-                query = query.Where(j => !excludeJobIds.Contains(j.Id));
+                query = query.Where(j => !excludeAccountIds.Contains(j.AdrAccountId));
             }
             
             // Filter by manual request status

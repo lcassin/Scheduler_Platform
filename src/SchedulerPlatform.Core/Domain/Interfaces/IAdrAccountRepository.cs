@@ -24,7 +24,8 @@ public interface IAdrAccountRepository : IRepository<AdrAccount>
         DateTime? modifiedAfter = null,
         DateTime? modifiedBefore = null,
         DateTime? createdAfter = null,
-        DateTime? createdBefore = null);
+        DateTime? createdBefore = null,
+        List<int>? excludeAccountIds = null);
     Task<int> GetTotalCountAsync(int? clientId = null);
     Task<int> GetCountByNextRunStatusAsync(string status, int? clientId = null);
     Task<int> GetCountByHistoricalStatusAsync(string status, int? clientId = null);

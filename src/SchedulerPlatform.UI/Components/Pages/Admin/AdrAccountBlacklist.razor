@@ -642,8 +642,7 @@
     private bool HasVendorCode()
     {
         return _editingEntry != null && 
-               (!string.IsNullOrWhiteSpace(_editingEntry.MasterVendorCode) || 
-                !string.IsNullOrWhiteSpace(_editingEntry.PrimaryVendorCode));
+               !string.IsNullOrWhiteSpace(_editingEntry.PrimaryVendorCode);
     }
 
     private Color GetExclusionTypeColor(string? exclusionType)

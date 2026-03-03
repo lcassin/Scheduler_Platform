@@ -54,7 +54,8 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
         DateTime? modifiedAfter = null,
         DateTime? modifiedBefore = null,
         DateTime? createdAfter = null,
-        DateTime? createdBefore = null)
+        DateTime? createdBefore = null,
+        List<int>? excludeAccountIds = null)
     {
         var query = _dbSet.Where(a => !a.IsDeleted);
 
@@ -127,6 +128,12 @@ public class AdrAccountRepository : Repository<AdrAccount>, IAdrAccountRepositor
         if (createdBefore.HasValue)
         {
             query = query.Where(a => a.CreatedDateTime < createdBefore.Value);
+        }
+
+        // Exclude specific account IDs (used for blacklist "none" filter to exclude blacklisted accounts)
+        if (excludeAccountIds != null && excludeAccountIds.Count > 0)
+        {
+            query = query.Where(a => !excludeAccountIds.Contains(a.Id));
         }
 
         var totalCount = await query.CountAsync();
