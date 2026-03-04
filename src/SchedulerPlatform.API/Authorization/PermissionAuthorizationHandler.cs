@@ -14,7 +14,7 @@ public class PermissionAuthorizationHandler : AuthorizationHandler<PermissionReq
             c.Type == "is_system_admin" &&
             string.Equals(c.Value, "true", StringComparison.OrdinalIgnoreCase));
         
-        if (isSystemAdmin || context.User.HasClaim("role", "Admin"))
+        if (isSystemAdmin || context.User.HasClaim("role", "Admin") || context.User.HasClaim("role", "Super Admin"))
         {
             context.Succeed(requirement);
             return Task.CompletedTask;
