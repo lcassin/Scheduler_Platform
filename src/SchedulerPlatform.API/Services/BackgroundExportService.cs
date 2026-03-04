@@ -265,7 +265,7 @@ public class BackgroundExportService : BackgroundService
         request.Filters.TryGetValue("clientId", out var clientIdStr);
         request.Filters.TryGetValue("searchTerm", out var searchTerm);
         request.Filters.TryGetValue("nextRunStatus", out var nextRunStatus);
-        request.Filters.TryGetValue("historicalStatus", out var historicalStatus);
+        request.Filters.TryGetValue("historicalBillingStatus", out var historicalStatus);
         request.Filters.TryGetValue("primaryVendorCode", out var primaryVendorCode);
         request.Filters.TryGetValue("masterVendorCode", out var masterVendorCode);
         request.Filters.TryGetValue("blacklistStatus", out var blacklistStatus);
@@ -528,6 +528,19 @@ public class BackgroundExportService : BackgroundService
 
         if (modifiedBefore.HasValue)
             query = query.Where(j => j.ModifiedDateTime <= modifiedBefore.Value);
+
+        // Execution filters - filter jobs that have matching AdrJobExecution records
+        // (matches AdrJobRepository.GetPagedAsync pattern)
+        var hasExecutionFilter = !string.IsNullOrWhiteSpace(orchestrationRequestId) || executionRequestTypeId.HasValue || executionIsError.HasValue;
+        if (hasExecutionFilter)
+        {
+            query = query.Where(j => dbContext.AdrJobExecutions.Any(e =>
+                e.AdrJobId == j.Id &&
+                !e.IsDeleted &&
+                (orchestrationRequestId == null || e.OrchestrationRequestId == orchestrationRequestId) &&
+                (!executionRequestTypeId.HasValue || e.AdrRequestTypeId == executionRequestTypeId.Value) &&
+                (!executionIsError.HasValue || e.IsError == executionIsError.Value)));
+        }
 
         if (latestPerAccount)
         {
