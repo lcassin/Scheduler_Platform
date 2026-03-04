@@ -444,7 +444,6 @@ public class BackgroundExportService : BackgroundService
 
         var query = dbContext.AdrJobs
             .Include(j => j.AdrAccount)
-            .Include(j => j.Status)
             .Where(j => !j.IsDeleted);
 
         if (clientId.HasValue)
