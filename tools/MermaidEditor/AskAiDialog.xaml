@@ -25,11 +25,11 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#3E3E42"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="#007ACC"/>
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource ThemeHoverBrush}"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource ThemeAccentBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#007ACC"/>
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource ThemeAccentBrush}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
                                 <Setter Property="Foreground" Value="{DynamicResource ThemeDisabledForegroundBrush}"/>
@@ -43,12 +43,12 @@
 
         <!-- TextBox Style -->
         <Style TargetType="TextBox">
-            <Setter Property="Background" Value="#3E3E42"/>
-            <Setter Property="Foreground" Value="#F1F1F1"/>
-            <Setter Property="BorderBrush" Value="#555555"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeToolbarBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="8,6"/>
-            <Setter Property="CaretBrush" Value="#F1F1F1"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource ThemeForegroundBrush}"/>
         </Style>
         
         <!-- Dark ScrollBar Thumb -->
@@ -58,14 +58,14 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Thumb">
-                        <Border x:Name="thumbBorder" Background="#686868" CornerRadius="4" 
+                        <Border x:Name="thumbBorder" Background="{DynamicResource ThemeSliderThumbBrush}" CornerRadius="4" 
                                 Margin="2" MinHeight="18" MinWidth="18"/>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="thumbBorder" Property="Background" Value="#9E9E9E"/>
+                                <Setter TargetName="thumbBorder" Property="Background" Value="{DynamicResource ThemeSliderThumbHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsDragging" Value="True">
-                                <Setter TargetName="thumbBorder" Property="Background" Value="#BFBFBF"/>
+                                <Setter TargetName="thumbBorder" Property="Background" Value="{DynamicResource ThemeSliderThumbHoverBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -79,7 +79,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RepeatButton">
-                        <Border Background="#3E3E42" Height="0" Width="0"/>
+                        <Border Background="{DynamicResource ThemeBorderBrush}" Height="0" Width="0"/>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
@@ -99,7 +99,7 @@
         </Style>
 
         <ControlTemplate x:Key="DarkVerticalScrollBar" TargetType="ScrollBar">
-            <Grid Background="#2D2D30">
+            <Grid Background="{DynamicResource ThemeToolbarBackgroundBrush}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
@@ -157,7 +157,7 @@
         </Grid>
         
         <!-- Chat Messages Area -->
-        <Border Grid.Row="1" Background="#2D2D30" CornerRadius="4" Padding="0" Margin="0,0,0,8">
+        <Border Grid.Row="1" Background="{DynamicResource ThemeToolbarBackgroundBrush}" CornerRadius="4" Padding="0" Margin="0,0,0,8">
             <ScrollViewer x:Name="ChatScrollViewer" VerticalScrollBarVisibility="Auto" Padding="8">
                 <StackPanel x:Name="ChatMessagesPanel" Margin="0"/>
             </ScrollViewer>

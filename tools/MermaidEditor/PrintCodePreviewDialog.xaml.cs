@@ -302,14 +302,20 @@ public partial class PrintCodePreviewDialog : Window
 
     private FlowDocument BuildFlowDocument(double pageWidth, double pageHeight)
     {
+        // Content area width = page width minus left and right margins
+        double contentWidth = pageWidth - (_marginSize * 2);
+        
         var doc = new FlowDocument
         {
             PagePadding = new Thickness(_marginSize),
             PageWidth = pageWidth,
             PageHeight = pageHeight,
+            Background = WpfBrushes.White, // Required for PDF export (JPEG has no alpha channel)
             FontFamily = new System.Windows.Media.FontFamily("Consolas, Courier New, monospace"),
             FontSize = _fontSize,
-            ColumnWidth = double.MaxValue // Single column
+            // When word wrap is on, set column width to content area so text wraps within margins
+            // When off, set to MaxValue so lines extend without wrapping
+            ColumnWidth = _wordWrap ? Math.Max(contentWidth, 100) : double.MaxValue
         };
 
         // Add title
@@ -402,6 +408,32 @@ public partial class PrintCodePreviewDialog : Window
                 Stretch = Stretch.Uniform
             };
 
+            var canvas = new Canvas
+            {
+                Width = effectivePageWidth * previewScale,
+                Height = effectivePageHeight * previewScale,
+                ClipToBounds = true
+            };
+
+            Canvas.SetLeft(image, 0);
+            Canvas.SetTop(image, 0);
+            canvas.Children.Add(image);
+
+            // Draw margin guides (dashed lines matching Mermaid Print Preview)
+            double printableWidth = effectivePageWidth - (_marginSize * 2);
+            double printableHeight = effectivePageHeight - (_marginSize * 2);
+            var marginRect = new System.Windows.Shapes.Rectangle
+            {
+                Width = printableWidth * previewScale,
+                Height = printableHeight * previewScale,
+                Stroke = new SolidColorBrush(System.Windows.Media.Color.FromRgb(180, 180, 180)),
+                StrokeDashArray = new DoubleCollection { 6, 3 },
+                StrokeThickness = 1.0
+            };
+            Canvas.SetLeft(marginRect, _marginSize * previewScale);
+            Canvas.SetTop(marginRect, _marginSize * previewScale);
+            canvas.Children.Add(marginRect);
+
             var pageBorder = new Border
             {
                 Width = effectivePageWidth * previewScale,
@@ -411,7 +443,7 @@ public partial class PrintCodePreviewDialog : Window
                 BorderThickness = new Thickness(1),
                 Margin = new Thickness(8),
                 ClipToBounds = true,
-                Child = image
+                Child = canvas
             };
 
             PreviewPagesPanel.Children.Add(pageBorder);
@@ -695,7 +727,7 @@ public partial class PrintCodePreviewDialog : Window
             Write($"/Width {pixelWidths[i]} /Height {pixelHeights[i]} ");
             Write("/ColorSpace /DeviceRGB /BitsPerComponent 8 ");
             Write("/Filter /DCTDecode ");
-            Write($"/Length {jpeg.Length} ");
+            Write($"/Length {jpeg.Length + 1} ");
             Write(">>\n");
             Write("stream\n");
             WriteBytes(jpeg);
