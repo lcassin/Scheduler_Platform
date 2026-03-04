@@ -453,8 +453,41 @@ public partial class PrintCodePreviewDialog : Window
         if (PageCountText != null)
             PageCountText.Text = $"Pages: {_totalPages}";
 
+        // Update page range defaults
+        if (ToPageTextBox != null && AllPagesRadio?.IsChecked == true)
+            ToPageTextBox.Text = _totalPages.ToString();
+
         _currentPage = 1;
         UpdatePageNavigation();
+    }
+
+    private void PageRange_Changed(object sender, RoutedEventArgs e)
+    {
+        if (FromPageTextBox == null || ToPageTextBox == null) return;
+        bool isRange = PageRangeRadio?.IsChecked == true;
+        FromPageTextBox.IsEnabled = isRange;
+        ToPageTextBox.IsEnabled = isRange;
+    }
+
+    private void PageRangeValue_Changed(object sender, TextChangedEventArgs e)
+    {
+        // Just allow the user to type — validation happens at print/save time
+    }
+
+    /// <summary>
+    /// Returns the 1-based (fromPage, toPage) range clamped to [1, _totalPages].
+    /// </summary>
+    private (int from, int to) GetPageRange()
+    {
+        if (AllPagesRadio?.IsChecked == true)
+            return (1, _totalPages);
+
+        int from = 1, to = _totalPages;
+        if (int.TryParse(FromPageTextBox?.Text, out int f))
+            from = Math.Max(1, Math.Min(f, _totalPages));
+        if (int.TryParse(ToPageTextBox?.Text, out int t))
+            to = Math.Max(from, Math.Min(t, _totalPages));
+        return (from, to);
     }
 
     private void UpdatePageNavigation()
@@ -568,8 +601,49 @@ public partial class PrintCodePreviewDialog : Window
         var paginator = ((IDocumentPaginatorSource)printDoc).DocumentPaginator;
         paginator.PageSize = new System.Windows.Size(effectivePageWidth, effectivePageHeight);
 
-        // Print directly without showing system dialog
-        printDialog.PrintDocument(paginator, $"Code: {_documentTitle}");
+        // Apply page range
+        var (fromPage, toPage) = GetPageRange();
+
+        if (fromPage == 1 && toPage == paginator.PageCount)
+        {
+            // Print all pages
+            printDialog.PrintDocument(paginator, $"Code: {_documentTitle}");
+        }
+        else
+        {
+            // Print selected page range using FixedDocument
+            var fixedDoc = new FixedDocument();
+            fixedDoc.DocumentPaginator.PageSize = new System.Windows.Size(effectivePageWidth, effectivePageHeight);
+
+            for (int i = fromPage - 1; i < toPage; i++)
+            {
+                var docPage = paginator.GetPage(i);
+                int pw = (int)(effectivePageWidth * 1.5);
+                int ph = (int)(effectivePageHeight * 1.5);
+                var rtb = new RenderTargetBitmap(pw, ph, 144, 144, PixelFormats.Pbgra32);
+                rtb.Render(docPage.Visual);
+
+                var img = new System.Windows.Controls.Image
+                {
+                    Source = rtb,
+                    Width = effectivePageWidth,
+                    Height = effectivePageHeight,
+                    Stretch = Stretch.Uniform
+                };
+
+                var fixedPage = new FixedPage { Width = effectivePageWidth, Height = effectivePageHeight };
+                fixedPage.Children.Add(img);
+                fixedPage.Measure(new System.Windows.Size(effectivePageWidth, effectivePageHeight));
+                fixedPage.Arrange(new Rect(0, 0, effectivePageWidth, effectivePageHeight));
+
+                var pageContent = new PageContent();
+                ((IAddChild)pageContent).AddChild(fixedPage);
+                fixedDoc.Pages.Add(pageContent);
+            }
+
+            printDialog.PrintDocument(fixedDoc.DocumentPaginator, $"Code: {_documentTitle}");
+        }
+
         DialogResult = true;
         Close();
     }
@@ -609,7 +683,10 @@ public partial class PrintCodePreviewDialog : Window
             var pagePixelWidths = new List<int>();
             var pagePixelHeights = new List<int>();
 
-            for (int i = 0; i < paginator.PageCount; i++)
+            // Apply page range
+            var (fromPage, toPage) = GetPageRange();
+
+            for (int i = fromPage - 1; i < toPage; i++)
             {
                 var page = paginator.GetPage(i);
 
