@@ -208,9 +208,9 @@ public static class CustomIcons
 		<rect x=""44"" y=""24"" width=""3"" height=""2""/>
 	</g>
 </g>
-<circle cx=""51"" cy=""51"" r=""9"" fill=""currentColor""/>
-<line x1=""47"" y1=""47"" x2=""55"" y2=""55"" stroke=""var(--mud-palette-drawer-background, #27272f)"" stroke-width=""2.5"" stroke-linecap=""round""/>
-<line x1=""55"" y1=""47"" x2=""47"" y2=""55"" stroke=""var(--mud-palette-drawer-background, #27272f)"" stroke-width=""2.5"" stroke-linecap=""round""/>
+<circle cx=""48"" cy=""48"" r=""12"" fill=""currentColor""/>
+<line x1=""42"" y1=""42"" x2=""54"" y2=""54"" stroke=""var(--mud-palette-drawer-background, #27272f)"" stroke-width=""3"" stroke-linecap=""round""/>
+<line x1=""54"" y1=""42"" x2=""42"" y2=""54"" stroke=""var(--mud-palette-drawer-background, #27272f)"" stroke-width=""3"" stroke-linecap=""round""/>
 </svg>";
 
     /// <summary>Credential validation - shield with checkmark</summary>
