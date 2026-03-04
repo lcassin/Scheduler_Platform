@@ -600,6 +600,7 @@ public partial class PrintCodePreviewDialog : Window
         var printDoc = BuildFlowDocument(effectivePageWidth, effectivePageHeight);
         var paginator = ((IDocumentPaginatorSource)printDoc).DocumentPaginator;
         paginator.PageSize = new System.Windows.Size(effectivePageWidth, effectivePageHeight);
+        paginator.ComputePageCount();
 
         // Apply page range
         var (fromPage, toPage) = GetPageRange();
