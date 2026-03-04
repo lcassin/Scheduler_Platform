@@ -322,6 +322,36 @@
                             </StackPanel>
                         </GroupBox>
                         
+                        <!-- Pages to Print -->
+                        <GroupBox Header="Pages">
+                            <StackPanel Margin="8">
+                                <RadioButton x:Name="AllPagesRadio" Content="All" IsChecked="True"
+                                             Checked="PageRange_Changed"/>
+                                <RadioButton x:Name="PageRangeRadio" Content="Range"
+                                             Checked="PageRange_Changed"/>
+                                <StackPanel Orientation="Horizontal" Margin="20,4,0,0">
+                                    <TextBlock Text="From:" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource ThemeForegroundBrush}" Margin="0,0,4,0"/>
+                                    <TextBox x:Name="FromPageTextBox" Width="40" Text="1" 
+                                             IsEnabled="False" TextChanged="PageRangeValue_Changed"
+                                             Background="{DynamicResource ThemeToolbarBackgroundBrush}"
+                                             Foreground="{DynamicResource ThemeForegroundBrush}"
+                                             BorderBrush="{DynamicResource ThemeBorderBrush}"
+                                             CaretBrush="{DynamicResource ThemeForegroundBrush}"
+                                             Padding="4,2"/>
+                                    <TextBlock Text="To:" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource ThemeForegroundBrush}" Margin="8,0,4,0"/>
+                                    <TextBox x:Name="ToPageTextBox" Width="40" Text="1" 
+                                             IsEnabled="False" TextChanged="PageRangeValue_Changed"
+                                             Background="{DynamicResource ThemeToolbarBackgroundBrush}"
+                                             Foreground="{DynamicResource ThemeForegroundBrush}"
+                                             BorderBrush="{DynamicResource ThemeBorderBrush}"
+                                             CaretBrush="{DynamicResource ThemeForegroundBrush}"
+                                             Padding="4,2"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </GroupBox>
+                        
                         <!-- Orientation -->
                         <GroupBox Header="Orientation">
                             <StackPanel Margin="8">
@@ -368,36 +398,6 @@
                                           Checked="Options_Changed" Unchecked="Options_Changed"/>
                                 <CheckBox x:Name="WordWrapCheckBox" Content="Word wrap" IsChecked="True"
                                           Checked="Options_Changed" Unchecked="Options_Changed"/>
-                            </StackPanel>
-                        </GroupBox>
-                        
-                        <!-- Pages to Print -->
-                        <GroupBox Header="Pages">
-                            <StackPanel Margin="8">
-                                <RadioButton x:Name="AllPagesRadio" Content="All" IsChecked="True"
-                                             Checked="PageRange_Changed"/>
-                                <RadioButton x:Name="PageRangeRadio" Content="Range"
-                                             Checked="PageRange_Changed"/>
-                                <StackPanel Orientation="Horizontal" Margin="20,4,0,0">
-                                    <TextBlock Text="From:" VerticalAlignment="Center"
-                                               Foreground="{DynamicResource ThemeForegroundBrush}" Margin="0,0,4,0"/>
-                                    <TextBox x:Name="FromPageTextBox" Width="40" Text="1" 
-                                             IsEnabled="False" TextChanged="PageRangeValue_Changed"
-                                             Background="{DynamicResource ThemeToolbarBackgroundBrush}"
-                                             Foreground="{DynamicResource ThemeForegroundBrush}"
-                                             BorderBrush="{DynamicResource ThemeBorderBrush}"
-                                             CaretBrush="{DynamicResource ThemeForegroundBrush}"
-                                             Padding="4,2"/>
-                                    <TextBlock Text="To:" VerticalAlignment="Center"
-                                               Foreground="{DynamicResource ThemeForegroundBrush}" Margin="8,0,4,0"/>
-                                    <TextBox x:Name="ToPageTextBox" Width="40" Text="1" 
-                                             IsEnabled="False" TextChanged="PageRangeValue_Changed"
-                                             Background="{DynamicResource ThemeToolbarBackgroundBrush}"
-                                             Foreground="{DynamicResource ThemeForegroundBrush}"
-                                             BorderBrush="{DynamicResource ThemeBorderBrush}"
-                                             CaretBrush="{DynamicResource ThemeForegroundBrush}"
-                                             Padding="4,2"/>
-                                </StackPanel>
                             </StackPanel>
                         </GroupBox>
                     </StackPanel>
