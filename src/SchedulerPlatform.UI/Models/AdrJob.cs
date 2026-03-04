@@ -52,6 +52,7 @@ public class AdrJobStats
     public int ScrapeRequestedCount { get; set; }
     public int CompletedCount { get; set; }
     public int FailedCount { get; set; }
+    public int CancelledCount { get; set; }
     public int NeedsReviewCount { get; set; }
     // Phase breakdown
     public int CredentialPhaseCount { get; set; }

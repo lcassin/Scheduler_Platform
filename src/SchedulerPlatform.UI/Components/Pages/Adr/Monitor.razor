@@ -866,6 +866,10 @@
                             <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.Cancel" Size="Size.Small" Color="Color.Error" Class="mr-2" />Failed</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-error);">@_jobStats.FailedCount</strong></td>
                         </tr>
+                        <tr style="cursor: pointer;" @onclick="@(() => OnJobPipelineChartClick("Cancelled"))">
+                            <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" Style="color: #ff9800;" Class="mr-2" />Cancelled</td>
+                            <td class="text-right"><strong style="color: #ff9800;">@_jobStats.CancelledCount</strong></td>
+                        </tr>
                         <tr style="cursor: pointer;" @onclick="@(() => OnJobPipelineChartClick("NeedsReview"))">
                             <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.RateReview" Size="Size.Small" Color="Color.Warning" Class="mr-2" />Needs Review</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-warning);">@_jobStats.NeedsReviewCount</strong></td>
@@ -1515,6 +1519,7 @@
             { "ADR Request Sent", "#7e57c2" },   // Purple/Primary
             { "Completed", "#66bb6a" },          // Green/Success
             { "Failed", "#f44336" },             // Red/Error
+            { "Cancelled", "#ff9800" },          // Orange
             { "Needs Review", "#ffa726" }        // Orange/Warning - slightly different shade
         };
         
@@ -1566,6 +1571,13 @@
             labelList.Add("Failed");
             colorList.Add(statusColorMap["Failed"]);
             customDataList.Add("Failed");
+        }
+        if (_jobStats.CancelledCount > 0)
+        {
+            dataList.Add(_jobStats.CancelledCount);
+            labelList.Add("Cancelled");
+            colorList.Add(statusColorMap["Cancelled"]);
+            customDataList.Add("Cancelled");
         }
         if (_jobStats.NeedsReviewCount > 0)
         {

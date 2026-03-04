@@ -2059,7 +2059,7 @@ public class AdrController : ControllerBase
         try
         {
             int totalCount, pendingCount, credentialVerifiedCount, scrapeRequestedCount, 
-                completedCount, failedCount, needsReviewCount, credentialFailedCount,
+                completedCount, failedCount, cancelledCount, needsReviewCount, credentialFailedCount,
                 credentialCheckRequestedCount, credentialCheckInProgressCount;
 
             if (lastOrchestrationRuns.HasValue && lastOrchestrationRuns.Value > 0)
@@ -2092,13 +2092,14 @@ public class AdrController : ControllerBase
                     scrapeRequestedCount = sr + sci;
                     completedCount = statusCounts.TryGetValue("Completed", out var c) ? c : 0;
                     failedCount = statusCounts.TryGetValue("Failed", out var f) ? f : 0;
+                    cancelledCount = statusCounts.TryGetValue("Cancelled", out var can) ? can : 0;
                     needsReviewCount = statusCounts.TryGetValue("NeedsReview", out var nr) ? nr : 0;
                 }
                 else
                 {
                     // No recent runs, return zeros
                     totalCount = pendingCount = credentialVerifiedCount = credentialFailedCount = 
-                        scrapeRequestedCount = completedCount = failedCount = needsReviewCount = 
+                        scrapeRequestedCount = completedCount = failedCount = cancelledCount = needsReviewCount = 
                         credentialCheckRequestedCount = credentialCheckInProgressCount = 0;
                 }
             }
@@ -2128,6 +2129,7 @@ public class AdrController : ControllerBase
                 scrapeRequestedCount = sr2 + sci2;
                 completedCount = statusCounts.TryGetValue("Completed", out var c2) ? c2 : 0;
                 failedCount = statusCounts.TryGetValue("Failed", out var f2) ? f2 : 0;
+                cancelledCount = statusCounts.TryGetValue("Cancelled", out var can2) ? can2 : 0;
                 needsReviewCount = statusCounts.TryGetValue("NeedsReview", out var nr2) ? nr2 : 0;
             }
 
@@ -2135,8 +2137,8 @@ public class AdrController : ControllerBase
             // Credential Phase: Pending + CredentialCheckRequested + CredentialCheckInProgress + CredentialVerified + CredentialFailed
             var credentialPhaseCount = pendingCount + credentialCheckRequestedCount + credentialCheckInProgressCount + credentialVerifiedCount + credentialFailedCount;
             
-            // ADR Document Phase: ScrapeRequested (includes StatusCheckInProgress) + Completed + Failed + NeedsReview
-            var adrDocumentPhaseCount = scrapeRequestedCount + completedCount + failedCount + needsReviewCount;
+            // ADR Document Phase: ScrapeRequested (includes StatusCheckInProgress) + Completed + Failed + Cancelled + NeedsReview
+            var adrDocumentPhaseCount = scrapeRequestedCount + completedCount + failedCount + cancelledCount + needsReviewCount;
 
             return Ok(new
             {
@@ -2149,6 +2151,7 @@ public class AdrController : ControllerBase
                 scrapeRequestedCount,
                 completedCount,
                 failedCount,
+                cancelledCount,
                 needsReviewCount,
                 // Phase breakdown
                 credentialPhaseCount,
