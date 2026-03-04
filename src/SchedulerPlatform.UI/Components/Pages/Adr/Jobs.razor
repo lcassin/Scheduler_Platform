@@ -866,7 +866,7 @@
         StateHasChanged();
         try
         {
-            // Build filters dictionary from current filter state
+            // Build filters dictionary from current filter state (must match all filters used in ServerReload)
             var filters = new Dictionary<string, string?>();
             if (!string.IsNullOrWhiteSpace(_filterStatus))
                 filters["status"] = _filterStatus;
@@ -876,6 +876,22 @@
                 filters["masterVendorCode"] = _filterMasterVendorCode;
             if (!string.IsNullOrWhiteSpace(_filterAccountNumber))
                 filters["searchTerm"] = _filterAccountNumber;
+            if (!string.IsNullOrWhiteSpace(_filterInterfaceAccountId))
+                filters["interfaceAccountId"] = _filterInterfaceAccountId;
+            if (!string.IsNullOrWhiteSpace(_filterBlacklistStatus))
+                filters["blacklistStatus"] = _filterBlacklistStatus;
+            if (_selectedAdrJobTypeId.HasValue)
+                filters["adrJobTypeId"] = _selectedAdrJobTypeId.Value.ToString();
+            if (_filterModifiedAfter.HasValue)
+                filters["modifiedAfter"] = _filterModifiedAfter.Value.ToString("o");
+            if (_filterModifiedBefore.HasValue)
+                filters["modifiedBefore"] = _filterModifiedBefore.Value.ToString("o");
+            if (!string.IsNullOrWhiteSpace(_filterRequestId))
+                filters["orchestrationRequestId"] = _filterRequestId;
+            if (_filterExecutionRequestTypeId.HasValue)
+                filters["executionRequestTypeId"] = _filterExecutionRequestTypeId.Value.ToString();
+            if (_filterExecutionIsError.HasValue)
+                filters["executionIsError"] = _filterExecutionIsError.Value.ToString();
             filters["latestPerAccount"] = _showLatestPerAccount.ToString();
             filters["showManualJobs"] = _showManualJobs.ToString();
 

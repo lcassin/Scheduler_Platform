@@ -261,7 +261,7 @@ public class BackgroundExportService : BackgroundService
     {
         var dbContext = scope.ServiceProvider.GetRequiredService<SchedulerDbContext>();
 
-        // Extract filter parameters
+        // Extract filter parameters (must match all filters sent by Accounts.razor ExportAccounts method)
         request.Filters.TryGetValue("clientId", out var clientIdStr);
         request.Filters.TryGetValue("searchTerm", out var searchTerm);
         request.Filters.TryGetValue("nextRunStatus", out var nextRunStatus);
@@ -269,6 +269,7 @@ public class BackgroundExportService : BackgroundService
         request.Filters.TryGetValue("primaryVendorCode", out var primaryVendorCode);
         request.Filters.TryGetValue("masterVendorCode", out var masterVendorCode);
         request.Filters.TryGetValue("blacklistStatus", out var blacklistStatus);
+        request.Filters.TryGetValue("jobStatus", out var jobStatus);
         
         int? clientId = !string.IsNullOrEmpty(clientIdStr) && int.TryParse(clientIdStr, out var cid) ? cid : null;
 
@@ -308,6 +309,17 @@ public class BackgroundExportService : BackgroundService
                 query = query.Where(a => a.IsFutureBlacklisted);
             else if (blacklistStatus == "any")
                 query = query.Where(a => a.IsCurrentlyBlacklisted || a.IsFutureBlacklisted);
+        }
+
+        // Filter by latest job status for each account
+        if (!string.IsNullOrWhiteSpace(jobStatus))
+        {
+            query = query.Where(a =>
+                dbContext.AdrJobs
+                    .Where(j => j.AdrAccountId == a.Id && !j.IsDeleted)
+                    .OrderByDescending(j => j.Id)
+                    .Select(j => j.Status)
+                    .FirstOrDefault() == jobStatus);
         }
 
         // Get count first so progress shows total while data is loading
@@ -425,7 +437,7 @@ public class BackgroundExportService : BackgroundService
     {
         var dbContext = scope.ServiceProvider.GetRequiredService<SchedulerDbContext>();
 
-        // Extract filter parameters
+        // Extract filter parameters (must match all filters sent by Jobs.razor ExportJobs method)
         request.Filters.TryGetValue("clientId", out var clientIdStr);
         request.Filters.TryGetValue("searchTerm", out var searchTerm);
         request.Filters.TryGetValue("startDate", out var startDateStr);
@@ -435,16 +447,42 @@ public class BackgroundExportService : BackgroundService
         request.Filters.TryGetValue("masterVendorCode", out var masterVendorCode);
         request.Filters.TryGetValue("latestPerAccount", out var latestPerAccountStr);
         request.Filters.TryGetValue("showManualJobs", out var showManualJobsStr);
+        request.Filters.TryGetValue("blacklistStatus", out var blacklistStatus);
+        request.Filters.TryGetValue("interfaceAccountId", out var interfaceAccountId);
+        request.Filters.TryGetValue("adrJobTypeId", out var adrJobTypeIdStr);
+        request.Filters.TryGetValue("modifiedAfter", out var modifiedAfterStr);
+        request.Filters.TryGetValue("modifiedBefore", out var modifiedBeforeStr);
+        request.Filters.TryGetValue("orchestrationRequestId", out var orchestrationRequestId);
+        request.Filters.TryGetValue("executionRequestTypeId", out var executionRequestTypeIdStr);
+        request.Filters.TryGetValue("executionIsError", out var executionIsErrorStr);
 
         int? clientId = !string.IsNullOrEmpty(clientIdStr) && int.TryParse(clientIdStr, out var cid) ? cid : null;
         DateTime? startDate = !string.IsNullOrEmpty(startDateStr) && DateTime.TryParse(startDateStr, out var sd) ? sd : null;
         DateTime? endDate = !string.IsNullOrEmpty(endDateStr) && DateTime.TryParse(endDateStr, out var ed) ? ed : null;
         bool latestPerAccount = !string.IsNullOrEmpty(latestPerAccountStr) && bool.TryParse(latestPerAccountStr, out var lpa) && lpa;
         bool showManualJobs = !string.IsNullOrEmpty(showManualJobsStr) && bool.TryParse(showManualJobsStr, out var smj) && smj;
+        int? adrJobTypeId = !string.IsNullOrEmpty(adrJobTypeIdStr) && int.TryParse(adrJobTypeIdStr, out var ajtid) ? ajtid : null;
+        DateTime? modifiedAfter = !string.IsNullOrEmpty(modifiedAfterStr) && DateTime.TryParse(modifiedAfterStr, out var ma) ? ma : null;
+        DateTime? modifiedBefore = !string.IsNullOrEmpty(modifiedBeforeStr) && DateTime.TryParse(modifiedBeforeStr, out var mb) ? mb : null;
+        int? executionRequestTypeId = !string.IsNullOrEmpty(executionRequestTypeIdStr) && int.TryParse(executionRequestTypeIdStr, out var ertid) ? ertid : null;
+        bool? executionIsError = !string.IsNullOrEmpty(executionIsErrorStr) && bool.TryParse(executionIsErrorStr, out var eie) ? eie : null;
 
         var query = dbContext.AdrJobs
             .Include(j => j.AdrAccount)
-            .Where(j => !j.IsDeleted);
+            .Where(j => !j.IsDeleted && j.AdrAccount != null && !j.AdrAccount.IsDeleted);
+
+        // Blacklist filter using denormalized flags on AdrAccount (matches AdrJobRepository.GetPagedAsync)
+        if (!string.IsNullOrWhiteSpace(blacklistStatus))
+        {
+            if (blacklistStatus == "none")
+                query = query.Where(j => j.AdrAccount != null && !j.AdrAccount.IsCurrentlyBlacklisted);
+            else if (blacklistStatus == "current")
+                query = query.Where(j => j.AdrAccount != null && j.AdrAccount.IsCurrentlyBlacklisted);
+            else if (blacklistStatus == "future")
+                query = query.Where(j => j.AdrAccount != null && j.AdrAccount.IsFutureBlacklisted);
+            else if (blacklistStatus == "any")
+                query = query.Where(j => j.AdrAccount != null && (j.AdrAccount.IsCurrentlyBlacklisted || j.AdrAccount.IsFutureBlacklisted));
+        }
 
         if (clientId.HasValue)
             query = query.Where(j => j.AdrAccount != null && j.AdrAccount.ClientId == clientId.Value);
@@ -452,10 +490,13 @@ public class BackgroundExportService : BackgroundService
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
             query = query.Where(j =>
-                (j.AdrAccount != null && j.AdrAccount.VMAccountNumber.Contains(searchTerm)) ||
+                j.VMAccountNumber.Contains(searchTerm) ||
                 (j.AdrAccount != null && j.AdrAccount.InterfaceAccountId != null && j.AdrAccount.InterfaceAccountId.Contains(searchTerm)) ||
                 (j.AdrAccount != null && j.AdrAccount.ClientName != null && j.AdrAccount.ClientName.Contains(searchTerm)));
         }
+
+        if (!string.IsNullOrWhiteSpace(interfaceAccountId))
+            query = query.Where(j => j.AdrAccount != null && j.AdrAccount.InterfaceAccountId != null && j.AdrAccount.InterfaceAccountId.Contains(interfaceAccountId));
 
         if (startDate.HasValue)
             query = query.Where(j => j.NextRunDateTime >= startDate.Value);
@@ -467,13 +508,26 @@ public class BackgroundExportService : BackgroundService
             query = query.Where(j => j.Status == status);
 
         if (!string.IsNullOrWhiteSpace(primaryVendorCode))
-            query = query.Where(j => j.AdrAccount != null && j.AdrAccount.PrimaryVendorCode == primaryVendorCode);
+            query = query.Where(j =>
+                (j.PrimaryVendorCode != null && j.PrimaryVendorCode.Contains(primaryVendorCode)) ||
+                (j.PrimaryVendorCode == null && j.AdrAccount != null && j.AdrAccount.PrimaryVendorCode != null && j.AdrAccount.PrimaryVendorCode.Contains(primaryVendorCode)));
 
         if (!string.IsNullOrWhiteSpace(masterVendorCode))
-            query = query.Where(j => j.AdrAccount != null && j.AdrAccount.MasterVendorCode == masterVendorCode);
+            query = query.Where(j =>
+                (j.MasterVendorCode != null && j.MasterVendorCode.Contains(masterVendorCode)) ||
+                (j.MasterVendorCode == null && j.AdrAccount != null && j.AdrAccount.MasterVendorCode != null && j.AdrAccount.MasterVendorCode.Contains(masterVendorCode)));
 
         if (!showManualJobs)
             query = query.Where(j => !j.IsManualRequest);
+
+        if (adrJobTypeId.HasValue)
+            query = query.Where(j => j.AdrJobTypeId == adrJobTypeId.Value);
+
+        if (modifiedAfter.HasValue)
+            query = query.Where(j => j.ModifiedDateTime >= modifiedAfter.Value);
+
+        if (modifiedBefore.HasValue)
+            query = query.Where(j => j.ModifiedDateTime <= modifiedBefore.Value);
 
         if (latestPerAccount)
         {
@@ -548,20 +602,40 @@ public class BackgroundExportService : BackgroundService
     {
         var dbContext = scope.ServiceProvider.GetRequiredService<SchedulerDbContext>();
 
-        // Extract filter parameters
+        // Extract filter parameters (must match all filters sent by Rules.razor ExportRules method)
         request.Filters.TryGetValue("searchTerm", out var searchTerm);
         request.Filters.TryGetValue("primaryVendorCode", out var primaryVendorCode);
+        request.Filters.TryGetValue("vendorCode", out var vendorCode); // Rules UI sends as "vendorCode"
         request.Filters.TryGetValue("masterVendorCode", out var masterVendorCode);
+        request.Filters.TryGetValue("accountNumber", out var accountNumber);
         request.Filters.TryGetValue("isEnabled", out var isEnabledStr);
         request.Filters.TryGetValue("isOverridden", out var isOverriddenStr);
         request.Filters.TryGetValue("periodType", out var periodType);
+        request.Filters.TryGetValue("blacklistStatus", out var blacklistStatus);
+
+        // Use vendorCode if primaryVendorCode not provided (Rules UI sends "vendorCode")
+        if (string.IsNullOrWhiteSpace(primaryVendorCode) && !string.IsNullOrWhiteSpace(vendorCode))
+            primaryVendorCode = vendorCode;
 
         bool? isEnabled = !string.IsNullOrEmpty(isEnabledStr) && bool.TryParse(isEnabledStr, out var ie) ? ie : null;
         bool? isOverridden = !string.IsNullOrEmpty(isOverriddenStr) && bool.TryParse(isOverriddenStr, out var io) ? io : null;
 
         var query = dbContext.AdrAccountRules
             .Include(r => r.AdrAccount)
-            .Where(r => !r.IsDeleted);
+            .Where(r => !r.IsDeleted && r.AdrAccount != null && !r.AdrAccount.IsDeleted);
+
+        // Blacklist filter using denormalized flags on AdrAccount
+        if (!string.IsNullOrWhiteSpace(blacklistStatus))
+        {
+            if (blacklistStatus == "none")
+                query = query.Where(r => r.AdrAccount != null && !r.AdrAccount.IsCurrentlyBlacklisted);
+            else if (blacklistStatus == "current")
+                query = query.Where(r => r.AdrAccount != null && r.AdrAccount.IsCurrentlyBlacklisted);
+            else if (blacklistStatus == "future")
+                query = query.Where(r => r.AdrAccount != null && r.AdrAccount.IsFutureBlacklisted);
+            else if (blacklistStatus == "any")
+                query = query.Where(r => r.AdrAccount != null && (r.AdrAccount.IsCurrentlyBlacklisted || r.AdrAccount.IsFutureBlacklisted));
+        }
 
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
@@ -571,11 +645,14 @@ public class BackgroundExportService : BackgroundService
                 (r.AdrAccount != null && r.AdrAccount.ClientName != null && r.AdrAccount.ClientName.Contains(searchTerm)));
         }
 
+        if (!string.IsNullOrWhiteSpace(accountNumber))
+            query = query.Where(r => r.AdrAccount != null && r.AdrAccount.VMAccountNumber.Contains(accountNumber));
+
         if (!string.IsNullOrWhiteSpace(primaryVendorCode))
-            query = query.Where(r => r.AdrAccount != null && r.AdrAccount.PrimaryVendorCode == primaryVendorCode);
+            query = query.Where(r => r.AdrAccount != null && r.AdrAccount.PrimaryVendorCode != null && r.AdrAccount.PrimaryVendorCode.Contains(primaryVendorCode));
 
         if (!string.IsNullOrWhiteSpace(masterVendorCode))
-            query = query.Where(r => r.AdrAccount != null && r.AdrAccount.MasterVendorCode == masterVendorCode);
+            query = query.Where(r => r.AdrAccount != null && r.AdrAccount.MasterVendorCode != null && r.AdrAccount.MasterVendorCode.Contains(masterVendorCode));
 
         if (isEnabled.HasValue)
             query = query.Where(r => r.IsEnabled == isEnabled.Value);
