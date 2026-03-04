@@ -302,6 +302,9 @@ public partial class PrintCodePreviewDialog : Window
 
     private FlowDocument BuildFlowDocument(double pageWidth, double pageHeight)
     {
+        // Content area width = page width minus left and right margins
+        double contentWidth = pageWidth - (_marginSize * 2);
+        
         var doc = new FlowDocument
         {
             PagePadding = new Thickness(_marginSize),
@@ -309,7 +312,9 @@ public partial class PrintCodePreviewDialog : Window
             PageHeight = pageHeight,
             FontFamily = new System.Windows.Media.FontFamily("Consolas, Courier New, monospace"),
             FontSize = _fontSize,
-            ColumnWidth = double.MaxValue // Single column
+            // When word wrap is on, set column width to content area so text wraps within margins
+            // When off, set to MaxValue so lines extend without wrapping
+            ColumnWidth = _wordWrap ? Math.Max(contentWidth, 100) : double.MaxValue
         };
 
         // Add title
