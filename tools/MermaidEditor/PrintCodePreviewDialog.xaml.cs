@@ -408,6 +408,32 @@ public partial class PrintCodePreviewDialog : Window
                 Stretch = Stretch.Uniform
             };
 
+            var canvas = new Canvas
+            {
+                Width = effectivePageWidth * previewScale,
+                Height = effectivePageHeight * previewScale,
+                ClipToBounds = true
+            };
+
+            Canvas.SetLeft(image, 0);
+            Canvas.SetTop(image, 0);
+            canvas.Children.Add(image);
+
+            // Draw margin guides (dashed lines matching Mermaid Print Preview)
+            double printableWidth = effectivePageWidth - (_marginSize * 2);
+            double printableHeight = effectivePageHeight - (_marginSize * 2);
+            var marginRect = new System.Windows.Shapes.Rectangle
+            {
+                Width = printableWidth * previewScale,
+                Height = printableHeight * previewScale,
+                Stroke = new SolidColorBrush(System.Windows.Media.Color.FromRgb(180, 180, 180)),
+                StrokeDashArray = new DoubleCollection { 6, 3 },
+                StrokeThickness = 1.0
+            };
+            Canvas.SetLeft(marginRect, _marginSize * previewScale);
+            Canvas.SetTop(marginRect, _marginSize * previewScale);
+            canvas.Children.Add(marginRect);
+
             var pageBorder = new Border
             {
                 Width = effectivePageWidth * previewScale,
@@ -417,7 +443,7 @@ public partial class PrintCodePreviewDialog : Window
                 BorderThickness = new Thickness(1),
                 Margin = new Thickness(8),
                 ClipToBounds = true,
-                Child = image
+                Child = canvas
             };
 
             PreviewPagesPanel.Children.Add(pageBorder);
