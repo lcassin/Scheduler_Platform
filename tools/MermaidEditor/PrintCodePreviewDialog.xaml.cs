@@ -310,6 +310,7 @@ public partial class PrintCodePreviewDialog : Window
             PagePadding = new Thickness(_marginSize),
             PageWidth = pageWidth,
             PageHeight = pageHeight,
+            Background = WpfBrushes.White, // Required for PDF export (JPEG has no alpha channel)
             FontFamily = new System.Windows.Media.FontFamily("Consolas, Courier New, monospace"),
             FontSize = _fontSize,
             // When word wrap is on, set column width to content area so text wraps within margins
