@@ -867,8 +867,8 @@
                             <td class="text-right"><strong style="color: var(--mud-palette-error);">@_jobStats.FailedCount</strong></td>
                         </tr>
                         <tr style="cursor: pointer;" @onclick="@(() => OnJobPipelineChartClick("Cancelled"))">
-                            <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" Style="color: #ef5350;" Class="mr-2" />Cancelled</td>
-                            <td class="text-right"><strong style="color: #ef5350;">@_jobStats.CancelledCount</strong></td>
+                            <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.Block" Size="Size.Small" Style="color: #795548;" Class="mr-2" />Cancelled</td>
+                            <td class="text-right"><strong style="color: #795548;">@_jobStats.CancelledCount</strong></td>
                         </tr>
                         <tr style="cursor: pointer;" @onclick="@(() => OnJobPipelineChartClick("NeedsReview"))">
                             <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.RateReview" Size="Size.Small" Color="Color.Warning" Class="mr-2" />Needs Review</td>
@@ -1519,7 +1519,7 @@
             { "ADR Request Sent", "#7e57c2" },   // Purple/Primary
             { "Completed", "#66bb6a" },          // Green/Success
             { "Failed", "#f44336" },             // Red/Error
-            { "Cancelled", "#ef5350" },          // Light Red (distinct from Credential Failed orange)
+            { "Cancelled", "#795548" },          // Brown (distinct from Failed red and Credential Failed orange)
             { "Needs Review", "#ffa726" }        // Orange/Warning - slightly different shade
         };
         
