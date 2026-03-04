@@ -647,8 +647,32 @@ public class BackgroundExportService : BackgroundService
         request.Filters.TryGetValue("searchTerm", out var searchTerm);
         request.Filters.TryGetValue("primaryVendorCode", out var primaryVendorCode);
         request.Filters.TryGetValue("masterVendorCode", out var masterVendorCode);
+        request.Filters.TryGetValue("status", out var status);
+        request.Filters.TryGetValue("accountNumber", out var accountNumber);
 
+        var today = DateTime.UtcNow.Date;
         var query = dbContext.AdrAccountBlacklists.Where(b => !b.IsDeleted);
+
+        // Apply status filter (same logic as synchronous ExportBlacklist endpoint)
+        switch (status?.ToLowerInvariant())
+        {
+            case "current":
+                query = query.Where(b => b.IsActive &&
+                    (!b.EffectiveStartDate.HasValue || b.EffectiveStartDate.Value <= today) &&
+                    (!b.EffectiveEndDate.HasValue || b.EffectiveEndDate.Value >= today));
+                break;
+            case "future":
+                query = query.Where(b => b.IsActive &&
+                    b.EffectiveStartDate.HasValue && b.EffectiveStartDate.Value > today);
+                break;
+            case "expired":
+                query = query.Where(b => b.EffectiveEndDate.HasValue && b.EffectiveEndDate.Value < today);
+                break;
+            case "inactive":
+                query = query.Where(b => !b.IsActive);
+                break;
+            // "all" or default: no additional filter
+        }
 
         if (!string.IsNullOrWhiteSpace(searchTerm))
         {
@@ -660,10 +684,13 @@ public class BackgroundExportService : BackgroundService
         }
 
         if (!string.IsNullOrWhiteSpace(primaryVendorCode))
-            query = query.Where(b => b.PrimaryVendorCode == primaryVendorCode);
+            query = query.Where(b => b.PrimaryVendorCode != null && b.PrimaryVendorCode.Contains(primaryVendorCode));
 
         if (!string.IsNullOrWhiteSpace(masterVendorCode))
-            query = query.Where(b => b.MasterVendorCode == masterVendorCode);
+            query = query.Where(b => b.MasterVendorCode != null && b.MasterVendorCode.Contains(masterVendorCode));
+
+        if (!string.IsNullOrWhiteSpace(accountNumber))
+            query = query.Where(b => b.VMAccountNumber != null && b.VMAccountNumber.Contains(accountNumber));
 
         // Get count first so progress shows total while data is loading
         var totalCount = await query.CountAsync(cancellationToken);
