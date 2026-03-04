@@ -13,7 +13,10 @@
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
     <div class="d-flex justify-space-between align-center mb-4">
-        <MudText Typo="Typo.h4">API Logs</MudText>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@CustomIcons.ApiLogs" Size="Size.Large" />
+            <MudText Typo="Typo.h4">API Logs</MudText>
+        </div>
         @if (_hasAccess && _isSuperAdmin)
         {
             <MudButton Variant="Variant.Outlined" 

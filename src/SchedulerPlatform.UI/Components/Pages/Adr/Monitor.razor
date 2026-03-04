@@ -9,7 +9,10 @@
 
 <PageTitle>ADR Job Monitor</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-4">ADR Job Monitor</MudText>
+<div class="d-flex align-center gap-2 mb-4">
+    <MudIcon Icon="@CustomIcons.JobMonitor" Size="Size.Large" />
+    <MudText Typo="Typo.h4">ADR Job Monitor</MudText>
+</div>
 
 @if (_testModeStatus?.IsEnabled == true)
 {
