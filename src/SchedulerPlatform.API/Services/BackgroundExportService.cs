@@ -477,10 +477,10 @@ public class BackgroundExportService : BackgroundService
 
         if (latestPerAccount)
         {
-            // Use a subquery to get the max Job ID per account, then filter.
-            // This avoids GroupBy+Select+Include which EF Core cannot translate to SQL.
-            var latestJobIds = dbContext.AdrJobs
-                .Where(j => !j.IsDeleted)
+            // Use a subquery from the already-filtered query to get the max Job ID per account.
+            // This ensures latestPerAccount respects all applied filters (status, date, vendor, etc.).
+            // Avoids GroupBy+Select(First())+Include which EF Core cannot translate to SQL.
+            var latestJobIds = query
                 .GroupBy(j => j.AdrAccountId)
                 .Select(g => g.Max(j => j.Id));
 
