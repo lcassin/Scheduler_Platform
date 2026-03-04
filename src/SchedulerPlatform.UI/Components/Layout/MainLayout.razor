@@ -76,10 +76,13 @@
         </AuthorizeView>
     </MudAppBar>
     
-    <MudDrawer @bind-Open="_drawerOpen" Elevation="2" ClipMode="DrawerClipMode.Always">
-        <MudDrawerHeader>
-            <MudText Typo="Typo.h6">Navigation</MudText>
-        </MudDrawerHeader>
+    <MudDrawer @bind-Open="_drawerOpen" Elevation="2" ClipMode="DrawerClipMode.Always" Variant="DrawerVariant.Mini" OpenMiniOnHover="true">
+        @if (_drawerOpen)
+        {
+            <MudDrawerHeader>
+                <MudText Typo="Typo.h6">Navigation</MudText>
+            </MudDrawerHeader>
+        }
         <NavMenu />
     </MudDrawer>
     
