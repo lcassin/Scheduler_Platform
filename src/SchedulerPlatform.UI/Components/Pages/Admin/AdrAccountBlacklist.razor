@@ -8,11 +8,11 @@
 @inject IPermissionService PermissionService
 @inject IJSRuntime JSRuntime
 
-<PageTitle>ADR Account Blacklist</PageTitle>
+<PageTitle>ADR Blacklist Queue</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
     <div class="d-flex justify-space-between align-center mb-4">
-        <MudText Typo="Typo.h4">ADR Account Blacklist</MudText>
+        <MudText Typo="Typo.h4">ADR Blacklist Queue</MudText>
         @if (_hasAccess)
         {
             <MudButton Variant="Variant.Filled" 
@@ -32,6 +32,9 @@
     }
     else
     {
+        <MudAlert Severity="Severity.Info" Class="mb-4" Variant="Variant.Outlined" Dense="true">
+            <strong>Note:</strong> Changes made here are queued and will not be applied to accounts until the next Orchestrator run.
+        </MudAlert>
         <MudPaper Class="pa-4 mb-4">
             <MudGrid Spacing="2">
                 <MudItem xs="12" md="2">
