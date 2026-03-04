@@ -215,8 +215,17 @@ public class AuthTokenHandler : DelegatingHandler
                     if (isExpired)
                     {
                         _logger.LogWarning(
-                            "Access token is EXPIRED. Expires: {Expires}, Now: {Now}",
+                            "Access token is EXPIRED. Expires: {Expires}, Now: {Now}. Triggering session expiry redirect.",
                             exp, DateTime.UtcNow);
+                        
+                        // Don't send an expired token — trigger session expiry immediately
+                        // This prevents confusing 403 errors when the real issue is token expiration
+                        _sessionStateService.NotifySessionExpired();
+                        return new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                        {
+                            RequestMessage = request,
+                            ReasonPhrase = "Access token expired"
+                        };
                     }
                 }
             }
