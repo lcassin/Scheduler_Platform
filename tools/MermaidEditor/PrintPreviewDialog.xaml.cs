@@ -916,7 +916,7 @@ public partial class PrintPreviewDialog : Window
             Write($"/Width {pixelWidths[i]} /Height {pixelHeights[i]} ");
             Write("/ColorSpace /DeviceRGB /BitsPerComponent 8 ");
             Write("/Filter /DCTDecode ");
-            Write($"/Length {jpeg.Length} ");
+            Write($"/Length {jpeg.Length + 1} ");
             Write(">>\n");
             Write("stream\n");
             WriteBytes(jpeg);
