@@ -805,7 +805,7 @@ Console.WriteLine(""Hello, World!"");
     /// Checks if the current caret line is inside a comment and tints the toggle-comment
     /// toolbar button and menu item icon green when it is.
     /// </summary>
-    private void UpdateToggleCommentIconColor()
+    private void UpdateToggleCommentIconColor(bool force = false)
     {
         try
         {
@@ -826,7 +826,7 @@ Console.WriteLine(""Hello, World!"");
                 isComment = lineText.StartsWith("<!--");
             }
 
-            if (isComment == _lastCaretWasInComment) return;
+            if (!force && isComment == _lastCaretWasInComment) return;
             _lastCaretWasInComment = isComment;
 
             if (isComment)
@@ -3277,6 +3277,10 @@ Console.WriteLine(""Hello, World!"");
             // Markdown uses block comments (<!-- -->)
             ToggleMarkdownComment(doc, selection);
         }
+        
+        // Force-refresh the comment icon color since the text changed but
+        // the caret position may not have moved (so PositionChanged won't fire)
+        UpdateToggleCommentIconColor(force: true);
     }
 
     private void ToggleMermaidComment(ICSharpCode.AvalonEdit.Document.TextDocument doc, ICSharpCode.AvalonEdit.Editing.Selection selection)
@@ -5720,6 +5724,8 @@ Console.WriteLine(""Hello, World!"");
         UpdateTabStyles(); // Update tab colors for new theme
         SvgIconHelper.ClearCache();
         InitializeIcons();
+        // Force-refresh comment icon color since InitializeIcons reset all icons to default
+        UpdateToggleCommentIconColor(force: true);
         RenderPreview(); // Re-render preview with new theme
     }
 
@@ -5749,6 +5755,8 @@ Console.WriteLine(""Hello, World!"");
                 UpdateTabStyles();
                 SvgIconHelper.ClearCache();
                 InitializeIcons();
+                // Force-refresh comment icon color since InitializeIcons reset all icons to default
+                UpdateToggleCommentIconColor(force: true);
                 RenderPreview();
             }
 
@@ -7326,6 +7334,10 @@ Console.WriteLine(""Hello, World!"");
         UpdateMarkdownFormattingVisibility();
         UpdateZoomControlsVisibility();
         UpdateUndoRedoState();
+        
+        // Force-refresh comment icon color for the new document's caret position
+        _lastCaretWasInComment = false;
+        UpdateToggleCommentIconColor(force: true);
         
         // Re-render preview for the new document
         // This will trigger NavigateToString which resets _hasNavigatedAway to false
