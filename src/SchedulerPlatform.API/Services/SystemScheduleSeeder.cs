@@ -46,6 +46,9 @@ public class SystemScheduleSeeder : IHostedService
             // Seed the ADR Full Cycle schedule
             await SeedAdrFullCycleScheduleAsync(dbContext, schedulerService, cancellationToken);
 
+            // Seed the ADR Status Check schedule
+            await SeedAdrStatusCheckScheduleAsync(dbContext, schedulerService, cancellationToken);
+
             _logger.LogInformation("SystemScheduleSeeder: completed");
         }
         catch (Exception ex)
@@ -166,6 +169,92 @@ public class SystemScheduleSeeder : IHostedService
         catch (Exception ex)
         {
             _logger.LogError(ex, "SystemScheduleSeeder: Failed to register maintenance schedule with Quartz scheduler");
+        }
+    }
+
+    private async Task SeedAdrStatusCheckScheduleAsync(
+        SchedulerDbContext dbContext,
+        ISchedulerService schedulerService,
+        CancellationToken cancellationToken)
+    {
+        const string adrStatusCheckScheduleName = "ADR Status Check";
+
+        var existingSchedule = await dbContext.Schedules
+            .FirstOrDefaultAsync(s => s.Name == adrStatusCheckScheduleName && s.IsSystemSchedule && !s.IsDeleted, cancellationToken);
+
+        if (existingSchedule != null)
+        {
+            _logger.LogInformation("SystemScheduleSeeder: ADR Status Check schedule already exists (Id: {ScheduleId})", existingSchedule.Id);
+            return;
+        }
+
+        // ClientId 1 is always "Cass Information Systems (Internal Client)"
+        const int cassClientId = 1;
+
+        var now = DateTime.UtcNow;
+        var adrStatusCheckSchedule = new Schedule
+        {
+            Name = adrStatusCheckScheduleName,
+            Description = "ADR Status Check: checks statuses for all scraped jobs via the background orchestration queue. Runs daily at 9 AM, 12 PM, 3 PM, and 6 PM Eastern Time.",
+            ClientId = cassClientId,
+            JobType = JobType.ApiCall,
+            Frequency = ScheduleFrequency.Daily,
+            CronExpression = "0 0 9,12,15,18 * * ?", // 9 AM, 12 PM, 3 PM, 6 PM
+            IsEnabled = true,
+            IsSystemSchedule = true,
+            MaxRetries = 3,
+            RetryDelayMinutes = 30,
+            TimeoutMinutes = 120, // Status checks can take a while with many jobs
+            TimeZone = "America/New_York", // Eastern Time
+            JobConfiguration = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                Url = "/api/adr/orchestrate/run-background",
+                Method = "POST",
+                AuthorizationType = "SchedulerApiKey",
+                RequestBody = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    runSync = false,
+                    runCreateJobs = false,
+                    runCredentialVerification = false,
+                    runScraping = false,
+                    runStatusCheck = true,
+                    checkAllScrapedStatuses = true
+                }),
+                ContentType = "application/json"
+            }),
+            CreatedDateTime = now,
+            CreatedBy = "System",
+            ModifiedDateTime = now,
+            ModifiedBy = "System"
+        };
+
+        try
+        {
+            var cronExpression = new Quartz.CronExpression(adrStatusCheckSchedule.CronExpression);
+            cronExpression.TimeZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+            var nextOccurrence = cronExpression.GetNextValidTimeAfter(DateTimeOffset.UtcNow);
+            adrStatusCheckSchedule.NextRunDateTime = nextOccurrence?.UtcDateTime;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "SystemScheduleSeeder: Could not calculate NextRunDateTime for ADR Status Check schedule");
+        }
+
+        dbContext.Schedules.Add(adrStatusCheckSchedule);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "SystemScheduleSeeder: Created ADR Status Check schedule (Id: {ScheduleId}, NextRun: {NextRun})",
+            adrStatusCheckSchedule.Id, adrStatusCheckSchedule.NextRunDateTime);
+
+        try
+        {
+            await schedulerService.ScheduleJob(adrStatusCheckSchedule);
+            _logger.LogInformation("SystemScheduleSeeder: Registered ADR Status Check schedule with Quartz scheduler");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "SystemScheduleSeeder: Failed to register ADR Status Check schedule with Quartz scheduler");
         }
     }
 
