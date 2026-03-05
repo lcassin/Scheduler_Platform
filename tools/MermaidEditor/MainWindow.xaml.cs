@@ -5882,7 +5882,8 @@ Console.WriteLine(""Hello, World!"");
         var keywordColor = isDark ? "#569CD6" : "#0000FF";
         var diagramTypeColor = isDark ? "#C586C0" : "#AF00DB";
         
-        var xshd = "<?xml version=\"1.0\"?>" +
+        // Register Mermaid syntax highlighting
+        var mermaidXshd = "<?xml version=\"1.0\"?>" +
             "<SyntaxDefinition name=\"Mermaid\" xmlns=\"http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008\">" +
             "<Color name=\"Comment\" foreground=\"" + commentColor + "\" />" +
             "<Color name=\"Keyword\" foreground=\"" + keywordColor + "\" fontWeight=\"bold\" />" +
@@ -5913,14 +5914,46 @@ Console.WriteLine(""Hello, World!"");
 
         try
         {
-            using var reader = new XmlTextReader(new StringReader(xshd));
-            var definition = HighlightingLoader.Load(reader, HighlightingManager.Instance);
-            HighlightingManager.Instance.RegisterHighlighting("Mermaid", new[] { ".mmd", ".mermaid" }, definition);
-            CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
+            using var mermaidReader = new XmlTextReader(new StringReader(mermaidXshd));
+            var mermaidDef = HighlightingLoader.Load(mermaidReader, HighlightingManager.Instance);
+            HighlightingManager.Instance.RegisterHighlighting("Mermaid", new[] { ".mmd", ".mermaid" }, mermaidDef);
         }
         catch
         {
             // If syntax highlighting fails, continue without it
+        }
+
+        // Register Markdown syntax highlighting (with theme-aware comment color)
+        var markdownXshd = "<?xml version=\"1.0\"?>" +
+            "<SyntaxDefinition name=\"Markdown\" xmlns=\"http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008\">" +
+            "<Color name=\"Comment\" foreground=\"" + commentColor + "\" />" +
+            "<RuleSet>" +
+            "<Span color=\"Comment\" multiline=\"true\">" +
+            "<Begin>&lt;!--</Begin>" +
+            "<End>--&gt;</End>" +
+            "</Span>" +
+            "</RuleSet>" +
+            "</SyntaxDefinition>";
+
+        try
+        {
+            using var markdownReader = new XmlTextReader(new StringReader(markdownXshd));
+            var markdownDef = HighlightingLoader.Load(markdownReader, HighlightingManager.Instance);
+            HighlightingManager.Instance.RegisterHighlighting("Markdown", new[] { ".md", ".markdown" }, markdownDef);
+        }
+        catch
+        {
+            // If syntax highlighting fails, continue without it
+        }
+
+        // Apply the correct highlighting based on the active document type
+        if (_currentRenderMode == RenderMode.Markdown)
+        {
+            CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Markdown");
+        }
+        else
+        {
+            CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
         }
     }
 
