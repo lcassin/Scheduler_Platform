@@ -336,6 +336,14 @@ Console.WriteLine(""Hello, World!"");
         {
             StatusText.Text = $"Line {CodeEditor.TextArea.Caret.Line}, Col {CodeEditor.TextArea.Caret.Column}";
             UpdateToggleCommentIconColor();
+            
+            // Ensure the editor scrolls to keep the caret visible when navigating
+            // with arrow keys, Tab, Home/End, etc. on long lines without word wrap.
+            // Use Dispatcher to defer until after AvalonEdit finishes its own layout pass.
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() =>
+            {
+                CodeEditor.TextArea.Caret.BringCaretToView();
+            }));
         };
         
         // Intercept Ctrl+F and Ctrl+H before AvalonEdit handles them
