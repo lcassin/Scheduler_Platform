@@ -198,7 +198,7 @@ public class SystemScheduleSeeder : IHostedService
             Description = "ADR Status Check: checks statuses for all scraped jobs via the background orchestration queue. Runs daily at 9 AM, 12 PM, 3 PM, and 6 PM Eastern Time.",
             ClientId = cassClientId,
             JobType = JobType.ApiCall,
-            Frequency = ScheduleFrequency.Daily,
+            Frequency = ScheduleFrequency.Custom,
             CronExpression = "0 0 9,12,15,18 * * ?", // 9 AM, 12 PM, 3 PM, 6 PM
             IsEnabled = true,
             IsSystemSchedule = true,
