@@ -633,6 +633,10 @@ Console.WriteLine(""Hello, World!"");
             
             // Initialize SVG icons for toolbar buttons and menu items
             InitializeIcons();
+            // Force-refresh comment icon color after InitializeIcons resets all icons to default.
+            // This is critical for session restore: the constructor already ran SwitchToDocument()
+            // which set _lastCaretWasInComment, but InitializeIcons() just overwrote the green tint.
+            UpdateToggleCommentIconColor(force: true);
             
             // Load recent files
             LoadRecentFiles();
