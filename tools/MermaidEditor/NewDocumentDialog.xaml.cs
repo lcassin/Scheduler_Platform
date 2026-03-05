@@ -219,6 +219,328 @@ Your content here...
 ", false);
     }
 
+    private void MarkdownCheatSheet_Click(object sender, RoutedEventArgs e)
+    {
+        SetTemplateAndClose(@"# Markdown Cheat Sheet
+
+A comprehensive reference for all Markdown syntax. Edit this document and watch the preview update in real time!
+
+---
+
+## 1. Headings
+
+# Heading 1
+## Heading 2
+### Heading 3
+#### Heading 4
+##### Heading 5
+###### Heading 6
+
+---
+
+## 2. Text Formatting
+
+**Bold text** using double asterisks  
+__Bold text__ using double underscores  
+*Italic text* using single asterisks  
+_Italic text_ using single underscores  
+***Bold and italic*** using triple asterisks  
+~~Strikethrough~~ using double tildes  
+`Inline code` using backticks  
+This is <sub>subscript</sub> and this is <sup>superscript</sup>
+
+---
+
+## 3. Paragraphs and Line Breaks
+
+This is a paragraph. Leave a blank line between paragraphs to separate them.
+
+This is a new paragraph. To create a line break within a paragraph,  
+end a line with two spaces (or use `<br>`) before the next line.<br>
+Like this.
+
+---
+
+## 4. Blockquotes
+
+> This is a blockquote.
+> It can span multiple lines.
+>
+> > Nested blockquotes are also supported.
+> >
+> > > And even deeper nesting.
+
+> **Tip:** Blockquotes can contain other Markdown elements like **bold**, *italic*, and `code`.
+
+---
+
+## 5. Lists
+
+### Unordered Lists
+
+- Item 1
+- Item 2
+  - Nested item 2a
+  - Nested item 2b
+    - Deeply nested item
+- Item 3
+
+### Ordered Lists
+
+1. First item
+2. Second item
+   1. Sub-item 2a
+   2. Sub-item 2b
+3. Third item
+
+### Task Lists
+
+- [x] Completed task
+- [x] Another completed task
+- [ ] Incomplete task
+- [ ] Another incomplete task
+
+---
+
+## 6. Links
+
+[Inline link](https://example.com)  
+[Link with title](https://example.com ""Hover to see this title"")  
+[Reference-style link][ref1]  
+[Numbered reference link][1]  
+<https://example.com> (auto-linked URL)  
+<user@example.com> (auto-linked email)
+
+[ref1]: https://example.com ""Reference Link""
+[1]: https://example.com ""Numbered Reference""
+
+---
+
+## 7. Images
+
+![Alt text for image](https://via.placeholder.com/400x100/4a90d9/ffffff?text=Sample+Image)
+
+![Small image](https://via.placeholder.com/150x50/e74c3c/ffffff?text=150x50)
+
+---
+
+## 8. Code
+
+### Inline Code
+
+Use `console.log()` to print output. The `<div>` element is a block container.
+
+### Fenced Code Blocks
+
+```javascript
+// JavaScript example
+function greet(name) {
+    console.log(`Hello, ${name}!`);
+    return { message: `Welcome, ${name}` };
+}
+
+greet(""World"");
+```
+
+```python
+# Python example
+def fibonacci(n):
+    a, b = 0, 1
+    for _ in range(n):
+        yield a
+        a, b = b, a + b
+
+for num in fibonacci(10):
+    print(num)
+```
+
+```csharp
+// C# example
+public class Program
+{
+    public static void Main(string[] args)
+    {
+        var message = ""Hello, World!"";
+        Console.WriteLine(message);
+    }
+}
+```
+
+```html
+<!-- HTML example -->
+<div class=""container"">
+    <h1>Hello World</h1>
+    <p>This is a <strong>paragraph</strong>.</p>
+</div>
+```
+
+```css
+/* CSS example */
+.container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #f0f0f0;
+    padding: 20px;
+}
+```
+
+```sql
+-- SQL example
+SELECT users.name, COUNT(orders.id) AS order_count
+FROM users
+LEFT JOIN orders ON users.id = orders.user_id
+WHERE users.active = 1
+GROUP BY users.name
+HAVING order_count > 5
+ORDER BY order_count DESC;
+```
+
+```json
+{
+    ""name"": ""Markdown Cheat Sheet"",
+    ""version"": ""1.0"",
+    ""features"": [""headings"", ""lists"", ""tables"", ""code""],
+    ""enabled"": true
+}
+```
+
+---
+
+## 9. Tables
+
+### Basic Table
+
+| Column 1 | Column 2 | Column 3 |
+|----------|----------|----------|
+| Row 1    | Data     | Data     |
+| Row 2    | Data     | Data     |
+| Row 3    | Data     | Data     |
+
+### Aligned Table
+
+| Left Aligned | Center Aligned | Right Aligned |
+|:-------------|:--------------:|--------------:|
+| Left         |    Center      |         Right |
+| Text         |    Text        |          Text |
+| Data         |    Data        |          Data |
+
+---
+
+## 10. Horizontal Rules
+
+Three or more hyphens, asterisks, or underscores create a horizontal rule:
+
+---
+
+***
+
+___
+
+---
+
+## 11. HTML in Markdown
+
+Markdown supports inline HTML for advanced formatting:
+
+<details>
+<summary>Click to expand (collapsible section)</summary>
+
+This content is hidden by default and revealed when the user clicks the summary.
+
+- Works with lists
+- **And formatting**
+- `And code`
+
+</details>
+
+<div align=""center"">
+    <strong>Centered content using HTML</strong><br>
+    <em>With line breaks and formatting</em>
+</div>
+
+<kbd>Ctrl</kbd> + <kbd>C</kbd> to copy (keyboard keys)
+
+Text with <mark>highlighted background</mark> using the mark tag.
+
+---
+
+## 12. Escaping Characters
+
+Use a backslash to display literal characters that normally have special meaning:
+
+\* Not italic \*  
+\# Not a heading  
+\- Not a list item  
+\[Not a link\]  
+\`Not inline code\`  
+\| Not a table column \|
+
+---
+
+## 13. Footnotes
+
+Here is a sentence with a footnote[^1] and another one[^2].
+
+[^1]: This is the first footnote content.
+[^2]: This is the second footnote — it can contain **formatting** and `code`.
+
+---
+
+## 14. Definition Lists
+
+Term 1
+: Definition for term 1
+
+Term 2
+: First definition for term 2
+: Second definition for term 2
+
+---
+
+## 15. Emoji (if supported)
+
+:smile: :rocket: :thumbsup: :heart: :warning: :star:
+
+---
+
+## 16. Comments
+
+<!-- This is an HTML comment — it will NOT appear in the rendered output -->
+<!-- Comments are useful for notes to yourself or temporarily hiding content -->
+
+The text above this line contains hidden HTML comments (visible in the editor, hidden in preview).
+
+---
+
+## 17. Math (if supported by renderer)
+
+Inline math: $E = mc^2$
+
+Block math:
+
+$$
+\sum_{i=1}^{n} x_i = x_1 + x_2 + \cdots + x_n
+$$
+
+---
+
+## 18. Abbreviations
+
+The HTML specification is maintained by the W3C.
+
+*[HTML]: Hyper Text Markup Language
+*[W3C]: World Wide Web Consortium
+
+---
+
+> **Note:** Not all Markdown renderers support every feature listed here.  
+> Standard features (headings, bold, italic, links, images, code, lists, tables, blockquotes)  
+> are universally supported. Extended features (task lists, footnotes, math, abbreviations,  
+> emoji) depend on the renderer.
+", false);
+    }
+
     private void Flowchart_Click(object sender, RoutedEventArgs e)
     {
         SetTemplateAndClose(@"---
