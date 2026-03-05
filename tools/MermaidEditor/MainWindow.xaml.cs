@@ -339,11 +339,19 @@ Console.WriteLine(""Hello, World!"");
             
             // Ensure the editor scrolls to keep the caret visible when navigating
             // with arrow keys, Tab, Home/End, etc. on long lines without word wrap.
-            // We defer with Loaded priority so the layout pass has completed and
-            // the caret's visual position is accurate.
+            // The root fix is CanContentScroll in the ScrollViewer template (MainWindow.xaml)
+            // which restores AvalonEdit's native IScrollInfo chain. This deferred call
+            // is a lightweight safety net that uses AvalonEdit's built-in scroll-to-caret.
             Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
             {
-                EnsureCaretVisible();
+                try
+                {
+                    CodeEditor.TextArea.Caret.BringCaretToView();
+                }
+                catch
+                {
+                    // Ignore errors during document switching
+                }
             }));
         };
         
@@ -356,62 +364,6 @@ Console.WriteLine(""Hello, World!"");
         EnableBracketHighlighting();
     }
     
-    private void EnsureCaretVisible()
-    {
-        try
-        {
-            var textView = CodeEditor.TextArea.TextView;
-            var caretPos = CodeEditor.TextArea.Caret.Position;
-            
-            // Get the caret's visual position in document coordinates
-            var visualPos = textView.GetVisualPosition(caretPos, 
-                ICSharpCode.AvalonEdit.Rendering.VisualYPosition.LineMiddle);
-            
-            var scrollOffset = textView.ScrollOffset;
-            var viewportWidth = textView.ActualWidth;
-            var viewportHeight = textView.ActualHeight;
-            
-            // Margin to keep the caret away from the edges (in pixels)
-            const double margin = 40;
-            
-            // Horizontal scroll: check if caret is past the right or left edge
-            double caretX = visualPos.X;
-            double visibleLeft = scrollOffset.X;
-            double visibleRight = scrollOffset.X + viewportWidth;
-            
-            if (caretX > visibleRight - margin)
-            {
-                // Caret past right edge — scroll right to show caret with margin
-                CodeEditor.ScrollToHorizontalOffset(caretX - viewportWidth + margin * 2);
-            }
-            else if (caretX < visibleLeft + margin && visibleLeft > 0)
-            {
-                // Caret past left edge — scroll left
-                CodeEditor.ScrollToHorizontalOffset(Math.Max(0, caretX - margin * 2));
-            }
-            
-            // Vertical scroll: check if caret is past the top or bottom edge
-            double caretY = visualPos.Y;
-            double visibleTop = scrollOffset.Y;
-            double visibleBottom = scrollOffset.Y + viewportHeight;
-            
-            if (caretY > visibleBottom - margin)
-            {
-                // Caret past bottom edge — scroll down
-                CodeEditor.ScrollToVerticalOffset(caretY - viewportHeight + margin * 2);
-            }
-            else if (caretY < visibleTop + margin && visibleTop > 0)
-            {
-                // Caret past top edge — scroll up
-                CodeEditor.ScrollToVerticalOffset(Math.Max(0, caretY - margin * 2));
-            }
-        }
-        catch
-        {
-            // If visual position calculation fails (e.g., during document switch), ignore
-        }
-    }
-
     private void CodeEditor_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (e.Key == System.Windows.Input.Key.F && Keyboard.Modifiers == ModifierKeys.Control)
