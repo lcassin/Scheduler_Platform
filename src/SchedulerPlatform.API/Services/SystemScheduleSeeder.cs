@@ -205,7 +205,7 @@ public class SystemScheduleSeeder : IHostedService
             MaxRetries = 3,
             RetryDelayMinutes = 30,
             TimeoutMinutes = 120, // Status checks can take a while with many jobs
-            TimeZone = "America/New_York", // Eastern Time
+            TimeZone = "Eastern Standard Time", // Eastern Time (handles EST/EDT automatically)
             JobConfiguration = System.Text.Json.JsonSerializer.Serialize(new
             {
                 Url = "/api/adr/orchestrate/run-background",
@@ -231,7 +231,7 @@ public class SystemScheduleSeeder : IHostedService
         try
         {
             var cronExpression = new Quartz.CronExpression(adrStatusCheckSchedule.CronExpression);
-            cronExpression.TimeZone = TimeZoneInfo.FindSystemTimeZoneById("America/New_York");
+            cronExpression.TimeZone = TimeZoneInfo.FindSystemTimeZoneById("Eastern Standard Time");
             var nextOccurrence = cronExpression.GetNextValidTimeAfter(DateTimeOffset.UtcNow);
             adrStatusCheckSchedule.NextRunDateTime = nextOccurrence?.UtcDateTime;
         }
