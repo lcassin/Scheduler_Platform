@@ -2605,9 +2605,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             _logger.LogError(ex, "Bulk credential verification failed");
             result.Errors++;
             result.ErrorMessages.Add($"Bulk credential verification failed: {ex.Message}");
-            stopwatch.Stop();
-            result.Duration = stopwatch.Elapsed;
-            return result;
+            throw;
         }
     }
 
@@ -2903,6 +2901,10 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 result.Duration, result.AccountsProcessed, result.CredentialsVerified, result.CredentialsFailed, result.Errors);
 
             return result;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
