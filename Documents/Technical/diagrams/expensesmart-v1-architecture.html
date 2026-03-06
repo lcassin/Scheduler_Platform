@@ -468,7 +468,7 @@
     <div class="wf-step">
       <div class="wf-icon" style="background:var(--sql-color)">&#128451;</div>
       <div class="wf-label">SQL Server Tier</div>
-      <div class="wf-sublabel">UtilityWeb, Workflow,<br>TMOS, CassImaging</div>
+      <div class="wf-sublabel">UtilityWeb, Workflow,<br>CassImaging, SSRS</div>
     </div>
     <div class="wf-arrow">&rarr;</div>
     <div class="wf-step">
@@ -520,24 +520,24 @@
     </div>
 
     <div style="margin-bottom:12px;">
-      <div class="topo-tier-title" style="color:#D83B01;background:#FFF0E0;">AT&T Dedicated Servers</div>
+      <div class="topo-tier-title" style="color:#D83B01;background:#FFF0E0;">AT&T Dedicated Servers (Load Balanced)</div>
     </div>
     <div class="two-col">
       <div class="server-card web" style="border-color:#D83B01;">
-        <div class="server-name">&#128421; Mako4 <span class="badge dedicated">AT&T</span></div>
+        <div class="server-name">&#128421; Mako4 <span class="badge dedicated">AT&T</span> <span class="badge lb">LB</span></div>
         <div class="server-role">Dedicated Web Server &mdash; AT&T</div>
         <div class="server-details">
           <div class="detail-item"><span class="detail-icon">&#127760;</span> IIS &mdash; Expensesmart WebForms</div>
-          <div class="detail-item"><span class="detail-icon">&#128101;</span> AT&T only (dedicated)</div>
+          <div class="detail-item"><span class="detail-icon">&#128101;</span> AT&T only (dedicated, load balanced)</div>
           <div class="detail-item"><span class="detail-icon">&#128279;</span> AT&T IdP: <span class="url-tag">sailpoint.cso.att.com</span></div>
         </div>
       </div>
       <div class="server-card web" style="border-color:#D83B01;">
-        <div class="server-name">&#128421; Mako5 <span class="badge dedicated">AT&T</span></div>
+        <div class="server-name">&#128421; Mako5 <span class="badge dedicated">AT&T</span> <span class="badge lb">LB</span></div>
         <div class="server-role">Dedicated Web Server &mdash; AT&T</div>
         <div class="server-details">
           <div class="detail-item"><span class="detail-icon">&#127760;</span> IIS &mdash; Expensesmart WebForms</div>
-          <div class="detail-item"><span class="detail-icon">&#128101;</span> AT&T only (dedicated)</div>
+          <div class="detail-item"><span class="detail-icon">&#128101;</span> AT&T only (dedicated, load balanced)</div>
         </div>
       </div>
     </div>
@@ -575,7 +575,7 @@
           <div class="server-details">
             <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">clm.cassinfo.com/sso</span></div>
             <div class="detail-item"><span class="detail-icon">&#128101;</span> 40+ partner IdPs (Azure AD, Okta, PingFederate)</div>
-            <div class="detail-item"><span class="detail-icon">&#128451;</span> User lookup via <strong>TMOS.dbo.tbl_Request_Profile</strong></div>
+            <div class="detail-item"><span class="detail-icon">&#128101;</span> User lookup via partner IdP claims</div>
           </div>
         </div>
       </div>
@@ -827,40 +827,41 @@
       </div>
     </div>
 
-    <!-- TMOS -->
+    <!-- SSRS / ReportTrak -->
     <div class="topo-tier" style="margin-top:12px;">
-      <div class="topo-tier-title hub">Additional Known Databases</div>
+      <div class="topo-tier-title hub">Reporting Services (SSRS)</div>
       <div class="three-col" style="margin-top:8px;">
-        <div class="server-card db" style="border-color:#8B4513;background:#FFF8F0;">
-          <div class="server-name">&#128451; TMOS Database</div>
-          <div class="server-role">SSO User Profiles &amp; Reporting</div>
+        <div class="server-card db" style="border-color:#0078D4;background:#E1F0FF;">
+          <div class="server-name">&#128202; SQLDEV02 <span class="badge test">TEST</span></div>
+          <div class="server-role">SSRS Report Server (Dev/Test)</div>
           <div class="server-details">
-            <div class="detail-item"><span class="detail-icon">&#128100;</span> tbl_Request_Profile (SSO user data)</div>
-            <div class="detail-item"><span class="detail-icon">&#9881;</span> psp_Report_FundingReview_Textron</div>
-            <div class="detail-item"><span class="detail-icon">&#128279;</span> Used by SAML SSO for user lookup</div>
+            <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">http://SQLDEV02:80/ReportServer</span></div>
+            <div class="detail-item"><span class="detail-icon">&#9881;</span> ReportingService2005 SOAP endpoint</div>
+            <div class="detail-item"><span class="detail-icon">&#128274;</span> NTLM auth (Windows credentials)</div>
           </div>
           <div class="db-list">
-            <div class="db-tag">TMOS</div>
-            <div class="db-tag">AsignetSSOList</div>
+            <div class="db-tag">ReportServer</div>
           </div>
         </div>
-        <div class="server-card db" style="border-color:#8B4513;background:#FFF8F0;">
-          <div class="server-name">&#128451; VendorCred Database</div>
-          <div class="server-role">External Vendor Credentials</div>
+        <div class="server-card db" style="border-color:#CC2131;background:#FFF0F1;">
+          <div class="server-name">&#128202; SSRS Prod Server <span class="badge prod">PROD</span></div>
+          <div class="server-role">SSRS Report Server (Production)</div>
           <div class="server-details">
-            <div class="detail-item"><span class="detail-icon">&#128274;</span> Stores vendor portal credentials</div>
-            <div class="detail-item"><span class="detail-icon">&#128260;</span> Source for ADR account sync (~200k accounts)</div>
+            <div class="detail-item"><span class="detail-icon">&#10067;</span> <em>Server name TBD &mdash; need from Infrastructure</em></div>
+            <div class="detail-item"><span class="detail-icon">&#9881;</span> ReportingService2005 SOAP endpoint</div>
+            <div class="detail-item"><span class="detail-icon">&#128196;</span> ReportTrak uses UtilityWeb DB on EMSDBPR05</div>
           </div>
           <div class="db-list">
-            <div class="db-tag">VendorCredNewUAT (test)</div>
+            <div class="db-tag">ReportServer</div>
           </div>
         </div>
         <div class="unknown-box">
           <div class="question">&#10067;</div>
-          <strong>Database-to-Server mapping TBD</strong><br>
-          Need to determine which physical servers host:<br>
-          TMOS, VendorCred, ASPState (session), and<br>
-          the exact prod server for UtilityWeb
+          <strong>Items TBD</strong><br>
+          Need to determine:<br>
+          ASPState server (prod session state),<br>
+          prod SSRS server name, and<br>
+          Steelhead vs Hammerhead active status
         </div>
       </div>
     </div>
@@ -1144,11 +1145,11 @@
 <div class="notes-section">
   <h3>Open Questions / Items to Confirm for Complete Diagram</h3>
   <ul>
-    <li><strong>Database-to-Server mapping (Prod):</strong> Which physical server hosts TMOS, VendorCred, and ASPState in production? Which Mako config (Steelhead vs Hammerhead) is currently active?</li>
+    <li><strong>ASPState (Prod):</strong> Which SQL server hosts the ASPState database for production session state?</li>
+    <li><strong>Steelhead vs Hammerhead:</strong> Which Mako config (Steelhead vs Hammerhead) is currently active for UtilityWeb?</li>
     <li><strong>Load Balancer:</strong> What is the load balancer make/model? (F5, HAProxy, etc.) What VIP/hostname does it expose?</li>
-    <li><strong>Reporting Server:</strong> Is SSRS running on a dedicated server or on one of the existing SQL servers?</li>
+    <li><strong>Reporting Server (Prod):</strong> What is the production SSRS server name? (Dev/test uses SQLDEV02.) ReportTrak queries run against UtilityWeb DB on EMSDBPR05.</li>
     <li><strong>Mako server OS/specs:</strong> Windows Server version and IIS version on Mako 1-5?</li>
-    <li><strong>Session State (Prod):</strong> Which SQL server hosts the ASPState database for production session state?</li>
     <li><strong>Bluefin/Steelhead/Hammerhead:</strong> Are these named instances, aliases, or physical server names? Are any of them the same physical box as EMSDBPR05/07?</li>
     <li><strong>Acme14 DB server:</strong> Does test point to emsdbdev02 for all databases or are some on Acme14 locally?</li>
     <li><strong>Network topology:</strong> VLAN segmentation between web tier, DB tier, and external access?</li>
