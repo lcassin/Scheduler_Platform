@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Expensesmart 1.0 - On-Premises Server Architecture Diagram</title>
+<style>
+  :root {
+    --prod-color: #0B7A3E;
+    --prod-bg: #E6F4EA;
+    --test-color: #B36B00;
+    --test-bg: #FFF4E0;
+    --sql-color: #CC2131;
+    --sql-bg: #FFF0F1;
+    --sso-color: #5C2D91;
+    --sso-bg: #F3EDFB;
+    --infra-color: #005A9E;
+    --infra-bg: #E1F0FF;
+    --ext-color: #E3008C;
+    --ext-bg: #FCE4F2;
+    --deploy-color: #1B1B1B;
+    --card-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    --border-radius: 8px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #F5F5F5;
+    color: #333;
+    padding: 20px;
+    max-width: 1400px;
+    margin: 0 auto;
+  }
+
+  .diagram-header {
+    text-align: center;
+    padding: 24px 20px;
+    background: linear-gradient(135deg, #1a1a2e, #16213e, #0f3460);
+    color: #fff;
+    border-radius: var(--border-radius);
+    margin-bottom: 24px;
+  }
+
+  .diagram-header h1 { font-size: 28px; font-weight: 600; margin-bottom: 4px; }
+  .diagram-header .subtitle { font-size: 14px; opacity: 0.85; }
+  .diagram-header .date { font-size: 12px; opacity: 0.7; margin-top: 6px; }
+
+  .legend {
+    display: flex;
+    gap: 16px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+    padding: 12px 20px;
+    background: #fff;
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+  }
+
+  .legend-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    display: inline-block;
+  }
+
+  .section {
+    background: #fff;
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+
+  .section-label {
+    font-size: 17px;
+    font-weight: 600;
+    padding: 10px 16px;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-label .icon { font-size: 22px; }
+
+  .section.prod { border: 2px solid var(--prod-color); }
+  .section.prod .section-label { background: var(--prod-color); }
+
+  .section.test { border: 2px solid var(--test-color); }
+  .section.test .section-label { background: var(--test-color); }
+
+  .section.sql { border: 2px solid var(--sql-color); }
+  .section.sql .section-label { background: var(--sql-color); }
+
+  .section.sso { border: 2px solid var(--sso-color); }
+  .section.sso .section-label { background: var(--sso-color); }
+
+  .section.infra { border: 2px solid var(--infra-color); }
+  .section.infra .section-label { background: var(--infra-color); }
+
+  .section.ext { border: 2px solid var(--ext-color); }
+  .section.ext .section-label { background: var(--ext-color); }
+
+  .section.deploy { border: 2px solid var(--deploy-color); }
+  .section.deploy .section-label { background: var(--deploy-color); }
+
+  .section-content { padding: 16px; }
+
+  .server-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+  }
+
+  .server-card {
+    border-radius: 6px;
+    padding: 12px;
+    border: 2px solid;
+    transition: transform 0.15s;
+    position: relative;
+  }
+
+  .server-card:hover { transform: translateY(-2px); }
+
+  .server-card.web { border-color: #0078D4; background: #F0F6FF; }
+  .server-card.db { border-color: var(--sql-color); background: var(--sql-bg); }
+  .server-card.auth { border-color: var(--sso-color); background: var(--sso-bg); }
+  .server-card.build { border-color: var(--deploy-color); background: #F5F5F5; }
+  .server-card.cache { border-color: #00B7C3; background: #E6FCFF; }
+  .server-card.file { border-color: #498205; background: #F0F9E8; }
+  .server-card.ext { border-color: var(--ext-color); background: var(--ext-bg); }
+
+  .server-name {
+    font-weight: 700;
+    font-size: 15px;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .server-role {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #666;
+    margin-bottom: 6px;
+  }
+
+  .server-details {
+    font-size: 12px;
+    line-height: 1.5;
+    color: #555;
+  }
+
+  .server-details .detail-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+    margin-bottom: 2px;
+  }
+
+  .server-details .detail-icon {
+    flex-shrink: 0;
+    width: 16px;
+    text-align: center;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #fff;
+  }
+
+  .badge.lb { background: #0078D4; }
+  .badge.dedicated { background: #D83B01; }
+  .badge.primary { background: var(--sql-color); }
+  .badge.replica { background: #498205; }
+  .badge.feeder { background: #B36B00; }
+  .badge.single { background: var(--sso-color); }
+
+  .db-list {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-top: 6px;
+  }
+
+  .db-tag {
+    background: rgba(0,0,0,0.07);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .url-tag {
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 11px;
+    color: #0078D4;
+    word-break: break-all;
+  }
+
+  .env-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .env-box {
+    border-radius: var(--border-radius);
+    padding: 14px;
+    border: 2px dashed;
+  }
+
+  .env-box.prod { border-color: var(--prod-color); background: var(--prod-bg); }
+  .env-box.test { border-color: var(--test-color); background: var(--test-bg); }
+
+  .env-title {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .env-box.prod .env-title { color: var(--prod-color); }
+  .env-box.test .env-title { color: var(--test-color); }
+
+  .env-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #fff;
+  }
+
+  .env-badge.prod { background: var(--prod-color); }
+  .env-badge.test { background: var(--test-color); }
+
+  .flow-connector {
+    text-align: center;
+    padding: 10px;
+    margin: 4px 0;
+  }
+
+  .flow-connector .arrow {
+    font-size: 22px;
+    color: #888;
+  }
+
+  .flow-connector .label {
+    font-size: 12px;
+    color: #666;
+    display: block;
+    margin-top: 2px;
+  }
+
+  .workflow-section .section-label { background: var(--deploy-color); }
+
+  .workflow-pipeline {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    padding: 20px 16px;
+    overflow-x: auto;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .wf-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 110px;
+    max-width: 150px;
+    text-align: center;
+  }
+
+  .wf-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: #fff;
+    margin-bottom: 6px;
+    border: 3px solid rgba(255,255,255,0.3);
+  }
+
+  .wf-label {
+    font-size: 12px;
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 2px;
+  }
+
+  .wf-sublabel {
+    font-size: 10px;
+    color: #777;
+    line-height: 1.3;
+  }
+
+  .wf-arrow {
+    display: flex;
+    align-items: center;
+    font-size: 24px;
+    color: #888;
+    padding: 0 4px;
+    margin-top: 14px;
+  }
+
+  .notes-section {
+    background: #FFFDE7;
+    border: 1px solid #FFC107;
+    border-radius: var(--border-radius);
+    padding: 14px 18px;
+    font-size: 13px;
+    line-height: 1.6;
+    margin-bottom: 16px;
+  }
+
+  .notes-section h3 {
+    color: #B36B00;
+    margin-bottom: 6px;
+    font-size: 14px;
+  }
+
+  .notes-section ul { padding-left: 20px; }
+
+  .db-conn-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-top: 8px;
+  }
+
+  .db-conn-table th, .db-conn-table td {
+    padding: 6px 10px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+  }
+
+  .db-conn-table th {
+    background: #f8f8f8;
+    font-weight: 600;
+    color: #444;
+  }
+
+  .db-conn-table td.mono {
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 11px;
+  }
+
+  .topo-tier {
+    margin-bottom: 16px;
+  }
+
+  .topo-tier-title {
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    display: inline-block;
+  }
+
+  .topo-tier-title.feeder { color: #B36B00; background: var(--test-bg); }
+  .topo-tier-title.hub { color: #0078D4; background: #E1F0FF; }
+  .topo-tier-title.replica { color: #498205; background: #F0F9E8; }
+
+  .unknown-box {
+    border: 2px dashed #ccc;
+    border-radius: 6px;
+    padding: 12px;
+    background: #fafafa;
+    text-align: center;
+    color: #888;
+    font-size: 13px;
+  }
+
+  .unknown-box .question { font-size: 20px; margin-bottom: 4px; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .three-col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .four-col { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .five-col { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+
+  @media (max-width: 900px) {
+    .env-columns, .two-col, .three-col, .four-col, .five-col { grid-template-columns: 1fr; }
+    .workflow-pipeline { justify-content: flex-start; }
+  }
+
+  @media print {
+    body { background: #fff; padding: 10px; }
+    .server-card:hover { transform: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ======== HEADER ======== -->
+<div class="diagram-header">
+  <h1>Expensesmart 1.0 &mdash; On-Premises Server Architecture</h1>
+  <div class="subtitle">Cass Information Systems &bull; Facilities Division &bull; All On-Premises (No Azure) &bull; IBIS Legacy Codebase</div>
+  <div class="date">Technology: ASP.NET Web Forms (VB.NET) &bull; .NET Framework 4.0 &bull; IIS &bull; SQL Server &nbsp;|&nbsp; Generated: March 2026</div>
+</div>
+
+<!-- ======== LEGEND ======== -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#0078D4"></div> IIS Web Server</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--sql-color)"></div> SQL Server</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--sso-color)"></div> Auth / SSO</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#00B7C3"></div> Cache</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#498205"></div> File / Network Share</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--ext-color)"></div> External Integration</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--deploy-color)"></div> Build / Deploy</div>
+</div>
+
+<!-- ======== APPLICATION WORKFLOW ======== -->
+<div class="section deploy">
+  <div class="section-label"><span class="icon">&#128640;</span> Expensesmart 1.0 &mdash; Application Request Flow</div>
+  <div class="workflow-pipeline">
+    <div class="wf-step">
+      <div class="wf-icon" style="background:#0078D4">&#128100;</div>
+      <div class="wf-label">End Users</div>
+      <div class="wf-sublabel">40+ Client Orgs<br>(AT&T, Kroger, etc.)</div>
+    </div>
+    <div class="wf-arrow">&rarr;</div>
+    <div class="wf-step">
+      <div class="wf-icon" style="background:var(--sso-color)">&#128272;</div>
+      <div class="wf-label">SSO / Login</div>
+      <div class="wf-sublabel">SAML 2.0 SP<br>+ Duende OIDC</div>
+    </div>
+    <div class="wf-arrow">&rarr;</div>
+    <div class="wf-step">
+      <div class="wf-icon" style="background:#D83B01">&#9881;</div>
+      <div class="wf-label">Load Balancer</div>
+      <div class="wf-sublabel">Routes to Mako<br>web servers</div>
+    </div>
+    <div class="wf-arrow">&rarr;</div>
+    <div class="wf-step">
+      <div class="wf-icon" style="background:#0078D4">&#127760;</div>
+      <div class="wf-label">IIS Web Tier</div>
+      <div class="wf-sublabel">Mako 1-5<br>ASP.NET WebForms</div>
+    </div>
+    <div class="wf-arrow">&rarr;</div>
+    <div class="wf-step">
+      <div class="wf-icon" style="background:var(--sql-color)">&#128451;</div>
+      <div class="wf-label">SQL Server Tier</div>
+      <div class="wf-sublabel">UtilityWeb, Workflow,<br>CassImaging, SSRS</div>
+    </div>
+    <div class="wf-arrow">&rarr;</div>
+    <div class="wf-step">
+      <div class="wf-icon" style="background:var(--ext-color)">&#128202;</div>
+      <div class="wf-label">External Services</div>
+      <div class="wf-sublabel">BillInfo, DocViewer,<br>SSRS Reports</div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== PRODUCTION WEB TIER ======== -->
+<div class="section prod">
+  <div class="section-label"><span class="icon">&#127968;</span> Production Web Tier &mdash; IIS Servers (Mako)</div>
+  <div class="section-content">
+    <p style="font-size:13px;color:#555;margin-bottom:12px;">All production web servers run IIS with the Expensesmart ASP.NET Web Forms application. Load-balanced, with AT&T on dedicated servers.</p>
+
+    <div style="margin-bottom:12px;">
+      <div class="topo-tier-title feeder">General Clients (Load Balanced)</div>
+    </div>
+    <div class="three-col" style="margin-bottom:16px;">
+      <div class="server-card web">
+        <div class="server-name">&#128421; Mako1 <span class="badge lb">LB</span></div>
+        <div class="server-role">Production Web Server</div>
+        <div class="server-details">
+          <div class="detail-item"><span class="detail-icon">&#127760;</span> IIS &mdash; Expensesmart WebForms</div>
+          <div class="detail-item"><span class="detail-icon">&#128101;</span> All clients except AT&T</div>
+          <div class="detail-item"><span class="detail-icon">&#9989;</span> Load balanced (active)</div>
+        </div>
+      </div>
+      <div class="server-card web">
+        <div class="server-name">&#128421; Mako2 <span class="badge lb">LB</span></div>
+        <div class="server-role">Production Web + Auth Server</div>
+        <div class="server-details">
+          <div class="detail-item"><span class="detail-icon">&#127760;</span> IIS &mdash; Expensesmart WebForms</div>
+          <div class="detail-item"><span class="detail-icon">&#128272;</span> Duende OIDC: <span class="url-tag">oidc.expensesmart.com</span></div>
+          <div class="detail-item"><span class="detail-icon">&#128101;</span> All clients except AT&T</div>
+          <div class="detail-item"><span class="detail-icon">&#9989;</span> Load balanced (active)</div>
+        </div>
+      </div>
+      <div class="server-card web">
+        <div class="server-name">&#128421; Mako3 <span class="badge lb">LB</span></div>
+        <div class="server-role">Production Web Server</div>
+        <div class="server-details">
+          <div class="detail-item"><span class="detail-icon">&#127760;</span> IIS &mdash; Expensesmart WebForms</div>
+          <div class="detail-item"><span class="detail-icon">&#128101;</span> All clients except AT&T</div>
+          <div class="detail-item"><span class="detail-icon">&#9989;</span> Load balanced (active)</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-bottom:12px;">
+      <div class="topo-tier-title" style="color:#D83B01;background:#FFF0E0;">AT&T Dedicated Servers (Load Balanced)</div>
+    </div>
+    <div class="two-col">
+      <div class="server-card web" style="border-color:#D83B01;">
+        <div class="server-name">&#128421; Mako4 <span class="badge dedicated">AT&T</span> <span class="badge lb">LB</span></div>
+        <div class="server-role">Dedicated Web Server &mdash; AT&T</div>
+        <div class="server-details">
+          <div class="detail-item"><span class="detail-icon">&#127760;</span> IIS &mdash; Expensesmart WebForms</div>
+          <div class="detail-item"><span class="detail-icon">&#128101;</span> AT&T only (dedicated, load balanced)</div>
+          <div class="detail-item"><span class="detail-icon">&#128279;</span> AT&T IdP: <span class="url-tag">sailpoint.cso.att.com</span></div>
+        </div>
+      </div>
+      <div class="server-card web" style="border-color:#D83B01;">
+        <div class="server-name">&#128421; Mako5 <span class="badge dedicated">AT&T</span> <span class="badge lb">LB</span></div>
+        <div class="server-role">Dedicated Web Server &mdash; AT&T</div>
+        <div class="server-details">
+          <div class="detail-item"><span class="detail-icon">&#127760;</span> IIS &mdash; Expensesmart WebForms</div>
+          <div class="detail-item"><span class="detail-icon">&#128101;</span> AT&T only (dedicated, load balanced)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== SSO / AUTHENTICATION ======== -->
+<div class="section sso">
+  <div class="section-label"><span class="icon">&#128272;</span> Authentication &amp; SSO Layer</div>
+  <div class="section-content">
+    <p style="font-size:13px;color:#555;margin-bottom:12px;">Duende IdentityServer handles OIDC. Each component is single-instance (LB restricted to one node due to operational data not being shared). SAML 2.0 SP handles federated SSO for 40+ partners. Login app redirects to SSO/OIDC flow.</p>
+    <p style="font-size:12px;color:#888;margin-bottom:12px;font-style:italic;">Limitation: Duende cannot share operational data across servers. If a token request starts on server1, the LB sends to server2 which fails. Load balancer is restricted to a single instance per component.</p>
+
+    <div class="env-columns">
+      <div class="env-box prod">
+        <div class="env-title"><span class="env-badge prod">PROD</span> Production Auth</div>
+        <div class="server-card auth" style="margin-bottom:8px;">
+          <div class="server-name">&#128272; Duende OIDC</div>
+          <div class="server-details">
+            <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">https://oidc.expensesmart.com</span></div>
+            <div class="detail-item"><span class="detail-icon">&#128421;</span> Running on <strong>Mako2</strong> (single instance)</div>
+            <div class="detail-item"><span class="detail-icon">&#128451;</span> Clients loaded from <strong>UtilityWeb.dbo.ClientSecurity</strong></div>
+          </div>
+        </div>
+        <div class="server-card auth" style="margin-bottom:8px;">
+          <div class="server-name">&#128274; Login Service</div>
+          <div class="server-details">
+            <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">https://login.expensesmart.com/Home/SsoRedirect</span></div>
+            <div class="detail-item"><span class="detail-icon">&#128421;</span> Running on <strong>Mako1</strong> (single instance)</div>
+            <div class="detail-item"><span class="detail-icon">&#128260;</span> SSO redirect / Caller of OIDC for SSO flow</div>
+          </div>
+        </div>
+        <div class="server-card auth">
+          <div class="server-name">&#128274; SAML 2.0 SSO SP</div>
+          <div class="server-details">
+            <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">clm.cassinfo.com/sso</span></div>
+            <div class="detail-item"><span class="detail-icon">&#128101;</span> 40+ partner IdPs (Azure AD, Okta, PingFederate)</div>
+            <div class="detail-item"><span class="detail-icon">&#128101;</span> User lookup via partner IdP claims</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="env-box test">
+        <div class="env-title"><span class="env-badge test">TEST</span> Non-Prod Auth</div>
+        <div class="server-card auth" style="margin-bottom:8px;">
+          <div class="server-name">&#128272; Duende OIDC (UAT)</div>
+          <div class="server-details">
+            <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">https://oidc.uat.expensesmart.com</span></div>
+            <div class="detail-item"><span class="detail-icon">&#128421;</span> Running on <strong>Acme14</strong></div>
+            <div class="detail-item"><span class="detail-icon">&#128451;</span> EntityID: oidc.uat.expensesmart.com</div>
+          </div>
+        </div>
+        <div class="server-card auth" style="margin-bottom:8px;">
+          <div class="server-name">&#128274; Login Service (UAT)</div>
+          <div class="server-details">
+            <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">https://login.uat.expensesmart.com/Home/SsoRedirect</span></div>
+            <div class="detail-item"><span class="detail-icon">&#128421;</span> Running on <strong>Acme14</strong></div>
+          </div>
+        </div>
+        <div class="server-card auth">
+          <div class="server-name">&#128274; SSO Test Token Generator</div>
+          <div class="server-details">
+            <div class="detail-item"><span class="detail-icon">&#128279;</span> Reads config from <span class="url-tag">//hyde/sso/appsettings.json</span></div>
+            <div class="detail-item"><span class="detail-icon">&#9881;</span> Generates test SAML tokens for development</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:12px;">
+      <p style="font-size:12px;color:#555;"><strong>Duende Repo:</strong> <span class="url-tag">https://dev.azure.com/CassInfoSys/Enterprise-Shared/_git/enterprise.services.authentication.duende</span></p>
+      <p style="font-size:12px;color:#555;"><strong>SSO Identity Repo:</strong> <span class="url-tag">https://dev.azure.com/CassInfoSys/Telecom/_git/Identity</span> (ASP.NET Core 3.1, ComponentSpace.Saml2)</p>
+    </div>
+  </div>
+</div>
+
+<!-- ======== TEST ENVIRONMENT ======== -->
+<div class="section test">
+  <div class="section-label"><span class="icon">&#128295;</span> Test Environment &mdash; Acme14</div>
+  <div class="section-content">
+    <p style="font-size:13px;color:#555;margin-bottom:12px;">Single server hosting all non-prod services with port-based separation.</p>
+
+    <div class="server-card web" style="border-color:var(--test-color);max-width:100%;">
+      <div class="server-name">&#128421; Acme14 <span class="badge" style="background:var(--test-color);">NON-PROD</span></div>
+      <div class="server-role">Test / UAT / Development Server</div>
+      <div class="server-details">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;">
+          <div>
+            <strong style="font-size:11px;">CASS Test URLs:</strong>
+            <div class="detail-item"><span class="detail-icon">&#127760;</span> <span class="url-tag">https://acme14.expensesmart.com:6002/</span></div>
+            <div class="detail-item"><span class="detail-icon">&#128272;</span> <span class="url-tag">:6001/webapi-identity</span></div>
+            <div class="detail-item"><span class="detail-icon">&#9881;</span> <span class="url-tag">:6002/Home/CallWebApi</span></div>
+            <div class="detail-item"><span class="detail-icon">&#128274;</span> <span class="url-tag">:6010/account/login</span></div>
+            <div class="detail-item"><span class="detail-icon">&#128196;</span> <span class="url-tag">:6001/metadata</span></div>
+          </div>
+          <div>
+            <strong style="font-size:11px;">Duende Auth Redirects:</strong>
+            <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">:6011/signin-oidc</span></div>
+            <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">:6011/signout-oidc</span></div>
+            <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">:6011/signout-callback-oidc</span></div>
+            <div style="margin-top:4px;">
+              <strong style="font-size:11px;">Other Auth Redirects:</strong>
+            </div>
+            <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">:6003/signin-oidc</span></div>
+            <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">:6003/signout-oidc</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:12px;">
+      <div class="topo-tier-title feeder">Test Database Server</div>
+    </div>
+    <div class="server-card db" style="margin-top:8px;">
+      <div class="server-name">&#128451; EMSDBDEV02 <span class="badge feeder">DEV DB</span></div>
+      <div class="server-role">Development / Test SQL Server</div>
+      <div class="server-details">
+        <div class="detail-item"><span class="detail-icon">&#128451;</span> All Expensesmart test databases on one server</div>
+      </div>
+      <div class="db-list">
+        <div class="db-tag">UtilityWeb</div>
+        <div class="db-tag">Workflow</div>
+        <div class="db-tag">CassImaging</div>
+        <div class="db-tag">UtilityMartPub</div>
+        <div class="db-tag">InternalReporting</div>
+        <div class="db-tag">ASPState</div>
+      </div>
+      <table class="db-conn-table" style="margin-top:10px;">
+        <thead><tr><th>Connection Name</th><th>Database</th><th>Server</th></tr></thead>
+        <tbody>
+          <tr><td>UI3Data</td><td class="mono">UtilityWeb</td><td class="mono">emsdbdev02</td></tr>
+          <tr><td>Workflow</td><td class="mono">Workflow</td><td class="mono">emsdbdev02</td></tr>
+          <tr><td>ReportTrak</td><td class="mono">UtilityWeb</td><td class="mono">emsdbdev02</td></tr>
+          <tr><td>DocTrak</td><td class="mono">UtilityWeb</td><td class="mono">emsdbdev02</td></tr>
+          <tr><td>Scheduler</td><td class="mono">UtilityWeb</td><td class="mono">emsdbdev02</td></tr>
+          <tr><td>CassImaging</td><td class="mono">CassImaging</td><td class="mono">emsdbdev02</td></tr>
+          <tr><td>UtilityMart</td><td class="mono">UtilityMartPub</td><td class="mono">emsdbdev02</td></tr>
+          <tr><td>IntranetReporting</td><td class="mono">InternalReporting</td><td class="mono">emsdbdev02</td></tr>
+          <tr><td>SessionState</td><td class="mono">ASPState</td><td class="mono">emsdbdev02</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ======== PRODUCTION DATABASE TIER ======== -->
+<div class="section sql">
+  <div class="section-label"><span class="icon">&#128451;</span> Production SQL Server Topology &mdash; On-Premises Data Tier</div>
+  <div class="section-content">
+    <p style="font-size:13px;color:#555;margin-bottom:12px;">Production databases are distributed across multiple on-prem SQL servers. Connection strings in web.config show the production mapping (commented out in dev branch). Servers below are identified from web.config, the v3 architecture diagram, and stored procedure references.</p>
+
+    <!-- Production DB connections from web.config -->
+    <div style="margin-bottom:16px;">
+      <div class="topo-tier-title hub">Production Database Connections (from web.config)</div>
+      <table class="db-conn-table" style="margin-top:8px;border:1px solid #ddd;border-radius:6px;">
+        <thead><tr><th>Connection Name</th><th>Database</th><th>Server</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>UI3Data (Config 1)</td><td class="mono">UtilityWeb</td><td class="mono">Steelhead</td><td>Primary web app data</td></tr>
+          <tr><td>UI3Data (Config 2)</td><td class="mono">UtilityWeb</td><td class="mono">Hammerhead</td><td>Alternate / failover</td></tr>
+          <tr><td>Workflow</td><td class="mono">Workflow</td><td class="mono">Bluefin</td><td>Workflow engine</td></tr>
+          <tr><td>ReportTrak</td><td class="mono">UtilityWeb1 / UtilityWeb2</td><td class="mono">EMSDBPR05</td><td>Per-config variant</td></tr>
+          <tr><td>DocTrak</td><td class="mono">UtilityWeb1 / UtilityWeb2</td><td class="mono">EMSDBPR05</td><td>Document tracking</td></tr>
+          <tr><td>Scheduler</td><td class="mono">UtilityWeb1 / UtilityWeb2</td><td class="mono">EMSDBPR05</td><td>Job scheduling</td></tr>
+          <tr><td>CassImaging</td><td class="mono">CassImaging</td><td class="mono">dbcassimagingsub</td><td>Image/document storage</td></tr>
+          <tr><td>UtilityMart</td><td class="mono">UtilityMartSub</td><td class="mono">Bluefin</td><td>Analytics/mart data</td></tr>
+          <tr><td>IntranetReporting</td><td class="mono">InternalReporting</td><td class="mono">Bluefin</td><td>Internal reports</td></tr>
+          <tr><td>SessionState</td><td class="mono">ASPState</td><td class="mono"><em>TBD</em></td><td>SQL Server session mode</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Source / Feeder Servers -->
+    <div class="topo-tier">
+      <div class="topo-tier-title feeder">Source / Feeder Servers</div>
+      <div class="four-col" style="margin-top:8px;">
+        <div class="server-card db">
+          <div class="server-name">&#128451; EMSDBPR05 <span class="badge feeder">FEEDER</span></div>
+          <div class="server-role">Reports &amp; Multi-Client DB</div>
+          <div class="db-list">
+            <div class="db-tag">UtilityWeb1</div>
+            <div class="db-tag">UtilityWeb2</div>
+            <div class="db-tag">UtilitymartSub</div>
+            <div class="db-tag">DataLoader</div>
+          </div>
+        </div>
+        <div class="server-card db">
+          <div class="server-name">&#128451; EMSDBHA <span class="badge feeder">FEEDER</span></div>
+          <div class="server-role">Core EMS / Shadowbase</div>
+          <div class="db-list">
+            <div class="db-tag">EMS</div>
+            <div class="db-tag">SHADOWBASE_UTILITIES</div>
+          </div>
+        </div>
+        <div class="server-card db">
+          <div class="server-name">&#128451; EMSDBPR06 <span class="badge feeder">FEEDER</span></div>
+          <div class="server-role">Daily Vendor Import</div>
+          <div class="db-list">
+            <div class="db-tag">EMSDBPR11 Vendor Import</div>
+          </div>
+        </div>
+        <div class="server-card db">
+          <div class="server-name">&#128451; EMSDBPR07 <span class="badge feeder">FEEDER</span></div>
+          <div class="server-role">UtilityWeb Host</div>
+          <div class="db-list">
+            <div class="db-tag">UtilityWeb</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-connector">
+      <div class="arrow">&#11015; &#11015; &#11015;</div>
+      <div class="label">Data feeds into central processing hub via SSIS / stored procedures</div>
+    </div>
+
+    <!-- Named Production Servers -->
+    <div class="topo-tier">
+      <div class="topo-tier-title hub">Named Production Database Servers</div>
+      <div class="four-col" style="margin-top:8px;">
+        <div class="server-card db" style="border-color:#0078D4;background:#E1F0FF;">
+          <div class="server-name" style="color:#004578;">&#128451; Steelhead</div>
+          <div class="server-role">Primary App Data</div>
+          <div class="db-list">
+            <div class="db-tag">UtilityWeb</div>
+          </div>
+        </div>
+        <div class="server-card db" style="border-color:#0078D4;background:#E1F0FF;">
+          <div class="server-name" style="color:#004578;">&#128451; Hammerhead</div>
+          <div class="server-role">App Data (Alternate)</div>
+          <div class="db-list">
+            <div class="db-tag">UtilityWeb</div>
+          </div>
+        </div>
+        <div class="server-card db" style="border-color:#0078D4;background:#E1F0FF;">
+          <div class="server-name" style="color:#004578;">&#128451; Bluefin</div>
+          <div class="server-role">Workflow &amp; Analytics</div>
+          <div class="db-list">
+            <div class="db-tag">Workflow</div>
+            <div class="db-tag">UtilityMartSub</div>
+            <div class="db-tag">InternalReporting</div>
+          </div>
+        </div>
+        <div class="server-card db" style="border-color:#0078D4;background:#E1F0FF;">
+          <div class="server-name" style="color:#004578;">&#128451; dbcassimagingsub</div>
+          <div class="server-role">Image Storage</div>
+          <div class="db-list">
+            <div class="db-tag">CassImaging</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-connector">
+      <div class="arrow">&#11015; &#11015; &#11015;</div>
+      <div class="label">Master Import &amp; Daily Incremental processing into central hub</div>
+    </div>
+
+    <!-- Central Processing Hub -->
+    <div class="topo-tier">
+      <div class="topo-tier-title hub">Central Processing Hub</div>
+      <div class="two-col" style="margin-top:8px;">
+        <div class="server-card db" style="border-color:#0078D4;background:#DEECF9;border-width:3px;">
+          <div class="server-name" style="color:#004578;">&#128451; PEMSDBSQL01 / PEMSDBSQL01\UEG <span class="badge primary">PRIMARY</span></div>
+          <div class="server-role">Central Processing Hub</div>
+          <div class="server-details">
+            <div class="detail-item"><span class="detail-icon">&#9881;</span> ES_Initial_MasterImportExpenseSmart</div>
+            <div class="detail-item"><span class="detail-icon">&#9881;</span> ES_Daily_Incremental_Delete_Load</div>
+          </div>
+          <div class="db-list">
+            <div class="db-tag">DataLoader</div>
+            <div class="db-tag">Client-db (x5 multi-tenant)</div>
+            <div class="db-tag">EMSUPortalCommon</div>
+          </div>
+        </div>
+        <div class="server-card db" style="border-color:#498205;background:#F0F9E8;border-width:3px;">
+          <div class="server-name" style="color:#498205;">&#128451; PEMSDBSQL10 <span class="badge replica">REPLICA</span></div>
+          <div class="server-role">Full Replica (SQL Replication)</div>
+          <div class="server-details">
+            <div class="detail-item"><span class="detail-icon">&#128260;</span> Mirrors all Expensesmart databases</div>
+          </div>
+          <div class="db-list">
+            <div class="db-tag">DataLoader</div>
+            <div class="db-tag">Client-db (x5 multi-tenant)</div>
+            <div class="db-tag">EMSUPortalCommon</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SSRS / ReportTrak -->
+    <div class="topo-tier" style="margin-top:12px;">
+      <div class="topo-tier-title hub">Reporting Services (SSRS)</div>
+      <div class="three-col" style="margin-top:8px;">
+        <div class="server-card db" style="border-color:#0078D4;background:#E1F0FF;">
+          <div class="server-name">&#128202; SQLDEV02 <span class="badge test">TEST</span></div>
+          <div class="server-role">SSRS Report Server (Dev/Test)</div>
+          <div class="server-details">
+            <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">http://SQLDEV02:80/ReportServer</span></div>
+            <div class="detail-item"><span class="detail-icon">&#9881;</span> ReportingService2005 SOAP endpoint</div>
+            <div class="detail-item"><span class="detail-icon">&#128274;</span> NTLM auth (Windows credentials)</div>
+          </div>
+          <div class="db-list">
+            <div class="db-tag">ReportServer</div>
+          </div>
+        </div>
+        <div class="server-card db" style="border-color:#CC2131;background:#FFF0F1;">
+          <div class="server-name">&#128202; SSRS Prod Server <span class="badge prod">PROD</span></div>
+          <div class="server-role">SSRS Report Server (Production)</div>
+          <div class="server-details">
+            <div class="detail-item"><span class="detail-icon">&#10067;</span> <em>Server name TBD &mdash; need from Infrastructure</em></div>
+            <div class="detail-item"><span class="detail-icon">&#9881;</span> ReportingService2005 SOAP endpoint</div>
+            <div class="detail-item"><span class="detail-icon">&#128196;</span> ReportTrak uses UtilityWeb DB on EMSDBPR05</div>
+          </div>
+          <div class="db-list">
+            <div class="db-tag">ReportServer</div>
+          </div>
+        </div>
+        <div class="unknown-box">
+          <div class="question">&#10067;</div>
+          <strong>Items TBD</strong><br>
+          Need to determine:<br>
+          ASPState server (prod session state),<br>
+          prod SSRS server name, and<br>
+          Steelhead vs Hammerhead active status
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== DATA FLOW STEPS ======== -->
+<div class="section infra">
+  <div class="section-label"><span class="icon">&#128260;</span> Data Processing Flow (ETL Pipeline)</div>
+  <div class="section-content">
+    <div class="four-col">
+      <div style="background:#F8F9FA;border-radius:6px;padding:12px;border-left:4px solid #0078D4;position:relative;">
+        <div style="position:absolute;top:-8px;left:-8px;background:#0078D4;color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">1</div>
+        <div style="font-weight:600;font-size:13px;margin-bottom:4px;margin-left:14px;">Master Import</div>
+        <div style="font-size:12px;color:#555;line-height:1.4;">
+          <strong>EMSDBHA (EMS)</strong> &rarr; <strong>PEMSDBSQL01\UEG</strong><br>
+          Runs ES_Initial_MasterImport and ES_Daily_Incremental_Delete_Load to populate DataLoader and Client databases.
+        </div>
+      </div>
+      <div style="background:#F8F9FA;border-radius:6px;padding:12px;border-left:4px solid #0078D4;position:relative;">
+        <div style="position:absolute;top:-8px;left:-8px;background:#0078D4;color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">2</div>
+        <div style="font-weight:600;font-size:13px;margin-bottom:4px;margin-left:14px;">Daily Vendor Import</div>
+        <div style="font-size:12px;color:#555;line-height:1.4;">
+          <strong>EMSDBPR06</strong> &rarr; <strong>PEMSDBSQL01 (EMSUPortalCommon)</strong><br>
+          EMSDBPR11 Daily Vendor Import process feeds vendor data into the portal common database.
+        </div>
+      </div>
+      <div style="background:#F8F9FA;border-radius:6px;padding:12px;border-left:4px solid #0078D4;position:relative;">
+        <div style="position:absolute;top:-8px;left:-8px;background:#0078D4;color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">3</div>
+        <div style="font-weight:600;font-size:13px;margin-bottom:4px;margin-left:14px;">EcoTrak Manual Process</div>
+        <div style="font-size:12px;color:#555;line-height:1.4;">
+          <strong>Manual Input</strong> &rarr; <strong>EMSDBPR05 (UtilitymartSub)</strong><br>
+          EcoTrak data is manually entered into the UtilitymartSub database.
+        </div>
+      </div>
+      <div style="background:#F8F9FA;border-radius:6px;padding:12px;border-left:4px solid #0078D4;position:relative;">
+        <div style="position:absolute;top:-8px;left:-8px;background:#0078D4;color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">4</div>
+        <div style="font-weight:600;font-size:13px;margin-bottom:4px;margin-left:14px;">Utility Data Sync</div>
+        <div style="font-size:12px;color:#555;line-height:1.4;">
+          <strong>EMSDBPR05 (UtilitymartSub)</strong> &rarr; <strong>PEMSDBSQL01 (DataLoader)</strong><br>
+          Utility data syncs from the UtilitymartSub database into the central DataLoader.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== INFRASTRUCTURE & SUPPORTING SERVERS ======== -->
+<div class="section infra">
+  <div class="section-label"><span class="icon">&#128736;</span> Supporting Infrastructure</div>
+  <div class="section-content">
+    <div class="four-col">
+      <div class="server-card cache">
+        <div class="server-name">&#9889; Bonefish</div>
+        <div class="server-role">Data Cache Server</div>
+        <div class="server-details">
+          <div class="detail-item"><span class="detail-icon">&#128268;</span> DataCacheHost: port 22233</div>
+          <div class="detail-item"><span class="detail-icon">&#128204;</span> App-level data caching layer</div>
+        </div>
+      </div>
+      <div class="server-card file">
+        <div class="server-name">&#128193; B2T57V1</div>
+        <div class="server-role">Document Drop-off (DocBroker)</div>
+        <div class="server-details">
+          <div class="detail-item"><span class="detail-icon">&#128194;</span> <span class="url-tag">\\B2T57V1\TempViewImage</span></div>
+        </div>
+      </div>
+      <div class="server-card file">
+        <div class="server-name">&#128193; WebDev01New</div>
+        <div class="server-role">Build Output / Stored Docs</div>
+        <div class="server-details">
+          <div class="detail-item"><span class="detail-icon">&#128194;</span> <span class="url-tag">\\WebDev01New\StoredDocuments</span></div>
+          <div class="detail-item"><span class="detail-icon">&#9881;</span> ADO build pipeline publishes here</div>
+        </div>
+      </div>
+      <div class="server-card file">
+        <div class="server-name">&#128193; N:\nCONTROL</div>
+        <div class="server-role">Client File Share</div>
+        <div class="server-details">
+          <div class="detail-item"><span class="detail-icon">&#128194;</span> Client Files - Active Clients</div>
+          <div class="detail-item"><span class="detail-icon">&#128196;</span> Report backup files (e.g., Textron Funding)</div>
+        </div>
+      </div>
+    </div>
+    <div class="four-col" style="margin-top:12px;">
+      <div class="server-card file">
+        <div class="server-name">&#128193; perftestweb02</div>
+        <div class="server-role">CommPortal Server</div>
+        <div class="server-details">
+          <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">http://perftestweb02:18077/</span></div>
+          <div class="detail-item"><span class="detail-icon">&#128260;</span> Token-based CommPortal access</div>
+        </div>
+      </div>
+      <div class="server-card build">
+        <div class="server-name">&#128736; Hyde16</div>
+        <div class="server-role">On-Prem Build Agent (ADO)</div>
+        <div class="server-details">
+          <div class="detail-item"><span class="detail-icon">&#9881;</span> Pool: "OnPrem Hyde16" / "OnPrem Hyde16 CoLo"</div>
+          <div class="detail-item"><span class="detail-icon">&#128194;</span> SSO config: <span class="url-tag">//hyde/sso/</span></div>
+        </div>
+      </div>
+      <div class="server-card" style="border-color:#666;background:#f8f8f8;">
+        <div class="server-name">&#128231; smtp.cassinfo.com</div>
+        <div class="server-role">SMTP Email Server</div>
+        <div class="server-details">
+          <div class="detail-item"><span class="detail-icon">&#128231;</span> Port 25, no SSL</div>
+          <div class="detail-item"><span class="detail-icon">&#128231;</span> From: scheduler@cassinfo.com</div>
+          <div class="detail-item"><span class="detail-icon">&#128231;</span> Errors: webIssues@cassinfo.com</div>
+        </div>
+      </div>
+      <div class="server-card" style="border-color:#666;background:#f8f8f8;">
+        <div class="server-name">&#128274; privpromotion.cassibisint.com</div>
+        <div class="server-role">Privilege Escalation Portal</div>
+        <div class="server-details">
+          <div class="detail-item"><span class="detail-icon">&#128274;</span> Used for Priv. Promotion requests</div>
+          <div class="detail-item"><span class="detail-icon">&#128196;</span> ADO ticket on EMS-IBIS board</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== EXTERNAL INTEGRATIONS ======== -->
+<div class="section ext">
+  <div class="section-label"><span class="icon">&#128279;</span> External Integrations &amp; Third-Party Services</div>
+  <div class="section-content">
+    <div class="four-col">
+      <div class="server-card ext">
+        <div class="server-name">&#127760; BillInfo</div>
+        <div class="server-details">
+          <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">billinfo.com/Login/LoginUser/</span></div>
+          <div class="detail-item"><span class="detail-icon">&#128196;</span> Document viewer integration</div>
+          <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">documentviewer.billinfo.com</span></div>
+        </div>
+      </div>
+      <div class="server-card ext">
+        <div class="server-name">&#128272; AT&T IdP</div>
+        <div class="server-details">
+          <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">sailpoint.cso.att.com</span></div>
+          <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">mylogins.cso.att.com</span></div>
+          <div class="detail-item"><span class="detail-icon">&#128279;</span> OIDC via <span class="url-tag">oidc.idp.elogin.att.com</span></div>
+        </div>
+      </div>
+      <div class="server-card ext">
+        <div class="server-name">&#128272; Kroger IdP</div>
+        <div class="server-details">
+          <div class="detail-item"><span class="detail-icon">&#128279;</span> PingOne Discovery endpoint</div>
+          <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">auth.pingone.com/...</span></div>
+        </div>
+      </div>
+      <div class="server-card ext">
+        <div class="server-name">&#128272; 40+ SSO Partners</div>
+        <div class="server-details">
+          <div class="detail-item"><span class="detail-icon">&#128101;</span> Azure AD, Okta, PingFederate</div>
+          <div class="detail-item"><span class="detail-icon">&#128274;</span> SAML 2.0 federated auth</div>
+          <div class="detail-item"><span class="detail-icon">&#128279;</span> Ericsson, BMW, S&P Global, etc.</div>
+        </div>
+      </div>
+    </div>
+    <div class="three-col" style="margin-top:12px;">
+      <div class="server-card ext">
+        <div class="server-name">&#128202; CLM Reporting</div>
+        <div class="server-details">
+          <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">clm.cassinfo.com/clm/reporting/</span></div>
+          <div class="detail-item"><span class="detail-icon">&#128196;</span> SSRS-based reports</div>
+          <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">clmcorp.cassinfo.com/clm/reporting/</span></div>
+        </div>
+      </div>
+      <div class="server-card ext">
+        <div class="server-name">&#128272; Asignet SSO</div>
+        <div class="server-details">
+          <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">auth.asignet.com/clm6/</span></div>
+          <div class="detail-item"><span class="detail-icon">&#128260;</span> Post-auth redirect for Asignet clients</div>
+        </div>
+      </div>
+      <div class="server-card ext">
+        <div class="server-name">&#9881; jaxapi (JAX API)</div>
+        <div class="server-details">
+          <div class="detail-item"><span class="detail-icon">&#128268;</span> jaxapidev / jaxapistag / jaxapiprod</div>
+          <div class="detail-item"><span class="detail-icon">&#9881;</span> External API integration layer</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== DEPLOYMENT PIPELINE ======== -->
+<div class="section deploy">
+  <div class="section-label"><span class="icon">&#128640;</span> Deployment Pipeline</div>
+  <div class="section-content">
+    <p style="font-size:13px;color:#555;margin-bottom:12px;">Build is automated via Azure DevOps. Production deployment to Mako servers is a manual IIS process (no fully automated prod deployment due to DevExpress license issue on WebDev01New).</p>
+
+    <div class="workflow-pipeline">
+      <div class="wf-step">
+        <div class="wf-icon" style="background:#1B1B1B">&#128187;</div>
+        <div class="wf-label">Developer</div>
+        <div class="wf-sublabel">Visual Studio<br>VB.NET / ASP.NET</div>
+      </div>
+      <div class="wf-arrow">&rarr;</div>
+      <div class="wf-step">
+        <div class="wf-icon" style="background:#0078D4">&#128260;</div>
+        <div class="wf-label">PR to Dev Branch</div>
+        <div class="wf-sublabel">Azure DevOps<br>EMS - LEGACY project</div>
+      </div>
+      <div class="wf-arrow">&rarr;</div>
+      <div class="wf-step">
+        <div class="wf-icon" style="background:#D83B01">&#9881;</div>
+        <div class="wf-label">ADO Build</div>
+        <div class="wf-sublabel">OnPrem Hyde16<br>agent pool</div>
+      </div>
+      <div class="wf-arrow">&rarr;</div>
+      <div class="wf-step">
+        <div class="wf-icon" style="background:#498205">&#128194;</div>
+        <div class="wf-label">WebDev01New</div>
+        <div class="wf-sublabel">Build artifact<br>published here</div>
+      </div>
+      <div class="wf-arrow">&rarr;</div>
+      <div class="wf-step">
+        <div class="wf-icon" style="background:#B36B00">&#128230;</div>
+        <div class="wf-label">Manual Publish</div>
+        <div class="wf-sublabel">Zip from VS<br>+ web.config edits</div>
+      </div>
+      <div class="wf-arrow">&rarr;</div>
+      <div class="wf-step">
+        <div class="wf-icon" style="background:var(--prod-color)">&#127760;</div>
+        <div class="wf-label">IIS Deploy</div>
+        <div class="wf-sublabel">Mako 1-5<br>Manual IIS update</div>
+      </div>
+    </div>
+
+    <div class="notes-section" style="margin-top:8px;">
+      <h3>Production Deployment Steps (Manual)</h3>
+      <ul>
+        <li>Request privilege escalation via ADO ticket on EMS-IBIS board + <span class="url-tag">privpromotion.cassibisint.com</span></li>
+        <li>Log into target Mako server, open IIS Manager, navigate to ExpenseSmart site</li>
+        <li>Create new release folder, paste published code, copy web.config from previous release</li>
+        <li>Ensure workflow folder retains <code>.aspx.vb</code> code-behind files (not compiled pages)</li>
+        <li>Update "Physical Path" in IIS basic settings to new release folder</li>
+        <li>Restart site, verify in browser, then move back into load balancer</li>
+        <li><strong>Note:</strong> WebDev01New build cannot be used directly for prod (DevExpress license issue)</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ======== APPLICATION STRUCTURE ======== -->
+<div class="section infra">
+  <div class="section-label"><span class="icon">&#128196;</span> Application Structure (from ExpenseSmart repo)</div>
+  <div class="section-content">
+    <p style="font-size:13px;color:#555;margin-bottom:12px;">
+      <strong>Repo:</strong> <span class="url-tag">https://dev.azure.com/CassInfoSys/EMS - LEGACY/_git/ExpenseSmart</span> &nbsp;|&nbsp;
+      <strong>Solution:</strong> NewUtilityInvoice.sln &nbsp;|&nbsp;
+      <strong>Framework:</strong> .NET Framework 4.0 &nbsp;|&nbsp;
+      <strong>Language:</strong> VB.NET + C#
+    </p>
+    <div class="four-col">
+      <div style="background:#f8f9fa;border-radius:6px;padding:10px;border-left:3px solid #0078D4;">
+        <div style="font-weight:700;font-size:13px;">WebSite</div>
+        <div style="font-size:11px;color:#555;">ASP.NET WebForms UI<br>ASPX + VB code-behind<br>DevExpress controls<br>MasterPages, Themes</div>
+      </div>
+      <div style="background:#f8f9fa;border-radius:6px;padding:10px;border-left:3px solid #498205;">
+        <div style="font-weight:700;font-size:13px;">ServiceLayer</div>
+        <div style="font-size:11px;color:#555;">VB.NET business logic<br>Account, Budget, KPI<br>Workflow, ProfiTrak<br>SiteView, Analytics</div>
+      </div>
+      <div style="background:#f8f9fa;border-radius:6px;padding:10px;border-left:3px solid var(--sql-color);">
+        <div style="font-weight:700;font-size:13px;">DataLayer</div>
+        <div style="font-size:11px;color:#555;">C# data access (ADO.NET)<br>DatabaseManager<br>DatabaseCaller<br>DataAccessAdapter</div>
+      </div>
+      <div style="background:#f8f9fa;border-radius:6px;padding:10px;border-left:3px solid var(--sso-color);">
+        <div style="font-weight:700;font-size:13px;">Supporting Projects</div>
+        <div style="font-size:11px;color:#555;">ExpenseSmart (model)<br>Scheduler / SchedulerDelivery<br>ReportTrak, DocTrak<br>ImageRetrievalConsole<br>BudgetImportExport<br>Encryption, ESSiteView</div>
+      </div>
+    </div>
+    <p style="font-size:12px;color:#555;margin-top:10px;">
+      <strong>Key Features:</strong> Dashboard, AccountView, SiteView, Financial, Analytics, KPI, Budget, Workflow, ReportTrak, DocTrak, DepositTrak, AlerTrak, ProfiTrak, Scheduler, ImageView, MissingBill, MyReports, AdvancedSearch
+    </p>
+  </div>
+</div>
+
+<!-- ======== UNKNOWN / TBD ======== -->
+<div class="notes-section">
+  <h3>Open Questions / Items to Confirm for Complete Diagram</h3>
+  <ul>
+    <li><strong>ASPState (Prod):</strong> Which SQL server hosts the ASPState database for production session state?</li>
+    <li><strong>Steelhead vs Hammerhead:</strong> Which Mako config (Steelhead vs Hammerhead) is currently active for UtilityWeb?</li>
+    <li><strong>Load Balancer:</strong> What is the load balancer make/model? (F5, HAProxy, etc.) What VIP/hostname does it expose?</li>
+    <li><strong>Reporting Server (Prod):</strong> What is the production SSRS server name? (Dev/test uses SQLDEV02.) ReportTrak queries run against UtilityWeb DB on EMSDBPR05.</li>
+    <li><strong>Mako server OS/specs:</strong> Windows Server version and IIS version on Mako 1-5?</li>
+    <li><strong>Bluefin/Steelhead/Hammerhead:</strong> Are these named instances, aliases, or physical server names? Are any of them the same physical box as EMSDBPR05/07?</li>
+    <li><strong>Acme14 DB server:</strong> Does test point to emsdbdev02 for all databases or are some on Acme14 locally?</li>
+    <li><strong>Network topology:</strong> VLAN segmentation between web tier, DB tier, and external access?</li>
+  </ul>
+</div>
+
+</body>
+</html>
