@@ -2992,8 +2992,8 @@ public class AdrController : ControllerBase
             
             if (extension == ".csv")
             {
-                // Parse CSV file
-                using var reader = new StreamReader(file.OpenReadStream());
+                // Parse CSV file (detect encoding to handle UTF-8 BOM)
+                using var reader = new StreamReader(file.OpenReadStream(), detectEncodingFromByteOrderMarks: true);
                 var headerLine = await reader.ReadLineAsync();
                 if (string.IsNullOrWhiteSpace(headerLine))
                 {
