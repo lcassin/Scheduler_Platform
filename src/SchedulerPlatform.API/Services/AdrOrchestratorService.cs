@@ -2442,8 +2442,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         var apiResult = await CallAdrApiAsync(
                             AdrRequestType.AttemptLogin,
                             accountInfo.CredentialId,
-                            null, // No date range for credential check
-                            null,
+                            DateTime.UtcNow.Date, // ADR API requires dates; use current date for credential checks
+                            DateTime.UtcNow.Date,
                             accountInfo.JobId, // Real job ID for tracking
                             accountInfo.VMAccountId,
                             accountInfo.InterfaceAccountId,
@@ -2741,8 +2741,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     var apiResult = await CallAdrApiAsync(
                         AdrRequestType.AttemptLogin,
                         accountInfo.CredentialId,
-                        null, // No date range for credential check
-                        null,
+                        DateTime.UtcNow.Date, // ADR API requires dates; use current date for credential checks
+                        DateTime.UtcNow.Date,
                         accountInfo.JobId, // Real job ID for tracking
                         accountInfo.VMAccountId,
                         accountInfo.InterfaceAccountId,
