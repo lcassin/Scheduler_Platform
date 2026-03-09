@@ -87,8 +87,8 @@ graph TB
         end
 
         subgraph NAMED["Named Production Database Servers"]
-            Steelhead["🗄️ Steelhead<br/>Primary App Data<br/>DB: UtilityWeb"]
-            Hammerhead["🗄️ Hammerhead<br/>App Data (Alternate)<br/>DB: UtilityWeb"]
+            Steelhead["🗄️ Steelhead / EMSDBPR07<br/>Primary App Data<br/>DB: UtilityWeb<br/>(legacy alias: Steelhead)"]
+            Hammerhead["🗄️ Hammerhead / PEMSDBSQL02<br/>App Data (Alternate)<br/>DB: UtilityWeb<br/>(legacy alias: Hammerhead)"]
             Bluefin["🗄️ Bluefin<br/>Workflow & Analytics<br/>DBs: Workflow, UtilityMartSub,<br/>InternalReporting"]
             dbcassimaging["🗄️ dbcassimagingsub<br/>Image Storage<br/>DB: CassImaging"]
         end
@@ -101,7 +101,7 @@ graph TB
         subgraph SSRS_TIER["Reporting Services (SSRS)"]
             SQLDEV02["📊 SQLDEV02 [TEST]<br/>SSRS Report Server (Dev/Test)<br/>http://SQLDEV02:80/ReportServer<br/>ReportingService2005 SOAP<br/>NTLM auth"]
             SSRSProd["📊 SSRS Prod Server [PROD]<br/>Server name TBD<br/>ReportTrak uses UtilityWeb<br/>DB on EMSDBPR05"]
-            SSRS_TBD["❓ TBD Items<br/>ASPState server (prod),<br/>Prod SSRS server name,<br/>Steelhead vs Hammerhead active status"]
+            SSRS_TBD["❓ TBD Items<br/>ASPState server (prod),<br/>Prod SSRS server name"]
         end
     end
 
@@ -244,8 +244,8 @@ graph LR
     classDef server fill:#FFF8E1,stroke:#F9A825,color:#7A5900
 
     subgraph CONNECTIONS["Connection String → Database → Server"]
-        UI3_1["UI3Data (Config 1)"] -->|"UtilityWeb"| Steelhead
-        UI3_2["UI3Data (Config 2)"] -->|"UtilityWeb"| Hammerhead
+        UI3_1["UI3Data (Config 1)"] -->|"UtilityWeb"| Steelhead["Steelhead (EMSDBPR07)"]
+        UI3_2["UI3Data (Config 2)"] -->|"UtilityWeb"| Hammerhead["Hammerhead (PEMSDBSQL02)"]
         WF["Workflow"] -->|"Workflow"| Bluefin
         RT["ReportTrak"] -->|"UtilityWeb1/2"| EMSDBPR05
         DT["DocTrak"] -->|"UtilityWeb1/2"| EMSDBPR05
@@ -391,10 +391,10 @@ graph TB
 | Item | Question |
 |------|----------|
 | **ASPState (Prod)** | Which SQL server hosts the ASPState database for production session state? |
-| **Steelhead vs Hammerhead** | Which config is currently active for UtilityWeb? |
+| ~~**Steelhead vs Hammerhead**~~ | ~~Resolved: Steelhead = EMSDBPR07, Hammerhead = PEMSDBSQL02 (old names updated to current naming convention by Infrastructure)~~ |
 | **Load Balancer** | Make/model? (F5, HAProxy, etc.) VIP/hostname? |
 | **SSRS Prod Server** | Production SSRS server name? (Dev/test uses SQLDEV02) |
 | **Mako Server Specs** | Windows Server version and IIS version on Mako 1-5? |
-| **Bluefin/Steelhead/Hammerhead** | Named instances, aliases, or physical servers? Same box as EMSDBPR05/07? |
+| ~~**Steelhead/Hammerhead**~~ | ~~Steelhead = EMSDBPR07, Hammerhead = PEMSDBSQL02 (legacy aliases). Bluefin mapping still TBD.~~ |
 | **Acme14 DB Server** | Does test point to EMSDBDEV02 for all databases or some on Acme14 locally? |
 | **Network Topology** | VLAN segmentation between web tier, DB tier, and external access? |

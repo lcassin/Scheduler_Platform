@@ -687,8 +687,8 @@
       <table class="db-conn-table" style="margin-top:8px;border:1px solid #ddd;border-radius:6px;">
         <thead><tr><th>Connection Name</th><th>Database</th><th>Server</th><th>Notes</th></tr></thead>
         <tbody>
-          <tr><td>UI3Data (Config 1)</td><td class="mono">UtilityWeb</td><td class="mono">Steelhead</td><td>Primary web app data</td></tr>
-          <tr><td>UI3Data (Config 2)</td><td class="mono">UtilityWeb</td><td class="mono">Hammerhead</td><td>Alternate / failover</td></tr>
+          <tr><td>UI3Data (Config 1)</td><td class="mono">UtilityWeb</td><td class="mono">Steelhead (= EMSDBPR07)</td><td>Primary web app data</td></tr>
+          <tr><td>UI3Data (Config 2)</td><td class="mono">UtilityWeb</td><td class="mono">Hammerhead (= PEMSDBSQL02)</td><td>Alternate / failover</td></tr>
           <tr><td>Workflow</td><td class="mono">Workflow</td><td class="mono">Bluefin</td><td>Workflow engine</td></tr>
           <tr><td>ReportTrak</td><td class="mono">UtilityWeb1 / UtilityWeb2</td><td class="mono">EMSDBPR05</td><td>Per-config variant</td></tr>
           <tr><td>DocTrak</td><td class="mono">UtilityWeb1 / UtilityWeb2</td><td class="mono">EMSDBPR05</td><td>Document tracking</td></tr>
@@ -750,15 +750,15 @@
       <div class="topo-tier-title hub">Named Production Database Servers</div>
       <div class="four-col" style="margin-top:8px;">
         <div class="server-card db" style="border-color:#0078D4;background:#E1F0FF;">
-          <div class="server-name" style="color:#004578;">&#128451; Steelhead</div>
-          <div class="server-role">Primary App Data</div>
+          <div class="server-name" style="color:#004578;">&#128451; Steelhead (EMSDBPR07)</div>
+          <div class="server-role">Primary App Data &mdash; legacy alias &ldquo;Steelhead&rdquo;</div>
           <div class="db-list">
             <div class="db-tag">UtilityWeb</div>
           </div>
         </div>
         <div class="server-card db" style="border-color:#0078D4;background:#E1F0FF;">
-          <div class="server-name" style="color:#004578;">&#128451; Hammerhead</div>
-          <div class="server-role">App Data (Alternate)</div>
+          <div class="server-name" style="color:#004578;">&#128451; Hammerhead (PEMSDBSQL02)</div>
+          <div class="server-role">App Data (Alternate) &mdash; legacy alias &ldquo;Hammerhead&rdquo;</div>
           <div class="db-list">
             <div class="db-tag">UtilityWeb</div>
           </div>
@@ -851,9 +851,8 @@
           <div class="question">&#10067;</div>
           <strong>Items TBD</strong><br>
           Need to determine:<br>
-          ASPState server (prod session state),<br>
-          prod SSRS server name, and<br>
-          Steelhead vs Hammerhead active status
+          ASPState server (prod session state)<br>
+          and prod SSRS server name
         </div>
       </div>
     </div>
@@ -1123,11 +1122,11 @@
   <h3>Open Questions / Items to Confirm for Complete Diagram</h3>
   <ul>
     <li><strong>ASPState (Prod):</strong> Which SQL server hosts the ASPState database for production session state?</li>
-    <li><strong>Steelhead vs Hammerhead:</strong> Which Mako config (Steelhead vs Hammerhead) is currently active for UtilityWeb?</li>
+    <li><s><strong>Steelhead vs Hammerhead:</strong> Resolved &mdash; Steelhead = EMSDBPR07, Hammerhead = PEMSDBSQL02 (old names, updated to current naming convention by Infrastructure).</s></li>
     <li><strong>Load Balancer:</strong> What is the load balancer make/model? (F5, HAProxy, etc.) What VIP/hostname does it expose?</li>
     <li><strong>Reporting Server (Prod):</strong> What is the production SSRS server name? (Dev/test uses SQLDEV02.) ReportTrak queries run against UtilityWeb DB on EMSDBPR05.</li>
     <li><strong>Mako server OS/specs:</strong> Windows Server version and IIS version on Mako 1-5?</li>
-    <li><strong>Bluefin/Steelhead/Hammerhead:</strong> Are these named instances, aliases, or physical server names? Are any of them the same physical box as EMSDBPR05/07?</li>
+    <li><s><strong>Bluefin/Steelhead/Hammerhead:</strong> Steelhead = EMSDBPR07, Hammerhead = PEMSDBSQL02 (legacy aliases, renamed by Infrastructure). Bluefin mapping still TBD.</s></li>
     <li><strong>Acme14 DB server:</strong> Does test point to emsdbdev02 for all databases or are some on Acme14 locally?</li>
     <li><strong>Network topology:</strong> VLAN segmentation between web tier, DB tier, and external access?</li>
   </ul>
