@@ -2854,6 +2854,7 @@ public class AdrController : ControllerBase
     {
         try
         {
+            var userTimeZone = await GetCurrentUserTimeZoneAsync();
             var orchestrationRequest = new AdrOrchestrationRequest
             {
                 RequestedBy = User.Identity?.Name ?? "API",
@@ -2863,7 +2864,8 @@ public class AdrController : ControllerBase
                 RunScraping = false,
                 RunStatusCheck = false,
                 RunBulkCredentialVerification = true,
-                TestRunLimit = testrun
+                TestRunLimit = testrun,
+                BillingTimeZoneId = userTimeZone
             };
 
             await _orchestrationQueue.QueueAsync(orchestrationRequest);
@@ -3329,6 +3331,7 @@ public class AdrController : ControllerBase
                 });
             }
             
+            var userTimeZone = await GetCurrentUserTimeZoneAsync();
             var orchestrationRequest = new AdrOrchestrationRequest
             {
                 RequestedBy = User.Identity?.Name ?? "Unknown",
@@ -3337,7 +3340,8 @@ public class AdrController : ControllerBase
                 RunCredentialVerification = request?.RunCredentialVerification ?? true,
                 RunScraping = request?.RunScraping ?? true,
                 RunStatusCheck = request?.RunStatusCheck ?? true,
-                CheckAllScrapedStatuses = request?.CheckAllScrapedStatuses ?? false
+                CheckAllScrapedStatuses = request?.CheckAllScrapedStatuses ?? false,
+                BillingTimeZoneId = userTimeZone
             };
 
             await _orchestrationQueue.QueueAsync(orchestrationRequest);
@@ -5354,6 +5358,24 @@ public class AdrController : ControllerBase
         #endregion
 
     #region Private Helpers
+
+    /// <summary>
+    /// Looks up the current user's PreferredTimeZone from the database.
+    /// Returns null if the user cannot be identified or has no timezone set,
+    /// which causes the orchestrator to fall back to its default (Central Standard Time).
+    /// </summary>
+    private async Task<string?> GetCurrentUserTimeZoneAsync()
+    {
+        var username = User.Identity?.Name;
+        if (string.IsNullOrEmpty(username)) return null;
+        
+        var user = await _dbContext.Users
+            .Where(u => u.Email == username || u.Username == username)
+            .Select(u => u.PreferredTimeZone)
+            .FirstOrDefaultAsync();
+        
+        return user;
+    }
 
     /// <summary>
     /// Resets all status/tracking fields on an AdrJob so it can be reprocessed by the orchestrator.
