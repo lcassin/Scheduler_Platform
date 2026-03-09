@@ -2414,16 +2414,7 @@ public class AdrController : ControllerBase
             }
 
             // Reset job to Pending status so it gets picked up by the orchestrator
-            job.Status = "Pending";
-            job.AdrStatusId = null;
-            job.AdrStatusDescription = null;
-            job.AdrIndexId = null;
-            job.ErrorMessage = null;
-            job.CredentialVerifiedDateTime = null;
-            job.ScrapingCompletedDateTime = null;
-            job.RetryCount = 0;
-            job.ModifiedDateTime = DateTime.UtcNow;
-            job.ModifiedBy = User.Identity?.Name ?? "System Created";
+            ResetJobForRefire(job, User.Identity?.Name ?? "System Created");
 
             await _unitOfWork.AdrJobs.UpdateAsync(job);
             await _unitOfWork.SaveChangesAsync();
@@ -2483,16 +2474,7 @@ public class AdrController : ControllerBase
                     }
 
                     // Reset job to Pending status so it gets picked up by the orchestrator
-                    job.Status = "Pending";
-                    job.AdrStatusId = null;
-                    job.AdrStatusDescription = null;
-                    job.AdrIndexId = null;
-                    job.ErrorMessage = null;
-                    job.CredentialVerifiedDateTime = null;
-                    job.ScrapingCompletedDateTime = null;
-                    job.RetryCount = 0;
-                    job.ModifiedDateTime = DateTime.UtcNow;
-                    job.ModifiedBy = User.Identity?.Name ?? "System Created";
+                    ResetJobForRefire(job, User.Identity?.Name ?? "System Created");
 
                     await _unitOfWork.AdrJobs.UpdateAsync(job);
                     refiredCount++;
@@ -5370,6 +5352,31 @@ public class AdrController : ControllerBase
         }
 
         #endregion
+
+    #region Private Helpers
+
+    /// <summary>
+    /// Resets all status/tracking fields on an AdrJob so it can be reprocessed by the orchestrator.
+    /// Clears IsManualRequest so the job is visible to all orchestration queries.
+    /// </summary>
+    private static void ResetJobForRefire(AdrJob job, string modifiedBy)
+    {
+        job.Status = "Pending";
+        job.AdrStatusId = null;
+        job.AdrStatusDescription = null;
+        job.AdrIndexId = null;
+        job.ErrorMessage = null;
+        job.CredentialVerifiedDateTime = null;
+        job.ScrapingCompletedDateTime = null;
+        job.RetryCount = 0;
+        job.IsManualRequest = false;  // Clear so orchestration queries pick it up
+        job.LastStatusCheckResponse = null;
+        job.LastStatusCheckDateTime = null;
+        job.ModifiedDateTime = DateTime.UtcNow;
+        job.ModifiedBy = modifiedBy;
+    }
+
+    #endregion
 }
 
 #region Request DTOs

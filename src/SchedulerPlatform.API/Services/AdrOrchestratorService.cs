@@ -10,18 +10,18 @@ namespace SchedulerPlatform.API.Services;
 
 public interface IAdrOrchestratorService
 {
-    Task<JobCreationResult> CreateJobsForDueAccountsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null);
-    Task<CredentialVerificationResult> VerifyCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null);
-    Task<ScrapeResult> ProcessScrapingAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null);
-    Task<StatusCheckResult> CheckPendingStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null);
-    Task<StatusCheckResult> CheckAllScrapedStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null);
+    Task<JobCreationResult> CreateJobsForDueAccountsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null, string? billingTimeZoneId = null);
+    Task<CredentialVerificationResult> VerifyCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null, string? billingTimeZoneId = null);
+    Task<ScrapeResult> ProcessScrapingAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null, string? billingTimeZoneId = null);
+    Task<StatusCheckResult> CheckPendingStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null, string? billingTimeZoneId = null);
+    Task<StatusCheckResult> CheckAllScrapedStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null, string? billingTimeZoneId = null);
     /// <summary>
     /// Finalizes stale pending jobs that missed their processing window.
     /// Jobs in Pending or CredentialCheckInProgress status with NextRangeEndDateTime in the past
     /// are marked as Cancelled and their rules are advanced to the next billing cycle.
     /// This does NOT call any ADR APIs (no cost incurred).
     /// </summary>
-    Task<StalePendingJobsResult> FinalizeStalePendingJobsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null);
+    Task<StalePendingJobsResult> FinalizeStalePendingJobsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null, string? billingTimeZoneId = null);
     
     /// <summary>
     /// Runs credential verification (AttemptLogin) for ALL active accounts in the system.
@@ -57,7 +57,7 @@ public interface IAdrOrchestratorService
     /// <param name="progressCallback">Optional callback to report progress (current, total)</param>
     /// <param name="cancellationToken">Cancellation token for the operation</param>
     /// <returns>Results of the rebill processing operation</returns>
-    Task<RebillResult> ProcessRebillAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null);
+    Task<RebillResult> ProcessRebillAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null, string? billingTimeZoneId = null);
     
     /// <summary>
     /// Fires a rebill check for a single account.
@@ -254,6 +254,15 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     private const int DefaultBatchSize = 1000; // Process and save in batches to avoid large transactions
     private const int DefaultMaxParallelRequests = 8; // Default parallel API requests
 
+    // Billing date comparisons must be based on a user/schedule timezone (not UTC).
+    // ADR scheduling fields (NextRunDateTime, NextRangeStartDateTime, NextRangeEndDateTime) are date-only
+    // calendar dates; using DateTime.UtcNow.Date can be off-by-one when the user's local date differs from UTC.
+    // Default fallback matches the rest of the app (Users default to Central).
+    private const string DefaultBillingTimeZoneId = "Central Standard Time";
+
+    // Cache to avoid repeated timezone lookups.
+    private static readonly ConcurrentDictionary<string, TimeZoneInfo> TimeZoneCache = new(StringComparer.OrdinalIgnoreCase);
+
     // Cached configuration from database (loaded once per orchestration run)
     private AdrConfiguration? _cachedConfig;
 
@@ -334,9 +343,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// Loads all active blacklist entries for the given exclusion type.
     /// Call this once at the start of batch operations to avoid N database queries.
     /// </summary>
-    private async Task<List<AdrAccountBlacklist>> LoadBlacklistEntriesAsync(string exclusionType = "All")
+    private async Task<List<AdrAccountBlacklist>> LoadBlacklistEntriesAsync(string exclusionType = "All", string? billingTimeZoneId = null)
     {
-        var today = DateTime.UtcNow.Date;
+        var today = GetBillingToday(billingTimeZoneId);
         var entries = await _unitOfWork.AdrAccountBlacklists.FindAsync(b =>
             !b.IsDeleted &&
             b.IsActive &&
@@ -456,9 +465,23 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         }
     }
 
+    /// <summary>
+    /// Returns "today" in the caller's billing timezone for date comparisons.
+    /// All billing dates (NextRunDateTime, NextRangeStartDateTime, NextRangeEndDateTime) are calendar dates
+    /// in the user's local timezone. Using DateTime.UtcNow.Date would give the wrong date
+    /// when the UTC date has already rolled over but the user's local date has not.
+    /// Falls back to <see cref="DefaultBillingTimeZoneId"/> when no timezone is specified.
+    /// </summary>
+    private static DateTime GetBillingToday(string? billingTimeZoneId = null)
+    {
+        var tzId = billingTimeZoneId ?? DefaultBillingTimeZoneId;
+        var tz = TimeZoneCache.GetOrAdd(tzId, id => TimeZoneInfo.FindSystemTimeZoneById(id));
+        return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz).Date;
+    }
+
     #region Step 2: Job Creation
 
-    public async Task<JobCreationResult> CreateJobsForDueAccountsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null)
+    public async Task<JobCreationResult> CreateJobsForDueAccountsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null, string? billingTimeZoneId = null)
     {
         var result = new JobCreationResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -674,7 +697,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
     #region Step 3: Credential Verification
 
-    public async Task<CredentialVerificationResult> VerifyCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null)
+    public async Task<CredentialVerificationResult> VerifyCredentialsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null, string? billingTimeZoneId = null)
     {
         var result = new CredentialVerificationResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -687,7 +710,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             _logger.LogInformation("Starting credential verification with {MaxParallel} parallel workers, {LeadDays} day lead time", 
                 maxParallel, credentialCheckLeadDays);
 
-            var jobsNeedingVerification = (await _unitOfWork.AdrJobs.GetJobsNeedingCredentialVerificationAsync(DateTime.UtcNow, credentialCheckLeadDays)).ToList();
+            var jobsNeedingVerification = (await _unitOfWork.AdrJobs.GetJobsNeedingCredentialVerificationAsync(GetBillingToday(billingTimeZoneId), credentialCheckLeadDays)).ToList();
             var totalJobsFound = jobsNeedingVerification.Count;
             _logger.LogInformation("Found {Count} jobs needing credential verification (NextRunDate within {LeadDays} days)", 
                 totalJobsFound, credentialCheckLeadDays);
@@ -996,7 +1019,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
     #region Step 4: Invoice Scraping
 
-    public async Task<ScrapeResult> ProcessScrapingAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null)
+    public async Task<ScrapeResult> ProcessScrapingAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null, string? billingTimeZoneId = null)
     {
         var result = new ScrapeResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -1006,7 +1029,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
         {
             _logger.LogInformation("Starting invoice scraping with {MaxParallel} parallel workers", maxParallel);
 
-            var jobsReadyForScraping = (await _unitOfWork.AdrJobs.GetJobsReadyForScrapingAsync(DateTime.UtcNow)).ToList();
+            var jobsReadyForScraping = (await _unitOfWork.AdrJobs.GetJobsReadyForScrapingAsync(GetBillingToday(billingTimeZoneId))).ToList();
             var totalJobsFound = jobsReadyForScraping.Count;
             _logger.LogInformation("Found {Count} jobs ready for scraping", totalJobsFound);
 
@@ -1115,7 +1138,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             using var semaphore = new SemaphoreSlim(maxParallel, maxParallel);
             int completedApiCalls = 0;
             var totalApiCalls = jobsToProcess.Count;
-            var today = DateTime.UtcNow.Date;
+            var today = GetBillingToday(billingTimeZoneId);
             
             var tasks = jobsToProcess.Select(async jobInfo =>
             {
@@ -1315,7 +1338,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
 
     #region Status Checking
 
-    public async Task<StatusCheckResult> CheckPendingStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null)
+    public async Task<StatusCheckResult> CheckPendingStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null, string? billingTimeZoneId = null)
     {
         var result = new StatusCheckResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -1584,13 +1607,14 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                                 job.AdrAccount.LastSuccessfulDownloadDate = CalculateLastSuccessfulDownloadDate(
                                     job.AdrAccount.LastSuccessfulDownloadDate,
                                     job.NextRunDateTime,
-                                    job.PeriodType);
+                                    job.PeriodType,
+                                    billingTimeZoneId);
                                 job.AdrAccount.ModifiedDateTime = DateTime.UtcNow;
                                 job.AdrAccount.ModifiedBy = "System Created";
                             }
                             
                             // Advance the rule to the next billing cycle using pre-loaded rules (no DB round-trip)
-                            AdvanceRuleToNextCycleSync(job, rulesById);
+                            AdvanceRuleToNextCycleSync(job, rulesById, billingTimeZoneId);
                         }
                         else if (statusResult.StatusId == (int)AdrStatus.AiCanceled)
                         {
@@ -1623,10 +1647,10 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     else
                     {
                         // Job is still processing - check if billing window has been exhausted
-                        var today = DateTime.UtcNow.Date;
-                        var windowEnd = job.NextRangeEndDateTime?.Date ?? today;
+                        var billingToday = GetBillingToday(billingTimeZoneId);
+                        var windowEnd = job.NextRangeEndDateTime?.Date ?? billingToday;
                         
-                        if (today > windowEnd)
+                        if (billingToday > windowEnd)
                         {
                             // Billing window exhausted without finding a bill
                             // Mark job as NoInvoiceFound and advance rule to next cycle
@@ -1639,7 +1663,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                                 job.Id, windowEnd);
                             
                             // Advance the rule to the next billing cycle using pre-loaded rules (no DB round-trip)
-                            AdvanceRuleToNextCycleSync(job, rulesById);
+                            AdvanceRuleToNextCycleSync(job, rulesById, billingTimeZoneId);
                         }
                         else
                         {
@@ -1729,7 +1753,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// This is used by the "Check Statuses Only" button to check status for all ScrapeRequested jobs
     /// since there's no cost to check status from the ADR API.
     /// </summary>
-    public async Task<StatusCheckResult> CheckAllScrapedStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null)
+    public async Task<StatusCheckResult> CheckAllScrapedStatusesAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null, string? billingTimeZoneId = null)
     {
         var result = new StatusCheckResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -2024,13 +2048,14 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                                 job.AdrAccount.LastSuccessfulDownloadDate = CalculateLastSuccessfulDownloadDate(
                                     job.AdrAccount.LastSuccessfulDownloadDate,
                                     job.NextRunDateTime,
-                                    job.PeriodType);
+                                    job.PeriodType,
+                                    billingTimeZoneId);
                                 job.AdrAccount.ModifiedDateTime = DateTime.UtcNow;
                                 job.AdrAccount.ModifiedBy = "System Created";
                             }
                             
                             // Advance the rule to the next billing cycle using pre-loaded rules (no DB round-trip)
-                            AdvanceRuleToNextCycleSync(job, rulesById);
+                            AdvanceRuleToNextCycleSync(job, rulesById, billingTimeZoneId);
                         }
                         else if (statusResult.StatusId == (int)AdrStatus.AiCanceled)
                         {
@@ -2092,10 +2117,10 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     else
                     {
                         // Job is still processing - check if billing window has been exhausted
-                        var today = DateTime.UtcNow.Date;
-                        var windowEnd = job.NextRangeEndDateTime?.Date ?? today;
+                        var billingToday = GetBillingToday(billingTimeZoneId);
+                        var windowEnd = job.NextRangeEndDateTime?.Date ?? billingToday;
                         
-                        if (today > windowEnd)
+                        if (billingToday > windowEnd)
                         {
                             // Billing window exhausted without finding a bill
                             // Mark job as NoInvoiceFound and advance rule to next cycle
@@ -2108,7 +2133,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                                 job.Id, windowEnd);
                             
                             // Advance the rule to the next billing cycle using pre-loaded rules (no DB round-trip)
-                            AdvanceRuleToNextCycleSync(job, rulesById);
+                            AdvanceRuleToNextCycleSync(job, rulesById, billingTimeZoneId);
                         }
                         else
                         {
@@ -2210,7 +2235,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// are marked as Cancelled and their rules are advanced to the next billing cycle.
     /// This does NOT call any ADR APIs (no cost incurred).
     /// </summary>
-    public async Task<StalePendingJobsResult> FinalizeStalePendingJobsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null)
+    public async Task<StalePendingJobsResult> FinalizeStalePendingJobsAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null, string? billingTimeZoneId = null)
     {
         var result = new StalePendingJobsResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -2230,7 +2255,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             }
 
             // Get stale pending jobs (default 90 day lookback)
-            var staleJobs = (await _unitOfWork.AdrJobs.GetStalePendingJobsAsync(DateTime.UtcNow)).ToList();
+            var staleJobs = (await _unitOfWork.AdrJobs.GetStalePendingJobsAsync(GetBillingToday(billingTimeZoneId))).ToList();
             result.JobsFound = staleJobs.Count;
             
             _logger.LogInformation("Found {Count} stale pending jobs to finalize", staleJobs.Count);
@@ -2439,11 +2464,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 {
                     try
                     {
+                        var today = GetBillingToday();
                         var apiResult = await CallAdrApiAsync(
                             AdrRequestType.AttemptLogin,
                             accountInfo.CredentialId,
-                            DateTime.UtcNow.Date, // ADR API requires dates; use current date for credential checks
-                            DateTime.UtcNow.Date,
+                            today, // ADR API requires dates; use billing today for credential checks
+                            today,
                             accountInfo.JobId, // Real job ID for tracking
                             accountInfo.VMAccountId,
                             accountInfo.InterfaceAccountId,
@@ -2738,11 +2764,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 await semaphore.WaitAsync(cancellationToken);
                 try
                 {
+                    var today = GetBillingToday();
                     var apiResult = await CallAdrApiAsync(
                         AdrRequestType.AttemptLogin,
                         accountInfo.CredentialId,
-                        DateTime.UtcNow.Date, // ADR API requires dates; use current date for credential checks
-                        DateTime.UtcNow.Date,
+                        today, // ADR API requires dates; use billing today for credential checks
+                        today,
                         accountInfo.JobId, // Real job ID for tracking
                         accountInfo.VMAccountId,
                         accountInfo.InterfaceAccountId,
@@ -2923,12 +2950,12 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// Rebill checks look for updated invoices, partial invoices, and off-cycle invoices.
     /// OPTIMIZED: Uses bulk job lookup, dictionary-based account lookup, and batched saves.
     /// </summary>
-    public async Task<RebillResult> ProcessRebillAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null)
+    public async Task<RebillResult> ProcessRebillAsync(Action<int, int>? progressCallback = null, CancellationToken cancellationToken = default, string? orchestrationRequestId = null, string? billingTimeZoneId = null)
     {
         var result = new RebillResult();
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var maxParallel = GetMaxParallelRequests();
-        var today = DateTime.UtcNow.Date;
+        var today = GetBillingToday(billingTimeZoneId);
         var todayDayOfWeek = today.DayOfWeek;
 
         try
@@ -3788,9 +3815,10 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     private static DateTime CalculateLastSuccessfulDownloadDate(
         DateTime? currentLastSuccessfulDownloadDate,
         DateTime? jobNextRunDateTime,
-        string? periodType)
+        string? periodType,
+        string? billingTimeZoneId = null)
     {
-        var jobDate = jobNextRunDateTime?.Date ?? DateTime.UtcNow.Date;
+        var jobDate = jobNextRunDateTime?.Date ?? GetBillingToday(billingTimeZoneId);
         
         // First successful download - establish baseline
         if (!currentLastSuccessfulDownloadDate.HasValue)
@@ -3822,14 +3850,14 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     /// Preserves the current window offsets (days before/after NextRunDateTime) to maintain
     /// any manual adjustments to the search window size.
     /// </summary>
-    private async Task AdvanceRuleToNextCycleAsync(AdrJob job) => 
-        AdvanceRuleToNextCycleSync(job, null);
+    private async Task AdvanceRuleToNextCycleAsync(AdrJob job, string? billingTimeZoneId = null) => 
+        AdvanceRuleToNextCycleSync(job, null, billingTimeZoneId);
 
     /// <summary>
     /// Synchronous version of AdvanceRuleToNextCycleAsync that uses pre-loaded rules dictionary.
     /// This avoids N+1 database queries when processing many jobs.
     /// </summary>
-    private void AdvanceRuleToNextCycleSync(AdrJob job, Dictionary<int, AdrAccountRule>? preloadedRules)
+    private void AdvanceRuleToNextCycleSync(AdrJob job, Dictionary<int, AdrAccountRule>? preloadedRules, string? billingTimeZoneId = null)
     {
         if (!job.AdrAccountRuleId.HasValue)
         {
@@ -3856,7 +3884,7 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             }
 
             // Use job's NextRunDateTime as the anchor (not status check date) to avoid creep
-            var anchorDate = job.NextRunDateTime?.Date ?? DateTime.UtcNow.Date;
+            var anchorDate = job.NextRunDateTime?.Date ?? GetBillingToday(billingTimeZoneId);
             
             // Get the anchor day of month to preserve across billing cycles
             // This prevents "sticky" drift after short months (e.g., Jan 31 -> Feb 28 -> Mar 28)
@@ -3920,8 +3948,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             // The Account fields were previously only updated during sync from VendorCred, causing stale data
             if (job.AdrAccount != null)
             {
-                var today = DateTime.UtcNow.Date;
-                var daysUntilNextRun = (int)(nextRunDate - today).TotalDays;
+                var todayBilling = GetBillingToday(billingTimeZoneId);
+                var daysUntilNextRun = (int)(nextRunDate - todayBilling).TotalDays;
                 
                 // Update scheduling fields on the account
                 job.AdrAccount.NextRunDateTime = nextRunDate;
