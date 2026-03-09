@@ -83,12 +83,11 @@ graph TB
             EMSDBPR05["🗄️ EMSDBPR05 [FEEDER]<br/>Reports & Multi-Client DB<br/>DBs: UtilityWeb1, UtilityWeb2,<br/>UtilitymartSub, DataLoader"]
             EMSDBHA["🗄️ EMSDBHA [FEEDER]<br/>Core EMS / Shadowbase<br/>DBs: EMS, SHADOWBASE_UTILITIES"]
             EMSDBPR06["🗄️ EMSDBPR06 [FEEDER]<br/>Daily Vendor Import<br/>DB: EMSDBPR11 Vendor Import"]
-            EMSDBPR07["🗄️ EMSDBPR07 [FEEDER]<br/>UtilityWeb Host<br/>DB: UtilityWeb"]
+            EMSDBPR07["🗄️ EMSDBPR07 [FEEDER]<br/>UtilityWeb Host<br/>DB: UtilityWeb<br/>(DNS alias: Steelhead)"]
         end
 
         subgraph NAMED["Named Production Database Servers"]
-            Steelhead["🗄️ Steelhead / EMSDBPR07<br/>Primary App Data<br/>DB: UtilityWeb<br/>(legacy alias: Steelhead)"]
-            Hammerhead["🗄️ Hammerhead / PEMSDBSQL02<br/>App Data (Alternate)<br/>DB: UtilityWeb<br/>(legacy alias: Hammerhead)"]
+            PEMSDBSQL02["🗄️ PEMSDBSQL02<br/>App Data (Alternate / Failover)<br/>DB: UtilityWeb<br/>(DNS alias: Hammerhead)"]
             Bluefin["🗄️ Bluefin<br/>Workflow & Analytics<br/>DBs: Workflow, UtilityMartSub,<br/>InternalReporting"]
             dbcassimaging["🗄️ dbcassimagingsub<br/>Image Storage<br/>DB: CassImaging"]
         end
@@ -172,13 +171,13 @@ graph TB
     LB -->|"Route (AT&T)"| Mako5
 
     %% Web to DB
-    Mako1 -->|"SQL"| Steelhead
+    Mako1 -->|"SQL"| EMSDBPR07
     Mako1 -->|"SQL"| Bluefin
     Mako1 -->|"SQL"| dbcassimaging
-    Mako2 -->|"SQL"| Steelhead
-    Mako3 -->|"SQL"| Steelhead
-    Mako4 -->|"SQL"| Steelhead
-    Mako5 -->|"SQL"| Steelhead
+    Mako2 -->|"SQL"| EMSDBPR07
+    Mako3 -->|"SQL"| EMSDBPR07
+    Mako4 -->|"SQL"| EMSDBPR07
+    Mako5 -->|"SQL"| EMSDBPR07
 
     %% Web to Cache/File
     Mako1 -.->|"Cache"| Bonefish
@@ -220,7 +219,7 @@ graph TB
     class Mako1,Mako2,Mako3 web
     class Mako4,Mako5 lb
     class DuendeOIDC,LoginSvc,DuendeUAT,LoginUAT,TokenGen auth
-    class EMSDBPR05,EMSDBHA,EMSDBPR06,EMSDBPR07,Steelhead,Hammerhead,Bluefin,dbcassimaging,EMSDBDEV02 db
+    class EMSDBPR05,EMSDBHA,EMSDBPR06,EMSDBPR07,PEMSDBSQL02,Bluefin,dbcassimaging,EMSDBDEV02 db
     class PEMSDBSQL01 dbhub
     class PEMSDBSQL10 dbreplica
     class Bonefish cache
@@ -244,8 +243,8 @@ graph LR
     classDef server fill:#FFF8E1,stroke:#F9A825,color:#7A5900
 
     subgraph CONNECTIONS["Connection String → Database → Server"]
-        UI3_1["UI3Data (Config 1)"] -->|"UtilityWeb"| Steelhead["Steelhead (EMSDBPR07)"]
-        UI3_2["UI3Data (Config 2)"] -->|"UtilityWeb"| Hammerhead["Hammerhead (PEMSDBSQL02)"]
+        UI3_1["UI3Data (Config 1)"] -->|"UtilityWeb"| EMSDBPR07_2["EMSDBPR07 (alias: Steelhead)"]
+        UI3_2["UI3Data (Config 2)"] -->|"UtilityWeb"| PEMSDBSQL02_2["PEMSDBSQL02 (alias: Hammerhead)"]
         WF["Workflow"] -->|"Workflow"| Bluefin
         RT["ReportTrak"] -->|"UtilityWeb1/2"| EMSDBPR05
         DT["DocTrak"] -->|"UtilityWeb1/2"| EMSDBPR05
@@ -257,7 +256,7 @@ graph LR
     end
 
     class UI3_1,UI3_2,WF,RT,DT,SCHED,CI,UM,IR,SS conn
-    class Steelhead,Hammerhead,Bluefin,EMSDBPR05,dbcassimagingsub server
+    class EMSDBPR07_2,PEMSDBSQL02_2,Bluefin,EMSDBPR05,dbcassimagingsub server
 ```
 
 ---

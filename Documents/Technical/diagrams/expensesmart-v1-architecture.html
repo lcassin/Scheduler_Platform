@@ -687,8 +687,8 @@
       <table class="db-conn-table" style="margin-top:8px;border:1px solid #ddd;border-radius:6px;">
         <thead><tr><th>Connection Name</th><th>Database</th><th>Server</th><th>Notes</th></tr></thead>
         <tbody>
-          <tr><td>UI3Data (Config 1)</td><td class="mono">UtilityWeb</td><td class="mono">Steelhead (= EMSDBPR07)</td><td>Primary web app data</td></tr>
-          <tr><td>UI3Data (Config 2)</td><td class="mono">UtilityWeb</td><td class="mono">Hammerhead (= PEMSDBSQL02)</td><td>Alternate / failover</td></tr>
+          <tr><td>UI3Data (Config 1)</td><td class="mono">UtilityWeb</td><td class="mono">EMSDBPR07 <em>(alias: Steelhead)</em></td><td>Primary web app data</td></tr>
+          <tr><td>UI3Data (Config 2)</td><td class="mono">UtilityWeb</td><td class="mono">PEMSDBSQL02 <em>(alias: Hammerhead)</em></td><td>Alternate / failover</td></tr>
           <tr><td>Workflow</td><td class="mono">Workflow</td><td class="mono">Bluefin</td><td>Workflow engine</td></tr>
           <tr><td>ReportTrak</td><td class="mono">UtilityWeb1 / UtilityWeb2</td><td class="mono">EMSDBPR05</td><td>Per-config variant</td></tr>
           <tr><td>DocTrak</td><td class="mono">UtilityWeb1 / UtilityWeb2</td><td class="mono">EMSDBPR05</td><td>Document tracking</td></tr>
@@ -733,6 +733,9 @@
         <div class="server-card db">
           <div class="server-name">&#128451; EMSDBPR07 <span class="badge feeder">FEEDER</span></div>
           <div class="server-role">UtilityWeb Host</div>
+          <div class="server-details">
+            <div class="detail-item"><span class="detail-icon">&#128204;</span> DNS alias: <strong>Steelhead</strong> (legacy name in web.config)</div>
+          </div>
           <div class="db-list">
             <div class="db-tag">UtilityWeb</div>
           </div>
@@ -750,15 +753,11 @@
       <div class="topo-tier-title hub">Named Production Database Servers</div>
       <div class="four-col" style="margin-top:8px;">
         <div class="server-card db" style="border-color:#0078D4;background:#E1F0FF;">
-          <div class="server-name" style="color:#004578;">&#128451; Steelhead (EMSDBPR07)</div>
-          <div class="server-role">Primary App Data &mdash; legacy alias &ldquo;Steelhead&rdquo;</div>
-          <div class="db-list">
-            <div class="db-tag">UtilityWeb</div>
+          <div class="server-name" style="color:#004578;">&#128451; PEMSDBSQL02</div>
+          <div class="server-role">App Data (Alternate / Failover)</div>
+          <div class="server-details">
+            <div class="detail-item"><span class="detail-icon">&#128204;</span> DNS alias: <strong>Hammerhead</strong> (legacy name in web.config)</div>
           </div>
-        </div>
-        <div class="server-card db" style="border-color:#0078D4;background:#E1F0FF;">
-          <div class="server-name" style="color:#004578;">&#128451; Hammerhead (PEMSDBSQL02)</div>
-          <div class="server-role">App Data (Alternate) &mdash; legacy alias &ldquo;Hammerhead&rdquo;</div>
           <div class="db-list">
             <div class="db-tag">UtilityWeb</div>
           </div>
