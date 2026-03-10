@@ -706,20 +706,13 @@
       <div class="topo-tier-title feeder">Source / Feeder Servers</div>
       <div class="four-col" style="margin-top:8px;">
         <div class="server-card db">
-          <div class="server-name">&#128451; EMSDBPR05 <span class="badge feeder">FEEDER</span></div>
-          <div class="server-role">Reports &amp; Multi-Client DB</div>
-          <div class="db-list">
-            <div class="db-tag">UtilityWeb1</div>
-            <div class="db-tag">UtilityWeb2</div>
-            <div class="db-tag">UtilitymartSub</div>
-            <div class="db-tag">DataLoader</div>
-          </div>
-        </div>
-        <div class="server-card db">
-          <div class="server-name">&#128451; EMSDBHA <span class="badge feeder">FEEDER</span></div>
+          <div class="server-name">&#128451; EMSDBHA <span class="badge feeder">SOURCE</span></div>
           <div class="server-role">Core EMS / Shadowbase</div>
+          <div class="server-details">
+            <div class="detail-item"><span class="detail-icon">&#128268;</span> Fed from <strong>HP NonStop | Tandem</strong> mainframe</div>
+          </div>
           <div class="db-list">
-            <div class="db-tag">EMS</div>
+            <div class="db-tag">IBIS</div>
             <div class="db-tag">SHADOWBASE_UTILITIES</div>
           </div>
         </div>
@@ -731,13 +724,12 @@
           </div>
         </div>
         <div class="server-card db">
-          <div class="server-name">&#128451; EMSDBPR07 <span class="badge feeder">FEEDER</span></div>
-          <div class="server-role">UtilityWeb Host</div>
+          <div class="server-name">&#128451; PEMSDBSQL03 <span class="badge feeder">FEEDER</span></div>
+          <div class="server-role">Attunity / Tandem Feed</div>
           <div class="server-details">
-            <div class="detail-item"><span class="detail-icon">&#128204;</span> DNS alias: <strong>Steelhead</strong> (legacy name in web.config)</div>
-          </div>
-          <div class="db-list">
-            <div class="db-tag">UtilityWeb</div>
+            <div class="detail-item"><span class="detail-icon">&#9881;</span> Attunity Task Schedulers (Push TO Bicycle)</div>
+            <div class="detail-item"><span class="detail-icon">&#128260;</span> Feeds via <strong>TarponVM</strong> &rarr; <strong>UtilityDataLoader</strong></div>
+            <div class="detail-item"><span class="detail-icon">&#128268;</span> Tandemfeed database</div>
           </div>
         </div>
       </div>
@@ -745,45 +737,7 @@
 
     <div class="flow-connector">
       <div class="arrow">&#11015; &#11015; &#11015;</div>
-      <div class="label">Data feeds into central processing hub via SSIS / stored procedures</div>
-    </div>
-
-    <!-- Named Production Servers -->
-    <div class="topo-tier">
-      <div class="topo-tier-title hub">Named Production Database Servers</div>
-      <div class="four-col" style="margin-top:8px;">
-        <div class="server-card db" style="border-color:#0078D4;background:#E1F0FF;">
-          <div class="server-name" style="color:#004578;">&#128451; PEMSDBSQL02</div>
-          <div class="server-role">App Data (Alternate / Failover)</div>
-          <div class="server-details">
-            <div class="detail-item"><span class="detail-icon">&#128204;</span> DNS alias: <strong>Hammerhead</strong> (legacy name in web.config)</div>
-          </div>
-          <div class="db-list">
-            <div class="db-tag">UtilityWeb</div>
-          </div>
-        </div>
-        <div class="server-card db" style="border-color:#0078D4;background:#E1F0FF;">
-          <div class="server-name" style="color:#004578;">&#128451; Bluefin</div>
-          <div class="server-role">Workflow &amp; Analytics</div>
-          <div class="db-list">
-            <div class="db-tag">Workflow</div>
-            <div class="db-tag">UtilityMartSub</div>
-            <div class="db-tag">InternalReporting</div>
-          </div>
-        </div>
-        <div class="server-card db" style="border-color:#0078D4;background:#E1F0FF;">
-          <div class="server-name" style="color:#004578;">&#128451; dbcassimagingsub</div>
-          <div class="server-role">Image Storage</div>
-          <div class="db-list">
-            <div class="db-tag">CassImaging</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="flow-connector">
-      <div class="arrow">&#11015; &#11015; &#11015;</div>
-      <div class="label">Master Import &amp; Daily Incremental processing into central hub</div>
+      <div class="label">Data feeds into central processing hub via SSIS / stored procedures / Attunity</div>
     </div>
 
     <!-- Central Processing Hub -->
@@ -798,6 +752,7 @@
             <div class="detail-item"><span class="detail-icon">&#9881;</span> ES_Daily_Incremental_Delete_Load</div>
           </div>
           <div class="db-list">
+            <div class="db-tag">UtilitymartSPub</div>
             <div class="db-tag">DataLoader</div>
             <div class="db-tag">Client-db (x5 multi-tenant)</div>
             <div class="db-tag">EMSUPortalCommon</div>
@@ -813,6 +768,76 @@
             <div class="db-tag">DataLoader</div>
             <div class="db-tag">Client-db (x5 multi-tenant)</div>
             <div class="db-tag">EMSUPortalCommon</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-connector">
+      <div class="arrow">&#11015; &#11015; &#11015;</div>
+      <div class="label">SQL Replication fans out to downstream servers (AT&T-specific vs all other clients)</div>
+    </div>
+
+    <!-- Downstream Replication Targets -->
+    <div class="topo-tier">
+      <div class="topo-tier-title hub">Downstream Replication Targets</div>
+      <div class="four-col" style="margin-top:8px;">
+        <div class="server-card db" style="border-color:#D83B01;background:#FFF0E0;">
+          <div class="server-name" style="color:#D83B01;">&#128451; EMSDBPR05 <span class="badge" style="background:#D83B01;">AT&T</span> <span class="badge replica">REPLICATION</span></div>
+          <div class="server-role">AT&T-Specific Data (Replication Target)</div>
+          <div class="server-details">
+            <div class="detail-item"><span class="detail-icon">&#128260;</span> Receives AT&T replication from PEMSDBSQL01</div>
+          </div>
+          <div class="db-list">
+            <div class="db-tag">UtilityWeb1</div>
+            <div class="db-tag">UtilityWeb2</div>
+            <div class="db-tag">UtilitymartSub</div>
+          </div>
+        </div>
+        <div class="server-card db" style="border-color:#0078D4;background:#E1F0FF;">
+          <div class="server-name" style="color:#004578;">&#128451; EMSDBPR07 <span class="badge replica">REPLICATION</span></div>
+          <div class="server-role">All Clients Except AT&T (Replication Target)</div>
+          <div class="server-details">
+            <div class="detail-item"><span class="detail-icon">&#128204;</span> DNS alias: <strong>Steelhead</strong> (legacy name in web.config)</div>
+            <div class="detail-item"><span class="detail-icon">&#128260;</span> Receives non-AT&T replication from PEMSDBSQL01</div>
+          </div>
+          <div class="db-list">
+            <div class="db-tag">UtilityWeb</div>
+            <div class="db-tag">UtilitymartSub</div>
+          </div>
+        </div>
+        <div class="server-card db" style="border-color:#0078D4;background:#E1F0FF;">
+          <div class="server-name" style="color:#004578;">&#128451; PEMSDBSQL02</div>
+          <div class="server-role">App Data (Alternate / Failover)</div>
+          <div class="server-details">
+            <div class="detail-item"><span class="detail-icon">&#128204;</span> DNS alias: <strong>Hammerhead</strong> (legacy name in web.config)</div>
+          </div>
+          <div class="db-list">
+            <div class="db-tag">UtilitymartSub</div>
+            <div class="db-tag">UtilityWeb</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Other Named Production Servers -->
+    <div class="topo-tier" style="margin-top:12px;">
+      <div class="topo-tier-title hub">Other Production Database Servers</div>
+      <div class="four-col" style="margin-top:8px;">
+        <div class="server-card db" style="border-color:#0078D4;background:#E1F0FF;">
+          <div class="server-name" style="color:#004578;">&#128451; Bluefin</div>
+          <div class="server-role">Workflow &amp; Analytics</div>
+          <div class="db-list">
+            <div class="db-tag">Workflow</div>
+            <div class="db-tag">UtilityMartSub</div>
+            <div class="db-tag">InternalReporting</div>
+          </div>
+        </div>
+        <div class="server-card db" style="border-color:#0078D4;background:#E1F0FF;">
+          <div class="server-name" style="color:#004578;">&#128451; dbcassimagingsub</div>
+          <div class="server-role">Image Storage</div>
+          <div class="db-list">
+            <div class="db-tag">CassImaging</div>
           </div>
         </div>
       </div>
@@ -860,39 +885,69 @@
 
 <!-- ======== DATA FLOW STEPS ======== -->
 <div class="section infra">
-  <div class="section-label"><span class="icon">&#128260;</span> Data Processing Flow (ETL Pipeline)</div>
+  <div class="section-label"><span class="icon">&#128260;</span> Data Processing Flow (Updated March 2026)</div>
   <div class="section-content">
+    <p style="font-size:12px;color:#555;margin-bottom:12px;line-height:1.5;">
+      Data flows from the HP NonStop mainframe and Attunity schedulers through a central hub (PEMSDBSQL01),
+      then replicates outward to downstream servers. AT&T data is segregated to EMSDBPR05; all other clients replicate to EMSDBPR07.
+    </p>
     <div class="four-col">
       <div style="background:#F8F9FA;border-radius:6px;padding:12px;border-left:4px solid #0078D4;position:relative;">
         <div style="position:absolute;top:-8px;left:-8px;background:#0078D4;color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">1</div>
-        <div style="font-weight:600;font-size:13px;margin-bottom:4px;margin-left:14px;">Master Import</div>
+        <div style="font-weight:600;font-size:13px;margin-bottom:4px;margin-left:14px;">HP NonStop / Tandem Feed</div>
         <div style="font-size:12px;color:#555;line-height:1.4;">
-          <strong>EMSDBHA (EMS)</strong> &rarr; <strong>PEMSDBSQL01\UEG</strong><br>
-          Runs ES_Initial_MasterImport and ES_Daily_Incremental_Delete_Load to populate DataLoader and Client databases.
+          <strong>HP NonStop | Tandem</strong> &rarr; <strong>EMSDBHA</strong> (IBIS, SHADOWBASE_UTILITIES)<br>
+          Mainframe source data lands in EMSDBHA via Shadowbase replication.
         </div>
       </div>
       <div style="background:#F8F9FA;border-radius:6px;padding:12px;border-left:4px solid #0078D4;position:relative;">
         <div style="position:absolute;top:-8px;left:-8px;background:#0078D4;color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">2</div>
-        <div style="font-weight:600;font-size:13px;margin-bottom:4px;margin-left:14px;">Daily Vendor Import</div>
+        <div style="font-weight:600;font-size:13px;margin-bottom:4px;margin-left:14px;">Attunity &rarr; PEMSDBSQL03</div>
         <div style="font-size:12px;color:#555;line-height:1.4;">
-          <strong>EMSDBPR06</strong> &rarr; <strong>PEMSDBSQL01 (EMSUPortalCommon)</strong><br>
-          EMSDBPR11 Daily Vendor Import process feeds vendor data into the portal common database.
+          <strong>Attunity Task Schedulers</strong> (Push TO Bicycle) &rarr; <strong>PEMSDBSQL03</strong><br>
+          Tandemfeed &rarr; TarponVM &rarr; UtilityDataLoader. Scheduled data push from Tandem into SQL Server.
         </div>
       </div>
       <div style="background:#F8F9FA;border-radius:6px;padding:12px;border-left:4px solid #0078D4;position:relative;">
         <div style="position:absolute;top:-8px;left:-8px;background:#0078D4;color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">3</div>
-        <div style="font-weight:600;font-size:13px;margin-bottom:4px;margin-left:14px;">EcoTrak Manual Process</div>
+        <div style="font-weight:600;font-size:13px;margin-bottom:4px;margin-left:14px;">Master Import &rarr; Central Hub</div>
         <div style="font-size:12px;color:#555;line-height:1.4;">
-          <strong>Manual Input</strong> &rarr; <strong>EMSDBPR05 (UtilitymartSub)</strong><br>
-          EcoTrak data is manually entered into the UtilitymartSub database.
+          <strong>EMSDBHA</strong> &rarr; <strong>PEMSDBSQL01\UEG</strong> (UtilitymartSPub, DataLoader, Client-db)<br>
+          ES_Initial_MasterImport + ES_Daily_Incremental_Delete_Load populates the central hub.
         </div>
       </div>
       <div style="background:#F8F9FA;border-radius:6px;padding:12px;border-left:4px solid #0078D4;position:relative;">
         <div style="position:absolute;top:-8px;left:-8px;background:#0078D4;color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">4</div>
-        <div style="font-weight:600;font-size:13px;margin-bottom:4px;margin-left:14px;">Utility Data Sync</div>
+        <div style="font-weight:600;font-size:13px;margin-bottom:4px;margin-left:14px;">Daily Vendor Import</div>
         <div style="font-size:12px;color:#555;line-height:1.4;">
-          <strong>EMSDBPR05 (UtilitymartSub)</strong> &rarr; <strong>PEMSDBSQL01 (DataLoader)</strong><br>
-          Utility data syncs from the UtilitymartSub database into the central DataLoader.
+          <strong>EMSDBPR06</strong> &rarr; <strong>PEMSDBSQL01 (EMSUPortalCommon)</strong><br>
+          EMSDBPR11 Daily Vendor Import feeds vendor data into the portal common database.
+        </div>
+      </div>
+    </div>
+    <div class="four-col" style="margin-top:8px;">
+      <div style="background:#F8F9FA;border-radius:6px;padding:12px;border-left:4px solid #498205;position:relative;">
+        <div style="position:absolute;top:-8px;left:-8px;background:#498205;color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">5</div>
+        <div style="font-weight:600;font-size:13px;margin-bottom:4px;margin-left:14px;">Replication: AT&T Split</div>
+        <div style="font-size:12px;color:#555;line-height:1.4;">
+          <strong>PEMSDBSQL01</strong> &rarr; <strong>EMSDBPR05</strong> (UtilityWeb1, UtilityWeb2, UtilitymartSub)<br>
+          AT&T-specific data replicates to EMSDBPR05 (dedicated AT&T reporting/data).
+        </div>
+      </div>
+      <div style="background:#F8F9FA;border-radius:6px;padding:12px;border-left:4px solid #498205;position:relative;">
+        <div style="position:absolute;top:-8px;left:-8px;background:#498205;color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">6</div>
+        <div style="font-weight:600;font-size:13px;margin-bottom:4px;margin-left:14px;">Replication: All Other Clients</div>
+        <div style="font-size:12px;color:#555;line-height:1.4;">
+          <strong>PEMSDBSQL01</strong> &rarr; <strong>EMSDBPR07</strong> (UtilityWeb, UtilitymartSub)<br>
+          All clients except AT&T replicate to EMSDBPR07 (alias: Steelhead). ETL process runs here.
+        </div>
+      </div>
+      <div style="background:#F8F9FA;border-radius:6px;padding:12px;border-left:4px solid #498205;position:relative;">
+        <div style="position:absolute;top:-8px;left:-8px;background:#498205;color:#fff;width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;">7</div>
+        <div style="font-weight:600;font-size:13px;margin-bottom:4px;margin-left:14px;">PEMSDBSQL02 (Hammerhead)</div>
+        <div style="font-size:12px;color:#555;line-height:1.4;">
+          <strong>PEMSDBSQL02</strong> hosts UtilitymartSub and UtilityWeb.<br>
+          Alternate / failover app data server (alias: Hammerhead).
         </div>
       </div>
     </div>

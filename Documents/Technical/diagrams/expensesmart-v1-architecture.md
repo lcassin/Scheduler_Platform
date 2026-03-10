@@ -80,21 +80,26 @@ graph TB
         direction TB
 
         subgraph FEEDERS["Source / Feeder Servers"]
-            EMSDBPR05["🗄️ EMSDBPR05 [FEEDER]<br/>Reports & Multi-Client DB<br/>DBs: UtilityWeb1, UtilityWeb2,<br/>UtilitymartSub, DataLoader"]
-            EMSDBHA["🗄️ EMSDBHA [FEEDER]<br/>Core EMS / Shadowbase<br/>DBs: EMS, SHADOWBASE_UTILITIES"]
+            HPTandem["🖥️ HP NonStop | Tandem<br/>Mainframe Source"]
+            EMSDBHA["🗄️ EMSDBHA [SOURCE]<br/>Core EMS / Shadowbase<br/>DBs: IBIS, SHADOWBASE_UTILITIES<br/>(Fed from HP NonStop)"]
             EMSDBPR06["🗄️ EMSDBPR06 [FEEDER]<br/>Daily Vendor Import<br/>DB: EMSDBPR11 Vendor Import"]
-            EMSDBPR07["🗄️ EMSDBPR07 [FEEDER]<br/>UtilityWeb Host<br/>DB: UtilityWeb<br/>(DNS alias: Steelhead)"]
-        end
-
-        subgraph NAMED["Named Production Database Servers"]
-            PEMSDBSQL02["🗄️ PEMSDBSQL02<br/>App Data (Alternate / Failover)<br/>DB: UtilityWeb<br/>(DNS alias: Hammerhead)"]
-            Bluefin["🗄️ Bluefin<br/>Workflow & Analytics<br/>DBs: Workflow, UtilityMartSub,<br/>InternalReporting"]
-            dbcassimaging["🗄️ dbcassimagingsub<br/>Image Storage<br/>DB: CassImaging"]
+            PEMSDBSQL03["🗄️ PEMSDBSQL03 [FEEDER]<br/>Attunity / Tandem Feed<br/>Attunity Task Schedulers<br/>(Push TO Bicycle)<br/>Tandemfeed → TarponVM →<br/>UtilityDataLoader"]
         end
 
         subgraph HUB["Central Processing Hub"]
-            PEMSDBSQL01["🗄️ PEMSDBSQL01 / UEG [PRIMARY]<br/>Central Processing Hub<br/>Procs: ES_Initial_MasterImport,<br/>ES_Daily_Incremental_Delete_Load<br/>DBs: DataLoader, Client-db (x5),<br/>EMSUPortalCommon"]
+            PEMSDBSQL01["🗄️ PEMSDBSQL01 / UEG [PRIMARY]<br/>Central Processing Hub<br/>Procs: ES_Initial_MasterImport,<br/>ES_Daily_Incremental_Delete_Load<br/>DBs: UtilitymartSPub, DataLoader,<br/>Client-db (x5), EMSUPortalCommon"]
             PEMSDBSQL10["🗄️ PEMSDBSQL10 [REPLICA]<br/>Full Replica (SQL Replication)<br/>Mirrors all Expensesmart databases<br/>DBs: DataLoader, Client-db (x5),<br/>EMSUPortalCommon"]
+        end
+
+        subgraph REPL["Downstream Replication Targets"]
+            EMSDBPR05["🗄️ EMSDBPR05 [AT&T REPLICATION]<br/>AT&T-Specific Data<br/>DBs: UtilityWeb1, UtilityWeb2,<br/>UtilitymartSub"]
+            EMSDBPR07["🗄️ EMSDBPR07 [REPLICATION]<br/>All Clients Except AT&T<br/>DBs: UtilityWeb, UtilitymartSub<br/>(DNS alias: Steelhead)"]
+            PEMSDBSQL02["🗄️ PEMSDBSQL02<br/>App Data (Alternate / Failover)<br/>DBs: UtilitymartSub, UtilityWeb<br/>(DNS alias: Hammerhead)"]
+        end
+
+        subgraph OTHER_DB["Other Production Database Servers"]
+            Bluefin["🗄️ Bluefin<br/>Workflow & Analytics<br/>DBs: Workflow, UtilityMartSub,<br/>InternalReporting"]
+            dbcassimaging["🗄️ dbcassimagingsub<br/>Image Storage<br/>DB: CassImaging"]
         end
 
         subgraph SSRS_TIER["Reporting Services (SSRS)"]
@@ -105,12 +110,14 @@ graph TB
     end
 
     %% ===== ETL PIPELINE =====
-    subgraph ETL["🔄 Data Processing Flow (ETL Pipeline)"]
+    subgraph ETL["🔄 Data Processing Flow (Updated March 2026)"]
         direction LR
-        ETL1["1️⃣ Master Import<br/>EMSDBHA (EMS) →<br/>PEMSDBSQL01\UEG<br/>ES_Initial_MasterImport +<br/>ES_Daily_Incremental"]
-        ETL2["2️⃣ Daily Vendor Import<br/>EMSDBPR06 →<br/>PEMSDBSQL01 (EMSUPortalCommon)<br/>EMSDBPR11 vendor data feed"]
-        ETL3["3️⃣ EcoTrak Manual<br/>Manual Input →<br/>EMSDBPR05 (UtilitymartSub)<br/>Manual data entry"]
-        ETL4["4️⃣ Utility Data Sync<br/>EMSDBPR05 (UtilitymartSub) →<br/>PEMSDBSQL01 (DataLoader)<br/>Utility data sync"]
+        ETL1["1️⃣ HP NonStop → EMSDBHA<br/>Shadowbase replication from<br/>Tandem mainframe"]
+        ETL2["2️⃣ Attunity → PEMSDBSQL03<br/>Task Schedulers push<br/>Tandemfeed → TarponVM →<br/>UtilityDataLoader"]
+        ETL3["3️⃣ EMSDBHA → PEMSDBSQL01<br/>Master Import + Daily<br/>Incremental into central hub"]
+        ETL4["4️⃣ EMSDBPR06 → PEMSDBSQL01<br/>Daily Vendor Import<br/>(EMSUPortalCommon)"]
+        ETL5["5️⃣ PEMSDBSQL01 → EMSDBPR05<br/>AT&T replication<br/>(UtilityWeb1/2, UtilitymartSub)"]
+        ETL6["6️⃣ PEMSDBSQL01 → EMSDBPR07<br/>All other clients replication<br/>(UtilityWeb, UtilitymartSub)"]
     end
 
     %% ===== SUPPORTING INFRASTRUCTURE =====
@@ -194,11 +201,16 @@ graph TB
     KrogerIdP -.->|"OIDC"| DuendeOIDC
     ADRScheduler -.->|"OIDC (shared Azure AD)"| DuendeOIDC
 
-    %% Feeder flow
+    %% Source to Hub flow
+    HPTandem -->|"Shadowbase"| EMSDBHA
     EMSDBHA -->|"Master Import"| PEMSDBSQL01
     EMSDBPR06 -->|"Vendor Import"| PEMSDBSQL01
-    EMSDBPR05 -->|"Utility Sync"| PEMSDBSQL01
+    PEMSDBSQL03 -->|"UtilityDataLoader"| PEMSDBSQL01
     PEMSDBSQL01 -->|"SQL Replication"| PEMSDBSQL10
+
+    %% Downstream replication
+    PEMSDBSQL01 -->|"AT&T Replication"| EMSDBPR05
+    PEMSDBSQL01 -->|"Non-AT&T Replication"| EMSDBPR07
 
     %% SSRS
     EMSDBPR05 -.->|"ReportTrak queries"| SSRSProd
@@ -219,7 +231,8 @@ graph TB
     class Mako1,Mako2,Mako3 web
     class Mako4,Mako5 lb
     class DuendeOIDC,LoginSvc,DuendeUAT,LoginUAT,TokenGen auth
-    class EMSDBPR05,EMSDBHA,EMSDBPR06,EMSDBPR07,PEMSDBSQL02,Bluefin,dbcassimaging,EMSDBDEV02 db
+    class EMSDBPR05,EMSDBHA,EMSDBPR06,EMSDBPR07,PEMSDBSQL02,PEMSDBSQL03,Bluefin,dbcassimaging,EMSDBDEV02 db
+    class HPTandem ext
     class PEMSDBSQL01 dbhub
     class PEMSDBSQL10 dbreplica
     class Bonefish cache
@@ -261,23 +274,40 @@ graph LR
 
 ---
 
-## ETL Data Processing Pipeline
+## Data Processing Flow (Updated March 2026)
+
+> Data flows from the HP NonStop mainframe and Attunity schedulers through a central hub (PEMSDBSQL01),
+> then replicates outward to downstream servers. AT&T data is segregated to EMSDBPR05; all other clients replicate to EMSDBPR07.
 
 ```mermaid
 graph LR
-    classDef step fill:#F8F9FA,stroke:#0078D4,stroke-width:2px,color:#333
     classDef source fill:#FFF8E1,stroke:#F9A825,color:#7A5900
-    classDef target fill:#DEECF9,stroke:#0078D4,stroke-width:2px,color:#004578
+    classDef feeder fill:#FFF8E1,stroke:#F9A825,color:#7A5900
+    classDef hub fill:#DEECF9,stroke:#0078D4,stroke-width:3px,color:#004578
+    classDef replica fill:#F0F9E8,stroke:#498205,stroke-width:2px,color:#498205
+    classDef att fill:#FFF0E0,stroke:#D83B01,stroke-width:2px,color:#8B2500
+    classDef downstream fill:#E1F0FF,stroke:#0078D4,stroke-width:2px,color:#004578
 
-    EMSDBHA["🗄️ EMSDBHA<br/>(EMS)"] -->|"1. Master Import<br/>ES_Initial_MasterImport<br/>ES_Daily_Incremental"| HUB["🗄️ PEMSDBSQL01\UEG<br/>(DataLoader, Client-db x5,<br/>EMSUPortalCommon)"]
-    EMSDBPR06["🗄️ EMSDBPR06<br/>(EMSDBPR11)"] -->|"2. Daily Vendor Import"| HUB
-    MANUAL["📝 Manual Input"] -->|"3. EcoTrak Manual"| EMSDBPR05["🗄️ EMSDBPR05<br/>(UtilitymartSub)"]
-    EMSDBPR05 -->|"4. Utility Data Sync"| HUB
+    HPTandem["🖥️ HP NonStop<br/>Tandem Mainframe"] -->|"Shadowbase<br/>Replication"| EMSDBHA["🗄️ EMSDBHA<br/>(IBIS, SHADOWBASE_UTILITIES)"]
+    Attunity["⚙️ Attunity Task<br/>Schedulers<br/>(Push TO Bicycle)"] -->|"Tandemfeed →<br/>TarponVM →<br/>UtilityDataLoader"| PEMSDBSQL03["🗄️ PEMSDBSQL03"]
+    EMSDBPR06["🗄️ EMSDBPR06<br/>(EMSDBPR11<br/>Vendor Import)"]
+
+    EMSDBHA -->|"1. Master Import<br/>ES_Initial_MasterImport<br/>ES_Daily_Incremental"| HUB["🗄️ PEMSDBSQL01 / UEG<br/>(UtilitymartSPub, DataLoader,<br/>Client-db x5, EMSUPortalCommon)"]
+    PEMSDBSQL03 -->|"2. UtilityDataLoader"| HUB
+    EMSDBPR06 -->|"3. Daily Vendor Import"| HUB
+
     HUB -->|"SQL Replication"| REPLICA["🗄️ PEMSDBSQL10<br/>(Full Replica)"]
+    HUB -->|"AT&T Replication"| EMSDBPR05["🗄️ EMSDBPR05<br/>(UtilityWeb1, UtilityWeb2,<br/>UtilitymartSub)"]
+    HUB -->|"Non-AT&T Replication<br/>(Except AT&T)"| EMSDBPR07["🗄️ EMSDBPR07<br/>(UtilityWeb, UtilitymartSub)<br/>alias: Steelhead"]
 
-    class EMSDBHA,EMSDBPR06,EMSDBPR05 source
-    class HUB target
-    class REPLICA target
+    PEMSDBSQL02["🗄️ PEMSDBSQL02<br/>(UtilitymartSub, UtilityWeb)<br/>alias: Hammerhead"]
+
+    class HPTandem,Attunity source
+    class EMSDBHA,EMSDBPR06,PEMSDBSQL03 feeder
+    class HUB hub
+    class REPLICA replica
+    class EMSDBPR05 att
+    class EMSDBPR07,PEMSDBSQL02 downstream
 ```
 
 ---
