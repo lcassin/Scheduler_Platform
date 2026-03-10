@@ -450,7 +450,7 @@
     <div class="wf-step">
       <div class="wf-icon" style="background:var(--sso-color)">&#128272;</div>
       <div class="wf-label">SSO / Login</div>
-      <div class="wf-sublabel">SAML 2.0 SP<br>+ Duende OIDC</div>
+      <div class="wf-sublabel">Duende OIDC<br>+ Login Service</div>
     </div>
     <div class="wf-arrow">&rarr;</div>
     <div class="wf-step">
@@ -548,7 +548,7 @@
 <div class="section sso">
   <div class="section-label"><span class="icon">&#128272;</span> Authentication &amp; SSO Layer</div>
   <div class="section-content">
-    <p style="font-size:13px;color:#555;margin-bottom:12px;">Duende IdentityServer handles OIDC. Each component is single-instance (LB restricted to one node due to operational data not being shared). SAML 2.0 SP handles federated SSO for 40+ partners. Login app redirects to SSO/OIDC flow.</p>
+    <p style="font-size:13px;color:#555;margin-bottom:12px;">Duende IdentityServer handles OIDC for Expensesmart (EMS-IBIS/Utilities Division). Each component is single-instance (LB restricted to one node due to operational data not being shared). Login app redirects to OIDC flow.</p>
     <p style="font-size:12px;color:#888;margin-bottom:12px;font-style:italic;">Limitation: Duende cannot share operational data across servers. If a token request starts on server1, the LB sends to server2 which fails. Load balancer is restricted to a single instance per component.</p>
 
     <div class="env-columns">
@@ -568,14 +568,6 @@
             <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">https://login.expensesmart.com/Home/SsoRedirect</span></div>
             <div class="detail-item"><span class="detail-icon">&#128421;</span> Running on <strong>Mako1</strong> (single instance)</div>
             <div class="detail-item"><span class="detail-icon">&#128260;</span> SSO redirect / Caller of OIDC for SSO flow</div>
-          </div>
-        </div>
-        <div class="server-card auth">
-          <div class="server-name">&#128274; SAML 2.0 SSO SP</div>
-          <div class="server-details">
-            <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">clm.cassinfo.com/sso</span></div>
-            <div class="detail-item"><span class="detail-icon">&#128101;</span> 40+ partner IdPs (Azure AD, Okta, PingFederate)</div>
-            <div class="detail-item"><span class="detail-icon">&#128101;</span> User lookup via partner IdP claims</div>
           </div>
         </div>
       </div>
@@ -601,7 +593,7 @@
           <div class="server-name">&#128274; SSO Test Token Generator</div>
           <div class="server-details">
             <div class="detail-item"><span class="detail-icon">&#128279;</span> Reads config from <span class="url-tag">//hyde/sso/appsettings.json</span></div>
-            <div class="detail-item"><span class="detail-icon">&#9881;</span> Generates test SAML tokens for development</div>
+            <div class="detail-item"><span class="detail-icon">&#9881;</span> Generates test tokens for development</div>
           </div>
         </div>
       </div>
@@ -609,7 +601,7 @@
 
     <div style="margin-top:12px;">
       <p style="font-size:12px;color:#555;"><strong>Duende Repo:</strong> <span class="url-tag">https://dev.azure.com/CassInfoSys/Enterprise-Shared/_git/enterprise.services.authentication.duende</span></p>
-      <p style="font-size:12px;color:#555;"><strong>SSO Identity Repo:</strong> <span class="url-tag">https://dev.azure.com/CassInfoSys/Telecom/_git/Identity</span> (ASP.NET Core 3.1, ComponentSpace.Saml2)</p>
+      <p style="font-size:12px;color:#888;font-style:italic;margin-top:6px;"><strong>Note:</strong> The Enterprise ADR Scheduler (Scheduler_Platform) also links to this Duende OIDC endpoint as an external application, since both share the same Azure AD source.</p>
     </div>
   </div>
 </div>
@@ -695,8 +687,8 @@
       <table class="db-conn-table" style="margin-top:8px;border:1px solid #ddd;border-radius:6px;">
         <thead><tr><th>Connection Name</th><th>Database</th><th>Server</th><th>Notes</th></tr></thead>
         <tbody>
-          <tr><td>UI3Data (Config 1)</td><td class="mono">UtilityWeb</td><td class="mono">Steelhead</td><td>Primary web app data</td></tr>
-          <tr><td>UI3Data (Config 2)</td><td class="mono">UtilityWeb</td><td class="mono">Hammerhead</td><td>Alternate / failover</td></tr>
+          <tr><td>UI3Data (Config 1)</td><td class="mono">UtilityWeb</td><td class="mono">EMSDBPR07 <em>(alias: Steelhead)</em></td><td>Primary web app data</td></tr>
+          <tr><td>UI3Data (Config 2)</td><td class="mono">UtilityWeb</td><td class="mono">PEMSDBSQL02 <em>(alias: Hammerhead)</em></td><td>Alternate / failover</td></tr>
           <tr><td>Workflow</td><td class="mono">Workflow</td><td class="mono">Bluefin</td><td>Workflow engine</td></tr>
           <tr><td>ReportTrak</td><td class="mono">UtilityWeb1 / UtilityWeb2</td><td class="mono">EMSDBPR05</td><td>Per-config variant</td></tr>
           <tr><td>DocTrak</td><td class="mono">UtilityWeb1 / UtilityWeb2</td><td class="mono">EMSDBPR05</td><td>Document tracking</td></tr>
@@ -741,6 +733,9 @@
         <div class="server-card db">
           <div class="server-name">&#128451; EMSDBPR07 <span class="badge feeder">FEEDER</span></div>
           <div class="server-role">UtilityWeb Host</div>
+          <div class="server-details">
+            <div class="detail-item"><span class="detail-icon">&#128204;</span> DNS alias: <strong>Steelhead</strong> (legacy name in web.config)</div>
+          </div>
           <div class="db-list">
             <div class="db-tag">UtilityWeb</div>
           </div>
@@ -758,15 +753,11 @@
       <div class="topo-tier-title hub">Named Production Database Servers</div>
       <div class="four-col" style="margin-top:8px;">
         <div class="server-card db" style="border-color:#0078D4;background:#E1F0FF;">
-          <div class="server-name" style="color:#004578;">&#128451; Steelhead</div>
-          <div class="server-role">Primary App Data</div>
-          <div class="db-list">
-            <div class="db-tag">UtilityWeb</div>
+          <div class="server-name" style="color:#004578;">&#128451; PEMSDBSQL02</div>
+          <div class="server-role">App Data (Alternate / Failover)</div>
+          <div class="server-details">
+            <div class="detail-item"><span class="detail-icon">&#128204;</span> DNS alias: <strong>Hammerhead</strong> (legacy name in web.config)</div>
           </div>
-        </div>
-        <div class="server-card db" style="border-color:#0078D4;background:#E1F0FF;">
-          <div class="server-name" style="color:#004578;">&#128451; Hammerhead</div>
-          <div class="server-role">App Data (Alternate)</div>
           <div class="db-list">
             <div class="db-tag">UtilityWeb</div>
           </div>
@@ -859,9 +850,8 @@
           <div class="question">&#10067;</div>
           <strong>Items TBD</strong><br>
           Need to determine:<br>
-          ASPState server (prod session state),<br>
-          prod SSRS server name, and<br>
-          Steelhead vs Hammerhead active status
+          ASPState server (prod session state)<br>
+          and prod SSRS server name
         </div>
       </div>
     </div>
@@ -1013,30 +1003,15 @@
         </div>
       </div>
       <div class="server-card ext">
-        <div class="server-name">&#128272; 40+ SSO Partners</div>
+        <div class="server-name">&#128260; ADR Scheduler</div>
         <div class="server-details">
-          <div class="detail-item"><span class="detail-icon">&#128101;</span> Azure AD, Okta, PingFederate</div>
-          <div class="detail-item"><span class="detail-icon">&#128274;</span> SAML 2.0 federated auth</div>
-          <div class="detail-item"><span class="detail-icon">&#128279;</span> Ericsson, BMW, S&P Global, etc.</div>
+          <div class="detail-item"><span class="detail-icon">&#128279;</span> Enterprise ADR (Scheduler_Platform)</div>
+          <div class="detail-item"><span class="detail-icon">&#128272;</span> Links to Duende OIDC endpoint</div>
+          <div class="detail-item"><span class="detail-icon">&#128451;</span> Shared Azure AD source</div>
         </div>
       </div>
     </div>
     <div class="three-col" style="margin-top:12px;">
-      <div class="server-card ext">
-        <div class="server-name">&#128202; CLM Reporting</div>
-        <div class="server-details">
-          <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">clm.cassinfo.com/clm/reporting/</span></div>
-          <div class="detail-item"><span class="detail-icon">&#128196;</span> SSRS-based reports</div>
-          <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">clmcorp.cassinfo.com/clm/reporting/</span></div>
-        </div>
-      </div>
-      <div class="server-card ext">
-        <div class="server-name">&#128272; Asignet SSO</div>
-        <div class="server-details">
-          <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">auth.asignet.com/clm6/</span></div>
-          <div class="detail-item"><span class="detail-icon">&#128260;</span> Post-auth redirect for Asignet clients</div>
-        </div>
-      </div>
       <div class="server-card ext">
         <div class="server-name">&#9881; jaxapi (JAX API)</div>
         <div class="server-details">
@@ -1146,11 +1121,11 @@
   <h3>Open Questions / Items to Confirm for Complete Diagram</h3>
   <ul>
     <li><strong>ASPState (Prod):</strong> Which SQL server hosts the ASPState database for production session state?</li>
-    <li><strong>Steelhead vs Hammerhead:</strong> Which Mako config (Steelhead vs Hammerhead) is currently active for UtilityWeb?</li>
+    <li><s><strong>Steelhead vs Hammerhead:</strong> Resolved &mdash; Steelhead = EMSDBPR07, Hammerhead = PEMSDBSQL02 (old names, updated to current naming convention by Infrastructure).</s></li>
     <li><strong>Load Balancer:</strong> What is the load balancer make/model? (F5, HAProxy, etc.) What VIP/hostname does it expose?</li>
     <li><strong>Reporting Server (Prod):</strong> What is the production SSRS server name? (Dev/test uses SQLDEV02.) ReportTrak queries run against UtilityWeb DB on EMSDBPR05.</li>
     <li><strong>Mako server OS/specs:</strong> Windows Server version and IIS version on Mako 1-5?</li>
-    <li><strong>Bluefin/Steelhead/Hammerhead:</strong> Are these named instances, aliases, or physical server names? Are any of them the same physical box as EMSDBPR05/07?</li>
+    <li><s><strong>Bluefin/Steelhead/Hammerhead:</strong> Steelhead = EMSDBPR07, Hammerhead = PEMSDBSQL02 (legacy aliases, renamed by Infrastructure). Bluefin mapping still TBD.</s></li>
     <li><strong>Acme14 DB server:</strong> Does test point to emsdbdev02 for all databases or are some on Acme14 locally?</li>
     <li><strong>Network topology:</strong> VLAN segmentation between web tier, DB tier, and external access?</li>
   </ul>
