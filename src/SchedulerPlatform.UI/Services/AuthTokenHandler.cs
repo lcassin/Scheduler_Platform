@@ -246,14 +246,22 @@ public class AuthTokenHandler : DelegatingHandler
 
         var response = await base.SendAsync(request, cancellationToken);
 
-        // Check for 401 Unauthorized - session has expired
-        if (response.StatusCode == HttpStatusCode.Unauthorized)
+        // Check for 401 Unauthorized or 403 Forbidden - session has expired or token is invalid
+        // APIs may return either status code when a JWT token expires:
+        // - 401 when the token is missing or the scheme is rejected
+        // - 403 when the token is present but expired/invalid (common with bearer token validation)
+        if (response.StatusCode == HttpStatusCode.Unauthorized || response.StatusCode == HttpStatusCode.Forbidden)
         {
-            // Log the WWW-Authenticate header to understand why the token was rejected
             var wwwAuthenticate = response.Headers.WwwAuthenticate.ToString();
             _logger.LogWarning(
-                "Received 401 Unauthorized from API. Request: {Method} {Uri}, WWW-Authenticate: {WwwAuthenticate}",
-                request.Method, request.RequestUri, wwwAuthenticate);
+                "Received {StatusCode} from API. Request: {Method} {Uri}, WWW-Authenticate: {WwwAuthenticate}",
+                response.StatusCode, request.Method, request.RequestUri, wwwAuthenticate);
+            
+            // Clear the stale token from the store so subsequent requests don't keep using it
+            if (!string.IsNullOrEmpty(userKey))
+            {
+                GlobalTokenStore.RemoveToken(userKey);
+            }
             
             // Notify all subscribers (like MainLayout) that the session has expired
             // This allows centralized handling of session expiration with automatic redirect

@@ -116,7 +116,7 @@ public static class Config
                     "role",
                     "permissions"
                 },
-                AccessTokenLifetime = 3600,
+                AccessTokenLifetime = 28800, // 8 hours - covers a full workday to prevent mid-session 403 errors
                 RequireConsent = false
             },
             new Client
@@ -138,7 +138,7 @@ public static class Config
                 },
                 AlwaysSendClientClaims = true,
                 ClientClaimsPrefix = string.Empty,
-                AccessTokenLifetime = 3600
+                AccessTokenLifetime = 28800 // 8 hours
             },
             new Client
             {
@@ -158,7 +158,7 @@ public static class Config
                     "role",
                     "permissions"
                 },
-                AccessTokenLifetime = 3600,
+                AccessTokenLifetime = 28800, // 8 hours
                 RequireConsent = false
             }
         };
