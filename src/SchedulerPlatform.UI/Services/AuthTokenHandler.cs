@@ -218,6 +218,13 @@ public class AuthTokenHandler : DelegatingHandler
                             "Access token is EXPIRED. Expires: {Expires}, Now: {Now}. Triggering session expiry redirect.",
                             exp, DateTime.UtcNow);
                         
+                        // Clear the stale expired token from the store so subsequent requests
+                        // don't keep re-detecting the same expired token in a loop
+                        if (!string.IsNullOrEmpty(userKey))
+                        {
+                            GlobalTokenStore.RemoveToken(userKey);
+                        }
+                        
                         // Don't send an expired token — trigger session expiry immediately
                         // This prevents confusing 403 errors when the real issue is token expiration
                         _sessionStateService.NotifySessionExpired();
