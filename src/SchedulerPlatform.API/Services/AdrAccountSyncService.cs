@@ -706,6 +706,7 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
                   AND (b.[EffectiveEndDate] IS NULL OR b.[EffectiveEndDate] >= {0})
                   AND (
                     (b.[PrimaryVendorCode] IS NOT NULL AND b.[PrimaryVendorCode] <> '' AND b.[PrimaryVendorCode] = a.[PrimaryVendorCode])
+                    OR (b.[MasterVendorCode] IS NOT NULL AND b.[MasterVendorCode] <> '' AND b.[MasterVendorCode] = a.[MasterVendorCode])
                     OR (b.[VMAccountId] IS NOT NULL AND b.[VMAccountId] = a.[VMAccountId])
                     OR (b.[VMAccountNumber] IS NOT NULL AND b.[VMAccountNumber] <> '' AND b.[VMAccountNumber] = a.[VMAccountNumber])
                     OR (b.[CredentialId] IS NOT NULL AND b.[CredentialId] = a.[CredentialId])
@@ -728,6 +729,7 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
                   AND (b.[EffectiveEndDate] IS NULL OR b.[EffectiveEndDate] >= b.[EffectiveStartDate])
                   AND (
                     (b.[PrimaryVendorCode] IS NOT NULL AND b.[PrimaryVendorCode] <> '' AND b.[PrimaryVendorCode] = a.[PrimaryVendorCode])
+                    OR (b.[MasterVendorCode] IS NOT NULL AND b.[MasterVendorCode] <> '' AND b.[MasterVendorCode] = a.[MasterVendorCode])
                     OR (b.[VMAccountId] IS NOT NULL AND b.[VMAccountId] = a.[VMAccountId])
                     OR (b.[VMAccountNumber] IS NOT NULL AND b.[VMAccountNumber] <> '' AND b.[VMAccountNumber] = a.[VMAccountNumber])
                     OR (b.[CredentialId] IS NOT NULL AND b.[CredentialId] = a.[CredentialId])
@@ -744,7 +746,12 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
     }
 
     /// <summary>
-    /// Cancels/closes all non-terminal jobs belonging to currently-blacklisted accounts.
+    /// Handles jobs for currently-blacklisted accounts in two groups:
+    /// 1. Pre-downstream jobs (Pending, CredentialCheckRequested, CredentialVerified, CredentialFailed)
+    ///    → Cancelled immediately since they haven't fired downstream yet.
+    /// 2. Post-downstream jobs (ScrapeRequested, ScrapeInProgress, StatusCheckInProgress, CredentialCheckInProgress)
+    ///    → Set to BlacklistedPendingReview so the status check pipeline continues monitoring them
+    ///    for downstream results. They auto-close at end of billing cycle.
     /// Runs AFTER UpdateBlacklistFlagsAsync so that IsCurrentlyBlacklisted is up to date.
     /// Uses raw SQL for performance — updates directly in the database without loading entities.
     /// </summary>
@@ -752,13 +759,12 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
         Action<string, int, int>? subStepCallback,
         CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Starting cancellation of jobs for blacklisted accounts");
-        subStepCallback?.Invoke("Cancelling blacklisted account jobs", 0, 1);
+        _logger.LogInformation("Starting cancellation/review of jobs for blacklisted accounts");
+        subStepCallback?.Invoke("Processing blacklisted account jobs", 0, 2);
 
         var now = DateTime.UtcNow;
 
-        // Cancel all non-terminal jobs where the account is currently blacklisted.
-        // Terminal statuses (Completed, Failed, Cancelled, NeedsReview) are left untouched.
+        // Step 1: Cancel pre-downstream jobs immediately (haven't fired to external API yet)
         var cancelSql = @"
             UPDATE j
             SET j.[Status] = 'Cancelled',
@@ -769,13 +775,32 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
             INNER JOIN [AdrAccount] a ON j.[AdrAccountId] = a.[AdrAccountId]
             WHERE a.[IsCurrentlyBlacklisted] = 1
               AND j.[IsDeleted] = 0
-              AND j.[Status] IN ('Pending', 'CredentialCheckRequested', 'CredentialCheckInProgress', 
-                                  'CredentialVerified', 'CredentialFailed', 'ScrapeRequested', 
-                                  'ScrapeInProgress', 'StatusCheckInProgress')";
+              AND j.[Status] IN ('Pending', 'CredentialCheckRequested', 'CredentialVerified', 'CredentialFailed')";
 
         var cancelledCount = await _dbContext.Database.ExecuteSqlRawAsync(cancelSql, new object[] { now }, cancellationToken);
-        _logger.LogInformation("Cancelled {Count} non-terminal jobs for blacklisted accounts", cancelledCount);
-        subStepCallback?.Invoke("Cancelling blacklisted account jobs", 1, 1);
+        _logger.LogInformation("Cancelled {Count} pre-downstream jobs for blacklisted accounts", cancelledCount);
+        subStepCallback?.Invoke("Processing blacklisted account jobs", 1, 2);
+
+        // Step 2: Move post-downstream jobs to BlacklistedPendingReview
+        // These jobs have already fired downstream (credential check or scrape sent to external API).
+        // The status check pipeline will continue monitoring them for downstream results and
+        // auto-close them at end of billing cycle.
+        var reviewSql = @"
+            UPDATE j
+            SET j.[Status] = 'BlacklistedPendingReview',
+                j.[ErrorMessage] = 'Account blacklisted - monitoring for downstream results',
+                j.[ModifiedDateTime] = {0},
+                j.[ModifiedBy] = 'System - Blacklist Sync'
+            FROM [AdrJob] j
+            INNER JOIN [AdrAccount] a ON j.[AdrAccountId] = a.[AdrAccountId]
+            WHERE a.[IsCurrentlyBlacklisted] = 1
+              AND j.[IsDeleted] = 0
+              AND j.[Status] IN ('CredentialCheckInProgress', 'ScrapeRequested', 
+                                  'ScrapeInProgress', 'StatusCheckInProgress')";
+
+        var reviewCount = await _dbContext.Database.ExecuteSqlRawAsync(reviewSql, new object[] { now }, cancellationToken);
+        _logger.LogInformation("Moved {Count} post-downstream jobs to BlacklistedPendingReview for blacklisted accounts", reviewCount);
+        subStepCallback?.Invoke("Processing blacklisted account jobs", 2, 2);
     }
 
     /// <summary>

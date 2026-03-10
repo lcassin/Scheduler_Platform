@@ -476,10 +476,12 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
         var today = currentDate.Date;
 
         // Get scraping-related jobs that need status check
+        // BlacklistedPendingReview jobs are included so the status check pipeline can monitor
+        // downstream results for blacklisted accounts that already fired to the external API.
         var scrapingJobs = await _dbSet
             .Where(j => !j.IsDeleted &&
                         !j.IsManualRequest &&
-                        (j.Status == "ScrapeRequested" || j.Status == "StatusCheckInProgress" || j.Status == "NeedsReview") &&
+                        (j.Status == "ScrapeRequested" || j.Status == "StatusCheckInProgress" || j.Status == "NeedsReview" || j.Status == "BlacklistedPendingReview") &&
                         !j.ScrapingCompletedDateTime.HasValue &&
                         // At least delayDays since last modification
                         j.ModifiedDateTime <= checkDate)
@@ -514,6 +516,8 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
         // Include "NeedsReview" because the status can be fixed downstream and should be re-checked
         // Include "CredentialCheckInProgress" and "CredentialFailed" to check credential verification status
         // (credentials can be fixed by helpdesk and should be re-checked daily until NextRunDate arrives)
+        // BlacklistedPendingReview jobs are included so manual status checks can also
+        // monitor downstream results for blacklisted accounts that already fired to the external API.
         return await _dbSet
             .Where(j => !j.IsDeleted &&
                         // Include all jobs that need status checking
@@ -521,7 +525,8 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                          j.Status == "StatusCheckInProgress" ||
                          j.Status == "NeedsReview" ||
                          j.Status == "CredentialCheckInProgress" ||
-                         j.Status == "CredentialFailed"))
+                         j.Status == "CredentialFailed" ||
+                         j.Status == "BlacklistedPendingReview"))
             .Include(j => j.AdrAccount)
             .ToListAsync();
     }

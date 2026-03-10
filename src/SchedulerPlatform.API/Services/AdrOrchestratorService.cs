@@ -1545,10 +1545,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.AdrStatusId = statusResult.StatusId;
                     job.AdrStatusDescription = statusResult.StatusDescription;
 
-                    // Determine if this is a credential verification job or a scraping job
+                    // Determine if this is a credential verification job, blacklisted-pending-review job, or scraping job
                     // Use the original status (before we changed it to StatusCheckInProgress)
                     var originalStatus = originalStatusByJobId.TryGetValue(jobId, out var origStatus) ? origStatus : job.Status;
                     var isCredentialJob = originalStatus == "CredentialCheckInProgress" || originalStatus == "CredentialFailed";
+                    var isBlacklistedPendingReview = originalStatus == "BlacklistedPendingReview";
                     
                     if (isCredentialJob)
                     {
@@ -1589,6 +1590,73 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             // Still processing - keep as CredentialCheckInProgress
                             job.Status = "CredentialCheckInProgress";
                             result.JobsStillProcessing++;
+                        }
+                    }
+                    else if (isBlacklistedPendingReview)
+                    {
+                        // BlacklistedPendingReview: Account was blacklisted but job already fired downstream.
+                        // We continue monitoring for downstream results so they don't get orphaned.
+                        // If downstream completes (final status), we process the result normally.
+                        // If still processing, we auto-close at end of billing cycle instead of retrying.
+                        if (statusResult.IsFinal)
+                        {
+                            if (statusResult.StatusId == (int)AdrStatus.Complete)
+                            {
+                                // Downstream completed successfully even though account is blacklisted.
+                                // Record the completion so the data isn't lost.
+                                job.Status = "Completed";
+                                job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                                result.JobsCompleted++;
+                                _logger.LogInformation(
+                                    "Job {JobId}: BlacklistedPendingReview - downstream completed (StatusId {StatusId}), marking as Completed",
+                                    job.Id, statusResult.StatusId);
+                                
+                                // Still advance the rule so it doesn't re-fire for the same billing cycle
+                                AdvanceRuleToNextCycleSync(job, rulesById, billingTimeZoneId);
+                            }
+                            else
+                            {
+                                // Downstream returned a final status (AI Canceled, No Documents, error, etc.)
+                                // Close the job as Cancelled since the account is blacklisted anyway
+                                job.Status = "Cancelled";
+                                job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                                job.ErrorMessage = $"Account blacklisted - downstream returned StatusId {statusResult.StatusId}: {statusResult.StatusDescription}";
+                                result.JobsCompleted++;
+                                _logger.LogInformation(
+                                    "Job {JobId}: BlacklistedPendingReview - downstream final (StatusId {StatusId}: {Description}), closing as Cancelled",
+                                    job.Id, statusResult.StatusId, statusResult.StatusDescription);
+                                
+                                // Advance rule so the blacklisted account doesn't get stuck on this cycle
+                                AdvanceRuleToNextCycleSync(job, rulesById, billingTimeZoneId);
+                            }
+                        }
+                        else
+                        {
+                            // Downstream still processing - check if billing window has been exhausted
+                            var billingToday = GetBillingToday(billingTimeZoneId);
+                            var windowEnd = job.NextRangeEndDateTime?.Date ?? billingToday;
+                            
+                            if (billingToday > windowEnd)
+                            {
+                                // Billing window exhausted - auto-close as Cancelled
+                                job.Status = "Cancelled";
+                                job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                                job.ErrorMessage = "Account blacklisted - billing window exhausted without downstream completion";
+                                result.JobsCompleted++;
+                                
+                                _logger.LogInformation(
+                                    "Job {JobId}: BlacklistedPendingReview - billing window exhausted (ended {WindowEnd}), auto-closing as Cancelled",
+                                    job.Id, windowEnd);
+                                
+                                // Advance rule so it moves to the next billing cycle
+                                AdvanceRuleToNextCycleSync(job, rulesById, billingTimeZoneId);
+                            }
+                            else
+                            {
+                                // Still within billing window - keep monitoring as BlacklistedPendingReview
+                                job.Status = "BlacklistedPendingReview";
+                                result.JobsStillProcessing++;
+                            }
                         }
                     }
                     else if (statusResult.IsFinal)
@@ -1985,10 +2053,11 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.LastStatusCheckResponse = TruncateResponse(statusResult.RawResponse, 1000);
                     job.LastStatusCheckDateTime = DateTime.UtcNow;
 
-                    // Determine if this is a credential verification job or a scraping job
+                    // Determine if this is a credential verification job, blacklisted-pending-review job, or scraping job
                     // Use the original status (before we changed it to StatusCheckInProgress)
                     var originalStatus = originalStatusByJobId.TryGetValue(jobId, out var origStatus) ? origStatus : job.Status;
                     var isCredentialJob = originalStatus == "CredentialCheckInProgress" || originalStatus == "CredentialFailed";
+                    var isBlacklistedPendingReview = originalStatus == "BlacklistedPendingReview";
                     
                     if (isCredentialJob)
                     {
@@ -2029,6 +2098,57 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             // Still processing - keep as CredentialCheckInProgress
                             job.Status = "CredentialCheckInProgress";
                             result.JobsStillProcessing++;
+                        }
+                    }
+                    else if (isBlacklistedPendingReview)
+                    {
+                        // BlacklistedPendingReview: Account was blacklisted but job already fired downstream.
+                        // Same logic as in CheckPendingStatusesAsync — process final results, auto-close at end of cycle.
+                        if (statusResult.IsFinal)
+                        {
+                            if (statusResult.StatusId == (int)AdrStatus.Complete)
+                            {
+                                job.Status = "Completed";
+                                job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                                result.JobsCompleted++;
+                                _logger.LogInformation(
+                                    "Job {JobId}: BlacklistedPendingReview - downstream completed (StatusId {StatusId}), marking as Completed",
+                                    job.Id, statusResult.StatusId);
+                                AdvanceRuleToNextCycleSync(job, rulesById, billingTimeZoneId);
+                            }
+                            else
+                            {
+                                job.Status = "Cancelled";
+                                job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                                job.ErrorMessage = $"Account blacklisted - downstream returned StatusId {statusResult.StatusId}: {statusResult.StatusDescription}";
+                                result.JobsCompleted++;
+                                _logger.LogInformation(
+                                    "Job {JobId}: BlacklistedPendingReview - downstream final (StatusId {StatusId}: {Description}), closing as Cancelled",
+                                    job.Id, statusResult.StatusId, statusResult.StatusDescription);
+                                AdvanceRuleToNextCycleSync(job, rulesById, billingTimeZoneId);
+                            }
+                        }
+                        else
+                        {
+                            var billingToday = GetBillingToday(billingTimeZoneId);
+                            var windowEnd = job.NextRangeEndDateTime?.Date ?? billingToday;
+                            
+                            if (billingToday > windowEnd)
+                            {
+                                job.Status = "Cancelled";
+                                job.ScrapingCompletedDateTime = DateTime.UtcNow;
+                                job.ErrorMessage = "Account blacklisted - billing window exhausted without downstream completion";
+                                result.JobsCompleted++;
+                                _logger.LogInformation(
+                                    "Job {JobId}: BlacklistedPendingReview - billing window exhausted (ended {WindowEnd}), auto-closing as Cancelled",
+                                    job.Id, windowEnd);
+                                AdvanceRuleToNextCycleSync(job, rulesById, billingTimeZoneId);
+                            }
+                            else
+                            {
+                                job.Status = "BlacklistedPendingReview";
+                                result.JobsStillProcessing++;
+                            }
                         }
                     }
                     else if (statusResult.IsFinal)
