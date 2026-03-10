@@ -246,16 +246,13 @@ public class AuthTokenHandler : DelegatingHandler
 
         var response = await base.SendAsync(request, cancellationToken);
 
-        // Check for 401 Unauthorized or 403 Forbidden - session has expired or token is invalid
-        // APIs may return either status code when a JWT token expires:
-        // - 401 when the token is missing or the scheme is rejected
-        // - 403 when the token is present but expired/invalid (common with bearer token validation)
-        if (response.StatusCode == HttpStatusCode.Unauthorized || response.StatusCode == HttpStatusCode.Forbidden)
+        // Check for 401 Unauthorized - session has expired
+        if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
             var wwwAuthenticate = response.Headers.WwwAuthenticate.ToString();
             _logger.LogWarning(
-                "Received {StatusCode} from API. Request: {Method} {Uri}, WWW-Authenticate: {WwwAuthenticate}",
-                response.StatusCode, request.Method, request.RequestUri, wwwAuthenticate);
+                "Received 401 Unauthorized from API. Request: {Method} {Uri}, WWW-Authenticate: {WwwAuthenticate}",
+                request.Method, request.RequestUri, wwwAuthenticate);
             
             // Clear the stale token from the store so subsequent requests don't keep using it
             if (!string.IsNullOrEmpty(userKey))
@@ -269,6 +266,54 @@ public class AuthTokenHandler : DelegatingHandler
             
             // Return the response without throwing - let the redirect happen gracefully
             // instead of causing exceptions to propagate through the component tree
+        }
+        
+        // Check for 403 Forbidden — but only treat it as session expiration if the token
+        // is near expiry or missing. A 403 with a valid, non-expired token is a legitimate
+        // permission denial (e.g., non-admin hitting admin endpoint) and should NOT trigger logout.
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            bool tokenIsExpiredOrMissing = string.IsNullOrEmpty(accessToken);
+            
+            if (!tokenIsExpiredOrMissing && !string.IsNullOrEmpty(accessToken))
+            {
+                try
+                {
+                    var handler = new JwtSecurityTokenHandler();
+                    if (handler.CanReadToken(accessToken))
+                    {
+                        var jwt = handler.ReadJwtToken(accessToken);
+                        // Consider token problematic if it expires within 5 minutes
+                        tokenIsExpiredOrMissing = jwt.ValidTo <= DateTime.UtcNow.AddMinutes(5);
+                    }
+                }
+                catch
+                {
+                    // If we can't parse the token, assume it's bad
+                    tokenIsExpiredOrMissing = true;
+                }
+            }
+            
+            if (tokenIsExpiredOrMissing)
+            {
+                _logger.LogWarning(
+                    "Received 403 Forbidden with expired/missing token — treating as session expiration. Request: {Method} {Uri}",
+                    request.Method, request.RequestUri);
+                
+                if (!string.IsNullOrEmpty(userKey))
+                {
+                    GlobalTokenStore.RemoveToken(userKey);
+                }
+                
+                _sessionStateService.NotifySessionExpired();
+            }
+            else
+            {
+                // Legitimate permission denial — log but do NOT trigger session expiration
+                _logger.LogWarning(
+                    "Received 403 Forbidden (permission denied) from API. Request: {Method} {Uri}",
+                    request.Method, request.RequestUri);
+            }
         }
 
         return response;
