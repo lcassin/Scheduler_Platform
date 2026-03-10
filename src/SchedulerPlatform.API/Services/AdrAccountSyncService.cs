@@ -275,6 +275,10 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             
             progressCallback?.Invoke(totalAccountCount, totalAccountCount);
 
+            // Step 4b: Cancel active jobs for accounts that were just marked as deleted
+            // This prevents orphaned jobs from continuing to run for accounts that no longer exist in vendor master
+            await CancelJobsForDeletedAccountsAsync(subStepCallback, cancellationToken);
+
             // Step 5: Update blacklist flags on active (non-deleted) accounts
             // This runs AFTER we have determined the true active accounts (after deletion phase)
             // so that only active accounts get flagged. Deleted/inactive accounts are skipped.
@@ -772,6 +776,43 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
         var cancelledCount = await _dbContext.Database.ExecuteSqlRawAsync(cancelSql, new object[] { now }, cancellationToken);
         _logger.LogInformation("Cancelled {Count} non-terminal jobs for blacklisted accounts", cancelledCount);
         subStepCallback?.Invoke("Cancelling blacklisted account jobs", 1, 1);
+    }
+
+    /// <summary>
+    /// Cancels/closes all non-terminal jobs belonging to deleted accounts.
+    /// Runs AFTER the deletion phase so that IsDeleted is up to date.
+    /// This prevents orphaned jobs from continuing to process for accounts
+    /// that have been removed from the vendor master load table.
+    /// Uses raw SQL for performance — updates directly in the database without loading entities.
+    /// </summary>
+    private async Task CancelJobsForDeletedAccountsAsync(
+        Action<string, int, int>? subStepCallback,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Starting cancellation of jobs for deleted accounts");
+        subStepCallback?.Invoke("Cancelling deleted account jobs", 0, 1);
+
+        var now = DateTime.UtcNow;
+
+        // Cancel all non-terminal jobs where the account is deleted.
+        // Terminal statuses (Completed, Failed, Cancelled, NeedsReview) are left untouched.
+        var cancelSql = @"
+            UPDATE j
+            SET j.[Status] = 'Cancelled',
+                j.[ErrorMessage] = 'Account deleted from vendor master during sync',
+                j.[ModifiedDateTime] = {0},
+                j.[ModifiedBy] = 'System - Deleted Account Sync'
+            FROM [AdrJob] j
+            INNER JOIN [AdrAccount] a ON j.[AdrAccountId] = a.[AdrAccountId]
+            WHERE a.[IsDeleted] = 1
+              AND j.[IsDeleted] = 0
+              AND j.[Status] IN ('Pending', 'CredentialCheckRequested', 'CredentialCheckInProgress', 
+                                  'CredentialVerified', 'CredentialFailed', 'ScrapeRequested', 
+                                  'ScrapeInProgress', 'StatusCheckInProgress')";
+
+        var cancelledCount = await _dbContext.Database.ExecuteSqlRawAsync(cancelSql, new object[] { now }, cancellationToken);
+        _logger.LogInformation("Cancelled {Count} non-terminal jobs for deleted accounts", cancelledCount);
+        subStepCallback?.Invoke("Cancelling deleted account jobs", 1, 1);
     }
 
     /// <summary>
