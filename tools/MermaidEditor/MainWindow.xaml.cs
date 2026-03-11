@@ -1778,9 +1778,10 @@ Console.WriteLine(""Hello, World!"");
                     var scrollTop = _activeDocument.PreviewScrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture);
                     var scrollLeft = _activeDocument.PreviewScrollLeft.ToString(System.Globalization.CultureInfo.InvariantCulture);
                     await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
-                        (function() {{
+                        (async function() {{
                             const markdownContent = {escapedCode};
                             document.getElementById('content').innerHTML = marked.parse(markdownContent);
+                            await renderMermaidBlocks();
                             setupClickHandlers();
                             // Restore scroll position after content is updated
                             // Try all methods since html/body can both have overflow:auto
@@ -1800,9 +1801,10 @@ Console.WriteLine(""Hello, World!"");
                 {
                     // Update content without reloading the page - scroll position is naturally preserved
                     await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
-                        (function() {{
+                        (async function() {{
                             const markdownContent = {escapedCode};
                             document.getElementById('content').innerHTML = marked.parse(markdownContent);
+                            await renderMermaidBlocks();
                             setupClickHandlers();
                         }})();
                     ");
@@ -1853,6 +1855,7 @@ Console.WriteLine(""Hello, World!"");
     <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/xml.min.js""></script>
     <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/json.min.js""></script>
     <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/sql.min.js""></script>
+    <script src=""https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js""></script>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         html, body {{ 
@@ -1895,16 +1898,76 @@ Console.WriteLine(""Hello, World!"");
         .markdown-body table tr:nth-child(2n) {{
             background-color: #f6f8fa;
         }}
+        /* Mermaid diagram containers in markdown */
+        .mermaid-container {{
+            background: #ffffff;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+            overflow: auto;
+            text-align: center;
+        }}
+        .mermaid-container svg {{
+            max-width: 100%;
+            height: auto;
+        }}
+        .mermaid-error {{
+            color: #cf222e;
+            background: #fff5f5;
+            border: 1px solid #cf222e;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+            font-family: monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+        }}
     </style>
 </head>
 <body>
     <article class=""markdown-body"" id=""content""></article>
     <script>
+        // Initialize mermaid for rendering embedded diagrams in markdown
+        mermaid.initialize({{ 
+            startOnLoad: false,
+            theme: 'default',
+            securityLevel: 'loose',
+            fontFamily: 'Segoe UI, Helvetica, Arial, sans-serif'
+        }});
+        
+        // Counter for unique mermaid diagram IDs
+        var mermaidCounter = 0;
+        
+        // Find all mermaid code blocks and render them as diagrams
+        async function renderMermaidBlocks() {{
+            const content = document.getElementById('content');
+            const codeBlocks = content.querySelectorAll('pre code.language-mermaid');
+            
+            for (const codeBlock of codeBlocks) {{
+                const pre = codeBlock.parentElement;
+                const mermaidCode = codeBlock.textContent;
+                const container = document.createElement('div');
+                container.className = 'mermaid-container';
+                
+                try {{
+                    const id = 'mermaid-diagram-' + (mermaidCounter++);
+                    const {{ svg }} = await mermaid.render(id, mermaidCode);
+                    container.innerHTML = svg;
+                }} catch (err) {{
+                    container.className = 'mermaid-error';
+                    container.textContent = 'Mermaid Error: ' + err.message;
+                }}
+                
+                pre.replaceWith(container);
+            }}
+        }}
+        
         const markdownContent = {escapedCode};
         
         marked.setOptions({{
             highlight: function(code, lang) {{
-                if (lang && hljs.getLanguage(lang)) {{
+                if (lang && lang !== 'mermaid' && hljs.getLanguage(lang)) {{
                     try {{
                         return hljs.highlight(code, {{ language: lang }}).value;
                     }} catch (e) {{}}
@@ -1916,6 +1979,9 @@ Console.WriteLine(""Hello, World!"");
         }});
         
         document.getElementById('content').innerHTML = marked.parse(markdownContent);
+        
+        // Render any embedded mermaid diagrams
+        renderMermaidBlocks();
         
         // Add click handlers for click-to-highlight feature
         setupClickHandlers();
@@ -7021,6 +7087,41 @@ Console.WriteLine(""Hello, World!"");
         contextMenu.Items.Add(new Separator());
         contextMenu.Items.Add(closeAllItem);
         contextMenu.Items.Add(closeAllButThisItem);
+        
+        // Add file-related context menu items (only for saved documents)
+        if (!string.IsNullOrEmpty(doc.FilePath))
+        {
+            contextMenu.Items.Add(new Separator());
+            
+            var copyPathItem = new System.Windows.Controls.MenuItem { Header = "Copy File Path" };
+            copyPathItem.Click += (s, e) =>
+            {
+                try
+                {
+                    System.Windows.Clipboard.SetText(doc.FilePath);
+                    StatusText.Text = "File path copied to clipboard";
+                }
+                catch { }
+            };
+            
+            var openLocationItem = new System.Windows.Controls.MenuItem { Header = "Open File Location" };
+            openLocationItem.Click += (s, e) =>
+            {
+                try
+                {
+                    var directory = System.IO.Path.GetDirectoryName(doc.FilePath);
+                    if (!string.IsNullOrEmpty(directory) && System.IO.Directory.Exists(directory))
+                    {
+                        // Open Explorer with the file selected
+                        System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{doc.FilePath}\"");
+                    }
+                }
+                catch { }
+            };
+            
+            contextMenu.Items.Add(copyPathItem);
+            contextMenu.Items.Add(openLocationItem);
+        }
         
         tabBorder.ContextMenu = contextMenu;
         
