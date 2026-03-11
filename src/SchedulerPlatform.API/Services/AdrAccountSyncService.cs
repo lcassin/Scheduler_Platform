@@ -833,7 +833,7 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
               AND j.[IsDeleted] = 0
               AND j.[Status] IN ('Pending', 'CredentialCheckRequested', 'CredentialCheckInProgress', 
                                   'CredentialVerified', 'CredentialFailed', 'ScrapeRequested', 
-                                  'ScrapeInProgress', 'StatusCheckInProgress')";
+                                  'ScrapeInProgress', 'StatusCheckInProgress', 'BlacklistedPendingReview')";
 
         var cancelledCount = await _dbContext.Database.ExecuteSqlRawAsync(cancelSql, new object[] { now }, cancellationToken);
         _logger.LogInformation("Cancelled {Count} non-terminal jobs for deleted accounts", cancelledCount);
