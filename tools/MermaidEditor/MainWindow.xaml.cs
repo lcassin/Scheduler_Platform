@@ -1978,15 +1978,6 @@ Console.WriteLine(""Hello, World!"");
             gfm: true
         }});
         
-        (async function() {{
-        document.getElementById('content').innerHTML = marked.parse(markdownContent);
-        
-        // Render any embedded mermaid diagrams
-        await renderMermaidBlocks();
-        
-        // Add click handlers for click-to-highlight feature
-        setupClickHandlers();
-        
         function setupClickHandlers() {{
             const content = document.getElementById('content');
             
@@ -2156,16 +2147,26 @@ Console.WriteLine(""Hello, World!"");
             }});
         }}
         
-        // Notify C# that markdown is ready and pass target scroll position for restoration
-        var targetScrollLeft = {targetScrollLeft};
-        var targetScrollTop = {targetScrollTop};
-        setTimeout(function() {{
-            window.chrome.webview.postMessage({{ 
-                type: 'markdownReady', 
-                targetScrollLeft: targetScrollLeft, 
-                targetScrollTop: targetScrollTop 
-            }});
-        }}, 50);
+        // Run initial render in async IIFE to properly await mermaid rendering
+        (async function() {{
+            document.getElementById('content').innerHTML = marked.parse(markdownContent);
+            
+            // Render any embedded mermaid diagrams
+            await renderMermaidBlocks();
+            
+            // Add click handlers for click-to-highlight feature
+            setupClickHandlers();
+            
+            // Notify C# that markdown is ready and pass target scroll position for restoration
+            var targetScrollLeft = {targetScrollLeft};
+            var targetScrollTop = {targetScrollTop};
+            setTimeout(function() {{
+                window.chrome.webview.postMessage({{ 
+                    type: 'markdownReady', 
+                    targetScrollLeft: targetScrollLeft, 
+                    targetScrollTop: targetScrollTop 
+                }});
+            }}, 50);
         }})();
     </script>
 </body>
