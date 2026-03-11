@@ -1,0 +1,1429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mermaid Visual Editor</title>
+    <script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/panzoom@9.4.3/dist/panzoom.min.js"></script>
+    <style>
+        :root {
+            /* Dark theme (default) */
+            --bg-color: #1E1E1E;
+            --grid-color: #2D2D30;
+            --grid-dot-color: #3E3E42;
+            --node-fill: #252526;
+            --node-stroke: #3E3E42;
+            --node-text: #D4D4D4;
+            --node-selected-stroke: #007ACC;
+            --node-hover-stroke: #4A4A4E;
+            --edge-color: #6A6A6A;
+            --edge-label-bg: #1E1E1E;
+            --edge-label-text: #D4D4D4;
+            --toolbar-bg: #2D2D30;
+            --toolbar-border: #3E3E42;
+            --toolbar-text: #D4D4D4;
+            --toolbar-hover: #3E3E42;
+            --tooltip-bg: #252526;
+            --tooltip-border: #3E3E42;
+            --subgraph-fill: rgba(62, 62, 66, 0.3);
+            --subgraph-stroke: #3E3E42;
+            --subgraph-text: #858585;
+            --selection-rect: rgba(0, 122, 204, 0.2);
+            --context-menu-bg: #252526;
+            --context-menu-border: #3E3E42;
+            --context-menu-hover: #094771;
+            --context-menu-text: #D4D4D4;
+            --input-bg: #3C3C3C;
+            --input-border: #3E3E42;
+            --input-text: #D4D4D4;
+        }
+
+        .theme-light {
+            --bg-color: #F5F5F5;
+            --grid-color: #E8E8E8;
+            --grid-dot-color: #CCCCCC;
+            --node-fill: #FFFFFF;
+            --node-stroke: #CCCCCC;
+            --node-text: #1E1E1E;
+            --node-selected-stroke: #0078D4;
+            --node-hover-stroke: #999999;
+            --edge-color: #999999;
+            --edge-label-bg: #F5F5F5;
+            --edge-label-text: #1E1E1E;
+            --toolbar-bg: #E8E8E8;
+            --toolbar-border: #CCCCCC;
+            --toolbar-text: #1E1E1E;
+            --toolbar-hover: #D0D0D0;
+            --tooltip-bg: #FFFFFF;
+            --tooltip-border: #CCCCCC;
+            --subgraph-fill: rgba(200, 200, 200, 0.3);
+            --subgraph-stroke: #CCCCCC;
+            --subgraph-text: #6E6E6E;
+            --selection-rect: rgba(0, 120, 212, 0.15);
+            --context-menu-bg: #FFFFFF;
+            --context-menu-border: #CCCCCC;
+            --context-menu-hover: #CCE8FF;
+            --context-menu-text: #1E1E1E;
+            --input-bg: #FFFFFF;
+            --input-border: #CCCCCC;
+            --input-text: #1E1E1E;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: var(--bg-color);
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+
+        #diagram-svg {
+            width: 4000px;
+            height: 4000px;
+            cursor: grab;
+        }
+
+        #diagram-svg:active { cursor: grabbing; }
+
+        /* Grid pattern */
+        .grid-pattern { stroke: var(--grid-dot-color); }
+
+        /* Node styles */
+        .node-group { cursor: pointer; }
+        .node-group:hover .node-shape { stroke: var(--node-hover-stroke); stroke-width: 2; }
+        .node-shape {
+            fill: var(--node-fill);
+            stroke: var(--node-stroke);
+            stroke-width: 1.5;
+            transition: stroke 0.15s, stroke-width 0.15s;
+        }
+        .node-shape.selected {
+            stroke: var(--node-selected-stroke);
+            stroke-width: 2.5;
+            filter: drop-shadow(0 0 4px rgba(0, 122, 204, 0.4));
+        }
+        .node-label {
+            fill: var(--node-text);
+            font-size: 13px;
+            text-anchor: middle;
+            dominant-baseline: central;
+            pointer-events: none;
+        }
+
+        /* Edge styles */
+        .edge-line {
+            fill: none;
+            stroke: var(--edge-color);
+            stroke-width: 1.5;
+        }
+        .edge-line.selected {
+            stroke: var(--node-selected-stroke);
+            stroke-width: 2.5;
+        }
+        .edge-label-bg {
+            fill: var(--edge-label-bg);
+        }
+        .edge-label {
+            fill: var(--edge-label-text);
+            font-size: 11px;
+            text-anchor: middle;
+            dominant-baseline: central;
+            pointer-events: none;
+        }
+        .edge-arrowhead {
+            fill: var(--edge-color);
+        }
+        .edge-arrowhead.selected {
+            fill: var(--node-selected-stroke);
+        }
+
+        /* Subgraph styles */
+        .subgraph-rect {
+            fill: var(--subgraph-fill);
+            stroke: var(--subgraph-stroke);
+            stroke-width: 1;
+            stroke-dasharray: 5,5;
+            rx: 8;
+            ry: 8;
+        }
+        .subgraph-label {
+            fill: var(--subgraph-text);
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        /* Inline text editor */
+        .inline-editor {
+            position: absolute;
+            background: var(--input-bg);
+            border: 2px solid var(--node-selected-stroke);
+            border-radius: 4px;
+            color: var(--input-text);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 13px;
+            padding: 4px 8px;
+            outline: none;
+            z-index: 1000;
+            min-width: 80px;
+            text-align: center;
+        }
+
+        /* Context menu */
+        .context-menu {
+            position: absolute;
+            background: var(--context-menu-bg);
+            border: 1px solid var(--context-menu-border);
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 2000;
+            min-width: 180px;
+            padding: 4px 0;
+            display: none;
+        }
+        .context-menu.visible { display: block; }
+        .context-menu-item {
+            padding: 6px 16px;
+            color: var(--context-menu-text);
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .context-menu-item:hover {
+            background: var(--context-menu-hover);
+        }
+        .context-menu-item.disabled {
+            opacity: 0.4;
+            pointer-events: none;
+        }
+        .context-menu-separator {
+            height: 1px;
+            background: var(--context-menu-border);
+            margin: 4px 0;
+        }
+
+        /* Connection points (shown on hover) */
+        .connection-point {
+            fill: var(--node-selected-stroke);
+            stroke: var(--bg-color);
+            stroke-width: 2;
+            opacity: 0;
+            cursor: crosshair;
+            transition: opacity 0.15s;
+        }
+        .node-group:hover .connection-point,
+        .node-group.drawing-edge .connection-point {
+            opacity: 1;
+        }
+
+        /* Temp edge being drawn */
+        .temp-edge {
+            fill: none;
+            stroke: var(--node-selected-stroke);
+            stroke-width: 2;
+            stroke-dasharray: 6,3;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <svg id="diagram-svg" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+                <!-- Grid pattern -->
+                <pattern id="grid-small" width="20" height="20" patternUnits="userSpaceOnUse">
+                    <circle cx="10" cy="10" r="0.5" fill="var(--grid-dot-color)" />
+                </pattern>
+                <pattern id="grid-large" width="100" height="100" patternUnits="userSpaceOnUse">
+                    <rect width="100" height="100" fill="url(#grid-small)" />
+                    <circle cx="50" cy="50" r="1" fill="var(--grid-dot-color)" />
+                </pattern>
+                <!-- Arrowhead markers -->
+                <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
+                    <polygon points="0 0, 10 3.5, 0 7" class="edge-arrowhead" />
+                </marker>
+                <marker id="arrowhead-selected" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto" markerUnits="strokeWidth">
+                    <polygon points="0 0, 10 3.5, 0 7" class="edge-arrowhead selected" />
+                </marker>
+                <marker id="circle-end" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto" markerUnits="strokeWidth">
+                    <circle cx="4" cy="4" r="3" class="edge-arrowhead" />
+                </marker>
+                <marker id="cross-end" markerWidth="10" markerHeight="10" refX="5" refY="5" orient="auto" markerUnits="strokeWidth">
+                    <path d="M2,2 L8,8 M8,2 L2,8" stroke="var(--edge-color)" stroke-width="2" />
+                </marker>
+            </defs>
+
+            <!-- Background grid -->
+            <rect width="100%" height="100%" fill="url(#grid-large)" />
+
+            <!-- Subgraphs layer (rendered behind nodes) -->
+            <g id="subgraphs-layer"></g>
+
+            <!-- Edges layer -->
+            <g id="edges-layer"></g>
+
+            <!-- Nodes layer -->
+            <g id="nodes-layer"></g>
+
+            <!-- Temp edge for drawing -->
+            <line id="temp-edge" class="temp-edge" style="display:none" />
+        </svg>
+    </div>
+
+    <!-- Context menu -->
+    <div id="context-menu" class="context-menu">
+        <div class="context-menu-item" data-action="add-rectangle">&#9645; Add Rectangle Node</div>
+        <div class="context-menu-item" data-action="add-rounded">&#9711; Add Rounded Node</div>
+        <div class="context-menu-item" data-action="add-diamond">&#9670; Add Diamond Node</div>
+        <div class="context-menu-item" data-action="add-circle">&#9679; Add Circle Node</div>
+        <div class="context-menu-item" data-action="add-hexagon">&#11042; Add Hexagon Node</div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item" data-action="add-edge">&#8594; Draw Edge</div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item" data-action="edit-label">&#9998; Edit Label</div>
+        <div class="context-menu-item" data-action="delete-selected">&#128465; Delete Selected</div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item" data-action="auto-layout">&#9783; Auto Layout</div>
+    </div>
+
+    <!-- Inline text editor -->
+    <input type="text" id="inline-editor" class="inline-editor" style="display:none" />
+
+    <script>
+    (function() {
+        'use strict';
+
+        // ========== State ==========
+        let diagram = {
+            direction: 'TD',
+            nodes: [],
+            edges: [],
+            subgraphs: []
+        };
+
+        let selectedNodeId = null;
+        let selectedEdgeIndex = -1;
+        let isDragging = false;
+        let dragNodeId = null;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let dragNodeStartX = 0;
+        let dragNodeStartY = 0;
+        let isDrawingEdge = false;
+        let drawEdgeFromId = null;
+        let panzoomInstance = null;
+        let contextMenuX = 0;
+        let contextMenuY = 0;
+
+        const svg = document.getElementById('diagram-svg');
+        const nodesLayer = document.getElementById('nodes-layer');
+        const edgesLayer = document.getElementById('edges-layer');
+        const subgraphsLayer = document.getElementById('subgraphs-layer');
+        const contextMenu = document.getElementById('context-menu');
+        const inlineEditor = document.getElementById('inline-editor');
+        const tempEdge = document.getElementById('temp-edge');
+        const canvasContainer = document.getElementById('canvas-container');
+
+        // ========== Initialization ==========
+
+        function initPanzoom() {
+            if (panzoomInstance) {
+                panzoomInstance.dispose();
+            }
+            panzoomInstance = panzoom(svg, {
+                maxZoom: 5,
+                minZoom: 0.1,
+                initialZoom: 1,
+                bounds: false,
+                boundsPadding: 0.1,
+                smoothScroll: false,
+                // Don't pan when dragging nodes
+                beforeMouseDown: function(e) {
+                    // Allow pan only if not clicking on a node or edge
+                    const target = e.target;
+                    const isInteractive = target.closest('.node-group') ||
+                                         target.closest('.edge-group') ||
+                                         target.closest('.connection-point');
+                    return isInteractive;
+                }
+            });
+        }
+
+        // ========== Theme ==========
+
+        window.setTheme = function(theme) {
+            if (theme === 'light') {
+                document.body.classList.add('theme-light');
+            } else {
+                document.body.classList.remove('theme-light');
+            }
+        };
+
+        // ========== Load Diagram from C# ==========
+
+        window.loadDiagram = function(jsonData) {
+            try {
+                const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+                diagram.direction = data.direction || 'TD';
+                diagram.nodes = (data.nodes || []).map(n => ({
+                    id: n.id,
+                    label: n.label || n.id,
+                    shape: n.shape || 'Rectangle',
+                    x: n.x || 0,
+                    y: n.y || 0,
+                    width: n.width || 0,
+                    height: n.height || 0,
+                    cssClass: n.cssClass || null
+                }));
+                diagram.edges = (data.edges || []).map(e => ({
+                    from: e.from,
+                    to: e.to,
+                    label: e.label || '',
+                    style: e.style || 'Solid',
+                    arrowType: e.arrowType || 'Arrow'
+                }));
+                diagram.subgraphs = (data.subgraphs || []).map(s => ({
+                    id: s.id,
+                    label: s.label || s.id,
+                    nodeIds: s.nodeIds || [],
+                    direction: s.direction || null
+                }));
+
+                // Auto-layout if nodes don't have positions
+                const needsLayout = diagram.nodes.some(n => n.x === 0 && n.y === 0);
+                if (needsLayout && diagram.nodes.length > 0) {
+                    autoLayout();
+                }
+
+                render();
+                centerView();
+            } catch (err) {
+                console.error('Failed to load diagram:', err);
+            }
+        };
+
+        // ========== Auto Layout (dagre) ==========
+
+        function autoLayout() {
+            if (typeof dagre === 'undefined') return;
+
+            const g = new dagre.graphlib.Graph();
+            g.setGraph({
+                rankdir: diagram.direction === 'LR' || diagram.direction === 'RL' ? 'LR' : 'TB',
+                nodesep: 60,
+                ranksep: 80,
+                edgesep: 20,
+                marginx: 40,
+                marginy: 40
+            });
+            g.setDefaultEdgeLabel(function() { return {}; });
+
+            diagram.nodes.forEach(node => {
+                const size = estimateNodeSize(node);
+                g.setNode(node.id, { width: size.width, height: size.height });
+            });
+
+            diagram.edges.forEach(edge => {
+                g.setEdge(edge.from, edge.to);
+            });
+
+            dagre.layout(g);
+
+            diagram.nodes.forEach(node => {
+                const layoutNode = g.node(node.id);
+                if (layoutNode) {
+                    node.x = layoutNode.x;
+                    node.y = layoutNode.y;
+                    node.width = layoutNode.width;
+                    node.height = layoutNode.height;
+                }
+            });
+        }
+
+        function estimateNodeSize(node) {
+            const label = node.label || node.id;
+            const charWidth = 8;
+            const textWidth = label.length * charWidth;
+            let width = Math.max(textWidth + 40, 80);
+            let height = 40;
+
+            switch (node.shape) {
+                case 'Circle':
+                case 'DoubleCircle':
+                    const r = Math.max(width, height) / 2 + 10;
+                    width = height = r * 2;
+                    break;
+                case 'Rhombus':
+                    width = Math.max(width * 1.4, 80);
+                    height = Math.max(height * 1.4, 60);
+                    break;
+                case 'Hexagon':
+                    width += 30;
+                    break;
+                case 'Stadium':
+                    width += 20;
+                    break;
+            }
+
+            return { width, height };
+        }
+
+        // ========== Rendering ==========
+
+        function render() {
+            renderSubgraphs();
+            renderEdges();
+            renderNodes();
+        }
+
+        function renderNodes() {
+            nodesLayer.innerHTML = '';
+
+            diagram.nodes.forEach(node => {
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.classList.add('node-group');
+                g.setAttribute('data-node-id', node.id);
+                g.setAttribute('transform', `translate(${node.x}, ${node.y})`);
+
+                // Create shape
+                const shape = createNodeShape(node);
+                if (selectedNodeId === node.id) {
+                    shape.classList.add('selected');
+                }
+                g.appendChild(shape);
+
+                // Create label
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.classList.add('node-label');
+                text.setAttribute('x', '0');
+                text.setAttribute('y', '0');
+                text.textContent = node.label || node.id;
+                g.appendChild(text);
+
+                // Connection points (N, S, E, W)
+                const hw = (node.width || 80) / 2;
+                const hh = (node.height || 40) / 2;
+                const cpPositions = [
+                    { cx: 0, cy: -hh },  // top
+                    { cx: 0, cy: hh },   // bottom
+                    { cx: -hw, cy: 0 },  // left
+                    { cx: hw, cy: 0 }    // right
+                ];
+                cpPositions.forEach(pos => {
+                    const cp = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    cp.classList.add('connection-point');
+                    cp.setAttribute('cx', pos.cx);
+                    cp.setAttribute('cy', pos.cy);
+                    cp.setAttribute('r', '5');
+                    cp.setAttribute('data-node-id', node.id);
+                    g.appendChild(cp);
+                });
+
+                nodesLayer.appendChild(g);
+            });
+        }
+
+        function createNodeShape(node) {
+            const w = node.width || 80;
+            const h = node.height || 40;
+            const hw = w / 2;
+            const hh = h / 2;
+            let shape;
+
+            switch (node.shape) {
+                case 'Rounded':
+                case 'Stadium': {
+                    shape = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    shape.setAttribute('x', -hw);
+                    shape.setAttribute('y', -hh);
+                    shape.setAttribute('width', w);
+                    shape.setAttribute('height', h);
+                    shape.setAttribute('rx', node.shape === 'Stadium' ? hh : 10);
+                    shape.setAttribute('ry', node.shape === 'Stadium' ? hh : 10);
+                    break;
+                }
+                case 'Circle': {
+                    const r = Math.max(hw, hh);
+                    shape = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    shape.setAttribute('cx', 0);
+                    shape.setAttribute('cy', 0);
+                    shape.setAttribute('r', r);
+                    break;
+                }
+                case 'DoubleCircle': {
+                    // Use a group for double circle
+                    shape = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    const r = Math.max(hw, hh);
+                    const outer = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    outer.setAttribute('cx', 0);
+                    outer.setAttribute('cy', 0);
+                    outer.setAttribute('r', r);
+                    outer.classList.add('node-shape');
+                    const inner = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    inner.setAttribute('cx', 0);
+                    inner.setAttribute('cy', 0);
+                    inner.setAttribute('r', r - 5);
+                    inner.classList.add('node-shape');
+                    shape.appendChild(outer);
+                    shape.appendChild(inner);
+                    break;
+                }
+                case 'Rhombus': {
+                    shape = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                    shape.setAttribute('points', `0,${-hh} ${hw},0 0,${hh} ${-hw},0`);
+                    break;
+                }
+                case 'Hexagon': {
+                    const inset = hw * 0.25;
+                    shape = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                    shape.setAttribute('points',
+                        `${-hw + inset},${-hh} ${hw - inset},${-hh} ${hw},0 ${hw - inset},${hh} ${-hw + inset},${hh} ${-hw},0`);
+                    break;
+                }
+                case 'Parallelogram': {
+                    const skew = 15;
+                    shape = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                    shape.setAttribute('points',
+                        `${-hw + skew},${-hh} ${hw + skew},${-hh} ${hw - skew},${hh} ${-hw - skew},${hh}`);
+                    break;
+                }
+                case 'ParallelogramAlt': {
+                    const skew = 15;
+                    shape = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                    shape.setAttribute('points',
+                        `${-hw - skew},${-hh} ${hw - skew},${-hh} ${hw + skew},${hh} ${-hw + skew},${hh}`);
+                    break;
+                }
+                case 'Trapezoid': {
+                    const inset = 15;
+                    shape = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                    shape.setAttribute('points',
+                        `${-hw + inset},${-hh} ${hw - inset},${-hh} ${hw},${hh} ${-hw},${hh}`);
+                    break;
+                }
+                case 'TrapezoidAlt': {
+                    const inset = 15;
+                    shape = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                    shape.setAttribute('points',
+                        `${-hw},${-hh} ${hw},${-hh} ${hw - inset},${hh} ${-hw + inset},${hh}`);
+                    break;
+                }
+                case 'Subroutine': {
+                    // Double vertical lines on sides
+                    shape = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    rect.setAttribute('x', -hw);
+                    rect.setAttribute('y', -hh);
+                    rect.setAttribute('width', w);
+                    rect.setAttribute('height', h);
+                    rect.classList.add('node-shape');
+                    const lineL = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    lineL.setAttribute('x1', -hw + 8);
+                    lineL.setAttribute('y1', -hh);
+                    lineL.setAttribute('x2', -hw + 8);
+                    lineL.setAttribute('y2', hh);
+                    lineL.setAttribute('stroke', 'var(--node-stroke)');
+                    lineL.setAttribute('stroke-width', '1.5');
+                    const lineR = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    lineR.setAttribute('x1', hw - 8);
+                    lineR.setAttribute('y1', -hh);
+                    lineR.setAttribute('x2', hw - 8);
+                    lineR.setAttribute('y2', hh);
+                    lineR.setAttribute('stroke', 'var(--node-stroke)');
+                    lineR.setAttribute('stroke-width', '1.5');
+                    shape.appendChild(rect);
+                    shape.appendChild(lineL);
+                    shape.appendChild(lineR);
+                    break;
+                }
+                case 'Cylindrical': {
+                    // Database cylinder
+                    const ry = 8;
+                    shape = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    const body = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    body.setAttribute('d',
+                        `M${-hw},${-hh + ry} A${hw},${ry} 0 0,1 ${hw},${-hh + ry} V${hh - ry} A${hw},${ry} 0 0,1 ${-hw},${hh - ry} Z`);
+                    body.classList.add('node-shape');
+                    const topEllipse = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+                    topEllipse.setAttribute('cx', 0);
+                    topEllipse.setAttribute('cy', -hh + ry);
+                    topEllipse.setAttribute('rx', hw);
+                    topEllipse.setAttribute('ry', ry);
+                    topEllipse.classList.add('node-shape');
+                    shape.appendChild(body);
+                    shape.appendChild(topEllipse);
+                    break;
+                }
+                case 'Asymmetric': {
+                    // Flag shape: >text]
+                    shape = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                    shape.setAttribute('points',
+                        `${-hw},${-hh} ${hw},${-hh} ${hw},${hh} ${-hw},${hh} ${-hw + 15},0`);
+                    break;
+                }
+                default: {
+                    // Rectangle (default)
+                    shape = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    shape.setAttribute('x', -hw);
+                    shape.setAttribute('y', -hh);
+                    shape.setAttribute('width', w);
+                    shape.setAttribute('height', h);
+                    break;
+                }
+            }
+
+            if (shape.tagName !== 'g') {
+                shape.classList.add('node-shape');
+            }
+            return shape;
+        }
+
+        function renderEdges() {
+            edgesLayer.innerHTML = '';
+
+            diagram.edges.forEach((edge, idx) => {
+                const fromNode = diagram.nodes.find(n => n.id === edge.from);
+                const toNode = diagram.nodes.find(n => n.id === edge.to);
+                if (!fromNode || !toNode) return;
+
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.classList.add('edge-group');
+                g.setAttribute('data-edge-index', idx);
+
+                // Calculate connection points
+                const points = getEdgePoints(fromNode, toNode);
+
+                // Create path
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.classList.add('edge-line');
+                line.setAttribute('x1', points.x1);
+                line.setAttribute('y1', points.y1);
+                line.setAttribute('x2', points.x2);
+                line.setAttribute('y2', points.y2);
+
+                // Apply edge style
+                if (edge.style === 'Dotted') {
+                    line.setAttribute('stroke-dasharray', '6,3');
+                } else if (edge.style === 'Thick') {
+                    line.setAttribute('stroke-width', '3');
+                }
+
+                // Apply arrow type
+                if (edge.arrowType === 'Arrow') {
+                    line.setAttribute('marker-end', selectedEdgeIndex === idx ? 'url(#arrowhead-selected)' : 'url(#arrowhead)');
+                } else if (edge.arrowType === 'Circle') {
+                    line.setAttribute('marker-end', 'url(#circle-end)');
+                } else if (edge.arrowType === 'Cross') {
+                    line.setAttribute('marker-end', 'url(#cross-end)');
+                }
+
+                if (selectedEdgeIndex === idx) {
+                    line.classList.add('selected');
+                }
+
+                g.appendChild(line);
+
+                // Edge label
+                if (edge.label) {
+                    const mx = (points.x1 + points.x2) / 2;
+                    const my = (points.y1 + points.y2) / 2;
+
+                    const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    labelText.classList.add('edge-label');
+                    labelText.setAttribute('x', mx);
+                    labelText.setAttribute('y', my);
+                    labelText.textContent = edge.label;
+
+                    // Background rect sized to text
+                    const tw = edge.label.length * 7 + 12;
+                    labelBg.classList.add('edge-label-bg');
+                    labelBg.setAttribute('x', mx - tw / 2);
+                    labelBg.setAttribute('y', my - 9);
+                    labelBg.setAttribute('width', tw);
+                    labelBg.setAttribute('height', 18);
+                    labelBg.setAttribute('rx', 3);
+
+                    g.appendChild(labelBg);
+                    g.appendChild(labelText);
+                }
+
+                // Invisible wider line for easier click target
+                const hitArea = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                hitArea.setAttribute('x1', points.x1);
+                hitArea.setAttribute('y1', points.y1);
+                hitArea.setAttribute('x2', points.x2);
+                hitArea.setAttribute('y2', points.y2);
+                hitArea.setAttribute('stroke', 'transparent');
+                hitArea.setAttribute('stroke-width', '12');
+                hitArea.setAttribute('cursor', 'pointer');
+                hitArea.setAttribute('data-edge-index', idx);
+                g.appendChild(hitArea);
+
+                edgesLayer.appendChild(g);
+            });
+        }
+
+        function getEdgePoints(fromNode, toNode) {
+            // Simple center-to-center with border intersection
+            const fx = fromNode.x, fy = fromNode.y;
+            const tx = toNode.x, ty = toNode.y;
+            const fw = (fromNode.width || 80) / 2;
+            const fh = (fromNode.height || 40) / 2;
+            const tw = (toNode.width || 80) / 2;
+            const th = (toNode.height || 40) / 2;
+
+            const dx = tx - fx;
+            const dy = ty - fy;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist === 0) return { x1: fx, y1: fy, x2: tx, y2: ty };
+
+            const nx = dx / dist;
+            const ny = dy / dist;
+
+            // Intersection with from node border
+            const fromOffset = getRectBorderOffset(fw, fh, nx, ny);
+            // Intersection with to node border
+            const toOffset = getRectBorderOffset(tw, th, -nx, -ny);
+
+            return {
+                x1: fx + nx * fromOffset,
+                y1: fy + ny * fromOffset,
+                x2: tx - nx * toOffset,
+                y2: ty - ny * toOffset
+            };
+        }
+
+        function getRectBorderOffset(hw, hh, nx, ny) {
+            // Find intersection of ray from center in direction (nx, ny) with rect border
+            if (Math.abs(nx) < 0.001 && Math.abs(ny) < 0.001) return 0;
+            const tx = Math.abs(nx) > 0.001 ? hw / Math.abs(nx) : Infinity;
+            const ty = Math.abs(ny) > 0.001 ? hh / Math.abs(ny) : Infinity;
+            return Math.min(tx, ty);
+        }
+
+        function renderSubgraphs() {
+            subgraphsLayer.innerHTML = '';
+
+            diagram.subgraphs.forEach(sg => {
+                const sgNodes = diagram.nodes.filter(n => sg.nodeIds.includes(n.id));
+                if (sgNodes.length === 0) return;
+
+                // Calculate bounding box
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                sgNodes.forEach(n => {
+                    const hw = (n.width || 80) / 2;
+                    const hh = (n.height || 40) / 2;
+                    minX = Math.min(minX, n.x - hw);
+                    minY = Math.min(minY, n.y - hh);
+                    maxX = Math.max(maxX, n.x + hw);
+                    maxY = Math.max(maxY, n.y + hh);
+                });
+
+                const padding = 30;
+                const labelHeight = 20;
+
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.classList.add('subgraph-group');
+
+                const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                rect.classList.add('subgraph-rect');
+                rect.setAttribute('x', minX - padding);
+                rect.setAttribute('y', minY - padding - labelHeight);
+                rect.setAttribute('width', maxX - minX + padding * 2);
+                rect.setAttribute('height', maxY - minY + padding * 2 + labelHeight);
+                g.appendChild(rect);
+
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.classList.add('subgraph-label');
+                text.setAttribute('x', minX - padding + 10);
+                text.setAttribute('y', minY - padding - 5);
+                text.textContent = sg.label || sg.id;
+                g.appendChild(text);
+
+                subgraphsLayer.appendChild(g);
+            });
+        }
+
+        // ========== Center View ==========
+
+        function centerView() {
+            if (diagram.nodes.length === 0) return;
+            if (!panzoomInstance) return;
+
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            diagram.nodes.forEach(n => {
+                const hw = (n.width || 80) / 2;
+                const hh = (n.height || 40) / 2;
+                minX = Math.min(minX, n.x - hw);
+                minY = Math.min(minY, n.y - hh);
+                maxX = Math.max(maxX, n.x + hw);
+                maxY = Math.max(maxY, n.y + hh);
+            });
+
+            const cx = (minX + maxX) / 2;
+            const cy = (minY + maxY) / 2;
+            const vw = canvasContainer.clientWidth;
+            const vh = canvasContainer.clientHeight;
+
+            // Move so center of diagram is at center of viewport
+            panzoomInstance.moveTo(vw / 2 - cx, vh / 2 - cy);
+        }
+
+        // ========== Event Handlers ==========
+
+        // Node click/drag
+        svg.addEventListener('mousedown', function(e) {
+            const nodeGroup = e.target.closest('.node-group');
+            const edgeHit = e.target.closest('[data-edge-index]');
+            const connectionPt = e.target.closest('.connection-point');
+
+            hideContextMenu();
+
+            if (connectionPt) {
+                // Start drawing edge
+                e.stopPropagation();
+                e.preventDefault();
+                isDrawingEdge = true;
+                drawEdgeFromId = connectionPt.getAttribute('data-node-id');
+                const fromNode = diagram.nodes.find(n => n.id === drawEdgeFromId);
+                if (fromNode) {
+                    tempEdge.setAttribute('x1', fromNode.x);
+                    tempEdge.setAttribute('y1', fromNode.y);
+                    tempEdge.setAttribute('x2', fromNode.x);
+                    tempEdge.setAttribute('y2', fromNode.y);
+                    tempEdge.style.display = '';
+                }
+                return;
+            }
+
+            if (nodeGroup) {
+                e.stopPropagation();
+                const nodeId = nodeGroup.getAttribute('data-node-id');
+                selectNode(nodeId);
+
+                // Start drag
+                const node = diagram.nodes.find(n => n.id === nodeId);
+                if (node) {
+                    isDragging = true;
+                    dragNodeId = nodeId;
+                    const pt = getSVGPoint(e);
+                    dragStartX = pt.x;
+                    dragStartY = pt.y;
+                    dragNodeStartX = node.x;
+                    dragNodeStartY = node.y;
+                }
+                return;
+            }
+
+            if (edgeHit && !nodeGroup) {
+                e.stopPropagation();
+                const idx = parseInt(edgeHit.getAttribute('data-edge-index'));
+                selectEdge(idx);
+                return;
+            }
+
+            // Clicked on canvas - deselect
+            deselectAll();
+        });
+
+        svg.addEventListener('mousemove', function(e) {
+            if (isDragging && dragNodeId) {
+                const pt = getSVGPoint(e);
+                const node = diagram.nodes.find(n => n.id === dragNodeId);
+                if (node) {
+                    node.x = dragNodeStartX + (pt.x - dragStartX);
+                    node.y = dragNodeStartY + (pt.y - dragStartY);
+                    render();
+                }
+                return;
+            }
+
+            if (isDrawingEdge) {
+                const pt = getSVGPoint(e);
+                tempEdge.setAttribute('x2', pt.x);
+                tempEdge.setAttribute('y2', pt.y);
+            }
+        });
+
+        svg.addEventListener('mouseup', function(e) {
+            if (isDragging && dragNodeId) {
+                const node = diagram.nodes.find(n => n.id === dragNodeId);
+                if (node) {
+                    postMessage({
+                        type: 'nodeMoved',
+                        nodeId: node.id,
+                        x: node.x,
+                        y: node.y
+                    });
+                }
+                isDragging = false;
+                dragNodeId = null;
+                return;
+            }
+
+            if (isDrawingEdge) {
+                tempEdge.style.display = 'none';
+                isDrawingEdge = false;
+
+                // Check if mouse is over a node
+                const target = e.target.closest('.node-group');
+                if (target) {
+                    const toId = target.getAttribute('data-node-id');
+                    if (toId && toId !== drawEdgeFromId) {
+                        // Create new edge
+                        diagram.edges.push({
+                            from: drawEdgeFromId,
+                            to: toId,
+                            label: '',
+                            style: 'Solid',
+                            arrowType: 'Arrow'
+                        });
+                        render();
+                        postMessage({
+                            type: 'edgeCreated',
+                            from: drawEdgeFromId,
+                            to: toId,
+                            label: '',
+                            style: 'Solid',
+                            arrowType: 'Arrow'
+                        });
+                    }
+                }
+                drawEdgeFromId = null;
+            }
+        });
+
+        // Double-click to edit label
+        svg.addEventListener('dblclick', function(e) {
+            const nodeGroup = e.target.closest('.node-group');
+            if (nodeGroup) {
+                const nodeId = nodeGroup.getAttribute('data-node-id');
+                startInlineEdit(nodeId);
+                return;
+            }
+
+            // Double-click on edge label
+            const edgeGroup = e.target.closest('.edge-group');
+            if (edgeGroup) {
+                const idx = parseInt(edgeGroup.getAttribute('data-edge-index'));
+                startEdgeLabelEdit(idx);
+            }
+        });
+
+        // Context menu
+        svg.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            const pt = getSVGPoint(e);
+            contextMenuX = pt.x;
+            contextMenuY = pt.y;
+
+            // Check if right-clicked on a node
+            const nodeGroup = e.target.closest('.node-group');
+            if (nodeGroup) {
+                selectNode(nodeGroup.getAttribute('data-node-id'));
+            }
+
+            showContextMenu(e.clientX, e.clientY);
+        });
+
+        // Context menu item clicks
+        contextMenu.addEventListener('click', function(e) {
+            const item = e.target.closest('.context-menu-item');
+            if (!item) return;
+            const action = item.getAttribute('data-action');
+            handleContextMenuAction(action);
+            hideContextMenu();
+        });
+
+        // Hide context menu on click elsewhere
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.context-menu')) {
+                hideContextMenu();
+            }
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            // Don't handle shortcuts when editing text
+            if (inlineEditor.style.display !== 'none') return;
+
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                deleteSelected();
+                e.preventDefault();
+            } else if (e.key === 'Escape') {
+                deselectAll();
+            } else if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
+                postMessage({ type: 'undo' });
+                e.preventDefault();
+            } else if (e.key === 'y' && (e.ctrlKey || e.metaKey)) {
+                postMessage({ type: 'redo' });
+                e.preventDefault();
+            } else if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
+                // Select all - not implemented yet
+                e.preventDefault();
+            }
+        });
+
+        // ========== Selection ==========
+
+        function selectNode(nodeId) {
+            selectedNodeId = nodeId;
+            selectedEdgeIndex = -1;
+            render();
+            postMessage({ type: 'nodeSelected', nodeId: nodeId });
+        }
+
+        function selectEdge(idx) {
+            selectedNodeId = null;
+            selectedEdgeIndex = idx;
+            render();
+            postMessage({ type: 'edgeSelected', edgeIndex: idx });
+        }
+
+        function deselectAll() {
+            selectedNodeId = null;
+            selectedEdgeIndex = -1;
+            render();
+            postMessage({ type: 'selectionCleared' });
+        }
+
+        // ========== Inline Editing ==========
+
+        function startInlineEdit(nodeId) {
+            const node = diagram.nodes.find(n => n.id === nodeId);
+            if (!node) return;
+
+            selectNode(nodeId);
+
+            // Position the input over the node
+            const transform = panzoomInstance ? panzoomInstance.getTransform() : { x: 0, y: 0, scale: 1 };
+            const scale = transform.scale;
+            const screenX = node.x * scale + transform.x;
+            const screenY = node.y * scale + transform.y;
+            const nodeWidth = (node.width || 80) * scale;
+
+            inlineEditor.value = node.label || node.id;
+            inlineEditor.style.display = 'block';
+            inlineEditor.style.left = (screenX - nodeWidth / 2) + 'px';
+            inlineEditor.style.top = (screenY - 14) + 'px';
+            inlineEditor.style.width = nodeWidth + 'px';
+            inlineEditor.style.fontSize = (13 * scale) + 'px';
+            inlineEditor.focus();
+            inlineEditor.select();
+
+            function finishEdit() {
+                const newLabel = inlineEditor.value.trim();
+                if (newLabel && newLabel !== (node.label || node.id)) {
+                    node.label = newLabel;
+                    // Re-estimate size
+                    const size = estimateNodeSize(node);
+                    node.width = size.width;
+                    node.height = size.height;
+                    render();
+                    postMessage({
+                        type: 'nodeEdited',
+                        nodeId: node.id,
+                        label: newLabel,
+                        width: node.width,
+                        height: node.height
+                    });
+                }
+                inlineEditor.style.display = 'none';
+                inlineEditor.removeEventListener('blur', finishEdit);
+                inlineEditor.removeEventListener('keydown', handleKey);
+            }
+
+            function handleKey(e) {
+                if (e.key === 'Enter') {
+                    finishEdit();
+                    e.preventDefault();
+                } else if (e.key === 'Escape') {
+                    inlineEditor.style.display = 'none';
+                    inlineEditor.removeEventListener('blur', finishEdit);
+                    inlineEditor.removeEventListener('keydown', handleKey);
+                }
+            }
+
+            inlineEditor.addEventListener('blur', finishEdit);
+            inlineEditor.addEventListener('keydown', handleKey);
+        }
+
+        function startEdgeLabelEdit(edgeIndex) {
+            const edge = diagram.edges[edgeIndex];
+            if (!edge) return;
+
+            selectEdge(edgeIndex);
+
+            const fromNode = diagram.nodes.find(n => n.id === edge.from);
+            const toNode = diagram.nodes.find(n => n.id === edge.to);
+            if (!fromNode || !toNode) return;
+
+            const transform = panzoomInstance ? panzoomInstance.getTransform() : { x: 0, y: 0, scale: 1 };
+            const scale = transform.scale;
+            const mx = ((fromNode.x + toNode.x) / 2) * scale + transform.x;
+            const my = ((fromNode.y + toNode.y) / 2) * scale + transform.y;
+
+            inlineEditor.value = edge.label || '';
+            inlineEditor.style.display = 'block';
+            inlineEditor.style.left = (mx - 50) + 'px';
+            inlineEditor.style.top = (my - 14) + 'px';
+            inlineEditor.style.width = '100px';
+            inlineEditor.style.fontSize = (11 * scale) + 'px';
+            inlineEditor.focus();
+            inlineEditor.select();
+
+            function finishEdit() {
+                const newLabel = inlineEditor.value.trim();
+                edge.label = newLabel;
+                render();
+                postMessage({
+                    type: 'edgeEdited',
+                    edgeIndex: edgeIndex,
+                    label: newLabel
+                });
+                inlineEditor.style.display = 'none';
+                inlineEditor.removeEventListener('blur', finishEdit);
+                inlineEditor.removeEventListener('keydown', handleKey);
+            }
+
+            function handleKey(e) {
+                if (e.key === 'Enter') {
+                    finishEdit();
+                    e.preventDefault();
+                } else if (e.key === 'Escape') {
+                    inlineEditor.style.display = 'none';
+                    inlineEditor.removeEventListener('blur', finishEdit);
+                    inlineEditor.removeEventListener('keydown', handleKey);
+                }
+            }
+
+            inlineEditor.addEventListener('blur', finishEdit);
+            inlineEditor.addEventListener('keydown', handleKey);
+        }
+
+        // ========== Context Menu ==========
+
+        function showContextMenu(x, y) {
+            // Enable/disable items based on selection
+            const editItem = contextMenu.querySelector('[data-action="edit-label"]');
+            const deleteItem = contextMenu.querySelector('[data-action="delete-selected"]');
+
+            if (selectedNodeId || selectedEdgeIndex >= 0) {
+                editItem.classList.remove('disabled');
+                deleteItem.classList.remove('disabled');
+            } else {
+                editItem.classList.add('disabled');
+                deleteItem.classList.add('disabled');
+            }
+
+            contextMenu.style.left = x + 'px';
+            contextMenu.style.top = y + 'px';
+            contextMenu.classList.add('visible');
+        }
+
+        function hideContextMenu() {
+            contextMenu.classList.remove('visible');
+        }
+
+        function handleContextMenuAction(action) {
+            const shapeMap = {
+                'add-rectangle': 'Rectangle',
+                'add-rounded': 'Rounded',
+                'add-diamond': 'Rhombus',
+                'add-circle': 'Circle',
+                'add-hexagon': 'Hexagon'
+            };
+
+            if (shapeMap[action]) {
+                addNode(shapeMap[action], contextMenuX, contextMenuY);
+            } else if (action === 'add-edge') {
+                // Enter edge drawing mode - user clicks source then target
+                isDrawingEdge = true;
+                // Use selected node as source if one is selected
+                if (selectedNodeId) {
+                    drawEdgeFromId = selectedNodeId;
+                    const fromNode = diagram.nodes.find(n => n.id === drawEdgeFromId);
+                    if (fromNode) {
+                        tempEdge.setAttribute('x1', fromNode.x);
+                        tempEdge.setAttribute('y1', fromNode.y);
+                        tempEdge.setAttribute('x2', fromNode.x);
+                        tempEdge.setAttribute('y2', fromNode.y);
+                        tempEdge.style.display = '';
+                    }
+                }
+            } else if (action === 'edit-label') {
+                if (selectedNodeId) {
+                    startInlineEdit(selectedNodeId);
+                } else if (selectedEdgeIndex >= 0) {
+                    startEdgeLabelEdit(selectedEdgeIndex);
+                }
+            } else if (action === 'delete-selected') {
+                deleteSelected();
+            } else if (action === 'auto-layout') {
+                autoLayout();
+                render();
+                // Notify C# of all new positions
+                diagram.nodes.forEach(n => {
+                    postMessage({
+                        type: 'nodeMoved',
+                        nodeId: n.id,
+                        x: n.x,
+                        y: n.y
+                    });
+                });
+                postMessage({ type: 'autoLayoutApplied' });
+            }
+        }
+
+        // ========== Node/Edge Operations ==========
+
+        function addNode(shape, x, y) {
+            // Generate unique ID
+            let counter = diagram.nodes.length + 1;
+            let id = 'node' + counter;
+            while (diagram.nodes.some(n => n.id === id)) {
+                counter++;
+                id = 'node' + counter;
+            }
+
+            const label = 'New Node';
+            const node = {
+                id: id,
+                label: label,
+                shape: shape,
+                x: x,
+                y: y,
+                width: 0,
+                height: 0,
+                cssClass: null
+            };
+
+            const size = estimateNodeSize(node);
+            node.width = size.width;
+            node.height = size.height;
+
+            diagram.nodes.push(node);
+            render();
+            selectNode(id);
+
+            postMessage({
+                type: 'nodeCreated',
+                nodeId: id,
+                label: label,
+                shape: shape,
+                x: x,
+                y: y,
+                width: node.width,
+                height: node.height
+            });
+
+            // Start editing the label immediately
+            setTimeout(() => startInlineEdit(id), 100);
+        }
+
+        function deleteSelected() {
+            if (selectedNodeId) {
+                const nodeId = selectedNodeId;
+                diagram.nodes = diagram.nodes.filter(n => n.id !== nodeId);
+                // Remove edges connected to this node
+                diagram.edges = diagram.edges.filter(e => e.from !== nodeId && e.to !== nodeId);
+                // Remove from subgraphs
+                diagram.subgraphs.forEach(sg => {
+                    sg.nodeIds = sg.nodeIds.filter(id => id !== nodeId);
+                });
+                selectedNodeId = null;
+                render();
+                postMessage({ type: 'nodeDeleted', nodeId: nodeId });
+            } else if (selectedEdgeIndex >= 0 && selectedEdgeIndex < diagram.edges.length) {
+                const edge = diagram.edges[selectedEdgeIndex];
+                diagram.edges.splice(selectedEdgeIndex, 1);
+                selectedEdgeIndex = -1;
+                render();
+                postMessage({ type: 'edgeDeleted', from: edge.from, to: edge.to });
+            }
+        }
+
+        // ========== Utility ==========
+
+        function getSVGPoint(e) {
+            const ctm = svg.getScreenCTM();
+            if (!ctm) return { x: e.clientX, y: e.clientY };
+            return {
+                x: (e.clientX - ctm.e) / ctm.a,
+                y: (e.clientY - ctm.f) / ctm.d
+            };
+        }
+
+        function postMessage(data) {
+            try {
+                if (window.chrome && window.chrome.webview) {
+                    window.chrome.webview.postMessage(data);
+                }
+            } catch (err) {
+                console.log('postMessage:', JSON.stringify(data));
+            }
+        }
+
+        // ========== External API for C# ==========
+
+        window.updateNode = function(nodeId, props) {
+            const node = diagram.nodes.find(n => n.id === nodeId);
+            if (!node) return;
+            if (props.label !== undefined) node.label = props.label;
+            if (props.shape !== undefined) node.shape = props.shape;
+            if (props.x !== undefined) node.x = props.x;
+            if (props.y !== undefined) node.y = props.y;
+            if (props.width !== undefined) node.width = props.width;
+            if (props.height !== undefined) node.height = props.height;
+            render();
+        };
+
+        window.removeNode = function(nodeId) {
+            diagram.nodes = diagram.nodes.filter(n => n.id !== nodeId);
+            diagram.edges = diagram.edges.filter(e => e.from !== nodeId && e.to !== nodeId);
+            if (selectedNodeId === nodeId) selectedNodeId = null;
+            render();
+        };
+
+        window.addEdge = function(from, to, label, style, arrowType) {
+            diagram.edges.push({ from, to, label: label || '', style: style || 'Solid', arrowType: arrowType || 'Arrow' });
+            render();
+        };
+
+        window.removeEdge = function(from, to) {
+            diagram.edges = diagram.edges.filter(e => !(e.from === from && e.to === to));
+            render();
+        };
+
+        window.applyAutoLayout = function() {
+            autoLayout();
+            render();
+            centerView();
+        };
+
+        window.getState = function() {
+            return JSON.stringify(diagram);
+        };
+
+        // Initialize
+        initPanzoom();
+        render();
+
+        // Notify C# that the visual editor is ready
+        postMessage({ type: 'editorReady' });
+    })();
+    </script>
+</body>
+</html>
