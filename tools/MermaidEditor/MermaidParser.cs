@@ -134,6 +134,7 @@ public static class MermaidParser
                     // Normalize TB to TD (they are equivalent)
                     if (model.Direction == "TB")
                         model.Direction = "TD";
+                    model.DeclarationLineIndex = i;
                     foundDeclaration = true;
                     continue;
                 }

@@ -205,7 +205,9 @@ public class VisualEditorBridge
                 To = e.ToNodeId,
                 Label = string.IsNullOrEmpty(e.Label) ? null : e.Label,
                 Style = e.Style.ToString(),
-                ArrowType = e.ArrowType.ToString()
+                ArrowType = e.ArrowType.ToString(),
+                IsBidirectional = e.IsBidirectional,
+                LinkLength = e.LinkLength
             }).ToList(),
             Subgraphs = model.Subgraphs.Select(s => new SubgraphDto
             {
@@ -507,7 +509,9 @@ public class VisualEditorBridge
                     ToNodeId = e.To ?? string.Empty,
                     Label = e.Label,
                     Style = style,
-                    ArrowType = arrow
+                    ArrowType = arrow,
+                    IsBidirectional = e.IsBidirectional,
+                    LinkLength = e.LinkLength
                 });
             }
         }
@@ -563,6 +567,8 @@ public class VisualEditorBridge
         public string? Label { get; set; }
         public string? Style { get; set; }
         public string? ArrowType { get; set; }
+        public bool IsBidirectional { get; set; }
+        public int LinkLength { get; set; } = 2;
     }
 
     private class SubgraphDto
