@@ -36,8 +36,8 @@ graph TB
         AUTH_NOTE["Duende IdentityServer handles OIDC for<br/>Expensesmart (EMS-IBIS/Utilities Division).<br/>Single-instance per component (LB restricted)."]
 
         subgraph AUTH_PROD["🟢 Production Auth"]
-            DuendeOIDC["🔐 Duende OIDC<br/>oidc.expensesmart.com<br/>Running on Mako2 (single instance)<br/>Clients: UtilityWeb.dbo.ClientSecurity"]
-            LoginSvc["🔒 Login Service<br/>login.expensesmart.com/Home/SsoRedirect<br/>Running on Mako1 (single instance)<br/>SSO redirect / OIDC flow caller"]
+            DuendeOIDC["🔐 Duende OIDC<br/>oidc.expensesmart.com (VIP: 10.1.1.195)<br/>Running on Mako3 (single instance, port 6004)<br/>Mako1/Mako2 disabled for OIDC<br/>Clients: UtilityWeb.dbo.ClientSecurity"]
+            LoginSvc["🔒 Login Service<br/>login.expensesmart.com (VIP: 10.1.1.194)<br/>Running on Mako2 (single instance, port 6003)<br/>Mako1/Mako3 disabled for Login<br/>SSO redirect / OIDC flow caller"]
         end
 
         subgraph AUTH_TEST["🟣 Non-Prod Auth (Acme14)"]
@@ -51,19 +51,19 @@ graph TB
     end
 
     %% ===== LOAD BALANCER =====
-    LB["⚙️ Load Balancer<br/>(Make/model TBD)<br/>Routes to Mako web servers"]
+    LB["⚙️ Kemp Load Masters<br/>HA Cluster (Columbus, dual-appliance failover)<br/>External → Edge FW → NAT → Kemp VIP (DMZ)<br/>→ Web servers (DMZ) → FW → SQL (internal)"]
 
     %% ===== PRODUCTION WEB TIER =====
     subgraph WEB["🏠 Production Web Tier — IIS Servers"]
         direction TB
         subgraph WEB_GENERAL["General Clients (Load Balanced)"]
-            Mako1["🖥️ Mako1 [LB]<br/>IIS — Expensesmart WebForms<br/>All clients except AT&T"]
-            Mako2["🖥️ Mako2 [LB]<br/>IIS — Expensesmart WebForms<br/>+ Duende OIDC host<br/>All clients except AT&T"]
-            Mako3["🖥️ Mako3 [LB]<br/>IIS — Expensesmart WebForms<br/>All clients except AT&T"]
+            Mako1["🖥️ Mako1 [LB]<br/>Win Server 2019 / IIS 10<br/>www.expensesmart.com :4448 (enabled)<br/>All clients except AT&T"]
+            Mako2["🖥️ Mako2 [LB]<br/>Win Server 2019 / IIS 10<br/>www :4448 (enabled) + Login :6003 (enabled)<br/>All clients except AT&T"]
+            Mako3["🖥️ Mako3 [LB]<br/>Win Server 2019 / IIS 10<br/>www :4448 (enabled) + OIDC :6004 (enabled)<br/>All clients except AT&T"]
         end
         subgraph WEB_ATT["AT&T Dedicated (Load Balanced)"]
-            Mako4["🖥️ Mako4 [AT&T LB]<br/>IIS — Expensesmart WebForms<br/>AT&T only (dedicated)<br/>IdP: sailpoint.cso.att.com"]
-            Mako5["🖥️ Mako5 [AT&T LB]<br/>IIS — Expensesmart WebForms<br/>AT&T only (dedicated)"]
+            Mako4["🖥️ Mako4 [AT&T LB]<br/>Win Server 2019 / IIS 10<br/>att.expensesmart.com :4444 (enabled)<br/>AT&T only | IdP: sailpoint.cso.att.com"]
+            Mako5["🖥️ Mako5 [AT&T LB]<br/>Win Server 2019 / IIS 10<br/>att.expensesmart.com :4444 (enabled)<br/>AT&T only (dedicated)"]
         end
     end
 
@@ -130,13 +130,13 @@ graph TB
         PerfTestWeb["📁 perftestweb02<br/>CommPortal Server<br/>http://perftestweb02:18077/"]
         Hyde16["🔧 Hyde16<br/>On-Prem Build Agent (ADO)<br/>Pool: OnPrem Hyde16 / CoLo<br/>SSO config: //hyde/sso/"]
         SMTP["📧 smtp.cassinfo.com<br/>SMTP Email Server<br/>Port 25, no SSL<br/>From: scheduler@cassinfo.com"]
-        PrivPromo["🔒 privpromotion.cassibisint.com<br/>Privilege Escalation Portal<br/>ADO ticket on EMS-IBIS board"]
+        PrivPromo["🔒 privpromotion.cassibisint.com<br/>Privilege Escalation Portal (VIP: 10.1.0.84, :18095)<br/>Servers: emswebpr04 (disabled), emswebpr06 (enabled)<br/>ADO ticket on EMS-IBIS board"]
     end
 
     %% ===== EXTERNAL INTEGRATIONS =====
     subgraph EXT["🔗 External Integrations & Third-Party Services"]
         direction TB
-        BillInfo["🌐 BillInfo<br/>billinfo.com/Login/LoginUser/<br/>documentviewer.billinfo.com<br/>Document viewer integration"]
+        BillInfo["🌐 BillInfo<br/>www.billinfo.com (VIP: 10.1.1.91, :14300)<br/>documentviewer.billinfo.com (VIP: 10.1.1.238, :14302)<br/>Servers: emswebpr01/02/03"]
         ATTIdP["🔐 AT&T IdP<br/>sailpoint.cso.att.com<br/>mylogins.cso.att.com<br/>OIDC: oidc.idp.elogin.att.com"]
         KrogerIdP["🔐 Kroger IdP<br/>PingOne Discovery endpoint<br/>auth.pingone.com/..."]
         ADRScheduler["🔄 ADR Scheduler<br/>Enterprise ADR (Scheduler_Platform)<br/>Links to Duende OIDC endpoint<br/>Shared Azure AD source"]
@@ -318,8 +318,8 @@ graph LR
 sequenceDiagram
     participant U as End User
     participant LB as Load Balancer
-    participant Login as Login Service<br/>(Mako1)
-    participant OIDC as Duende OIDC<br/>(Mako2)
+    participant Login as Login Service<br/>(Mako2, port 6003)
+    participant OIDC as Duende OIDC<br/>(Mako3, port 6004)
     participant IdP as External IdP<br/>(AT&T/Kroger)
     participant IIS as IIS Web Tier<br/>(Mako 1-5)
 
@@ -421,9 +421,9 @@ graph TB
 |------|----------|
 | **ASPState (Prod)** | Which SQL server hosts the ASPState database for production session state? |
 | ~~**Steelhead vs Hammerhead**~~ | ~~Resolved: Steelhead = EMSDBPR07, Hammerhead = PEMSDBSQL02 (old names updated to current naming convention by Infrastructure)~~ |
-| **Load Balancer** | Make/model? (F5, HAProxy, etc.) VIP/hostname? |
+| ~~**Load Balancer**~~ | ~~Resolved: Kemp Technology Load Masters, HA cluster of two appliances (Columbus office). Full VIP/port/state table in HTML diagram.~~ |
 | **SSRS Prod Server** | Production SSRS server name? (Dev/test uses SQLDEV02) |
-| **Mako Server Specs** | Windows Server version and IIS version on Mako 1-5? |
+| ~~**Mako Server Specs**~~ | ~~Resolved: Windows Server 2019 / IIS 10 on Mako 1-5.~~ |
 | ~~**Steelhead/Hammerhead**~~ | ~~Steelhead = EMSDBPR07, Hammerhead = PEMSDBSQL02 (legacy aliases). Bluefin mapping still TBD.~~ |
 | **Acme14 DB Server** | Does test point to EMSDBDEV02 for all databases or some on Acme14 locally? |
-| **Network Topology** | VLAN segmentation between web tier, DB tier, and external access? |
+| ~~**Network Topology**~~ | ~~Resolved: External → Edge firewalls → NAT → Kemp VIP (DMZ) → Web servers (DMZ) → Firewall → SQL Servers (internal, not in DMZ).~~ |
