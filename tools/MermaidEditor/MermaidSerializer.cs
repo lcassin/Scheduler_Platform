@@ -272,7 +272,7 @@ public static class MermaidSerializer
         if (model.Comments.Count > 0)
         {
             var trailingComments = model.Comments
-                .Where(c => c.OriginalLineIndex > 1)
+                .Where(c => c.OriginalLineIndex > 0)
                 .OrderBy(c => c.OriginalLineIndex)
                 .ToList();
 
