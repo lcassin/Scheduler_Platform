@@ -455,8 +455,8 @@
     <div class="wf-arrow">&rarr;</div>
     <div class="wf-step">
       <div class="wf-icon" style="background:#D83B01">&#9881;</div>
-      <div class="wf-label">Load Balancer</div>
-      <div class="wf-sublabel">Routes to Mako<br>web servers</div>
+      <div class="wf-label">Kemp Load Balancer</div>
+      <div class="wf-sublabel">HA cluster (Columbus)<br>Dual-appliance failover</div>
     </div>
     <div class="wf-arrow">&rarr;</div>
     <div class="wf-step">
@@ -483,7 +483,8 @@
 <div class="section prod">
   <div class="section-label"><span class="icon">&#127968;</span> Production Web Tier &mdash; IIS Servers (Mako)</div>
   <div class="section-content">
-    <p style="font-size:13px;color:#555;margin-bottom:12px;">All production web servers run IIS with the Expensesmart ASP.NET Web Forms application. Load-balanced, with AT&T on dedicated servers.</p>
+    <p style="font-size:13px;color:#555;margin-bottom:12px;">All production web servers run <strong>Windows Server 2019 / IIS 10</strong> with the Expensesmart ASP.NET Web Forms application. Traffic is routed through a <strong>Kemp Technology Load Masters HA cluster</strong> (Columbus office, dual-appliance failover).</p>
+    <p style="font-size:12px;color:#888;margin-bottom:12px;font-style:italic;"><strong>Network path:</strong> External users &rarr; Edge firewalls &rarr; NAT &rarr; Kemp VIP (DMZ) &rarr; Web servers (DMZ) &rarr; Firewall &rarr; SQL servers (internal, not in DMZ).</p>
 
     <div style="margin-bottom:12px;">
       <div class="topo-tier-title feeder">General Clients (Load Balanced)</div>
@@ -493,28 +494,33 @@
         <div class="server-name">&#128421; Mako1 <span class="badge lb">LB</span></div>
         <div class="server-role">Production Web Server</div>
         <div class="server-details">
-          <div class="detail-item"><span class="detail-icon">&#127760;</span> IIS &mdash; Expensesmart WebForms</div>
+          <div class="detail-item"><span class="detail-icon">&#127760;</span> Windows Server 2019 / IIS 10</div>
           <div class="detail-item"><span class="detail-icon">&#128101;</span> All clients except AT&T</div>
-          <div class="detail-item"><span class="detail-icon">&#9989;</span> Load balanced (active)</div>
+          <div class="detail-item"><span class="detail-icon">&#9989;</span> www.expensesmart.com &mdash; <strong>enabled</strong> (port 4448)</div>
+          <div class="detail-item"><span class="detail-icon">&#128683;</span> oidc.expensesmart.com &mdash; disabled</div>
+          <div class="detail-item"><span class="detail-icon">&#128683;</span> login.expensesmart.com &mdash; disabled</div>
         </div>
       </div>
       <div class="server-card web">
         <div class="server-name">&#128421; Mako2 <span class="badge lb">LB</span></div>
-        <div class="server-role">Production Web + Auth Server</div>
+        <div class="server-role">Production Web + Login Server</div>
         <div class="server-details">
-          <div class="detail-item"><span class="detail-icon">&#127760;</span> IIS &mdash; Expensesmart WebForms</div>
-          <div class="detail-item"><span class="detail-icon">&#128272;</span> Duende OIDC: <span class="url-tag">oidc.expensesmart.com</span></div>
+          <div class="detail-item"><span class="detail-icon">&#127760;</span> Windows Server 2019 / IIS 10</div>
+          <div class="detail-item"><span class="detail-icon">&#128274;</span> Login Service: <span class="url-tag">login.expensesmart.com</span> &mdash; <strong>enabled</strong> (port 6003)</div>
           <div class="detail-item"><span class="detail-icon">&#128101;</span> All clients except AT&T</div>
-          <div class="detail-item"><span class="detail-icon">&#9989;</span> Load balanced (active)</div>
+          <div class="detail-item"><span class="detail-icon">&#9989;</span> www.expensesmart.com &mdash; <strong>enabled</strong> (port 4448)</div>
+          <div class="detail-item"><span class="detail-icon">&#128683;</span> oidc.expensesmart.com &mdash; disabled</div>
         </div>
       </div>
       <div class="server-card web">
         <div class="server-name">&#128421; Mako3 <span class="badge lb">LB</span></div>
-        <div class="server-role">Production Web Server</div>
+        <div class="server-role">Production Web + OIDC Server</div>
         <div class="server-details">
-          <div class="detail-item"><span class="detail-icon">&#127760;</span> IIS &mdash; Expensesmart WebForms</div>
+          <div class="detail-item"><span class="detail-icon">&#127760;</span> Windows Server 2019 / IIS 10</div>
+          <div class="detail-item"><span class="detail-icon">&#128272;</span> Duende OIDC: <span class="url-tag">oidc.expensesmart.com</span> &mdash; <strong>enabled</strong> (port 6004)</div>
           <div class="detail-item"><span class="detail-icon">&#128101;</span> All clients except AT&T</div>
-          <div class="detail-item"><span class="detail-icon">&#9989;</span> Load balanced (active)</div>
+          <div class="detail-item"><span class="detail-icon">&#9989;</span> www.expensesmart.com &mdash; <strong>enabled</strong> (port 4448)</div>
+          <div class="detail-item"><span class="detail-icon">&#128683;</span> login.expensesmart.com &mdash; disabled</div>
         </div>
       </div>
     </div>
@@ -527,8 +533,8 @@
         <div class="server-name">&#128421; Mako4 <span class="badge dedicated">AT&T</span> <span class="badge lb">LB</span></div>
         <div class="server-role">Dedicated Web Server &mdash; AT&T</div>
         <div class="server-details">
-          <div class="detail-item"><span class="detail-icon">&#127760;</span> IIS &mdash; Expensesmart WebForms</div>
-          <div class="detail-item"><span class="detail-icon">&#128101;</span> AT&T only (dedicated, load balanced)</div>
+          <div class="detail-item"><span class="detail-icon">&#127760;</span> Windows Server 2019 / IIS 10</div>
+          <div class="detail-item"><span class="detail-icon">&#9989;</span> att.expensesmart.com &mdash; <strong>enabled</strong> (port 4444)</div>
           <div class="detail-item"><span class="detail-icon">&#128279;</span> AT&T IdP: <span class="url-tag">sailpoint.cso.att.com</span></div>
         </div>
       </div>
@@ -536,8 +542,8 @@
         <div class="server-name">&#128421; Mako5 <span class="badge dedicated">AT&T</span> <span class="badge lb">LB</span></div>
         <div class="server-role">Dedicated Web Server &mdash; AT&T</div>
         <div class="server-details">
-          <div class="detail-item"><span class="detail-icon">&#127760;</span> IIS &mdash; Expensesmart WebForms</div>
-          <div class="detail-item"><span class="detail-icon">&#128101;</span> AT&T only (dedicated, load balanced)</div>
+          <div class="detail-item"><span class="detail-icon">&#127760;</span> Windows Server 2019 / IIS 10</div>
+          <div class="detail-item"><span class="detail-icon">&#9989;</span> att.expensesmart.com &mdash; <strong>enabled</strong> (port 4444)</div>
         </div>
       </div>
     </div>
@@ -558,7 +564,8 @@
           <div class="server-name">&#128272; Duende OIDC</div>
           <div class="server-details">
             <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">https://oidc.expensesmart.com</span></div>
-            <div class="detail-item"><span class="detail-icon">&#128421;</span> Running on <strong>Mako2</strong> (single instance)</div>
+            <div class="detail-item"><span class="detail-icon">&#128421;</span> Running on <strong>Mako3</strong> (single instance, port 6004)</div>
+            <div class="detail-item"><span class="detail-icon">&#128268;</span> VIP: 10.1.1.195 &mdash; Mako1(disabled), Mako2(disabled), <strong>Mako3(enabled)</strong></div>
             <div class="detail-item"><span class="detail-icon">&#128451;</span> Clients loaded from <strong>UtilityWeb.dbo.ClientSecurity</strong></div>
           </div>
         </div>
@@ -566,7 +573,8 @@
           <div class="server-name">&#128274; Login Service</div>
           <div class="server-details">
             <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">https://login.expensesmart.com/Home/SsoRedirect</span></div>
-            <div class="detail-item"><span class="detail-icon">&#128421;</span> Running on <strong>Mako1</strong> (single instance)</div>
+            <div class="detail-item"><span class="detail-icon">&#128421;</span> Running on <strong>Mako2</strong> (single instance, port 6003)</div>
+            <div class="detail-item"><span class="detail-icon">&#128268;</span> VIP: 10.1.1.194 &mdash; Mako1(disabled), <strong>Mako2(enabled)</strong>, Mako3(disabled)</div>
             <div class="detail-item"><span class="detail-icon">&#128260;</span> SSO redirect / Caller of OIDC for SSO flow</div>
           </div>
         </div>
@@ -954,6 +962,49 @@
   </div>
 </div>
 
+<!-- ======== LOAD BALANCER & NETWORK ======== -->
+<div class="section prod">
+  <div class="section-label"><span class="icon">&#9881;</span> Load Balancer &amp; Network Topology</div>
+  <div class="section-content">
+    <p style="font-size:13px;color:#555;margin-bottom:12px;"><strong>Kemp Technology Load Masters</strong> &mdash; HA cluster of two appliances with failover (Columbus office).</p>
+    <p style="font-size:12px;color:#888;margin-bottom:12px;font-style:italic;"><strong>Network path:</strong> External users &rarr; Edge firewalls &rarr; NAT &rarr; Kemp VIP front-end (DMZ) &rarr; Web servers (DMZ) &rarr; Firewall &rarr; SQL Servers (internal, <em>not</em> in DMZ).</p>
+
+    <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px;">
+      <thead>
+        <tr style="background:#E1F0FF;">
+          <th style="padding:6px 8px;text-align:left;border:1px solid #ccc;">Site (VIP)</th>
+          <th style="padding:6px 8px;text-align:left;border:1px solid #ccc;">Backend Server</th>
+          <th style="padding:6px 8px;text-align:center;border:1px solid #ccc;">State</th>
+          <th style="padding:6px 8px;text-align:center;border:1px solid #ccc;">Port</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td style="padding:4px 8px;border:1px solid #ccc;font-weight:600;" rowspan="3">oidc.expensesmart.com (10.1.1.195)</td><td style="padding:4px 8px;border:1px solid #ccc;">Mako1</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;color:#999;">disabled</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;">6004</td></tr>
+        <tr><td style="padding:4px 8px;border:1px solid #ccc;">Mako2</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;color:#999;">disabled</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;">6004</td></tr>
+        <tr><td style="padding:4px 8px;border:1px solid #ccc;"><strong>Mako3</strong></td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;color:#498205;font-weight:600;">enabled</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;">6004</td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding:4px 8px;border:1px solid #ccc;font-weight:600;" rowspan="3">login.expensesmart.com (10.1.1.194)</td><td style="padding:4px 8px;border:1px solid #ccc;">Mako1</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;color:#999;">disabled</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;">6003</td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding:4px 8px;border:1px solid #ccc;"><strong>Mako2</strong></td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;color:#498205;font-weight:600;">enabled</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;">6003</td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding:4px 8px;border:1px solid #ccc;">Mako3</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;color:#999;">disabled</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;">6003</td></tr>
+        <tr><td style="padding:4px 8px;border:1px solid #ccc;font-weight:600;" rowspan="3">www.expensesmart.com (10.1.1.53)</td><td style="padding:4px 8px;border:1px solid #ccc;"><strong>Mako1</strong></td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;color:#498205;font-weight:600;">enabled</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;">4448</td></tr>
+        <tr><td style="padding:4px 8px;border:1px solid #ccc;"><strong>Mako2</strong></td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;color:#498205;font-weight:600;">enabled</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;">4448</td></tr>
+        <tr><td style="padding:4px 8px;border:1px solid #ccc;"><strong>Mako3</strong></td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;color:#498205;font-weight:600;">enabled</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;">4448</td></tr>
+        <tr style="background:#FFF0E0;"><td style="padding:4px 8px;border:1px solid #ccc;font-weight:600;" rowspan="2">att.expensesmart.com (10.1.1.54)</td><td style="padding:4px 8px;border:1px solid #ccc;"><strong>Mako4</strong></td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;color:#498205;font-weight:600;">enabled</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;">4444</td></tr>
+        <tr style="background:#FFF0E0;"><td style="padding:4px 8px;border:1px solid #ccc;"><strong>Mako5</strong></td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;color:#498205;font-weight:600;">enabled</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;">4444</td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding:4px 8px;border:1px solid #ccc;font-weight:600;" rowspan="2">UAT Auth (Acme14)</td><td style="padding:4px 8px;border:1px solid #ccc;"><strong>Acme14</strong> (oidc.uat, 10.1.1.197)</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;color:#498205;font-weight:600;">enabled</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;">6011</td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding:4px 8px;border:1px solid #ccc;"><strong>Acme14</strong> (login.uat, 10.1.1.196)</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;color:#498205;font-weight:600;">enabled</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;">6003</td></tr>
+        <tr><td style="padding:4px 8px;border:1px solid #ccc;font-weight:600;" rowspan="3">www.billinfo.com (10.1.1.91)</td><td style="padding:4px 8px;border:1px solid #ccc;">emswebpr01</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;color:#999;">disabled</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;">14300</td></tr>
+        <tr><td style="padding:4px 8px;border:1px solid #ccc;"><strong>emswebpr02</strong></td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;color:#498205;font-weight:600;">enabled</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;">14300</td></tr>
+        <tr><td style="padding:4px 8px;border:1px solid #ccc;"><strong>emswebpr03</strong></td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;color:#498205;font-weight:600;">enabled</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;">14300</td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding:4px 8px;border:1px solid #ccc;font-weight:600;" rowspan="3">documentviewer.billinfo.com (10.1.1.238)</td><td style="padding:4px 8px;border:1px solid #ccc;"><strong>emswebpr01</strong></td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;color:#498205;font-weight:600;">enabled</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;">14302</td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding:4px 8px;border:1px solid #ccc;"><strong>emswebpr02</strong></td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;color:#498205;font-weight:600;">enabled</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;">14302</td></tr>
+        <tr style="background:#f9f9f9;"><td style="padding:4px 8px;border:1px solid #ccc;">emswebpr03</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;color:#999;">disabled</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;">14302</td></tr>
+        <tr><td style="padding:4px 8px;border:1px solid #ccc;font-weight:600;" rowspan="2">privpromotion.cassibisint.com (10.1.0.84)</td><td style="padding:4px 8px;border:1px solid #ccc;">emswebpr04</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;color:#999;">disabled</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;">18095</td></tr>
+        <tr><td style="padding:4px 8px;border:1px solid #ccc;"><strong>emswebpr06</strong></td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;color:#498205;font-weight:600;">enabled</td><td style="padding:4px 8px;border:1px solid #ccc;text-align:center;">18095</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
 <!-- ======== INFRASTRUCTURE & SUPPORTING SERVERS ======== -->
 <div class="section infra">
   <div class="section-label"><span class="icon">&#128736;</span> Supporting Infrastructure</div>
@@ -1021,7 +1072,8 @@
         <div class="server-name">&#128274; privpromotion.cassibisint.com</div>
         <div class="server-role">Privilege Escalation Portal</div>
         <div class="server-details">
-          <div class="detail-item"><span class="detail-icon">&#128274;</span> Used for Priv. Promotion requests</div>
+          <div class="detail-item"><span class="detail-icon">&#128268;</span> VIP: 10.1.0.84 (port 18095)</div>
+          <div class="detail-item"><span class="detail-icon">&#128421;</span> Servers: emswebpr04 (disabled), <strong>emswebpr06</strong> (enabled)</div>
           <div class="detail-item"><span class="detail-icon">&#128196;</span> ADO ticket on EMS-IBIS board</div>
         </div>
       </div>
@@ -1037,9 +1089,10 @@
       <div class="server-card ext">
         <div class="server-name">&#127760; BillInfo</div>
         <div class="server-details">
-          <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">billinfo.com/Login/LoginUser/</span></div>
-          <div class="detail-item"><span class="detail-icon">&#128196;</span> Document viewer integration</div>
-          <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">documentviewer.billinfo.com</span></div>
+          <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">www.billinfo.com</span> (VIP: 10.1.1.91)</div>
+          <div class="detail-item"><span class="detail-icon">&#128279;</span> <span class="url-tag">documentviewer.billinfo.com</span> (VIP: 10.1.1.238)</div>
+          <div class="detail-item"><span class="detail-icon">&#128421;</span> Servers: emswebpr01, emswebpr02, emswebpr03</div>
+          <div class="detail-item"><span class="detail-icon">&#128268;</span> Ports: 14300 (www), 14302 (docviewer)</div>
         </div>
       </div>
       <div class="server-card ext">
@@ -1177,12 +1230,12 @@
   <ul>
     <li><strong>ASPState (Prod):</strong> Which SQL server hosts the ASPState database for production session state?</li>
     <li><s><strong>Steelhead vs Hammerhead:</strong> Resolved &mdash; Steelhead = EMSDBPR07, Hammerhead = PEMSDBSQL02 (old names, updated to current naming convention by Infrastructure).</s></li>
-    <li><strong>Load Balancer:</strong> What is the load balancer make/model? (F5, HAProxy, etc.) What VIP/hostname does it expose?</li>
+    <li><s><strong>Load Balancer:</strong> Resolved &mdash; Kemp Technology Load Masters, HA cluster of two appliances (Columbus office). Full VIP/port/state table added above.</s></li>
     <li><strong>Reporting Server (Prod):</strong> What is the production SSRS server name? (Dev/test uses SQLDEV02.) ReportTrak queries run against UtilityWeb DB on EMSDBPR05.</li>
-    <li><strong>Mako server OS/specs:</strong> Windows Server version and IIS version on Mako 1-5?</li>
+    <li><s><strong>Mako server OS/specs:</strong> Resolved &mdash; Windows Server 2019 / IIS 10 on Mako 1-5.</s></li>
     <li><s><strong>Bluefin/Steelhead/Hammerhead:</strong> Steelhead = EMSDBPR07, Hammerhead = PEMSDBSQL02 (legacy aliases, renamed by Infrastructure). Bluefin mapping still TBD.</s></li>
     <li><strong>Acme14 DB server:</strong> Does test point to emsdbdev02 for all databases or are some on Acme14 locally?</li>
-    <li><strong>Network topology:</strong> VLAN segmentation between web tier, DB tier, and external access?</li>
+    <li><s><strong>Network topology:</strong> Resolved &mdash; External &rarr; Edge firewalls &rarr; NAT &rarr; Kemp VIP (DMZ) &rarr; Web servers (DMZ) &rarr; Firewall &rarr; SQL Servers (internal, not in DMZ).</s></li>
   </ul>
 </div>
 
