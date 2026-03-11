@@ -1978,10 +1978,11 @@ Console.WriteLine(""Hello, World!"");
             gfm: true
         }});
         
+        (async function() {{
         document.getElementById('content').innerHTML = marked.parse(markdownContent);
         
         // Render any embedded mermaid diagrams
-        renderMermaidBlocks();
+        await renderMermaidBlocks();
         
         // Add click handlers for click-to-highlight feature
         setupClickHandlers();
@@ -2165,6 +2166,7 @@ Console.WriteLine(""Hello, World!"");
                 targetScrollTop: targetScrollTop 
             }});
         }}, 50);
+        }})();
     </script>
 </body>
 </html>";
