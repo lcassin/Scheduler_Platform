@@ -23,8 +23,8 @@ public static class MermaidSerializer
 
         var sb = new StringBuilder();
 
-        // Write any comments that appeared before the declaration (line index < 0 or 0)
-        WriteCommentsBeforeLine(sb, model, 0);
+        // Write any comments that appeared before the declaration
+        WriteCommentsBeforeLine(sb, model, model.DeclarationLineIndex);
 
         // Write the flowchart declaration
         var direction = model.Direction;
@@ -272,7 +272,7 @@ public static class MermaidSerializer
         if (model.Comments.Count > 0)
         {
             var trailingComments = model.Comments
-                .Where(c => c.OriginalLineIndex > 0)
+                .Where(c => c.OriginalLineIndex > model.DeclarationLineIndex)
                 .OrderBy(c => c.OriginalLineIndex)
                 .ToList();
 

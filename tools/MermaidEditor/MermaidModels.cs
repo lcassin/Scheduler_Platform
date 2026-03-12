@@ -46,6 +46,12 @@ public class FlowchartModel
     /// The diagram keyword used in the source (e.g., "flowchart" or "graph").
     /// </summary>
     public string DiagramKeyword { get; set; } = "flowchart";
+
+    /// <summary>
+    /// The original line index of the flowchart declaration in the source text.
+    /// Used by the serializer to correctly position comments relative to the declaration.
+    /// </summary>
+    public int DeclarationLineIndex { get; set; }
 }
 
 /// <summary>
