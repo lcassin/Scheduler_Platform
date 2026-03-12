@@ -1530,11 +1530,17 @@
                 text.textContent = (sg.label || sg.id) + (sgNodes.length === 0 ? ' (empty)' : '');
                 g.appendChild(text);
 
-                // Add connection points for edge drawing from/to subgraphs
+                // Store bounding box on subgraph for centerView / fitToView
                 const rx = minX - padding;
                 const ry = minY - padding - labelHeight;
                 const rw = maxX - minX + padding * 2;
                 const rh = maxY - minY + padding * 2 + labelHeight;
+                sg._rx = rx;
+                sg._ry = ry;
+                sg._rw = rw;
+                sg._rh = rh;
+
+                // Add connection points for edge drawing from/to subgraphs
                 const cpSize = 8;
                 const cpPositions = [
                     { x: rx + rw / 2, y: ry },           // top
@@ -1577,13 +1583,32 @@
                 maxY = Math.max(maxY, n.y + hh);
             });
 
+            // Also include subgraph bounding boxes
+            diagram.subgraphs.forEach(sg => {
+                if (sg._rx !== undefined) {
+                    minX = Math.min(minX, sg._rx);
+                    minY = Math.min(minY, sg._ry);
+                    maxX = Math.max(maxX, sg._rx + sg._rw);
+                    maxY = Math.max(maxY, sg._ry + sg._rh);
+                }
+            });
+
+            const contentW = maxX - minX;
+            const contentH = maxY - minY;
             const cx = (minX + maxX) / 2;
             const cy = (minY + maxY) / 2;
             const vw = canvasContainer.clientWidth;
             const vh = canvasContainer.clientHeight;
 
-            // Move so center of diagram is at center of viewport
-            panzoomInstance.moveTo(vw / 2 - cx, vh / 2 - cy);
+            // Calculate scale to fit content with padding
+            const padding = 60;
+            const scaleX = (vw - padding * 2) / contentW;
+            const scaleY = (vh - padding * 2) / contentH;
+            const targetScale = Math.min(scaleX, scaleY, 2); // cap at 2x max
+
+            // Reset zoom to 1 first, then apply new transform
+            panzoomInstance.zoomAbs(0, 0, targetScale);
+            panzoomInstance.moveTo(vw / 2 - cx * targetScale, vh / 2 - cy * targetScale);
         }
 
         // ========== Event Handlers ==========

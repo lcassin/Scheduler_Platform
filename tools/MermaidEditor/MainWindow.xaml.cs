@@ -6029,7 +6029,7 @@ Console.WriteLine(""Hello, World!"");
         aboutWindow.ShowDialog();
     }
 
-    private void ApplyTheme(AppTheme theme)
+    private async void ApplyTheme(AppTheme theme)
     {
         ThemeManager.ApplyTheme(theme);
         UpdateEditorTheme();
@@ -6038,6 +6038,13 @@ Console.WriteLine(""Hello, World!"");
         SvgIconHelper.ClearCache();
         InitializeIcons();
         RenderPreview(); // Re-render preview with new theme
+
+        // Update visual editor theme
+        if (_visualEditorBridge != null && _visualEditorInitialized)
+        {
+            var isDark = ThemeManager.IsDarkTheme;
+            await _visualEditorBridge.SetThemeAsync(isDark ? "dark" : "light");
+        }
     }
 
     private void UpdateEditorTheme()
@@ -6067,6 +6074,13 @@ Console.WriteLine(""Hello, World!"");
                 SvgIconHelper.ClearCache();
                 InitializeIcons();
                 RenderPreview();
+
+                // Update visual editor theme
+                if (_visualEditorBridge != null && _visualEditorInitialized)
+                {
+                    var isDark = ThemeManager.IsDarkTheme;
+                    _ = _visualEditorBridge.SetThemeAsync(isDark ? "dark" : "light");
+                }
             }
 
             // Apply editor settings
