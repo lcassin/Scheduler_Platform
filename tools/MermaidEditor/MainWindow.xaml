@@ -1261,6 +1261,11 @@
         
         <!-- Main Content - Split View -->
         <Grid x:Name="MainContentGrid" Grid.Row="2">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="CodeEditorColumn" Width="*" MinWidth="200"/>
                 <ColumnDefinition x:Name="VisualSplitterColumn" Width="0"/>
@@ -1269,141 +1274,132 @@
                 <ColumnDefinition x:Name="PreviewColumn" Width="*" MinWidth="200"/>
             </Grid.ColumnDefinitions>
             
-            <!-- Left Panel - Code Editor with Document Tabs -->
-            <Grid Grid.Column="0" Background="{DynamicResource ThemeToolbarBackgroundBrush}">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
-                
-                <!-- Document Tabs (populated programmatically) with purple accent styling -->
-                <Grid Grid.Row="0">
-                    <!-- Purple line underneath non-selected tabs -->
-                    <Border Background="{DynamicResource ThemeToolbarBackgroundBrush}" BorderBrush="{DynamicResource ThemePurpleAccentBrush}" 
-                            BorderThickness="0,0,0,1" Margin="0,0,0,0"/>
-                    <ScrollViewer x:Name="DocumentTabScrollViewer" 
-                                  HorizontalScrollBarVisibility="Auto" 
-                                  VerticalScrollBarVisibility="Disabled"
-                                  Background="Transparent">
-                        <StackPanel x:Name="DocumentTabsPanel" Orientation="Horizontal"/>
-                    </ScrollViewer>
-                </Grid>
-                
-                <!-- Navigation Dropdown Bar -->
-                <ComboBox x:Name="NavigationDropdown" 
-                          Grid.Row="1"
-                          Style="{StaticResource NavigationComboBoxStyle}"
-                          HorizontalContentAlignment="Stretch"
-                          VerticalContentAlignment="Center"
-                          BorderThickness="0,0,0,1"
-                          Margin="0,0,0,4"
-                          SelectionChanged="NavigationDropdown_SelectionChanged"
-                          ToolTip="Jump to section">
-                    <ComboBox.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding DisplayText}" Foreground="{DynamicResource ThemeForegroundBrush}" Margin="{Binding IndentMargin}"/>
-                        </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                    <ComboBox.ItemContainerStyle>
-                        <Style TargetType="ComboBoxItem">
-                            <Setter Property="Background" Value="{DynamicResource ThemeToolbarBackgroundBrush}"/>
-                            <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
-                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                            <Setter Property="VerticalContentAlignment" Value="Center"/>
-                            <Setter Property="Padding" Value="8,4"/>
-                            <Setter Property="Template">
-                                <Setter.Value>
-                                    <ControlTemplate TargetType="ComboBoxItem">
-                                        <Border x:Name="Bd" 
-                                                Background="{TemplateBinding Background}" 
-                                                Padding="{TemplateBinding Padding}">
-                                            <ContentPresenter/>
-                                        </Border>
-                                        <ControlTemplate.Triggers>
-                                            <Trigger Property="IsHighlighted" Value="True">
-                                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThemeHoverBrush}"/>
-                                            </Trigger>
-                                            <Trigger Property="IsSelected" Value="True">
-                                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThemeSelectedBrush}"/>
-                                            </Trigger>
-                                        </ControlTemplate.Triggers>
-                                    </ControlTemplate>
-                                </Setter.Value>
-                            </Setter>
-                        </Style>
-                    </ComboBox.ItemContainerStyle>
-                </ComboBox>
-                
-                <!-- Code Editor with purple border on right and subtle grey border on bottom -->
-                <Border Grid.Row="2" 
-                        BorderBrush="{DynamicResource ThemePurpleAccentBrush}" 
-                        BorderThickness="0,0,1,0"
-                        Background="{DynamicResource ThemeBackgroundBrush}">
-                    <Border BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="0,0,0,1">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition x:Name="MinimapColumn" Width="0"/>
-                            </Grid.ColumnDefinitions>
-                            <avalon:TextEditor x:Name="CodeEditor" 
-                                     Grid.Column="0"
-                                     FontFamily="Consolas"
-                                     FontSize="14"
-                                     Background="{DynamicResource ThemeEditorBackgroundBrush}"
-                                     Foreground="{DynamicResource ThemeEditorForegroundBrush}"
-                                     ShowLineNumbers="True"
-                                     WordWrap="False"
-                                     HorizontalScrollBarVisibility="Auto"
-                                     VerticalScrollBarVisibility="Auto"/>
-                            <!-- Minimap Panel -->
-                            <Border x:Name="MinimapBorder" 
-                                    Grid.Column="1" 
-                                    Background="{DynamicResource ThemeEditorBackgroundBrush}"
-                                    BorderBrush="{DynamicResource ThemeBorderBrush}"
-                                    BorderThickness="1,0,0,0"
-                                    ClipToBounds="True"
-                                    Visibility="Collapsed">
-                                <Grid>
-                                    <avalon:TextEditor x:Name="MinimapEditor"
-                                             FontFamily="Consolas"
-                                             FontSize="2"
-                                             Background="{DynamicResource ThemeEditorBackgroundBrush}"
-                                             Foreground="{DynamicResource ThemeEditorForegroundBrush}"
-                                             ShowLineNumbers="False"
-                                             WordWrap="False"
-                                             IsReadOnly="True"
-                                             HorizontalScrollBarVisibility="Hidden"
-                                             VerticalScrollBarVisibility="Hidden"
-                                             IsHitTestVisible="False"/>
-                                    <!-- Viewport indicator overlay - use Grid with Canvas for proper sizing -->
-                                    <Grid x:Name="MinimapOverlayGrid"
-                                          Background="Transparent"
-                                          MouseLeftButtonDown="MinimapViewport_MouseLeftButtonDown"
-                                          MouseMove="MinimapViewport_MouseMove"
-                                          MouseLeftButtonUp="MinimapViewport_MouseLeftButtonUp"
-                                          MouseWheel="MinimapOverlay_MouseWheel"
-                                          SizeChanged="MinimapViewport_SizeChanged">
-                                        <Canvas x:Name="MinimapViewportCanvas" 
-                                                HorizontalAlignment="Stretch"
-                                                VerticalAlignment="Stretch">
-                                            <Border x:Name="MinimapViewportIndicator"
-                                                    Background="#50888888"
-                                                    BorderBrush="{DynamicResource ThemePurpleAccentBrush}"
-                                                    BorderThickness="2"
-                                                    CornerRadius="2"
-                                                    IsHitTestVisible="False"/>
-                                        </Canvas>
-                                    </Grid>
-                                </Grid>
-                            </Border>
-                        </Grid>
-                    </Border>
-                </Border>
+            <!-- Document Tabs - spans all columns so they're always visible in all modes -->
+            <Grid Grid.Row="0" Grid.ColumnSpan="5" Background="{DynamicResource ThemeToolbarBackgroundBrush}">
+                <!-- Purple line underneath non-selected tabs -->
+                <Border Background="{DynamicResource ThemeToolbarBackgroundBrush}" BorderBrush="{DynamicResource ThemePurpleAccentBrush}" 
+                        BorderThickness="0,0,0,1" Margin="0,0,0,0"/>
+                <ScrollViewer x:Name="DocumentTabScrollViewer" 
+                              HorizontalScrollBarVisibility="Auto" 
+                              VerticalScrollBarVisibility="Disabled"
+                              Background="Transparent">
+                    <StackPanel x:Name="DocumentTabsPanel" Orientation="Horizontal"/>
+                </ScrollViewer>
             </Grid>
             
+            <!-- Navigation Dropdown Bar - spans all columns -->
+            <ComboBox x:Name="NavigationDropdown" 
+                      Grid.Row="1" Grid.ColumnSpan="5"
+                      Style="{StaticResource NavigationComboBoxStyle}"
+                      HorizontalContentAlignment="Stretch"
+                      VerticalContentAlignment="Center"
+                      BorderThickness="0,0,0,1"
+                      Margin="0,0,0,4"
+                      SelectionChanged="NavigationDropdown_SelectionChanged"
+                      ToolTip="Jump to section">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate>
+                        <TextBlock Text="{Binding DisplayText}" Foreground="{DynamicResource ThemeForegroundBrush}" Margin="{Binding IndentMargin}"/>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+                <ComboBox.ItemContainerStyle>
+                    <Style TargetType="ComboBoxItem">
+                        <Setter Property="Background" Value="{DynamicResource ThemeToolbarBackgroundBrush}"/>
+                        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        <Setter Property="VerticalContentAlignment" Value="Center"/>
+                        <Setter Property="Padding" Value="8,4"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="ComboBoxItem">
+                                    <Border x:Name="Bd" 
+                                            Background="{TemplateBinding Background}" 
+                                            Padding="{TemplateBinding Padding}">
+                                        <ContentPresenter/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsHighlighted" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThemeHoverBrush}"/>
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThemeSelectedBrush}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ComboBox.ItemContainerStyle>
+            </ComboBox>
+            
+            <!-- Left Panel - Code Editor -->
+            <Border Grid.Row="2" Grid.Column="0"
+                    BorderBrush="{DynamicResource ThemePurpleAccentBrush}" 
+                    BorderThickness="0,0,1,0"
+                    Background="{DynamicResource ThemeBackgroundBrush}">
+                <Border BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="0,0,0,1">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition x:Name="MinimapColumn" Width="0"/>
+                        </Grid.ColumnDefinitions>
+                        <avalon:TextEditor x:Name="CodeEditor" 
+                                 Grid.Column="0"
+                                 FontFamily="Consolas"
+                                 FontSize="14"
+                                 Background="{DynamicResource ThemeEditorBackgroundBrush}"
+                                 Foreground="{DynamicResource ThemeEditorForegroundBrush}"
+                                 ShowLineNumbers="True"
+                                 WordWrap="False"
+                                 HorizontalScrollBarVisibility="Auto"
+                                 VerticalScrollBarVisibility="Auto"/>
+                        <!-- Minimap Panel -->
+                        <Border x:Name="MinimapBorder" 
+                                Grid.Column="1" 
+                                Background="{DynamicResource ThemeEditorBackgroundBrush}"
+                                BorderBrush="{DynamicResource ThemeBorderBrush}"
+                                BorderThickness="1,0,0,0"
+                                ClipToBounds="True"
+                                Visibility="Collapsed">
+                            <Grid>
+                                <avalon:TextEditor x:Name="MinimapEditor"
+                                         FontFamily="Consolas"
+                                         FontSize="2"
+                                         Background="{DynamicResource ThemeEditorBackgroundBrush}"
+                                         Foreground="{DynamicResource ThemeEditorForegroundBrush}"
+                                         ShowLineNumbers="False"
+                                         WordWrap="False"
+                                         IsReadOnly="True"
+                                         HorizontalScrollBarVisibility="Hidden"
+                                         VerticalScrollBarVisibility="Hidden"
+                                         IsHitTestVisible="False"/>
+                                <!-- Viewport indicator overlay - use Grid with Canvas for proper sizing -->
+                                <Grid x:Name="MinimapOverlayGrid"
+                                      Background="Transparent"
+                                      MouseLeftButtonDown="MinimapViewport_MouseLeftButtonDown"
+                                      MouseMove="MinimapViewport_MouseMove"
+                                      MouseLeftButtonUp="MinimapViewport_MouseLeftButtonUp"
+                                      MouseWheel="MinimapOverlay_MouseWheel"
+                                      SizeChanged="MinimapViewport_SizeChanged">
+                                    <Canvas x:Name="MinimapViewportCanvas" 
+                                            HorizontalAlignment="Stretch"
+                                            VerticalAlignment="Stretch">
+                                        <Border x:Name="MinimapViewportIndicator"
+                                                Background="#50888888"
+                                                BorderBrush="{DynamicResource ThemePurpleAccentBrush}"
+                                                BorderThickness="2"
+                                                CornerRadius="2"
+                                                IsHitTestVisible="False"/>
+                                    </Canvas>
+                                </Grid>
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </Border>
+            </Border>
+            
             <!-- Splitter between Code Editor and Visual Editor (visible in Split Mode) -->
-            <GridSplitter x:Name="VisualEditorSplitter" Grid.Column="1" 
+            <GridSplitter x:Name="VisualEditorSplitter" Grid.Row="2" Grid.Column="1" 
                           Width="8" 
                           HorizontalAlignment="Stretch"
                           Background="{DynamicResource ThemeBorderBrush}"
@@ -1423,7 +1419,7 @@
             </GridSplitter>
             
             <!-- Visual Editor Panel -->
-            <Grid x:Name="VisualEditorPanel" Grid.Column="2" Visibility="Collapsed">
+            <Grid x:Name="VisualEditorPanel" Grid.Row="2" Grid.Column="2" Visibility="Collapsed">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
@@ -1441,7 +1437,7 @@
             </Grid>
             
             <!-- Splitter between Editor(s) and Preview -->
-            <GridSplitter Grid.Column="3" 
+            <GridSplitter Grid.Row="2" Grid.Column="3" 
                           Width="8" 
                           HorizontalAlignment="Stretch"
                           Background="{DynamicResource ThemeBorderBrush}"
@@ -1460,7 +1456,7 @@
             </GridSplitter>
             
             <!-- Right Panel - Preview -->
-            <Grid Grid.Column="4">
+            <Grid Grid.Row="2" Grid.Column="4">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
