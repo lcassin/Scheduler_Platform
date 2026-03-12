@@ -486,7 +486,10 @@
             transition: opacity 0.15s;
         }
         .node-group:hover .connection-point,
-        .node-group.drawing-edge .connection-point {
+        .node-group.drawing-edge .connection-point,
+        .subgraph-group:hover .connection-point,
+        .subgraph-group.drawing-edge .connection-point,
+        .edge-drawing-active .connection-point {
             opacity: 1;
         }
 
@@ -1358,28 +1361,42 @@
             const sgIds = new Set(diagram.subgraphs.map(s => s.id));
 
             diagram.edges.forEach((edge, idx) => {
-                // Resolve subgraph IDs to first contained node
-                let fromId = edge.from;
-                let toId = edge.to;
-                if (sgIds.has(fromId)) {
-                    const sg = diagram.subgraphs.find(s => s.id === fromId);
-                    if (sg && sg.nodeIds.length > 0) fromId = sg.nodeIds[0];
-                }
-                if (sgIds.has(toId)) {
-                    const sg = diagram.subgraphs.find(s => s.id === toId);
-                    if (sg && sg.nodeIds.length > 0) toId = sg.nodeIds[0];
-                }
+                    // Resolve edge endpoints - use subgraph bounding box if endpoint is a subgraph
+                    let fromId = edge.from;
+                    let toId = edge.to;
+                    const fromIsSg = sgIds.has(fromId);
+                    const toIsSg = sgIds.has(toId);
 
-                const fromNode = diagram.nodes.find(n => n.id === fromId);
-                const toNode = diagram.nodes.find(n => n.id === toId);
-                if (!fromNode || !toNode) return;
+                    // Build a virtual node-like object for subgraphs using their bounding box
+                    let fromObj, toObj;
+                    if (fromIsSg) {
+                        const sg = diagram.subgraphs.find(s => s.id === fromId);
+                        if (sg && sg._rx !== undefined) {
+                            fromObj = { x: sg._rx + sg._rw / 2, y: sg._ry + sg._rh / 2, width: sg._rw, height: sg._rh };
+                        } else if (sg && sg.nodeIds.length > 0) {
+                            fromObj = diagram.nodes.find(n => n.id === sg.nodeIds[0]);
+                        }
+                    } else {
+                        fromObj = diagram.nodes.find(n => n.id === fromId);
+                    }
+                    if (toIsSg) {
+                        const sg = diagram.subgraphs.find(s => s.id === toId);
+                        if (sg && sg._rx !== undefined) {
+                            toObj = { x: sg._rx + sg._rw / 2, y: sg._ry + sg._rh / 2, width: sg._rw, height: sg._rh };
+                        } else if (sg && sg.nodeIds.length > 0) {
+                            toObj = diagram.nodes.find(n => n.id === sg.nodeIds[0]);
+                        }
+                    } else {
+                        toObj = diagram.nodes.find(n => n.id === toId);
+                    }
+                    if (!fromObj || !toObj) return;
 
-                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-                g.classList.add('edge-group');
-                g.setAttribute('data-edge-index', idx);
+                    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    g.classList.add('edge-group');
+                    g.setAttribute('data-edge-index', idx);
 
-                // Calculate connection points
-                const points = getEdgePoints(fromNode, toNode);
+                    // Calculate connection points
+                    const points = getEdgePoints(fromObj, toObj);
 
                 // Create path
                 const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
@@ -1573,7 +1590,7 @@
                 sg._rh = rh;
 
                 // Add connection points for edge drawing from/to subgraphs
-                const cpSize = 8;
+                const cpSize = 10;
                 const cpPositions = [
                     { x: rx + rw / 2, y: ry },           // top
                     { x: rx + rw, y: ry + rh / 2 },      // right
@@ -1841,12 +1858,16 @@
             if (isDrawingEdge) {
                 tempEdge.style.display = 'none';
                 isDrawingEdge = false;
+                svg.classList.remove('edge-drawing-active');
 
-                // Check if mouse is over a node or subgraph
+                // Check if mouse is over a node or subgraph connection point
                 let toId = null;
+                const targetCp = e.target.closest('.connection-point');
                 const targetNode = e.target.closest('.node-group');
                 const targetSg = e.target.closest('.subgraph-group');
-                if (targetNode) {
+                if (targetCp) {
+                    toId = targetCp.getAttribute('data-node-id');
+                } else if (targetNode) {
                     toId = targetNode.getAttribute('data-node-id');
                 } else if (targetSg) {
                     toId = targetSg.getAttribute('data-subgraph-id');
@@ -2354,7 +2375,8 @@
             } else if (action === 'add-edge') {
                 // Enter edge drawing mode - user clicks source then target
                 isDrawingEdge = true;
-                // Use selected node as source if one is selected
+                svg.classList.add('edge-drawing-active');
+                // Use selected node or subgraph as source if one is selected
                 if (selectedNodeId) {
                     drawEdgeFromId = selectedNodeId;
                     const fromNode = diagram.nodes.find(n => n.id === drawEdgeFromId);
@@ -2363,6 +2385,18 @@
                         tempEdge.setAttribute('y1', fromNode.y);
                         tempEdge.setAttribute('x2', fromNode.x);
                         tempEdge.setAttribute('y2', fromNode.y);
+                        tempEdge.style.display = '';
+                    }
+                } else if (selectedSubgraphId) {
+                    drawEdgeFromId = selectedSubgraphId;
+                    const sg = diagram.subgraphs.find(s => s.id === selectedSubgraphId);
+                    if (sg && sg._rx !== undefined) {
+                        const cx = sg._rx + sg._rw / 2;
+                        const cy = sg._ry + sg._rh / 2;
+                        tempEdge.setAttribute('x1', cx);
+                        tempEdge.setAttribute('y1', cy);
+                        tempEdge.setAttribute('x2', cx);
+                        tempEdge.setAttribute('y2', cy);
                         tempEdge.style.display = '';
                     }
                 }
@@ -2735,6 +2769,7 @@
 
         document.getElementById('tb-add-edge').addEventListener('click', function() {
             isDrawingEdge = true;
+            svg.classList.add('edge-drawing-active');
             if (selectedNodeId) {
                 drawEdgeFromId = selectedNodeId;
                 const fromNode = diagram.nodes.find(n => n.id === drawEdgeFromId);
@@ -2743,6 +2778,18 @@
                     tempEdge.setAttribute('y1', fromNode.y);
                     tempEdge.setAttribute('x2', fromNode.x);
                     tempEdge.setAttribute('y2', fromNode.y);
+                    tempEdge.style.display = '';
+                }
+            } else if (selectedSubgraphId) {
+                drawEdgeFromId = selectedSubgraphId;
+                const sg = diagram.subgraphs.find(s => s.id === selectedSubgraphId);
+                if (sg && sg._rx !== undefined) {
+                    const cx = sg._rx + sg._rw / 2;
+                    const cy = sg._ry + sg._rh / 2;
+                    tempEdge.setAttribute('x1', cx);
+                    tempEdge.setAttribute('y1', cy);
+                    tempEdge.setAttribute('x2', cx);
+                    tempEdge.setAttribute('y2', cy);
                     tempEdge.style.display = '';
                 }
             }
@@ -2805,6 +2852,7 @@
         svg.addEventListener('mouseup', function() {
             if (!isDrawingEdge) {
                 document.getElementById('tb-add-edge').classList.remove('active');
+                svg.classList.remove('edge-drawing-active');
             }
         });
 
