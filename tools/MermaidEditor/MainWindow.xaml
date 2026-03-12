@@ -1236,13 +1236,32 @@
                     </ToolBarTray>
                 </Border>
                 
+                <!-- Visual Editor Mode Toolbar (only visible for Mermaid files) -->
+                <Border x:Name="VisualEditorModeToolbar" Background="{DynamicResource ThemeToolbarBackgroundBrush}" CornerRadius="4" HorizontalAlignment="Left" Margin="6,0,0,0" Visibility="Collapsed">
+                    <ToolBarTray Background="Transparent">
+                        <ToolBar Band="1" BandIndex="1" Background="Transparent">
+                            <ToggleButton x:Name="TextModeToggle" Click="TextMode_Click" ToolTip="Text Mode" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4" IsChecked="True">
+                                <TextBlock Text="&#xE8A5;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            </ToggleButton>
+                            <ToggleButton x:Name="VisualModeToggle" Click="VisualMode_Click" ToolTip="Visual Mode" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4">
+                                <TextBlock Text="&#xE8B1;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            </ToggleButton>
+                            <ToggleButton x:Name="SplitModeToggle" Click="SplitMode_Click" ToolTip="Split Mode (Text + Visual)" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4">
+                                <TextBlock Text="&#xE8A0;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            </ToggleButton>
+                        </ToolBar>
+                    </ToolBarTray>
+                </Border>
+                
             </StackPanel>
         </Border>
         
         <!-- Main Content - Split View -->
         <Grid x:Name="MainContentGrid" Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" MinWidth="200"/>
+                <ColumnDefinition x:Name="CodeEditorColumn" Width="*" MinWidth="200"/>
+                <ColumnDefinition x:Name="VisualSplitterColumn" Width="0"/>
+                <ColumnDefinition x:Name="VisualEditorColumn" Width="0"/>
                 <ColumnDefinition x:Name="SplitterColumn" Width="5"/>
                 <ColumnDefinition x:Name="PreviewColumn" Width="*" MinWidth="200"/>
             </Grid.ColumnDefinitions>
@@ -1376,8 +1395,46 @@
                 </Border>
             </Grid>
             
-            <!-- Splitter with grip indicator -->
-            <GridSplitter Grid.Column="1" 
+            <!-- Splitter between Code Editor and Visual Editor (visible in Split Mode) -->
+            <GridSplitter x:Name="VisualEditorSplitter" Grid.Column="1" 
+                          Width="8" 
+                          HorizontalAlignment="Stretch"
+                          Background="{DynamicResource ThemeBorderBrush}"
+                          Cursor="SizeWE"
+                          Visibility="Collapsed">
+                <GridSplitter.Template>
+                    <ControlTemplate TargetType="GridSplitter">
+                        <Border Background="{DynamicResource ThemeBorderBrush}">
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+                                <Ellipse Width="4" Height="4" Fill="{DynamicResource ThemeDisabledForegroundBrush}" Margin="0,2"/>
+                                <Ellipse Width="4" Height="4" Fill="{DynamicResource ThemeDisabledForegroundBrush}" Margin="0,2"/>
+                                <Ellipse Width="4" Height="4" Fill="{DynamicResource ThemeDisabledForegroundBrush}" Margin="0,2"/>
+                            </StackPanel>
+                        </Border>
+                    </ControlTemplate>
+                </GridSplitter.Template>
+            </GridSplitter>
+            
+            <!-- Visual Editor Panel -->
+            <Grid x:Name="VisualEditorPanel" Grid.Column="2" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                
+                <Border Grid.Row="0" Background="{DynamicResource ThemeToolbarBackgroundBrush}" Padding="8,4">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="&#xE8B1;" FontFamily="Segoe MDL2 Assets" FontSize="14" Foreground="{DynamicResource ThemeForegroundBrush}" VerticalAlignment="Center"/>
+                        <TextBlock Text="Visual Editor" Foreground="{DynamicResource ThemeForegroundBrush}" FontWeight="SemiBold" Margin="6,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+                
+                <wv2:WebView2 x:Name="VisualEditorWebView" 
+                              Grid.Row="1"/>
+            </Grid>
+            
+            <!-- Splitter between Editor(s) and Preview -->
+            <GridSplitter Grid.Column="3" 
                           Width="8" 
                           HorizontalAlignment="Stretch"
                           Background="{DynamicResource ThemeBorderBrush}"
@@ -1396,7 +1453,7 @@
             </GridSplitter>
             
             <!-- Right Panel - Preview -->
-            <Grid Grid.Column="2">
+            <Grid Grid.Column="4">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>

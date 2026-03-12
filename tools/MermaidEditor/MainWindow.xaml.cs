@@ -42,6 +42,13 @@ public enum RenderMode
     Markdown
 }
 
+public enum VisualEditorMode
+{
+    Text,
+    Visual,
+    Split
+}
+
 public partial class MainWindow : Window
 {
     // P/Invoke for dark title bar
@@ -105,6 +112,13 @@ public partial class MainWindow : Window
     private SpellCheckService? _spellCheckService;
     private SpellCheckBackgroundRenderer? _spellCheckRenderer;
     private bool _isSpellCheckEnabled;
+
+    // Visual editor
+    private VisualEditorMode _visualEditorMode = VisualEditorMode.Text;
+    private VisualEditorBridge? _visualEditorBridge;
+    private bool _visualEditorInitialized;
+    private FlowchartModel? _currentFlowchartModel;
+    private bool _isVisualEditorUpdating; // Prevent re-entrant updates between text <-> visual
 
     private const string DefaultMermaidCode= @"flowchart TD
     A[Start] --> B[End]";
@@ -656,6 +670,9 @@ Console.WriteLine(""Hello, World!"");
             
             // Initialize spell check
             await InitializeSpellCheckAsync();
+            
+            // Initialize Visual Editor WebView2
+            await InitializeVisualEditorAsync();
         }
         catch (Exception ex)
         {
@@ -2683,6 +2700,9 @@ Console.WriteLine(""Hello, World!"");
                 _spellCheckRenderer.InvalidateSpelling();
             }
         }
+
+        // Update visual editor mode toolbar visibility
+        UpdateVisualEditorModeToolbarVisibility();
     }
 
     private void New_Click(object sender, RoutedEventArgs e)
@@ -4365,6 +4385,277 @@ Console.WriteLine(""Hello, World!"");
         };
 
         e.Handled = true;
+    }
+
+    #endregion
+
+    #region Visual Editor Integration
+
+    /// <summary>
+    /// Initializes the Visual Editor WebView2 control and loads the embedded VisualEditor.html.
+    /// </summary>
+    private async Task InitializeVisualEditorAsync()
+    {
+        try
+        {
+            await VisualEditorWebView.EnsureCoreWebView2Async();
+            _visualEditorInitialized = true;
+
+            // Load the embedded VisualEditor.html resource
+            var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+            using var stream = assembly.GetManifestResourceStream("MermaidEditor.Resources.VisualEditor.html");
+            if (stream != null)
+            {
+                using var reader = new StreamReader(stream);
+                var html = await reader.ReadToEndAsync();
+                VisualEditorWebView.NavigateToString(html);
+            }
+
+            // Initialize the bridge with a default model
+            _currentFlowchartModel = new FlowchartModel();
+            _visualEditorBridge = new VisualEditorBridge(VisualEditorWebView, _currentFlowchartModel);
+
+            // Wire up events
+            _visualEditorBridge.ModelChanged += VisualEditorBridge_ModelChanged;
+            _visualEditorBridge.EditorReady += VisualEditorBridge_EditorReady;
+
+            // Apply current theme to visual editor
+            var isDark = ThemeManager.IsDarkTheme;
+            await _visualEditorBridge.SetThemeAsync(isDark ? "dark" : "light");
+        }
+        catch (Exception)
+        {
+            // Visual editor is optional - silently fail if WebView2 can't init for it
+            _visualEditorInitialized = false;
+        }
+    }
+
+    /// <summary>
+    /// Called when the visual editor JS signals it is ready to receive diagram data.
+    /// </summary>
+    private async void VisualEditorBridge_EditorReady(object? sender, EventArgs e)
+    {
+        // If we're already in Visual or Split mode and have a model, send it
+        if (_visualEditorMode != VisualEditorMode.Text && _currentFlowchartModel != null && _visualEditorBridge != null)
+        {
+            await _visualEditorBridge.SendDiagramToEditorAsync();
+        }
+    }
+
+    /// <summary>
+    /// Called when the visual editor modifies the FlowchartModel (node moved, created, deleted, etc.).
+    /// Serializes the model back to text and updates the code editor + preview.
+    /// </summary>
+    private void VisualEditorBridge_ModelChanged(object? sender, ModelChangedEventArgs e)
+    {
+        if (_isVisualEditorUpdating) return;
+
+        _isVisualEditorUpdating = true;
+        try
+        {
+            // Serialize the model back to Mermaid text
+            var text = MermaidSerializer.Serialize(e.Model);
+
+            // Update the code editor text without triggering a re-parse loop
+            if (_visualEditorMode == VisualEditorMode.Visual || _visualEditorMode == VisualEditorMode.Split)
+            {
+                _isSwitchingDocuments = true; // Suppress dirty flag from programmatic text change
+                CodeEditor.Text = text;
+                _isSwitchingDocuments = false;
+
+                // Mark document as dirty
+                _isDirty = true;
+                if (_activeDocument != null)
+                {
+                    _activeDocument.IsDirty = true;
+                }
+                UpdateTitle();
+
+                // Re-render preview
+                RenderPreview();
+            }
+        }
+        finally
+        {
+            _isVisualEditorUpdating = false;
+        }
+    }
+
+    /// <summary>
+    /// Updates the visibility of the visual editor mode toolbar based on the current render mode.
+    /// Only visible for Mermaid files.
+    /// </summary>
+    private void UpdateVisualEditorModeToolbarVisibility()
+    {
+        if (VisualEditorModeToolbar != null)
+        {
+            VisualEditorModeToolbar.Visibility = _currentRenderMode == RenderMode.Mermaid && _visualEditorInitialized
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+
+        // If switching to a non-Mermaid file while in Visual/Split mode, revert to Text mode
+        if (_currentRenderMode != RenderMode.Mermaid && _visualEditorMode != VisualEditorMode.Text)
+        {
+            SwitchToTextMode();
+        }
+    }
+
+    private void TextMode_Click(object sender, RoutedEventArgs e)
+    {
+        SwitchToTextMode();
+    }
+
+    private void VisualMode_Click(object sender, RoutedEventArgs e)
+    {
+        SwitchToVisualMode();
+    }
+
+    private void SplitMode_Click(object sender, RoutedEventArgs e)
+    {
+        SwitchToSplitMode();
+    }
+
+    /// <summary>
+    /// Switches to Text Mode: shows CodeEditor + Preview, hides Visual Editor.
+    /// Serializes the current visual model back to text if coming from Visual/Split mode.
+    /// </summary>
+    private void SwitchToTextMode()
+    {
+        if (_visualEditorMode != VisualEditorMode.Text && _currentFlowchartModel != null && _visualEditorBridge != null)
+        {
+            // Serialize model back to text
+            _isVisualEditorUpdating = true;
+            try
+            {
+                var text = MermaidSerializer.Serialize(_currentFlowchartModel);
+                _isSwitchingDocuments = true;
+                CodeEditor.Text = text;
+                _isSwitchingDocuments = false;
+            }
+            finally
+            {
+                _isVisualEditorUpdating = false;
+            }
+        }
+
+        _visualEditorMode = VisualEditorMode.Text;
+        UpdateModeToggleButtons();
+        ApplyVisualEditorLayout();
+    }
+
+    /// <summary>
+    /// Switches to Visual Mode: shows VisualEditor + Preview, hides CodeEditor.
+    /// Parses current text into the FlowchartModel and sends to visual editor.
+    /// </summary>
+    private async void SwitchToVisualMode()
+    {
+        _visualEditorMode = VisualEditorMode.Visual;
+        UpdateModeToggleButtons();
+        ApplyVisualEditorLayout();
+
+        // Parse current text into model and send to visual editor
+        await ParseAndSendToVisualEditor();
+    }
+
+    /// <summary>
+    /// Switches to Split Mode: shows CodeEditor + VisualEditor + Preview (all three).
+    /// Parses current text and sends to visual editor.
+    /// </summary>
+    private async void SwitchToSplitMode()
+    {
+        _visualEditorMode = VisualEditorMode.Split;
+        UpdateModeToggleButtons();
+        ApplyVisualEditorLayout();
+
+        // Parse current text into model and send to visual editor
+        await ParseAndSendToVisualEditor();
+    }
+
+    /// <summary>
+    /// Parses the current CodeEditor text via MermaidParser and sends the model to the visual editor.
+    /// </summary>
+    private async Task ParseAndSendToVisualEditor()
+    {
+        if (_visualEditorBridge == null || !_visualEditorInitialized) return;
+
+        try
+        {
+            _isVisualEditorUpdating = true;
+            _currentFlowchartModel = MermaidParser.ParseFlowchart(CodeEditor.Text);
+            await _visualEditorBridge.UpdateModelAsync(_currentFlowchartModel);
+        }
+        catch (Exception)
+        {
+            // If parsing fails, keep the existing model
+        }
+        finally
+        {
+            _isVisualEditorUpdating = false;
+        }
+    }
+
+    /// <summary>
+    /// Updates the toggle button checked states to reflect the current mode.
+    /// </summary>
+    private void UpdateModeToggleButtons()
+    {
+        TextModeToggle.IsChecked = _visualEditorMode == VisualEditorMode.Text;
+        VisualModeToggle.IsChecked = _visualEditorMode == VisualEditorMode.Visual;
+        SplitModeToggle.IsChecked = _visualEditorMode == VisualEditorMode.Split;
+    }
+
+    /// <summary>
+    /// Applies the grid layout based on the current VisualEditorMode.
+    /// Controls column widths and panel visibility.
+    /// </summary>
+    private void ApplyVisualEditorLayout()
+    {
+        switch (_visualEditorMode)
+        {
+            case VisualEditorMode.Text:
+                // Show CodeEditor + Preview, hide Visual Editor
+                CodeEditorColumn.Width = new GridLength(1, GridUnitType.Star);
+                CodeEditorColumn.MinWidth = 200;
+                VisualSplitterColumn.Width = new GridLength(0);
+                VisualEditorColumn.Width = new GridLength(0);
+                VisualEditorColumn.MinWidth = 0;
+                VisualEditorPanel.Visibility = Visibility.Collapsed;
+                VisualEditorSplitter.Visibility = Visibility.Collapsed;
+                break;
+
+            case VisualEditorMode.Visual:
+                // Show Visual Editor + Preview, hide CodeEditor
+                CodeEditorColumn.Width = new GridLength(0);
+                CodeEditorColumn.MinWidth = 0;
+                VisualSplitterColumn.Width = new GridLength(0);
+                VisualEditorColumn.Width = new GridLength(1, GridUnitType.Star);
+                VisualEditorColumn.MinWidth = 200;
+                VisualEditorPanel.Visibility = Visibility.Visible;
+                VisualEditorSplitter.Visibility = Visibility.Collapsed;
+                break;
+
+            case VisualEditorMode.Split:
+                // Show all three: CodeEditor + Visual Editor + Preview
+                CodeEditorColumn.Width = new GridLength(1, GridUnitType.Star);
+                CodeEditorColumn.MinWidth = 200;
+                VisualSplitterColumn.Width = new GridLength(5);
+                VisualEditorColumn.Width = new GridLength(1, GridUnitType.Star);
+                VisualEditorColumn.MinWidth = 200;
+                VisualEditorPanel.Visibility = Visibility.Visible;
+                VisualEditorSplitter.Visibility = Visibility.Visible;
+                break;
+        }
+
+        // Ensure preview column stays visible in all modes
+        if (_isPreviewVisible)
+        {
+            SplitterColumn.Width = new GridLength(5);
+            PreviewColumn.Width = _savedPreviewColumnWidth.Value > 0
+                ? _savedPreviewColumnWidth
+                : new GridLength(1, GridUnitType.Star);
+            PreviewColumn.MinWidth = 200;
+        }
     }
 
     #endregion
