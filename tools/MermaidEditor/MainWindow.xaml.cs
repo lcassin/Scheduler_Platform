@@ -7879,6 +7879,23 @@ Console.WriteLine(""Hello, World!"");
             await SavePreviewScrollPositionAsync(_activeDocument);
         }
         
+        // If we're in Visual or Split mode, revert to Text mode BEFORE switching
+        // documents. This prevents the stale visual editor model from being
+        // serialized back into the wrong document's text buffer.
+        if (_visualEditorMode != VisualEditorMode.Text)
+        {
+            // Directly set mode to Text without serializing the model back to text —
+            // the current document's text is already correct, we just need to hide
+            // the visual editor and reset the layout.
+            _visualEditorMode = VisualEditorMode.Text;
+            UpdateModeToggleButtons();
+            ApplyVisualEditorLayout();
+        }
+        
+        // Clear the current models so they don't bleed into the new document
+        _currentFlowchartModel = null;
+        _currentSequenceDiagramModel = null;
+        
         // Switch to new document
         _activeDocument = doc;
         doc.IsSelected = true;
@@ -7936,6 +7953,9 @@ Console.WriteLine(""Hello, World!"");
         UpdateMarkdownFormattingVisibility();
         UpdateZoomControlsVisibility();
         UpdateUndoRedoState();
+        
+        // Update visual editor toolbar visibility for the new document's render mode
+        UpdateVisualEditorModeToolbarVisibility();
         
         // Force-refresh comment icon color for the new document's caret position
         _lastCaretWasInComment = false;

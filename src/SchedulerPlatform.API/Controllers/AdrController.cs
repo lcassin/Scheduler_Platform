@@ -5381,7 +5381,7 @@ public class AdrController : ControllerBase
 
     /// <summary>
     /// Resets all status/tracking fields on an AdrJob so it can be reprocessed by the orchestrator.
-    /// Clears IsManualRequest so the job is visible to all orchestration queries.
+    /// Preserves IsManualRequest so the job retains its original creation context.
     /// </summary>
     private static void ResetJobForRefire(AdrJob job, string modifiedBy)
     {
@@ -5393,7 +5393,8 @@ public class AdrController : ControllerBase
         job.CredentialVerifiedDateTime = null;
         job.ScrapingCompletedDateTime = null;
         job.RetryCount = 0;
-        job.IsManualRequest = false;  // Clear so orchestration queries pick it up
+        // Note: IsManualRequest is intentionally NOT cleared — refiring a job should
+        // preserve whether it was manually created or orchestrator-created.
         job.LastStatusCheckResponse = null;
         job.LastStatusCheckDateTime = null;
         job.ModifiedDateTime = DateTime.UtcNow;

@@ -505,7 +505,14 @@ public class BackgroundExportService : BackgroundService
             query = query.Where(j => j.NextRunDateTime <= endDate.Value);
 
         if (!string.IsNullOrWhiteSpace(status))
-            query = query.Where(j => j.Status == status);
+        {
+            // Support comma-separated status values (e.g. "Failed,Cancelled" from Dashboard chart clicks)
+            var statuses = status.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (statuses.Length == 1)
+                query = query.Where(j => j.Status == statuses[0]);
+            else
+                query = query.Where(j => statuses.Contains(j.Status));
+        }
 
         if (!string.IsNullOrWhiteSpace(primaryVendorCode))
             query = query.Where(j =>
