@@ -4583,8 +4583,15 @@ Console.WriteLine(""Hello, World!"");
     /// </summary>
     private async void VisualEditorBridge_EditorReady(object? sender, EventArgs e)
     {
+        if (_visualEditorBridge == null) return;
+
+        // Always apply the current theme when the editor signals ready —
+        // the SetThemeAsync in InitializeVisualEditorAsync fires before
+        // the page has finished loading, so the theme is lost.
+        await _visualEditorBridge.SetThemeAsync(GetVisualEditorThemeString());
+
         // If we're already in Visual or Split mode and have a model, send it
-        if (_visualEditorMode != VisualEditorMode.Text && _currentFlowchartModel != null && _visualEditorBridge != null)
+        if (_visualEditorMode != VisualEditorMode.Text && _currentFlowchartModel != null)
         {
             await _visualEditorBridge.SendDiagramToEditorAsync();
         }
