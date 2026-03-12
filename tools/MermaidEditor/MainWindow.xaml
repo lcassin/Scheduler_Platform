@@ -1291,6 +1291,8 @@
                 <ComboBox x:Name="NavigationDropdown" 
                           Grid.Row="1"
                           Style="{StaticResource NavigationComboBoxStyle}"
+                          HorizontalContentAlignment="Stretch"
+                          VerticalContentAlignment="Center"
                           BorderThickness="0,0,0,1"
                           Margin="0,0,0,4"
                           SelectionChanged="NavigationDropdown_SelectionChanged"

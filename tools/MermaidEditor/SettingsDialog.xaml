@@ -302,7 +302,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="Color theme:" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="ThemeCombo" Grid.Column="1" SelectionChanged="ThemeCombo_SelectionChanged">
+                            <ComboBox x:Name="ThemeCombo" Grid.Column="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" SelectionChanged="ThemeCombo_SelectionChanged">
                                 <ComboBoxItem Content="Dark"/>
                                 <ComboBoxItem Content="Light"/>
                                 <ComboBoxItem Content="Twilight"/>
@@ -317,7 +317,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="New file type:" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="DefaultFileTypeCombo" Grid.Column="1">
+                            <ComboBox x:Name="DefaultFileTypeCombo" Grid.Column="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center">
                                 <ComboBoxItem Content="Mermaid"/>
                                 <ComboBoxItem Content="Markdown"/>
                             </ComboBox>
@@ -338,7 +338,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="Font family:" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="FontFamilyCombo" Grid.Column="1" SelectionChanged="FontFamilyCombo_SelectionChanged">
+                            <ComboBox x:Name="FontFamilyCombo" Grid.Column="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" SelectionChanged="FontFamilyCombo_SelectionChanged">
                                 <ComboBoxItem Content="Consolas"/>
                                 <ComboBoxItem Content="Cascadia Code"/>
                                 <ComboBoxItem Content="Cascadia Mono"/>
@@ -422,7 +422,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="Provider:" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="AiProviderCombo" Grid.Column="1" SelectionChanged="AiProviderCombo_SelectionChanged">
+                            <ComboBox x:Name="AiProviderCombo" Grid.Column="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" SelectionChanged="AiProviderCombo_SelectionChanged">
                                 <ComboBoxItem Content="OpenAI"/>
                                 <ComboBoxItem Content="Anthropic"/>
                             </ComboBox>
@@ -443,7 +443,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="Model:" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="AiModelCombo" Grid.Column="1" IsEditable="True">
+                            <ComboBox x:Name="AiModelCombo" Grid.Column="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" IsEditable="True">
                                 <!-- OpenAI models (default) -->
                                 <ComboBoxItem Content="gpt-4o"/>
                                 <ComboBoxItem Content="gpt-4o-mini"/>

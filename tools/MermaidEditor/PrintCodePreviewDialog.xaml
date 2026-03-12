@@ -275,7 +275,7 @@
                 <!-- Font Size -->
                 <GroupBox Header="Font Size">
                     <StackPanel Margin="8">
-                        <ComboBox x:Name="FontSizeCombo" SelectionChanged="FontSizeCombo_SelectionChanged">
+                        <ComboBox x:Name="FontSizeCombo" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" SelectionChanged="FontSizeCombo_SelectionChanged">
                             <ComboBoxItem Content="8 pt"/>
                             <ComboBoxItem Content="9 pt"/>
                             <ComboBoxItem Content="10 pt" IsSelected="True"/>

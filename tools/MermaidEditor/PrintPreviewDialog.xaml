@@ -305,14 +305,14 @@
                         <!-- Printer Selection -->
                         <GroupBox Header="Printer">
                             <StackPanel Margin="8">
-                                <ComboBox x:Name="PrinterCombo" SelectionChanged="PrinterCombo_SelectionChanged"/>
+                                <ComboBox x:Name="PrinterCombo" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" SelectionChanged="PrinterCombo_SelectionChanged"/>
                             </StackPanel>
                         </GroupBox>
                         
                         <!-- Page Size -->
                         <GroupBox Header="Page Size">
                             <StackPanel Margin="8">
-                                <ComboBox x:Name="PageSizeCombo" SelectionChanged="PageSizeCombo_SelectionChanged">
+                                <ComboBox x:Name="PageSizeCombo" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" SelectionChanged="PageSizeCombo_SelectionChanged">
                                     <ComboBoxItem Content="Letter (8.5 x 11 in)" IsSelected="True"/>
                                     <ComboBoxItem Content="Legal (8.5 x 14 in)"/>
                                     <ComboBoxItem Content="A4 (210 x 297 mm)"/>
@@ -347,7 +347,7 @@
                         <!-- Margins -->
                         <GroupBox Header="Margins">
                             <StackPanel Margin="8">
-                                <ComboBox x:Name="MarginsCombo" SelectionChanged="MarginsCombo_SelectionChanged">
+                                <ComboBox x:Name="MarginsCombo" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" SelectionChanged="MarginsCombo_SelectionChanged">
                                     <ComboBoxItem Content="Normal (1 inch)" IsSelected="True"/>
                                     <ComboBoxItem Content="Narrow (0.5 inch)"/>
                                     <ComboBoxItem Content="Wide (1.5 inch)"/>

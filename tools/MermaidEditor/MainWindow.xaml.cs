@@ -4506,8 +4506,7 @@ Console.WriteLine(""Hello, World!"");
             if (_visualEditorMode == VisualEditorMode.Visual || _visualEditorMode == VisualEditorMode.Split)
             {
                 _isSwitchingDocuments = true; // Suppress dirty flag from programmatic text change
-                CodeEditor.Text = text;
-                _isSwitchingDocuments = false;
+                try { CodeEditor.Text = text; } finally { _isSwitchingDocuments = false; }
 
                 // Mark document as dirty
                 _isDirty = true;
@@ -4576,8 +4575,7 @@ Console.WriteLine(""Hello, World!"");
             {
                 var text = MermaidSerializer.Serialize(_currentFlowchartModel);
                 _isSwitchingDocuments = true;
-                CodeEditor.Text = text;
-                _isSwitchingDocuments = false;
+                try { CodeEditor.Text = text; } finally { _isSwitchingDocuments = false; }
             }
             finally
             {
