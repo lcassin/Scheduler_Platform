@@ -334,7 +334,7 @@
                 filters["clientId"] = _filterClientId.Value.ToString();
             if (!string.IsNullOrWhiteSpace(_searchTerm))
                 filters["searchTerm"] = _searchTerm;
-            filters["historicalStatus"] = "Missing"; // Always filter for Missing accounts
+            filters["historicalBillingStatus"] = "Missing"; // Always filter for Missing accounts
             if (!string.IsNullOrWhiteSpace(_filterBlacklistStatus))
                 filters["blacklistStatus"] = _filterBlacklistStatus;
 
