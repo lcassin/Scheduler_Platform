@@ -643,6 +643,7 @@
             <div class="context-submenu" id="move-to-subgraph-submenu"></div>
         </div>
         <div class="context-menu-item" data-action="remove-from-subgraph" id="remove-from-subgraph-menu" style="display:none">&#8617; Remove from Subgraph</div>
+        <div class="context-menu-item" data-action="delete-subgraph" id="delete-subgraph-menu" style="display:none">&#128465; Delete Subgraph</div>
         <div class="context-menu-separator"></div>
         <div class="context-menu-item" data-action="auto-layout">&#9783; Auto Layout</div>
     </div>
@@ -2217,6 +2218,10 @@
                 removeFromSgMenu.style.display = 'none';
             }
 
+            // Show/hide "Delete Subgraph" based on subgraph selection
+            const deleteSgMenu = document.getElementById('delete-subgraph-menu');
+            deleteSgMenu.style.display = selectedSubgraphId ? '' : 'none';
+
             contextMenu.style.left = x + 'px';
             contextMenu.style.top = y + 'px';
             contextMenu.classList.add('visible');
@@ -2276,6 +2281,8 @@
                 moveNodeToSubgraph(selectedNodeId, targetSgId);
             } else if (action === 'remove-from-subgraph') {
                 removeNodeFromSubgraph(selectedNodeId);
+            } else if (action === 'delete-subgraph') {
+                deleteSelected();
             } else if (action === 'auto-layout') {
                 autoLayout();
                 render();
