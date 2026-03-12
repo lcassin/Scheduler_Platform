@@ -1263,12 +1263,12 @@ Console.WriteLine(""Hello, World!"");
             ? _activeDocument.PreviewZoom.ToString(System.Globalization.CultureInfo.InvariantCulture) 
             : "1";
 
-        var isDark = ThemeManager.IsDarkTheme;
-        var bodyBg = isDark ? "#1e1e1e" : "#f5f5f5";
-        var diagramBg = isDark ? "#2d2d2d" : "white";
-        var diagramShadow = isDark ? "0 2px 10px rgba(0,0,0,0.4)" : "0 2px 10px rgba(0,0,0,0.1)";
-        var errorColor = isDark ? "#ef9a9a" : "#d32f2f";
-        var errorBg = isDark ? "#4e1a1a" : "#ffebee";
+        var theme = ThemeManager.CurrentTheme;
+        var bodyBg = theme switch { AppTheme.Light => "#f5f5f5", AppTheme.Twilight => "#1A1A2E", _ => "#1e1e1e" };
+        var diagramBg = theme switch { AppTheme.Light => "white", AppTheme.Twilight => "#1F2544", _ => "#2d2d2d" };
+        var diagramShadow = theme == AppTheme.Light ? "0 2px 10px rgba(0,0,0,0.1)" : "0 2px 10px rgba(0,0,0,0.4)";
+        var errorColor = theme == AppTheme.Light ? "#d32f2f" : "#ef9a9a";
+        var errorBg = theme switch { AppTheme.Light => "#ffebee", AppTheme.Twilight => "#2E1A2E", _ => "#4e1a1a" };
 
         var html = $@"<!DOCTYPE html>
 <html>
@@ -1875,14 +1875,22 @@ Console.WriteLine(""Hello, World!"");
             ? _activeDocument.PreviewScrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture) 
             : "0";
 
+        var mdTheme = ThemeManager.CurrentTheme;
+        var mdCssVariant = mdTheme == AppTheme.Light ? "light" : "dark"; // Twilight uses dark CSS
+        var mdHljsStyle = mdTheme == AppTheme.Light ? "github" : "github-dark";
+        var mdBodyBg = mdTheme switch { AppTheme.Light => "#ffffff", AppTheme.Twilight => "#1A1A2E", _ => "#1e1e1e" };
+        var mdColorScheme = mdTheme == AppTheme.Light ? "light" : "dark";
+        var mdCodeBg = mdTheme switch { AppTheme.Light => "#f6f8fa", AppTheme.Twilight => "#141428", _ => "#161b22" };
+        var mdTableBorder = mdTheme switch { AppTheme.Light => "#d0d7de", AppTheme.Twilight => "#3D4A6B", _ => "#30363d" };
+
         var html = $@"<!DOCTYPE html
 <html>
 <head>
     <meta charset=""UTF-8"">
     {baseTag}
     <script src=""https://cdn.jsdelivr.net/npm/marked/marked.min.js""></script>
-    <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-{(ThemeManager.IsDarkTheme ? "dark" : "light")}.min.css"">
-    <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/highlight.js@11/styles/{(ThemeManager.IsDarkTheme ? "github-dark" : "github")}.min.css"">
+    <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-{mdCssVariant}.min.css"">
+    <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/highlight.js@11/styles/{mdHljsStyle}.min.css"">
     <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/core.min.js""></script>
     <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/javascript.min.js""></script>
     <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/csharp.min.js""></script>
@@ -1898,8 +1906,8 @@ Console.WriteLine(""Hello, World!"");
             width: 100%; 
             height: 100%; 
             overflow: auto;
-            background: {(ThemeManager.IsDarkTheme ? "#1e1e1e" : "#ffffff")};
-            color-scheme: {(ThemeManager.IsDarkTheme ? "dark" : "light")};
+            background: {mdBodyBg};
+            color-scheme: {mdColorScheme};
         }}
         .markdown-body {{
             padding: 20px 32px;
@@ -1907,13 +1915,13 @@ Console.WriteLine(""Hello, World!"");
             margin: 0 auto;
         }}
         .markdown-body pre {{
-            background-color: {(ThemeManager.IsDarkTheme ? "#161b22" : "#f6f8fa")};
+            background-color: {mdCodeBg};
             border-radius: 6px;
             padding: 16px;
             overflow: auto;
         }}
         .markdown-body code {{
-            background-color: {(ThemeManager.IsDarkTheme ? "#161b22" : "#f6f8fa")};
+            background-color: {mdCodeBg};
             border-radius: 3px;
             padding: 0.2em 0.4em;
             font-size: 85%;
@@ -1929,11 +1937,11 @@ Console.WriteLine(""Hello, World!"");
         }}
         .markdown-body table th,
         .markdown-body table td {{
-            border: 1px solid {(ThemeManager.IsDarkTheme ? "#30363d" : "#d0d7de")};
+            border: 1px solid {mdTableBorder};
             padding: 6px 13px;
         }}
         .markdown-body table tr:nth-child(2n) {{
-            background-color: {(ThemeManager.IsDarkTheme ? "#161b22" : "#f6f8fa")};
+            background-color: {mdCodeBg};
         }}
         /* Force white/light background for printing */
         @media print {{
@@ -4555,9 +4563,8 @@ Console.WriteLine(""Hello, World!"");
             _visualEditorBridge.ModelChanged += VisualEditorBridge_ModelChanged;
             _visualEditorBridge.EditorReady += VisualEditorBridge_EditorReady;
 
-            // Apply current theme to visual editor
-            var isDark = ThemeManager.IsDarkTheme;
-            await _visualEditorBridge.SetThemeAsync(isDark ? "dark" : "light");
+                // Apply current theme to visual editor
+                await _visualEditorBridge.SetThemeAsync(GetVisualEditorThemeString());
 
             // Now that visual editor is initialized, refresh toolbar visibility
             // (SetRenderModeFromFile may have already run before init completed)
@@ -6162,9 +6169,21 @@ Console.WriteLine(""Hello, World!"");
         // Update visual editor theme
         if (_visualEditorBridge != null && _visualEditorInitialized)
         {
-            var isDark = ThemeManager.IsDarkTheme;
-            await _visualEditorBridge.SetThemeAsync(isDark ? "dark" : "light");
+            await _visualEditorBridge.SetThemeAsync(GetVisualEditorThemeString());
         }
+    }
+
+    /// <summary>
+    /// Returns the visual editor theme string for the current app theme: "dark", "light", or "twilight".
+    /// </summary>
+    private static string GetVisualEditorThemeString()
+    {
+        return ThemeManager.CurrentTheme switch
+        {
+            AppTheme.Light => "light",
+            AppTheme.Twilight => "twilight",
+            _ => "dark"
+        };
     }
 
     private void UpdateEditorTheme()
@@ -6202,8 +6221,7 @@ Console.WriteLine(""Hello, World!"");
                 // Update visual editor theme
                 if (_visualEditorBridge != null && _visualEditorInitialized)
                 {
-                    var isDark = ThemeManager.IsDarkTheme;
-                    _ = _visualEditorBridge.SetThemeAsync(isDark ? "dark" : "light");
+                    _ = _visualEditorBridge.SetThemeAsync(GetVisualEditorThemeString());
                 }
             }
 
@@ -6463,6 +6481,12 @@ Console.WriteLine(""Hello, World!"");
 
     private void RenderMermaidPreview(string code)
     {
+        var pvTheme = ThemeManager.CurrentTheme;
+        var pvBodyBg = pvTheme switch { AppTheme.Light => "#f5f5f5", AppTheme.Twilight => "#1A1A2E", _ => "#1e1e1e" };
+        var pvDiagramBg = pvTheme switch { AppTheme.Light => "white", AppTheme.Twilight => "#1F2544", _ => "#2d2d2d" };
+        var pvShadow = pvTheme == AppTheme.Light ? "0 2px 10px rgba(0,0,0,0.1)" : "0 2px 10px rgba(0,0,0,0.4)";
+        var pvMermaidTheme = pvTheme == AppTheme.Light ? "default" : "dark";
+
         var html = $@"<!DOCTYPE html>
 <html>
 <head>
@@ -6474,7 +6498,7 @@ Console.WriteLine(""Hello, World!"");
             width: 100%; 
             height: 100%; 
             overflow: hidden;
-            background: #f5f5f5;
+            background: {pvBodyBg};
         }}
         #container {{
             width: 100%;
@@ -6486,10 +6510,10 @@ Console.WriteLine(""Hello, World!"");
             overflow: auto;
         }}
         #diagram {{
-            background: white;
+            background: {pvDiagramBg};
             padding: 20px;
             border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: {pvShadow};
             display: inline-block;
         }}
         #diagram.has-error {{
@@ -6515,7 +6539,7 @@ Console.WriteLine(""Hello, World!"");
     <script>
         mermaid.initialize({{ 
             startOnLoad: true, 
-            theme: 'default', 
+            theme: '{pvMermaidTheme}', 
             securityLevel: 'loose'
         }});
         mermaid.run().then(() => {{
@@ -6596,9 +6620,9 @@ Console.WriteLine(""Hello, World!"");
 <head>
     {baseTag}
     <script src=""https://cdn.jsdelivr.net/npm/marked/marked.min.js""></script>
-    <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-{(ThemeManager.IsDarkTheme ? "dark" : "light")}.min.css"">
+    <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-{(ThemeManager.CurrentTheme == AppTheme.Light ? "light" : "dark")}.min.css"">
     <style>
-        body {{ margin: 0; padding: 20px; background: {(ThemeManager.IsDarkTheme ? "#1e1e1e" : "#ffffff")}; color-scheme: {(ThemeManager.IsDarkTheme ? "dark" : "light")}; }}
+        body {{ margin: 0; padding: 20px; background: {(ThemeManager.CurrentTheme switch { AppTheme.Light => "#ffffff", AppTheme.Twilight => "#1A1A2E", _ => "#1e1e1e" })}; color-scheme: {(ThemeManager.CurrentTheme == AppTheme.Light ? "light" : "dark")}; }}
         .markdown-body {{ box-sizing: border-box; min-width: 200px; max-width: 980px; margin: 0 auto; }}
         @media print {{ body {{ background: white !important; color-scheme: light !important; }} }}
     </style>

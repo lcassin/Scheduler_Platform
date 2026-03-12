@@ -70,6 +70,37 @@
             --input-text: #1E1E1E;
         }
 
+        .theme-twilight {
+            --bg-color: #1A1A2E;
+            --grid-color: #1F2544;
+            --grid-dot-color: #3D4A6B;
+            --node-fill: #16213E;
+            --node-stroke: #3D4A6B;
+            --node-text: #D4D4E8;
+            --node-selected-stroke: #4A90D9;
+            --node-hover-stroke: #5A6A8A;
+            --edge-color: #5A6A8A;
+            --edge-label-bg: #1A1A2E;
+            --edge-label-text: #D4D4E8;
+            --toolbar-bg: #1F2544;
+            --toolbar-border: #3D4A6B;
+            --toolbar-text: #D4D4E8;
+            --toolbar-hover: #2D3A5C;
+            --tooltip-bg: #16213E;
+            --tooltip-border: #3D4A6B;
+            --subgraph-fill: rgba(61, 74, 107, 0.3);
+            --subgraph-stroke: #3D4A6B;
+            --subgraph-text: #6B7A99;
+            --selection-rect: rgba(74, 144, 217, 0.2);
+            --context-menu-bg: #16213E;
+            --context-menu-border: #3D4A6B;
+            --context-menu-hover: #3D5A80;
+            --context-menu-text: #D4D4E8;
+            --input-bg: #1F2544;
+            --input-border: #3D4A6B;
+            --input-text: #D4D4E8;
+        }
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
@@ -905,10 +936,11 @@
         // ========== Theme ==========
 
         window.setTheme = function(theme) {
+            document.body.classList.remove('theme-light', 'theme-twilight');
             if (theme === 'light') {
                 document.body.classList.add('theme-light');
-            } else {
-                document.body.classList.remove('theme-light');
+            } else if (theme === 'twilight') {
+                document.body.classList.add('theme-twilight');
             }
         };
 
@@ -2588,7 +2620,7 @@
             minimapCtx.clearRect(0, 0, cw, ch);
 
             // Draw edges (resolve subgraph IDs to first contained node)
-            const isDark = !document.body.classList.contains('theme-light');
+            const isDark = !document.body.classList.contains('theme-light'); // Both dark and twilight are "dark"
             minimapCtx.strokeStyle = isDark ? '#555' : '#bbb';
             minimapCtx.lineWidth = 1;
             diagram.edges.forEach(edge => {
