@@ -785,9 +785,11 @@
                     direction: s.direction || null
                 }));
 
-                // Auto-layout if nodes don't have positions
-                const needsLayout = diagram.nodes.some(n => n.x === 0 && n.y === 0);
-                if (needsLayout && diagram.nodes.length > 0) {
+                // Auto-layout if real nodes (not subgraph proxy nodes) don't have positions
+                const sgIds = new Set(diagram.subgraphs.map(s => s.id));
+                const realNodes = diagram.nodes.filter(n => !sgIds.has(n.id));
+                const needsLayout = realNodes.some(n => n.x === 0 && n.y === 0);
+                if (needsLayout && realNodes.length > 0) {
                     autoLayout();
                 }
 
@@ -817,6 +819,9 @@
             });
             g.setDefaultEdgeLabel(function() { return {}; });
 
+            // Build a set of subgraph IDs for quick lookup
+            const subgraphIds = new Set(diagram.subgraphs.map(sg => sg.id));
+
             // Build a lookup: nodeId -> subgraphId
             const nodeToSubgraph = {};
             diagram.subgraphs.forEach(sg => {
@@ -831,7 +836,9 @@
             });
 
             // Register all diagram nodes and set their parent (subgraph) if applicable
+            // Skip nodes whose ID matches a subgraph ID (proxy nodes for subgraph edges)
             diagram.nodes.forEach(node => {
+                if (subgraphIds.has(node.id)) return; // Don't overwrite cluster node
                 const size = estimateNodeSize(node);
                 g.setNode(node.id, { width: size.width, height: size.height });
                 if (nodeToSubgraph[node.id]) {
@@ -839,15 +846,37 @@
                 }
             });
 
-            // Register all edges
+            // Helper: resolve a subgraph ID to its first contained node for edge routing
+            function resolveEdgeEndpoint(id) {
+                if (subgraphIds.has(id)) {
+                    const sg = diagram.subgraphs.find(s => s.id === id);
+                    if (sg && sg.nodeIds.length > 0) {
+                        return sg.nodeIds[0]; // Route to first node in subgraph
+                    }
+                }
+                return id;
+            }
+
+            // Register all edges, resolving subgraph IDs to actual nodes
             diagram.edges.forEach(edge => {
-                g.setEdge(edge.from, edge.to);
+                const from = resolveEdgeEndpoint(edge.from);
+                const to = resolveEdgeEndpoint(edge.to);
+                // Only add edge if both endpoints exist as real nodes in the graph
+                if (g.hasNode(from) && g.hasNode(to)) {
+                    g.setEdge(from, to);
+                }
             });
 
-            dagre.layout(g);
+            try {
+                dagre.layout(g);
+            } catch (e) {
+                console.error('dagre layout failed:', e);
+                return;
+            }
 
             // Apply computed positions to diagram nodes
             diagram.nodes.forEach(node => {
+                if (subgraphIds.has(node.id)) return; // Skip proxy nodes
                 const layoutNode = g.node(node.id);
                 if (layoutNode) {
                     node.x = layoutNode.x;
@@ -898,7 +927,12 @@
         function renderNodes() {
             nodesLayer.innerHTML = '';
 
+            // Build set of subgraph IDs to skip proxy nodes
+            const sgIds = new Set(diagram.subgraphs.map(s => s.id));
+
             diagram.nodes.forEach(node => {
+                // Skip proxy nodes (nodes whose ID matches a subgraph ID)
+                if (sgIds.has(node.id)) return;
                 const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                 g.classList.add('node-group');
                 g.setAttribute('data-node-id', node.id);
@@ -1131,9 +1165,24 @@
         function renderEdges() {
             edgesLayer.innerHTML = '';
 
+            // Build set of subgraph IDs to resolve proxy edges
+            const sgIds = new Set(diagram.subgraphs.map(s => s.id));
+
             diagram.edges.forEach((edge, idx) => {
-                const fromNode = diagram.nodes.find(n => n.id === edge.from);
-                const toNode = diagram.nodes.find(n => n.id === edge.to);
+                // Resolve subgraph IDs to first contained node
+                let fromId = edge.from;
+                let toId = edge.to;
+                if (sgIds.has(fromId)) {
+                    const sg = diagram.subgraphs.find(s => s.id === fromId);
+                    if (sg && sg.nodeIds.length > 0) fromId = sg.nodeIds[0];
+                }
+                if (sgIds.has(toId)) {
+                    const sg = diagram.subgraphs.find(s => s.id === toId);
+                    if (sg && sg.nodeIds.length > 0) toId = sg.nodeIds[0];
+                }
+
+                const fromNode = diagram.nodes.find(n => n.id === fromId);
+                const toNode = diagram.nodes.find(n => n.id === toId);
                 if (!fromNode || !toNode) return;
 
                 const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -1312,8 +1361,13 @@
             if (diagram.nodes.length === 0) return;
             if (!panzoomInstance) return;
 
+            // Skip proxy nodes (nodes whose ID matches a subgraph ID)
+            const sgIds = new Set(diagram.subgraphs.map(s => s.id));
+            const realNodes = diagram.nodes.filter(n => !sgIds.has(n.id));
+            if (realNodes.length === 0) return;
+
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            diagram.nodes.forEach(n => {
+            realNodes.forEach(n => {
                 const hw = (n.width || 80) / 2;
                 const hh = (n.height || 40) / 2;
                 minX = Math.min(minX, n.x - hw);
@@ -2107,7 +2161,12 @@
 
         function updateMinimap() {
             if (!minimapCanvas || !minimapCtx) return;
-            if (diagram.nodes.length === 0) {
+
+            // Skip proxy nodes (nodes whose ID matches a subgraph ID)
+            const sgIds = new Set(diagram.subgraphs.map(s => s.id));
+            const realNodes = diagram.nodes.filter(n => !sgIds.has(n.id));
+
+            if (realNodes.length === 0) {
                 minimapCtx.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
                 minimapViewport.style.display = 'none';
                 return;
@@ -2118,7 +2177,7 @@
 
             // Calculate diagram bounding box
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            diagram.nodes.forEach(n => {
+            realNodes.forEach(n => {
                 const hw = (n.width || 80) / 2;
                 const hh = (n.height || 40) / 2;
                 minX = Math.min(minX, n.x - hw);
@@ -2137,13 +2196,22 @@
 
             minimapCtx.clearRect(0, 0, cw, ch);
 
-            // Draw edges
+            // Draw edges (resolve subgraph IDs to first contained node)
             const isDark = !document.body.classList.contains('theme-light');
             minimapCtx.strokeStyle = isDark ? '#555' : '#bbb';
             minimapCtx.lineWidth = 1;
             diagram.edges.forEach(edge => {
-                const fromNode = diagram.nodes.find(n => n.id === edge.from);
-                const toNode = diagram.nodes.find(n => n.id === edge.to);
+                let fromId = edge.from, toId = edge.to;
+                if (sgIds.has(fromId)) {
+                    const sg = diagram.subgraphs.find(s => s.id === fromId);
+                    if (sg && sg.nodeIds.length > 0) fromId = sg.nodeIds[0];
+                }
+                if (sgIds.has(toId)) {
+                    const sg = diagram.subgraphs.find(s => s.id === toId);
+                    if (sg && sg.nodeIds.length > 0) toId = sg.nodeIds[0];
+                }
+                const fromNode = diagram.nodes.find(n => n.id === fromId);
+                const toNode = diagram.nodes.find(n => n.id === toId);
                 if (!fromNode || !toNode) return;
                 minimapCtx.beginPath();
                 minimapCtx.moveTo((fromNode.x - minX) * scale, (fromNode.y - minY) * scale);
@@ -2151,8 +2219,8 @@
                 minimapCtx.stroke();
             });
 
-            // Draw nodes
-            diagram.nodes.forEach(n => {
+            // Draw nodes (skip proxy nodes)
+            realNodes.forEach(n => {
                 const nx = (n.x - minX) * scale;
                 const ny = (n.y - minY) * scale;
                 const nw = (n.width || 80) * scale;
