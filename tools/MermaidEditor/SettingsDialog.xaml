@@ -72,6 +72,8 @@
         <Style TargetType="ComboBoxItem">
             <Setter Property="Background" Value="{DynamicResource ThemeMenuBackgroundBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Padding" Value="8,6"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Style.Triggers>
