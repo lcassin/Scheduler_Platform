@@ -333,6 +333,10 @@ public class VisualEditorBridge
                     HandleSubgraphEdited(root);
                     break;
 
+                case "subgraphDeleted":
+                    HandleSubgraphDeleted(root);
+                    break;
+
                 case "nodeSubgraphChanged":
                     HandleNodeSubgraphChanged(root);
                     break;
@@ -605,6 +609,19 @@ public class VisualEditorBridge
         PushUndo();
         sg.Label = label ?? sg.Label;
         RaiseModelChanged("subgraphEdited");
+    }
+
+    private void HandleSubgraphDeleted(JsonElement root)
+    {
+        var subgraphId = root.GetProperty("subgraphId").GetString();
+        if (string.IsNullOrEmpty(subgraphId)) return;
+
+        var sg = _model.Subgraphs.Find(s => s.Id == subgraphId);
+        if (sg == null) return;
+
+        PushUndo();
+        _model.Subgraphs.Remove(sg);
+        RaiseModelChanged("subgraphDeleted");
     }
 
     private void HandleNodeSubgraphChanged(JsonElement root)
