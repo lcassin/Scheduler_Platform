@@ -1287,62 +1287,69 @@
                 </ScrollViewer>
             </Grid>
             
-            <!-- Navigation Dropdown Bar - spans all columns -->
-            <ComboBox x:Name="NavigationDropdown" 
-                      Grid.Row="1" Grid.ColumnSpan="5"
-                      Style="{StaticResource NavigationComboBoxStyle}"
-                      HorizontalContentAlignment="Stretch"
-                      VerticalContentAlignment="Center"
-                      BorderThickness="0,0,0,1"
-                      Margin="0,0,0,4"
-                      SelectionChanged="NavigationDropdown_SelectionChanged"
-                      ToolTip="Jump to section">
-                <ComboBox.ItemTemplate>
-                    <DataTemplate>
-                        <TextBlock Text="{Binding DisplayText}" Foreground="{DynamicResource ThemeForegroundBrush}" Margin="{Binding IndentMargin}"/>
-                    </DataTemplate>
-                </ComboBox.ItemTemplate>
-                <ComboBox.ItemContainerStyle>
-                    <Style TargetType="ComboBoxItem">
-                        <Setter Property="Background" Value="{DynamicResource ThemeToolbarBackgroundBrush}"/>
-                        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
-                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                        <Setter Property="VerticalContentAlignment" Value="Center"/>
-                        <Setter Property="Padding" Value="8,4"/>
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="ComboBoxItem">
-                                    <Border x:Name="Bd" 
-                                            Background="{TemplateBinding Background}" 
-                                            Padding="{TemplateBinding Padding}">
-                                        <ContentPresenter/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsHighlighted" Value="True">
-                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThemeHoverBrush}"/>
-                                        </Trigger>
-                                        <Trigger Property="IsSelected" Value="True">
-                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThemeSelectedBrush}"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                    </Style>
-                </ComboBox.ItemContainerStyle>
-            </ComboBox>
-            
-            <!-- Left Panel - Code Editor -->
-            <Border Grid.Row="2" Grid.Column="0"
-                    BorderBrush="{DynamicResource ThemePurpleAccentBrush}" 
-                    BorderThickness="0,0,1,0"
-                    Background="{DynamicResource ThemeBackgroundBrush}">
-                <Border BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="0,0,0,1">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition x:Name="MinimapColumn" Width="0"/>
-                        </Grid.ColumnDefinitions>
+            <!-- Left Panel - Code Editor with Navigation Dropdown -->
+            <Grid Grid.Row="1" Grid.RowSpan="2" Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                
+                <!-- Navigation Dropdown Bar (editor-specific, stays in code editor column) -->
+                <ComboBox x:Name="NavigationDropdown" 
+                          Grid.Row="0"
+                          Style="{StaticResource NavigationComboBoxStyle}"
+                          HorizontalContentAlignment="Stretch"
+                          VerticalContentAlignment="Center"
+                          BorderThickness="0,0,0,1"
+                          Margin="0,0,0,4"
+                          SelectionChanged="NavigationDropdown_SelectionChanged"
+                          ToolTip="Jump to section">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding DisplayText}" Foreground="{DynamicResource ThemeForegroundBrush}" Margin="{Binding IndentMargin}"/>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                    <ComboBox.ItemContainerStyle>
+                        <Style TargetType="ComboBoxItem">
+                            <Setter Property="Background" Value="{DynamicResource ThemeToolbarBackgroundBrush}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="VerticalContentAlignment" Value="Center"/>
+                            <Setter Property="Padding" Value="8,4"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ComboBoxItem">
+                                        <Border x:Name="Bd" 
+                                                Background="{TemplateBinding Background}" 
+                                                Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsHighlighted" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThemeHoverBrush}"/>
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ThemeSelectedBrush}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ComboBox.ItemContainerStyle>
+                </ComboBox>
+                
+                <!-- Code Editor with purple border on right and subtle grey border on bottom -->
+                <Border Grid.Row="1"
+                        BorderBrush="{DynamicResource ThemePurpleAccentBrush}" 
+                        BorderThickness="0,0,1,0"
+                        Background="{DynamicResource ThemeBackgroundBrush}">
+                    <Border BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="0,0,0,1">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition x:Name="MinimapColumn" Width="0"/>
+                            </Grid.ColumnDefinitions>
                         <avalon:TextEditor x:Name="CodeEditor" 
                                  Grid.Column="0"
                                  FontFamily="Consolas"
@@ -1397,6 +1404,7 @@
                     </Grid>
                 </Border>
             </Border>
+            </Grid>
             
             <!-- Splitter between Code Editor and Visual Editor (visible in Split Mode) -->
             <GridSplitter x:Name="VisualEditorSplitter" Grid.Row="2" Grid.Column="1" 
