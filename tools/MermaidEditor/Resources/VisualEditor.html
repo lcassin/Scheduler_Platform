@@ -2441,6 +2441,13 @@
                 selectedEdgeIndex = -1;
                 render();
                 postMessage({ type: 'edgeDeleted', from: edge.from, to: edge.to });
+            } else if (selectedSubgraphId) {
+                const sgId = selectedSubgraphId;
+                diagram.subgraphs = diagram.subgraphs.filter(sg => sg.id !== sgId);
+                selectedSubgraphId = null;
+                render();
+                hidePropertyPanel();
+                postMessage({ type: 'subgraphDeleted', subgraphId: sgId });
             }
         }
 
