@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Expensesmart 1.0 - On-Premises Server Architecture Diagram</title>
+<title>ExpenseSmart 1.0/3.0 - On-Premises Server Architecture Diagram</title>
 <style>
   :root {
     --prod-color: #0B7A3E;
@@ -421,7 +421,7 @@
 
 <!-- ======== HEADER ======== -->
 <div class="diagram-header">
-  <h1>Expensesmart 1.0 &mdash; On-Premises Server Architecture</h1>
+  <h1>ExpenseSmart 1.0/3.0 &mdash; On-Premises Server Architecture</h1>
   <div class="subtitle">Cass Information Systems &bull; Facilities Division &bull; All On-Premises (No Azure) &bull; IBIS Legacy Codebase</div>
   <div class="date">Technology: ASP.NET Web Forms (VB.NET) &bull; .NET Framework 4.0 &bull; IIS &bull; SQL Server &nbsp;|&nbsp; Generated: March 2026</div>
 </div>
@@ -439,7 +439,7 @@
 
 <!-- ======== APPLICATION WORKFLOW ======== -->
 <div class="section deploy">
-  <div class="section-label"><span class="icon">&#128640;</span> Expensesmart 1.0 &mdash; Application Request Flow</div>
+  <div class="section-label"><span class="icon">&#128640;</span> ExpenseSmart 1.0/3.0 &mdash; Application Request Flow</div>
   <div class="workflow-pipeline">
     <div class="wf-step">
       <div class="wf-icon" style="background:#0078D4">&#128100;</div>
@@ -1222,21 +1222,6 @@
       <strong>Key Features:</strong> Dashboard, AccountView, SiteView, Financial, Analytics, KPI, Budget, Workflow, ReportTrak, DocTrak, DepositTrak, AlerTrak, ProfiTrak, Scheduler, ImageView, MissingBill, MyReports, AdvancedSearch
     </p>
   </div>
-</div>
-
-<!-- ======== UNKNOWN / TBD ======== -->
-<div class="notes-section">
-  <h3>Open Questions / Items to Confirm for Complete Diagram</h3>
-  <ul>
-    <li><strong>ASPState (Prod):</strong> Which SQL server hosts the ASPState database for production session state?</li>
-    <li><s><strong>Steelhead vs Hammerhead:</strong> Resolved &mdash; Steelhead = EMSDBPR07, Hammerhead = PEMSDBSQL02 (old names, updated to current naming convention by Infrastructure).</s></li>
-    <li><s><strong>Load Balancer:</strong> Resolved &mdash; Kemp Technology Load Masters, HA cluster of two appliances (Columbus office). Full VIP/port/state table added above.</s></li>
-    <li><strong>Reporting Server (Prod):</strong> What is the production SSRS server name? (Dev/test uses SQLDEV02.) ReportTrak queries run against UtilityWeb DB on EMSDBPR05.</li>
-    <li><s><strong>Mako server OS/specs:</strong> Resolved &mdash; Windows Server 2019 / IIS 10 on Mako 1-5.</s></li>
-    <li><s><strong>Bluefin/Steelhead/Hammerhead:</strong> Steelhead = EMSDBPR07, Hammerhead = PEMSDBSQL02 (legacy aliases, renamed by Infrastructure). Bluefin mapping still TBD.</s></li>
-    <li><strong>Acme14 DB server:</strong> Does test point to emsdbdev02 for all databases or are some on Acme14 locally?</li>
-    <li><s><strong>Network topology:</strong> Resolved &mdash; External &rarr; Edge firewalls &rarr; NAT &rarr; Kemp VIP (DMZ) &rarr; Web servers (DMZ) &rarr; Firewall &rarr; SQL Servers (internal, not in DMZ).</s></li>
-  </ul>
 </div>
 
 </body>

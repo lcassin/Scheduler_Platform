@@ -413,17 +413,4 @@ graph TB
 
 **Key Features:** Dashboard, AccountView, SiteView, Financial, Analytics, KPI, Budget, Workflow, ReportTrak, DocTrak, DepositTrak, AlerTrak, ProfiTrak, Scheduler, ImageView, MissingBill, MyReports, AdvancedSearch
 
----
 
-## Open Questions / Items to Confirm
-
-| Item | Question |
-|------|----------|
-| **ASPState (Prod)** | Which SQL server hosts the ASPState database for production session state? |
-| ~~**Steelhead vs Hammerhead**~~ | ~~Resolved: Steelhead = EMSDBPR07, Hammerhead = PEMSDBSQL02 (old names updated to current naming convention by Infrastructure)~~ |
-| ~~**Load Balancer**~~ | ~~Resolved: Kemp Technology Load Masters, HA cluster of two appliances (Columbus office). Full VIP/port/state table in HTML diagram.~~ |
-| **SSRS Prod Server** | Production SSRS server name? (Dev/test uses SQLDEV02) |
-| ~~**Mako Server Specs**~~ | ~~Resolved: Windows Server 2019 / IIS 10 on Mako 1-5.~~ |
-| ~~**Steelhead/Hammerhead**~~ | ~~Steelhead = EMSDBPR07, Hammerhead = PEMSDBSQL02 (legacy aliases). Bluefin mapping still TBD.~~ |
-| **Acme14 DB Server** | Does test point to EMSDBDEV02 for all databases or some on Acme14 locally? |
-| ~~**Network Topology**~~ | ~~Resolved: External → Edge firewalls → NAT → Kemp VIP (DMZ) → Web servers (DMZ) → Firewall → SQL Servers (internal, not in DMZ).~~ |
