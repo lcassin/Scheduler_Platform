@@ -4893,126 +4893,100 @@ Console.WriteLine(""Hello, World!"");
     }
 
     /// <summary>
+    /// Finds the first meaningful Mermaid line, skipping frontmatter (--- blocks),
+    /// config directives (%%{...}%%), comments (%%), and empty lines.
+    /// Returns null if no meaningful line is found.
+    /// </summary>
+    private static string? GetFirstMeaningfulMermaidLine(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+
+        bool inFrontmatter = false;
+        bool frontmatterOpened = false;
+
+        foreach (var rawLine in text.Split('\n'))
+        {
+            var line = rawLine.TrimEnd('\r').Trim();
+            if (string.IsNullOrEmpty(line)) continue;
+
+            // Handle --- YAML frontmatter blocks
+            if (line == "---")
+            {
+                if (!frontmatterOpened)
+                {
+                    inFrontmatter = true;
+                    frontmatterOpened = true;
+                }
+                else
+                {
+                    inFrontmatter = false;
+                }
+                continue;
+            }
+
+            // Skip lines inside frontmatter block
+            if (inFrontmatter) continue;
+
+            // Skip config directives like %%{init: ...}%%
+            if (line.StartsWith("%%{")) continue;
+
+            // Skip comments
+            if (line.StartsWith("%% ") || line.StartsWith("%%\t") || line == "%%") continue;
+
+            return line;
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Detects whether the given Mermaid text is a flowchart (graph/flowchart declaration).
     /// Returns true if the first meaningful line starts with "graph" or "flowchart".
     /// </summary>
     private static bool IsFlowchart(string text)
     {
-        if (string.IsNullOrWhiteSpace(text)) return false;
-
-        foreach (var rawLine in text.Split('\n'))
-        {
-            var line = rawLine.TrimEnd('\r').Trim();
-            if (string.IsNullOrEmpty(line)) continue;
-            if (line.StartsWith("%%{")) continue;
-            if (line.StartsWith("%% ") || line.StartsWith("%%\t")) continue;
-            return line.StartsWith("graph ", StringComparison.OrdinalIgnoreCase)
-                || line.StartsWith("graph\t", StringComparison.OrdinalIgnoreCase)
-                || line.StartsWith("flowchart ", StringComparison.OrdinalIgnoreCase)
-                || line.StartsWith("flowchart\t", StringComparison.OrdinalIgnoreCase);
-        }
-        return false;
+        var line = GetFirstMeaningfulMermaidLine(text);
+        if (line == null) return false;
+        return line.StartsWith("graph ", StringComparison.OrdinalIgnoreCase)
+            || line.StartsWith("graph\t", StringComparison.OrdinalIgnoreCase)
+            || line.StartsWith("flowchart ", StringComparison.OrdinalIgnoreCase)
+            || line.StartsWith("flowchart\t", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
     /// Detects whether the given Mermaid text is a sequence diagram.
-    /// Checks for "sequenceDiagram" as the first non-preamble, non-comment, non-empty line.
     /// </summary>
     private static bool IsSequenceDiagram(string text)
     {
-        if (string.IsNullOrWhiteSpace(text)) return false;
-
-        foreach (var rawLine in text.Split('\n'))
-        {
-            var line = rawLine.TrimEnd('\r').Trim();
-            if (string.IsNullOrEmpty(line)) continue;
-            // Skip preamble lines (config directives like %%{init: ...}%%)
-            if (line.StartsWith("%%{")) continue;
-            // Skip comments
-            if (line.StartsWith("%% ") || line.StartsWith("%%\t")) continue;
-            // First meaningful line determines diagram type
-            return line.Equals("sequenceDiagram", StringComparison.Ordinal);
-        }
-        return false;
+        var line = GetFirstMeaningfulMermaidLine(text);
+        return line != null && line.Equals("sequenceDiagram", StringComparison.Ordinal);
     }
 
     /// <summary>
     /// Detects whether the given Mermaid text is a class diagram.
-    /// Checks for "classDiagram" as the first non-preamble, non-comment, non-empty line.
     /// </summary>
     private static bool IsClassDiagram(string text)
     {
-        if (string.IsNullOrWhiteSpace(text)) return false;
-
-        foreach (var rawLine in text.Split('\n'))
-        {
-            var line = rawLine.TrimEnd('\r').Trim();
-            if (string.IsNullOrEmpty(line)) continue;
-            // Skip preamble lines (config directives like %%{init: ...}%%)
-            if (line.StartsWith("%%{")) continue;
-            // Skip comments
-            if (line.StartsWith("%% ") || line.StartsWith("%%\t")) continue;
-            // Skip frontmatter delimiters
-            if (line == "---") continue;
-            // Skip frontmatter content (title:, config:, etc.)
-            if (line.Contains(':') && !line.StartsWith("classDiagram")) continue;
-            // First meaningful line determines diagram type
-            return line.Equals("classDiagram", StringComparison.Ordinal);
-        }
-        return false;
+        var line = GetFirstMeaningfulMermaidLine(text);
+        return line != null && line.Equals("classDiagram", StringComparison.Ordinal);
     }
 
     /// <summary>
     /// Detects whether the given Mermaid text is a state diagram.
-    /// Checks for "stateDiagram" or "stateDiagram-v2" as the first non-preamble, non-comment, non-empty line.
     /// </summary>
     private static bool IsStateDiagram(string text)
     {
-        if (string.IsNullOrWhiteSpace(text)) return false;
-
-        foreach (var rawLine in text.Split('\n'))
-        {
-            var line = rawLine.TrimEnd('\r').Trim();
-            if (string.IsNullOrEmpty(line)) continue;
-            // Skip preamble lines (config directives like %%{init: ...}%%)
-            if (line.StartsWith("%%{")) continue;
-            // Skip comments
-            if (line.StartsWith("%% ") || line.StartsWith("%%\t")) continue;
-            // Skip frontmatter delimiters
-            if (line == "---") continue;
-            // Skip frontmatter content (title:, config:, etc.)
-            if (line.Contains(':') && !line.StartsWith("stateDiagram")) continue;
-            // First meaningful line determines diagram type
-            return line.Equals("stateDiagram-v2", StringComparison.Ordinal)
-                || line.Equals("stateDiagram", StringComparison.Ordinal);
-        }
-        return false;
+        var line = GetFirstMeaningfulMermaidLine(text);
+        return line != null && (line.Equals("stateDiagram-v2", StringComparison.Ordinal)
+            || line.Equals("stateDiagram", StringComparison.Ordinal));
     }
 
     /// <summary>
     /// Detects whether the given Mermaid text is an ER diagram.
-    /// Checks for "erDiagram" as the first non-preamble, non-comment, non-empty line.
     /// </summary>
     private static bool IsERDiagram(string text)
     {
-        if (string.IsNullOrWhiteSpace(text)) return false;
-
-        foreach (var rawLine in text.Split('\n'))
-        {
-            var line = rawLine.TrimEnd('\r').Trim();
-            if (string.IsNullOrEmpty(line)) continue;
-            // Skip preamble lines (config directives like %%{init: ...}%%)
-            if (line.StartsWith("%%{")) continue;
-            // Skip comments
-            if (line.StartsWith("%% ") || line.StartsWith("%%\t")) continue;
-            // Skip frontmatter delimiters
-            if (line == "---") continue;
-            // Skip frontmatter content (title:, config:, etc.)
-            if (line.Contains(':') && !line.StartsWith("erDiagram")) continue;
-            // First meaningful line determines diagram type
-            return line.Equals("erDiagram", StringComparison.Ordinal);
-        }
-        return false;
+        var line = GetFirstMeaningfulMermaidLine(text);
+        return line != null && line.Equals("erDiagram", StringComparison.Ordinal);
     }
 
     /// <summary>
