@@ -2774,6 +2774,1056 @@
             }
         }
 
+        // ========== Sequence Diagram Visual Editor ==========
+
+        let seqDiagram = null; // When non-null, we're in sequence diagram mode
+        let seqSelectedParticipantId = null;
+        let seqSelectedMessageIndex = -1;
+        let seqDraggingParticipantId = null;
+        let seqDragStartX = 0;
+        let seqDragParticipantStartIdx = 0;
+        const SEQ_PARTICIPANT_WIDTH = 120;
+        const SEQ_PARTICIPANT_HEIGHT = 40;
+        const SEQ_PARTICIPANT_GAP = 180;
+        const SEQ_MESSAGE_SPACING = 50;
+        const SEQ_TOP_MARGIN = 60;
+        const SEQ_LEFT_MARGIN = 100;
+        const SEQ_LIFELINE_START_Y = SEQ_TOP_MARGIN + SEQ_PARTICIPANT_HEIGHT + 20;
+
+        window.loadSequenceDiagram = function(jsonData) {
+            try {
+                const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+                seqDiagram = {
+                    participants: (data.participants || []).map(p => ({
+                        id: p.id,
+                        alias: p.alias || null,
+                        type: p.type || 'Participant',
+                        isExplicit: p.isExplicit !== false,
+                        isDestroyed: p.isDestroyed || false
+                    })),
+                    elements: data.elements || [],
+                    autoNumber: data.autoNumber || false,
+                    preambleLines: data.preambleLines || [],
+                    declarationLineIndex: data.declarationLineIndex || 0
+                };
+
+                // Clear flowchart diagram state
+                diagram.nodes = [];
+                diagram.edges = [];
+                diagram.subgraphs = [];
+
+                // Hide flowchart-specific toolbar buttons, show sequence-specific ones
+                updateToolbarForSequenceDiagram();
+
+                renderSequenceDiagram();
+                centerView();
+            } catch (err) {
+                console.error('Failed to load sequence diagram:', err);
+            }
+        };
+
+        function updateToolbarForSequenceDiagram() {
+            const flowchartBtns = ['tb-add-node', 'tb-add-edge', 'tb-add-subgraph', 'tb-auto-layout'];
+            flowchartBtns.forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) btn.style.display = seqDiagram ? 'none' : '';
+            });
+        }
+
+        function getParticipantX(index) {
+            return SEQ_LEFT_MARGIN + index * SEQ_PARTICIPANT_GAP;
+        }
+
+        function getParticipantLabel(p) {
+            return p.alias || p.id;
+        }
+
+        function getParticipantIndex(participantId) {
+            if (!seqDiagram) return -1;
+            return seqDiagram.participants.findIndex(p => p.id === participantId);
+        }
+
+        function getMessageY(msgIndex) {
+            return SEQ_LIFELINE_START_Y + 30 + msgIndex * SEQ_MESSAGE_SPACING;
+        }
+
+        // Count only messages (not notes, fragments, activations) for vertical positioning
+        function getVisualMessageIndex(elementIndex) {
+            if (!seqDiagram) return 0;
+            let visualIdx = 0;
+            for (let i = 0; i < elementIndex; i++) {
+                const el = seqDiagram.elements[i];
+                if (el.elementType === 'message') visualIdx++;
+            }
+            return visualIdx;
+        }
+
+        function getTotalVisualHeight() {
+            if (!seqDiagram) return 400;
+            let msgCount = 0;
+            let fragDepth = 0;
+            let extraSpace = 0;
+            seqDiagram.elements.forEach(el => {
+                if (el.elementType === 'message') msgCount++;
+                else if (el.elementType === 'fragment') {
+                    // Fragments add extra vertical space
+                    let sectionMsgCount = 0;
+                    if (el.sections) {
+                        el.sections.forEach(s => {
+                            if (s.elements) {
+                                s.elements.forEach(se => { if (se.elementType === 'message') sectionMsgCount++; });
+                            }
+                        });
+                    }
+                    extraSpace += 40 + (el.sections ? (el.sections.length - 1) * 20 : 0);
+                }
+                else if (el.elementType === 'note') extraSpace += 30;
+            });
+            return SEQ_LIFELINE_START_Y + 60 + (msgCount + 1) * SEQ_MESSAGE_SPACING + extraSpace;
+        }
+
+        function renderSequenceDiagram() {
+            if (!seqDiagram) return;
+
+            nodesLayer.innerHTML = '';
+            edgesLayer.innerHTML = '';
+            subgraphsLayer.innerHTML = '';
+
+            const totalHeight = getTotalVisualHeight();
+            const participants = seqDiagram.participants;
+
+            // ===== Render Participants (top boxes) =====
+            participants.forEach((p, idx) => {
+                const x = getParticipantX(idx);
+                const y = SEQ_TOP_MARGIN;
+                const isActor = p.type === 'Actor';
+
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.classList.add('node-group', 'seq-participant');
+                g.setAttribute('data-participant-id', p.id);
+                g.setAttribute('transform', `translate(${x}, ${y})`);
+
+                if (isActor) {
+                    // Draw stick figure for Actor
+                    const actorG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    // Head
+                    const head = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    head.setAttribute('cx', '0');
+                    head.setAttribute('cy', '-12');
+                    head.setAttribute('r', '8');
+                    head.classList.add('node-shape');
+                    if (seqSelectedParticipantId === p.id) head.classList.add('selected');
+                    actorG.appendChild(head);
+                    // Body
+                    const body = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    body.setAttribute('x1', '0'); body.setAttribute('y1', '-4');
+                    body.setAttribute('x2', '0'); body.setAttribute('y2', '10');
+                    body.setAttribute('stroke', 'var(--node-stroke)'); body.setAttribute('stroke-width', '1.5');
+                    actorG.appendChild(body);
+                    // Arms
+                    const arms = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    arms.setAttribute('x1', '-10'); arms.setAttribute('y1', '0');
+                    arms.setAttribute('x2', '10'); arms.setAttribute('y2', '0');
+                    arms.setAttribute('stroke', 'var(--node-stroke)'); arms.setAttribute('stroke-width', '1.5');
+                    actorG.appendChild(arms);
+                    // Legs
+                    const legL = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    legL.setAttribute('x1', '0'); legL.setAttribute('y1', '10');
+                    legL.setAttribute('x2', '-8'); legL.setAttribute('y2', '20');
+                    legL.setAttribute('stroke', 'var(--node-stroke)'); legL.setAttribute('stroke-width', '1.5');
+                    actorG.appendChild(legL);
+                    const legR = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    legR.setAttribute('x1', '0'); legR.setAttribute('y1', '10');
+                    legR.setAttribute('x2', '8'); legR.setAttribute('y2', '20');
+                    legR.setAttribute('stroke', 'var(--node-stroke)'); legR.setAttribute('stroke-width', '1.5');
+                    actorG.appendChild(legR);
+                    g.appendChild(actorG);
+                } else {
+                    // Draw box for Participant
+                    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    rect.setAttribute('x', -SEQ_PARTICIPANT_WIDTH / 2);
+                    rect.setAttribute('y', -SEQ_PARTICIPANT_HEIGHT / 2);
+                    rect.setAttribute('width', SEQ_PARTICIPANT_WIDTH);
+                    rect.setAttribute('height', SEQ_PARTICIPANT_HEIGHT);
+                    rect.setAttribute('rx', '4');
+                    rect.classList.add('node-shape');
+                    if (seqSelectedParticipantId === p.id) rect.classList.add('selected');
+                    g.appendChild(rect);
+                }
+
+                // Label
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.classList.add('node-label');
+                text.setAttribute('x', '0');
+                text.setAttribute('y', isActor ? '30' : '0');
+                text.textContent = getParticipantLabel(p);
+                g.appendChild(text);
+
+                nodesLayer.appendChild(g);
+
+                // ===== Bottom participant box (mirror) =====
+                const bottomY = totalHeight;
+                const gBottom = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                gBottom.classList.add('node-group', 'seq-participant-bottom');
+                gBottom.setAttribute('transform', `translate(${x}, ${bottomY})`);
+
+                if (isActor) {
+                    const head2 = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    head2.setAttribute('cx', '0'); head2.setAttribute('cy', '-12'); head2.setAttribute('r', '8');
+                    head2.classList.add('node-shape');
+                    gBottom.appendChild(head2);
+                    const body2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    body2.setAttribute('x1', '0'); body2.setAttribute('y1', '-4');
+                    body2.setAttribute('x2', '0'); body2.setAttribute('y2', '10');
+                    body2.setAttribute('stroke', 'var(--node-stroke)'); body2.setAttribute('stroke-width', '1.5');
+                    gBottom.appendChild(body2);
+                    const arms2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    arms2.setAttribute('x1', '-10'); arms2.setAttribute('y1', '0');
+                    arms2.setAttribute('x2', '10'); arms2.setAttribute('y2', '0');
+                    arms2.setAttribute('stroke', 'var(--node-stroke)'); arms2.setAttribute('stroke-width', '1.5');
+                    gBottom.appendChild(arms2);
+                    const legL2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    legL2.setAttribute('x1', '0'); legL2.setAttribute('y1', '10');
+                    legL2.setAttribute('x2', '-8'); legL2.setAttribute('y2', '20');
+                    legL2.setAttribute('stroke', 'var(--node-stroke)'); legL2.setAttribute('stroke-width', '1.5');
+                    gBottom.appendChild(legL2);
+                    const legR2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    legR2.setAttribute('x1', '0'); legR2.setAttribute('y1', '10');
+                    legR2.setAttribute('x2', '8'); legR2.setAttribute('y2', '20');
+                    legR2.setAttribute('stroke', 'var(--node-stroke)'); legR2.setAttribute('stroke-width', '1.5');
+                    gBottom.appendChild(legR2);
+                } else {
+                    const rect2 = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    rect2.setAttribute('x', -SEQ_PARTICIPANT_WIDTH / 2);
+                    rect2.setAttribute('y', -SEQ_PARTICIPANT_HEIGHT / 2);
+                    rect2.setAttribute('width', SEQ_PARTICIPANT_WIDTH);
+                    rect2.setAttribute('height', SEQ_PARTICIPANT_HEIGHT);
+                    rect2.setAttribute('rx', '4');
+                    rect2.classList.add('node-shape');
+                    gBottom.appendChild(rect2);
+                }
+
+                const text2 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text2.classList.add('node-label');
+                text2.setAttribute('x', '0');
+                text2.setAttribute('y', isActor ? '30' : '0');
+                text2.textContent = getParticipantLabel(p);
+                gBottom.appendChild(text2);
+                nodesLayer.appendChild(gBottom);
+            });
+
+            // ===== Render Lifelines =====
+            participants.forEach((p, idx) => {
+                const x = getParticipantX(idx);
+                const startY = SEQ_LIFELINE_START_Y;
+                const endY = totalHeight - SEQ_PARTICIPANT_HEIGHT / 2 - 10;
+
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', x);
+                line.setAttribute('y1', startY);
+                line.setAttribute('x2', x);
+                line.setAttribute('y2', endY);
+                line.setAttribute('stroke', 'var(--edge-color)');
+                line.setAttribute('stroke-width', '1');
+                line.setAttribute('stroke-dasharray', '6,3');
+                line.classList.add('seq-lifeline');
+                subgraphsLayer.appendChild(line);
+            });
+
+            // ===== Render Elements (messages, notes, fragments) =====
+            let visualMsgIdx = 0;
+            let msgNumber = seqDiagram.autoNumber ? 1 : 0;
+            const activationStacks = {}; // participantId -> [{startY}]
+
+            seqDiagram.elements.forEach((el, elIdx) => {
+                if (el.elementType === 'message') {
+                    const fromIdx = getParticipantIndex(el.fromId);
+                    const toIdx = getParticipantIndex(el.toId);
+                    if (fromIdx < 0 || toIdx < 0) { visualMsgIdx++; return; }
+
+                    const fromX = getParticipantX(fromIdx);
+                    const toX = getParticipantX(toIdx);
+                    const y = getMessageY(visualMsgIdx);
+                    const isSelfMessage = el.fromId === el.toId;
+
+                    const msgGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    msgGroup.classList.add('edge-group', 'seq-message');
+                    msgGroup.setAttribute('data-element-index', elIdx);
+
+                    if (isSelfMessage) {
+                        // Self-message: loop arrow
+                        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                        const loopW = 40;
+                        const loopH = 30;
+                        path.setAttribute('d', `M ${fromX} ${y} H ${fromX + loopW} V ${y + loopH} H ${fromX}`);
+                        path.classList.add('edge-line');
+                        if (seqSelectedMessageIndex === elIdx) path.classList.add('selected');
+                        applyArrowStyle(path, el.arrowType);
+                        msgGroup.appendChild(path);
+
+                        // Arrowhead for self-message
+                        const arrowPoly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                        arrowPoly.setAttribute('points', `${fromX + 8},${y + loopH - 4} ${fromX},${y + loopH} ${fromX + 8},${y + loopH + 4}`);
+                        arrowPoly.classList.add('edge-arrowhead');
+                        if (seqSelectedMessageIndex === elIdx) arrowPoly.classList.add('selected');
+                        msgGroup.appendChild(arrowPoly);
+
+                        // Label
+                        if (el.text) {
+                            const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                            label.classList.add('edge-label');
+                            label.setAttribute('x', fromX + loopW + 5);
+                            label.setAttribute('y', y + loopH / 2);
+                            label.setAttribute('text-anchor', 'start');
+                            label.textContent = (msgNumber > 0 ? msgNumber + '. ' : '') + el.text;
+                            msgGroup.appendChild(label);
+                        }
+                    } else {
+                        // Normal message: horizontal arrow
+                        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        line.setAttribute('x1', fromX);
+                        line.setAttribute('y1', y);
+                        line.setAttribute('x2', toX);
+                        line.setAttribute('y2', y);
+                        line.classList.add('edge-line');
+                        if (seqSelectedMessageIndex === elIdx) line.classList.add('selected');
+                        applyArrowStyle(line, el.arrowType);
+                        msgGroup.appendChild(line);
+
+                        // Arrowhead
+                        const isOpen = (el.arrowType || '').includes('Open') || (el.arrowType || '').includes('Async');
+                        const isCross = (el.arrowType || '').includes('Cross');
+                        const dir = toX > fromX ? 1 : -1;
+
+                        if (isCross) {
+                            // Cross (X) arrowhead
+                            const size = 6;
+                            const cx = toX;
+                            const cy = y;
+                            const cross1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                            cross1.setAttribute('x1', cx - size); cross1.setAttribute('y1', cy - size);
+                            cross1.setAttribute('x2', cx + size); cross1.setAttribute('y2', cy + size);
+                            cross1.setAttribute('stroke', 'var(--edge-color)'); cross1.setAttribute('stroke-width', '2');
+                            if (seqSelectedMessageIndex === elIdx) cross1.setAttribute('stroke', 'var(--node-selected-stroke)');
+                            msgGroup.appendChild(cross1);
+                            const cross2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                            cross2.setAttribute('x1', cx - size); cross2.setAttribute('y1', cy + size);
+                            cross2.setAttribute('x2', cx + size); cross2.setAttribute('y2', cy - size);
+                            cross2.setAttribute('stroke', 'var(--edge-color)'); cross2.setAttribute('stroke-width', '2');
+                            if (seqSelectedMessageIndex === elIdx) cross2.setAttribute('stroke', 'var(--node-selected-stroke)');
+                            msgGroup.appendChild(cross2);
+                        } else if (isOpen) {
+                            // Open arrowhead (V shape, no fill)
+                            const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+                            arrow.setAttribute('points', `${toX - dir * 10},${y - 5} ${toX},${y} ${toX - dir * 10},${y + 5}`);
+                            arrow.setAttribute('fill', 'none');
+                            arrow.setAttribute('stroke', 'var(--edge-color)');
+                            arrow.setAttribute('stroke-width', '1.5');
+                            if (seqSelectedMessageIndex === elIdx) arrow.setAttribute('stroke', 'var(--node-selected-stroke)');
+                            msgGroup.appendChild(arrow);
+                        } else {
+                            // Filled arrowhead
+                            const arrowPoly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                            arrowPoly.setAttribute('points', `${toX - dir * 10},${y - 5} ${toX},${y} ${toX - dir * 10},${y + 5}`);
+                            arrowPoly.classList.add('edge-arrowhead');
+                            if (seqSelectedMessageIndex === elIdx) arrowPoly.classList.add('selected');
+                            msgGroup.appendChild(arrowPoly);
+                        }
+
+                        // Label
+                        if (el.text) {
+                            const midX = (fromX + toX) / 2;
+                            const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                            const labelText = (msgNumber > 0 ? msgNumber + '. ' : '') + el.text;
+                            const textWidth = labelText.length * 7 + 12;
+                            labelBg.setAttribute('x', midX - textWidth / 2);
+                            labelBg.setAttribute('y', y - 18);
+                            labelBg.setAttribute('width', textWidth);
+                            labelBg.setAttribute('height', 16);
+                            labelBg.setAttribute('rx', '2');
+                            labelBg.classList.add('edge-label-bg');
+                            msgGroup.appendChild(labelBg);
+
+                            const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                            label.classList.add('edge-label');
+                            label.setAttribute('x', midX);
+                            label.setAttribute('y', y - 10);
+                            label.textContent = labelText;
+                            msgGroup.appendChild(label);
+                        }
+                    }
+
+                    edgesLayer.appendChild(msgGroup);
+
+                    // Handle activation
+                    if (el.activateTarget) {
+                        if (!activationStacks[el.toId]) activationStacks[el.toId] = [];
+                        activationStacks[el.toId].push({ startY: y });
+                    }
+                    if (el.deactivateSource) {
+                        const stack = activationStacks[el.fromId];
+                        if (stack && stack.length > 0) {
+                            const activation = stack.pop();
+                            renderActivationBox(el.fromId, activation.startY, y);
+                        }
+                    }
+
+                    if (msgNumber > 0) msgNumber++;
+                    visualMsgIdx++;
+                }
+                else if (el.elementType === 'note') {
+                    renderSequenceNote(el, visualMsgIdx);
+                }
+                else if (el.elementType === 'fragment') {
+                    renderSequenceFragment(el, elIdx, visualMsgIdx);
+                    // Count messages inside fragment for positioning
+                    if (el.sections) {
+                        el.sections.forEach(s => {
+                            if (s.elements) {
+                                s.elements.forEach(se => { if (se.elementType === 'message') visualMsgIdx++; });
+                            }
+                        });
+                    }
+                }
+                else if (el.elementType === 'activate') {
+                    if (!activationStacks[el.participantId]) activationStacks[el.participantId] = [];
+                    activationStacks[el.participantId].push({ startY: getMessageY(visualMsgIdx) });
+                }
+                else if (el.elementType === 'deactivate') {
+                    const stack = activationStacks[el.participantId];
+                    if (stack && stack.length > 0) {
+                        const activation = stack.pop();
+                        renderActivationBox(el.participantId, activation.startY, getMessageY(visualMsgIdx));
+                    }
+                }
+            });
+
+            // Close any remaining open activations
+            Object.keys(activationStacks).forEach(pid => {
+                const stack = activationStacks[pid];
+                while (stack.length > 0) {
+                    const activation = stack.pop();
+                    renderActivationBox(pid, activation.startY, getTotalVisualHeight() - 60);
+                }
+            });
+
+            // ===== Render clickable zones between lifelines for adding messages =====
+            if (participants.length >= 2) {
+                for (let i = 0; i < participants.length - 1; i++) {
+                    const x1 = getParticipantX(i);
+                    const x2 = getParticipantX(i + 1);
+                    const midX = (x1 + x2) / 2;
+                    const addZone = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    addZone.setAttribute('x', midX - 15);
+                    addZone.setAttribute('y', totalHeight - 50);
+                    addZone.setAttribute('width', 30);
+                    addZone.setAttribute('height', 20);
+                    addZone.setAttribute('rx', '4');
+                    addZone.setAttribute('fill', 'var(--toolbar-bg)');
+                    addZone.setAttribute('stroke', 'var(--toolbar-border)');
+                    addZone.setAttribute('cursor', 'pointer');
+                    addZone.setAttribute('opacity', '0.6');
+                    const addText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    addText.setAttribute('x', midX);
+                    addText.setAttribute('y', totalHeight - 37);
+                    addText.setAttribute('text-anchor', 'middle');
+                    addText.setAttribute('font-size', '14');
+                    addText.setAttribute('fill', 'var(--toolbar-text)');
+                    addText.setAttribute('cursor', 'pointer');
+                    addText.textContent = '+';
+
+                    const fromId = participants[i].id;
+                    const toId = participants[i + 1].id;
+                    addZone.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        postMessage({
+                            type: 'seq_messageCreated',
+                            fromId: fromId,
+                            toId: toId,
+                            text: 'Message',
+                            arrowType: 'SolidArrow'
+                        });
+                    });
+                    addText.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        postMessage({
+                            type: 'seq_messageCreated',
+                            fromId: fromId,
+                            toId: toId,
+                            text: 'Message',
+                            arrowType: 'SolidArrow'
+                        });
+                    });
+
+                    nodesLayer.appendChild(addZone);
+                    nodesLayer.appendChild(addText);
+                }
+            }
+
+            updateMinimap();
+        }
+
+        function applyArrowStyle(lineEl, arrowType) {
+            arrowType = arrowType || 'SolidArrow';
+            if (arrowType.startsWith('Dotted')) {
+                lineEl.setAttribute('stroke-dasharray', '6,3');
+            }
+        }
+
+        function renderActivationBox(participantId, startY, endY) {
+            const idx = getParticipantIndex(participantId);
+            if (idx < 0) return;
+            const x = getParticipantX(idx);
+            const boxWidth = 12;
+
+            const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            rect.setAttribute('x', x - boxWidth / 2);
+            rect.setAttribute('y', startY);
+            rect.setAttribute('width', boxWidth);
+            rect.setAttribute('height', Math.max(endY - startY, 10));
+            rect.setAttribute('fill', 'var(--node-fill)');
+            rect.setAttribute('stroke', 'var(--node-stroke)');
+            rect.setAttribute('stroke-width', '1.5');
+            rect.classList.add('seq-activation');
+            subgraphsLayer.appendChild(rect);
+        }
+
+        function renderSequenceNote(note, visualMsgIdx) {
+            if (!seqDiagram) return;
+            const y = getMessageY(visualMsgIdx) - 10;
+
+            // Parse overParticipants to find positioning
+            const overParts = (note.overParticipants || '').split(',').map(s => s.trim()).filter(Boolean);
+            let noteX = SEQ_LEFT_MARGIN;
+            let noteWidth = 120;
+
+            if (overParts.length > 0) {
+                const indices = overParts.map(pid => getParticipantIndex(pid)).filter(i => i >= 0);
+                if (indices.length > 0) {
+                    const minIdx = Math.min(...indices);
+                    const maxIdx = Math.max(...indices);
+                    noteX = (getParticipantX(minIdx) + getParticipantX(maxIdx)) / 2;
+                }
+            }
+
+            const position = note.notePosition || 'RightOf';
+            if (position === 'LeftOf' && overParts.length > 0) {
+                const idx = getParticipantIndex(overParts[0]);
+                if (idx >= 0) noteX = getParticipantX(idx) - noteWidth - 20;
+            } else if (position === 'RightOf' && overParts.length > 0) {
+                const idx = getParticipantIndex(overParts[0]);
+                if (idx >= 0) noteX = getParticipantX(idx) + 20;
+            }
+
+            const noteG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            noteG.classList.add('seq-note');
+
+            const noteRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            noteRect.setAttribute('x', noteX - noteWidth / 2);
+            noteRect.setAttribute('y', y);
+            noteRect.setAttribute('width', noteWidth);
+            noteRect.setAttribute('height', 30);
+            noteRect.setAttribute('rx', '2');
+            noteRect.setAttribute('fill', '#FFFFCC');
+            noteRect.setAttribute('stroke', '#999900');
+            noteRect.setAttribute('stroke-width', '1');
+            noteG.appendChild(noteRect);
+
+            // Fold corner
+            const fold = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            const fx = noteX + noteWidth / 2;
+            fold.setAttribute('d', `M ${fx - 10} ${y} L ${fx} ${y + 10} L ${fx - 10} ${y + 10} Z`);
+            fold.setAttribute('fill', '#EEEE88');
+            fold.setAttribute('stroke', '#999900');
+            fold.setAttribute('stroke-width', '0.5');
+            noteG.appendChild(fold);
+
+            const noteText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            noteText.setAttribute('x', noteX);
+            noteText.setAttribute('y', y + 18);
+            noteText.setAttribute('text-anchor', 'middle');
+            noteText.setAttribute('font-size', '11');
+            noteText.setAttribute('fill', '#333');
+            noteText.textContent = note.text || '';
+            noteG.appendChild(noteText);
+
+            edgesLayer.appendChild(noteG);
+        }
+
+        function renderSequenceFragment(fragment, elIdx, visualMsgIdx) {
+            if (!seqDiagram) return;
+            const startY = getMessageY(visualMsgIdx) - 20;
+
+            // Count total messages inside all sections
+            let totalMsgs = 0;
+            if (fragment.sections) {
+                fragment.sections.forEach(s => {
+                    if (s.elements) {
+                        s.elements.forEach(se => { if (se.elementType === 'message') totalMsgs++; });
+                    }
+                });
+            }
+            const endY = startY + (totalMsgs + 1) * SEQ_MESSAGE_SPACING + 30;
+
+            // Determine horizontal extent (span all participants by default)
+            const participants = seqDiagram.participants;
+            const leftX = participants.length > 0 ? getParticipantX(0) - SEQ_PARTICIPANT_WIDTH / 2 - 10 : SEQ_LEFT_MARGIN - 40;
+            const rightX = participants.length > 0 ? getParticipantX(participants.length - 1) + SEQ_PARTICIPANT_WIDTH / 2 + 10 : SEQ_LEFT_MARGIN + 200;
+
+            const fragG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            fragG.classList.add('seq-fragment');
+
+            // Main rectangle
+            const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            rect.setAttribute('x', leftX);
+            rect.setAttribute('y', startY);
+            rect.setAttribute('width', rightX - leftX);
+            rect.setAttribute('height', endY - startY);
+            rect.setAttribute('fill', 'var(--subgraph-fill)');
+            rect.setAttribute('stroke', 'var(--subgraph-stroke)');
+            rect.setAttribute('stroke-width', '1');
+            rect.setAttribute('rx', '2');
+            fragG.appendChild(rect);
+
+            // Fragment type label (e.g., "loop", "alt", "opt")
+            const typeLabel = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            const typeBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            const fragTypeText = (fragment.fragmentType || fragment.type || 'loop').toLowerCase();
+            const typeWidth = fragTypeText.length * 8 + 16;
+            typeBg.setAttribute('x', leftX);
+            typeBg.setAttribute('y', startY);
+            typeBg.setAttribute('width', typeWidth);
+            typeBg.setAttribute('height', 20);
+            typeBg.setAttribute('fill', 'var(--toolbar-bg)');
+            typeBg.setAttribute('stroke', 'var(--subgraph-stroke)');
+            typeBg.setAttribute('stroke-width', '1');
+            typeLabel.appendChild(typeBg);
+
+            const typeText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            typeText.setAttribute('x', leftX + 8);
+            typeText.setAttribute('y', startY + 14);
+            typeText.setAttribute('font-size', '11');
+            typeText.setAttribute('font-weight', 'bold');
+            typeText.setAttribute('fill', 'var(--toolbar-text)');
+            typeText.textContent = fragTypeText;
+            typeLabel.appendChild(typeText);
+            fragG.appendChild(typeLabel);
+
+            // Condition label
+            if (fragment.text) {
+                const condText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                condText.setAttribute('x', leftX + typeWidth + 10);
+                condText.setAttribute('y', startY + 14);
+                condText.setAttribute('font-size', '11');
+                condText.setAttribute('fill', 'var(--subgraph-text)');
+                condText.textContent = '[' + fragment.text + ']';
+                fragG.appendChild(condText);
+            }
+
+            // Section dividers (for alt/else etc.)
+            if (fragment.sections && fragment.sections.length > 1) {
+                let sectionMsgOffset = 0;
+                for (let si = 1; si < fragment.sections.length; si++) {
+                    // Count messages in previous section
+                    const prevSection = fragment.sections[si - 1];
+                    if (prevSection.elements) {
+                        prevSection.elements.forEach(se => { if (se.elementType === 'message') sectionMsgOffset++; });
+                    }
+                    const dividerY = startY + 25 + sectionMsgOffset * SEQ_MESSAGE_SPACING + 10;
+
+                    const divider = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    divider.setAttribute('x1', leftX);
+                    divider.setAttribute('y1', dividerY);
+                    divider.setAttribute('x2', rightX);
+                    divider.setAttribute('y2', dividerY);
+                    divider.setAttribute('stroke', 'var(--subgraph-stroke)');
+                    divider.setAttribute('stroke-width', '1');
+                    divider.setAttribute('stroke-dasharray', '5,3');
+                    fragG.appendChild(divider);
+
+                    // Section label
+                    if (fragment.sections[si].label) {
+                        const secLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        secLabel.setAttribute('x', leftX + 10);
+                        secLabel.setAttribute('y', dividerY + 14);
+                        secLabel.setAttribute('font-size', '11');
+                        secLabel.setAttribute('fill', 'var(--subgraph-text)');
+                        secLabel.textContent = '[' + fragment.sections[si].label + ']';
+                        fragG.appendChild(secLabel);
+                    }
+                }
+            }
+
+            subgraphsLayer.appendChild(fragG);
+        }
+
+        // ===== Sequence Diagram Interaction Handlers =====
+
+        // Participant drag to reorder
+        svg.addEventListener('mousedown', function(e) {
+            if (!seqDiagram) return;
+            const participantGroup = e.target.closest('.seq-participant');
+            if (participantGroup) {
+                const pid = participantGroup.getAttribute('data-participant-id');
+                if (pid) {
+                    seqDraggingParticipantId = pid;
+                    seqDragStartX = e.clientX;
+                    seqDragParticipantStartIdx = getParticipantIndex(pid);
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            }
+        });
+
+        svg.addEventListener('mousemove', function(e) {
+            if (!seqDiagram || !seqDraggingParticipantId) return;
+            // Visual feedback during drag would require re-rendering on each mouse move
+            // For now, we just track the drag
+        });
+
+        svg.addEventListener('mouseup', function(e) {
+            if (!seqDiagram || !seqDraggingParticipantId) return;
+            const dx = e.clientX - seqDragStartX;
+            const transform = panzoomInstance ? panzoomInstance.getTransform() : { scale: 1 };
+            const svgDx = dx / transform.scale;
+
+            // Calculate how many positions to shift
+            const positionsShifted = Math.round(svgDx / SEQ_PARTICIPANT_GAP);
+            if (positionsShifted !== 0) {
+                const newIdx = Math.max(0, Math.min(seqDiagram.participants.length - 1,
+                    seqDragParticipantStartIdx + positionsShifted));
+                if (newIdx !== seqDragParticipantStartIdx) {
+                    // Reorder participants
+                    const newOrder = seqDiagram.participants.map(p => p.id);
+                    const [removed] = newOrder.splice(seqDragParticipantStartIdx, 1);
+                    newOrder.splice(newIdx, 0, removed);
+                    postMessage({ type: 'seq_participantReordered', participantIds: newOrder });
+                }
+            }
+            seqDraggingParticipantId = null;
+        });
+
+        // Click on participant to select
+        svg.addEventListener('click', function(e) {
+            if (!seqDiagram) return;
+            const participantGroup = e.target.closest('.seq-participant');
+            const messageGroup = e.target.closest('.seq-message');
+
+            if (participantGroup) {
+                const pid = participantGroup.getAttribute('data-participant-id');
+                seqSelectedParticipantId = pid;
+                seqSelectedMessageIndex = -1;
+                selectedNodeId = null;
+                selectedEdgeIndex = -1;
+                renderSequenceDiagram();
+                showSeqParticipantPropertyPanel(pid);
+                e.stopPropagation();
+                return;
+            }
+
+            if (messageGroup) {
+                const elIdx = parseInt(messageGroup.getAttribute('data-element-index'), 10);
+                seqSelectedMessageIndex = elIdx;
+                seqSelectedParticipantId = null;
+                selectedNodeId = null;
+                selectedEdgeIndex = -1;
+                renderSequenceDiagram();
+                showSeqMessagePropertyPanel(elIdx);
+                e.stopPropagation();
+                return;
+            }
+
+            // Clicked on empty space — deselect
+            if (seqDiagram) {
+                seqSelectedParticipantId = null;
+                seqSelectedMessageIndex = -1;
+                propertyPanel.classList.remove('visible');
+                renderSequenceDiagram();
+            }
+        });
+
+        // Double-click to edit message text inline
+        svg.addEventListener('dblclick', function(e) {
+            if (!seqDiagram) return;
+            const messageGroup = e.target.closest('.seq-message');
+            if (messageGroup) {
+                const elIdx = parseInt(messageGroup.getAttribute('data-element-index'), 10);
+                const el = seqDiagram.elements[elIdx];
+                if (el && el.elementType === 'message') {
+                    startSeqInlineEdit(elIdx, el, e);
+                }
+                e.stopPropagation();
+                return;
+            }
+
+            const participantGroup = e.target.closest('.seq-participant');
+            if (participantGroup) {
+                const pid = participantGroup.getAttribute('data-participant-id');
+                const p = seqDiagram.participants.find(pp => pp.id === pid);
+                if (p) {
+                    startSeqParticipantInlineEdit(pid, p, e);
+                }
+                e.stopPropagation();
+            }
+        });
+
+        function startSeqInlineEdit(elIdx, el, e) {
+            const rect = svg.getBoundingClientRect();
+            inlineEditor.style.display = '';
+            inlineEditor.style.left = (e.clientX - 50) + 'px';
+            inlineEditor.style.top = (e.clientY - 15) + 'px';
+            inlineEditor.value = el.text || '';
+            inlineEditor.focus();
+            inlineEditor.select();
+
+            function finishEdit() {
+                const newText = inlineEditor.value.trim();
+                inlineEditor.style.display = 'none';
+                inlineEditor.removeEventListener('blur', finishEdit);
+                inlineEditor.removeEventListener('keydown', onKey);
+                if (newText !== (el.text || '')) {
+                    postMessage({ type: 'seq_messageEdited', elementIndex: elIdx, text: newText });
+                }
+            }
+            function onKey(e) {
+                if (e.key === 'Enter') { finishEdit(); e.preventDefault(); }
+                if (e.key === 'Escape') { inlineEditor.style.display = 'none'; inlineEditor.removeEventListener('blur', finishEdit); inlineEditor.removeEventListener('keydown', onKey); }
+            }
+            inlineEditor.addEventListener('blur', finishEdit);
+            inlineEditor.addEventListener('keydown', onKey);
+        }
+
+        function startSeqParticipantInlineEdit(pid, p, e) {
+            inlineEditor.style.display = '';
+            inlineEditor.style.left = (e.clientX - 50) + 'px';
+            inlineEditor.style.top = (e.clientY - 15) + 'px';
+            inlineEditor.value = p.alias || p.id;
+            inlineEditor.focus();
+            inlineEditor.select();
+
+            function finishEdit() {
+                const newAlias = inlineEditor.value.trim();
+                inlineEditor.style.display = 'none';
+                inlineEditor.removeEventListener('blur', finishEdit);
+                inlineEditor.removeEventListener('keydown', onKey);
+                if (newAlias && newAlias !== (p.alias || p.id)) {
+                    postMessage({ type: 'seq_participantEdited', participantId: pid, alias: newAlias });
+                }
+            }
+            function onKey(e) {
+                if (e.key === 'Enter') { finishEdit(); e.preventDefault(); }
+                if (e.key === 'Escape') { inlineEditor.style.display = 'none'; inlineEditor.removeEventListener('blur', finishEdit); inlineEditor.removeEventListener('keydown', onKey); }
+            }
+            inlineEditor.addEventListener('blur', finishEdit);
+            inlineEditor.addEventListener('keydown', onKey);
+        }
+
+        // ===== Sequence Diagram Property Panels =====
+
+        function showSeqParticipantPropertyPanel(pid) {
+            if (!seqDiagram) return;
+            const p = seqDiagram.participants.find(pp => pp.id === pid);
+            if (!p) return;
+
+            propPanelTitle.textContent = 'Participant';
+            const body = document.querySelector('.property-panel-body');
+            body.innerHTML = `
+                <div class="property-row">
+                    <div class="property-label">ID</div>
+                    <input class="property-input" id="seq-prop-id" value="${escapeHtml(p.id)}" readonly style="opacity:0.6" />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Display Name</div>
+                    <input class="property-input" id="seq-prop-alias" value="${escapeHtml(p.alias || '')}" placeholder="(uses ID if empty)" />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Type</div>
+                    <select class="property-select" id="seq-prop-type">
+                        <option value="Participant" ${p.type === 'Participant' ? 'selected' : ''}>Participant (Box)</option>
+                        <option value="Actor" ${p.type === 'Actor' ? 'selected' : ''}>Actor (Stick Figure)</option>
+                    </select>
+                </div>
+            `;
+
+            document.getElementById('seq-prop-alias').addEventListener('change', function() {
+                postMessage({ type: 'seq_participantEdited', participantId: pid, alias: this.value.trim() || null });
+            });
+            document.getElementById('seq-prop-type').addEventListener('change', function() {
+                postMessage({ type: 'seq_participantEdited', participantId: pid, type: this.value });
+            });
+
+            propertyPanel.classList.add('visible');
+        }
+
+        function showSeqMessagePropertyPanel(elIdx) {
+            if (!seqDiagram) return;
+            const el = seqDiagram.elements[elIdx];
+            if (!el || el.elementType !== 'message') return;
+
+            propPanelTitle.textContent = 'Message';
+            const body = document.querySelector('.property-panel-body');
+            body.innerHTML = `
+                <div class="property-row">
+                    <div class="property-label">From</div>
+                    <select class="property-select" id="seq-msg-from">
+                        ${seqDiagram.participants.map(p => `<option value="${escapeHtml(p.id)}" ${el.fromId === p.id ? 'selected' : ''}>${escapeHtml(getParticipantLabel(p))}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="property-row">
+                    <div class="property-label">To</div>
+                    <select class="property-select" id="seq-msg-to">
+                        ${seqDiagram.participants.map(p => `<option value="${escapeHtml(p.id)}" ${el.toId === p.id ? 'selected' : ''}>${escapeHtml(getParticipantLabel(p))}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Text</div>
+                    <input class="property-input" id="seq-msg-text" value="${escapeHtml(el.text || '')}" />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Arrow Type</div>
+                    <select class="property-select" id="seq-msg-arrow">
+                        <option value="SolidArrow" ${el.arrowType === 'SolidArrow' ? 'selected' : ''}>Solid Arrow (->>) </option>
+                        <option value="DottedArrow" ${el.arrowType === 'DottedArrow' ? 'selected' : ''}>Dotted Arrow (-->>)</option>
+                        <option value="SolidOpen" ${el.arrowType === 'SolidOpen' ? 'selected' : ''}>Solid Open (->)</option>
+                        <option value="DottedOpen" ${el.arrowType === 'DottedOpen' ? 'selected' : ''}>Dotted Open (-->)</option>
+                        <option value="SolidCross" ${el.arrowType === 'SolidCross' ? 'selected' : ''}>Solid Cross (-x)</option>
+                        <option value="DottedCross" ${el.arrowType === 'DottedCross' ? 'selected' : ''}>Dotted Cross (--x)</option>
+                        <option value="SolidAsync" ${el.arrowType === 'SolidAsync' ? 'selected' : ''}>Solid Async (-))</option>
+                        <option value="DottedAsync" ${el.arrowType === 'DottedAsync' ? 'selected' : ''}>Dotted Async (--))</option>
+                    </select>
+                </div>
+            `;
+
+            document.getElementById('seq-msg-text').addEventListener('change', function() {
+                postMessage({ type: 'seq_messageEdited', elementIndex: elIdx, text: this.value });
+            });
+            document.getElementById('seq-msg-arrow').addEventListener('change', function() {
+                postMessage({ type: 'seq_messageEdited', elementIndex: elIdx, arrowType: this.value });
+            });
+
+            propertyPanel.classList.add('visible');
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        }
+
+        // ===== Sequence Diagram Context Menu =====
+
+        svg.addEventListener('contextmenu', function(e) {
+            if (!seqDiagram) return;
+            e.preventDefault();
+            e.stopPropagation();
+
+            const participantGroup = e.target.closest('.seq-participant');
+            const messageGroup = e.target.closest('.seq-message');
+
+            contextMenu.innerHTML = '';
+
+            if (participantGroup) {
+                const pid = participantGroup.getAttribute('data-participant-id');
+                seqSelectedParticipantId = pid;
+
+                addContextMenuItem('Edit Participant', () => {
+                    const p = seqDiagram.participants.find(pp => pp.id === pid);
+                    if (p) startSeqParticipantInlineEdit(pid, p, e);
+                });
+                addContextMenuItem('Delete Participant', () => {
+                    postMessage({ type: 'seq_participantDeleted', participantId: pid });
+                });
+                addContextMenuSeparator();
+                addContextMenuItem('Add Participant After', () => {
+                    const newId = 'Participant' + (seqDiagram.participants.length + 1);
+                    postMessage({ type: 'seq_participantCreated', participantId: newId });
+                });
+            } else if (messageGroup) {
+                const elIdx = parseInt(messageGroup.getAttribute('data-element-index'), 10);
+                seqSelectedMessageIndex = elIdx;
+
+                addContextMenuItem('Edit Message', () => {
+                    const el = seqDiagram.elements[elIdx];
+                    if (el) startSeqInlineEdit(elIdx, el, e);
+                });
+                addContextMenuItem('Delete Message', () => {
+                    postMessage({ type: 'seq_messageDeleted', elementIndex: elIdx });
+                });
+                addContextMenuSeparator();
+                addContextMenuItem('Add Message Below', () => {
+                    const el = seqDiagram.elements[elIdx];
+                    if (el && el.elementType === 'message') {
+                        postMessage({
+                            type: 'seq_messageCreated',
+                            fromId: el.fromId,
+                            toId: el.toId,
+                            text: 'Message',
+                            arrowType: 'SolidArrow',
+                            insertIndex: elIdx + 1
+                        });
+                    }
+                });
+            } else {
+                // Empty space context menu
+                addContextMenuItem('Add Participant', () => {
+                    const newId = 'Participant' + (seqDiagram.participants.length + 1);
+                    postMessage({ type: 'seq_participantCreated', participantId: newId });
+                });
+                if (seqDiagram.participants.length >= 2) {
+                    addContextMenuItem('Add Message', () => {
+                        postMessage({
+                            type: 'seq_messageCreated',
+                            fromId: seqDiagram.participants[0].id,
+                            toId: seqDiagram.participants[1].id,
+                            text: 'Message',
+                            arrowType: 'SolidArrow'
+                        });
+                    });
+                }
+            }
+
+            const svgPt = getSVGPoint(e);
+            const rect = canvasContainer.getBoundingClientRect();
+            contextMenu.style.left = e.clientX + 'px';
+            contextMenu.style.top = e.clientY + 'px';
+            contextMenu.classList.add('visible');
+            renderSequenceDiagram();
+        });
+
+        function addContextMenuItem(label, onClick) {
+            const item = document.createElement('div');
+            item.classList.add('context-menu-item');
+            item.textContent = label;
+            item.addEventListener('click', function(e) {
+                e.stopPropagation();
+                contextMenu.classList.remove('visible');
+                onClick();
+            });
+            contextMenu.appendChild(item);
+        }
+
+        function addContextMenuSeparator() {
+            const sep = document.createElement('div');
+            sep.classList.add('context-menu-separator');
+            contextMenu.appendChild(sep);
+        }
+
+        // Delete key for sequence elements
+        document.addEventListener('keydown', function(e) {
+            if (!seqDiagram) return;
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) return;
+
+                if (seqSelectedParticipantId) {
+                    postMessage({ type: 'seq_participantDeleted', participantId: seqSelectedParticipantId });
+                    seqSelectedParticipantId = null;
+                    e.preventDefault();
+                } else if (seqSelectedMessageIndex >= 0) {
+                    postMessage({ type: 'seq_messageDeleted', elementIndex: seqSelectedMessageIndex });
+                    seqSelectedMessageIndex = -1;
+                    e.preventDefault();
+                }
+            }
+        });
+
         // ========== External API for C# ==========
 
         window.updateNode = function(nodeId, props) {

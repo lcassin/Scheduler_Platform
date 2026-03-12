@@ -1272,6 +1272,11 @@ Console.WriteLine(""Hello, World!"");
         var errorColor = theme == AppTheme.Light ? "#d32f2f" : "#ef9a9a";
         var errorBg = theme switch { AppTheme.Light => "#ffebee", AppTheme.Twilight => "#2E1A2E", _ => "#4e1a1a" };
 
+        // Scrollbar theming for dark/twilight themes
+        var scrollbarTrack = theme switch { AppTheme.Light => "#f0f0f0", AppTheme.Twilight => "#16213E", _ => "#2a2a2a" };
+        var scrollbarThumb = theme switch { AppTheme.Light => "#c1c1c1", AppTheme.Twilight => "#3a4a6b", _ => "#555555" };
+        var scrollbarThumbHover = theme switch { AppTheme.Light => "#a8a8a8", AppTheme.Twilight => "#4a5a7b", _ => "#666666" };
+
         var html = $@"<!DOCTYPE html>
 <html>
 <head>
@@ -1327,6 +1332,12 @@ Console.WriteLine(""Hello, World!"");
             max-width: 100%;
             overflow-x: auto;
         }}
+        /* Scrollbar theming */
+        ::-webkit-scrollbar {{ width: 10px; height: 10px; }}
+        ::-webkit-scrollbar-track {{ background: {scrollbarTrack}; }}
+        ::-webkit-scrollbar-thumb {{ background: {scrollbarThumb}; border-radius: 5px; }}
+        ::-webkit-scrollbar-thumb:hover {{ background: {scrollbarThumbHover}; }}
+        ::-webkit-scrollbar-corner {{ background: {scrollbarTrack}; }}
         /* Force white background for printing */
         @media print {{
             html, body {{ background: white !important; }}
@@ -1884,6 +1895,9 @@ Console.WriteLine(""Hello, World!"");
         var mdColorScheme = mdTheme == AppTheme.Light ? "light" : "dark";
         var mdCodeBg = mdTheme switch { AppTheme.Light => "#f6f8fa", AppTheme.Twilight => "#141428", _ => "#161b22" };
         var mdTableBorder = mdTheme switch { AppTheme.Light => "#d0d7de", AppTheme.Twilight => "#3D4A6B", _ => "#30363d" };
+        var mdScrollbarTrack = mdTheme switch { AppTheme.Light => "#f0f0f0", AppTheme.Twilight => "#16213E", _ => "#2a2a2a" };
+        var mdScrollbarThumb = mdTheme switch { AppTheme.Light => "#c1c1c1", AppTheme.Twilight => "#3a4a6b", _ => "#555555" };
+        var mdScrollbarThumbHover = mdTheme switch { AppTheme.Light => "#a8a8a8", AppTheme.Twilight => "#4a5a7b", _ => "#666666" };
 
         var html = $@"<!DOCTYPE html
 <html>
@@ -1945,6 +1959,12 @@ Console.WriteLine(""Hello, World!"");
         .markdown-body table tr:nth-child(2n) {{
             background-color: {mdCodeBg};
         }}
+        /* Scrollbar theming */
+        ::-webkit-scrollbar {{ width: 10px; height: 10px; }}
+        ::-webkit-scrollbar-track {{ background: {mdScrollbarTrack}; }}
+        ::-webkit-scrollbar-thumb {{ background: {mdScrollbarThumb}; border-radius: 5px; }}
+        ::-webkit-scrollbar-thumb:hover {{ background: {mdScrollbarThumbHover}; }}
+        ::-webkit-scrollbar-corner {{ background: {mdScrollbarTrack}; }}
         /* Force white/light background for printing */
         @media print {{
             html, body {{ background: white !important; color-scheme: light !important; }}
@@ -4563,6 +4583,7 @@ Console.WriteLine(""Hello, World!"");
 
             // Wire up events
             _visualEditorBridge.ModelChanged += VisualEditorBridge_ModelChanged;
+            _visualEditorBridge.SequenceModelChanged += VisualEditorBridge_SequenceModelChanged;
             _visualEditorBridge.EditorReady += VisualEditorBridge_EditorReady;
 
                 // Apply current theme to visual editor
@@ -4592,9 +4613,16 @@ Console.WriteLine(""Hello, World!"");
         await _visualEditorBridge.SetThemeAsync(GetVisualEditorThemeString());
 
         // If we're already in Visual or Split mode and have a model, send it
-        if (_visualEditorMode != VisualEditorMode.Text && _currentFlowchartModel != null)
+        if (_visualEditorMode != VisualEditorMode.Text)
         {
-            await _visualEditorBridge.SendDiagramToEditorAsync();
+            if (_currentSequenceDiagramModel != null)
+            {
+                await _visualEditorBridge.UpdateSequenceModelAsync(_currentSequenceDiagramModel);
+            }
+            else if (_currentFlowchartModel != null)
+            {
+                await _visualEditorBridge.SendDiagramToEditorAsync();
+            }
         }
     }
 
@@ -4611,6 +4639,44 @@ Console.WriteLine(""Hello, World!"");
         {
             // Serialize the model back to Mermaid text
             var text = MermaidSerializer.Serialize(e.Model);
+
+            // Update the code editor text without triggering a re-parse loop
+            if (_visualEditorMode == VisualEditorMode.Visual || _visualEditorMode == VisualEditorMode.Split)
+            {
+                _isSwitchingDocuments = true; // Suppress dirty flag from programmatic text change
+                try { CodeEditor.Text = text; } finally { _isSwitchingDocuments = false; }
+
+                // Mark document as dirty
+                _isDirty = true;
+                if (_activeDocument != null)
+                {
+                    _activeDocument.IsDirty = true;
+                }
+                UpdateTitle();
+
+                // Re-render preview
+                RenderPreview();
+            }
+        }
+        finally
+        {
+            _isVisualEditorUpdating = false;
+        }
+    }
+
+    /// <summary>
+    /// Called when the visual editor modifies the SequenceDiagramModel (participant reordered, message created, etc.).
+    /// Serializes the model back to text and updates the code editor + preview.
+    /// </summary>
+    private void VisualEditorBridge_SequenceModelChanged(object? sender, SequenceModelChangedEventArgs e)
+    {
+        if (_isVisualEditorUpdating) return;
+
+        _isVisualEditorUpdating = true;
+        try
+        {
+            // Serialize the sequence model back to Mermaid text
+            var text = MermaidSerializer.SerializeSequenceDiagram(e.Model);
 
             // Update the code editor text without triggering a re-parse loop
             if (_visualEditorMode == VisualEditorMode.Visual || _visualEditorMode == VisualEditorMode.Split)
@@ -4788,8 +4854,7 @@ Console.WriteLine(""Hello, World!"");
                 {
                     _currentSequenceDiagramModel = parsed;
                     _currentFlowchartModel = null;
-                    // Sequence diagram visual editor support will be added in Session 10.
-                    // For now, the preview pane still renders the text via Mermaid.js.
+                    await _visualEditorBridge.UpdateSequenceModelAsync(_currentSequenceDiagramModel);
                 }
             }
             else
@@ -4823,8 +4888,8 @@ Console.WriteLine(""Hello, World!"");
         if (_currentRenderMode != RenderMode.Mermaid) return false;
         var text = CodeEditor.Text;
         if (string.IsNullOrWhiteSpace(text)) return true; // empty file — allow visual editor
-        // If it's a flowchart, visual editing is supported
-        return IsFlowchart(text);
+        // Flowcharts and sequence diagrams have visual editing support
+        return IsFlowchart(text) || IsSequenceDiagram(text);
     }
 
     /// <summary>

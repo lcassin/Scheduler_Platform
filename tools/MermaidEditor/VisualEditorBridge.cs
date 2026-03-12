@@ -6,14 +6,26 @@ using Microsoft.Web.WebView2.Core;
 namespace MermaidEditor;
 
 /// <summary>
+/// Tracks which diagram type is currently active in the visual editor.
+/// </summary>
+public enum ActiveDiagramType
+{
+    Flowchart,
+    Sequence
+}
+
+/// <summary>
 /// Handles bidirectional communication between the visual editor WebView2
-/// and the C# FlowchartModel. Converts model to JSON for JS, processes
+/// and the C# diagram models. Converts models to JSON for JS, processes
 /// messages from JS, and maintains undo/redo history.
+/// Supports flowchart and sequence diagram types.
 /// </summary>
 public class VisualEditorBridge
 {
     private readonly WebView2 _webView;
     private FlowchartModel _model;
+    private SequenceDiagramModel? _sequenceModel;
+    private ActiveDiagramType _activeDiagramType = ActiveDiagramType.Flowchart;
     private readonly List<string> _undoStack = new();
     private readonly List<string> _redoStack = new();
     private const int MaxHistorySize = 100;
@@ -31,6 +43,12 @@ public class VisualEditorBridge
     /// The handler should regenerate the Mermaid text via MermaidSerializer.
     /// </summary>
     public event EventHandler<ModelChangedEventArgs>? ModelChanged;
+
+    /// <summary>
+    /// Raised when the SequenceDiagramModel is modified by the visual editor.
+    /// The handler should regenerate the Mermaid text via MermaidSerializer.
+    /// </summary>
+    public event EventHandler<SequenceModelChangedEventArgs>? SequenceModelChanged;
 
     /// <summary>
     /// Raised when a node is selected in the visual editor.
@@ -51,6 +69,16 @@ public class VisualEditorBridge
     /// Gets the current FlowchartModel.
     /// </summary>
     public FlowchartModel Model => _model;
+
+    /// <summary>
+    /// Gets the current SequenceDiagramModel (may be null if not in sequence mode).
+    /// </summary>
+    public SequenceDiagramModel? SequenceModel => _sequenceModel;
+
+    /// <summary>
+    /// Gets the currently active diagram type.
+    /// </summary>
+    public ActiveDiagramType ActiveDiagramType => _activeDiagramType;
 
     /// <summary>
     /// Gets whether undo is available.
@@ -100,7 +128,121 @@ public class VisualEditorBridge
     public async Task UpdateModelAsync(FlowchartModel newModel)
     {
         _model = newModel ?? throw new ArgumentNullException(nameof(newModel));
+        _activeDiagramType = ActiveDiagramType.Flowchart;
         await SendDiagramToEditorAsync();
+    }
+
+    // ========== Sequence Diagram Support ==========
+
+    /// <summary>
+    /// Sends the current SequenceDiagramModel to the visual editor as JSON.
+    /// </summary>
+    public async Task SendSequenceDiagramToEditorAsync()
+    {
+        if (_sequenceModel == null) return;
+        var json = ConvertSequenceModelToJson(_sequenceModel);
+        var escaped = JsonSerializer.Serialize(json);
+        await _webView.ExecuteScriptAsync($"window.loadSequenceDiagram({escaped})");
+    }
+
+    /// <summary>
+    /// Updates the sequence model reference and sends to editor.
+    /// </summary>
+    public async Task UpdateSequenceModelAsync(SequenceDiagramModel newModel)
+    {
+        _sequenceModel = newModel ?? throw new ArgumentNullException(nameof(newModel));
+        _activeDiagramType = ActiveDiagramType.Sequence;
+        _undoStack.Clear();
+        _redoStack.Clear();
+        await SendSequenceDiagramToEditorAsync();
+    }
+
+    /// <summary>
+    /// Converts a SequenceDiagramModel to the JSON format expected by the visual editor JS.
+    /// </summary>
+    public static string ConvertSequenceModelToJson(SequenceDiagramModel model)
+    {
+        var participants = model.Participants.Select(p => new SeqParticipantDto
+        {
+            Id = p.Id,
+            Alias = p.Alias,
+            Type = p.Type.ToString(),
+            IsExplicit = p.IsExplicit,
+            IsDestroyed = p.IsDestroyed
+        }).ToList();
+
+        var elements = FlattenSequenceElements(model.Elements);
+
+        var dto = new SeqDiagramDto
+        {
+            Participants = participants,
+            Elements = elements,
+            AutoNumber = model.AutoNumber,
+            PreambleLines = model.PreambleLines,
+            DeclarationLineIndex = model.DeclarationLineIndex
+        };
+
+        return JsonSerializer.Serialize(dto, JsonOptions);
+    }
+
+    /// <summary>
+    /// Flattens sequence elements (including fragment contents) into a list of DTOs.
+    /// </summary>
+    private static List<SeqElementDto> FlattenSequenceElements(List<SequenceElement> elements)
+    {
+        var result = new List<SeqElementDto>();
+        foreach (var elem in elements)
+        {
+            switch (elem)
+            {
+                case SequenceMessage msg:
+                    result.Add(new SeqElementDto
+                    {
+                        ElementType = "message",
+                        FromId = msg.FromId,
+                        ToId = msg.ToId,
+                        Text = msg.Text,
+                        ArrowType = msg.ArrowType.ToString(),
+                        ActivateTarget = msg.ActivateTarget,
+                        DeactivateSource = msg.DeactivateSource
+                    });
+                    break;
+
+                case SequenceNote note:
+                    result.Add(new SeqElementDto
+                    {
+                        ElementType = "note",
+                        Text = note.Text,
+                        NotePosition = note.Position.ToString(),
+                        OverParticipants = note.OverParticipants
+                    });
+                    break;
+
+                case SequenceFragment fragment:
+                    var fragDto = new SeqElementDto
+                    {
+                        ElementType = "fragment",
+                        FragmentType = fragment.Type.ToString(),
+                        Text = fragment.Label,
+                        Sections = fragment.Sections.Select(s => new SeqFragmentSectionDto
+                        {
+                            Label = s.Label,
+                            Elements = FlattenSequenceElements(s.Elements)
+                        }).ToList()
+                    };
+                    result.Add(fragDto);
+                    break;
+
+                case SequenceActivation activation:
+                    result.Add(new SeqElementDto
+                    {
+                        ElementType = activation.IsActivate ? "activate" : "deactivate",
+                        ParticipantId = activation.ParticipantId
+                    });
+                    break;
+            }
+        }
+        return result;
     }
 
     /// <summary>
@@ -129,7 +271,7 @@ public class VisualEditorBridge
         if (_undoStack.Count == 0) return;
 
         // Save current state to redo
-        var currentJson = ConvertModelToJson(_model);
+        var currentJson = GetCurrentModelJson();
         _redoStack.Add(currentJson);
         if (_redoStack.Count > MaxHistorySize)
             _redoStack.RemoveAt(0);
@@ -141,9 +283,18 @@ public class VisualEditorBridge
         _isSuppressingUpdates = true;
         try
         {
-            RestoreModelFromJson(previousJson);
-            await SendDiagramToEditorAsync();
-            RaiseModelChanged("undo");
+            if (_activeDiagramType == ActiveDiagramType.Sequence)
+            {
+                RestoreSequenceModelFromJson(previousJson);
+                await SendSequenceDiagramToEditorAsync();
+                RaiseSequenceModelChanged("undo");
+            }
+            else
+            {
+                RestoreModelFromJson(previousJson);
+                await SendDiagramToEditorAsync();
+                RaiseModelChanged("undo");
+            }
         }
         finally
         {
@@ -159,7 +310,7 @@ public class VisualEditorBridge
         if (_redoStack.Count == 0) return;
 
         // Save current state to undo
-        var currentJson = ConvertModelToJson(_model);
+        var currentJson = GetCurrentModelJson();
         _undoStack.Add(currentJson);
         if (_undoStack.Count > MaxHistorySize)
             _undoStack.RemoveAt(0);
@@ -171,14 +322,33 @@ public class VisualEditorBridge
         _isSuppressingUpdates = true;
         try
         {
-            RestoreModelFromJson(redoJson);
-            await SendDiagramToEditorAsync();
-            RaiseModelChanged("redo");
+            if (_activeDiagramType == ActiveDiagramType.Sequence)
+            {
+                RestoreSequenceModelFromJson(redoJson);
+                await SendSequenceDiagramToEditorAsync();
+                RaiseSequenceModelChanged("redo");
+            }
+            else
+            {
+                RestoreModelFromJson(redoJson);
+                await SendDiagramToEditorAsync();
+                RaiseModelChanged("redo");
+            }
         }
         finally
         {
             _isSuppressingUpdates = false;
         }
+    }
+
+    /// <summary>
+    /// Gets the JSON snapshot of the currently active model for undo/redo.
+    /// </summary>
+    private string GetCurrentModelJson()
+    {
+        if (_activeDiagramType == ActiveDiagramType.Sequence && _sequenceModel != null)
+            return ConvertSequenceModelToJson(_sequenceModel);
+        return ConvertModelToJson(_model);
     }
 
     /// <summary>
@@ -351,6 +521,44 @@ public class VisualEditorBridge
 
                 case "redo":
                     _ = RedoAsync();
+                    break;
+
+                // ===== Sequence Diagram Messages =====
+
+                case "seq_participantReordered":
+                    HandleSeqParticipantReordered(root);
+                    break;
+
+                case "seq_participantEdited":
+                    HandleSeqParticipantEdited(root);
+                    break;
+
+                case "seq_participantCreated":
+                    HandleSeqParticipantCreated(root);
+                    break;
+
+                case "seq_participantDeleted":
+                    HandleSeqParticipantDeleted(root);
+                    break;
+
+                case "seq_messageCreated":
+                    HandleSeqMessageCreated(root);
+                    break;
+
+                case "seq_messageEdited":
+                    HandleSeqMessageEdited(root);
+                    break;
+
+                case "seq_messageDeleted":
+                    HandleSeqMessageDeleted(root);
+                    break;
+
+                case "seq_participantSelected":
+                    // Selection doesn't need model changes
+                    break;
+
+                case "seq_messageSelected":
+                    // Selection doesn't need model changes
                     break;
             }
         }
@@ -747,7 +955,7 @@ public class VisualEditorBridge
 
     private void PushUndo()
     {
-        var json = ConvertModelToJson(_model);
+        var json = GetCurrentModelJson();
         _undoStack.Add(json);
         if (_undoStack.Count > MaxHistorySize)
             _undoStack.RemoveAt(0);
@@ -868,6 +1076,296 @@ public class VisualEditorBridge
         ModelChanged?.Invoke(this, new ModelChangedEventArgs(changeType, _model));
     }
 
+    private void RaiseSequenceModelChanged(string changeType)
+    {
+        if (_sequenceModel != null)
+            SequenceModelChanged?.Invoke(this, new SequenceModelChangedEventArgs(changeType, _sequenceModel));
+    }
+
+    // ========== Sequence Diagram Message Handlers ==========
+
+    private void HandleSeqParticipantReordered(JsonElement root)
+    {
+        if (_sequenceModel == null) return;
+        if (!root.TryGetProperty("participantIds", out var idsArray)) return;
+
+        var newOrder = new List<string>();
+        foreach (var id in idsArray.EnumerateArray())
+        {
+            var pid = id.GetString();
+            if (!string.IsNullOrEmpty(pid)) newOrder.Add(pid);
+        }
+
+        PushUndo();
+        var reordered = new List<SequenceParticipant>();
+        foreach (var pid in newOrder)
+        {
+            var p = _sequenceModel.Participants.Find(x => x.Id == pid);
+            if (p != null) reordered.Add(p);
+        }
+        // Add any participants not in the reorder list (shouldn't happen, but defensive)
+        foreach (var p in _sequenceModel.Participants)
+        {
+            if (!reordered.Contains(p)) reordered.Add(p);
+        }
+        _sequenceModel.Participants = reordered;
+        RaiseSequenceModelChanged("seq_participantReordered");
+    }
+
+    private void HandleSeqParticipantEdited(JsonElement root)
+    {
+        if (_sequenceModel == null) return;
+        var participantId = root.GetProperty("participantId").GetString();
+        if (string.IsNullOrEmpty(participantId)) return;
+
+        var participant = _sequenceModel.Participants.Find(p => p.Id == participantId);
+        if (participant == null) return;
+
+        PushUndo();
+        if (root.TryGetProperty("alias", out var aliasProp))
+        {
+            var alias = aliasProp.GetString();
+            participant.Alias = string.IsNullOrEmpty(alias) ? null : alias;
+        }
+        if (root.TryGetProperty("type", out var typeProp))
+        {
+            var typeStr = typeProp.GetString();
+            if (Enum.TryParse<SequenceParticipantType>(typeStr, out var pType))
+                participant.Type = pType;
+        }
+        RaiseSequenceModelChanged("seq_participantEdited");
+    }
+
+    private void HandleSeqParticipantCreated(JsonElement root)
+    {
+        if (_sequenceModel == null) return;
+        var participantId = root.GetProperty("participantId").GetString();
+        if (string.IsNullOrEmpty(participantId)) return;
+
+        // Don't create duplicates
+        if (_sequenceModel.Participants.Any(p => p.Id == participantId)) return;
+
+        PushUndo();
+        var newParticipant = new SequenceParticipant
+        {
+            Id = participantId,
+            IsExplicit = true,
+            Type = SequenceParticipantType.Participant
+        };
+
+        if (root.TryGetProperty("alias", out var aliasProp))
+        {
+            var alias = aliasProp.GetString();
+            newParticipant.Alias = string.IsNullOrEmpty(alias) ? null : alias;
+        }
+        if (root.TryGetProperty("type", out var typeProp))
+        {
+            var typeStr = typeProp.GetString();
+            if (Enum.TryParse<SequenceParticipantType>(typeStr, out var pType))
+                newParticipant.Type = pType;
+        }
+
+        _sequenceModel.Participants.Add(newParticipant);
+        RaiseSequenceModelChanged("seq_participantCreated");
+    }
+
+    private void HandleSeqParticipantDeleted(JsonElement root)
+    {
+        if (_sequenceModel == null) return;
+        var participantId = root.GetProperty("participantId").GetString();
+        if (string.IsNullOrEmpty(participantId)) return;
+
+        PushUndo();
+        _sequenceModel.Participants.RemoveAll(p => p.Id == participantId);
+        // Remove messages involving this participant
+        _sequenceModel.Elements.RemoveAll(e =>
+            e is SequenceMessage msg && (msg.FromId == participantId || msg.ToId == participantId));
+        RaiseSequenceModelChanged("seq_participantDeleted");
+    }
+
+    private void HandleSeqMessageCreated(JsonElement root)
+    {
+        if (_sequenceModel == null) return;
+        var fromId = root.GetProperty("fromId").GetString();
+        var toId = root.GetProperty("toId").GetString();
+        var text = root.TryGetProperty("text", out var textProp) ? textProp.GetString() ?? "" : "";
+
+        if (string.IsNullOrEmpty(fromId) || string.IsNullOrEmpty(toId)) return;
+
+        PushUndo();
+
+        var arrowType = SequenceArrowType.SolidArrow;
+        if (root.TryGetProperty("arrowType", out var arrowProp))
+        {
+            var arrowStr = arrowProp.GetString();
+            if (Enum.TryParse<SequenceArrowType>(arrowStr, out var parsed))
+                arrowType = parsed;
+        }
+
+        var msg = new SequenceMessage
+        {
+            FromId = fromId,
+            ToId = toId,
+            Text = text,
+            ArrowType = arrowType
+        };
+
+        // Insert at specified index or append
+        if (root.TryGetProperty("insertIndex", out var idxProp))
+        {
+            var idx = idxProp.GetInt32();
+            if (idx >= 0 && idx <= _sequenceModel.Elements.Count)
+                _sequenceModel.Elements.Insert(idx, msg);
+            else
+                _sequenceModel.Elements.Add(msg);
+        }
+        else
+        {
+            _sequenceModel.Elements.Add(msg);
+        }
+
+        RaiseSequenceModelChanged("seq_messageCreated");
+    }
+
+    private void HandleSeqMessageEdited(JsonElement root)
+    {
+        if (_sequenceModel == null) return;
+        var elementIndex = root.GetProperty("elementIndex").GetInt32();
+
+        if (elementIndex < 0 || elementIndex >= _sequenceModel.Elements.Count) return;
+        if (_sequenceModel.Elements[elementIndex] is not SequenceMessage msg) return;
+
+        PushUndo();
+        if (root.TryGetProperty("text", out var textProp))
+            msg.Text = textProp.GetString() ?? "";
+        if (root.TryGetProperty("arrowType", out var arrowProp))
+        {
+            var arrowStr = arrowProp.GetString();
+            if (Enum.TryParse<SequenceArrowType>(arrowStr, out var parsed))
+                msg.ArrowType = parsed;
+        }
+        RaiseSequenceModelChanged("seq_messageEdited");
+    }
+
+    private void HandleSeqMessageDeleted(JsonElement root)
+    {
+        if (_sequenceModel == null) return;
+        var elementIndex = root.GetProperty("elementIndex").GetInt32();
+
+        if (elementIndex < 0 || elementIndex >= _sequenceModel.Elements.Count) return;
+
+        PushUndo();
+        _sequenceModel.Elements.RemoveAt(elementIndex);
+        RaiseSequenceModelChanged("seq_messageDeleted");
+    }
+
+    // ========== Sequence Model Restore (for undo/redo) ==========
+
+    private void RestoreSequenceModelFromJson(string json)
+    {
+        var dto = JsonSerializer.Deserialize<SeqDiagramDto>(json, JsonOptions);
+        if (dto == null || _sequenceModel == null) return;
+
+        _sequenceModel.AutoNumber = dto.AutoNumber;
+        _sequenceModel.PreambleLines = dto.PreambleLines ?? new List<string>();
+        _sequenceModel.DeclarationLineIndex = dto.DeclarationLineIndex;
+        _sequenceModel.Participants.Clear();
+        _sequenceModel.Elements.Clear();
+
+        if (dto.Participants != null)
+        {
+            foreach (var p in dto.Participants)
+            {
+                var pType = Enum.TryParse<SequenceParticipantType>(p.Type, out var parsed)
+                    ? parsed : SequenceParticipantType.Participant;
+                _sequenceModel.Participants.Add(new SequenceParticipant
+                {
+                    Id = p.Id ?? string.Empty,
+                    Alias = p.Alias,
+                    Type = pType,
+                    IsExplicit = p.IsExplicit,
+                    IsDestroyed = p.IsDestroyed
+                });
+            }
+        }
+
+        if (dto.Elements != null)
+        {
+            _sequenceModel.Elements = RestoreSequenceElements(dto.Elements);
+        }
+    }
+
+    private static List<SequenceElement> RestoreSequenceElements(List<SeqElementDto> dtos)
+    {
+        var result = new List<SequenceElement>();
+        foreach (var dto in dtos)
+        {
+            switch (dto.ElementType)
+            {
+                case "message":
+                    var arrowType = Enum.TryParse<SequenceArrowType>(dto.ArrowType, out var aParsed)
+                        ? aParsed : SequenceArrowType.SolidArrow;
+                    result.Add(new SequenceMessage
+                    {
+                        FromId = dto.FromId ?? string.Empty,
+                        ToId = dto.ToId ?? string.Empty,
+                        Text = dto.Text ?? string.Empty,
+                        ArrowType = arrowType,
+                        ActivateTarget = dto.ActivateTarget,
+                        DeactivateSource = dto.DeactivateSource
+                    });
+                    break;
+
+                case "note":
+                    var notePos = Enum.TryParse<SequenceNotePosition>(dto.NotePosition, out var nParsed)
+                        ? nParsed : SequenceNotePosition.RightOf;
+                    result.Add(new SequenceNote
+                    {
+                        Text = dto.Text ?? string.Empty,
+                        Position = notePos,
+                        OverParticipants = dto.OverParticipants ?? string.Empty
+                    });
+                    break;
+
+                case "fragment":
+                    var fragType = Enum.TryParse<SequenceFragmentType>(dto.FragmentType, out var fParsed)
+                        ? fParsed : SequenceFragmentType.Loop;
+                    var fragment = new SequenceFragment
+                    {
+                        Type = fragType,
+                        Label = dto.Text ?? string.Empty
+                    };
+                    if (dto.Sections != null)
+                    {
+                        fragment.Sections = dto.Sections.Select(s => new SequenceFragmentSection
+                        {
+                            Label = s.Label,
+                            Elements = RestoreSequenceElements(s.Elements ?? new List<SeqElementDto>())
+                        }).ToList();
+                    }
+                    result.Add(fragment);
+                    break;
+
+                case "activate":
+                    result.Add(new SequenceActivation
+                    {
+                        ParticipantId = dto.ParticipantId ?? string.Empty,
+                        IsActivate = true
+                    });
+                    break;
+
+                case "deactivate":
+                    result.Add(new SequenceActivation
+                    {
+                        ParticipantId = dto.ParticipantId ?? string.Empty,
+                        IsActivate = false
+                    });
+                    break;
+            }
+        }
+        return result;
+    }
+
     // ========== DTOs for JSON Serialization ==========
 
     private class DiagramDto
@@ -934,6 +1432,52 @@ public class VisualEditorBridge
         public string? NodeIds { get; set; }
         public string? ClassName { get; set; }
     }
+
+    // ========== Sequence Diagram DTOs ==========
+
+    private class SeqDiagramDto
+    {
+        public List<SeqParticipantDto>? Participants { get; set; }
+        public List<SeqElementDto>? Elements { get; set; }
+        public bool AutoNumber { get; set; }
+        public List<string>? PreambleLines { get; set; }
+        public int DeclarationLineIndex { get; set; }
+    }
+
+    private class SeqParticipantDto
+    {
+        public string? Id { get; set; }
+        public string? Alias { get; set; }
+        public string? Type { get; set; }
+        public bool IsExplicit { get; set; }
+        public bool IsDestroyed { get; set; }
+    }
+
+    private class SeqElementDto
+    {
+        public string? ElementType { get; set; }
+        // Message fields
+        public string? FromId { get; set; }
+        public string? ToId { get; set; }
+        public string? Text { get; set; }
+        public string? ArrowType { get; set; }
+        public bool ActivateTarget { get; set; }
+        public bool DeactivateSource { get; set; }
+        // Note fields
+        public string? NotePosition { get; set; }
+        public string? OverParticipants { get; set; }
+        // Fragment fields
+        public string? FragmentType { get; set; }
+        public List<SeqFragmentSectionDto>? Sections { get; set; }
+        // Activation fields
+        public string? ParticipantId { get; set; }
+    }
+
+    private class SeqFragmentSectionDto
+    {
+        public string? Label { get; set; }
+        public List<SeqElementDto>? Elements { get; set; }
+    }
 }
 
 /// <summary>
@@ -971,5 +1515,27 @@ public class NodeSelectedEventArgs : EventArgs
     public NodeSelectedEventArgs(string nodeId)
     {
         NodeId = nodeId;
+    }
+}
+
+/// <summary>
+/// Event args for when the SequenceDiagramModel changes via the visual editor.
+/// </summary>
+public class SequenceModelChangedEventArgs : EventArgs
+{
+    /// <summary>
+    /// The type of change (e.g., "seq_participantCreated", "seq_messageEdited", etc.).
+    /// </summary>
+    public string ChangeType { get; }
+
+    /// <summary>
+    /// The updated SequenceDiagramModel.
+    /// </summary>
+    public SequenceDiagramModel Model { get; }
+
+    public SequenceModelChangedEventArgs(string changeType, SequenceDiagramModel model)
+    {
+        ChangeType = changeType;
+        Model = model;
     }
 }
