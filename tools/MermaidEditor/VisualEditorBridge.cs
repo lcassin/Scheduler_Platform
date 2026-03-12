@@ -89,8 +89,8 @@ public class VisualEditorBridge
     public async Task SendDiagramToEditorAsync()
     {
         var json = ConvertModelToJson(_model);
-        var escaped = json.Replace("\\", "\\\\").Replace("'", "\\'");
-        await _webView.ExecuteScriptAsync($"window.loadDiagram('{escaped}')");
+        var escaped = JsonSerializer.Serialize(json);
+        await _webView.ExecuteScriptAsync($"window.loadDiagram({escaped})");
     }
 
     /// <summary>
@@ -191,7 +191,7 @@ public class VisualEditorBridge
             Nodes = model.Nodes.Select(n => new NodeDto
             {
                 Id = n.Id,
-                Label = n.Label ?? n.Id,
+                Label = n.Label,
                 Shape = n.Shape.ToString(),
                 X = n.Position.X,
                 Y = n.Position.Y,
@@ -215,7 +215,25 @@ public class VisualEditorBridge
                 Label = s.Label,
                 NodeIds = s.NodeIds,
                 Direction = s.Direction
-            }).ToList()
+            }).ToList(),
+            Styles = model.Styles.Select(s => new StyleDto
+            {
+                IsClassDef = s.IsClassDef,
+                Target = s.Target,
+                StyleString = s.StyleString
+            }).ToList(),
+            Comments = model.Comments.Select(c => new CommentDto
+            {
+                Text = c.Text,
+                OriginalLineIndex = c.OriginalLineIndex
+            }).ToList(),
+            ClassAssignments = model.ClassAssignments.Select(ca => new ClassAssignmentDto
+            {
+                NodeIds = ca.NodeIds,
+                ClassName = ca.ClassName
+            }).ToList(),
+            DiagramKeyword = model.DiagramKeyword,
+            DeclarationLineIndex = model.DeclarationLineIndex
         };
 
         return JsonSerializer.Serialize(dto, JsonOptions);
@@ -476,9 +494,14 @@ public class VisualEditorBridge
         if (dto == null) return;
 
         _model.Direction = dto.Direction ?? "TD";
+        _model.DiagramKeyword = dto.DiagramKeyword ?? "flowchart";
+        _model.DeclarationLineIndex = dto.DeclarationLineIndex;
         _model.Nodes.Clear();
         _model.Edges.Clear();
         _model.Subgraphs.Clear();
+        _model.Styles.Clear();
+        _model.Comments.Clear();
+        _model.ClassAssignments.Clear();
 
         if (dto.Nodes != null)
         {
@@ -529,6 +552,43 @@ public class VisualEditorBridge
                 });
             }
         }
+
+        if (dto.Styles != null)
+        {
+            foreach (var s in dto.Styles)
+            {
+                _model.Styles.Add(new StyleDefinition
+                {
+                    IsClassDef = s.IsClassDef,
+                    Target = s.Target ?? string.Empty,
+                    StyleString = s.StyleString ?? string.Empty
+                });
+            }
+        }
+
+        if (dto.Comments != null)
+        {
+            foreach (var c in dto.Comments)
+            {
+                _model.Comments.Add(new CommentEntry
+                {
+                    Text = c.Text ?? string.Empty,
+                    OriginalLineIndex = c.OriginalLineIndex
+                });
+            }
+        }
+
+        if (dto.ClassAssignments != null)
+        {
+            foreach (var ca in dto.ClassAssignments)
+            {
+                _model.ClassAssignments.Add(new ClassAssignment
+                {
+                    NodeIds = ca.NodeIds ?? string.Empty,
+                    ClassName = ca.ClassName ?? string.Empty
+                });
+            }
+        }
     }
 
     // ========== Event Raising ==========
@@ -546,6 +606,11 @@ public class VisualEditorBridge
         public List<NodeDto>? Nodes { get; set; }
         public List<EdgeDto>? Edges { get; set; }
         public List<SubgraphDto>? Subgraphs { get; set; }
+        public List<StyleDto>? Styles { get; set; }
+        public List<CommentDto>? Comments { get; set; }
+        public List<ClassAssignmentDto>? ClassAssignments { get; set; }
+        public string? DiagramKeyword { get; set; }
+        public int DeclarationLineIndex { get; set; }
     }
 
     private class NodeDto
@@ -577,6 +642,25 @@ public class VisualEditorBridge
         public string? Label { get; set; }
         public List<string>? NodeIds { get; set; }
         public string? Direction { get; set; }
+    }
+
+    private class StyleDto
+    {
+        public bool IsClassDef { get; set; }
+        public string? Target { get; set; }
+        public string? StyleString { get; set; }
+    }
+
+    private class CommentDto
+    {
+        public string? Text { get; set; }
+        public int OriginalLineIndex { get; set; }
+    }
+
+    private class ClassAssignmentDto
+    {
+        public string? NodeIds { get; set; }
+        public string? ClassName { get; set; }
     }
 }
 
