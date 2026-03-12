@@ -564,4 +564,354 @@ public static class MermaidSerializer
             }
         }
     }
+
+    // =============================================
+    // Class Diagram Serializer (Phase 2.2)
+    // =============================================
+
+    /// <summary>
+    /// Serializes a ClassDiagramModel to valid Mermaid class diagram text.
+    /// </summary>
+    /// <param name="model">The class diagram model to serialize.</param>
+    /// <returns>Valid Mermaid class diagram text.</returns>
+    public static string SerializeClassDiagram(ClassDiagramModel model)
+    {
+        if (model == null)
+            return string.Empty;
+
+        var sb = new StringBuilder();
+
+        // Write preamble lines (config directives, frontmatter, etc.)
+        foreach (var preambleLine in model.PreambleLines)
+        {
+            sb.AppendLine(preambleLine);
+        }
+
+        // Write comments that appeared before the declaration
+        WriteClassDiagramCommentsBeforeLine(sb, model, model.DeclarationLineIndex);
+
+        // Write the classDiagram declaration
+        sb.AppendLine("classDiagram");
+
+        // Write direction if specified
+        if (!string.IsNullOrEmpty(model.Direction))
+        {
+            sb.AppendLine($"{Indent}direction {model.Direction}");
+        }
+
+        // Write notes that appear before class definitions
+        foreach (var note in model.Notes)
+        {
+            if (note.ForClass != null)
+            {
+                sb.AppendLine($"{Indent}note for {note.ForClass} \"{note.Text}\"");
+            }
+            else
+            {
+                sb.AppendLine($"{Indent}note \"{note.Text}\"");
+            }
+        }
+
+        // Collect classes that belong to namespaces
+        var classesInNamespaces = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var ns in model.Namespaces)
+        {
+            foreach (var classId in ns.ClassIds)
+            {
+                classesInNamespaces.Add(classId);
+            }
+        }
+
+        // Write namespace blocks with their classes
+        foreach (var ns in model.Namespaces)
+        {
+            sb.AppendLine($"{Indent}namespace {ns.Name} {{");
+            foreach (var classId in ns.ClassIds)
+            {
+                var cls = model.Classes.Find(c => c.Id == classId);
+                if (cls != null)
+                {
+                    WriteClassDefinition(sb, cls, Indent + Indent);
+                }
+            }
+            sb.AppendLine($"{Indent}}}");
+        }
+
+        // Write class definitions not in namespaces
+        // First write classes with members (using body syntax)
+        // Then write classes without members that were explicitly declared
+        foreach (var cls in model.Classes.Where(c => !classesInNamespaces.Contains(c.Id)))
+        {
+            if (cls.Members.Count > 0 || cls.IsExplicit)
+            {
+                WriteClassDefinition(sb, cls, Indent);
+            }
+        }
+
+        // Write relationships
+        if (model.Relationships.Count > 0)
+        {
+            foreach (var rel in model.Relationships)
+            {
+                sb.AppendLine($"{Indent}{FormatClassRelationship(rel)}");
+            }
+        }
+
+        // Write style definitions (classDef)
+        foreach (var style in model.Styles.Where(s => s.IsClassDef))
+        {
+            sb.AppendLine($"{Indent}classDef {style.Target} {style.StyleString}");
+        }
+
+        // Write inline style definitions (style)
+        foreach (var style in model.Styles.Where(s => !s.IsClassDef))
+        {
+            sb.AppendLine($"{Indent}style {style.Target} {style.StyleString}");
+        }
+
+        // Write cssClass assignments
+        foreach (var cssClass in model.CssClassAssignments)
+        {
+            sb.AppendLine($"{Indent}cssClass \"{cssClass.NodeIds}\" {cssClass.ClassName}");
+        }
+
+        // Write trailing comments
+        WriteClassDiagramTrailingComments(sb, model);
+
+        return sb.ToString().TrimEnd('\r', '\n') + Environment.NewLine;
+    }
+
+    /// <summary>
+    /// Writes a class definition block with its members.
+    /// Uses body syntax { } when the class has members or an annotation.
+    /// Uses inline syntax for simple declarations.
+    /// </summary>
+    private static void WriteClassDefinition(StringBuilder sb, ClassDefinition cls, string indent)
+    {
+        var classLine = new StringBuilder($"{indent}class {cls.Id}");
+
+        // Append generic type
+        if (!string.IsNullOrEmpty(cls.GenericType))
+        {
+            classLine.Append($"~{cls.GenericType}~");
+        }
+
+        // Append label
+        if (!string.IsNullOrEmpty(cls.Label))
+        {
+            classLine.Append($"[\"{cls.Label}\"]");
+        }
+
+        // Append CSS class
+        if (!string.IsNullOrEmpty(cls.CssClass))
+        {
+            classLine.Append($":::{cls.CssClass}");
+        }
+
+        // Inline annotation (only if no members and no body needed)
+        if (!string.IsNullOrEmpty(cls.Annotation) && cls.Members.Count == 0)
+        {
+            classLine.Append($" <<{cls.Annotation}>>");
+            sb.AppendLine(classLine.ToString());
+            return;
+        }
+
+        // If class has members or annotation inside body, use { } syntax
+        if (cls.Members.Count > 0 || !string.IsNullOrEmpty(cls.Annotation))
+        {
+            classLine.Append('{');
+            sb.AppendLine(classLine.ToString());
+
+            var innerIndent = indent + Indent;
+
+            // Write annotation inside body if present
+            if (!string.IsNullOrEmpty(cls.Annotation))
+            {
+                sb.AppendLine($"{innerIndent}<<{cls.Annotation}>>");
+            }
+
+            // Write members
+            foreach (var member in cls.Members)
+            {
+                sb.AppendLine($"{innerIndent}{FormatClassMember(member)}");
+            }
+
+            sb.AppendLine($"{indent}}}");
+        }
+        else
+        {
+            // Simple class declaration
+            sb.AppendLine(classLine.ToString());
+        }
+    }
+
+    /// <summary>
+    /// Formats a class member for serialization.
+    /// Uses the raw text for round-trip fidelity when available.
+    /// </summary>
+    private static string FormatClassMember(ClassMember member)
+    {
+        // If we have raw text, use it for best round-trip fidelity
+        if (!string.IsNullOrEmpty(member.RawText))
+        {
+            return member.RawText;
+        }
+
+        // Otherwise, reconstruct from parsed fields
+        var sb = new StringBuilder();
+
+        // Visibility prefix
+        sb.Append(member.Visibility switch
+        {
+            MemberVisibility.Public => "+",
+            MemberVisibility.Private => "-",
+            MemberVisibility.Protected => "#",
+            MemberVisibility.Package => "~",
+            _ => ""
+        });
+
+        if (member.IsMethod)
+        {
+            sb.Append(member.Name);
+            sb.Append('(');
+            if (!string.IsNullOrEmpty(member.Parameters))
+            {
+                sb.Append(member.Parameters);
+            }
+            sb.Append(')');
+
+            // Return type
+            if (!string.IsNullOrEmpty(member.Type))
+            {
+                sb.Append($" {member.Type}");
+            }
+        }
+        else
+        {
+            // Field: "Type name" or "name : type" format
+            if (!string.IsNullOrEmpty(member.Type) && !string.IsNullOrEmpty(member.Name))
+            {
+                sb.Append($"{member.Type} {member.Name}");
+            }
+            else
+            {
+                sb.Append(member.Name);
+            }
+        }
+
+        // Classifier suffix
+        sb.Append(member.Classifier switch
+        {
+            MemberClassifier.Abstract => "*",
+            MemberClassifier.Static => "$",
+            _ => ""
+        });
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Formats a class relationship for serialization.
+    /// </summary>
+    private static string FormatClassRelationship(ClassRelationship rel)
+    {
+        var sb = new StringBuilder();
+
+        sb.Append(rel.FromId);
+
+        // From cardinality
+        if (!string.IsNullOrEmpty(rel.FromCardinality))
+        {
+            sb.Append($" \"{rel.FromCardinality}\"");
+        }
+
+        sb.Append(' ');
+
+        // Left end
+        if (rel.LeftEnd == ClassRelationEnd.Lollipop)
+        {
+            sb.Append("()");
+        }
+        else
+        {
+            sb.Append(rel.LeftEnd switch
+            {
+                ClassRelationEnd.Inheritance => "<|",
+                ClassRelationEnd.Composition => "*",
+                ClassRelationEnd.Aggregation => "o",
+                ClassRelationEnd.Arrow => "<",
+                _ => ""
+            });
+        }
+
+        // Link
+        sb.Append(rel.LinkStyle == ClassLinkStyle.Dashed ? ".." : "--");
+
+        // Right end
+        if (rel.RightEnd == ClassRelationEnd.Lollipop)
+        {
+            sb.Append("()");
+        }
+        else
+        {
+            sb.Append(rel.RightEnd switch
+            {
+                ClassRelationEnd.Inheritance => "|>",
+                ClassRelationEnd.Composition => "*",
+                ClassRelationEnd.Aggregation => "o",
+                ClassRelationEnd.Arrow => ">",
+                _ => ""
+            });
+        }
+
+        // To cardinality
+        if (!string.IsNullOrEmpty(rel.ToCardinality))
+        {
+            sb.Append($" \"{rel.ToCardinality}\"");
+        }
+
+        sb.Append($" {rel.ToId}");
+
+        // Label
+        if (!string.IsNullOrEmpty(rel.Label))
+        {
+            sb.Append($" : {rel.Label}");
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Writes comments that appeared before a given line in the class diagram.
+    /// </summary>
+    private static void WriteClassDiagramCommentsBeforeLine(StringBuilder sb, ClassDiagramModel model, int lineIndex)
+    {
+        foreach (var comment in model.Comments.Where(c => c.OriginalLineIndex < lineIndex))
+        {
+            sb.AppendLine($"%%{comment.Text}");
+        }
+    }
+
+    /// <summary>
+    /// Writes trailing comments for a class diagram.
+    /// </summary>
+    private static void WriteClassDiagramTrailingComments(StringBuilder sb, ClassDiagramModel model)
+    {
+        if (model.Comments.Count > 0)
+        {
+            var trailingComments = model.Comments
+                .Where(c => c.OriginalLineIndex > model.DeclarationLineIndex)
+                .OrderBy(c => c.OriginalLineIndex)
+                .ToList();
+
+            if (trailingComments.Count > 0)
+            {
+                sb.AppendLine();
+                foreach (var comment in trailingComments)
+                {
+                    sb.AppendLine($"%%{comment.Text}");
+                }
+            }
+        }
+    }
 }

@@ -1210,4 +1210,545 @@ public static class MermaidParser
             _ => SequenceNotePosition.RightOf
         };
     }
+
+    // =============================================
+    // Class Diagram Parser (Phase 2.2)
+    // =============================================
+
+    // --- Class diagram declaration ---
+    private static readonly Regex ClassDiagramDeclaration = new(@"^\s*classDiagram\s*$", RegexOptions.Compiled);
+
+    // --- Class declaration patterns ---
+    // class Animal
+    // class Animal["Label"]
+    // class Animal~Shape~
+    // class Animal:::cssClass
+    // class Animal <<interface>>
+    private static readonly Regex ClassDeclarationPattern = new(
+        @"^\s*class\s+([\w-]+)(?:~([^~]+)~)?(?:\[""([^""]+)""\])?\s*(?::::([\w-]+))?\s*(?:<<([^>]+)>>)?\s*(\{)?\s*$",
+        RegexOptions.Compiled);
+
+    // --- Annotation on separate line: <<interface>> ClassName ---
+    private static readonly Regex SeparateAnnotationPattern = new(
+        @"^\s*<<([^>]+)>>\s+([\w-]+)\s*$", RegexOptions.Compiled);
+
+    // --- Member defined via colon syntax: ClassName : +String owner ---
+    private static readonly Regex ColonMemberPattern = new(
+        @"^\s*([\w-]+)\s*:\s*(.+)$", RegexOptions.Compiled);
+
+    // --- Relationship pattern ---
+    // Handles all 8 relationship types with optional cardinality and labels
+    // ClassA "1" <|-- "*" ClassB : implements
+    // ClassA <|--|> ClassB
+    // bar ()-- foo (lollipop)
+    // foo --() bar (lollipop)
+    private static readonly Regex ClassRelationPattern = new(
+        @"^\s*([\w-]+)\s*(?:""([^""]*)""\s*)?" +    // FromId + optional cardinality
+        @"(\(?)" +                                     // Optional ( for lollipop left
+        @"(<\||\*|o|<|(?:\|>))?" +                     // Optional left end: <|, *, o, <, |>
+        @"(\)?\s*)" +                                  // Optional ) for lollipop left
+        @"(--|\.\.)" +                                 // Link: -- or ..
+        @"(\s*\(?)" +                                  // Optional ( for lollipop right
+        @"(\|>|\*|o|>|(?:<\|))?" +                     // Optional right end: |>, *, o, >, <|
+        @"(\)?)" +                                     // Optional ) for lollipop right
+        @"\s*(?:""([^""]*)""\s*)?" +                   // Optional cardinality
+        @"([\w-]+)" +                                  // ToId
+        @"(?:\s*:\s*(.+))?\s*$",                       // Optional label
+        RegexOptions.Compiled);
+
+    // --- Note patterns ---
+    // note "text"
+    // note for ClassName "text"
+    private static readonly Regex ClassNotePattern = new(
+        @"^\s*note\s+(?:for\s+([\w-]+)\s+)?""([^""]+)""\s*$", RegexOptions.Compiled);
+
+    // --- Namespace pattern ---
+    private static readonly Regex NamespaceStartPattern = new(
+        @"^\s*namespace\s+([\w.-]+)\s*\{\s*$", RegexOptions.Compiled);
+
+    // --- Direction pattern for class diagrams ---
+    private static readonly Regex ClassDirectionPattern = new(
+        @"^\s*direction\s+(TB|TD|BT|RL|LR)\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // --- Style patterns (reuse from flowchart but keep local for clarity) ---
+    private static readonly Regex ClassStylePattern = new(@"^\s*style\s+(.+?)\s+(.+)$", RegexOptions.Compiled);
+    private static readonly Regex ClassClassDefPattern = new(@"^\s*classDef\s+(\S+)\s+(.+)$", RegexOptions.Compiled);
+    private static readonly Regex CssClassPattern = new(
+        @"^\s*cssClass\s+""([^""]+)""\s+(\S+)\s*;?\s*$", RegexOptions.Compiled);
+
+    // --- Link/callback/click patterns (preserve but don't parse deeply) ---
+    private static readonly Regex LinkCallbackPattern = new(
+        @"^\s*(link|callback|click)\s+", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Parses Mermaid class diagram text into a ClassDiagramModel.
+    /// </summary>
+    /// <param name="text">The Mermaid class diagram source text.</param>
+    /// <returns>A populated ClassDiagramModel, or null if the text is not a valid class diagram.</returns>
+    public static ClassDiagramModel? ParseClassDiagram(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        var lines = text.Split('\n');
+        var model = new ClassDiagramModel();
+        var knownClasses = new HashSet<string>(StringComparer.Ordinal);
+        bool foundDeclaration = false;
+
+        // Track namespace nesting
+        var namespaceStack = new Stack<ClassNamespace>();
+        // Track class body parsing (class Foo { ... })
+        bool inClassBody = false;
+        string? currentClassId = null;
+        int braceDepth = 0;
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var rawLine = lines[i];
+            var line = rawLine.TrimEnd('\r');
+
+            // Skip empty lines
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            // Check for comments (before declaration check)
+            var commentMatch = CommentPattern.Match(line);
+            if (commentMatch.Success)
+            {
+                var commentText = commentMatch.Groups[1].Value;
+                if (!commentText.TrimStart().StartsWith("@pos"))
+                {
+                    model.Comments.Add(new CommentEntry
+                    {
+                        Text = commentText,
+                        OriginalLineIndex = i
+                    });
+                }
+                continue;
+            }
+
+            // Check for classDiagram declaration
+            if (!foundDeclaration)
+            {
+                var declMatch = ClassDiagramDeclaration.Match(line);
+                if (declMatch.Success)
+                {
+                    model.DeclarationLineIndex = i;
+                    foundDeclaration = true;
+                    continue;
+                }
+
+                // Preserve preamble lines
+                if (!line.TrimStart().StartsWith("%%"))
+                {
+                    model.PreambleLines.Add(line);
+                    continue;
+                }
+            }
+
+            if (!foundDeclaration)
+                continue;
+
+            var trimmedLine = line.Trim();
+
+            // If we're inside a class body { ... }, parse members
+            if (inClassBody && currentClassId != null)
+            {
+                // Check for closing brace
+                if (trimmedLine == "}" || trimmedLine.EndsWith("}"))
+                {
+                    braceDepth--;
+                    if (braceDepth <= 0)
+                    {
+                        inClassBody = false;
+                        currentClassId = null;
+                        braceDepth = 0;
+                    }
+                    continue;
+                }
+
+                // Check for annotation inside class body: <<interface>>
+                if (trimmedLine.StartsWith("<<") && trimmedLine.EndsWith(">>"))
+                {
+                    var annotation = trimmedLine[2..^2].Trim();
+                    var cls = model.Classes.Find(c => c.Id == currentClassId);
+                    if (cls != null) cls.Annotation = annotation;
+                    continue;
+                }
+
+                // Parse as a class member
+                var classDef = model.Classes.Find(c => c.Id == currentClassId);
+                if (classDef != null)
+                {
+                    classDef.Members.Add(ParseClassMember(trimmedLine));
+                }
+                continue;
+            }
+
+            // Check for direction
+            var dirMatch = ClassDirectionPattern.Match(trimmedLine);
+            if (dirMatch.Success)
+            {
+                model.Direction = dirMatch.Groups[1].Value.ToUpperInvariant();
+                continue;
+            }
+
+            // Check for namespace start
+            var nsMatch = NamespaceStartPattern.Match(trimmedLine);
+            if (nsMatch.Success)
+            {
+                var ns = new ClassNamespace { Name = nsMatch.Groups[1].Value };
+                namespaceStack.Push(ns);
+                continue;
+            }
+
+            // Check for closing brace (namespace end or class body end)
+            if (trimmedLine == "}")
+            {
+                if (namespaceStack.Count > 0)
+                {
+                    var completedNs = namespaceStack.Pop();
+                    model.Namespaces.Add(completedNs);
+                }
+                continue;
+            }
+
+            // Check for note
+            var noteMatch = ClassNotePattern.Match(trimmedLine);
+            if (noteMatch.Success)
+            {
+                var forClass = noteMatch.Groups[1].Success ? noteMatch.Groups[1].Value : null;
+                var noteText = noteMatch.Groups[2].Value;
+                model.Notes.Add(new ClassNote { Text = noteText, ForClass = forClass });
+                continue;
+            }
+
+            // Check for style directive
+            var styleMatch = ClassStylePattern.Match(trimmedLine);
+            if (styleMatch.Success)
+            {
+                model.Styles.Add(new StyleDefinition
+                {
+                    IsClassDef = false,
+                    Target = styleMatch.Groups[1].Value.Trim(),
+                    StyleString = styleMatch.Groups[2].Value.Trim()
+                });
+                continue;
+            }
+
+            // Check for classDef directive
+            var classDefStyleMatch = ClassClassDefPattern.Match(trimmedLine);
+            if (classDefStyleMatch.Success)
+            {
+                model.Styles.Add(new StyleDefinition
+                {
+                    IsClassDef = true,
+                    Target = classDefStyleMatch.Groups[1].Value.Trim(),
+                    StyleString = classDefStyleMatch.Groups[2].Value.Trim()
+                });
+                continue;
+            }
+
+            // Check for cssClass assignment
+            var cssClassMatch = CssClassPattern.Match(trimmedLine);
+            if (cssClassMatch.Success)
+            {
+                model.CssClassAssignments.Add(new ClassDiagramCssClass
+                {
+                    NodeIds = cssClassMatch.Groups[1].Value.Trim(),
+                    ClassName = cssClassMatch.Groups[2].Value.Trim()
+                });
+                continue;
+            }
+
+            // Check for link/callback/click (preserve as-is, skip parsing)
+            if (LinkCallbackPattern.IsMatch(trimmedLine))
+                continue;
+
+            // Check for separate annotation: <<interface>> ClassName
+            var annotationMatch = SeparateAnnotationPattern.Match(trimmedLine);
+            if (annotationMatch.Success)
+            {
+                var annotation = annotationMatch.Groups[1].Value.Trim();
+                var classId = annotationMatch.Groups[2].Value;
+                EnsureClassExists(model, knownClasses, classId, namespaceStack);
+                var cls = model.Classes.Find(c => c.Id == classId);
+                if (cls != null) cls.Annotation = annotation;
+                continue;
+            }
+
+            // Check for class declaration: class ClassName { ... } or class ClassName
+            var classMatch = ClassDeclarationPattern.Match(trimmedLine);
+            if (classMatch.Success)
+            {
+                var classId = classMatch.Groups[1].Value;
+                var genericType = classMatch.Groups[2].Success ? classMatch.Groups[2].Value : null;
+                var label = classMatch.Groups[3].Success ? classMatch.Groups[3].Value : null;
+                var cssClass = classMatch.Groups[4].Success ? classMatch.Groups[4].Value : null;
+                var annotation = classMatch.Groups[5].Success ? classMatch.Groups[5].Value.Trim() : null;
+                var hasOpenBrace = classMatch.Groups[6].Success;
+
+                EnsureClassExists(model, knownClasses, classId, namespaceStack);
+                var cls = model.Classes.Find(c => c.Id == classId);
+                if (cls != null)
+                {
+                    cls.IsExplicit = true;
+                    if (genericType != null) cls.GenericType = genericType;
+                    if (label != null) cls.Label = label;
+                    if (cssClass != null) cls.CssClass = cssClass;
+                    if (annotation != null) cls.Annotation = annotation;
+                }
+
+                if (hasOpenBrace)
+                {
+                    inClassBody = true;
+                    currentClassId = classId;
+                    braceDepth = 1;
+                }
+                continue;
+            }
+
+            // Check for colon member syntax: ClassName : +memberDef
+            var colonMatch = ColonMemberPattern.Match(trimmedLine);
+            if (colonMatch.Success)
+            {
+                var classId = colonMatch.Groups[1].Value;
+                var memberText = colonMatch.Groups[2].Value.Trim();
+
+                // Make sure this isn't actually a relationship by checking for relationship operators
+                if (!ContainsRelationshipOperator(memberText))
+                {
+                    EnsureClassExists(model, knownClasses, classId, namespaceStack);
+                    var cls = model.Classes.Find(c => c.Id == classId);
+                    if (cls != null)
+                    {
+                        cls.Members.Add(ParseClassMember(memberText));
+                    }
+                    continue;
+                }
+            }
+
+            // Check for relationship
+            if (TryParseClassRelationship(trimmedLine, model, knownClasses, namespaceStack))
+                continue;
+        }
+
+        if (!foundDeclaration)
+            return null;
+
+        return model;
+    }
+
+    /// <summary>
+    /// Checks if a member text contains a relationship operator (to distinguish from colon member syntax).
+    /// </summary>
+    private static bool ContainsRelationshipOperator(string text)
+    {
+        // Check for relationship operators within the text
+        return text.Contains("<|") || text.Contains("|>") ||
+               text.Contains("*--") || text.Contains("--*") ||
+               text.Contains("o--") || text.Contains("--o") ||
+               text.Contains("-->") || text.Contains("<--") ||
+               text.Contains("..>") || text.Contains("<..") ||
+               text.Contains("..|>") || text.Contains("<|..");
+    }
+
+    /// <summary>
+    /// Attempts to parse a line as a class diagram relationship.
+    /// </summary>
+    private static bool TryParseClassRelationship(string line, ClassDiagramModel model,
+        HashSet<string> knownClasses, Stack<ClassNamespace> namespaceStack)
+    {
+        // Try the general relationship regex
+        var match = ClassRelationPattern.Match(line);
+        if (!match.Success)
+            return false;
+
+        var fromId = match.Groups[1].Value;
+        var fromCardinality = match.Groups[2].Success && match.Groups[2].Value.Length > 0
+            ? match.Groups[2].Value : null;
+
+        var leftParen = match.Groups[3].Value;
+        var leftEndStr = match.Groups[4].Success ? match.Groups[4].Value : "";
+        var leftParenClose = match.Groups[5].Value.Trim();
+
+        var linkStr = match.Groups[6].Value; // -- or ..
+
+        var rightParenOpen = match.Groups[7].Value.Trim();
+        var rightEndStr = match.Groups[8].Success ? match.Groups[8].Value : "";
+        var rightParen = match.Groups[9].Value;
+
+        var toCardinality = match.Groups[10].Success && match.Groups[10].Value.Length > 0
+            ? match.Groups[10].Value : null;
+        var toId = match.Groups[11].Value;
+        var label = match.Groups[12].Success ? match.Groups[12].Value.Trim() : null;
+
+        // Determine link style
+        var linkStyle = linkStr == ".." ? ClassLinkStyle.Dashed : ClassLinkStyle.Solid;
+
+        // Parse left end
+        var leftEnd = ParseRelationEnd(leftEndStr, leftParen.Contains("(") && leftParenClose.Contains(")"));
+
+        // Parse right end
+        var rightEnd = ParseRelationEnd(rightEndStr, rightParenOpen.Contains("(") && rightParen.Contains(")"));
+
+        // Ensure classes exist
+        EnsureClassExists(model, knownClasses, fromId, namespaceStack);
+        EnsureClassExists(model, knownClasses, toId, namespaceStack);
+
+        model.Relationships.Add(new ClassRelationship
+        {
+            FromId = fromId,
+            ToId = toId,
+            LeftEnd = leftEnd,
+            RightEnd = rightEnd,
+            LinkStyle = linkStyle,
+            Label = string.IsNullOrEmpty(label) ? null : label,
+            FromCardinality = fromCardinality,
+            ToCardinality = toCardinality
+        });
+
+        return true;
+    }
+
+    /// <summary>
+    /// Parses a relationship end marker string into a ClassRelationEnd enum value.
+    /// </summary>
+    private static ClassRelationEnd ParseRelationEnd(string endStr, bool isLollipop)
+    {
+        if (isLollipop) return ClassRelationEnd.Lollipop;
+
+        return endStr switch
+        {
+            "<|" or "|>" => ClassRelationEnd.Inheritance,
+            "*" => ClassRelationEnd.Composition,
+            "o" => ClassRelationEnd.Aggregation,
+            "<" or ">" => ClassRelationEnd.Arrow,
+            _ => ClassRelationEnd.None
+        };
+    }
+
+    /// <summary>
+    /// Parses a class member text into a ClassMember object.
+    /// Handles visibility (+, -, #, ~), method detection (parentheses), return types, and classifiers (* $).
+    /// </summary>
+    private static ClassMember ParseClassMember(string text)
+    {
+        var member = new ClassMember { RawText = text };
+        var remaining = text.Trim();
+
+        // Parse visibility prefix
+        if (remaining.Length > 0)
+        {
+            switch (remaining[0])
+            {
+                case '+':
+                    member.Visibility = MemberVisibility.Public;
+                    remaining = remaining[1..];
+                    break;
+                case '-':
+                    member.Visibility = MemberVisibility.Private;
+                    remaining = remaining[1..];
+                    break;
+                case '#':
+                    member.Visibility = MemberVisibility.Protected;
+                    remaining = remaining[1..];
+                    break;
+                case '~':
+                    member.Visibility = MemberVisibility.Package;
+                    remaining = remaining[1..];
+                    break;
+            }
+        }
+
+        // Check for classifier suffix (* or $) at the very end
+        if (remaining.EndsWith("*"))
+        {
+            member.Classifier = MemberClassifier.Abstract;
+            remaining = remaining[..^1];
+        }
+        else if (remaining.EndsWith("$"))
+        {
+            member.Classifier = MemberClassifier.Static;
+            remaining = remaining[..^1];
+        }
+
+        // Check if it's a method (contains parentheses)
+        var parenOpen = remaining.IndexOf('(');
+        if (parenOpen >= 0)
+        {
+            member.IsMethod = true;
+            var parenClose = remaining.LastIndexOf(')');
+            if (parenClose > parenOpen)
+            {
+                member.Parameters = remaining[(parenOpen + 1)..parenClose];
+                // Method name is everything before the (
+                var beforeParen = remaining[..parenOpen].Trim();
+                member.Name = beforeParen;
+
+                // Return type is everything after the closing )
+                var afterParen = remaining[(parenClose + 1)..].Trim();
+                if (!string.IsNullOrEmpty(afterParen))
+                {
+                    member.Type = afterParen;
+                }
+            }
+            else
+            {
+                // Malformed - treat whole thing as name
+                member.Name = remaining;
+            }
+        }
+        else
+        {
+            // It's a field — could be "Type name" or just "name"
+            member.IsMethod = false;
+            // Split by space to separate type from name
+            // Mermaid uses "Type name" format (e.g., "+String owner", "+int age")
+            // Also handle "name : type" format
+            var colonIdx = remaining.IndexOf(':');
+            if (colonIdx >= 0)
+            {
+                // "name : type" format (e.g., "-idCard : IdCard")
+                member.Name = remaining[..colonIdx].Trim();
+                member.Type = remaining[(colonIdx + 1)..].Trim();
+            }
+            else
+            {
+                // "Type name" format or just "name"
+                var parts = remaining.Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2)
+                {
+                    // Check if first part looks like a type (contains generic ~~ or starts with uppercase or is a known type)
+                    member.Type = parts[0];
+                    member.Name = parts[1];
+                }
+                else if (parts.Length == 1)
+                {
+                    member.Name = parts[0];
+                }
+            }
+        }
+
+        return member;
+    }
+
+    /// <summary>
+    /// Ensures a class exists in the model, creating it if not already known.
+    /// </summary>
+    private static void EnsureClassExists(ClassDiagramModel model, HashSet<string> knownClasses,
+        string classId, Stack<ClassNamespace> namespaceStack)
+    {
+        if (knownClasses.Contains(classId))
+            return;
+
+        knownClasses.Add(classId);
+        model.Classes.Add(new ClassDefinition { Id = classId });
+
+        // If we're inside a namespace, add the class to it
+        if (namespaceStack.Count > 0)
+        {
+            namespaceStack.Peek().ClassIds.Add(classId);
+        }
+    }
 }

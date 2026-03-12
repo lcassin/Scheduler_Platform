@@ -621,3 +621,319 @@ public class SequenceDestroy : SequenceElement
     /// </summary>
     public string ParticipantId { get; set; } = string.Empty;
 }
+
+// =============================================
+// Class Diagram Models (Phase 2.2)
+// =============================================
+
+/// <summary>
+/// Represents a complete Mermaid class diagram.
+/// </summary>
+public class ClassDiagramModel
+{
+    /// <summary>
+    /// Optional direction for the diagram layout (TB, BT, RL, LR).
+    /// </summary>
+    public string? Direction { get; set; }
+
+    /// <summary>
+    /// All class definitions in the diagram.
+    /// </summary>
+    public List<ClassDefinition> Classes { get; set; } = new();
+
+    /// <summary>
+    /// All relationships between classes.
+    /// </summary>
+    public List<ClassRelationship> Relationships { get; set; } = new();
+
+    /// <summary>
+    /// Namespace groupings.
+    /// </summary>
+    public List<ClassNamespace> Namespaces { get; set; } = new();
+
+    /// <summary>
+    /// Notes attached to the diagram or specific classes.
+    /// </summary>
+    public List<ClassNote> Notes { get; set; } = new();
+
+    /// <summary>
+    /// Preserved comments from the source text (%% lines).
+    /// </summary>
+    public List<CommentEntry> Comments { get; set; } = new();
+
+    /// <summary>
+    /// Lines that appear before the classDiagram declaration (e.g., config directives).
+    /// </summary>
+    public List<string> PreambleLines { get; set; } = new();
+
+    /// <summary>
+    /// The original line index of the classDiagram declaration.
+    /// </summary>
+    public int DeclarationLineIndex { get; set; }
+
+    /// <summary>
+    /// Style definitions (style className fill:#color and classDef className fill:#color).
+    /// </summary>
+    public List<StyleDefinition> Styles { get; set; } = new();
+
+    /// <summary>
+    /// CSS class assignments (cssClass "nodeId" className).
+    /// </summary>
+    public List<ClassDiagramCssClass> CssClassAssignments { get; set; } = new();
+}
+
+/// <summary>
+/// Represents a class definition in a class diagram.
+/// </summary>
+public class ClassDefinition
+{
+    /// <summary>
+    /// The unique identifier/name for this class.
+    /// </summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional display label (for class Animal["Label"] syntax).
+    /// </summary>
+    public string? Label { get; set; }
+
+    /// <summary>
+    /// Optional annotation (e.g., "interface", "abstract", "enumeration", "service").
+    /// Stored without the &lt;&lt; &gt;&gt; delimiters.
+    /// </summary>
+    public string? Annotation { get; set; }
+
+    /// <summary>
+    /// Optional generic type parameter (e.g., "Shape" for class Square~Shape~).
+    /// </summary>
+    public string? GenericType { get; set; }
+
+    /// <summary>
+    /// All members (fields and methods) of this class.
+    /// </summary>
+    public List<ClassMember> Members { get; set; } = new();
+
+    /// <summary>
+    /// Optional CSS class name applied via ::: operator.
+    /// </summary>
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Whether this class was explicitly declared with the class keyword
+    /// (vs. implicitly created from a relationship or member definition).
+    /// </summary>
+    public bool IsExplicit { get; set; }
+
+    /// <summary>
+    /// Returns the effective display label (Label if set, otherwise Id).
+    /// </summary>
+    public string DisplayLabel => Label ?? Id;
+}
+
+/// <summary>
+/// Represents a member (field or method) of a class.
+/// </summary>
+public class ClassMember
+{
+    /// <summary>
+    /// The raw text of the member as it appeared in the source.
+    /// Used for round-trip fidelity when the member isn't modified.
+    /// </summary>
+    public string RawText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The visibility modifier of the member.
+    /// </summary>
+    public MemberVisibility Visibility { get; set; } = MemberVisibility.None;
+
+    /// <summary>
+    /// Whether this member is a method (has parentheses).
+    /// </summary>
+    public bool IsMethod { get; set; }
+
+    /// <summary>
+    /// The member name (without visibility prefix, type, or parameters).
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The data type for fields, or return type for methods.
+    /// </summary>
+    public string? Type { get; set; }
+
+    /// <summary>
+    /// The parameter text inside parentheses for methods (without the parens).
+    /// </summary>
+    public string? Parameters { get; set; }
+
+    /// <summary>
+    /// Optional classifier suffix (* for abstract, $ for static).
+    /// </summary>
+    public MemberClassifier Classifier { get; set; } = MemberClassifier.None;
+}
+
+/// <summary>
+/// Visibility modifiers for class members.
+/// </summary>
+public enum MemberVisibility
+{
+    /// <summary>No visibility modifier specified.</summary>
+    None,
+
+    /// <summary>Public: +</summary>
+    Public,
+
+    /// <summary>Private: -</summary>
+    Private,
+
+    /// <summary>Protected: #</summary>
+    Protected,
+
+    /// <summary>Package/Internal: ~</summary>
+    Package
+}
+
+/// <summary>
+/// Classifier suffixes for class members.
+/// </summary>
+public enum MemberClassifier
+{
+    /// <summary>No classifier.</summary>
+    None,
+
+    /// <summary>Abstract method: someMethod()*</summary>
+    Abstract,
+
+    /// <summary>Static member: someMethod()$ or someField$</summary>
+    Static
+}
+
+/// <summary>
+/// Represents a relationship between two classes.
+/// </summary>
+public class ClassRelationship
+{
+    /// <summary>
+    /// The left-side class ID.
+    /// </summary>
+    public string FromId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The right-side class ID.
+    /// </summary>
+    public string ToId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The relation end type on the left (From) side.
+    /// </summary>
+    public ClassRelationEnd LeftEnd { get; set; } = ClassRelationEnd.None;
+
+    /// <summary>
+    /// The relation end type on the right (To) side.
+    /// </summary>
+    public ClassRelationEnd RightEnd { get; set; } = ClassRelationEnd.None;
+
+    /// <summary>
+    /// The link style (solid or dashed).
+    /// </summary>
+    public ClassLinkStyle LinkStyle { get; set; } = ClassLinkStyle.Solid;
+
+    /// <summary>
+    /// Optional label describing the relationship.
+    /// </summary>
+    public string? Label { get; set; }
+
+    /// <summary>
+    /// Optional cardinality on the left (From) side (e.g., "1", "0..*").
+    /// </summary>
+    public string? FromCardinality { get; set; }
+
+    /// <summary>
+    /// Optional cardinality on the right (To) side (e.g., "*", "1..*").
+    /// </summary>
+    public string? ToCardinality { get; set; }
+}
+
+/// <summary>
+/// Relation end types for class diagram relationships.
+/// </summary>
+public enum ClassRelationEnd
+{
+    /// <summary>No marker (plain line end).</summary>
+    None,
+
+    /// <summary>Inheritance arrow: &lt;| or |&gt;</summary>
+    Inheritance,
+
+    /// <summary>Composition diamond: *</summary>
+    Composition,
+
+    /// <summary>Aggregation diamond: o</summary>
+    Aggregation,
+
+    /// <summary>Association arrow: &lt; or &gt;</summary>
+    Arrow,
+
+    /// <summary>Lollipop interface: ()</summary>
+    Lollipop
+}
+
+/// <summary>
+/// Link line styles for class diagram relationships.
+/// </summary>
+public enum ClassLinkStyle
+{
+    /// <summary>Solid line: --</summary>
+    Solid,
+
+    /// <summary>Dashed line: ..</summary>
+    Dashed
+}
+
+/// <summary>
+/// Represents a namespace grouping in a class diagram.
+/// </summary>
+public class ClassNamespace
+{
+    /// <summary>
+    /// The namespace name.
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// IDs of classes that belong to this namespace.
+    /// </summary>
+    public List<string> ClassIds { get; set; } = new();
+}
+
+/// <summary>
+/// Represents a note in a class diagram.
+/// </summary>
+public class ClassNote
+{
+    /// <summary>
+    /// The note text content.
+    /// </summary>
+    public string Text { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The class ID this note is for (null for general notes).
+    /// </summary>
+    public string? ForClass { get; set; }
+}
+
+/// <summary>
+/// Represents a cssClass assignment in a class diagram.
+/// </summary>
+public class ClassDiagramCssClass
+{
+    /// <summary>
+    /// The node ID(s) to assign the class to (comma-separated for multiple).
+    /// </summary>
+    public string NodeIds { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The CSS class name to assign.
+    /// </summary>
+    public string ClassName { get; set; } = string.Empty;
+}

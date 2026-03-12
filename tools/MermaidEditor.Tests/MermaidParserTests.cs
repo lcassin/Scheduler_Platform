@@ -567,4 +567,486 @@ public class MermaidParserTests
         // Verify C is NOT in sg1
         Assert.DoesNotContain("C", model.Subgraphs[0].NodeIds);
     }
+
+    // =============================================
+    // Class Diagram Tests (Phase 2.2)
+    // =============================================
+
+    /// <summary>
+    /// Round-trip helper for class diagrams: parse → serialize → re-parse → compare models.
+    /// </summary>
+    private static void AssertClassDiagramRoundTrip(string input)
+    {
+        var model1 = MermaidParser.ParseClassDiagram(input);
+        Assert.NotNull(model1);
+
+        var serialized = MermaidSerializer.SerializeClassDiagram(model1);
+        Assert.False(string.IsNullOrWhiteSpace(serialized), "Serialized output should not be empty");
+
+        var model2 = MermaidParser.ParseClassDiagram(serialized);
+        Assert.NotNull(model2);
+
+        // Compare direction
+        Assert.Equal(model1.Direction, model2.Direction);
+
+        // Compare classes
+        Assert.Equal(model1.Classes.Count, model2.Classes.Count);
+        for (int i = 0; i < model1.Classes.Count; i++)
+        {
+            Assert.Equal(model1.Classes[i].Id, model2.Classes[i].Id);
+            Assert.Equal(model1.Classes[i].Annotation, model2.Classes[i].Annotation);
+            Assert.Equal(model1.Classes[i].GenericType, model2.Classes[i].GenericType);
+            Assert.Equal(model1.Classes[i].Members.Count, model2.Classes[i].Members.Count);
+            for (int j = 0; j < model1.Classes[i].Members.Count; j++)
+            {
+                Assert.Equal(model1.Classes[i].Members[j].RawText, model2.Classes[i].Members[j].RawText);
+                Assert.Equal(model1.Classes[i].Members[j].IsMethod, model2.Classes[i].Members[j].IsMethod);
+                Assert.Equal(model1.Classes[i].Members[j].Visibility, model2.Classes[i].Members[j].Visibility);
+            }
+        }
+
+        // Compare relationships
+        Assert.Equal(model1.Relationships.Count, model2.Relationships.Count);
+        for (int i = 0; i < model1.Relationships.Count; i++)
+        {
+            Assert.Equal(model1.Relationships[i].FromId, model2.Relationships[i].FromId);
+            Assert.Equal(model1.Relationships[i].ToId, model2.Relationships[i].ToId);
+            Assert.Equal(model1.Relationships[i].LeftEnd, model2.Relationships[i].LeftEnd);
+            Assert.Equal(model1.Relationships[i].RightEnd, model2.Relationships[i].RightEnd);
+            Assert.Equal(model1.Relationships[i].LinkStyle, model2.Relationships[i].LinkStyle);
+            Assert.Equal(model1.Relationships[i].Label, model2.Relationships[i].Label);
+            Assert.Equal(model1.Relationships[i].FromCardinality, model2.Relationships[i].FromCardinality);
+            Assert.Equal(model1.Relationships[i].ToCardinality, model2.Relationships[i].ToCardinality);
+        }
+
+        // Compare namespaces
+        Assert.Equal(model1.Namespaces.Count, model2.Namespaces.Count);
+        for (int i = 0; i < model1.Namespaces.Count; i++)
+        {
+            Assert.Equal(model1.Namespaces[i].Name, model2.Namespaces[i].Name);
+            Assert.Equal(model1.Namespaces[i].ClassIds.Count, model2.Namespaces[i].ClassIds.Count);
+        }
+
+        // Compare notes
+        Assert.Equal(model1.Notes.Count, model2.Notes.Count);
+        for (int i = 0; i < model1.Notes.Count; i++)
+        {
+            Assert.Equal(model1.Notes[i].Text, model2.Notes[i].Text);
+            Assert.Equal(model1.Notes[i].ForClass, model2.Notes[i].ForClass);
+        }
+
+        // Compare styles
+        Assert.Equal(model1.Styles.Count, model2.Styles.Count);
+        for (int i = 0; i < model1.Styles.Count; i++)
+        {
+            Assert.Equal(model1.Styles[i].IsClassDef, model2.Styles[i].IsClassDef);
+            Assert.Equal(model1.Styles[i].Target, model2.Styles[i].Target);
+            Assert.Equal(model1.Styles[i].StyleString, model2.Styles[i].StyleString);
+        }
+    }
+
+    [Fact]
+    public void ClassDiagram_BasicParsing()
+    {
+        var input = @"classDiagram
+    class Animal
+    Animal : +int age
+    Animal : +String gender
+    Animal: +isMammal()
+    Animal: +mate()";
+        var model = MermaidParser.ParseClassDiagram(input);
+        Assert.NotNull(model);
+        Assert.Single(model.Classes);
+        Assert.Equal("Animal", model.Classes[0].Id);
+        Assert.Equal(4, model.Classes[0].Members.Count);
+
+        // Check visibility
+        Assert.Equal(MemberVisibility.Public, model.Classes[0].Members[0].Visibility);
+
+        // Check method detection
+        Assert.False(model.Classes[0].Members[0].IsMethod); // +int age
+        Assert.False(model.Classes[0].Members[1].IsMethod); // +String gender
+        Assert.True(model.Classes[0].Members[2].IsMethod);  // +isMammal()
+        Assert.True(model.Classes[0].Members[3].IsMethod);  // +mate()
+    }
+
+    [Fact]
+    public void ClassDiagram_RoundTrip_BasicClasses()
+    {
+        var input = @"classDiagram
+    class Animal
+    class Duck{
+        +String beakColor
+        +swim()
+        +quack()
+    }
+    class Fish{
+        -int sizeInFeet
+        -canEat()
+    }";
+        AssertClassDiagramRoundTrip(input);
+
+        var model = MermaidParser.ParseClassDiagram(input);
+        Assert.NotNull(model);
+        Assert.Equal(3, model.Classes.Count);
+        Assert.Equal("Animal", model.Classes[0].Id);
+        Assert.Equal("Duck", model.Classes[1].Id);
+        Assert.Equal(3, model.Classes[1].Members.Count);
+        Assert.Equal(MemberVisibility.Public, model.Classes[1].Members[0].Visibility);
+        Assert.Equal(MemberVisibility.Private, model.Classes[2].Members[0].Visibility);
+    }
+
+    [Fact]
+    public void ClassDiagram_RoundTrip_AllRelationshipTypes()
+    {
+        var input = @"classDiagram
+    classA <|-- classB
+    classC *-- classD
+    classE o-- classF
+    classG <-- classH
+    classI -- classJ
+    classK <.. classL
+    classM <|.. classN
+    classO .. classP";
+        AssertClassDiagramRoundTrip(input);
+
+        var model = MermaidParser.ParseClassDiagram(input);
+        Assert.NotNull(model);
+        Assert.Equal(8, model.Relationships.Count);
+
+        // Inheritance: <|--
+        Assert.Equal(ClassRelationEnd.Inheritance, model.Relationships[0].LeftEnd);
+        Assert.Equal(ClassRelationEnd.None, model.Relationships[0].RightEnd);
+        Assert.Equal(ClassLinkStyle.Solid, model.Relationships[0].LinkStyle);
+
+        // Composition: *--
+        Assert.Equal(ClassRelationEnd.Composition, model.Relationships[1].LeftEnd);
+        Assert.Equal(ClassLinkStyle.Solid, model.Relationships[1].LinkStyle);
+
+        // Aggregation: o--
+        Assert.Equal(ClassRelationEnd.Aggregation, model.Relationships[2].LeftEnd);
+        Assert.Equal(ClassLinkStyle.Solid, model.Relationships[2].LinkStyle);
+
+        // Association: <--
+        Assert.Equal(ClassRelationEnd.Arrow, model.Relationships[3].LeftEnd);
+        Assert.Equal(ClassLinkStyle.Solid, model.Relationships[3].LinkStyle);
+
+        // Solid link: --
+        Assert.Equal(ClassRelationEnd.None, model.Relationships[4].LeftEnd);
+        Assert.Equal(ClassRelationEnd.None, model.Relationships[4].RightEnd);
+        Assert.Equal(ClassLinkStyle.Solid, model.Relationships[4].LinkStyle);
+
+        // Dashed dependency: <..
+        Assert.Equal(ClassRelationEnd.Arrow, model.Relationships[5].LeftEnd);
+        Assert.Equal(ClassLinkStyle.Dashed, model.Relationships[5].LinkStyle);
+
+        // Dashed realization: <|..
+        Assert.Equal(ClassRelationEnd.Inheritance, model.Relationships[6].LeftEnd);
+        Assert.Equal(ClassLinkStyle.Dashed, model.Relationships[6].LinkStyle);
+
+        // Dashed link: ..
+        Assert.Equal(ClassRelationEnd.None, model.Relationships[7].LeftEnd);
+        Assert.Equal(ClassRelationEnd.None, model.Relationships[7].RightEnd);
+        Assert.Equal(ClassLinkStyle.Dashed, model.Relationships[7].LinkStyle);
+    }
+
+    [Fact]
+    public void ClassDiagram_RoundTrip_RelationshipsWithLabels()
+    {
+        var input = @"classDiagram
+    classA --|> classB : Inheritance
+    classC --* classD : Composition
+    classE --o classF : Aggregation";
+        AssertClassDiagramRoundTrip(input);
+
+        var model = MermaidParser.ParseClassDiagram(input);
+        Assert.NotNull(model);
+        Assert.Equal("Inheritance", model.Relationships[0].Label);
+        Assert.Equal("Composition", model.Relationships[1].Label);
+        Assert.Equal("Aggregation", model.Relationships[2].Label);
+    }
+
+    [Fact]
+    public void ClassDiagram_RoundTrip_Cardinality()
+    {
+        var input = @"classDiagram
+    Customer ""1"" --> ""*"" Ticket
+    Student ""1"" --> ""1..*"" Course";
+        AssertClassDiagramRoundTrip(input);
+
+        var model = MermaidParser.ParseClassDiagram(input);
+        Assert.NotNull(model);
+        Assert.Equal(2, model.Relationships.Count);
+        Assert.Equal("1", model.Relationships[0].FromCardinality);
+        Assert.Equal("*", model.Relationships[0].ToCardinality);
+        Assert.Equal("1", model.Relationships[1].FromCardinality);
+        Assert.Equal("1..*", model.Relationships[1].ToCardinality);
+    }
+
+    [Fact]
+    public void ClassDiagram_RoundTrip_Annotations()
+    {
+        var input = @"classDiagram
+    class Shape{
+        <<interface>>
+        noOfVertices
+        draw()
+    }
+    class Color{
+        <<enumeration>>
+        RED
+        BLUE
+        GREEN
+    }";
+        AssertClassDiagramRoundTrip(input);
+
+        var model = MermaidParser.ParseClassDiagram(input);
+        Assert.NotNull(model);
+        Assert.Equal("interface", model.Classes[0].Annotation);
+        Assert.Equal("enumeration", model.Classes[1].Annotation);
+    }
+
+    [Fact]
+    public void ClassDiagram_RoundTrip_VisibilityModifiers()
+    {
+        var input = @"classDiagram
+    class MyClass{
+        +publicField
+        -privateField
+        #protectedField
+        ~packageField
+        +publicMethod()
+        -privateMethod()
+        #protectedMethod()
+        ~packageMethod()
+    }";
+        AssertClassDiagramRoundTrip(input);
+
+        var model = MermaidParser.ParseClassDiagram(input);
+        Assert.NotNull(model);
+        var members = model.Classes[0].Members;
+        Assert.Equal(8, members.Count);
+        Assert.Equal(MemberVisibility.Public, members[0].Visibility);
+        Assert.Equal(MemberVisibility.Private, members[1].Visibility);
+        Assert.Equal(MemberVisibility.Protected, members[2].Visibility);
+        Assert.Equal(MemberVisibility.Package, members[3].Visibility);
+        Assert.False(members[0].IsMethod);
+        Assert.True(members[4].IsMethod);
+    }
+
+    [Fact]
+    public void ClassDiagram_RoundTrip_ReturnTypes()
+    {
+        var input = @"classDiagram
+    class BankAccount{
+        +String owner
+        +BigDecimal balance
+        +deposit(amount) bool
+        +withdrawal(amount) int
+    }";
+        AssertClassDiagramRoundTrip(input);
+
+        var model = MermaidParser.ParseClassDiagram(input);
+        Assert.NotNull(model);
+        var members = model.Classes[0].Members;
+        Assert.True(members[2].IsMethod);
+        Assert.Equal("bool", members[2].Type);
+        Assert.True(members[3].IsMethod);
+        Assert.Equal("int", members[3].Type);
+    }
+
+    [Fact]
+    public void ClassDiagram_RoundTrip_Direction()
+    {
+        var input = @"classDiagram
+    direction RL
+    class Student{
+        -idCard : IdCard
+    }
+    class IdCard{
+        -id : int
+        -name : string
+    }
+    Student ""1"" --o ""1"" IdCard : carries";
+        AssertClassDiagramRoundTrip(input);
+
+        var model = MermaidParser.ParseClassDiagram(input);
+        Assert.NotNull(model);
+        Assert.Equal("RL", model.Direction);
+    }
+
+    [Fact]
+    public void ClassDiagram_RoundTrip_Namespace()
+    {
+        var input = @"classDiagram
+    namespace BaseShapes {
+        class Triangle
+        class Rectangle{
+            double width
+            double height
+        }
+    }";
+        AssertClassDiagramRoundTrip(input);
+
+        var model = MermaidParser.ParseClassDiagram(input);
+        Assert.NotNull(model);
+        Assert.Single(model.Namespaces);
+        Assert.Equal("BaseShapes", model.Namespaces[0].Name);
+        Assert.Equal(2, model.Namespaces[0].ClassIds.Count);
+    }
+
+    [Fact]
+    public void ClassDiagram_RoundTrip_Notes()
+    {
+        var input = @"classDiagram
+    note ""This is a general note""
+    note for MyClass ""This is a note for a class""
+    class MyClass{
+    }";
+        AssertClassDiagramRoundTrip(input);
+
+        var model = MermaidParser.ParseClassDiagram(input);
+        Assert.NotNull(model);
+        Assert.Equal(2, model.Notes.Count);
+        Assert.Null(model.Notes[0].ForClass);
+        Assert.Equal("This is a general note", model.Notes[0].Text);
+        Assert.Equal("MyClass", model.Notes[1].ForClass);
+        Assert.Equal("This is a note for a class", model.Notes[1].Text);
+    }
+
+    [Fact]
+    public void ClassDiagram_RoundTrip_Styling()
+    {
+        var input = @"classDiagram
+    class Animal
+    class Mineral
+    style Animal fill:#f9f,stroke:#333,stroke-width:4px
+    classDef important fill:#f00";
+        AssertClassDiagramRoundTrip(input);
+
+        var model = MermaidParser.ParseClassDiagram(input);
+        Assert.NotNull(model);
+        Assert.Equal(2, model.Styles.Count);
+        Assert.False(model.Styles[0].IsClassDef);
+        Assert.Equal("Animal", model.Styles[0].Target);
+        Assert.True(model.Styles[1].IsClassDef);
+        Assert.Equal("important", model.Styles[1].Target);
+    }
+
+    [Fact]
+    public void ClassDiagram_RoundTrip_ComplexDiagram()
+    {
+        var input = @"classDiagram
+    note ""From Duck till Zebra""
+    Animal <|-- Duck
+    note for Duck ""can fly""
+    Animal <|-- Fish
+    Animal <|-- Zebra
+    Animal : +int age
+    Animal : +String gender
+    Animal: +isMammal()
+    Animal: +mate()
+    class Duck{
+        +String beakColor
+        +swim()
+        +quack()
+    }
+    class Fish{
+        -int sizeInFeet
+        -canEat()
+    }
+    class Zebra{
+        +bool is_wild
+        +run()
+    }";
+        AssertClassDiagramRoundTrip(input);
+
+        var model = MermaidParser.ParseClassDiagram(input);
+        Assert.NotNull(model);
+        Assert.Equal(4, model.Classes.Count); // Animal, Duck, Fish, Zebra
+        Assert.Equal(3, model.Relationships.Count); // 3 inheritance relationships
+        Assert.Equal(2, model.Notes.Count);
+    }
+
+    [Fact]
+    public void ClassDiagram_RoundTrip_PreamblePreserved()
+    {
+        var input = @"---
+title: Animal example
+---
+classDiagram
+    class Animal
+    class Duck";
+        AssertClassDiagramRoundTrip(input);
+
+        var model = MermaidParser.ParseClassDiagram(input);
+        Assert.NotNull(model);
+        Assert.True(model.PreambleLines.Count > 0, "Preamble should be preserved");
+    }
+
+    [Fact]
+    public void ClassDiagram_RoundTrip_Classifiers()
+    {
+        var input = @"classDiagram
+    class MyClass{
+        +someAbstractMethod()*
+        +someStaticMethod()$
+        String someField$
+    }";
+        AssertClassDiagramRoundTrip(input);
+
+        var model = MermaidParser.ParseClassDiagram(input);
+        Assert.NotNull(model);
+        var members = model.Classes[0].Members;
+        Assert.Equal(MemberClassifier.Abstract, members[0].Classifier);
+        Assert.Equal(MemberClassifier.Static, members[1].Classifier);
+        Assert.Equal(MemberClassifier.Static, members[2].Classifier);
+    }
+
+    [Fact]
+    public void ClassDiagram_Parse_ReturnsNull_ForNonClassDiagram()
+    {
+        var input = "flowchart TD\n    A --> B";
+        var model = MermaidParser.ParseClassDiagram(input);
+        Assert.Null(model);
+    }
+
+    [Fact]
+    public void ClassDiagram_Parse_ReturnsNull_ForEmptyInput()
+    {
+        Assert.Null(MermaidParser.ParseClassDiagram(""));
+        Assert.Null(MermaidParser.ParseClassDiagram("   "));
+    }
+
+    [Fact]
+    public void ClassDiagram_Serialize_ReturnsEmpty_ForNullModel()
+    {
+        Assert.Equal(string.Empty, MermaidSerializer.SerializeClassDiagram(null!));
+    }
+
+    [Fact]
+    public void ClassDiagram_RoundTrip_SeparateAnnotation()
+    {
+        var input = @"classDiagram
+    class Shape
+    <<interface>> Shape
+    Shape : noOfVertices
+    Shape : draw()";
+        var model = MermaidParser.ParseClassDiagram(input);
+        Assert.NotNull(model);
+        Assert.Equal("interface", model.Classes[0].Annotation);
+        Assert.Equal(2, model.Classes[0].Members.Count);
+    }
+
+    [Fact]
+    public void ClassDiagram_RoundTrip_CssClass()
+    {
+        var input = @"classDiagram
+    class Animal:::someclass
+    classDef someclass fill:#f96";
+        var model = MermaidParser.ParseClassDiagram(input);
+        Assert.NotNull(model);
+        Assert.Equal("someclass", model.Classes[0].CssClass);
+        Assert.Single(model.Styles);
+    }
 }
