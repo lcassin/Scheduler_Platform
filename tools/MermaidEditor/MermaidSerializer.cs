@@ -257,7 +257,7 @@ public static class MermaidSerializer
     /// </summary>
     private static void WriteCommentsBeforeLine(StringBuilder sb, FlowchartModel model, int lineIndex)
     {
-        foreach (var comment in model.Comments.Where(c => c.OriginalLineIndex <= lineIndex))
+        foreach (var comment in model.Comments.Where(c => c.OriginalLineIndex < lineIndex))
         {
             sb.AppendLine($"%%{comment.Text}");
         }
