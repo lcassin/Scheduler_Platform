@@ -161,6 +161,8 @@
                                     </StackPanel>
                                 </StackPanel>
                             </Button>
+                
+                            <TextBlock Text="Markdown" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,12,0,4"/>
                             <Button Style="{StaticResource TemplateButtonStyle}" Click="MarkdownCheatSheet_Click">
                                 <StackPanel Orientation="Horizontal">
                                     <Image Source="Resources/TemplateThumbnails/markdown.png" Width="36" Height="36" Margin="0,0,10,0"/>
