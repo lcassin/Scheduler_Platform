@@ -198,7 +198,8 @@ public class VisualEditorBridge
                 Y = n.Position.Y,
                 Width = n.Size.Width,
                 Height = n.Size.Height,
-                CssClass = n.CssClass
+                CssClass = n.CssClass,
+                HasManualPosition = n.HasManualPosition
             }).ToList(),
             Edges = model.Edges.Select(e => new EdgeDto
             {
@@ -347,6 +348,7 @@ public class VisualEditorBridge
 
         PushUndo();
         node.Position = new System.Windows.Point(x, y);
+        node.HasManualPosition = true;
         RaiseModelChanged("nodeMoved");
     }
 
@@ -616,7 +618,8 @@ public class VisualEditorBridge
                     Shape = shape,
                     Position = new System.Windows.Point(n.X, n.Y),
                     Size = new System.Windows.Size(n.Width, n.Height),
-                    CssClass = n.CssClass
+                    CssClass = n.CssClass,
+                    HasManualPosition = n.HasManualPosition
                 });
             }
         }
@@ -724,6 +727,7 @@ public class VisualEditorBridge
         public double Width { get; set; }
         public double Height { get; set; }
         public string? CssClass { get; set; }
+        public bool HasManualPosition { get; set; }
     }
 
     private class EdgeDto

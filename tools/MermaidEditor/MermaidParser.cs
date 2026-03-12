@@ -83,6 +83,9 @@ public static class MermaidParser
     // --- Comment pattern ---
     private static readonly Regex CommentPattern = new(@"^\s*%%(.*)$", RegexOptions.Compiled);
 
+    // --- Position comment pattern: %% @pos nodeId x,y ---
+    private static readonly Regex PosCommentPattern = new(@"^\s*%%\s*@pos\s+(\S+)\s+(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*$", RegexOptions.Compiled);
+
     // --- Node-only pattern (just a node ID on a line by itself, no shape) ---
     private static readonly Regex BareNodePattern = new(@"^\s*([a-zA-Z_][\w]*)\s*$", RegexOptions.Compiled);
 
@@ -100,6 +103,7 @@ public static class MermaidParser
         var model = new FlowchartModel();
         var knownNodes = new HashSet<string>(StringComparer.Ordinal);
         var subgraphStack = new Stack<FlowchartSubgraph>();
+        var pendingPositions = new Dictionary<string, (double x, double y)>(StringComparer.Ordinal);
         bool foundDeclaration = false;
 
         for (int i = 0; i < lines.Length; i++)
@@ -111,7 +115,19 @@ public static class MermaidParser
             if (string.IsNullOrWhiteSpace(line))
                 continue;
 
-            // Check for comments first
+            // Check for @pos position comments first (before general comments)
+            var posMatch = PosCommentPattern.Match(line);
+            if (posMatch.Success)
+            {
+                var posNodeId = posMatch.Groups[1].Value;
+                var posX = double.Parse(posMatch.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
+                var posY = double.Parse(posMatch.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture);
+                pendingPositions[posNodeId] = (posX, posY);
+                // Don't add @pos comments to the Comments list - they are metadata, not user comments
+                continue;
+            }
+
+            // Check for comments
             var commentMatch = CommentPattern.Match(line);
             if (commentMatch.Success)
             {
@@ -265,6 +281,17 @@ public static class MermaidParser
         // If no declaration was found, this isn't a flowchart
         if (!foundDeclaration)
             return null;
+
+        // Apply any pending @pos position data to nodes
+        foreach (var kvp in pendingPositions)
+        {
+            var node = model.Nodes.Find(n => n.Id == kvp.Key);
+            if (node != null)
+            {
+                node.Position = new System.Windows.Point(kvp.Value.x, kvp.Value.y);
+                node.HasManualPosition = true;
+            }
+        }
 
         return model;
     }

@@ -333,6 +333,44 @@
             background: none;
         }
 
+        /* Minimap */
+        .minimap {
+            position: fixed;
+            bottom: 12px;
+            right: 12px;
+            width: 180px;
+            height: 120px;
+            background: var(--bg-color);
+            border: 1px solid var(--toolbar-border);
+            border-radius: 4px;
+            overflow: hidden;
+            z-index: 100;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            pointer-events: none;
+        }
+        .minimap canvas {
+            width: 100%;
+            height: 100%;
+        }
+        .minimap-viewport {
+            position: absolute;
+            border: 1.5px solid var(--node-selected-stroke);
+            background: var(--selection-rect);
+            pointer-events: none;
+        }
+
+        /* Drag ghost */
+        .node-group.dragging .node-shape {
+            opacity: 0.6;
+            filter: drop-shadow(0 0 6px rgba(0, 122, 204, 0.5));
+        }
+
+        /* Edge hover highlight */
+        .edge-group:hover .edge-line {
+            stroke: var(--node-selected-stroke);
+            stroke-width: 2.5;
+        }
+
         /* Connection points (shown on hover) */
         .connection-point {
             fill: var(--node-selected-stroke);
@@ -473,6 +511,12 @@
         </div>
     </div>
 
+    <!-- Minimap -->
+    <div id="minimap" class="minimap">
+        <canvas id="minimap-canvas" width="360" height="240"></canvas>
+        <div id="minimap-viewport" class="minimap-viewport"></div>
+    </div>
+
     <!-- Inline text editor -->
     <input type="text" id="inline-editor" class="inline-editor" style="display:none" />
 
@@ -501,6 +545,8 @@
         let panzoomInstance = null;
         let contextMenuX = 0;
         let contextMenuY = 0;
+        let selectedNodeIds = [];  // For multi-select (Ctrl+A)
+        const SNAP_GRID = 20;     // Snap-to-grid size in pixels
 
         const svg = document.getElementById('diagram-svg');
         const nodesLayer = document.getElementById('nodes-layer');
@@ -519,6 +565,9 @@
         const propFillColorText = document.getElementById('prop-fill-color-text');
         const propPanelTitle = document.getElementById('property-panel-title');
         const propPanelClose = document.getElementById('property-panel-close');
+        const minimapCanvas = document.getElementById('minimap-canvas');
+        const minimapViewport = document.getElementById('minimap-viewport');
+        const minimapCtx = minimapCanvas.getContext('2d');
 
         // ========== Initialization ==========
 
@@ -670,6 +719,7 @@
             renderSubgraphs();
             renderEdges();
             renderNodes();
+            updateMinimap();
         }
 
         function renderNodes() {
@@ -681,9 +731,14 @@
                 g.setAttribute('data-node-id', node.id);
                 g.setAttribute('transform', `translate(${node.x}, ${node.y})`);
 
+                // Add dragging class for ghost effect
+                if (isDragging && dragNodeId === node.id) {
+                    g.classList.add('dragging');
+                }
+
                 // Create shape
                 const shape = createNodeShape(node);
-                if (selectedNodeId === node.id) {
+                if (selectedNodeId === node.id || selectedNodeIds.includes(node.id)) {
                     shape.classList.add('selected');
                 }
                 g.appendChild(shape);
@@ -961,7 +1016,7 @@
         }
 
         function getEdgePoints(fromNode, toNode) {
-            // Simple center-to-center with border intersection
+            // Port-based routing: pick the best port pair (N/S/E/W) to minimize overlap
             const fx = fromNode.x, fy = fromNode.y;
             const tx = toNode.x, ty = toNode.y;
             const fw = (fromNode.width || 80) / 2;
@@ -969,33 +1024,44 @@
             const tw = (toNode.width || 80) / 2;
             const th = (toNode.height || 40) / 2;
 
-            const dx = tx - fx;
-            const dy = ty - fy;
-            const dist = Math.sqrt(dx * dx + dy * dy);
-            if (dist === 0) return { x1: fx, y1: fy, x2: tx, y2: ty };
+            // Port positions for from and to nodes
+            const fromPorts = [
+                { x: fx, y: fy - fh, name: 'top' },     // N
+                { x: fx, y: fy + fh, name: 'bottom' },   // S
+                { x: fx - fw, y: fy, name: 'left' },     // W
+                { x: fx + fw, y: fy, name: 'right' }     // E
+            ];
+            const toPorts = [
+                { x: tx, y: ty - th, name: 'top' },
+                { x: tx, y: ty + th, name: 'bottom' },
+                { x: tx - tw, y: ty, name: 'left' },
+                { x: tx + tw, y: ty, name: 'right' }
+            ];
 
-            const nx = dx / dist;
-            const ny = dy / dist;
+            // Pick the pair with the shortest distance
+            let bestDist = Infinity;
+            let bestFrom = fromPorts[0];
+            let bestTo = toPorts[0];
 
-            // Intersection with from node border
-            const fromOffset = getRectBorderOffset(fw, fh, nx, ny);
-            // Intersection with to node border
-            const toOffset = getRectBorderOffset(tw, th, -nx, -ny);
+            for (const fp of fromPorts) {
+                for (const tp of toPorts) {
+                    const dx = tp.x - fp.x;
+                    const dy = tp.y - fp.y;
+                    const d = Math.sqrt(dx * dx + dy * dy);
+                    if (d < bestDist) {
+                        bestDist = d;
+                        bestFrom = fp;
+                        bestTo = tp;
+                    }
+                }
+            }
 
             return {
-                x1: fx + nx * fromOffset,
-                y1: fy + ny * fromOffset,
-                x2: tx - nx * toOffset,
-                y2: ty - ny * toOffset
+                x1: bestFrom.x,
+                y1: bestFrom.y,
+                x2: bestTo.x,
+                y2: bestTo.y
             };
-        }
-
-        function getRectBorderOffset(hw, hh, nx, ny) {
-            // Find intersection of ray from center in direction (nx, ny) with rect border
-            if (Math.abs(nx) < 0.001 && Math.abs(ny) < 0.001) return 0;
-            const tx = Math.abs(nx) > 0.001 ? hw / Math.abs(nx) : Infinity;
-            const ty = Math.abs(ny) > 0.001 ? hh / Math.abs(ny) : Infinity;
-            return Math.min(tx, ty);
         }
 
         function renderSubgraphs() {
@@ -1128,9 +1194,15 @@
                 const pt = getSVGPoint(e);
                 const node = diagram.nodes.find(n => n.id === dragNodeId);
                 if (node) {
-                    node.x = dragNodeStartX + (pt.x - dragStartX);
-                    node.y = dragNodeStartY + (pt.y - dragStartY);
+                    let newX = dragNodeStartX + (pt.x - dragStartX);
+                    let newY = dragNodeStartY + (pt.y - dragStartY);
+                    // Snap-to-grid
+                    newX = Math.round(newX / SNAP_GRID) * SNAP_GRID;
+                    newY = Math.round(newY / SNAP_GRID) * SNAP_GRID;
+                    node.x = newX;
+                    node.y = newY;
                     render();
+                    updateMinimap();
                 }
                 return;
             }
@@ -1255,10 +1327,10 @@
             } else if (e.key === 'y' && (e.ctrlKey || e.metaKey)) {
                 postMessage({ type: 'redo' });
                 e.preventDefault();
-            } else if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
-                // Select all - not implemented yet
-                e.preventDefault();
-            }
+                } else if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
+                    selectAllNodes();
+                    e.preventDefault();
+                }
         });
 
         // ========== Selection ==========
@@ -1266,6 +1338,7 @@
         function selectNode(nodeId) {
             selectedNodeId = nodeId;
             selectedEdgeIndex = -1;
+            selectedNodeIds = [];  // Clear multi-select on single select
             render();
             showPropertyPanel();
             postMessage({ type: 'nodeSelected', nodeId: nodeId });
@@ -1282,9 +1355,19 @@
         function deselectAll() {
             selectedNodeId = null;
             selectedEdgeIndex = -1;
+            selectedNodeIds = [];
             render();
             hidePropertyPanel();
             postMessage({ type: 'selectionCleared' });
+        }
+
+        function selectAllNodes() {
+            if (diagram.nodes.length === 0) return;
+            selectedNodeIds = diagram.nodes.map(n => n.id);
+            selectedNodeId = selectedNodeIds[0];
+            selectedEdgeIndex = -1;
+            render();
+            hidePropertyPanel();
         }
 
         // ========== Property Panel ==========
@@ -1699,6 +1782,92 @@
                 }
             } catch (err) {
                 console.log('postMessage:', JSON.stringify(data));
+            }
+        }
+
+        // ========== Minimap ==========
+
+        function updateMinimap() {
+            if (!minimapCanvas || !minimapCtx) return;
+            if (diagram.nodes.length === 0) {
+                minimapCtx.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
+                minimapViewport.style.display = 'none';
+                return;
+            }
+
+            const cw = minimapCanvas.width;
+            const ch = minimapCanvas.height;
+
+            // Calculate diagram bounding box
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            diagram.nodes.forEach(n => {
+                const hw = (n.width || 80) / 2;
+                const hh = (n.height || 40) / 2;
+                minX = Math.min(minX, n.x - hw);
+                minY = Math.min(minY, n.y - hh);
+                maxX = Math.max(maxX, n.x + hw);
+                maxY = Math.max(maxY, n.y + hh);
+            });
+
+            const padding = 40;
+            minX -= padding; minY -= padding;
+            maxX += padding; maxY += padding;
+
+            const dw = maxX - minX || 1;
+            const dh = maxY - minY || 1;
+            const scale = Math.min(cw / dw, ch / dh);
+
+            minimapCtx.clearRect(0, 0, cw, ch);
+
+            // Draw edges
+            const isDark = !document.body.classList.contains('theme-light');
+            minimapCtx.strokeStyle = isDark ? '#555' : '#bbb';
+            minimapCtx.lineWidth = 1;
+            diagram.edges.forEach(edge => {
+                const fromNode = diagram.nodes.find(n => n.id === edge.from);
+                const toNode = diagram.nodes.find(n => n.id === edge.to);
+                if (!fromNode || !toNode) return;
+                minimapCtx.beginPath();
+                minimapCtx.moveTo((fromNode.x - minX) * scale, (fromNode.y - minY) * scale);
+                minimapCtx.lineTo((toNode.x - minX) * scale, (toNode.y - minY) * scale);
+                minimapCtx.stroke();
+            });
+
+            // Draw nodes
+            diagram.nodes.forEach(n => {
+                const nx = (n.x - minX) * scale;
+                const ny = (n.y - minY) * scale;
+                const nw = (n.width || 80) * scale;
+                const nh = (n.height || 40) * scale;
+
+                const isSelected = (n.id === selectedNodeId || selectedNodeIds.includes(n.id));
+                minimapCtx.fillStyle = isSelected ? (isDark ? '#007ACC' : '#0078D4') : (isDark ? '#3E3E42' : '#CCCCCC');
+                minimapCtx.fillRect(nx - nw / 2, ny - nh / 2, nw, nh);
+            });
+
+            // Update viewport indicator
+            if (panzoomInstance) {
+                const transform = panzoomInstance.getTransform();
+                const container = canvasContainer.getBoundingClientRect();
+                // Viewport in SVG coordinates
+                const vx = (-transform.x / transform.scale);
+                const vy = (-transform.y / transform.scale);
+                const vw = container.width / transform.scale;
+                const vh = container.height / transform.scale;
+
+                // Map to minimap coordinates
+                const mvx = (vx - minX) * scale;
+                const mvy = (vy - minY) * scale;
+                const mvw = vw * scale;
+                const mvh = vh * scale;
+
+                minimapViewport.style.display = '';
+                minimapViewport.style.left = Math.max(0, mvx / (cw / 180)) + 'px';
+                minimapViewport.style.top = Math.max(0, mvy / (ch / 120)) + 'px';
+                minimapViewport.style.width = Math.min(180, mvw / (cw / 180)) + 'px';
+                minimapViewport.style.height = Math.min(120, mvh / (ch / 120)) + 'px';
+            } else {
+                minimapViewport.style.display = 'none';
             }
         }
 
