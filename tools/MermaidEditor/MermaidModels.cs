@@ -309,3 +309,315 @@ public class CommentEntry
     /// </summary>
     public int OriginalLineIndex { get; set; }
 }
+
+// =============================================
+// Sequence Diagram Models (Phase 2.1)
+// =============================================
+
+/// <summary>
+/// Represents a complete Mermaid sequence diagram.
+/// </summary>
+public class SequenceDiagramModel
+{
+    /// <summary>
+    /// All participants/actors in the diagram, in order of appearance (left to right).
+    /// </summary>
+    public List<SequenceParticipant> Participants { get; set; } = new();
+
+    /// <summary>
+    /// All messages and events in the diagram, in order of appearance (top to bottom).
+    /// </summary>
+    public List<SequenceElement> Elements { get; set; } = new();
+
+    /// <summary>
+    /// Preserved comments from the source text (%% lines).
+    /// </summary>
+    public List<CommentEntry> Comments { get; set; } = new();
+
+    /// <summary>
+    /// Lines that appear before the sequenceDiagram declaration (e.g., config directives).
+    /// </summary>
+    public List<string> PreambleLines { get; set; } = new();
+
+    /// <summary>
+    /// The original line index of the sequenceDiagram declaration.
+    /// </summary>
+    public int DeclarationLineIndex { get; set; }
+
+    /// <summary>
+    /// Whether to automatically number messages (autonumber directive).
+    /// </summary>
+    public bool AutoNumber { get; set; }
+}
+
+/// <summary>
+/// Represents a participant or actor in a sequence diagram.
+/// </summary>
+public class SequenceParticipant
+{
+    /// <summary>
+    /// The unique identifier for this participant.
+    /// </summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The display alias/label. If null, Id is used.
+    /// </summary>
+    public string? Alias { get; set; }
+
+    /// <summary>
+    /// Whether this is an actor (stick figure) or participant (box).
+    /// </summary>
+    public SequenceParticipantType Type { get; set; } = SequenceParticipantType.Participant;
+
+    /// <summary>
+    /// Returns the effective display label.
+    /// </summary>
+    public string DisplayLabel => Alias ?? Id;
+
+    /// <summary>
+    /// Whether this participant was explicitly declared (vs. implicitly created from a message).
+    /// </summary>
+    public bool IsExplicit { get; set; }
+
+    /// <summary>
+    /// Whether this participant has been destroyed (via destroy keyword).
+    /// </summary>
+    public bool IsDestroyed { get; set; }
+}
+
+/// <summary>
+/// Type of sequence diagram participant.
+/// </summary>
+public enum SequenceParticipantType
+{
+    /// <summary>Rendered as a box: participant Alice</summary>
+    Participant,
+
+    /// <summary>Rendered as a stick figure: actor Alice</summary>
+    Actor
+}
+
+/// <summary>
+/// Base class for all elements in a sequence diagram (messages, notes, fragments, etc.).
+/// Elements are ordered top-to-bottom in the diagram.
+/// </summary>
+public abstract class SequenceElement
+{
+}
+
+/// <summary>
+/// Represents a message (arrow) between two participants.
+/// </summary>
+public class SequenceMessage : SequenceElement
+{
+    /// <summary>
+    /// The source participant ID.
+    /// </summary>
+    public string FromId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The target participant ID.
+    /// </summary>
+    public string ToId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The message text displayed on the arrow.
+    /// </summary>
+    public string Text { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The arrow/line style of this message.
+    /// </summary>
+    public SequenceArrowType ArrowType { get; set; } = SequenceArrowType.SolidArrow;
+
+    /// <summary>
+    /// Whether this message activates the target participant's lifeline.
+    /// Corresponds to the + suffix on arrow types.
+    /// </summary>
+    public bool ActivateTarget { get; set; }
+
+    /// <summary>
+    /// Whether this message deactivates the source participant's lifeline.
+    /// Corresponds to the - suffix on arrow types.
+    /// </summary>
+    public bool DeactivateSource { get; set; }
+}
+
+/// <summary>
+/// Arrow types for sequence diagram messages.
+/// </summary>
+public enum SequenceArrowType
+{
+    /// <summary>Solid line with filled arrowhead: ->></summary>
+    SolidArrow,
+
+    /// <summary>Dotted line with filled arrowhead: -->> (return/response)</summary>
+    DottedArrow,
+
+    /// <summary>Solid line with open arrowhead: ->   (async)</summary>
+    SolidOpen,
+
+    /// <summary>Dotted line with open arrowhead: --> (async return)</summary>
+    DottedOpen,
+
+    /// <summary>Solid line with cross end: -x (lost message)</summary>
+    SolidCross,
+
+    /// <summary>Dotted line with cross end: --x</summary>
+    DottedCross,
+
+    /// <summary>Solid line with open arrow (async): -)</summary>
+    SolidAsync,
+
+    /// <summary>Dotted line with open arrow (async): --)</summary>
+    DottedAsync
+}
+
+/// <summary>
+/// Represents a note in a sequence diagram.
+/// </summary>
+public class SequenceNote : SequenceElement
+{
+    /// <summary>
+    /// The note text content.
+    /// </summary>
+    public string Text { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The position of the note relative to participant(s).
+    /// </summary>
+    public SequenceNotePosition Position { get; set; } = SequenceNotePosition.RightOf;
+
+    /// <summary>
+    /// The participant ID(s) this note is attached to.
+    /// For "over" notes spanning multiple participants, comma-separated.
+    /// </summary>
+    public string OverParticipants { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Note positioning in a sequence diagram.
+/// </summary>
+public enum SequenceNotePosition
+{
+    /// <summary>Note right of Alice</summary>
+    RightOf,
+
+    /// <summary>Note left of Alice</summary>
+    LeftOf,
+
+    /// <summary>Note over Alice or Note over Alice,Bob</summary>
+    Over
+}
+
+/// <summary>
+/// Represents a fragment (loop, alt, opt, par, critical, break, rect) in a sequence diagram.
+/// Fragments can contain nested elements and have multiple sections (e.g., alt/else).
+/// </summary>
+public class SequenceFragment : SequenceElement
+{
+    /// <summary>
+    /// The fragment type (loop, alt, opt, par, critical, break, rect).
+    /// </summary>
+    public SequenceFragmentType Type { get; set; }
+
+    /// <summary>
+    /// The label/condition text for the fragment.
+    /// </summary>
+    public string Label { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The sections within the fragment.
+    /// For simple fragments (loop, opt), there is one section.
+    /// For alt, there is the main section plus else sections.
+    /// For par, there is the main section plus "and" sections.
+    /// </summary>
+    public List<SequenceFragmentSection> Sections { get; set; } = new();
+}
+
+/// <summary>
+/// A section within a fragment (e.g., the "if" part or an "else" part of an alt block).
+/// </summary>
+public class SequenceFragmentSection
+{
+    /// <summary>
+    /// The label for this section (e.g., condition text for alt/else, or empty for the main section of a loop).
+    /// </summary>
+    public string? Label { get; set; }
+
+    /// <summary>
+    /// The elements contained within this section.
+    /// </summary>
+    public List<SequenceElement> Elements { get; set; } = new();
+}
+
+/// <summary>
+/// Types of sequence diagram fragments.
+/// </summary>
+public enum SequenceFragmentType
+{
+    /// <summary>loop [condition]...end</summary>
+    Loop,
+
+    /// <summary>alt [condition]...else [condition]...end</summary>
+    Alt,
+
+    /// <summary>opt [condition]...end</summary>
+    Opt,
+
+    /// <summary>par [label]...and [label]...end</summary>
+    Par,
+
+    /// <summary>critical [label]...option [label]...end</summary>
+    Critical,
+
+    /// <summary>break [condition]...end</summary>
+    Break,
+
+    /// <summary>rect rgb(...)...end</summary>
+    Rect
+}
+
+/// <summary>
+/// Represents an activate directive in a sequence diagram.
+/// </summary>
+public class SequenceActivation : SequenceElement
+{
+    /// <summary>
+    /// The participant ID to activate.
+    /// </summary>
+    public string ParticipantId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Whether this is an activate (true) or deactivate (false) directive.
+    /// </summary>
+    public bool IsActivate { get; set; }
+}
+
+/// <summary>
+/// Represents a participant creation event (create participant Alice).
+/// </summary>
+public class SequenceCreate : SequenceElement
+{
+    /// <summary>
+    /// The type of the created participant (participant or actor).
+    /// </summary>
+    public SequenceParticipantType ParticipantType { get; set; } = SequenceParticipantType.Participant;
+
+    /// <summary>
+    /// The participant ID being created.
+    /// </summary>
+    public string ParticipantId { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Represents a participant destruction event (destroy Alice).
+/// </summary>
+public class SequenceDestroy : SequenceElement
+{
+    /// <summary>
+    /// The participant ID being destroyed.
+    /// </summary>
+    public string ParticipantId { get; set; } = string.Empty;
+}

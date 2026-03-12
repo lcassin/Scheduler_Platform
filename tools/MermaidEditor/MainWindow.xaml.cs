@@ -118,6 +118,7 @@ public partial class MainWindow : Window
     private VisualEditorBridge? _visualEditorBridge;
     private bool _visualEditorInitialized;
     private FlowchartModel? _currentFlowchartModel;
+    private SequenceDiagramModel? _currentSequenceDiagramModel;
     private bool _isVisualEditorUpdating; // Prevent re-entrant updates between text <-> visual
 
     private const string DefaultMermaidCode= @"flowchart TD
@@ -4676,15 +4677,27 @@ Console.WriteLine(""Hello, World!"");
     /// </summary>
     private void SwitchToTextMode()
     {
-        if (_visualEditorMode != VisualEditorMode.Text && _currentFlowchartModel != null && _visualEditorBridge != null)
+        if (_visualEditorMode != VisualEditorMode.Text && _visualEditorBridge != null)
         {
-            // Serialize model back to text
+            // Serialize the active model back to text
             _isVisualEditorUpdating = true;
             try
             {
-                var text = MermaidSerializer.Serialize(_currentFlowchartModel);
-                _isSwitchingDocuments = true;
-                try { CodeEditor.Text = text; } finally { _isSwitchingDocuments = false; }
+                string? text = null;
+                if (_currentSequenceDiagramModel != null)
+                {
+                    text = MermaidSerializer.SerializeSequenceDiagram(_currentSequenceDiagramModel);
+                }
+                else if (_currentFlowchartModel != null)
+                {
+                    text = MermaidSerializer.Serialize(_currentFlowchartModel);
+                }
+
+                if (text != null)
+                {
+                    _isSwitchingDocuments = true;
+                    try { CodeEditor.Text = text; } finally { _isSwitchingDocuments = false; }
+                }
             }
             finally
             {
@@ -4727,6 +4740,7 @@ Console.WriteLine(""Hello, World!"");
 
     /// <summary>
     /// Parses the current CodeEditor text via MermaidParser and sends the model to the visual editor.
+    /// Detects diagram type (flowchart vs sequence) and routes to the correct parser.
     /// </summary>
     private async Task ParseAndSendToVisualEditor()
     {
@@ -4735,11 +4749,28 @@ Console.WriteLine(""Hello, World!"");
         try
         {
             _isVisualEditorUpdating = true;
-            var parsed = MermaidParser.ParseFlowchart(CodeEditor.Text);
-            if (parsed != null)
+            var text = CodeEditor.Text;
+
+            if (IsSequenceDiagram(text))
             {
-                _currentFlowchartModel = parsed;
-                await _visualEditorBridge.UpdateModelAsync(_currentFlowchartModel);
+                var parsed = MermaidParser.ParseSequenceDiagram(text);
+                if (parsed != null)
+                {
+                    _currentSequenceDiagramModel = parsed;
+                    _currentFlowchartModel = null;
+                    // Sequence diagram visual editor support will be added in Session 10.
+                    // For now, the preview pane still renders the text via Mermaid.js.
+                }
+            }
+            else
+            {
+                var parsed = MermaidParser.ParseFlowchart(text);
+                if (parsed != null)
+                {
+                    _currentFlowchartModel = parsed;
+                    _currentSequenceDiagramModel = null;
+                    await _visualEditorBridge.UpdateModelAsync(_currentFlowchartModel);
+                }
             }
         }
         catch (Exception)
@@ -4750,6 +4781,28 @@ Console.WriteLine(""Hello, World!"");
         {
             _isVisualEditorUpdating = false;
         }
+    }
+
+    /// <summary>
+    /// Detects whether the given Mermaid text is a sequence diagram.
+    /// Checks for "sequenceDiagram" as the first non-preamble, non-comment, non-empty line.
+    /// </summary>
+    private static bool IsSequenceDiagram(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+
+        foreach (var rawLine in text.Split('\n'))
+        {
+            var line = rawLine.TrimEnd('\r').Trim();
+            if (string.IsNullOrEmpty(line)) continue;
+            // Skip preamble lines (config directives like %%{init: ...}%%)
+            if (line.StartsWith("%%{")) continue;
+            // Skip comments
+            if (line.StartsWith("%% ") || line.StartsWith("%%\t")) continue;
+            // First meaningful line determines diagram type
+            return line.Equals("sequenceDiagram", StringComparison.Ordinal);
+        }
+        return false;
     }
 
     /// <summary>

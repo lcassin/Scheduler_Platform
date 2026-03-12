@@ -328,4 +328,240 @@ public static class MermaidSerializer
             sb.AppendLine($"%% @pos {node.Id} {x},{y}");
         }
     }
+
+    // =============================================
+    // Sequence Diagram Serializer (Phase 2.1)
+    // =============================================
+
+    /// <summary>
+    /// Serializes a SequenceDiagramModel to valid Mermaid sequence diagram text.
+    /// </summary>
+    /// <param name="model">The sequence diagram model to serialize.</param>
+    /// <returns>Valid Mermaid sequence diagram text.</returns>
+    public static string SerializeSequenceDiagram(SequenceDiagramModel model)
+    {
+        if (model == null)
+            return string.Empty;
+
+        var sb = new StringBuilder();
+
+        // Write preamble lines (config directives, frontmatter, etc.)
+        foreach (var preambleLine in model.PreambleLines)
+        {
+            sb.AppendLine(preambleLine);
+        }
+
+        // Write comments that appeared before the declaration
+        WriteSequenceCommentsBeforeLine(sb, model, model.DeclarationLineIndex);
+
+        // Write the sequenceDiagram declaration
+        sb.AppendLine("sequenceDiagram");
+
+        // Write autonumber if enabled
+        if (model.AutoNumber)
+        {
+            sb.AppendLine($"{Indent}autonumber");
+        }
+
+        // Write explicit participant/actor declarations
+        foreach (var participant in model.Participants.Where(p => p.IsExplicit))
+        {
+            var keyword = participant.Type == SequenceParticipantType.Actor ? "actor" : "participant";
+            if (!string.IsNullOrEmpty(participant.Alias))
+            {
+                sb.AppendLine($"{Indent}{keyword} {participant.Id} as {participant.Alias}");
+            }
+            else
+            {
+                sb.AppendLine($"{Indent}{keyword} {participant.Id}");
+            }
+        }
+
+        // Blank line between declarations and elements
+        if (model.Participants.Any(p => p.IsExplicit) && model.Elements.Count > 0)
+        {
+            sb.AppendLine();
+        }
+
+        // Write all elements in order
+        WriteSequenceElements(sb, model.Elements, Indent);
+
+        // Write trailing comments
+        WriteSequenceTrailingComments(sb, model);
+
+        return sb.ToString().TrimEnd('\r', '\n') + Environment.NewLine;
+    }
+
+    /// <summary>
+    /// Writes a list of sequence elements with proper indentation. Handles recursive fragment serialization.
+    /// </summary>
+    private static void WriteSequenceElements(StringBuilder sb, List<SequenceElement> elements, string indent)
+    {
+        foreach (var element in elements)
+        {
+            switch (element)
+            {
+                case SequenceMessage msg:
+                    WriteSequenceMessage(sb, msg, indent);
+                    break;
+                case SequenceNote note:
+                    WriteSequenceNote(sb, note, indent);
+                    break;
+                case SequenceFragment fragment:
+                    WriteSequenceFragment(sb, fragment, indent);
+                    break;
+                case SequenceActivation activation:
+                    var keyword = activation.IsActivate ? "activate" : "deactivate";
+                    sb.AppendLine($"{indent}{keyword} {activation.ParticipantId}");
+                    break;
+                case SequenceCreate create:
+                    var createKeyword = create.ParticipantType == SequenceParticipantType.Actor ? "actor" : "participant";
+                    sb.AppendLine($"{indent}create {createKeyword} {create.ParticipantId}");
+                    break;
+                case SequenceDestroy destroy:
+                    sb.AppendLine($"{indent}destroy {destroy.ParticipantId}");
+                    break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Writes a sequence message line.
+    /// </summary>
+    private static void WriteSequenceMessage(StringBuilder sb, SequenceMessage msg, string indent)
+    {
+        var arrowStr = msg.ArrowType switch
+        {
+            SequenceArrowType.SolidArrow => "->>",
+            SequenceArrowType.DottedArrow => "-->>",
+            SequenceArrowType.SolidOpen => "->",
+            SequenceArrowType.DottedOpen => "-->",
+            SequenceArrowType.SolidCross => "-x",
+            SequenceArrowType.DottedCross => "--x",
+            SequenceArrowType.SolidAsync => "-)",
+            SequenceArrowType.DottedAsync => "--)",
+            _ => "->>"
+        };
+
+        // Add activation/deactivation suffix
+        var suffix = "";
+        if (msg.ActivateTarget) suffix = "+";
+        else if (msg.DeactivateSource) suffix = "-";
+
+        sb.AppendLine($"{indent}{msg.FromId}{arrowStr}{suffix}{msg.ToId}: {msg.Text}");
+    }
+
+    /// <summary>
+    /// Writes a sequence note (single-line or multi-line).
+    /// </summary>
+    private static void WriteSequenceNote(StringBuilder sb, SequenceNote note, string indent)
+    {
+        var positionStr = note.Position switch
+        {
+            SequenceNotePosition.RightOf => "right of",
+            SequenceNotePosition.LeftOf => "left of",
+            SequenceNotePosition.Over => "over",
+            _ => "right of"
+        };
+
+        if (note.Text.Contains('\n'))
+        {
+            // Multi-line note
+            sb.AppendLine($"{indent}Note {positionStr} {note.OverParticipants}");
+            foreach (var line in note.Text.Split('\n'))
+            {
+                sb.AppendLine($"{indent}{Indent}{line}");
+            }
+            sb.AppendLine($"{indent}end note");
+        }
+        else
+        {
+            sb.AppendLine($"{indent}Note {positionStr} {note.OverParticipants}: {note.Text}");
+        }
+    }
+
+    /// <summary>
+    /// Writes a sequence fragment block with its sections. Handles alt/else, par/and, etc.
+    /// </summary>
+    private static void WriteSequenceFragment(StringBuilder sb, SequenceFragment fragment, string indent)
+    {
+        var typeStr = fragment.Type switch
+        {
+            SequenceFragmentType.Loop => "loop",
+            SequenceFragmentType.Alt => "alt",
+            SequenceFragmentType.Opt => "opt",
+            SequenceFragmentType.Par => "par",
+            SequenceFragmentType.Critical => "critical",
+            SequenceFragmentType.Break => "break",
+            SequenceFragmentType.Rect => "rect",
+            _ => "loop"
+        };
+
+        sb.AppendLine($"{indent}{typeStr} {fragment.Label}");
+
+        var innerIndent = indent + Indent;
+
+        for (int i = 0; i < fragment.Sections.Count; i++)
+        {
+            if (i > 0)
+            {
+                // Determine the section divider keyword based on fragment type
+                var dividerKeyword = fragment.Type switch
+                {
+                    SequenceFragmentType.Par => "and",
+                    SequenceFragmentType.Critical => "option",
+                    _ => "else"
+                };
+
+                var sectionLabel = fragment.Sections[i].Label;
+                if (!string.IsNullOrEmpty(sectionLabel))
+                {
+                    sb.AppendLine($"{indent}{dividerKeyword} {sectionLabel}");
+                }
+                else
+                {
+                    sb.AppendLine($"{indent}{dividerKeyword}");
+                }
+            }
+
+            // Recursively write section elements
+            WriteSequenceElements(sb, fragment.Sections[i].Elements, innerIndent);
+        }
+
+        sb.AppendLine($"{indent}end");
+    }
+
+    /// <summary>
+    /// Writes comments that appeared before a given line in the sequence diagram.
+    /// </summary>
+    private static void WriteSequenceCommentsBeforeLine(StringBuilder sb, SequenceDiagramModel model, int lineIndex)
+    {
+        foreach (var comment in model.Comments.Where(c => c.OriginalLineIndex < lineIndex))
+        {
+            sb.AppendLine($"%%{comment.Text}");
+        }
+    }
+
+    /// <summary>
+    /// Writes trailing comments for a sequence diagram.
+    /// </summary>
+    private static void WriteSequenceTrailingComments(StringBuilder sb, SequenceDiagramModel model)
+    {
+        if (model.Comments.Count > 0)
+        {
+            var trailingComments = model.Comments
+                .Where(c => c.OriginalLineIndex > model.DeclarationLineIndex)
+                .OrderBy(c => c.OriginalLineIndex)
+                .ToList();
+
+            if (trailingComments.Count > 0)
+            {
+                sb.AppendLine();
+                foreach (var comment in trailingComments)
+                {
+                    sb.AppendLine($"%%{comment.Text}");
+                }
+            }
+        }
+    }
 }

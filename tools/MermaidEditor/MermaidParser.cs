@@ -781,4 +781,433 @@ public static class MermaidParser
         public string NodeText { get; set; } = string.Empty;
         public EdgeInfo? EdgeAfter { get; set; }
     }
+
+    // =============================================
+    // Sequence Diagram Parser (Phase 2.1)
+    // =============================================
+
+    // --- Sequence diagram declaration ---
+    private static readonly Regex SequenceDiagramDeclaration = new(@"^\s*sequenceDiagram\s*$", RegexOptions.Compiled);
+
+    // --- Participant/actor declarations ---
+    // participant Alice as Alice Label
+    // actor Bob as Bob Label
+    private static readonly Regex ParticipantDeclaration = new(
+        @"^\s*(participant|actor)\s+(\S+?)(?:\s+as\s+(.+))?\s*$", RegexOptions.Compiled);
+
+    // --- Message pattern ---
+    // Alice->>Bob: Hello
+    // Alice-->>Bob: Response
+    // Alice->Bob: Open arrow
+    // Alice-->Bob: Dotted open
+    // Alice-xBob: Lost
+    // Alice--xBob: Dotted lost
+    // Alice-)Bob: Async
+    // Alice--)Bob: Dotted async
+    // Supports +/- suffixes for activate/deactivate
+    private static readonly Regex MessagePattern = new(
+        @"^\s*(.+?)\s*(->>|-->>|->|-->|-x|--x|-\)|--\))(\+|-)?(.+?):\s*(.*)$", RegexOptions.Compiled);
+
+    // --- Note pattern ---
+    // Note right of Alice: text
+    // Note left of Bob: text
+    // Note over Alice: text
+    // Note over Alice,Bob: text
+    private static readonly Regex NotePattern = new(
+        @"^\s*[Nn]ote\s+(right of|left of|over)\s+(.+?):\s*(.*)$", RegexOptions.Compiled);
+
+    // --- Multi-line note start pattern ---
+    // Note right of Alice
+    // Note over Alice,Bob
+    private static readonly Regex NoteStartPattern = new(
+        @"^\s*[Nn]ote\s+(right of|left of|over)\s+(.+?)\s*$", RegexOptions.Compiled);
+
+    // --- Fragment patterns ---
+    private static readonly Regex FragmentStartPattern = new(
+        @"^\s*(loop|alt|opt|par|critical|break|rect)\s*(.*?)\s*$", RegexOptions.Compiled);
+    private static readonly Regex ElsePattern = new(
+        @"^\s*(else|and|option)\s*(.*?)\s*$", RegexOptions.Compiled);
+    private static readonly Regex EndPattern = new(
+        @"^\s*end\s*$", RegexOptions.Compiled);
+
+    // --- Activate/deactivate ---
+    private static readonly Regex ActivatePattern = new(
+        @"^\s*(activate|deactivate)\s+(\S+)\s*$", RegexOptions.Compiled);
+
+    // --- Autonumber ---
+    private static readonly Regex AutonumberPattern = new(
+        @"^\s*autonumber\s*$", RegexOptions.Compiled);
+
+    // --- Create/destroy ---
+    private static readonly Regex CreatePattern = new(
+        @"^\s*create\s+(participant|actor)\s+(\S+?)(?:\s+as\s+(.+))?\s*$", RegexOptions.Compiled);
+    private static readonly Regex DestroyPattern = new(
+        @"^\s*destroy\s+(\S+)\s*$", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Parses Mermaid sequence diagram text into a SequenceDiagramModel.
+    /// </summary>
+    /// <param name="text">The Mermaid sequence diagram source text.</param>
+    /// <returns>A populated SequenceDiagramModel, or null if the text is not a valid sequence diagram.</returns>
+    public static SequenceDiagramModel? ParseSequenceDiagram(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        var lines = text.Split('\n');
+        var model = new SequenceDiagramModel();
+        var knownParticipants = new HashSet<string>(StringComparer.Ordinal);
+        bool foundDeclaration = false;
+
+        // Stack for nested fragment parsing — each entry is the current section's element list
+        var fragmentStack = new Stack<(SequenceFragment fragment, int sectionIndex)>();
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var rawLine = lines[i];
+            var line = rawLine.TrimEnd('\r');
+
+            // Skip empty lines
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            // Check for comments (before declaration check)
+            var commentMatch = CommentPattern.Match(line);
+            if (commentMatch.Success)
+            {
+                var commentText = commentMatch.Groups[1].Value;
+                // Skip @pos comments (flowchart-specific metadata)
+                if (!commentText.TrimStart().StartsWith("@pos"))
+                {
+                    model.Comments.Add(new CommentEntry
+                    {
+                        Text = commentText,
+                        OriginalLineIndex = i
+                    });
+                }
+                continue;
+            }
+
+            // Check for sequenceDiagram declaration
+            if (!foundDeclaration)
+            {
+                var declMatch = SequenceDiagramDeclaration.Match(line);
+                if (declMatch.Success)
+                {
+                    model.DeclarationLineIndex = i;
+                    foundDeclaration = true;
+                    continue;
+                }
+
+                // Preserve preamble lines (config directives, etc.)
+                if (!line.TrimStart().StartsWith("%%"))
+                {
+                    model.PreambleLines.Add(line);
+                    continue;
+                }
+            }
+
+            if (!foundDeclaration)
+                continue;
+
+            var trimmedLine = line.Trim();
+
+            // Get current element list (top-level or inside a fragment section)
+            List<SequenceElement> currentElements = GetCurrentElementList(model, fragmentStack);
+
+            // Check for autonumber
+            if (AutonumberPattern.IsMatch(trimmedLine))
+            {
+                model.AutoNumber = true;
+                continue;
+            }
+
+            // Check for create participant
+            var createMatch = CreatePattern.Match(trimmedLine);
+            if (createMatch.Success)
+            {
+                var type = createMatch.Groups[1].Value == "actor"
+                    ? SequenceParticipantType.Actor
+                    : SequenceParticipantType.Participant;
+                var id = createMatch.Groups[2].Value;
+                var alias = createMatch.Groups[3].Success ? createMatch.Groups[3].Value.Trim() : null;
+
+                EnsureSequenceParticipant(model, knownParticipants, id, alias, type, isExplicit: true);
+
+                currentElements.Add(new SequenceCreate
+                {
+                    ParticipantType = type,
+                    ParticipantId = id
+                });
+                continue;
+            }
+
+            // Check for destroy
+            var destroyMatch = DestroyPattern.Match(trimmedLine);
+            if (destroyMatch.Success)
+            {
+                var id = destroyMatch.Groups[1].Value;
+                currentElements.Add(new SequenceDestroy { ParticipantId = id });
+
+                // Mark participant as destroyed
+                var p = model.Participants.Find(p => p.Id == id);
+                if (p != null) p.IsDestroyed = true;
+                continue;
+            }
+
+            // Check for participant/actor declaration
+            var participantMatch = ParticipantDeclaration.Match(trimmedLine);
+            if (participantMatch.Success)
+            {
+                var type = participantMatch.Groups[1].Value == "actor"
+                    ? SequenceParticipantType.Actor
+                    : SequenceParticipantType.Participant;
+                var id = participantMatch.Groups[2].Value;
+                var alias = participantMatch.Groups[3].Success ? participantMatch.Groups[3].Value.Trim() : null;
+
+                EnsureSequenceParticipant(model, knownParticipants, id, alias, type, isExplicit: true);
+                continue;
+            }
+
+            // Check for activate/deactivate
+            var activateMatch = ActivatePattern.Match(trimmedLine);
+            if (activateMatch.Success)
+            {
+                var isActivate = activateMatch.Groups[1].Value == "activate";
+                var participantId = activateMatch.Groups[2].Value;
+                EnsureSequenceParticipant(model, knownParticipants, participantId);
+                currentElements.Add(new SequenceActivation
+                {
+                    ParticipantId = participantId,
+                    IsActivate = isActivate
+                });
+                continue;
+            }
+
+            // Check for fragment start (loop, alt, opt, par, critical, break, rect)
+            var fragmentMatch = FragmentStartPattern.Match(trimmedLine);
+            if (fragmentMatch.Success)
+            {
+                var typeStr = fragmentMatch.Groups[1].Value;
+                var label = fragmentMatch.Groups[2].Value.Trim();
+
+                var fragmentType = typeStr switch
+                {
+                    "loop" => SequenceFragmentType.Loop,
+                    "alt" => SequenceFragmentType.Alt,
+                    "opt" => SequenceFragmentType.Opt,
+                    "par" => SequenceFragmentType.Par,
+                    "critical" => SequenceFragmentType.Critical,
+                    "break" => SequenceFragmentType.Break,
+                    "rect" => SequenceFragmentType.Rect,
+                    _ => SequenceFragmentType.Loop
+                };
+
+                var fragment = new SequenceFragment
+                {
+                    Type = fragmentType,
+                    Label = label,
+                    Sections = { new SequenceFragmentSection { Label = label, Elements = new() } }
+                };
+
+                currentElements.Add(fragment);
+                fragmentStack.Push((fragment, 0));
+                continue;
+            }
+
+            // Check for else/and/option (fragment section divider)
+            var elseMatch = ElsePattern.Match(trimmedLine);
+            if (elseMatch.Success && fragmentStack.Count > 0)
+            {
+                var label = elseMatch.Groups[2].Value.Trim();
+                var (fragment, _) = fragmentStack.Pop();
+
+                var newSection = new SequenceFragmentSection
+                {
+                    Label = string.IsNullOrEmpty(label) ? null : label,
+                    Elements = new()
+                };
+                fragment.Sections.Add(newSection);
+                fragmentStack.Push((fragment, fragment.Sections.Count - 1));
+                continue;
+            }
+
+            // Check for end (closes fragment)
+            if (EndPattern.IsMatch(trimmedLine))
+            {
+                if (fragmentStack.Count > 0)
+                {
+                    fragmentStack.Pop();
+                }
+                continue;
+            }
+
+            // Check for note (single-line)
+            var noteMatch = NotePattern.Match(trimmedLine);
+            if (noteMatch.Success)
+            {
+                var position = ParseNotePosition(noteMatch.Groups[1].Value);
+                var participants = noteMatch.Groups[2].Value.Trim();
+                var noteText = noteMatch.Groups[3].Value.Trim();
+
+                // Ensure participants exist
+                foreach (var pid in participants.Split(',').Select(p => p.Trim()))
+                {
+                    EnsureSequenceParticipant(model, knownParticipants, pid);
+                }
+
+                currentElements.Add(new SequenceNote
+                {
+                    Text = noteText,
+                    Position = position,
+                    OverParticipants = participants
+                });
+                continue;
+            }
+
+            // Check for multi-line note start
+            var noteStartMatch = NoteStartPattern.Match(trimmedLine);
+            if (noteStartMatch.Success)
+            {
+                var position = ParseNotePosition(noteStartMatch.Groups[1].Value);
+                var participants = noteStartMatch.Groups[2].Value.Trim();
+
+                // Collect lines until "end note"
+                var noteLines = new List<string>();
+                i++;
+                while (i < lines.Length)
+                {
+                    var noteLine = lines[i].TrimEnd('\r').Trim();
+                    if (noteLine.Equals("end note", StringComparison.OrdinalIgnoreCase))
+                        break;
+                    noteLines.Add(noteLine);
+                    i++;
+                }
+
+                foreach (var pid in participants.Split(',').Select(p => p.Trim()))
+                {
+                    EnsureSequenceParticipant(model, knownParticipants, pid);
+                }
+
+                currentElements.Add(new SequenceNote
+                {
+                    Text = string.Join("\n", noteLines),
+                    Position = position,
+                    OverParticipants = participants
+                });
+                continue;
+            }
+
+            // Check for message
+            var messageMatch = MessagePattern.Match(trimmedLine);
+            if (messageMatch.Success)
+            {
+                var fromId = messageMatch.Groups[1].Value.Trim();
+                var arrowStr = messageMatch.Groups[2].Value;
+                var activationSuffix = messageMatch.Groups[3].Value;
+                var toId = messageMatch.Groups[4].Value.Trim();
+                var msgText = messageMatch.Groups[5].Value.Trim();
+
+                EnsureSequenceParticipant(model, knownParticipants, fromId);
+                EnsureSequenceParticipant(model, knownParticipants, toId);
+
+                var arrowType = arrowStr switch
+                {
+                    "->>" => SequenceArrowType.SolidArrow,
+                    "-->>" => SequenceArrowType.DottedArrow,
+                    "->" => SequenceArrowType.SolidOpen,
+                    "-->" => SequenceArrowType.DottedOpen,
+                    "-x" => SequenceArrowType.SolidCross,
+                    "--x" => SequenceArrowType.DottedCross,
+                    "-)" => SequenceArrowType.SolidAsync,
+                    "--)" => SequenceArrowType.DottedAsync,
+                    _ => SequenceArrowType.SolidArrow
+                };
+
+                var message = new SequenceMessage
+                {
+                    FromId = fromId,
+                    ToId = toId,
+                    Text = msgText,
+                    ArrowType = arrowType,
+                    ActivateTarget = activationSuffix == "+",
+                    DeactivateSource = activationSuffix == "-"
+                };
+
+                currentElements.Add(message);
+                continue;
+            }
+        }
+
+        if (!foundDeclaration)
+            return null;
+
+        return model;
+    }
+
+    /// <summary>
+    /// Gets the current element list — either the top-level model elements or the current fragment section's elements.
+    /// </summary>
+    private static List<SequenceElement> GetCurrentElementList(
+        SequenceDiagramModel model,
+        Stack<(SequenceFragment fragment, int sectionIndex)> fragmentStack)
+    {
+        if (fragmentStack.Count > 0)
+        {
+            var (fragment, sectionIndex) = fragmentStack.Peek();
+            return fragment.Sections[sectionIndex].Elements;
+        }
+        return model.Elements;
+    }
+
+    /// <summary>
+    /// Ensures a participant exists in the model, creating it if not already known.
+    /// </summary>
+    private static void EnsureSequenceParticipant(
+        SequenceDiagramModel model,
+        HashSet<string> knownParticipants,
+        string id,
+        string? alias = null,
+        SequenceParticipantType type = SequenceParticipantType.Participant,
+        bool isExplicit = false)
+    {
+        if (knownParticipants.Contains(id))
+        {
+            // Update alias/type if explicitly declared later
+            if (isExplicit)
+            {
+                var existing = model.Participants.Find(p => p.Id == id);
+                if (existing != null)
+                {
+                    if (alias != null) existing.Alias = alias;
+                    existing.Type = type;
+                    existing.IsExplicit = true;
+                }
+            }
+            return;
+        }
+
+        knownParticipants.Add(id);
+        model.Participants.Add(new SequenceParticipant
+        {
+            Id = id,
+            Alias = alias,
+            Type = type,
+            IsExplicit = isExplicit
+        });
+    }
+
+    /// <summary>
+    /// Parses a note position string to a SequenceNotePosition enum value.
+    /// </summary>
+    private static SequenceNotePosition ParseNotePosition(string positionStr)
+    {
+        return positionStr.ToLowerInvariant() switch
+        {
+            "right of" => SequenceNotePosition.RightOf,
+            "left of" => SequenceNotePosition.LeftOf,
+            "over" => SequenceNotePosition.Over,
+            _ => SequenceNotePosition.RightOf
+        };
+    }
 }
