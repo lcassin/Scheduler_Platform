@@ -1122,4 +1122,136 @@ public static class MermaidSerializer
             }
         }
     }
+
+    // =============================================
+    // ER Diagram Serializer (Phase 2.4)
+    // =============================================
+
+    /// <summary>
+    /// Serializes an ERDiagramModel to valid Mermaid ER diagram text.
+    /// </summary>
+    /// <param name="model">The ER diagram model to serialize.</param>
+    /// <returns>Valid Mermaid ER diagram text.</returns>
+    public static string SerializeERDiagram(ERDiagramModel model)
+    {
+        if (model == null)
+            return string.Empty;
+
+        var sb = new StringBuilder();
+
+        // Write preamble lines (config directives, frontmatter, etc.)
+        foreach (var preambleLine in model.PreambleLines)
+        {
+            sb.AppendLine(preambleLine);
+        }
+
+        // Write comments that appeared before the declaration
+        WriteERDiagramCommentsBeforeLine(sb, model, model.DeclarationLineIndex);
+
+        // Write the erDiagram declaration
+        sb.AppendLine("erDiagram");
+
+        // Write entity definitions with attributes
+        foreach (var entity in model.Entities.Where(e => e.Attributes.Count > 0))
+        {
+            sb.AppendLine($"{Indent}{entity.Name} {{");
+            foreach (var attr in entity.Attributes)
+            {
+                sb.Append($"{Indent}{Indent}{attr.Type} {attr.Name}");
+                if (!string.IsNullOrEmpty(attr.Key))
+                {
+                    sb.Append($" {attr.Key}");
+                }
+                if (!string.IsNullOrEmpty(attr.Comment))
+                {
+                    sb.Append($" \"{attr.Comment}\"");
+                }
+                sb.AppendLine();
+            }
+            sb.AppendLine($"{Indent}}}");
+        }
+
+        // Write relationships
+        foreach (var rel in model.Relationships)
+        {
+            sb.AppendLine($"{Indent}{FormatERRelationship(rel)}");
+        }
+
+        // Write trailing comments
+        WriteERDiagramTrailingComments(sb, model);
+
+        return sb.ToString().TrimEnd('\r', '\n') + Environment.NewLine;
+    }
+
+    /// <summary>
+    /// Formats an ER relationship for serialization.
+    /// </summary>
+    private static string FormatERRelationship(ERRelationship rel)
+    {
+        var sb = new StringBuilder();
+        sb.Append(rel.FromEntity);
+        sb.Append(' ');
+        sb.Append(FormatERCardinality(rel.LeftCardinality));
+        sb.Append(rel.IsIdentifying ? "--" : "..");
+        sb.Append(FormatERCardinality(rel.RightCardinality));
+        sb.Append(' ');
+        sb.Append(rel.ToEntity);
+
+        if (!string.IsNullOrEmpty(rel.Label))
+        {
+            sb.Append($" : {rel.Label}");
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Formats a cardinality enum value to its Mermaid string representation.
+    /// Uses the "left side" form for each cardinality.
+    /// </summary>
+    private static string FormatERCardinality(ERCardinality cardinality)
+    {
+        return cardinality switch
+        {
+            ERCardinality.ExactlyOne => "||",
+            ERCardinality.ZeroOrOne => "|o",
+            ERCardinality.ZeroOrMore => "}o",
+            ERCardinality.OneOrMore => "}|",
+            _ => "||"
+        };
+    }
+
+    /// <summary>
+    /// Writes comments that appeared before a given line in the ER diagram.
+    /// </summary>
+    private static void WriteERDiagramCommentsBeforeLine(StringBuilder sb, ERDiagramModel model, int lineIndex)
+    {
+        foreach (var comment in model.Comments.Where(c => c.OriginalLineIndex < lineIndex))
+        {
+            sb.AppendLine($"%%{comment.Text}");
+        }
+    }
+
+    /// <summary>
+    /// Writes trailing comments for an ER diagram.
+    /// </summary>
+    private static void WriteERDiagramTrailingComments(StringBuilder sb, ERDiagramModel model)
+    {
+        if (model.Comments.Count > 0)
+        {
+            var trailingComments = model.Comments
+                .Where(c => c.OriginalLineIndex > model.DeclarationLineIndex)
+                .OrderBy(c => c.OriginalLineIndex)
+                .ToList();
+
+            if (trailingComments.Count > 0)
+            {
+                sb.AppendLine();
+                foreach (var comment in trailingComments)
+                {
+                    sb.AppendLine($"%%{comment.Text}");
+                }
+            }
+        }
+    }
 }

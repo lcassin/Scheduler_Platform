@@ -2162,4 +2162,200 @@ public static class MermaidParser
         }
         return null;
     }
+
+    // =============================================
+    // ER Diagram Parser (Phase 2.4)
+    // =============================================
+
+    // --- ER diagram declaration ---
+    private static readonly Regex ERDiagramDeclaration = new(
+        @"^\s*erDiagram\s*$", RegexOptions.Compiled);
+
+    // --- ER relationship pattern ---
+    // CUSTOMER ||--o{ ORDER : places
+    // CUSTOMER }|..|{ DELIVERY-ADDRESS : uses
+    // Left entity, left cardinality, link style, right cardinality, right entity, label
+    private static readonly Regex ERRelationshipPattern = new(
+        @"^\s*([\w-]+)\s+(\|\||[|}][|o]|[|o][|{]|\|\{|\{[|o]|[|}]\|)\s*(--|\.\.)\s*(\|\||[|}][|o]|[|o][|{]|\|\{|\{[|o]|[|}]\|)\s*([\w-]+)\s*:\s*(.+?)\s*$",
+        RegexOptions.Compiled);
+
+    // --- ER entity block start ---
+    // CUSTOMER {
+    private static readonly Regex EREntityBlockStart = new(
+        @"^\s*([\w-]+)\s*\{\s*$", RegexOptions.Compiled);
+
+    // --- ER entity block end ---
+    private static readonly Regex EREntityBlockEnd = new(
+        @"^\s*\}\s*$", RegexOptions.Compiled);
+
+    // --- ER attribute line ---
+    // string name PK "The customer name"
+    // int age
+    // date created FK
+    private static readonly Regex ERAttributePattern = new(
+        @"^\s*(\S+)\s+(\S+)(?:\s+(PK|FK|UK))?(?:\s+""([^""]+)"")?\s*$", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Parses Mermaid ER diagram text into an ERDiagramModel.
+    /// </summary>
+    /// <param name="text">The Mermaid ER diagram source text.</param>
+    /// <returns>A populated ERDiagramModel, or null if the text is not a valid ER diagram.</returns>
+    public static ERDiagramModel? ParseERDiagram(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        var lines = text.Split('\n');
+        var model = new ERDiagramModel();
+        var knownEntities = new HashSet<string>(StringComparer.Ordinal);
+        bool foundDeclaration = false;
+
+        // Track entity body parsing
+        bool inEntityBody = false;
+        string? currentEntityName = null;
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var rawLine = lines[i];
+            var line = rawLine.TrimEnd('\r');
+
+            // Skip empty lines
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            // Check for comments (before declaration check)
+            var commentMatch = CommentPattern.Match(line);
+            if (commentMatch.Success)
+            {
+                model.Comments.Add(new CommentEntry
+                {
+                    Text = commentMatch.Groups[1].Value,
+                    OriginalLineIndex = i
+                });
+                continue;
+            }
+
+            // Handle entity body content
+            if (inEntityBody)
+            {
+                var endMatch = EREntityBlockEnd.Match(line);
+                if (endMatch.Success)
+                {
+                    inEntityBody = false;
+                    currentEntityName = null;
+                    continue;
+                }
+
+                // Parse attribute line
+                var attrMatch = ERAttributePattern.Match(line);
+                if (attrMatch.Success && currentEntityName != null)
+                {
+                    var entity = model.Entities.Find(e => e.Name == currentEntityName);
+                    if (entity != null)
+                    {
+                        entity.Attributes.Add(new ERAttribute
+                        {
+                            Type = attrMatch.Groups[1].Value,
+                            Name = attrMatch.Groups[2].Value,
+                            Key = attrMatch.Groups[3].Success ? attrMatch.Groups[3].Value : null,
+                            Comment = attrMatch.Groups[4].Success ? attrMatch.Groups[4].Value : null
+                        });
+                    }
+                }
+                continue;
+            }
+
+            // Look for the erDiagram declaration
+            if (!foundDeclaration)
+            {
+                var declMatch = ERDiagramDeclaration.Match(line);
+                if (declMatch.Success)
+                {
+                    foundDeclaration = true;
+                    model.DeclarationLineIndex = i;
+                    continue;
+                }
+
+                // Store as preamble
+                model.PreambleLines.Add(line);
+                continue;
+            }
+
+            // --- After declaration: parse ER diagram content ---
+
+            // Entity block start: ENTITY_NAME {
+            var entityBlockMatch = EREntityBlockStart.Match(line);
+            if (entityBlockMatch.Success)
+            {
+                var entityName = entityBlockMatch.Groups[1].Value;
+                EnsureEREntityExists(model, knownEntities, entityName);
+                var entity = model.Entities.Find(e => e.Name == entityName);
+                if (entity != null)
+                {
+                    entity.IsExplicit = true;
+                }
+                inEntityBody = true;
+                currentEntityName = entityName;
+                continue;
+            }
+
+            // Relationship: ENTITY1 ||--o{ ENTITY2 : label
+            var relMatch = ERRelationshipPattern.Match(line);
+            if (relMatch.Success)
+            {
+                var fromEntity = relMatch.Groups[1].Value;
+                var leftCardStr = relMatch.Groups[2].Value;
+                var linkStyle = relMatch.Groups[3].Value;
+                var rightCardStr = relMatch.Groups[4].Value;
+                var toEntity = relMatch.Groups[5].Value;
+                var label = relMatch.Groups[6].Value.Trim();
+
+                model.Relationships.Add(new ERRelationship
+                {
+                    FromEntity = fromEntity,
+                    ToEntity = toEntity,
+                    LeftCardinality = ParseERCardinality(leftCardStr),
+                    RightCardinality = ParseERCardinality(rightCardStr),
+                    IsIdentifying = linkStyle == "--",
+                    Label = label
+                });
+
+                // Ensure entities exist
+                EnsureEREntityExists(model, knownEntities, fromEntity);
+                EnsureEREntityExists(model, knownEntities, toEntity);
+                continue;
+            }
+        }
+
+        return foundDeclaration ? model : null;
+    }
+
+    /// <summary>
+    /// Parses a cardinality string to an ERCardinality enum value.
+    /// Mermaid ER cardinality markers:
+    /// || = exactly one, |o or o| = zero or one, }o or o{ = zero or more, }| or |{ = one or more
+    /// </summary>
+    private static ERCardinality ParseERCardinality(string cardStr)
+    {
+        return cardStr switch
+        {
+            "||" => ERCardinality.ExactlyOne,
+            "|o" or "o|" => ERCardinality.ZeroOrOne,
+            "}o" or "o{" => ERCardinality.ZeroOrMore,
+            "}|" or "|{" => ERCardinality.OneOrMore,
+            _ => ERCardinality.ExactlyOne
+        };
+    }
+
+    /// <summary>
+    /// Ensures an ER entity exists in the model, creating it if not already known.
+    /// </summary>
+    private static void EnsureEREntityExists(ERDiagramModel model, HashSet<string> knownEntities, string entityName)
+    {
+        if (knownEntities.Contains(entityName))
+            return;
+
+        knownEntities.Add(entityName);
+        model.Entities.Add(new EREntity { Name = entityName });
+    }
 }

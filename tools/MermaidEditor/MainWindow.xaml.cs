@@ -4925,6 +4925,32 @@ Console.WriteLine(""Hello, World!"");
     }
 
     /// <summary>
+    /// Detects whether the given Mermaid text is an ER diagram.
+    /// Checks for "erDiagram" as the first non-preamble, non-comment, non-empty line.
+    /// </summary>
+    private static bool IsERDiagram(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+
+        foreach (var rawLine in text.Split('\n'))
+        {
+            var line = rawLine.TrimEnd('\r').Trim();
+            if (string.IsNullOrEmpty(line)) continue;
+            // Skip preamble lines (config directives like %%{init: ...}%%)
+            if (line.StartsWith("%%{")) continue;
+            // Skip comments
+            if (line.StartsWith("%% ") || line.StartsWith("%%\t")) continue;
+            // Skip frontmatter delimiters
+            if (line == "---") continue;
+            // Skip frontmatter content (title:, config:, etc.)
+            if (line.Contains(':') && !line.StartsWith("erDiagram")) continue;
+            // First meaningful line determines diagram type
+            return line.Equals("erDiagram", StringComparison.Ordinal);
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Updates the toggle button checked states to reflect the current mode.
     /// </summary>
     private void UpdateModeToggleButtons()

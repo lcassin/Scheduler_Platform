@@ -1116,3 +1116,146 @@ public enum StateNotePosition
     /// <summary>Note appears to the left of the state.</summary>
     LeftOf
 }
+
+// =============================================
+// ER Diagram Models (Phase 2.4)
+// =============================================
+
+/// <summary>
+/// Represents a complete Mermaid ER (Entity-Relationship) diagram.
+/// Contains entities with attributes and relationships with cardinality markers.
+/// </summary>
+public class ERDiagramModel
+{
+    /// <summary>
+    /// All entity definitions in the diagram.
+    /// </summary>
+    public List<EREntity> Entities { get; set; } = new();
+
+    /// <summary>
+    /// All relationships between entities.
+    /// </summary>
+    public List<ERRelationship> Relationships { get; set; } = new();
+
+    /// <summary>
+    /// Comments preserved from the original text.
+    /// </summary>
+    public List<CommentEntry> Comments { get; set; } = new();
+
+    /// <summary>
+    /// Lines that appeared before the erDiagram declaration (config directives, frontmatter, etc.).
+    /// </summary>
+    public List<string> PreambleLines { get; set; } = new();
+
+    /// <summary>
+    /// The line index of the erDiagram declaration in the original text.
+    /// Used for comment placement during serialization.
+    /// </summary>
+    public int DeclarationLineIndex { get; set; }
+}
+
+/// <summary>
+/// Represents an entity in an ER diagram.
+/// An entity has a name and optional attributes with types and keys.
+/// </summary>
+public class EREntity
+{
+    /// <summary>
+    /// The entity name (e.g., "CUSTOMER", "ORDER").
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Attributes of the entity.
+    /// </summary>
+    public List<ERAttribute> Attributes { get; set; } = new();
+
+    /// <summary>
+    /// Whether this entity was explicitly declared (vs. inferred from relationships).
+    /// </summary>
+    public bool IsExplicit { get; set; }
+}
+
+/// <summary>
+/// Represents an attribute of an entity in an ER diagram.
+/// Attributes have a type, name, and optional key/comment.
+/// </summary>
+public class ERAttribute
+{
+    /// <summary>
+    /// The data type of the attribute (e.g., "string", "int", "date").
+    /// </summary>
+    public string Type { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The attribute name (e.g., "name", "id", "address").
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The key/constraint type (e.g., "PK", "FK", "UK").
+    /// </summary>
+    public string? Key { get; set; }
+
+    /// <summary>
+    /// Optional comment/description for the attribute (in quotes).
+    /// </summary>
+    public string? Comment { get; set; }
+}
+
+/// <summary>
+/// Represents a relationship between two entities in an ER diagram.
+/// Includes cardinality markers on both sides.
+/// </summary>
+public class ERRelationship
+{
+    /// <summary>
+    /// The first (left) entity name.
+    /// </summary>
+    public string FromEntity { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The second (right) entity name.
+    /// </summary>
+    public string ToEntity { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Cardinality on the left side of the relationship.
+    /// </summary>
+    public ERCardinality LeftCardinality { get; set; } = ERCardinality.ExactlyOne;
+
+    /// <summary>
+    /// Cardinality on the right side of the relationship.
+    /// </summary>
+    public ERCardinality RightCardinality { get; set; } = ERCardinality.ExactlyOne;
+
+    /// <summary>
+    /// Whether the relationship is identifying (solid line) or non-identifying (dashed line).
+    /// Identifying uses "--", non-identifying uses "..".
+    /// </summary>
+    public bool IsIdentifying { get; set; } = true;
+
+    /// <summary>
+    /// The relationship label (e.g., "places", "contains", "has").
+    /// </summary>
+    public string? Label { get; set; }
+}
+
+/// <summary>
+/// Cardinality markers for ER diagram relationships.
+/// These define how many instances of one entity relate to another.
+/// </summary>
+public enum ERCardinality
+{
+    /// <summary>Exactly one: || (one and only one)</summary>
+    ExactlyOne,
+
+    /// <summary>Zero or one: |o (zero or one)</summary>
+    ZeroOrOne,
+
+    /// <summary>Zero or more: }o (zero or more)</summary>
+    ZeroOrMore,
+
+    /// <summary>One or more: }| (one or more)</summary>
+    OneOrMore
+}

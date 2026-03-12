@@ -1425,4 +1425,236 @@ stateDiagram-v2
     join1 --> [*]";
         AssertStateDiagramRoundTrip(input);
     }
+
+    // =============================================
+    // ER Diagram Tests (Phase 2.4)
+    // =============================================
+
+    /// <summary>
+    /// Helper method to verify ER diagram round-trip fidelity.
+    /// Parses text -> serializes -> re-parses -> compares models.
+    /// </summary>
+    private static void AssertERDiagramRoundTrip(string input)
+    {
+        var model1 = MermaidParser.ParseERDiagram(input);
+        Assert.NotNull(model1);
+
+        var serialized = MermaidSerializer.SerializeERDiagram(model1);
+        Assert.False(string.IsNullOrWhiteSpace(serialized), "Serialized output should not be empty");
+
+        var model2 = MermaidParser.ParseERDiagram(serialized);
+        Assert.NotNull(model2);
+
+        // Compare entities
+        Assert.Equal(model1.Entities.Count, model2.Entities.Count);
+        for (int i = 0; i < model1.Entities.Count; i++)
+        {
+            Assert.Equal(model1.Entities[i].Name, model2.Entities[i].Name);
+            Assert.Equal(model1.Entities[i].Attributes.Count, model2.Entities[i].Attributes.Count);
+            for (int j = 0; j < model1.Entities[i].Attributes.Count; j++)
+            {
+                Assert.Equal(model1.Entities[i].Attributes[j].Type, model2.Entities[i].Attributes[j].Type);
+                Assert.Equal(model1.Entities[i].Attributes[j].Name, model2.Entities[i].Attributes[j].Name);
+                Assert.Equal(model1.Entities[i].Attributes[j].Key, model2.Entities[i].Attributes[j].Key);
+                Assert.Equal(model1.Entities[i].Attributes[j].Comment, model2.Entities[i].Attributes[j].Comment);
+            }
+        }
+
+        // Compare relationships
+        Assert.Equal(model1.Relationships.Count, model2.Relationships.Count);
+        for (int i = 0; i < model1.Relationships.Count; i++)
+        {
+            Assert.Equal(model1.Relationships[i].FromEntity, model2.Relationships[i].FromEntity);
+            Assert.Equal(model1.Relationships[i].ToEntity, model2.Relationships[i].ToEntity);
+            Assert.Equal(model1.Relationships[i].LeftCardinality, model2.Relationships[i].LeftCardinality);
+            Assert.Equal(model1.Relationships[i].RightCardinality, model2.Relationships[i].RightCardinality);
+            Assert.Equal(model1.Relationships[i].IsIdentifying, model2.Relationships[i].IsIdentifying);
+            Assert.Equal(model1.Relationships[i].Label, model2.Relationships[i].Label);
+        }
+
+        // Compare preamble
+        Assert.Equal(model1.PreambleLines.Count, model2.PreambleLines.Count);
+        for (int i = 0; i < model1.PreambleLines.Count; i++)
+        {
+            Assert.Equal(model1.PreambleLines[i], model2.PreambleLines[i]);
+        }
+    }
+
+    [Fact]
+    public void ERDiagram_BasicParsing()
+    {
+        var input = @"erDiagram
+    CUSTOMER ||--o{ ORDER : places
+    ORDER ||--|{ LINE-ITEM : contains";
+        var model = MermaidParser.ParseERDiagram(input);
+        Assert.NotNull(model);
+        Assert.Equal(3, model.Entities.Count);
+        Assert.Equal(2, model.Relationships.Count);
+        Assert.Equal("CUSTOMER", model.Entities[0].Name);
+        Assert.Equal("ORDER", model.Entities[1].Name);
+        Assert.Equal("LINE-ITEM", model.Entities[2].Name);
+    }
+
+    [Fact]
+    public void ERDiagram_RoundTrip_BasicRelationships()
+    {
+        var input = @"erDiagram
+    CUSTOMER ||--o{ ORDER : places
+    ORDER ||--|{ LINE-ITEM : contains";
+        AssertERDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void ERDiagram_RoundTrip_AllCardinalityTypes()
+    {
+        var input = @"erDiagram
+    A ||--|| B : one-to-one
+    C ||--o{ D : one-to-zero-or-more
+    E ||--|{ F : one-to-one-or-more
+    G |o--o| H : zero-or-one-to-zero-or-one";
+        AssertERDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void ERDiagram_RoundTrip_NonIdentifyingRelationship()
+    {
+        var input = @"erDiagram
+    CUSTOMER ||..o{ ORDER : places
+    ORDER ||..|{ LINE-ITEM : contains";
+        AssertERDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void ERDiagram_RoundTrip_EntityAttributes()
+    {
+        var input = @"erDiagram
+    CUSTOMER {
+        string name
+        int age
+        date created
+    }
+    CUSTOMER ||--o{ ORDER : places";
+        AssertERDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void ERDiagram_RoundTrip_AttributesWithKeys()
+    {
+        var input = @"erDiagram
+    CUSTOMER {
+        int id PK
+        string name
+        string email UK
+    }
+    ORDER {
+        int id PK
+        int customerId FK
+        date orderDate
+    }
+    CUSTOMER ||--o{ ORDER : places";
+        AssertERDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void ERDiagram_RoundTrip_AttributesWithComments()
+    {
+        var input = @"erDiagram
+    CUSTOMER {
+        int id PK ""The customer ID""
+        string name ""Full name""
+        string email UK ""Must be unique""
+    }
+    CUSTOMER ||--o{ ORDER : places";
+        AssertERDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void ERDiagram_RoundTrip_ComplexDiagram()
+    {
+        var input = @"erDiagram
+    CUSTOMER {
+        int id PK
+        string name
+        string email UK
+    }
+    ORDER {
+        int id PK
+        int customerId FK
+        date orderDate
+    }
+    LINE-ITEM {
+        int id PK
+        int orderId FK
+        int productId FK
+        int quantity
+    }
+    PRODUCT {
+        int id PK
+        string name
+        float price
+    }
+    CUSTOMER ||--o{ ORDER : places
+    ORDER ||--|{ LINE-ITEM : contains
+    PRODUCT ||--o{ LINE-ITEM : includes";
+        AssertERDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void ERDiagram_RoundTrip_PreamblePreserved()
+    {
+        var input = @"---
+title: My ER Diagram
+---
+erDiagram
+    CUSTOMER ||--o{ ORDER : places";
+        AssertERDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void ERDiagram_RoundTrip_MixedIdentifyingNonIdentifying()
+    {
+        var input = @"erDiagram
+    CUSTOMER ||--o{ ORDER : places
+    ORDER }|..|{ DELIVERY-ADDRESS : uses
+    CUSTOMER }|..|{ DELIVERY-ADDRESS : lives-at";
+        AssertERDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void ERDiagram_Parse_ReturnsNull_ForNonERDiagram()
+    {
+        var input = @"flowchart TD
+    A --> B";
+        var model = MermaidParser.ParseERDiagram(input);
+        Assert.Null(model);
+    }
+
+    [Fact]
+    public void ERDiagram_Parse_ReturnsNull_ForEmptyInput()
+    {
+        var model = MermaidParser.ParseERDiagram("");
+        Assert.Null(model);
+    }
+
+    [Fact]
+    public void ERDiagram_Serialize_ReturnsEmpty_ForNullModel()
+    {
+        var result = MermaidSerializer.SerializeERDiagram(null!);
+        Assert.Equal(string.Empty, result);
+    }
+
+    [Fact]
+    public void ERDiagram_RoundTrip_EntitiesFromRelationshipsOnly()
+    {
+        var input = @"erDiagram
+    PERSON ||--o{ CAR : owns
+    CAR }o--|| MANUFACTURER : made-by";
+        var model = MermaidParser.ParseERDiagram(input);
+        Assert.NotNull(model);
+        Assert.Equal(3, model.Entities.Count);
+        Assert.Equal("PERSON", model.Entities[0].Name);
+        Assert.Equal("CAR", model.Entities[1].Name);
+        Assert.Equal("MANUFACTURER", model.Entities[2].Name);
+        AssertERDiagramRoundTrip(input);
+    }
 }
