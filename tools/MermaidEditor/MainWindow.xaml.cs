@@ -1242,6 +1242,13 @@ Console.WriteLine(""Hello, World!"");
             ? _activeDocument.PreviewZoom.ToString(System.Globalization.CultureInfo.InvariantCulture) 
             : "1";
 
+        var isDark = ThemeManager.IsDarkTheme;
+        var bodyBg = isDark ? "#1e1e1e" : "#f5f5f5";
+        var diagramBg = isDark ? "#2d2d2d" : "white";
+        var diagramShadow = isDark ? "0 2px 10px rgba(0,0,0,0.4)" : "0 2px 10px rgba(0,0,0,0.1)";
+        var errorColor = isDark ? "#ef9a9a" : "#d32f2f";
+        var errorBg = isDark ? "#4e1a1a" : "#ffebee";
+
         var html = $@"<!DOCTYPE html>
 <html>
 <head>
@@ -1254,7 +1261,7 @@ Console.WriteLine(""Hello, World!"");
             width: 100%; 
             height: 100%; 
             overflow: hidden;
-            background: #f5f5f5;
+            background: {bodyBg};
         }}
         #container {{
             width: 100%;
@@ -1266,10 +1273,10 @@ Console.WriteLine(""Hello, World!"");
             overflow: auto;
         }}
         #diagram {{
-            background: white;
+            background: {diagramBg};
             padding: 20px;
             border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: {diagramShadow};
             display: inline-block;
         }}
         #diagram.has-error {{
@@ -1285,17 +1292,22 @@ Console.WriteLine(""Hello, World!"");
             max-width: none !important;
         }}
         .error {{
-            color: #d32f2f;
+            color: {errorColor};
             padding: 20px;
             font-family: Consolas, monospace;
             white-space: pre-wrap;
             word-wrap: break-word;
             word-break: break-word;
             overflow-wrap: break-word;
-            background: #ffebee;
+            background: {errorBg};
             border-radius: 8px;
             max-width: 100%;
             overflow-x: auto;
+        }}
+        /* Force white background for printing */
+        @media print {{
+            html, body {{ background: white !important; }}
+            #diagram {{ background: white !important; box-shadow: none !important; }}
         }}
     </style>
 </head>
@@ -1846,8 +1858,8 @@ Console.WriteLine(""Hello, World!"");
     <meta charset=""UTF-8"">
     {baseTag}
     <script src=""https://cdn.jsdelivr.net/npm/marked/marked.min.js""></script>
-    <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-light.min.css"">
-    <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github.min.css"">
+    <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-{(ThemeManager.IsDarkTheme ? "dark" : "light")}.min.css"">
+    <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/highlight.js@11/styles/{(ThemeManager.IsDarkTheme ? "github-dark" : "github")}.min.css"">
     <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/core.min.js""></script>
     <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/javascript.min.js""></script>
     <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/csharp.min.js""></script>
@@ -1862,7 +1874,8 @@ Console.WriteLine(""Hello, World!"");
             width: 100%; 
             height: 100%; 
             overflow: auto;
-            background: #ffffff;
+            background: {(ThemeManager.IsDarkTheme ? "#1e1e1e" : "#ffffff")};
+            color-scheme: {(ThemeManager.IsDarkTheme ? "dark" : "light")};
         }}
         .markdown-body {{
             padding: 20px 32px;
@@ -1870,13 +1883,13 @@ Console.WriteLine(""Hello, World!"");
             margin: 0 auto;
         }}
         .markdown-body pre {{
-            background-color: #f6f8fa;
+            background-color: {(ThemeManager.IsDarkTheme ? "#161b22" : "#f6f8fa")};
             border-radius: 6px;
             padding: 16px;
             overflow: auto;
         }}
         .markdown-body code {{
-            background-color: #f6f8fa;
+            background-color: {(ThemeManager.IsDarkTheme ? "#161b22" : "#f6f8fa")};
             border-radius: 3px;
             padding: 0.2em 0.4em;
             font-size: 85%;
@@ -1892,11 +1905,15 @@ Console.WriteLine(""Hello, World!"");
         }}
         .markdown-body table th,
         .markdown-body table td {{
-            border: 1px solid #d0d7de;
+            border: 1px solid {(ThemeManager.IsDarkTheme ? "#30363d" : "#d0d7de")};
             padding: 6px 13px;
         }}
         .markdown-body table tr:nth-child(2n) {{
-            background-color: #f6f8fa;
+            background-color: {(ThemeManager.IsDarkTheme ? "#161b22" : "#f6f8fa")};
+        }}
+        /* Force white/light background for printing */
+        @media print {{
+            html, body {{ background: white !important; color-scheme: light !important; }}
         }}
     </style>
 </head>
@@ -6037,6 +6054,8 @@ Console.WriteLine(""Hello, World!"");
         UpdateTabStyles(); // Update tab colors for new theme
         SvgIconHelper.ClearCache();
         InitializeIcons();
+        _mermaidPageLoaded = false; // Force full page reload to pick up new theme colors
+        _markdownPageLoaded = false; // Force full page reload for Markdown too
         RenderPreview(); // Re-render preview with new theme
 
         // Update visual editor theme
@@ -6073,6 +6092,8 @@ Console.WriteLine(""Hello, World!"");
                 UpdateTabStyles();
                 SvgIconHelper.ClearCache();
                 InitializeIcons();
+                _mermaidPageLoaded = false; // Force full page reload to pick up new theme colors
+                _markdownPageLoaded = false; // Force full page reload for Markdown too
                 RenderPreview();
 
                 // Update visual editor theme
@@ -6439,10 +6460,11 @@ Console.WriteLine(""Hello, World!"");
 <head>
     {baseTag}
     <script src=""https://cdn.jsdelivr.net/npm/marked/marked.min.js""></script>
-    <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-light.min.css"">
+    <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-{(ThemeManager.IsDarkTheme ? "dark" : "light")}.min.css"">
     <style>
-        body {{ margin: 0; padding: 20px; background: #ffffff; }}
+        body {{ margin: 0; padding: 20px; background: {(ThemeManager.IsDarkTheme ? "#1e1e1e" : "#ffffff")}; color-scheme: {(ThemeManager.IsDarkTheme ? "dark" : "light")}; }}
         .markdown-body {{ box-sizing: border-box; min-width: 200px; max-width: 980px; margin: 0 auto; }}
+        @media print {{ body {{ background: white !important; color-scheme: light !important; }} }}
     </style>
 </head>
 <body>
