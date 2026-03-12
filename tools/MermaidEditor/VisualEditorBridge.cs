@@ -109,7 +109,8 @@ public class VisualEditorBridge
     /// <param name="theme">"dark" or "light".</param>
     public async Task SetThemeAsync(string theme)
     {
-        await _webView.ExecuteScriptAsync($"window.setTheme('{theme}')");
+        var escaped = JsonSerializer.Serialize(theme);
+        await _webView.ExecuteScriptAsync($"window.setTheme({escaped})");
     }
 
     /// <summary>
@@ -303,7 +304,19 @@ public class VisualEditorBridge
                     break;
 
                 case "autoLayoutApplied":
-                    // Auto layout sends individual nodeMoved messages
+                    // Legacy: individual nodeMoved messages (no longer used)
+                    break;
+
+                case "autoLayoutComplete":
+                    HandleAutoLayoutComplete(root);
+                    break;
+
+                case "nodeShapeChanged":
+                    HandleNodeShapeChanged(root);
+                    break;
+
+                case "nodeStyleChanged":
+                    HandleNodeStyleChanged(root);
                     break;
 
                 case "undo":
@@ -473,6 +486,94 @@ public class VisualEditorBridge
         if (string.IsNullOrEmpty(nodeId)) return;
 
         NodeSelected?.Invoke(this, new NodeSelectedEventArgs(nodeId));
+    }
+
+    private void HandleNodeShapeChanged(JsonElement root)
+    {
+        var nodeId = root.GetProperty("nodeId").GetString();
+        var shape = root.GetProperty("shape").GetString();
+
+        if (string.IsNullOrEmpty(nodeId)) return;
+
+        var node = _model.Nodes.Find(n => n.Id == nodeId);
+        if (node == null) return;
+
+        PushUndo();
+        node.Shape = Enum.TryParse<NodeShape>(shape, out var parsed) ? parsed : NodeShape.Rectangle;
+
+        if (root.TryGetProperty("width", out var wProp) && root.TryGetProperty("height", out var hProp))
+        {
+            node.Size = new System.Windows.Size(wProp.GetDouble(), hProp.GetDouble());
+        }
+
+        RaiseModelChanged("nodeShapeChanged");
+    }
+
+    private void HandleNodeStyleChanged(JsonElement root)
+    {
+        var nodeId = root.GetProperty("nodeId").GetString();
+        if (string.IsNullOrEmpty(nodeId)) return;
+
+        var node = _model.Nodes.Find(n => n.Id == nodeId);
+        if (node == null) return;
+
+        PushUndo();
+
+        // Apply fill color as an inline style
+        if (root.TryGetProperty("fillColor", out var fillProp))
+        {
+            var fillColor = fillProp.GetString();
+            if (!string.IsNullOrEmpty(fillColor))
+            {
+                // Add or update a style definition for this node
+                var existingStyle = _model.Styles.Find(s => !s.IsClassDef && s.Target == nodeId);
+                var styleString = $"fill:{fillColor}";
+                if (existingStyle != null)
+                {
+                    existingStyle.StyleString = styleString;
+                }
+                else
+                {
+                    _model.Styles.Add(new StyleDefinition
+                    {
+                        IsClassDef = false,
+                        Target = nodeId,
+                        StyleString = styleString
+                    });
+                }
+            }
+        }
+
+        RaiseModelChanged("nodeStyleChanged");
+    }
+
+    private void HandleAutoLayoutComplete(JsonElement root)
+    {
+        if (!root.TryGetProperty("positions", out var positionsArray))
+            return;
+
+        PushUndo();
+
+        foreach (var pos in positionsArray.EnumerateArray())
+        {
+            var nodeId = pos.GetProperty("nodeId").GetString();
+            if (string.IsNullOrEmpty(nodeId)) continue;
+
+            var node = _model.Nodes.Find(n => n.Id == nodeId);
+            if (node == null) continue;
+
+            node.Position = new System.Windows.Point(
+                pos.GetProperty("x").GetDouble(),
+                pos.GetProperty("y").GetDouble()
+            );
+
+            if (pos.TryGetProperty("width", out var wProp) && pos.TryGetProperty("height", out var hProp))
+            {
+                node.Size = new System.Windows.Size(wProp.GetDouble(), hProp.GetDouble());
+            }
+        }
+
+        RaiseModelChanged("autoLayoutComplete");
     }
 
     // ========== Undo/Redo History ==========

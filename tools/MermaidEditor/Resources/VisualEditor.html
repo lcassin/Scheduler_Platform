@@ -212,6 +212,126 @@
             background: var(--context-menu-border);
             margin: 4px 0;
         }
+        /* Submenu support */
+        .context-menu-item.has-submenu {
+            position: relative;
+        }
+        .context-menu-item.has-submenu::after {
+            content: '\25B6';
+            font-size: 8px;
+            margin-left: auto;
+            padding-left: 12px;
+        }
+        .context-submenu {
+            position: absolute;
+            left: 100%;
+            top: -4px;
+            background: var(--context-menu-bg);
+            border: 1px solid var(--context-menu-border);
+            border-radius: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            min-width: 180px;
+            padding: 4px 0;
+            display: none;
+            z-index: 2001;
+        }
+        .context-menu-item.has-submenu:hover > .context-submenu {
+            display: block;
+        }
+
+        /* Floating Property Panel */
+        .property-panel {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            background: var(--context-menu-bg);
+            border: 1px solid var(--context-menu-border);
+            border-radius: 6px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+            z-index: 1500;
+            min-width: 220px;
+            max-width: 280px;
+            padding: 0;
+            display: none;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .property-panel.visible { display: block; }
+        .property-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--context-menu-border);
+            font-weight: 600;
+            font-size: 12px;
+            color: var(--context-menu-text);
+        }
+        .property-panel-close {
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--context-menu-text);
+            opacity: 0.6;
+            background: none;
+            border: none;
+            padding: 0 2px;
+        }
+        .property-panel-close:hover { opacity: 1; }
+        .property-panel-body {
+            padding: 10px 12px;
+        }
+        .property-row {
+            margin-bottom: 8px;
+        }
+        .property-row:last-child { margin-bottom: 0; }
+        .property-label {
+            font-size: 11px;
+            color: var(--context-menu-text);
+            opacity: 0.7;
+            margin-bottom: 3px;
+        }
+        .property-input {
+            width: 100%;
+            box-sizing: border-box;
+            background: var(--input-bg);
+            border: 1px solid var(--context-menu-border);
+            border-radius: 3px;
+            color: var(--input-text);
+            font-size: 12px;
+            padding: 4px 8px;
+            outline: none;
+        }
+        .property-input:focus {
+            border-color: var(--node-selected-stroke);
+        }
+        .property-select {
+            width: 100%;
+            box-sizing: border-box;
+            background: var(--input-bg);
+            border: 1px solid var(--context-menu-border);
+            border-radius: 3px;
+            color: var(--input-text);
+            font-size: 12px;
+            padding: 4px 6px;
+            outline: none;
+            cursor: pointer;
+        }
+        .property-select:focus {
+            border-color: var(--node-selected-stroke);
+        }
+        .property-color-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .property-color-input {
+            width: 28px;
+            height: 28px;
+            border: 1px solid var(--context-menu-border);
+            border-radius: 3px;
+            cursor: pointer;
+            padding: 0;
+            background: none;
+        }
 
         /* Connection points (shown on hover) */
         .connection-point {
@@ -281,13 +401,29 @@
         </svg>
     </div>
 
-    <!-- Context menu -->
+    <!-- Context menu with submenu for all 14 node shapes -->
     <div id="context-menu" class="context-menu">
-        <div class="context-menu-item" data-action="add-rectangle">&#9645; Add Rectangle Node</div>
-        <div class="context-menu-item" data-action="add-rounded">&#9711; Add Rounded Node</div>
-        <div class="context-menu-item" data-action="add-diamond">&#9670; Add Diamond Node</div>
-        <div class="context-menu-item" data-action="add-circle">&#9679; Add Circle Node</div>
-        <div class="context-menu-item" data-action="add-hexagon">&#11042; Add Hexagon Node</div>
+        <div class="context-menu-item has-submenu">
+            &#10010; Add Node
+            <div class="context-submenu">
+                <div class="context-menu-item" data-action="add-rectangle">&#9645; Rectangle</div>
+                <div class="context-menu-item" data-action="add-rounded">&#9711; Rounded</div>
+                <div class="context-menu-item" data-action="add-stadium">&#9676; Stadium</div>
+                <div class="context-menu-item" data-action="add-subroutine">&#9645; Subroutine</div>
+                <div class="context-menu-item" data-action="add-cylindrical">&#9740; Cylindrical</div>
+                <div class="context-menu-item" data-action="add-circle">&#9679; Circle</div>
+                <div class="context-menu-separator"></div>
+                <div class="context-menu-item" data-action="add-diamond">&#9670; Diamond</div>
+                <div class="context-menu-item" data-action="add-hexagon">&#11042; Hexagon</div>
+                <div class="context-menu-item" data-action="add-parallelogram">&#9649; Parallelogram</div>
+                <div class="context-menu-item" data-action="add-parallelogram-alt">&#9649; Parallelogram Alt</div>
+                <div class="context-menu-separator"></div>
+                <div class="context-menu-item" data-action="add-trapezoid">&#9186; Trapezoid</div>
+                <div class="context-menu-item" data-action="add-trapezoid-alt">&#9186; Trapezoid Alt</div>
+                <div class="context-menu-item" data-action="add-double-circle">&#10687; Double Circle</div>
+                <div class="context-menu-item" data-action="add-asymmetric">&#9655; Asymmetric</div>
+            </div>
+        </div>
         <div class="context-menu-separator"></div>
         <div class="context-menu-item" data-action="add-edge">&#8594; Draw Edge</div>
         <div class="context-menu-separator"></div>
@@ -295,6 +431,46 @@
         <div class="context-menu-item" data-action="delete-selected">&#128465; Delete Selected</div>
         <div class="context-menu-separator"></div>
         <div class="context-menu-item" data-action="auto-layout">&#9783; Auto Layout</div>
+    </div>
+
+    <!-- Floating Property Panel -->
+    <div id="property-panel" class="property-panel">
+        <div class="property-panel-header">
+            <span id="property-panel-title">Properties</span>
+            <button class="property-panel-close" id="property-panel-close">&times;</button>
+        </div>
+        <div class="property-panel-body">
+            <div class="property-row">
+                <div class="property-label">Label</div>
+                <input type="text" class="property-input" id="prop-label" placeholder="Enter label..." />
+            </div>
+            <div class="property-row" id="prop-shape-row">
+                <div class="property-label">Shape</div>
+                <select class="property-select" id="prop-shape">
+                    <option value="Rectangle">Rectangle</option>
+                    <option value="Rounded">Rounded</option>
+                    <option value="Stadium">Stadium</option>
+                    <option value="Subroutine">Subroutine</option>
+                    <option value="Cylindrical">Cylindrical</option>
+                    <option value="Circle">Circle</option>
+                    <option value="Rhombus">Diamond</option>
+                    <option value="Hexagon">Hexagon</option>
+                    <option value="Parallelogram">Parallelogram</option>
+                    <option value="ParallelogramAlt">Parallelogram Alt</option>
+                    <option value="Trapezoid">Trapezoid</option>
+                    <option value="TrapezoidAlt">Trapezoid Alt</option>
+                    <option value="DoubleCircle">Double Circle</option>
+                    <option value="Asymmetric">Asymmetric</option>
+                </select>
+            </div>
+            <div class="property-row" id="prop-style-row">
+                <div class="property-label">Fill Color</div>
+                <div class="property-color-row">
+                    <input type="color" class="property-color-input" id="prop-fill-color" value="#4a9eff" />
+                    <input type="text" class="property-input" id="prop-fill-color-text" placeholder="#hex" style="flex:1" />
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Inline text editor -->
@@ -334,6 +510,15 @@
         const inlineEditor = document.getElementById('inline-editor');
         const tempEdge = document.getElementById('temp-edge');
         const canvasContainer = document.getElementById('canvas-container');
+        const propertyPanel = document.getElementById('property-panel');
+        const propLabel = document.getElementById('prop-label');
+        const propShape = document.getElementById('prop-shape');
+        const propShapeRow = document.getElementById('prop-shape-row');
+        const propStyleRow = document.getElementById('prop-style-row');
+        const propFillColor = document.getElementById('prop-fill-color');
+        const propFillColorText = document.getElementById('prop-fill-color-text');
+        const propPanelTitle = document.getElementById('property-panel-title');
+        const propPanelClose = document.getElementById('property-panel-close');
 
         // ========== Initialization ==========
 
@@ -420,7 +605,7 @@
 
             const g = new dagre.graphlib.Graph();
             g.setGraph({
-                rankdir: diagram.direction === 'LR' || diagram.direction === 'RL' ? 'LR' : 'TB',
+                rankdir: diagram.direction === 'LR' ? 'LR' : diagram.direction === 'RL' ? 'RL' : diagram.direction === 'BT' ? 'BT' : 'TB',
                 nodesep: 60,
                 ranksep: 80,
                 edgesep: 20,
@@ -1082,6 +1267,7 @@
             selectedNodeId = nodeId;
             selectedEdgeIndex = -1;
             render();
+            showPropertyPanel();
             postMessage({ type: 'nodeSelected', nodeId: nodeId });
         }
 
@@ -1089,6 +1275,7 @@
             selectedNodeId = null;
             selectedEdgeIndex = idx;
             render();
+            showPropertyPanel();
             postMessage({ type: 'edgeSelected', edgeIndex: idx });
         }
 
@@ -1096,8 +1283,139 @@
             selectedNodeId = null;
             selectedEdgeIndex = -1;
             render();
+            hidePropertyPanel();
             postMessage({ type: 'selectionCleared' });
         }
+
+        // ========== Property Panel ==========
+
+        let _isPropPanelUpdating = false;
+
+        function showPropertyPanel() {
+            _isPropPanelUpdating = true;
+            try {
+                if (selectedNodeId) {
+                    const node = diagram.nodes.find(n => n.id === selectedNodeId);
+                    if (!node) { hidePropertyPanel(); return; }
+
+                    propPanelTitle.textContent = 'Node: ' + node.id;
+                    propLabel.value = node.label || node.id;
+                    propShape.value = node.shape || 'Rectangle';
+                    propShapeRow.style.display = '';
+                    propStyleRow.style.display = '';
+
+                    // Set color from node style if available
+                    const fillColor = getNodeFillColor(node);
+                    propFillColor.value = fillColor;
+                    propFillColorText.value = fillColor;
+
+                    propertyPanel.classList.add('visible');
+                } else if (selectedEdgeIndex >= 0 && selectedEdgeIndex < diagram.edges.length) {
+                    const edge = diagram.edges[selectedEdgeIndex];
+                    propPanelTitle.textContent = 'Edge: ' + edge.from + ' → ' + edge.to;
+                    propLabel.value = edge.label || '';
+                    propShapeRow.style.display = 'none';
+                    propStyleRow.style.display = 'none';
+
+                    propertyPanel.classList.add('visible');
+                } else {
+                    hidePropertyPanel();
+                }
+            } finally {
+                _isPropPanelUpdating = false;
+            }
+        }
+
+        function hidePropertyPanel() {
+            propertyPanel.classList.remove('visible');
+        }
+
+        function getNodeFillColor(node) {
+            // Default color
+            return '#4a9eff';
+        }
+
+        // Property panel event handlers
+        propLabel.addEventListener('change', function() {
+            if (_isPropPanelUpdating) return;
+            const newLabel = propLabel.value.trim();
+            if (selectedNodeId) {
+                const node = diagram.nodes.find(n => n.id === selectedNodeId);
+                if (node && newLabel) {
+                    node.label = newLabel;
+                    const size = estimateNodeSize(node);
+                    node.width = size.width;
+                    node.height = size.height;
+                    render();
+                    postMessage({
+                        type: 'nodeEdited',
+                        nodeId: node.id,
+                        label: newLabel,
+                        width: node.width,
+                        height: node.height
+                    });
+                }
+            } else if (selectedEdgeIndex >= 0) {
+                const edge = diagram.edges[selectedEdgeIndex];
+                if (edge) {
+                    edge.label = newLabel;
+                    render();
+                    postMessage({
+                        type: 'edgeEdited',
+                        edgeIndex: selectedEdgeIndex,
+                        label: newLabel
+                    });
+                }
+            }
+        });
+
+        propShape.addEventListener('change', function() {
+            if (_isPropPanelUpdating || !selectedNodeId) return;
+            const node = diagram.nodes.find(n => n.id === selectedNodeId);
+            if (!node) return;
+
+            const newShape = propShape.value;
+            node.shape = newShape;
+            const size = estimateNodeSize(node);
+            node.width = size.width;
+            node.height = size.height;
+            render();
+            postMessage({
+                type: 'nodeShapeChanged',
+                nodeId: node.id,
+                shape: newShape,
+                width: node.width,
+                height: node.height
+            });
+        });
+
+        propFillColor.addEventListener('input', function() {
+            if (_isPropPanelUpdating) return;
+            propFillColorText.value = propFillColor.value;
+            applyNodeFillColor(propFillColor.value);
+        });
+
+        propFillColorText.addEventListener('change', function() {
+            if (_isPropPanelUpdating) return;
+            const val = propFillColorText.value.trim();
+            if (/^#[0-9a-fA-F]{3,6}$/.test(val)) {
+                propFillColor.value = val;
+                applyNodeFillColor(val);
+            }
+        });
+
+        function applyNodeFillColor(color) {
+            if (!selectedNodeId) return;
+            postMessage({
+                type: 'nodeStyleChanged',
+                nodeId: selectedNodeId,
+                fillColor: color
+            });
+        }
+
+        propPanelClose.addEventListener('click', function() {
+            hidePropertyPanel();
+        });
 
         // ========== Inline Editing ==========
 
@@ -1243,7 +1561,16 @@
                 'add-rounded': 'Rounded',
                 'add-diamond': 'Rhombus',
                 'add-circle': 'Circle',
-                'add-hexagon': 'Hexagon'
+                'add-hexagon': 'Hexagon',
+                'add-stadium': 'Stadium',
+                'add-subroutine': 'Subroutine',
+                'add-cylindrical': 'Cylindrical',
+                'add-parallelogram': 'Parallelogram',
+                'add-parallelogram-alt': 'ParallelogramAlt',
+                'add-trapezoid': 'Trapezoid',
+                'add-trapezoid-alt': 'TrapezoidAlt',
+                'add-double-circle': 'DoubleCircle',
+                'add-asymmetric': 'Asymmetric'
             };
 
             if (shapeMap[action]) {
@@ -1274,16 +1601,15 @@
             } else if (action === 'auto-layout') {
                 autoLayout();
                 render();
-                // Notify C# of all new positions
-                diagram.nodes.forEach(n => {
-                    postMessage({
-                        type: 'nodeMoved',
-                        nodeId: n.id,
-                        x: n.x,
-                        y: n.y
-                    });
-                });
-                postMessage({ type: 'autoLayoutApplied' });
+                // Send all positions in a single atomic message
+                const positions = diagram.nodes.map(n => ({
+                    nodeId: n.id,
+                    x: n.x,
+                    y: n.y,
+                    width: n.width,
+                    height: n.height
+                }));
+                postMessage({ type: 'autoLayoutComplete', positions: positions });
             }
         }
 
