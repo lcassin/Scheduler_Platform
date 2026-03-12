@@ -4698,8 +4698,12 @@ Console.WriteLine(""Hello, World!"");
         try
         {
             _isVisualEditorUpdating = true;
-            _currentFlowchartModel = MermaidParser.ParseFlowchart(CodeEditor.Text);
-            await _visualEditorBridge.UpdateModelAsync(_currentFlowchartModel);
+            var parsed = MermaidParser.ParseFlowchart(CodeEditor.Text);
+            if (parsed != null)
+            {
+                _currentFlowchartModel = parsed;
+                await _visualEditorBridge.UpdateModelAsync(_currentFlowchartModel);
+            }
         }
         catch (Exception)
         {

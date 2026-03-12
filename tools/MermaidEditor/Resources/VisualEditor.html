@@ -393,6 +393,101 @@
             stroke-dasharray: 6,3;
             pointer-events: none;
         }
+
+        /* Editor Toolbar */
+        .editor-toolbar {
+            position: fixed;
+            top: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            background: var(--toolbar-bg);
+            border: 1px solid var(--toolbar-border);
+            border-radius: 6px;
+            padding: 3px 6px;
+            z-index: 200;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        .toolbar-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 30px;
+            height: 28px;
+            border: none;
+            background: transparent;
+            color: var(--toolbar-text);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 0;
+            position: relative;
+        }
+        .toolbar-btn:hover {
+            background: var(--toolbar-hover);
+        }
+        .toolbar-btn:active {
+            background: var(--node-selected-stroke);
+            color: #fff;
+        }
+        .toolbar-btn.active {
+            background: var(--node-selected-stroke);
+            color: #fff;
+        }
+        .toolbar-btn[disabled] {
+            opacity: 0.35;
+            pointer-events: none;
+        }
+        .toolbar-btn svg {
+            width: 16px;
+            height: 16px;
+            fill: currentColor;
+            stroke: currentColor;
+        }
+        .toolbar-sep {
+            width: 1px;
+            height: 20px;
+            background: var(--toolbar-border);
+            margin: 0 4px;
+        }
+        .toolbar-btn .tooltip {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-top: 6px;
+            padding: 3px 8px;
+            background: var(--tooltip-bg);
+            border: 1px solid var(--tooltip-border);
+            border-radius: 3px;
+            font-size: 11px;
+            white-space: nowrap;
+            color: var(--toolbar-text);
+            pointer-events: none;
+            z-index: 300;
+        }
+        .toolbar-btn:hover .tooltip {
+            display: block;
+        }
+
+        /* Resize handles */
+        .resize-handle {
+            fill: var(--node-selected-stroke);
+            stroke: var(--bg-color);
+            stroke-width: 1.5;
+            cursor: nwse-resize;
+        }
+        .resize-handle.rh-nw { cursor: nwse-resize; }
+        .resize-handle.rh-ne { cursor: nesw-resize; }
+        .resize-handle.rh-sw { cursor: nesw-resize; }
+        .resize-handle.rh-se { cursor: nwse-resize; }
+        .resize-handle.rh-n,
+        .resize-handle.rh-s { cursor: ns-resize; }
+        .resize-handle.rh-e,
+        .resize-handle.rh-w { cursor: ew-resize; }
     </style>
 </head>
 <body>
@@ -511,6 +606,50 @@
         </div>
     </div>
 
+    <!-- Editor Toolbar -->
+    <div id="editor-toolbar" class="editor-toolbar">
+        <button class="toolbar-btn" id="tb-add-node" title="Add Node">
+            <svg viewBox="0 0 16 16"><rect x="2" y="4" width="12" height="8" rx="1" fill="none" stroke-width="1.5"/><line x1="8" y1="6" x2="8" y2="10" stroke-width="1.5"/><line x1="6" y1="8" x2="10" y2="8" stroke-width="1.5"/></svg>
+            <span class="tooltip">Add Node</span>
+        </button>
+        <button class="toolbar-btn" id="tb-add-edge" title="Draw Edge">
+            <svg viewBox="0 0 16 16"><line x1="3" y1="13" x2="13" y2="3" stroke-width="1.5" fill="none"/><polygon points="13,3 9,4 12,7" fill="currentColor" stroke="none"/></svg>
+            <span class="tooltip">Draw Edge</span>
+        </button>
+        <div class="toolbar-sep"></div>
+        <button class="toolbar-btn" id="tb-delete" title="Delete Selected (Del)">
+            <svg viewBox="0 0 16 16"><path d="M5,3 V2 h6 v1 h3 v1.5 H2 V3 h3z M3,5.5 h10 l-0.8,9 H3.8 L3,5.5z M6.5,7 v5.5 M9.5,7 v5.5" fill="none" stroke-width="1.2"/></svg>
+            <span class="tooltip">Delete (Del)</span>
+        </button>
+        <div class="toolbar-sep"></div>
+        <button class="toolbar-btn" id="tb-undo" title="Undo (Ctrl+Z)">
+            <svg viewBox="0 0 16 16"><path d="M4,8 L7,5 M4,8 L7,11 M5,8 H11 A3,3 0 0,1 11,14 H8" fill="none" stroke-width="1.5"/></svg>
+            <span class="tooltip">Undo (Ctrl+Z)</span>
+        </button>
+        <button class="toolbar-btn" id="tb-redo" title="Redo (Ctrl+Y)">
+            <svg viewBox="0 0 16 16"><path d="M12,8 L9,5 M12,8 L9,11 M11,8 H5 A3,3 0 0,0 5,14 H8" fill="none" stroke-width="1.5"/></svg>
+            <span class="tooltip">Redo (Ctrl+Y)</span>
+        </button>
+        <div class="toolbar-sep"></div>
+        <button class="toolbar-btn" id="tb-auto-layout" title="Auto Layout">
+            <svg viewBox="0 0 16 16"><rect x="1" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1.2"/><rect x="10" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1.2"/><rect x="5.5" y="11" width="5" height="4" rx="0.5" fill="none" stroke-width="1.2"/><line x1="3.5" y1="5" x2="3.5" y2="7" stroke-width="1"/><line x1="12.5" y1="5" x2="12.5" y2="7" stroke-width="1"/><line x1="3.5" y1="7" x2="12.5" y2="7" stroke-width="1"/><line x1="8" y1="7" x2="8" y2="11" stroke-width="1"/></svg>
+            <span class="tooltip">Auto Layout</span>
+        </button>
+        <div class="toolbar-sep"></div>
+        <button class="toolbar-btn" id="tb-zoom-in" title="Zoom In">
+            <svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="5" fill="none" stroke-width="1.3"/><line x1="11" y1="11" x2="14" y2="14" stroke-width="1.5"/><line x1="5" y1="7" x2="9" y2="7" stroke-width="1.3"/><line x1="7" y1="5" x2="7" y2="9" stroke-width="1.3"/></svg>
+            <span class="tooltip">Zoom In</span>
+        </button>
+        <button class="toolbar-btn" id="tb-zoom-out" title="Zoom Out">
+            <svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="5" fill="none" stroke-width="1.3"/><line x1="11" y1="11" x2="14" y2="14" stroke-width="1.5"/><line x1="5" y1="7" x2="9" y2="7" stroke-width="1.3"/></svg>
+            <span class="tooltip">Zoom Out</span>
+        </button>
+        <button class="toolbar-btn" id="tb-zoom-fit" title="Fit to View">
+            <svg viewBox="0 0 16 16"><path d="M2,6 V2 H6 M10,2 H14 V6 M14,10 V14 H10 M6,14 H2 V10" fill="none" stroke-width="1.3"/><rect x="5" y="5" width="6" height="6" rx="0.5" fill="none" stroke-width="1"/></svg>
+            <span class="tooltip">Fit to View</span>
+        </button>
+    </div>
+
     <!-- Minimap -->
     <div id="minimap" class="minimap">
         <canvas id="minimap-canvas" width="360" height="240"></canvas>
@@ -547,6 +686,15 @@
         let contextMenuY = 0;
         let selectedNodeIds = [];  // For multi-select (Ctrl+A)
         const SNAP_GRID = 20;     // Snap-to-grid size in pixels
+        let isResizing = false;
+        let resizeNodeId = null;
+        let resizeDir = null;
+        let resizeStartX = 0;
+        let resizeStartY = 0;
+        let resizeNodeStartW = 0;
+        let resizeNodeStartH = 0;
+        let resizeNodeStartX = 0;
+        let resizeNodeStartY = 0;
 
         const svg = document.getElementById('diagram-svg');
         const nodesLayer = document.getElementById('nodes-layer');
@@ -588,7 +736,8 @@
                     const target = e.target;
                     const isInteractive = target.closest('.node-group') ||
                                          target.closest('.edge-group') ||
-                                         target.closest('.connection-point');
+                                         target.closest('.connection-point') ||
+                                         target.closest('.resize-handle');
                     return isInteractive;
                 }
             });
@@ -769,6 +918,32 @@
                     cp.setAttribute('data-node-id', node.id);
                     g.appendChild(cp);
                 });
+
+                // Resize handles (shown when selected)
+                if (selectedNodeId === node.id && !selectedNodeIds.length) {
+                    const rhSize = 6;
+                    const rhPositions = [
+                        { cx: -hw, cy: -hh, cls: 'rh-nw' },
+                        { cx:  hw, cy: -hh, cls: 'rh-ne' },
+                        { cx: -hw, cy:  hh, cls: 'rh-sw' },
+                        { cx:  hw, cy:  hh, cls: 'rh-se' },
+                        { cx:    0, cy: -hh, cls: 'rh-n' },
+                        { cx:    0, cy:  hh, cls: 'rh-s' },
+                        { cx: -hw, cy:    0, cls: 'rh-w' },
+                        { cx:  hw, cy:    0, cls: 'rh-e' }
+                    ];
+                    rhPositions.forEach(rh => {
+                        const handle = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                        handle.classList.add('resize-handle', rh.cls);
+                        handle.setAttribute('x', rh.cx - rhSize / 2);
+                        handle.setAttribute('y', rh.cy - rhSize / 2);
+                        handle.setAttribute('width', rhSize);
+                        handle.setAttribute('height', rhSize);
+                        handle.setAttribute('data-node-id', node.id);
+                        handle.setAttribute('data-resize', rh.cls.replace('rh-', ''));
+                        g.appendChild(handle);
+                    });
+                }
 
                 nodesLayer.appendChild(g);
             });
@@ -1142,6 +1317,27 @@
 
             hideContextMenu();
 
+            // Check for resize handle
+            const resizeHandle = e.target.closest('.resize-handle');
+            if (resizeHandle) {
+                e.stopPropagation();
+                e.preventDefault();
+                isResizing = true;
+                resizeNodeId = resizeHandle.getAttribute('data-node-id');
+                resizeDir = resizeHandle.getAttribute('data-resize');
+                const resNode = diagram.nodes.find(n => n.id === resizeNodeId);
+                if (resNode) {
+                    const pt = getSVGPoint(e);
+                    resizeStartX = pt.x;
+                    resizeStartY = pt.y;
+                    resizeNodeStartW = resNode.width || 80;
+                    resizeNodeStartH = resNode.height || 40;
+                    resizeNodeStartX = resNode.x;
+                    resizeNodeStartY = resNode.y;
+                }
+                return;
+            }
+
             if (connectionPt) {
                 // Start drawing edge
                 e.stopPropagation();
@@ -1190,6 +1386,39 @@
         });
 
         svg.addEventListener('mousemove', function(e) {
+            if (isResizing && resizeNodeId) {
+                const pt = getSVGPoint(e);
+                const dx = pt.x - resizeStartX;
+                const dy = pt.y - resizeStartY;
+                const node = diagram.nodes.find(n => n.id === resizeNodeId);
+                if (node) {
+                    const minW = 40;
+                    const minH = 24;
+                    let newW = resizeNodeStartW;
+                    let newH = resizeNodeStartH;
+                    let newX = resizeNodeStartX;
+                    let newY = resizeNodeStartY;
+
+                    if (resizeDir.includes('e')) { newW = Math.max(minW, resizeNodeStartW + dx * 2); }
+                    if (resizeDir.includes('w')) { newW = Math.max(minW, resizeNodeStartW - dx * 2); }
+                    if (resizeDir.includes('s')) { newH = Math.max(minH, resizeNodeStartH + dy * 2); }
+                    if (resizeDir.includes('n')) { newH = Math.max(minH, resizeNodeStartH - dy * 2); }
+
+                    // Snap to grid
+                    newW = Math.round(newW / SNAP_GRID) * SNAP_GRID;
+                    newH = Math.round(newH / SNAP_GRID) * SNAP_GRID;
+                    if (newW < minW) newW = minW;
+                    if (newH < minH) newH = minH;
+
+                    node.width = newW;
+                    node.height = newH;
+                    node.x = newX;
+                    node.y = newY;
+                    render();
+                }
+                return;
+            }
+
             if (isDragging && dragNodeId) {
                 const pt = getSVGPoint(e);
                 const node = diagram.nodes.find(n => n.id === dragNodeId);
@@ -1215,6 +1444,22 @@
         });
 
         svg.addEventListener('mouseup', function(e) {
+            if (isResizing && resizeNodeId) {
+                const node = diagram.nodes.find(n => n.id === resizeNodeId);
+                if (node) {
+                    postMessage({
+                        type: 'nodeResized',
+                        nodeId: node.id,
+                        width: node.width,
+                        height: node.height
+                    });
+                }
+                isResizing = false;
+                resizeNodeId = null;
+                resizeDir = null;
+                return;
+            }
+
             if (isDragging && dragNodeId) {
                 const node = diagram.nodes.find(n => n.id === dragNodeId);
                 if (node) {
@@ -1911,6 +2156,84 @@
         window.getState = function() {
             return JSON.stringify(diagram);
         };
+
+        // ========== Toolbar Button Handlers ==========
+
+        document.getElementById('tb-add-node').addEventListener('click', function() {
+            // Add a node at center of current viewport
+            const vw = canvasContainer.clientWidth;
+            const vh = canvasContainer.clientHeight;
+            const transform = panzoomInstance ? panzoomInstance.getTransform() : { x: 0, y: 0, scale: 1 };
+            const cx = (vw / 2 - transform.x) / transform.scale;
+            const cy = (vh / 2 - transform.y) / transform.scale;
+            addNode('Rectangle', Math.round(cx / SNAP_GRID) * SNAP_GRID, Math.round(cy / SNAP_GRID) * SNAP_GRID);
+        });
+
+        document.getElementById('tb-add-edge').addEventListener('click', function() {
+            isDrawingEdge = true;
+            if (selectedNodeId) {
+                drawEdgeFromId = selectedNodeId;
+                const fromNode = diagram.nodes.find(n => n.id === drawEdgeFromId);
+                if (fromNode) {
+                    tempEdge.setAttribute('x1', fromNode.x);
+                    tempEdge.setAttribute('y1', fromNode.y);
+                    tempEdge.setAttribute('x2', fromNode.x);
+                    tempEdge.setAttribute('y2', fromNode.y);
+                    tempEdge.style.display = '';
+                }
+            }
+            this.classList.add('active');
+        });
+
+        document.getElementById('tb-delete').addEventListener('click', function() {
+            deleteSelected();
+        });
+
+        document.getElementById('tb-undo').addEventListener('click', function() {
+            postMessage({ type: 'undo' });
+        });
+
+        document.getElementById('tb-redo').addEventListener('click', function() {
+            postMessage({ type: 'redo' });
+        });
+
+        document.getElementById('tb-auto-layout').addEventListener('click', function() {
+            autoLayout();
+            render();
+            const positions = diagram.nodes.map(n => ({
+                nodeId: n.id, x: n.x, y: n.y, width: n.width, height: n.height
+            }));
+            postMessage({ type: 'autoLayoutComplete', positions: positions });
+        });
+
+        document.getElementById('tb-zoom-in').addEventListener('click', function() {
+            if (panzoomInstance) {
+                const transform = panzoomInstance.getTransform();
+                const vw = canvasContainer.clientWidth / 2;
+                const vh = canvasContainer.clientHeight / 2;
+                panzoomInstance.smoothZoom(vw, vh, 1.3);
+            }
+        });
+
+        document.getElementById('tb-zoom-out').addEventListener('click', function() {
+            if (panzoomInstance) {
+                const vw = canvasContainer.clientWidth / 2;
+                const vh = canvasContainer.clientHeight / 2;
+                panzoomInstance.smoothZoom(vw, vh, 0.7);
+            }
+        });
+
+        document.getElementById('tb-zoom-fit').addEventListener('click', function() {
+            centerView();
+        });
+
+        // Clear edge-draw active state when edge drawing ends
+        const origMouseUp = svg.onmouseup;
+        svg.addEventListener('mouseup', function() {
+            if (!isDrawingEdge) {
+                document.getElementById('tb-add-edge').classList.remove('active');
+            }
+        });
 
         // Initialize
         initPanzoom();
