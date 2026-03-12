@@ -801,9 +801,12 @@
         function autoLayout() {
             if (typeof dagre === 'undefined') return;
 
-            const g = new dagre.graphlib.Graph();
+            const rankdir = diagram.direction === 'LR' ? 'LR' : diagram.direction === 'RL' ? 'RL' : diagram.direction === 'BT' ? 'BT' : 'TB';
+
+            // Use compound graph to group nodes within subgraphs
+            const g = new dagre.graphlib.Graph({ compound: true });
             g.setGraph({
-                rankdir: diagram.direction === 'LR' ? 'LR' : diagram.direction === 'RL' ? 'RL' : diagram.direction === 'BT' ? 'BT' : 'TB',
+                rankdir: rankdir,
                 nodesep: 60,
                 ranksep: 80,
                 edgesep: 20,
@@ -812,17 +815,36 @@
             });
             g.setDefaultEdgeLabel(function() { return {}; });
 
+            // Build a lookup: nodeId -> subgraphId
+            const nodeToSubgraph = {};
+            diagram.subgraphs.forEach(sg => {
+                sg.nodeIds.forEach(nid => {
+                    nodeToSubgraph[nid] = sg.id;
+                });
+            });
+
+            // Register subgraph cluster nodes (invisible parent nodes that dagre uses for grouping)
+            diagram.subgraphs.forEach(sg => {
+                g.setNode(sg.id, { label: sg.label || sg.id, clusterLabelPos: 'top' });
+            });
+
+            // Register all diagram nodes and set their parent (subgraph) if applicable
             diagram.nodes.forEach(node => {
                 const size = estimateNodeSize(node);
                 g.setNode(node.id, { width: size.width, height: size.height });
+                if (nodeToSubgraph[node.id]) {
+                    g.setParent(node.id, nodeToSubgraph[node.id]);
+                }
             });
 
+            // Register all edges
             diagram.edges.forEach(edge => {
                 g.setEdge(edge.from, edge.to);
             });
 
             dagre.layout(g);
 
+            // Apply computed positions to diagram nodes
             diagram.nodes.forEach(node => {
                 const layoutNode = g.node(node.id);
                 if (layoutNode) {
