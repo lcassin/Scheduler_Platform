@@ -513,14 +513,27 @@ public class VisualEditorBridge
 
     private void HandleEdgeDeleted(JsonElement root)
     {
-        var from = root.GetProperty("from").GetString();
-        var to = root.GetProperty("to").GetString();
+        if (root.TryGetProperty("edgeIndex", out var idxProp))
+        {
+            var edgeIndex = idxProp.GetInt32();
+            if (edgeIndex >= 0 && edgeIndex < _model.Edges.Count)
+            {
+                PushUndo();
+                _model.Edges.RemoveAt(edgeIndex);
+                RaiseModelChanged("edgeDeleted");
+            }
+        }
+        else
+        {
+            // Fallback: remove by from/to (legacy)
+            var from = root.GetProperty("from").GetString();
+            var to = root.GetProperty("to").GetString();
+            if (string.IsNullOrEmpty(from) || string.IsNullOrEmpty(to)) return;
 
-        if (string.IsNullOrEmpty(from) || string.IsNullOrEmpty(to)) return;
-
-        PushUndo();
-        _model.Edges.RemoveAll(e => e.FromNodeId == from && e.ToNodeId == to);
-        RaiseModelChanged("edgeDeleted");
+            PushUndo();
+            _model.Edges.RemoveAll(e => e.FromNodeId == from && e.ToNodeId == to);
+            RaiseModelChanged("edgeDeleted");
+        }
     }
 
     private void HandleNodeSelected(JsonElement root)
@@ -560,7 +573,7 @@ public class VisualEditorBridge
         var node = _model.Nodes.Find(n => n.Id == nodeId);
         if (node == null) return;
 
-        PushUndo();
+        bool changed = false;
 
         // Apply fill color as an inline style
         if (root.TryGetProperty("fillColor", out var fillProp))
@@ -590,10 +603,15 @@ public class VisualEditorBridge
                         StyleString = $"fill:{fillColor}"
                     });
                 }
+                changed = true;
             }
         }
 
-        RaiseModelChanged("nodeStyleChanged");
+        if (changed)
+        {
+            PushUndo();
+            RaiseModelChanged("nodeStyleChanged");
+        }
     }
 
     private void HandleSubgraphEdited(JsonElement root)

@@ -226,7 +226,9 @@ public static class MermaidSerializer
         switch (edge.Style)
         {
             case EdgeStyle.Solid:
-                sb.Append(new string('-', edge.LinkLength));
+                // Open links need minimum 3 dashes (---), arrow links need 2 (--)
+                var minLength = edge.ArrowType == ArrowType.Open ? 3 : 2;
+                sb.Append(new string('-', Math.Max(edge.LinkLength, minLength)));
                 break;
             case EdgeStyle.Dotted:
                 sb.Append("-.");

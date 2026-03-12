@@ -737,10 +737,24 @@ public static class MermaidParser
     /// </summary>
     private static bool TryParseNodeDefinition(string line, FlowchartModel model, HashSet<string> knownNodes, Stack<FlowchartSubgraph> subgraphStack)
     {
+        // Strip optional :::className suffix before shape matching
+        string? cssClass = null;
+        var classIdx = line.IndexOf(":::");
+        if (classIdx >= 0)
+        {
+            cssClass = line[(classIdx + 3)..].Trim();
+            line = line[..classIdx];
+        }
+
         var (id, label, shape) = TryMatchNodeShape(line);
         if (id != null && !IsMermaidKeyword(id))
         {
             EnsureNodeExists(id, label, shape, model, knownNodes);
+            if (!string.IsNullOrEmpty(cssClass))
+            {
+                var node = model.Nodes.Find(n => n.Id == id);
+                if (node != null) node.CssClass = cssClass;
+            }
             AddNodeToCurrentSubgraph(id, subgraphStack);
             return true;
         }

@@ -1530,6 +1530,28 @@
                 text.textContent = (sg.label || sg.id) + (sgNodes.length === 0 ? ' (empty)' : '');
                 g.appendChild(text);
 
+                // Add connection points for edge drawing from/to subgraphs
+                const rx = minX - padding;
+                const ry = minY - padding - labelHeight;
+                const rw = maxX - minX + padding * 2;
+                const rh = maxY - minY + padding * 2 + labelHeight;
+                const cpSize = 8;
+                const cpPositions = [
+                    { x: rx + rw / 2, y: ry },           // top
+                    { x: rx + rw, y: ry + rh / 2 },      // right
+                    { x: rx + rw / 2, y: ry + rh },       // bottom
+                    { x: rx, y: ry + rh / 2 }             // left
+                ];
+                cpPositions.forEach(cp => {
+                    const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    circle.classList.add('connection-point');
+                    circle.setAttribute('cx', cp.x);
+                    circle.setAttribute('cy', cp.y);
+                    circle.setAttribute('r', cpSize / 2);
+                    circle.setAttribute('data-node-id', sg.id);
+                    g.appendChild(circle);
+                });
+
                 subgraphsLayer.appendChild(g);
             });
         }
@@ -1596,18 +1618,29 @@
             }
 
             if (connectionPt) {
-                // Start drawing edge
+                // Start drawing edge from a node or subgraph
                 e.stopPropagation();
                 e.preventDefault();
                 isDrawingEdge = true;
                 drawEdgeFromId = connectionPt.getAttribute('data-node-id');
-                const fromNode = diagram.nodes.find(n => n.id === drawEdgeFromId);
-                if (fromNode) {
-                    tempEdge.setAttribute('x1', fromNode.x);
-                    tempEdge.setAttribute('y1', fromNode.y);
-                    tempEdge.setAttribute('x2', fromNode.x);
-                    tempEdge.setAttribute('y2', fromNode.y);
+                // Use connection point position as the start of the temp edge
+                const cpX = parseFloat(connectionPt.getAttribute('cx'));
+                const cpY = parseFloat(connectionPt.getAttribute('cy'));
+                if (!isNaN(cpX) && !isNaN(cpY)) {
+                    tempEdge.setAttribute('x1', cpX);
+                    tempEdge.setAttribute('y1', cpY);
+                    tempEdge.setAttribute('x2', cpX);
+                    tempEdge.setAttribute('y2', cpY);
                     tempEdge.style.display = '';
+                } else {
+                    const fromNode = diagram.nodes.find(n => n.id === drawEdgeFromId);
+                    if (fromNode) {
+                        tempEdge.setAttribute('x1', fromNode.x);
+                        tempEdge.setAttribute('y1', fromNode.y);
+                        tempEdge.setAttribute('x2', fromNode.x);
+                        tempEdge.setAttribute('y2', fromNode.y);
+                        tempEdge.style.display = '';
+                    }
                 }
                 return;
             }
@@ -1644,7 +1677,12 @@
                 e.stopPropagation();
                 const sgId = sgGroup.getAttribute('data-subgraph-id');
                 if (sgId) {
-                    selectSubgraph(sgId);
+                    if (isDrawingEdge) {
+                        // Complete edge drawing to a subgraph
+                        // handled in mouseup
+                    } else {
+                        selectSubgraph(sgId);
+                    }
                     return;
                 }
             }
@@ -1747,29 +1785,34 @@
                 tempEdge.style.display = 'none';
                 isDrawingEdge = false;
 
-                // Check if mouse is over a node
-                const target = e.target.closest('.node-group');
-                if (target) {
-                    const toId = target.getAttribute('data-node-id');
-                    if (toId && toId !== drawEdgeFromId) {
-                        // Create new edge
-                        diagram.edges.push({
-                            from: drawEdgeFromId,
-                            to: toId,
-                            label: '',
-                            style: 'Solid',
-                            arrowType: 'Arrow'
-                        });
-                        render();
-                        postMessage({
-                            type: 'edgeCreated',
-                            from: drawEdgeFromId,
-                            to: toId,
-                            label: '',
-                            style: 'Solid',
-                            arrowType: 'Arrow'
-                        });
-                    }
+                // Check if mouse is over a node or subgraph
+                let toId = null;
+                const targetNode = e.target.closest('.node-group');
+                const targetSg = e.target.closest('.subgraph-group');
+                if (targetNode) {
+                    toId = targetNode.getAttribute('data-node-id');
+                } else if (targetSg) {
+                    toId = targetSg.getAttribute('data-subgraph-id');
+                }
+
+                if (toId && toId !== drawEdgeFromId) {
+                    // Create new edge
+                    diagram.edges.push({
+                        from: drawEdgeFromId,
+                        to: toId,
+                        label: '',
+                        style: 'Solid',
+                        arrowType: 'Arrow'
+                    });
+                    render();
+                    postMessage({
+                        type: 'edgeCreated',
+                        from: drawEdgeFromId,
+                        to: toId,
+                        label: '',
+                        style: 'Solid',
+                        arrowType: 'Arrow'
+                    });
                 }
                 drawEdgeFromId = null;
             }
@@ -2443,11 +2486,12 @@
                 render();
                 postMessage({ type: 'nodeDeleted', nodeId: nodeId });
             } else if (selectedEdgeIndex >= 0 && selectedEdgeIndex < diagram.edges.length) {
-                const edge = diagram.edges[selectedEdgeIndex];
-                diagram.edges.splice(selectedEdgeIndex, 1);
+                const edgeIdx = selectedEdgeIndex;
+                const edge = diagram.edges[edgeIdx];
+                diagram.edges.splice(edgeIdx, 1);
                 selectedEdgeIndex = -1;
                 render();
-                postMessage({ type: 'edgeDeleted', from: edge.from, to: edge.to });
+                postMessage({ type: 'edgeDeleted', edgeIndex: edgeIdx, from: edge.from, to: edge.to });
             } else if (selectedSubgraphId) {
                 const sgId = selectedSubgraphId;
                 diagram.subgraphs = diagram.subgraphs.filter(sg => sg.id !== sgId);

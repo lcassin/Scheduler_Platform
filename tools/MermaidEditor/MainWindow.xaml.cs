@@ -1144,11 +1144,18 @@ Console.WriteLine(""Hello, World!"");
         RedoMenuItem.IsEnabled = canRedo;
     }
 
-    private void RenderTimer_Tick(object? sender, EventArgs e)
+    private async void RenderTimer_Tick(object? sender, EventArgs e)
     {
         _renderTimer.Stop();
         RenderPreview();
         UpdateNavigationDropdown();
+
+        // In Split mode, re-parse the code editor text and send to visual editor
+        // so the visual model stays in sync with text edits
+        if (_visualEditorMode == VisualEditorMode.Split && !_isVisualEditorUpdating)
+        {
+            await ParseAndSendToVisualEditor();
+        }
     }
 
     private void RenderPreview()
