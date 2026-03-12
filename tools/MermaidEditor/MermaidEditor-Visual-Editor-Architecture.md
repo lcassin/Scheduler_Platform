@@ -505,34 +505,45 @@ Node positions from the visual editor need to survive text editing. Options:
 
 ---
 
-## File Structure (New Files)
+## File Structure
 
+### Planned (Original)
 ```
 tools/MermaidEditor/
   Models/
     FlowchartModel.cs          # Flowchart data model
     SequenceDiagramModel.cs     # Phase 2
-    ClassDiagramModel.cs        # Phase 2
-    StateDiagramModel.cs        # Phase 2
-    ERDiagramModel.cs           # Phase 2
-    DiagramModelBase.cs         # Shared base class
+    ...
   Parsing/
     MermaidParser.cs            # Text -> Model
     MermaidSerializer.cs        # Model -> Text
-    FlowchartParser.cs          # Flowchart-specific parsing
-    FlowchartSerializer.cs      # Flowchart-specific serialization
+    ...
   VisualEditor/
     VisualEditorBridge.cs       # C# <-> JS communication
-    VisualEditorCommands.cs     # Command definitions (undo/redo, etc.)
-    DiagramHistory.cs           # Undo/redo model history
+    ...
   Resources/
-    VisualEditor.html           # The visual editor page (embedded resource)
-    visual-editor.css           # Styles (or embedded in HTML)
-    visual-editor.js            # Editor logic (or embedded in HTML)
-  Icons/
-    text-mode.svg               # Mode toggle icons
-    visual-mode.svg
-    split-mode.svg
+    VisualEditor.html           # The visual editor page
+    visual-editor.css           # Styles
+    visual-editor.js            # Editor logic
+```
+
+### Actual (Phase 1 — Flat Structure)
+```
+tools/MermaidEditor/
+  MermaidModels.cs              # All model classes (FlowchartModel, nodes, edges, subgraphs, enums)
+  MermaidParser.cs              # ParseFlowchart() — add ParseSequenceDiagram() etc. for Phase 2
+  MermaidSerializer.cs          # Serialize() — flowchart serialization with round-trip fidelity
+  VisualEditorBridge.cs         # C# <-> JS bridge, undo/redo history, model JSON conversion
+  MainWindow.xaml               # Updated with visual editor WebView2, mode toggle buttons
+  MainWindow.xaml.cs            # Mode switching, visual editor initialization
+  MermaidEditor.csproj          # Updated with embedded resource reference
+  Resources/
+    VisualEditor.html           # All-in-one: SVG canvas + CSS + JS (embedded resource)
+  MermaidEditor-Visual-Editor-Architecture.md  # This document
+
+tools/MermaidEditor.Tests/
+  MermaidEditor.Tests.csproj    # xUnit test project
+  MermaidParserTests.cs         # 28 round-trip tests (compile on Linux, run on Windows)
 ```
 
 ---
@@ -634,17 +645,26 @@ The existing preview WebView2 continues to render the Mermaid preview as before.
 
 ## Success Criteria
 
-### Phase 1 (MVP)
-- [ ] User can switch to Visual Mode for a flowchart `.mmd` file
-- [ ] All existing flowchart nodes and edges appear in the visual editor
-- [ ] User can drag nodes to new positions
-- [ ] User can add new nodes and edges via context menu
-- [ ] User can edit node labels by double-clicking
-- [ ] Changes in visual editor update the text and re-render the preview
-- [ ] Changes in text editor update the visual editor (when switching modes)
-- [ ] Node positions are preserved across sessions
-- [ ] No information is lost during text <-> visual round-trips
-- [ ] Existing text-only editing workflow is completely unaffected
+### Phase 1 (MVP) — COMPLETED
+- [x] User can switch to Visual Mode for a flowchart `.mmd` file
+- [x] All existing flowchart nodes and edges appear in the visual editor
+- [x] User can drag nodes to new positions
+- [x] User can add new nodes and edges via context menu and toolbar
+- [x] User can edit node labels by double-clicking
+- [x] Changes in visual editor update the text and re-render the preview
+- [x] Changes in text editor update the visual editor (when switching modes)
+- [x] Node positions are preserved across sessions (via `%% @pos` comments)
+- [x] No information is lost during text <-> visual round-trips (config directives, comments, styles preserved)
+- [x] Existing text-only editing workflow is completely unaffected
+- [x] In-editor toolbar with Add Node, Add Edge, Delete, Undo/Redo, Auto-Layout, Zoom controls
+- [x] Resize handles on selected nodes (8-handle pattern)
+- [x] Subgraph management: create, assign nodes, edit label, delete (context menu + keyboard + toolbar)
+- [x] Empty subgraph visibility (placeholder boxes with dashed borders)
+- [x] Compound graph layout via dagre (hierarchical subgraph positioning)
+- [x] Shape previews in property panel dropdown (inline SVG)
+- [x] Keyboard shortcuts: Delete, Ctrl+Z/Y, Ctrl+A, Escape
+- [x] Snap-to-grid, minimap, edge routing, drag ghost, hover highlights
+- [x] 28 xUnit round-trip tests
 
 ### Phase 2
 - [ ] Support for sequence, class, state, and ER diagrams in visual editor
@@ -655,6 +675,93 @@ The existing preview WebView2 continues to render the Mermaid preview as before.
 - [ ] AI can generate diagrams from natural language descriptions
 - [ ] Import from common formats (draw.io)
 - [ ] Advanced editing features (multi-select, alignment, etc.)
+
+---
+
+## Phase 1 Lessons Learned
+
+The following lessons were discovered during the Phase 1 flowchart implementation. These should be applied when building Phase 2+ diagram types.
+
+### Architecture & File Structure
+
+| Planned | Actual | Notes |
+|---------|--------|-------|
+| Subdirectories (`Models/`, `Parsing/`, `VisualEditor/`) | Flat — all `.cs` files in `tools/MermaidEditor/` root | Simpler for a single-tool project. No need to change. |
+| Separate `visual-editor.css` + `visual-editor.js` | All-in-one `VisualEditor.html` with embedded CSS/JS | Simplifies embedded resource loading. Single file is easier for WebView2. |
+| Separate parser per diagram type (`FlowchartParser.cs`) | Single `MermaidParser.cs` with `ParseFlowchart()` method | For Phase 2, add `ParseSequenceDiagram()`, `ParseClassDiagram()`, etc. to the same file — or split only if it gets too large. |
+
+### Subgraph / Container Handling (Critical for Phase 2)
+
+Subgraphs were the most complex part of Phase 1. Every diagram type with containers (sequence diagram fragments, class diagram packages, state diagram composite states) will face similar issues:
+
+1. **Proxy Nodes**: When a subgraph ID is used as an edge endpoint (e.g., `Frontend --> API`), the ID collides between the container and a logical node. Solution: detect "proxy nodes" (nodes whose ID matches a container ID), filter them from layout/rendering/measurement, and resolve edges to the first contained node instead.
+
+2. **Empty Containers**: dagre won't lay out containers with no children. Must render empty containers as placeholder boxes with stored positions (`_emptyX`/`_emptyY`) and dashed borders. Without this, newly created containers are invisible.
+
+3. **Compound Graph Layout**: dagre's `setParent()` is essential for hierarchical container positioning. Without it, containers are positioned independently and overlap. Use `compound: true` in dagre graph options and call `g.setParent(nodeId, containerId)` for each child.
+
+4. **Container Lifecycle UX**: Users need the full lifecycle: create → assign nodes → edit properties → delete. Each operation should be available via **both** context menu (right-click) **and** keyboard/toolbar. Discoverability was a recurring issue — if an action only exists in one place, users can't find it.
+
+5. **Container Selection**: Clicking on a container's border/background should select it, showing editable properties in the property panel. This requires hit-testing on the SVG rect elements for containers, separate from node hit-testing.
+
+6. **Container Deletion**: Deleting a container should release its children (not delete them). Children become top-level elements. Undo must restore the container and re-parent the children.
+
+### Parser & Round-Trip Fidelity
+
+1. **Preamble / Config Directives**: Mermaid files often start with config directives like `%%{init: {"theme": "dark", "look": "handdrawn"}}%%`. These are NOT comments — they must be captured as "preamble lines" and re-emitted verbatim at the top of serialized output. Losing them silently breaks diagram appearance.
+
+2. **Class Name Suffixes**: Nodes can have `:::className` suffixes (e.g., `A[Label]:::highlight`). The parser must strip these during node parsing and store them separately. The serializer must re-append them.
+
+3. **Style Preservation on Visual Edits**: When the user changes a node's fill color in the visual editor, the corresponding `style` directive must be updated (not duplicated). If no `style` directive exists, create one.
+
+4. **Stable Node Ordering**: The serializer must emit nodes in the same order they were parsed. Shuffling node order makes text diffs noisy and confuses users who care about their text layout.
+
+5. **@pos Comment Positioning**: `%% @pos nodeId x,y` comments should be emitted at the end of the file, after all diagram content. Interleaving them with node definitions clutters the text.
+
+### Visual Editor UX
+
+1. **Shape Previews in Dropdowns**: Shape names alone ("Stadium", "Subroutine", "Asymmetric") are not self-explanatory. Inline SVG previews next to each name in the shape picker dramatically improve usability. Apply this pattern to any future property dropdowns (e.g., relationship types, arrow styles).
+
+2. **Context Menu Completeness**: Every action available via toolbar/keyboard should also be in the right-click context menu. Users have different mental models — some reach for right-click first, others look for buttons. The context menu should show/hide items dynamically based on what's selected (node, edge, container, nothing).
+
+3. **Node Measurement Before Layout**: dagre needs accurate node sizes. Measure text by creating a temporary SVG `<text>` element, calling `getBBox()`, then adding padding. Without this, nodes overlap or have excessive whitespace.
+
+4. **Single Atomic Messages for Bulk Operations**: Auto-layout moves many nodes at once. Sending individual `nodeMoved` messages per node creates N undo entries. Instead, send a single `autoLayoutComplete` message with all positions, creating one undo entry for the whole operation.
+
+5. **Resize Handles**: 8-handle pattern (4 corners + 4 edge midpoints) works well. Enforce minimum size (40×24) and snap-to-grid (20px increments) during resize.
+
+6. **Edge Routing**: Edges should connect to the nearest connection point on the node boundary, not the center. Calculate intersection of the edge line with the node shape for clean arrow placement.
+
+### C# Bridge & Undo/Redo
+
+1. **History Stack Size**: Cap at 100 entries to prevent memory bloat on long editing sessions.
+
+2. **Model Snapshot Strategy**: Store full model JSON snapshots (not diffs). Simpler to implement and restore. The model is small enough that full snapshots are fine.
+
+3. **Null-Check on Parse**: `ParseAndSendToVisualEditor()` must null-check the parser result before assigning to the current model. Non-flowchart content or invalid syntax returns null — without the check, the model is silently cleared.
+
+4. **Message Types**: Each visual editor action needs a distinct message type. Phase 1 uses: `nodeMoved`, `nodeEdited`, `nodeAdded`, `edgeAdded`, `edgeEdited`, `deleteNode`, `deleteEdge`, `autoLayoutComplete`, `nodeResized`, `nodeShapeChanged`, `nodeStyleChanged`, `subgraphCreated`, `subgraphDeleted`, `subgraphLabelChanged`, `nodeMovedToSubgraph`, `nodeRemovedFromSubgraph`. Future diagram types will need their own message types.
+
+### Build & Testing
+
+1. **No CI on this repo**: All verification is manual `dotnet build --no-restore`. Always check for 0 errors before committing.
+
+2. **Unit tests require Windows**: Tests reference WPF types (`System.Windows.Point`, `System.Windows.Size`). They compile on Linux but must be executed on a Windows machine with `dotnet test`.
+
+3. **WPF Binding Warnings**: `System.Windows.Data Error: 4` warnings about `HorizontalContentAlignment` / `VerticalContentAlignment` on ComboBoxItem/MenuItem are a known WPF theming issue. They are harmless and do not affect functionality — safe to ignore.
+
+### Patterns to Reuse for Phase 2 Diagram Types
+
+Each new diagram type (sequence, class, state, ER) should follow this pattern:
+
+1. **Model classes**: Add to `MermaidModels.cs` (e.g., `SequenceDiagramModel`, `SequenceParticipant`, `SequenceMessage`)
+2. **Parser method**: Add `ParseSequenceDiagram()` to `MermaidParser.cs` (or new file if parser grows too large)
+3. **Serializer method**: Add `SerializeSequenceDiagram()` to `MermaidSerializer.cs`
+4. **Visual editor rendering**: Add `renderSequenceDiagram()` to `VisualEditor.html` — different diagram types need fundamentally different rendering (lifelines vs. nodes vs. tables)
+5. **Bridge handlers**: Add message types to `VisualEditorBridge.cs` for diagram-specific interactions
+6. **Round-trip tests**: Add to `MermaidEditor.Tests` project
+
+The visual editor should detect diagram type from the parsed model and switch rendering modes accordingly. The property panel should adapt its fields based on what's selected (e.g., participant properties vs. node properties vs. entity attributes).
 
 ---
 
