@@ -547,12 +547,18 @@ public class VisualEditorBridge
             var fillColor = fillProp.GetString();
             if (!string.IsNullOrEmpty(fillColor))
             {
-                // Add or update a style definition for this node
+                // Add or update a style definition for this node, preserving other properties
                 var existingStyle = _model.Styles.Find(s => !s.IsClassDef && s.Target == nodeId);
-                var styleString = $"fill:{fillColor}";
                 if (existingStyle != null)
                 {
-                    existingStyle.StyleString = styleString;
+                    // Preserve existing properties, only replace fill
+                    var props = existingStyle.StyleString
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                        .Select(p => p.Trim())
+                        .Where(p => !p.StartsWith("fill:", StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+                    props.Insert(0, $"fill:{fillColor}");
+                    existingStyle.StyleString = string.Join(",", props);
                 }
                 else
                 {
@@ -560,7 +566,7 @@ public class VisualEditorBridge
                     {
                         IsClassDef = false,
                         Target = nodeId,
-                        StyleString = styleString
+                        StyleString = $"fill:{fillColor}"
                     });
                 }
             }

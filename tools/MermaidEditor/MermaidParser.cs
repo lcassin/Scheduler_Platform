@@ -430,12 +430,25 @@ public static class MermaidParser
 
             if (closingBrackets != null)
             {
-                return (nodeId + closingBrackets, afterId[closingBrackets.Length..]);
+                var rest = afterId[closingBrackets.Length..];
+                // Consume optional :::className suffix
+                if (rest.StartsWith(":::"))
+                {
+                    var classEnd = rest.IndexOfAny(new[] { ' ', '\t' }, 3);
+                    rest = classEnd >= 0 ? rest[classEnd..] : string.Empty;
+                }
+                return (nodeId + closingBrackets, rest);
             }
         }
 
-        // Just a bare node ID
-        return (nodeId, afterId);
+        // Just a bare node ID - also handle :::className on bare IDs
+        var bareRest = afterId;
+        if (bareRest.StartsWith(":::"))
+        {
+            var classEnd = bareRest.IndexOfAny(new[] { ' ', '\t' }, 3);
+            bareRest = classEnd >= 0 ? bareRest[classEnd..] : string.Empty;
+        }
+        return (nodeId, bareRest);
     }
 
     /// <summary>
