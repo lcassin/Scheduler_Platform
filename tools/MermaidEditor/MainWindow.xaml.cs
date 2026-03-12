@@ -1265,7 +1265,8 @@ Console.WriteLine(""Hello, World!"");
 
         var theme = ThemeManager.CurrentTheme;
         var bodyBg = theme switch { AppTheme.Light => "#f5f5f5", AppTheme.Twilight => "#1A1A2E", _ => "#1e1e1e" };
-        var diagramBg = theme switch { AppTheme.Light => "white", AppTheme.Twilight => "#1F2544", _ => "#2d2d2d" };
+        // Use a lighter diagram card background for dark themes so Mermaid's dark-colored edges/arrows stay visible
+        var diagramBg = theme switch { AppTheme.Light => "white", AppTheme.Twilight => "#B8C4D8", _ => "#B0B0B0" };
         var diagramShadow = theme == AppTheme.Light ? "0 2px 10px rgba(0,0,0,0.1)" : "0 2px 10px rgba(0,0,0,0.4)";
         var errorColor = theme == AppTheme.Light ? "#d32f2f" : "#ef9a9a";
         var errorBg = theme switch { AppTheme.Light => "#ffebee", AppTheme.Twilight => "#2E1A2E", _ => "#4e1a1a" };
@@ -6483,7 +6484,8 @@ Console.WriteLine(""Hello, World!"");
     {
         var pvTheme = ThemeManager.CurrentTheme;
         var pvBodyBg = pvTheme switch { AppTheme.Light => "#f5f5f5", AppTheme.Twilight => "#1A1A2E", _ => "#1e1e1e" };
-        var pvDiagramBg = pvTheme switch { AppTheme.Light => "white", AppTheme.Twilight => "#1F2544", _ => "#2d2d2d" };
+        // Use a lighter diagram card background for dark themes so Mermaid's dark-colored edges/arrows stay visible
+        var pvDiagramBg = pvTheme switch { AppTheme.Light => "white", AppTheme.Twilight => "#B8C4D8", _ => "#B0B0B0" };
         var pvShadow = pvTheme == AppTheme.Light ? "0 2px 10px rgba(0,0,0,0.1)" : "0 2px 10px rgba(0,0,0,0.4)";
         var pvMermaidTheme = pvTheme == AppTheme.Light ? "default" : "dark";
 
