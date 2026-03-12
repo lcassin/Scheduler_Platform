@@ -4654,6 +4654,30 @@ Console.WriteLine(""Hello, World!"");
         {
             SwitchToTextMode();
         }
+
+        // Enable/disable Visual and Split buttons based on whether the current diagram
+        // type is supported by the visual editor (currently only flowcharts).
+        var visualSupported = IsVisualEditorSupportedForCurrentDiagram();
+        if (VisualModeToggle != null)
+        {
+            VisualModeToggle.IsEnabled = visualSupported;
+            VisualModeToggle.ToolTip = visualSupported
+                ? "Visual Mode"
+                : "Visual editor is not yet available for this diagram type";
+        }
+        if (SplitModeToggle != null)
+        {
+            SplitModeToggle.IsEnabled = visualSupported;
+            SplitModeToggle.ToolTip = visualSupported
+                ? "Split Mode (Text + Visual)"
+                : "Visual editor is not yet available for this diagram type";
+        }
+
+        // If currently in Visual/Split mode and the diagram type is unsupported, revert to Text
+        if (!visualSupported && _visualEditorMode != VisualEditorMode.Text)
+        {
+            SwitchToTextMode();
+        }
     }
 
     private void TextMode_Click(object sender, RoutedEventArgs e)
@@ -4716,6 +4740,9 @@ Console.WriteLine(""Hello, World!"");
     /// </summary>
     private async void SwitchToVisualMode()
     {
+        // Guard: don't switch to visual mode for unsupported diagram types
+        if (!IsVisualEditorSupportedForCurrentDiagram()) return;
+
         _visualEditorMode = VisualEditorMode.Visual;
         UpdateModeToggleButtons();
         ApplyVisualEditorLayout();
@@ -4730,6 +4757,9 @@ Console.WriteLine(""Hello, World!"");
     /// </summary>
     private async void SwitchToSplitMode()
     {
+        // Guard: don't switch to split mode for unsupported diagram types
+        if (!IsVisualEditorSupportedForCurrentDiagram()) return;
+
         _visualEditorMode = VisualEditorMode.Split;
         UpdateModeToggleButtons();
         ApplyVisualEditorLayout();
@@ -4781,6 +4811,42 @@ Console.WriteLine(""Hello, World!"");
         {
             _isVisualEditorUpdating = false;
         }
+    }
+
+    /// <summary>
+    /// Returns true if the current Mermaid text uses a diagram type that has visual editor support.
+    /// Currently only flowcharts (graph/flowchart) are supported. Sequence diagrams and other
+    /// types will be added in future phases.
+    /// </summary>
+    private bool IsVisualEditorSupportedForCurrentDiagram()
+    {
+        if (_currentRenderMode != RenderMode.Mermaid) return false;
+        var text = CodeEditor.Text;
+        if (string.IsNullOrWhiteSpace(text)) return true; // empty file — allow visual editor
+        // If it's a flowchart, visual editing is supported
+        return IsFlowchart(text);
+    }
+
+    /// <summary>
+    /// Detects whether the given Mermaid text is a flowchart (graph/flowchart declaration).
+    /// Returns true if the first meaningful line starts with "graph" or "flowchart".
+    /// </summary>
+    private static bool IsFlowchart(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+
+        foreach (var rawLine in text.Split('\n'))
+        {
+            var line = rawLine.TrimEnd('\r').Trim();
+            if (string.IsNullOrEmpty(line)) continue;
+            if (line.StartsWith("%%{")) continue;
+            if (line.StartsWith("%% ") || line.StartsWith("%%\t")) continue;
+            return line.StartsWith("graph ", StringComparison.OrdinalIgnoreCase)
+                || line.StartsWith("graph\t", StringComparison.OrdinalIgnoreCase)
+                || line.StartsWith("flowchart ", StringComparison.OrdinalIgnoreCase)
+                || line.StartsWith("flowchart\t", StringComparison.OrdinalIgnoreCase);
+        }
+        return false;
     }
 
     /// <summary>
