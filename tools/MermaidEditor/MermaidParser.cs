@@ -156,10 +156,10 @@ public static class MermaidParser
                 }
 
                 // If we haven't found a declaration yet and this isn't a comment/empty line,
-                // this may not be a flowchart
+                // preserve it as a preamble line (e.g., config directives, frontmatter)
                 if (!line.TrimStart().StartsWith("%%"))
                 {
-                    // Could be a frontmatter or other content; skip non-flowchart lines before declaration
+                    model.PreambleLines.Add(line);
                     continue;
                 }
             }

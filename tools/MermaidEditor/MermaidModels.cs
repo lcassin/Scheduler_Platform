@@ -52,6 +52,12 @@ public class FlowchartModel
     /// Used by the serializer to correctly position comments relative to the declaration.
     /// </summary>
     public int DeclarationLineIndex { get; set; }
+
+    /// <summary>
+    /// Lines that appear before the flowchart declaration (e.g., config directives, frontmatter).
+    /// These are preserved verbatim through round-trips.
+    /// </summary>
+    public List<string> PreambleLines { get; set; } = new();
 }
 
 /// <summary>

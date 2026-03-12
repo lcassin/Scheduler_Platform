@@ -235,7 +235,8 @@ public class VisualEditorBridge
                 ClassName = ca.ClassName
             }).ToList(),
             DiagramKeyword = model.DiagramKeyword,
-            DeclarationLineIndex = model.DeclarationLineIndex
+            DeclarationLineIndex = model.DeclarationLineIndex,
+            PreambleLines = model.PreambleLines
         };
 
         return JsonSerializer.Serialize(dto, JsonOptions);
@@ -666,6 +667,7 @@ public class VisualEditorBridge
         _model.Direction = dto.Direction ?? "TD";
         _model.DiagramKeyword = dto.DiagramKeyword ?? "flowchart";
         _model.DeclarationLineIndex = dto.DeclarationLineIndex;
+        _model.PreambleLines = dto.PreambleLines ?? new List<string>();
         _model.Nodes.Clear();
         _model.Edges.Clear();
         _model.Subgraphs.Clear();
@@ -782,6 +784,7 @@ public class VisualEditorBridge
         public List<ClassAssignmentDto>? ClassAssignments { get; set; }
         public string? DiagramKeyword { get; set; }
         public int DeclarationLineIndex { get; set; }
+        public List<string>? PreambleLines { get; set; }
     }
 
     private class NodeDto

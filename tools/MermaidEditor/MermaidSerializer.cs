@@ -24,6 +24,12 @@ public static class MermaidSerializer
 
         var sb = new StringBuilder();
 
+        // Write preamble lines (config directives, frontmatter, etc.)
+        foreach (var preambleLine in model.PreambleLines)
+        {
+            sb.AppendLine(preambleLine);
+        }
+
         // Write any comments that appeared before the declaration
         WriteCommentsBeforeLine(sb, model, model.DeclarationLineIndex);
 
