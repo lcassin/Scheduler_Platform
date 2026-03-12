@@ -329,6 +329,18 @@ public class VisualEditorBridge
                     HandleSubgraphCreated(root);
                     break;
 
+                case "subgraphEdited":
+                    HandleSubgraphEdited(root);
+                    break;
+
+                case "nodeSubgraphChanged":
+                    HandleNodeSubgraphChanged(root);
+                    break;
+
+                case "subgraphSelected":
+                    // Subgraph selection doesn't need model changes
+                    break;
+
                 case "undo":
                     _ = UndoAsync();
                     break;
@@ -578,6 +590,51 @@ public class VisualEditorBridge
         }
 
         RaiseModelChanged("nodeStyleChanged");
+    }
+
+    private void HandleSubgraphEdited(JsonElement root)
+    {
+        var subgraphId = root.GetProperty("subgraphId").GetString();
+        var label = root.GetProperty("label").GetString();
+
+        if (string.IsNullOrEmpty(subgraphId)) return;
+
+        var sg = _model.Subgraphs.Find(s => s.Id == subgraphId);
+        if (sg == null) return;
+
+        PushUndo();
+        sg.Label = label ?? sg.Label;
+        RaiseModelChanged("subgraphEdited");
+    }
+
+    private void HandleNodeSubgraphChanged(JsonElement root)
+    {
+        var nodeId = root.GetProperty("nodeId").GetString();
+        if (string.IsNullOrEmpty(nodeId)) return;
+
+        PushUndo();
+
+        // Remove from all subgraphs first
+        foreach (var sg in _model.Subgraphs)
+        {
+            sg.NodeIds.Remove(nodeId);
+        }
+
+        // Add to target subgraph if specified
+        if (root.TryGetProperty("subgraphId", out var sgIdProp) && sgIdProp.ValueKind != JsonValueKind.Null)
+        {
+            var targetSgId = sgIdProp.GetString();
+            if (!string.IsNullOrEmpty(targetSgId))
+            {
+                var targetSg = _model.Subgraphs.Find(s => s.Id == targetSgId);
+                if (targetSg != null)
+                {
+                    targetSg.NodeIds.Add(nodeId);
+                }
+            }
+        }
+
+        RaiseModelChanged("nodeSubgraphChanged");
     }
 
     private void HandleSubgraphCreated(JsonElement root)
