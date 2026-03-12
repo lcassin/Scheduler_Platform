@@ -1561,18 +1561,10 @@
     {
         // Navigate to ADR Jobs page with the clicked status as a filter
         // Status values are internal enum values: "Pending", "CredentialVerified", "ScrapeRequested", "Completed", "Failed", "NeedsReview"
-        // For merged chart slices (e.g. "Failed,Cancelled"), pass multiple status query params
-        if (status.Contains(','))
-        {
-            var statuses = status.Split(',');
-            var queryParams = string.Join("&", statuses.Select(s => $"status={Uri.EscapeDataString(s.Trim())}"));
-            NavigationManager.NavigateTo($"/adr/jobs?{queryParams}");
-        }
-        else
-        {
-            var encodedStatus = Uri.EscapeDataString(status);
-            NavigationManager.NavigateTo($"/adr/jobs?status={encodedStatus}");
-        }
+        // For merged chart slices (e.g. "Failed,Cancelled"), pass comma-separated value
+        // The Jobs page splits on commas to support multiple statuses
+        var encodedStatus = Uri.EscapeDataString(status);
+        NavigationManager.NavigateTo($"/adr/jobs?status={encodedStatus}");
     }
 
     private bool _showDashboardRunDetailsDialog = false;

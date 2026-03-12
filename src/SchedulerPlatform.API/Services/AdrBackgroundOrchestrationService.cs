@@ -663,7 +663,7 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                         if (progress < 0)
                         {
                             s.CurrentStepPhase = "Preparing";
-                            s.CurrentStepProgress = progress < 0 ? Math.Abs(progress) : progress;
+                            s.CurrentStepProgress = Math.Abs(progress);
                         }
                         else
                         {

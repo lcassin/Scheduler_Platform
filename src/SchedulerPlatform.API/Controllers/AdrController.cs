@@ -2060,7 +2060,7 @@ public class AdrController : ControllerBase
         {
             int totalCount, pendingCount, credentialVerifiedCount, scrapeRequestedCount, 
                 completedCount, failedCount, cancelledCount, needsReviewCount, credentialFailedCount,
-                credentialCheckRequestedCount, credentialCheckInProgressCount;
+                credentialCheckRequestedCount, credentialCheckInProgressCount, blacklistedPendingReviewCount;
 
             if (lastOrchestrationRuns.HasValue && lastOrchestrationRuns.Value > 0)
             {
@@ -2094,13 +2094,14 @@ public class AdrController : ControllerBase
                     failedCount = statusCounts.TryGetValue("Failed", out var f) ? f : 0;
                     cancelledCount = statusCounts.TryGetValue("Cancelled", out var can) ? can : 0;
                     needsReviewCount = statusCounts.TryGetValue("NeedsReview", out var nr) ? nr : 0;
+                    blacklistedPendingReviewCount = statusCounts.TryGetValue("BlacklistedPendingReview", out var blpr1) ? blpr1 : 0;
                 }
                 else
                 {
                     // No recent runs, return zeros
                     totalCount = pendingCount = credentialVerifiedCount = credentialFailedCount = 
                         scrapeRequestedCount = completedCount = failedCount = cancelledCount = needsReviewCount = 
-                        credentialCheckRequestedCount = credentialCheckInProgressCount = 0;
+                        credentialCheckRequestedCount = credentialCheckInProgressCount = blacklistedPendingReviewCount = 0;
                 }
             }
             else
@@ -2131,14 +2132,15 @@ public class AdrController : ControllerBase
                 failedCount = statusCounts.TryGetValue("Failed", out var f2) ? f2 : 0;
                 cancelledCount = statusCounts.TryGetValue("Cancelled", out var can2) ? can2 : 0;
                 needsReviewCount = statusCounts.TryGetValue("NeedsReview", out var nr2) ? nr2 : 0;
+                blacklistedPendingReviewCount = statusCounts.TryGetValue("BlacklistedPendingReview", out var blpr2) ? blpr2 : 0;
             }
 
             // Calculate phase breakdown counts
             // Credential Phase: Pending + CredentialCheckRequested + CredentialCheckInProgress + CredentialVerified + CredentialFailed
             var credentialPhaseCount = pendingCount + credentialCheckRequestedCount + credentialCheckInProgressCount + credentialVerifiedCount + credentialFailedCount;
             
-            // ADR Document Phase: ScrapeRequested (includes StatusCheckInProgress) + Completed + Failed + Cancelled + NeedsReview
-            var adrDocumentPhaseCount = scrapeRequestedCount + completedCount + failedCount + cancelledCount + needsReviewCount;
+            // ADR Document Phase: ScrapeRequested (includes StatusCheckInProgress) + Completed + Failed + Cancelled + NeedsReview + BlacklistedPendingReview
+            var adrDocumentPhaseCount = scrapeRequestedCount + completedCount + failedCount + cancelledCount + needsReviewCount + blacklistedPendingReviewCount;
 
             return Ok(new
             {

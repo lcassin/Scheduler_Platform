@@ -248,7 +248,16 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
 
             if (!string.IsNullOrWhiteSpace(status))
             {
-                query = query.Where(j => j.Status == status);
+                // Support comma-separated statuses (e.g. "Failed,Cancelled" from Dashboard chart clicks)
+                if (status.Contains(','))
+                {
+                    var statuses = status.Split(',').Select(s => s.Trim()).Where(s => !string.IsNullOrEmpty(s)).ToList();
+                    query = query.Where(j => statuses.Contains(j.Status));
+                }
+                else
+                {
+                    query = query.Where(j => j.Status == status);
+                }
             }
 
             if (billingPeriodStart.HasValue)

@@ -460,6 +460,7 @@
         }
         if (!string.IsNullOrEmpty(StatusParam))
         {
+            // Support comma-separated statuses from Dashboard chart clicks (e.g. "Failed,Cancelled")
             _selectedStatus = StatusParam;
             _filterStatus = StatusParam;
         }
