@@ -1470,7 +1470,8 @@
         }
 
         function getEdgePoints(fromNode, toNode) {
-            // Port-based routing: pick the best port pair (N/S/E/W) to minimize overlap
+            // Port-based routing with directional preference
+            // When target is predominantly below, prefer bottom->top ports, etc.
             const fx = fromNode.x, fy = fromNode.y;
             const tx = toNode.x, ty = toNode.y;
             const fw = (fromNode.width || 80) / 2;
@@ -1478,12 +1479,46 @@
             const tw = (toNode.width || 80) / 2;
             const th = (toNode.height || 40) / 2;
 
+            // Direction from source center to target center
+            const cdx = tx - fx;
+            const cdy = ty - fy;
+            const absDx = Math.abs(cdx);
+            const absDy = Math.abs(cdy);
+
+            // Determine preferred port directions based on relative position
+            // If vertical distance dominates, prefer top/bottom ports
+            // If horizontal distance dominates, prefer left/right ports
+            let preferredFrom, preferredTo;
+            if (absDy >= absDx) {
+                // Vertical dominant
+                if (cdy > 0) {
+                    // Target is below: prefer bottom->top
+                    preferredFrom = 'bottom';
+                    preferredTo = 'top';
+                } else {
+                    // Target is above: prefer top->bottom
+                    preferredFrom = 'top';
+                    preferredTo = 'bottom';
+                }
+            } else {
+                // Horizontal dominant
+                if (cdx > 0) {
+                    // Target is right: prefer right->left
+                    preferredFrom = 'right';
+                    preferredTo = 'left';
+                } else {
+                    // Target is left: prefer left->right
+                    preferredFrom = 'left';
+                    preferredTo = 'right';
+                }
+            }
+
             // Port positions for from and to nodes
             const fromPorts = [
-                { x: fx, y: fy - fh, name: 'top' },     // N
-                { x: fx, y: fy + fh, name: 'bottom' },   // S
-                { x: fx - fw, y: fy, name: 'left' },     // W
-                { x: fx + fw, y: fy, name: 'right' }     // E
+                { x: fx, y: fy - fh, name: 'top' },
+                { x: fx, y: fy + fh, name: 'bottom' },
+                { x: fx - fw, y: fy, name: 'left' },
+                { x: fx + fw, y: fy, name: 'right' }
             ];
             const toPorts = [
                 { x: tx, y: ty - th, name: 'top' },
@@ -1492,18 +1527,43 @@
                 { x: tx + tw, y: ty, name: 'right' }
             ];
 
-            // Pick the pair with the shortest distance
-            let bestDist = Infinity;
+            // Score each port pair: lower is better
+            // Combines distance with a penalty for non-preferred directions
+            let bestScore = Infinity;
             let bestFrom = fromPorts[0];
             let bestTo = toPorts[0];
+            const DIRECTION_BONUS = 0.6; // Preferred direction gets 60% distance reduction
 
             for (const fp of fromPorts) {
                 for (const tp of toPorts) {
                     const dx = tp.x - fp.x;
                     const dy = tp.y - fp.y;
-                    const d = Math.sqrt(dx * dx + dy * dy);
-                    if (d < bestDist) {
-                        bestDist = d;
+                    let d = Math.sqrt(dx * dx + dy * dy);
+
+                    // Apply bonus for directionally-aligned port pairs
+                    if (fp.name === preferredFrom && tp.name === preferredTo) {
+                        d *= (1 - DIRECTION_BONUS);
+                    } else if (fp.name === preferredFrom || tp.name === preferredTo) {
+                        d *= (1 - DIRECTION_BONUS * 0.3);
+                    }
+
+                    // Penalize "backwards" ports (e.g. using top port when target is below)
+                    const isBackwards = (
+                        (fp.name === 'top' && cdy > 0) ||
+                        (fp.name === 'bottom' && cdy < 0) ||
+                        (fp.name === 'left' && cdx > 0) ||
+                        (fp.name === 'right' && cdx < 0) ||
+                        (tp.name === 'bottom' && cdy > 0) ||
+                        (tp.name === 'top' && cdy < 0) ||
+                        (tp.name === 'right' && cdx > 0) ||
+                        (tp.name === 'left' && cdx < 0)
+                    );
+                    if (isBackwards) {
+                        d *= 1.5;
+                    }
+
+                    if (d < bestScore) {
+                        bestScore = d;
                         bestFrom = fp;
                         bestTo = tp;
                     }
