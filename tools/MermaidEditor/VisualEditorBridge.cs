@@ -573,6 +573,7 @@ public class VisualEditorBridge
         var node = _model.Nodes.Find(n => n.Id == nodeId);
         if (node == null) return;
 
+        PushUndo();
         bool changed = false;
 
         // Apply fill color as an inline style
@@ -609,8 +610,12 @@ public class VisualEditorBridge
 
         if (changed)
         {
-            PushUndo();
             RaiseModelChanged("nodeStyleChanged");
+        }
+        else
+        {
+            // No actual change — remove the undo snapshot we just pushed
+            if (_undoStack.Count > 0) _undoStack.RemoveAt(_undoStack.Count - 1);
         }
     }
 

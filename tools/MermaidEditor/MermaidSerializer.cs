@@ -167,7 +167,7 @@ public static class MermaidSerializer
 
         var label = node.Label;
 
-        return node.Shape switch
+        var shapePart = node.Shape switch
         {
             NodeShape.Rectangle => $"{node.Id}[{label}]",
             NodeShape.Rounded => $"{node.Id}({label})",
@@ -185,6 +185,12 @@ public static class MermaidSerializer
             NodeShape.DoubleCircle => $"{node.Id}((({label})))",
             _ => $"{node.Id}[{label}]"
         };
+
+        // Append :::className suffix if present
+        if (!string.IsNullOrEmpty(node.CssClass))
+            shapePart += $":::{node.CssClass}";
+
+        return shapePart;
     }
 
     /// <summary>
@@ -254,10 +260,16 @@ public static class MermaidSerializer
                     sb.Append('-');
                 break;
             case ArrowType.Circle:
-                sb.Append('o');
+                if (edge.Style == EdgeStyle.Dotted)
+                    sb.Append("-o");
+                else
+                    sb.Append('o');
                 break;
             case ArrowType.Cross:
-                sb.Append('x');
+                if (edge.Style == EdgeStyle.Dotted)
+                    sb.Append("-x");
+                else
+                    sb.Append('x');
                 break;
         }
 
