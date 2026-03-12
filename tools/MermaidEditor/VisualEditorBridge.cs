@@ -12,7 +12,9 @@ public enum ActiveDiagramType
 {
     Flowchart,
     Sequence,
-    ClassDiagram
+    ClassDiagram,
+    StateDiagram,
+    ERDiagram
 }
 
 /// <summary>
@@ -27,6 +29,8 @@ public class VisualEditorBridge
     private FlowchartModel _model;
     private SequenceDiagramModel? _sequenceModel;
     private ClassDiagramModel? _classDiagramModel;
+    private StateDiagramModel? _stateDiagramModel;
+    private ERDiagramModel? _erDiagramModel;
     private ActiveDiagramType _activeDiagramType = ActiveDiagramType.Flowchart;
     private readonly List<string> _undoStack = new();
     private readonly List<string> _redoStack = new();
@@ -59,6 +63,16 @@ public class VisualEditorBridge
     public event EventHandler<ClassDiagramModelChangedEventArgs>? ClassDiagramModelChanged;
 
     /// <summary>
+    /// Raised when the StateDiagramModel is modified by the visual editor.
+    /// </summary>
+    public event EventHandler<StateDiagramModelChangedEventArgs>? StateDiagramModelChanged;
+
+    /// <summary>
+    /// Raised when the ERDiagramModel is modified by the visual editor.
+    /// </summary>
+    public event EventHandler<ERDiagramModelChangedEventArgs>? ERDiagramModelChanged;
+
+    /// <summary>
     /// Raised when a node is selected in the visual editor.
     /// </summary>
     public event EventHandler<NodeSelectedEventArgs>? NodeSelected;
@@ -87,6 +101,16 @@ public class VisualEditorBridge
     /// Gets the current ClassDiagramModel (may be null if not in class diagram mode).
     /// </summary>
     public ClassDiagramModel? ClassDiagramModel => _classDiagramModel;
+
+    /// <summary>
+    /// Gets the current StateDiagramModel (may be null if not in state diagram mode).
+    /// </summary>
+    public StateDiagramModel? StateDiagramModel => _stateDiagramModel;
+
+    /// <summary>
+    /// Gets the current ERDiagramModel (may be null if not in ER diagram mode).
+    /// </summary>
+    public ERDiagramModel? ERDiagramModel => _erDiagramModel;
 
     /// <summary>
     /// Gets the currently active diagram type.
@@ -346,6 +370,149 @@ public class VisualEditorBridge
         return result;
     }
 
+    // ========== State Diagram Support ==========
+
+    /// <summary>
+    /// Sends the current StateDiagramModel to the visual editor as JSON.
+    /// </summary>
+    public async Task SendStateDiagramToEditorAsync()
+    {
+        if (_stateDiagramModel == null) return;
+        var json = ConvertStateDiagramModelToJson(_stateDiagramModel);
+        var escaped = JsonSerializer.Serialize(json);
+        await _webView.ExecuteScriptAsync($"window.loadStateDiagram({escaped})");
+    }
+
+    /// <summary>
+    /// Updates the state diagram model reference and sends to editor.
+    /// </summary>
+    public async Task UpdateStateDiagramModelAsync(StateDiagramModel newModel)
+    {
+        _stateDiagramModel = newModel ?? throw new ArgumentNullException(nameof(newModel));
+        _activeDiagramType = ActiveDiagramType.StateDiagram;
+        _undoStack.Clear();
+        _redoStack.Clear();
+        await SendStateDiagramToEditorAsync();
+    }
+
+    /// <summary>
+    /// Converts a StateDiagramModel to the JSON format expected by the visual editor JS.
+    /// </summary>
+    public static string ConvertStateDiagramModelToJson(StateDiagramModel model)
+    {
+        var states = model.States.Select(s => ConvertStateToDto(s)).ToList();
+
+        var transitions = model.Transitions.Select(t => new StDiagTransitionDto
+        {
+            FromId = t.FromId,
+            ToId = t.ToId,
+            Label = t.Label
+        }).ToList();
+
+        var notes = model.Notes.Select(n => new StDiagNoteDto
+        {
+            Text = n.Text,
+            StateId = n.StateId,
+            Position = n.Position.ToString()
+        }).ToList();
+
+        var dto = new StDiagramDto
+        {
+            Direction = model.Direction,
+            IsV2 = model.IsV2,
+            States = states,
+            Transitions = transitions,
+            Notes = notes,
+            PreambleLines = model.PreambleLines,
+            DeclarationLineIndex = model.DeclarationLineIndex
+        };
+
+        return JsonSerializer.Serialize(dto, JsonOptions);
+    }
+
+    private static StDiagStateDto ConvertStateToDto(StateDefinition state)
+    {
+        return new StDiagStateDto
+        {
+            Id = state.Id,
+            Label = state.Label,
+            Type = state.Type.ToString(),
+            CssClass = state.CssClass,
+            IsExplicit = state.IsExplicit,
+            NestedStates = state.NestedStates.Select(ns => ConvertStateToDto(ns)).ToList(),
+            NestedTransitions = state.NestedTransitions.Select(t => new StDiagTransitionDto
+            {
+                FromId = t.FromId,
+                ToId = t.ToId,
+                Label = t.Label
+            }).ToList()
+        };
+    }
+
+    // ========== ER Diagram Support ==========
+
+    /// <summary>
+    /// Sends the current ERDiagramModel to the visual editor as JSON.
+    /// </summary>
+    public async Task SendERDiagramToEditorAsync()
+    {
+        if (_erDiagramModel == null) return;
+        var json = ConvertERDiagramModelToJson(_erDiagramModel);
+        var escaped = JsonSerializer.Serialize(json);
+        await _webView.ExecuteScriptAsync($"window.loadERDiagram({escaped})");
+    }
+
+    /// <summary>
+    /// Updates the ER diagram model reference and sends to editor.
+    /// </summary>
+    public async Task UpdateERDiagramModelAsync(ERDiagramModel newModel)
+    {
+        _erDiagramModel = newModel ?? throw new ArgumentNullException(nameof(newModel));
+        _activeDiagramType = ActiveDiagramType.ERDiagram;
+        _undoStack.Clear();
+        _redoStack.Clear();
+        await SendERDiagramToEditorAsync();
+    }
+
+    /// <summary>
+    /// Converts an ERDiagramModel to the JSON format expected by the visual editor JS.
+    /// </summary>
+    public static string ConvertERDiagramModelToJson(ERDiagramModel model)
+    {
+        var entities = model.Entities.Select(e => new ErDiagEntityDto
+        {
+            Name = e.Name,
+            IsExplicit = e.IsExplicit,
+            Attributes = e.Attributes.Select(a => new ErDiagAttributeDto
+            {
+                Type = a.Type,
+                Name = a.Name,
+                Key = a.Key,
+                Comment = a.Comment
+            }).ToList()
+        }).ToList();
+
+        var relationships = model.Relationships.Select(r => new ErDiagRelDto
+        {
+            FromEntity = r.FromEntity,
+            ToEntity = r.ToEntity,
+            LeftCardinality = r.LeftCardinality.ToString(),
+            RightCardinality = r.RightCardinality.ToString(),
+            IsIdentifying = r.IsIdentifying,
+            Label = r.Label
+        }).ToList();
+
+        var dto = new ErDiagramDto
+        {
+            Entities = entities,
+            Relationships = relationships,
+            PreambleLines = model.PreambleLines,
+            DeclarationLineIndex = model.DeclarationLineIndex
+        };
+
+        return JsonSerializer.Serialize(dto, JsonOptions);
+    }
+
     /// <summary>
     /// Sets the visual editor theme.
     /// </summary>
@@ -384,7 +551,19 @@ public class VisualEditorBridge
         _isSuppressingUpdates = true;
         try
         {
-            if (_activeDiagramType == ActiveDiagramType.ClassDiagram)
+            if (_activeDiagramType == ActiveDiagramType.StateDiagram)
+            {
+                RestoreStateDiagramModelFromJson(previousJson);
+                await SendStateDiagramToEditorAsync();
+                RaiseStateDiagramModelChanged("undo");
+            }
+            else if (_activeDiagramType == ActiveDiagramType.ERDiagram)
+            {
+                RestoreERDiagramModelFromJson(previousJson);
+                await SendERDiagramToEditorAsync();
+                RaiseERDiagramModelChanged("undo");
+            }
+            else if (_activeDiagramType == ActiveDiagramType.ClassDiagram)
             {
                 RestoreClassDiagramModelFromJson(previousJson);
                 await SendClassDiagramToEditorAsync();
@@ -429,7 +608,19 @@ public class VisualEditorBridge
         _isSuppressingUpdates = true;
         try
         {
-            if (_activeDiagramType == ActiveDiagramType.ClassDiagram)
+            if (_activeDiagramType == ActiveDiagramType.StateDiagram)
+            {
+                RestoreStateDiagramModelFromJson(redoJson);
+                await SendStateDiagramToEditorAsync();
+                RaiseStateDiagramModelChanged("redo");
+            }
+            else if (_activeDiagramType == ActiveDiagramType.ERDiagram)
+            {
+                RestoreERDiagramModelFromJson(redoJson);
+                await SendERDiagramToEditorAsync();
+                RaiseERDiagramModelChanged("redo");
+            }
+            else if (_activeDiagramType == ActiveDiagramType.ClassDiagram)
             {
                 RestoreClassDiagramModelFromJson(redoJson);
                 await SendClassDiagramToEditorAsync();
@@ -459,6 +650,10 @@ public class VisualEditorBridge
     /// </summary>
     private string GetCurrentModelJson()
     {
+        if (_activeDiagramType == ActiveDiagramType.StateDiagram && _stateDiagramModel != null)
+            return ConvertStateDiagramModelToJson(_stateDiagramModel);
+        if (_activeDiagramType == ActiveDiagramType.ERDiagram && _erDiagramModel != null)
+            return ConvertERDiagramModelToJson(_erDiagramModel);
         if (_activeDiagramType == ActiveDiagramType.ClassDiagram && _classDiagramModel != null)
             return ConvertClassDiagramModelToJson(_classDiagramModel);
         if (_activeDiagramType == ActiveDiagramType.Sequence && _sequenceModel != null)
@@ -716,6 +911,88 @@ public class VisualEditorBridge
                     break;
 
                 case "seq_messageSelected":
+                    // Selection doesn't need model changes
+                    break;
+
+                // ===== State Diagram Messages =====
+
+                case "st_stateCreated":
+                    HandleStStateCreated(root);
+                    break;
+
+                case "st_stateEdited":
+                    HandleStStateEdited(root);
+                    break;
+
+                case "st_stateDeleted":
+                    HandleStStateDeleted(root);
+                    break;
+
+                case "st_transitionCreated":
+                    HandleStTransitionCreated(root);
+                    break;
+
+                case "st_transitionEdited":
+                    HandleStTransitionEdited(root);
+                    break;
+
+                case "st_transitionDeleted":
+                    HandleStTransitionDeleted(root);
+                    break;
+
+                case "st_noteCreated":
+                    HandleStNoteCreated(root);
+                    break;
+
+                case "st_noteDeleted":
+                    HandleStNoteDeleted(root);
+                    break;
+
+                case "st_stateSelected":
+                case "st_transitionSelected":
+                    // Selection doesn't need model changes
+                    break;
+
+                // ===== ER Diagram Messages =====
+
+                case "er_entityCreated":
+                    HandleErEntityCreated(root);
+                    break;
+
+                case "er_entityEdited":
+                    HandleErEntityEdited(root);
+                    break;
+
+                case "er_entityDeleted":
+                    HandleErEntityDeleted(root);
+                    break;
+
+                case "er_attributeAdded":
+                    HandleErAttributeAdded(root);
+                    break;
+
+                case "er_attributeEdited":
+                    HandleErAttributeEdited(root);
+                    break;
+
+                case "er_attributeDeleted":
+                    HandleErAttributeDeleted(root);
+                    break;
+
+                case "er_relationshipCreated":
+                    HandleErRelationshipCreated(root);
+                    break;
+
+                case "er_relationshipEdited":
+                    HandleErRelationshipEdited(root);
+                    break;
+
+                case "er_relationshipDeleted":
+                    HandleErRelationshipDeleted(root);
+                    break;
+
+                case "er_entitySelected":
+                case "er_relationshipSelected":
                     // Selection doesn't need model changes
                     break;
             }
@@ -1246,6 +1523,18 @@ public class VisualEditorBridge
             ClassDiagramModelChanged?.Invoke(this, new ClassDiagramModelChangedEventArgs(changeType, _classDiagramModel));
     }
 
+    private void RaiseStateDiagramModelChanged(string changeType)
+    {
+        if (_stateDiagramModel != null)
+            StateDiagramModelChanged?.Invoke(this, new StateDiagramModelChangedEventArgs(changeType, _stateDiagramModel));
+    }
+
+    private void RaiseERDiagramModelChanged(string changeType)
+    {
+        if (_erDiagramModel != null)
+            ERDiagramModelChanged?.Invoke(this, new ERDiagramModelChangedEventArgs(changeType, _erDiagramModel));
+    }
+
     // ========== Class Diagram Message Handlers ==========
 
     private void HandleClsClassCreated(JsonElement root)
@@ -1565,6 +1854,493 @@ public class VisualEditorBridge
                 {
                     Text = n.Text ?? string.Empty,
                     ForClass = n.ForClass
+                });
+            }
+        }
+    }
+
+    // ========== State Diagram Message Handlers ==========
+
+    private void HandleStStateCreated(JsonElement root)
+    {
+        if (_stateDiagramModel == null) return;
+        var stateId = root.GetProperty("stateId").GetString();
+        if (string.IsNullOrEmpty(stateId)) return;
+        if (_stateDiagramModel.States.Any(s => s.Id == stateId)) return;
+
+        PushUndo();
+        var newState = new StateDefinition
+        {
+            Id = stateId,
+            IsExplicit = true,
+            Type = StateType.Simple
+        };
+        if (root.TryGetProperty("label", out var labelProp))
+            newState.Label = labelProp.GetString();
+        if (root.TryGetProperty("type", out var typeProp))
+        {
+            var typeStr = typeProp.GetString();
+            if (Enum.TryParse<StateType>(typeStr, true, out var st))
+                newState.Type = st;
+        }
+        _stateDiagramModel.States.Add(newState);
+        RaiseStateDiagramModelChanged("st_stateCreated");
+    }
+
+    private void HandleStStateEdited(JsonElement root)
+    {
+        if (_stateDiagramModel == null) return;
+        var stateId = root.GetProperty("stateId").GetString();
+        if (string.IsNullOrEmpty(stateId)) return;
+
+        var state = FindStateRecursive(_stateDiagramModel.States, stateId);
+        if (state == null) return;
+
+        PushUndo();
+        if (root.TryGetProperty("label", out var labelProp))
+            state.Label = labelProp.GetString();
+        if (root.TryGetProperty("type", out var typeProp))
+        {
+            var typeStr = typeProp.GetString();
+            if (Enum.TryParse<StateType>(typeStr, true, out var st))
+                state.Type = st;
+        }
+        RaiseStateDiagramModelChanged("st_stateEdited");
+    }
+
+    private void HandleStStateDeleted(JsonElement root)
+    {
+        if (_stateDiagramModel == null) return;
+        var stateId = root.GetProperty("stateId").GetString();
+        if (string.IsNullOrEmpty(stateId)) return;
+
+        PushUndo();
+        _stateDiagramModel.States.RemoveAll(s => s.Id == stateId);
+        _stateDiagramModel.Transitions.RemoveAll(t => t.FromId == stateId || t.ToId == stateId);
+        _stateDiagramModel.Notes.RemoveAll(n => n.StateId == stateId);
+        RaiseStateDiagramModelChanged("st_stateDeleted");
+    }
+
+    private void HandleStTransitionCreated(JsonElement root)
+    {
+        if (_stateDiagramModel == null) return;
+        var fromId = root.GetProperty("fromId").GetString();
+        var toId = root.GetProperty("toId").GetString();
+        if (string.IsNullOrEmpty(fromId) || string.IsNullOrEmpty(toId)) return;
+
+        PushUndo();
+        var transition = new StateTransition
+        {
+            FromId = fromId,
+            ToId = toId
+        };
+        if (root.TryGetProperty("label", out var labelProp))
+            transition.Label = labelProp.GetString();
+        _stateDiagramModel.Transitions.Add(transition);
+        RaiseStateDiagramModelChanged("st_transitionCreated");
+    }
+
+    private void HandleStTransitionEdited(JsonElement root)
+    {
+        if (_stateDiagramModel == null) return;
+        var index = root.GetProperty("index").GetInt32();
+        if (index < 0 || index >= _stateDiagramModel.Transitions.Count) return;
+
+        PushUndo();
+        if (root.TryGetProperty("label", out var labelProp))
+            _stateDiagramModel.Transitions[index].Label = labelProp.GetString();
+        if (root.TryGetProperty("fromId", out var fromProp))
+            _stateDiagramModel.Transitions[index].FromId = fromProp.GetString() ?? string.Empty;
+        if (root.TryGetProperty("toId", out var toProp))
+            _stateDiagramModel.Transitions[index].ToId = toProp.GetString() ?? string.Empty;
+        RaiseStateDiagramModelChanged("st_transitionEdited");
+    }
+
+    private void HandleStTransitionDeleted(JsonElement root)
+    {
+        if (_stateDiagramModel == null) return;
+        var index = root.GetProperty("index").GetInt32();
+        if (index < 0 || index >= _stateDiagramModel.Transitions.Count) return;
+
+        PushUndo();
+        _stateDiagramModel.Transitions.RemoveAt(index);
+        RaiseStateDiagramModelChanged("st_transitionDeleted");
+    }
+
+    private void HandleStNoteCreated(JsonElement root)
+    {
+        if (_stateDiagramModel == null) return;
+        var stateId = root.GetProperty("stateId").GetString();
+        var text = root.GetProperty("text").GetString();
+        if (string.IsNullOrEmpty(stateId) || string.IsNullOrEmpty(text)) return;
+
+        PushUndo();
+        var note = new StateNote
+        {
+            StateId = stateId,
+            Text = text,
+            Position = StateNotePosition.RightOf
+        };
+        if (root.TryGetProperty("position", out var posProp))
+        {
+            var posStr = posProp.GetString();
+            if (Enum.TryParse<StateNotePosition>(posStr, true, out var pos))
+                note.Position = pos;
+        }
+        _stateDiagramModel.Notes.Add(note);
+        RaiseStateDiagramModelChanged("st_noteCreated");
+    }
+
+    private void HandleStNoteDeleted(JsonElement root)
+    {
+        if (_stateDiagramModel == null) return;
+        var index = root.GetProperty("index").GetInt32();
+        if (index < 0 || index >= _stateDiagramModel.Notes.Count) return;
+
+        PushUndo();
+        _stateDiagramModel.Notes.RemoveAt(index);
+        RaiseStateDiagramModelChanged("st_noteDeleted");
+    }
+
+    private static StateDefinition? FindStateRecursive(List<StateDefinition> states, string id)
+    {
+        foreach (var s in states)
+        {
+            if (s.Id == id) return s;
+            var found = FindStateRecursive(s.NestedStates, id);
+            if (found != null) return found;
+        }
+        return null;
+    }
+
+    private void RestoreStateDiagramModelFromJson(string json)
+    {
+        var dto = JsonSerializer.Deserialize<StDiagramDto>(json, JsonOptions);
+        if (dto == null) return;
+
+        _stateDiagramModel = new StateDiagramModel
+        {
+            Direction = dto.Direction,
+            IsV2 = dto.IsV2,
+            PreambleLines = dto.PreambleLines ?? new List<string>(),
+            DeclarationLineIndex = dto.DeclarationLineIndex
+        };
+
+        if (dto.States != null)
+        {
+            foreach (var s in dto.States)
+                _stateDiagramModel.States.Add(RestoreStateFromDto(s));
+        }
+
+        if (dto.Transitions != null)
+        {
+            foreach (var t in dto.Transitions)
+            {
+                _stateDiagramModel.Transitions.Add(new StateTransition
+                {
+                    FromId = t.FromId ?? string.Empty,
+                    ToId = t.ToId ?? string.Empty,
+                    Label = t.Label
+                });
+            }
+        }
+
+        if (dto.Notes != null)
+        {
+            foreach (var n in dto.Notes)
+            {
+                var pos = StateNotePosition.RightOf;
+                if (!string.IsNullOrEmpty(n.Position))
+                    Enum.TryParse(n.Position, true, out pos);
+
+                _stateDiagramModel.Notes.Add(new StateNote
+                {
+                    Text = n.Text ?? string.Empty,
+                    StateId = n.StateId ?? string.Empty,
+                    Position = pos
+                });
+            }
+        }
+    }
+
+    private static StateDefinition RestoreStateFromDto(StDiagStateDto dto)
+    {
+        var type = StateType.Simple;
+        if (!string.IsNullOrEmpty(dto.Type))
+            Enum.TryParse(dto.Type, true, out type);
+
+        var state = new StateDefinition
+        {
+            Id = dto.Id ?? string.Empty,
+            Label = dto.Label,
+            Type = type,
+            CssClass = dto.CssClass,
+            IsExplicit = dto.IsExplicit
+        };
+
+        if (dto.NestedStates != null)
+        {
+            foreach (var ns in dto.NestedStates)
+                state.NestedStates.Add(RestoreStateFromDto(ns));
+        }
+
+        if (dto.NestedTransitions != null)
+        {
+            foreach (var t in dto.NestedTransitions)
+            {
+                state.NestedTransitions.Add(new StateTransition
+                {
+                    FromId = t.FromId ?? string.Empty,
+                    ToId = t.ToId ?? string.Empty,
+                    Label = t.Label
+                });
+            }
+        }
+
+        return state;
+    }
+
+    // ========== ER Diagram Message Handlers ==========
+
+    private void HandleErEntityCreated(JsonElement root)
+    {
+        if (_erDiagramModel == null) return;
+        var name = root.GetProperty("name").GetString();
+        if (string.IsNullOrEmpty(name)) return;
+        if (_erDiagramModel.Entities.Any(e => e.Name == name)) return;
+
+        PushUndo();
+        _erDiagramModel.Entities.Add(new EREntity
+        {
+            Name = name,
+            IsExplicit = true
+        });
+        RaiseERDiagramModelChanged("er_entityCreated");
+    }
+
+    private void HandleErEntityEdited(JsonElement root)
+    {
+        if (_erDiagramModel == null) return;
+        var oldName = root.GetProperty("oldName").GetString();
+        if (string.IsNullOrEmpty(oldName)) return;
+
+        var entity = _erDiagramModel.Entities.Find(e => e.Name == oldName);
+        if (entity == null) return;
+
+        PushUndo();
+        if (root.TryGetProperty("name", out var nameProp))
+        {
+            var newName = nameProp.GetString();
+            if (!string.IsNullOrEmpty(newName) && newName != oldName)
+            {
+                // Update references in relationships
+                foreach (var r in _erDiagramModel.Relationships)
+                {
+                    if (r.FromEntity == oldName) r.FromEntity = newName;
+                    if (r.ToEntity == oldName) r.ToEntity = newName;
+                }
+                entity.Name = newName;
+            }
+        }
+        RaiseERDiagramModelChanged("er_entityEdited");
+    }
+
+    private void HandleErEntityDeleted(JsonElement root)
+    {
+        if (_erDiagramModel == null) return;
+        var name = root.GetProperty("name").GetString();
+        if (string.IsNullOrEmpty(name)) return;
+
+        PushUndo();
+        _erDiagramModel.Entities.RemoveAll(e => e.Name == name);
+        _erDiagramModel.Relationships.RemoveAll(r => r.FromEntity == name || r.ToEntity == name);
+        RaiseERDiagramModelChanged("er_entityDeleted");
+    }
+
+    private void HandleErAttributeAdded(JsonElement root)
+    {
+        if (_erDiagramModel == null) return;
+        var entityName = root.GetProperty("entityName").GetString();
+        if (string.IsNullOrEmpty(entityName)) return;
+
+        var entity = _erDiagramModel.Entities.Find(e => e.Name == entityName);
+        if (entity == null) return;
+
+        PushUndo();
+        var attr = new ERAttribute
+        {
+            Type = root.TryGetProperty("type", out var tProp) ? tProp.GetString() ?? "string" : "string",
+            Name = root.TryGetProperty("name", out var nProp) ? nProp.GetString() ?? "field" : "field"
+        };
+        if (root.TryGetProperty("key", out var kProp))
+            attr.Key = kProp.GetString();
+        if (root.TryGetProperty("comment", out var cProp))
+            attr.Comment = cProp.GetString();
+        entity.Attributes.Add(attr);
+        RaiseERDiagramModelChanged("er_attributeAdded");
+    }
+
+    private void HandleErAttributeEdited(JsonElement root)
+    {
+        if (_erDiagramModel == null) return;
+        var entityName = root.GetProperty("entityName").GetString();
+        var index = root.GetProperty("index").GetInt32();
+        if (string.IsNullOrEmpty(entityName)) return;
+
+        var entity = _erDiagramModel.Entities.Find(e => e.Name == entityName);
+        if (entity == null || index < 0 || index >= entity.Attributes.Count) return;
+
+        PushUndo();
+        var attr = entity.Attributes[index];
+        if (root.TryGetProperty("type", out var tProp))
+            attr.Type = tProp.GetString() ?? "string";
+        if (root.TryGetProperty("name", out var nProp))
+            attr.Name = nProp.GetString() ?? "field";
+        if (root.TryGetProperty("key", out var kProp))
+            attr.Key = kProp.GetString();
+        if (root.TryGetProperty("comment", out var cProp))
+            attr.Comment = cProp.GetString();
+        RaiseERDiagramModelChanged("er_attributeEdited");
+    }
+
+    private void HandleErAttributeDeleted(JsonElement root)
+    {
+        if (_erDiagramModel == null) return;
+        var entityName = root.GetProperty("entityName").GetString();
+        var index = root.GetProperty("index").GetInt32();
+        if (string.IsNullOrEmpty(entityName)) return;
+
+        var entity = _erDiagramModel.Entities.Find(e => e.Name == entityName);
+        if (entity == null || index < 0 || index >= entity.Attributes.Count) return;
+
+        PushUndo();
+        entity.Attributes.RemoveAt(index);
+        RaiseERDiagramModelChanged("er_attributeDeleted");
+    }
+
+    private void HandleErRelationshipCreated(JsonElement root)
+    {
+        if (_erDiagramModel == null) return;
+        var fromEntity = root.GetProperty("fromEntity").GetString();
+        var toEntity = root.GetProperty("toEntity").GetString();
+        if (string.IsNullOrEmpty(fromEntity) || string.IsNullOrEmpty(toEntity)) return;
+
+        PushUndo();
+        var rel = new ERRelationship
+        {
+            FromEntity = fromEntity,
+            ToEntity = toEntity
+        };
+        if (root.TryGetProperty("leftCardinality", out var lcProp))
+        {
+            if (Enum.TryParse<ERCardinality>(lcProp.GetString(), true, out var lc))
+                rel.LeftCardinality = lc;
+        }
+        if (root.TryGetProperty("rightCardinality", out var rcProp))
+        {
+            if (Enum.TryParse<ERCardinality>(rcProp.GetString(), true, out var rc))
+                rel.RightCardinality = rc;
+        }
+        if (root.TryGetProperty("isIdentifying", out var idProp))
+            rel.IsIdentifying = idProp.GetBoolean();
+        if (root.TryGetProperty("label", out var labelProp))
+            rel.Label = labelProp.GetString();
+        _erDiagramModel.Relationships.Add(rel);
+        RaiseERDiagramModelChanged("er_relationshipCreated");
+    }
+
+    private void HandleErRelationshipEdited(JsonElement root)
+    {
+        if (_erDiagramModel == null) return;
+        var index = root.GetProperty("index").GetInt32();
+        if (index < 0 || index >= _erDiagramModel.Relationships.Count) return;
+
+        PushUndo();
+        var rel = _erDiagramModel.Relationships[index];
+        if (root.TryGetProperty("leftCardinality", out var lcProp))
+        {
+            if (Enum.TryParse<ERCardinality>(lcProp.GetString(), true, out var lc))
+                rel.LeftCardinality = lc;
+        }
+        if (root.TryGetProperty("rightCardinality", out var rcProp))
+        {
+            if (Enum.TryParse<ERCardinality>(rcProp.GetString(), true, out var rc))
+                rel.RightCardinality = rc;
+        }
+        if (root.TryGetProperty("isIdentifying", out var idProp))
+            rel.IsIdentifying = idProp.GetBoolean();
+        if (root.TryGetProperty("label", out var labelProp))
+            rel.Label = labelProp.GetString();
+        RaiseERDiagramModelChanged("er_relationshipEdited");
+    }
+
+    private void HandleErRelationshipDeleted(JsonElement root)
+    {
+        if (_erDiagramModel == null) return;
+        var index = root.GetProperty("index").GetInt32();
+        if (index < 0 || index >= _erDiagramModel.Relationships.Count) return;
+
+        PushUndo();
+        _erDiagramModel.Relationships.RemoveAt(index);
+        RaiseERDiagramModelChanged("er_relationshipDeleted");
+    }
+
+    private void RestoreERDiagramModelFromJson(string json)
+    {
+        var dto = JsonSerializer.Deserialize<ErDiagramDto>(json, JsonOptions);
+        if (dto == null) return;
+
+        _erDiagramModel = new ERDiagramModel
+        {
+            PreambleLines = dto.PreambleLines ?? new List<string>(),
+            DeclarationLineIndex = dto.DeclarationLineIndex
+        };
+
+        if (dto.Entities != null)
+        {
+            foreach (var e in dto.Entities)
+            {
+                var entity = new EREntity
+                {
+                    Name = e.Name ?? string.Empty,
+                    IsExplicit = e.IsExplicit
+                };
+                if (e.Attributes != null)
+                {
+                    foreach (var a in e.Attributes)
+                    {
+                        entity.Attributes.Add(new ERAttribute
+                        {
+                            Type = a.Type ?? "string",
+                            Name = a.Name ?? "field",
+                            Key = a.Key,
+                            Comment = a.Comment
+                        });
+                    }
+                }
+                _erDiagramModel.Entities.Add(entity);
+            }
+        }
+
+        if (dto.Relationships != null)
+        {
+            foreach (var r in dto.Relationships)
+            {
+                var leftCard = ERCardinality.ExactlyOne;
+                var rightCard = ERCardinality.ExactlyOne;
+                if (!string.IsNullOrEmpty(r.LeftCardinality))
+                    Enum.TryParse(r.LeftCardinality, true, out leftCard);
+                if (!string.IsNullOrEmpty(r.RightCardinality))
+                    Enum.TryParse(r.RightCardinality, true, out rightCard);
+
+                _erDiagramModel.Relationships.Add(new ERRelationship
+                {
+                    FromEntity = r.FromEntity ?? string.Empty,
+                    ToEntity = r.ToEntity ?? string.Empty,
+                    LeftCardinality = leftCard,
+                    RightCardinality = rightCard,
+                    IsIdentifying = r.IsIdentifying,
+                    Label = r.Label
                 });
             }
         }
@@ -2025,6 +2801,79 @@ public class VisualEditorBridge
         public string? Text { get; set; }
         public string? ForClass { get; set; }
     }
+
+    // ========== State Diagram DTOs ==========
+
+    private class StDiagramDto
+    {
+        public string? Direction { get; set; }
+        public bool IsV2 { get; set; } = true;
+        public List<StDiagStateDto>? States { get; set; }
+        public List<StDiagTransitionDto>? Transitions { get; set; }
+        public List<StDiagNoteDto>? Notes { get; set; }
+        public List<string>? PreambleLines { get; set; }
+        public int DeclarationLineIndex { get; set; }
+    }
+
+    private class StDiagStateDto
+    {
+        public string? Id { get; set; }
+        public string? Label { get; set; }
+        public string? Type { get; set; }
+        public string? CssClass { get; set; }
+        public bool IsExplicit { get; set; }
+        public List<StDiagStateDto>? NestedStates { get; set; }
+        public List<StDiagTransitionDto>? NestedTransitions { get; set; }
+    }
+
+    private class StDiagTransitionDto
+    {
+        public string? FromId { get; set; }
+        public string? ToId { get; set; }
+        public string? Label { get; set; }
+    }
+
+    private class StDiagNoteDto
+    {
+        public string? Text { get; set; }
+        public string? StateId { get; set; }
+        public string? Position { get; set; }
+    }
+
+    // ========== ER Diagram DTOs ==========
+
+    private class ErDiagramDto
+    {
+        public List<ErDiagEntityDto>? Entities { get; set; }
+        public List<ErDiagRelDto>? Relationships { get; set; }
+        public List<string>? PreambleLines { get; set; }
+        public int DeclarationLineIndex { get; set; }
+    }
+
+    private class ErDiagEntityDto
+    {
+        public string? Name { get; set; }
+        public bool IsExplicit { get; set; }
+        public List<ErDiagAttributeDto>? Attributes { get; set; }
+    }
+
+    private class ErDiagAttributeDto
+    {
+        public string? Type { get; set; }
+        public string? Name { get; set; }
+        public string? Key { get; set; }
+        public string? Comment { get; set; }
+    }
+
+    private class ErDiagRelDto
+    {
+        public string? FromEntity { get; set; }
+        public string? ToEntity { get; set; }
+        public string? LeftCardinality { get; set; }
+        public string? RightCardinality { get; set; }
+        public bool IsIdentifying { get; set; }
+        public string? Label { get; set; }
+    }
 }
 
 /// <summary>
@@ -2103,6 +2952,36 @@ public class ClassDiagramModelChangedEventArgs : EventArgs
     public ClassDiagramModel Model { get; }
 
     public ClassDiagramModelChangedEventArgs(string changeType, ClassDiagramModel model)
+    {
+        ChangeType = changeType;
+        Model = model;
+    }
+}
+
+/// <summary>
+/// Event args for when the StateDiagramModel changes via the visual editor.
+/// </summary>
+public class StateDiagramModelChangedEventArgs : EventArgs
+{
+    public string ChangeType { get; }
+    public StateDiagramModel Model { get; }
+
+    public StateDiagramModelChangedEventArgs(string changeType, StateDiagramModel model)
+    {
+        ChangeType = changeType;
+        Model = model;
+    }
+}
+
+/// <summary>
+/// Event args for when the ERDiagramModel changes via the visual editor.
+/// </summary>
+public class ERDiagramModelChangedEventArgs : EventArgs
+{
+    public string ChangeType { get; }
+    public ERDiagramModel Model { get; }
+
+    public ERDiagramModelChangedEventArgs(string changeType, ERDiagramModel model)
     {
         ChangeType = changeType;
         Model = model;

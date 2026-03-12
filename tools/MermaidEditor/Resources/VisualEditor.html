@@ -4877,6 +4877,1611 @@
             }
         });
 
+        // ========== State Diagram Visual Editor ==========
+
+        let stDiagram = null; // When non-null, we're in state diagram mode
+        let stSelectedStateId = null;
+        let stSelectedTransIndex = -1;
+        let stDraggingStateId = null;
+        let stDragOffsetX = 0;
+        let stDragOffsetY = 0;
+        let stDrawingTransFrom = null; // stateId when drawing a transition
+        let stStatePositions = {}; // { stateId: { x, y, width, height } }
+
+        const ST_BOX_MIN_WIDTH = 120;
+        const ST_BOX_HEIGHT = 40;
+        const ST_BOX_PADDING = 12;
+        const ST_TOP_MARGIN = 60;
+        const ST_LEFT_MARGIN = 60;
+        const ST_GAP_X = 180;
+        const ST_GAP_Y = 80;
+        const ST_SPECIAL_RADIUS = 12;
+        const ST_NOTE_WIDTH = 140;
+        const ST_NOTE_HEIGHT = 60;
+        const ST_COMPOSITE_PADDING = 30;
+
+        window.loadStateDiagram = function(jsonData) {
+            try {
+                const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+                stDiagram = {
+                    direction: data.direction || null,
+                    isV2: data.isV2 !== false,
+                    states: (data.states || []).map(s => stParseState(s)),
+                    transitions: (data.transitions || []).map(t => ({
+                        fromId: t.fromId || '',
+                        toId: t.toId || '',
+                        label: t.label || null
+                    })),
+                    notes: (data.notes || []).map(n => ({
+                        text: n.text || '',
+                        stateId: n.stateId || '',
+                        position: n.position || 'RightOf'
+                    })),
+                    preambleLines: data.preambleLines || [],
+                    declarationLineIndex: data.declarationLineIndex || 0
+                };
+
+                // Clear other diagram states
+                diagram.nodes = [];
+                diagram.edges = [];
+                diagram.subgraphs = [];
+                seqDiagram = null;
+                clsDiagram = null;
+
+                stAutoLayoutStates();
+                updateToolbarForStateDiagram();
+                renderStateDiagram();
+                centerView();
+            } catch (err) {
+                console.error('Failed to load state diagram:', err);
+            }
+        };
+
+        function stParseState(s) {
+            return {
+                id: s.id || '',
+                label: s.label || null,
+                type: s.type || 'Simple',
+                cssClass: s.cssClass || null,
+                isExplicit: s.isExplicit !== false,
+                nestedStates: (s.nestedStates || []).map(ns => stParseState(ns)),
+                nestedTransitions: (s.nestedTransitions || []).map(t => ({
+                    fromId: t.fromId || '',
+                    toId: t.toId || '',
+                    label: t.label || null
+                }))
+            };
+        }
+
+        function updateToolbarForStateDiagram() {
+            const hideBtns = ['tb-add-node', 'tb-add-edge', 'tb-add-subgraph', 'tb-auto-layout'];
+            hideBtns.forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) btn.style.display = stDiagram ? 'none' : '';
+            });
+        }
+
+        function stAutoLayoutStates() {
+            if (!stDiagram) return;
+            const allStates = stGetAllFlatStates();
+            const cols = Math.max(1, Math.ceil(Math.sqrt(allStates.length)));
+            allStates.forEach((s, idx) => {
+                if (!stStatePositions[s.id]) {
+                    const col = idx % cols;
+                    const row = Math.floor(idx / cols);
+                    stStatePositions[s.id] = {
+                        x: ST_LEFT_MARGIN + col * ST_GAP_X,
+                        y: ST_TOP_MARGIN + row * ST_GAP_Y
+                    };
+                }
+            });
+        }
+
+        function stGetAllFlatStates() {
+            if (!stDiagram) return [];
+            const result = [];
+            function collect(states) {
+                states.forEach(s => {
+                    result.push(s);
+                    if (s.nestedStates && s.nestedStates.length > 0) {
+                        collect(s.nestedStates);
+                    }
+                });
+            }
+            collect(stDiagram.states);
+            return result;
+        }
+
+        function stFindState(stateId) {
+            const allStates = stGetAllFlatStates();
+            return allStates.find(s => s.id === stateId) || null;
+        }
+
+        function stGetStateBox(state) {
+            const pos = stStatePositions[state.id];
+            if (!pos) return { x: 0, y: 0, width: ST_BOX_MIN_WIDTH, height: ST_BOX_HEIGHT };
+
+            if (state.type === 'Fork' || state.type === 'Join') {
+                return { x: pos.x, y: pos.y, width: 80, height: 6 };
+            }
+            if (state.type === 'Choice') {
+                return { x: pos.x, y: pos.y, width: 30, height: 30 };
+            }
+
+            // Composite state - larger box
+            if (state.type === 'Composite' || (state.nestedStates && state.nestedStates.length > 0)) {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                ctx.font = 'bold 13px sans-serif';
+                const labelWidth = ctx.measureText(state.label || state.id).width + ST_BOX_PADDING * 2 + 20;
+                const nestedCount = state.nestedStates ? state.nestedStates.length : 0;
+                const innerCols = Math.max(1, Math.ceil(Math.sqrt(nestedCount)));
+                const innerRows = Math.ceil(nestedCount / innerCols);
+                const width = Math.max(200, labelWidth, innerCols * ST_GAP_X + ST_COMPOSITE_PADDING * 2);
+                const height = Math.max(100, ST_BOX_HEIGHT + innerRows * ST_GAP_Y + ST_COMPOSITE_PADDING);
+                return { x: pos.x, y: pos.y, width, height };
+            }
+
+            // Simple state - measure text width
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.font = '13px sans-serif';
+            const textWidth = ctx.measureText(state.label || state.id).width + ST_BOX_PADDING * 2 + 10;
+            const width = Math.max(ST_BOX_MIN_WIDTH, Math.ceil(textWidth));
+            return { x: pos.x, y: pos.y, width, height: ST_BOX_HEIGHT };
+        }
+
+        function renderStateDiagram() {
+            if (!stDiagram) return;
+
+            nodesLayer.innerHTML = '';
+            edgesLayer.innerHTML = '';
+            subgraphsLayer.innerHTML = '';
+
+            // Render states
+            stDiagram.states.forEach(state => stRenderState(state));
+
+            // Render transitions
+            stDiagram.transitions.forEach((trans, idx) => {
+                stRenderTransition(trans, idx);
+            });
+
+            // Render notes
+            stDiagram.notes.forEach((note, idx) => {
+                stRenderNote(note, idx);
+            });
+        }
+
+        function stRenderState(state) {
+            const box = stGetStateBox(state);
+            if (!stStatePositions[state.id]) return;
+            stStatePositions[state.id].width = box.width;
+            stStatePositions[state.id].height = box.height;
+
+            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.classList.add('node-group', 'st-state');
+            g.setAttribute('data-state-id', state.id);
+            g.setAttribute('transform', `translate(${box.x}, ${box.y})`);
+
+            if (state.type === 'Fork' || state.type === 'Join') {
+                // Horizontal bar
+                const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                rect.setAttribute('x', '0');
+                rect.setAttribute('y', '0');
+                rect.setAttribute('width', box.width);
+                rect.setAttribute('height', box.height);
+                rect.setAttribute('rx', '3');
+                rect.setAttribute('fill', 'var(--text-color)');
+                rect.setAttribute('stroke', 'var(--text-color)');
+                if (stSelectedStateId === state.id) rect.classList.add('selected');
+                g.appendChild(rect);
+            } else if (state.type === 'Choice') {
+                // Diamond
+                const diamond = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                const cx = box.width / 2;
+                const cy = box.height / 2;
+                diamond.setAttribute('points', `${cx},0 ${box.width},${cy} ${cx},${box.height} 0,${cy}`);
+                diamond.classList.add('node-shape');
+                if (stSelectedStateId === state.id) diamond.classList.add('selected');
+                g.appendChild(diamond);
+            } else if (state.type === 'Composite' || (state.nestedStates && state.nestedStates.length > 0)) {
+                // Composite state box with dashed border
+                const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                rect.setAttribute('x', '0');
+                rect.setAttribute('y', '0');
+                rect.setAttribute('width', box.width);
+                rect.setAttribute('height', box.height);
+                rect.setAttribute('rx', '8');
+                rect.classList.add('node-shape');
+                rect.setAttribute('stroke-dasharray', '5,3');
+                if (stSelectedStateId === state.id) rect.classList.add('selected');
+                g.appendChild(rect);
+
+                // Label at top
+                const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                label.setAttribute('x', ST_BOX_PADDING);
+                label.setAttribute('y', '20');
+                label.setAttribute('fill', 'var(--text-color)');
+                label.setAttribute('font-size', '13');
+                label.setAttribute('font-weight', 'bold');
+                label.textContent = state.label || state.id;
+                g.appendChild(label);
+
+                // Divider
+                const divider = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                divider.setAttribute('x1', '0');
+                divider.setAttribute('y1', '28');
+                divider.setAttribute('x2', box.width);
+                divider.setAttribute('y2', '28');
+                divider.setAttribute('stroke', 'var(--node-stroke)');
+                divider.setAttribute('stroke-width', '1');
+                g.appendChild(divider);
+
+                // Nested states are rendered as top-level via position offsets
+                if (state.nestedStates) {
+                    state.nestedStates.forEach(ns => stRenderState(ns));
+                }
+            } else {
+                // Simple state - rounded rectangle
+                const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                rect.setAttribute('x', '0');
+                rect.setAttribute('y', '0');
+                rect.setAttribute('width', box.width);
+                rect.setAttribute('height', box.height);
+                rect.setAttribute('rx', '8');
+                rect.classList.add('node-shape');
+                if (stSelectedStateId === state.id) rect.classList.add('selected');
+                g.appendChild(rect);
+
+                // State name
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('x', box.width / 2);
+                text.setAttribute('y', box.height / 2 + 5);
+                text.setAttribute('text-anchor', 'middle');
+                text.setAttribute('fill', 'var(--text-color)');
+                text.setAttribute('font-size', '13');
+                text.textContent = state.label || state.id;
+                g.appendChild(text);
+            }
+
+            // Connection grip points (N, S, E, W)
+            const grips = [
+                { cx: box.width / 2, cy: 0 },
+                { cx: box.width / 2, cy: box.height },
+                { cx: box.width, cy: box.height / 2 },
+                { cx: 0, cy: box.height / 2 }
+            ];
+            grips.forEach(gp => {
+                const grip = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                grip.setAttribute('cx', gp.cx);
+                grip.setAttribute('cy', gp.cy);
+                grip.setAttribute('r', '5');
+                grip.classList.add('grip-point');
+                grip.setAttribute('data-state-id', state.id);
+                g.appendChild(grip);
+            });
+
+            nodesLayer.appendChild(g);
+        }
+
+        function stRenderTransition(trans, idx) {
+            const fromState = stFindState(trans.fromId);
+            const toState = stFindState(trans.toId);
+
+            let fromBox, toBox;
+
+            // Handle [*] pseudo-states (start/end)
+            if (trans.fromId === '[*]') {
+                // Start state: small filled circle above the first real state
+                const toS = stFindState(trans.toId);
+                const toPos = toS ? stStatePositions[toS.id] : null;
+                fromBox = {
+                    x: (toPos ? toPos.x + 40 : ST_LEFT_MARGIN),
+                    y: (toPos ? toPos.y - 40 : ST_TOP_MARGIN - 40),
+                    width: 16, height: 16
+                };
+                // Render start circle
+                const startCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                startCircle.setAttribute('cx', fromBox.x + 8);
+                startCircle.setAttribute('cy', fromBox.y + 8);
+                startCircle.setAttribute('r', '8');
+                startCircle.setAttribute('fill', 'var(--text-color)');
+                subgraphsLayer.appendChild(startCircle);
+            } else {
+                fromBox = fromState ? stGetStateBox(fromState) : null;
+            }
+
+            if (trans.toId === '[*]') {
+                // End state: circle with inner dot
+                const fromS = stFindState(trans.fromId);
+                const fromPos = fromS ? stStatePositions[fromS.id] : null;
+                toBox = {
+                    x: (fromPos ? fromPos.x + 40 : ST_LEFT_MARGIN),
+                    y: (fromPos ? fromPos.y + (fromPos.height || ST_BOX_HEIGHT) + 30 : ST_TOP_MARGIN + 100),
+                    width: 20, height: 20
+                };
+                // Render end circle
+                const endOuter = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                endOuter.setAttribute('cx', toBox.x + 10);
+                endOuter.setAttribute('cy', toBox.y + 10);
+                endOuter.setAttribute('r', '10');
+                endOuter.setAttribute('fill', 'none');
+                endOuter.setAttribute('stroke', 'var(--text-color)');
+                endOuter.setAttribute('stroke-width', '2');
+                subgraphsLayer.appendChild(endOuter);
+                const endInner = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                endInner.setAttribute('cx', toBox.x + 10);
+                endInner.setAttribute('cy', toBox.y + 10);
+                endInner.setAttribute('r', '6');
+                endInner.setAttribute('fill', 'var(--text-color)');
+                subgraphsLayer.appendChild(endInner);
+            } else {
+                toBox = toState ? stGetStateBox(toState) : null;
+            }
+
+            if (!fromBox || !toBox) return;
+
+            // Calculate edge points
+            const fromCx = fromBox.x + fromBox.width / 2;
+            const fromCy = fromBox.y + fromBox.height / 2;
+            const toCx = toBox.x + toBox.width / 2;
+            const toCy = toBox.y + toBox.height / 2;
+
+            const ports = stGetEdgePorts(fromBox, toBox, fromCx, fromCy, toCx, toCy);
+
+            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.classList.add('st-transition');
+            g.setAttribute('data-trans-index', idx);
+
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', ports.x1);
+            line.setAttribute('y1', ports.y1);
+            line.setAttribute('x2', ports.x2);
+            line.setAttribute('y2', ports.y2);
+            line.setAttribute('stroke', stSelectedTransIndex === idx ? 'var(--edge-selected)' : 'var(--edge-color)');
+            line.setAttribute('stroke-width', stSelectedTransIndex === idx ? '3' : '2');
+            line.setAttribute('marker-end', 'url(#arrowhead)');
+            g.appendChild(line);
+
+            // Clickable hitbox
+            const hitbox = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            hitbox.setAttribute('x1', ports.x1);
+            hitbox.setAttribute('y1', ports.y1);
+            hitbox.setAttribute('x2', ports.x2);
+            hitbox.setAttribute('y2', ports.y2);
+            hitbox.setAttribute('stroke', 'transparent');
+            hitbox.setAttribute('stroke-width', '12');
+            hitbox.style.cursor = 'pointer';
+            g.appendChild(hitbox);
+
+            // Label
+            if (trans.label) {
+                const midX = (ports.x1 + ports.x2) / 2;
+                const midY = (ports.y1 + ports.y2) / 2;
+                const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                labelText.setAttribute('x', midX);
+                labelText.setAttribute('y', midY - 6);
+                labelText.setAttribute('text-anchor', 'middle');
+                labelText.setAttribute('fill', 'var(--text-color)');
+                labelText.setAttribute('font-size', '11');
+                labelText.setAttribute('font-style', 'italic');
+                labelText.textContent = trans.label;
+                g.appendChild(labelText);
+            }
+
+            edgesLayer.appendChild(g);
+        }
+
+        function stGetEdgePorts(fromBox, toBox, fromCx, fromCy, toCx, toCy) {
+            const fromPorts = [
+                { x: fromBox.x + fromBox.width / 2, y: fromBox.y, dir: 'N' },
+                { x: fromBox.x + fromBox.width / 2, y: fromBox.y + fromBox.height, dir: 'S' },
+                { x: fromBox.x + fromBox.width, y: fromBox.y + fromBox.height / 2, dir: 'E' },
+                { x: fromBox.x, y: fromBox.y + fromBox.height / 2, dir: 'W' }
+            ];
+            const toPorts = [
+                { x: toBox.x + toBox.width / 2, y: toBox.y, dir: 'N' },
+                { x: toBox.x + toBox.width / 2, y: toBox.y + toBox.height, dir: 'S' },
+                { x: toBox.x + toBox.width, y: toBox.y + toBox.height / 2, dir: 'E' },
+                { x: toBox.x, y: toBox.y + toBox.height / 2, dir: 'W' }
+            ];
+
+            let bestDist = Infinity;
+            let best = { x1: fromCx, y1: fromCy, x2: toCx, y2: toCy };
+            fromPorts.forEach(fp => {
+                toPorts.forEach(tp => {
+                    const d = Math.hypot(fp.x - tp.x, fp.y - tp.y);
+                    if (d < bestDist) {
+                        bestDist = d;
+                        best = { x1: fp.x, y1: fp.y, x2: tp.x, y2: tp.y };
+                    }
+                });
+            });
+            return best;
+        }
+
+        function stRenderNote(note, idx) {
+            const state = stFindState(note.stateId);
+            const pos = state ? stStatePositions[state.id] : null;
+            if (!pos) return;
+            const box = state ? stGetStateBox(state) : { x: 0, y: 0, width: 100, height: 40 };
+
+            const noteX = note.position === 'LeftOf' ? box.x - ST_NOTE_WIDTH - 20 : box.x + box.width + 20;
+            const noteY = box.y;
+
+            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.classList.add('st-note');
+            g.setAttribute('data-note-index', idx);
+
+            const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            rect.setAttribute('x', noteX);
+            rect.setAttribute('y', noteY);
+            rect.setAttribute('width', ST_NOTE_WIDTH);
+            rect.setAttribute('height', ST_NOTE_HEIGHT);
+            rect.setAttribute('rx', '2');
+            rect.setAttribute('fill', 'var(--note-fill, #ffffcc)');
+            rect.setAttribute('stroke', 'var(--note-stroke, #cccc00)');
+            rect.setAttribute('stroke-width', '1');
+            g.appendChild(rect);
+
+            // Note text
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', noteX + 6);
+            text.setAttribute('y', noteY + 16);
+            text.setAttribute('fill', 'var(--text-color)');
+            text.setAttribute('font-size', '11');
+            const lines = (note.text || '').split('\n');
+            lines.forEach((line, lineIdx) => {
+                const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+                tspan.setAttribute('x', noteX + 6);
+                tspan.setAttribute('dy', lineIdx === 0 ? '0' : '14');
+                tspan.textContent = line;
+                text.appendChild(tspan);
+            });
+            g.appendChild(text);
+
+            // Connector line from note to state
+            const connLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            const connFromX = note.position === 'LeftOf' ? noteX + ST_NOTE_WIDTH : noteX;
+            const connToX = note.position === 'LeftOf' ? box.x : box.x + box.width;
+            connLine.setAttribute('x1', connFromX);
+            connLine.setAttribute('y1', noteY + ST_NOTE_HEIGHT / 2);
+            connLine.setAttribute('x2', connToX);
+            connLine.setAttribute('y2', box.y + box.height / 2);
+            connLine.setAttribute('stroke', 'var(--note-stroke, #cccc00)');
+            connLine.setAttribute('stroke-width', '1');
+            connLine.setAttribute('stroke-dasharray', '4,4');
+            g.appendChild(connLine);
+
+            subgraphsLayer.appendChild(g);
+        }
+
+        // ===== State Diagram Mouse Interaction =====
+
+        svg.addEventListener('mousedown', function(e) {
+            if (!stDiagram) return;
+
+            const stateGroup = e.target.closest('.st-state');
+            const transGroup = e.target.closest('.st-transition');
+            const gripPoint = e.target.closest('.grip-point');
+
+            if (gripPoint && gripPoint.getAttribute('data-state-id')) {
+                // Start drawing a transition
+                const stateId = gripPoint.getAttribute('data-state-id');
+                stDrawingTransFrom = stateId;
+                const state = stFindState(stateId);
+                if (state) {
+                    const box = stGetStateBox(state);
+                    const cx = box.x + box.width / 2;
+                    const cy = box.y + box.height / 2;
+                    tempEdge.setAttribute('x1', cx);
+                    tempEdge.setAttribute('y1', cy);
+                    tempEdge.setAttribute('x2', cx);
+                    tempEdge.setAttribute('y2', cy);
+                    tempEdge.style.display = '';
+                }
+                e.preventDefault();
+                return;
+            }
+
+            if (stateGroup) {
+                const stateId = stateGroup.getAttribute('data-state-id');
+                stSelectedStateId = stateId;
+                stSelectedTransIndex = -1;
+
+                // Start dragging
+                const svgPt = getSVGPoint(e);
+                const pos = stStatePositions[stateId];
+                if (pos) {
+                    stDraggingStateId = stateId;
+                    stDragOffsetX = svgPt.x - pos.x;
+                    stDragOffsetY = svgPt.y - pos.y;
+                }
+
+                stShowStateProperties(stateId);
+                renderStateDiagram();
+                e.preventDefault();
+                return;
+            }
+
+            if (transGroup) {
+                const idx = parseInt(transGroup.getAttribute('data-trans-index'), 10);
+                stSelectedTransIndex = idx;
+                stSelectedStateId = null;
+                stShowTransitionProperties(idx);
+                renderStateDiagram();
+                e.preventDefault();
+                return;
+            }
+
+            // Click on empty space
+            stSelectedStateId = null;
+            stSelectedTransIndex = -1;
+            propertyPanel.classList.remove('visible');
+            renderStateDiagram();
+        });
+
+        svg.addEventListener('mousemove', function(e) {
+            if (!stDiagram) return;
+            const svgPt = getSVGPoint(e);
+
+            if (stDrawingTransFrom) {
+                tempEdge.setAttribute('x2', svgPt.x);
+                tempEdge.setAttribute('y2', svgPt.y);
+                return;
+            }
+
+            if (stDraggingStateId) {
+                const newX = Math.round((svgPt.x - stDragOffsetX) / SNAP_GRID) * SNAP_GRID;
+                const newY = Math.round((svgPt.y - stDragOffsetY) / SNAP_GRID) * SNAP_GRID;
+                stStatePositions[stDraggingStateId] = {
+                    ...stStatePositions[stDraggingStateId],
+                    x: newX,
+                    y: newY
+                };
+                renderStateDiagram();
+            }
+        });
+
+        svg.addEventListener('mouseup', function(e) {
+            if (!stDiagram) return;
+
+            if (stDrawingTransFrom) {
+                const svgPt = getSVGPoint(e);
+                // Find the state under the cursor
+                const targetGroup = e.target.closest('.st-state');
+                if (targetGroup) {
+                    const toStateId = targetGroup.getAttribute('data-state-id');
+                    if (toStateId && toStateId !== stDrawingTransFrom) {
+                        postMessage({ type: 'st_transitionCreated', fromId: stDrawingTransFrom, toId: toStateId });
+                    }
+                }
+                tempEdge.style.display = 'none';
+                stDrawingTransFrom = null;
+                return;
+            }
+
+            if (stDraggingStateId) {
+                stDraggingStateId = null;
+            }
+        });
+
+        // ===== State Diagram Double-Click to Edit =====
+
+        svg.addEventListener('dblclick', function(e) {
+            if (!stDiagram) return;
+
+            const stateGroup = e.target.closest('.st-state');
+            const transGroup = e.target.closest('.st-transition');
+
+            if (stateGroup) {
+                const stateId = stateGroup.getAttribute('data-state-id');
+                const state = stFindState(stateId);
+                if (state) {
+                    const newLabel = prompt('State label:', state.label || state.id);
+                    if (newLabel !== null) {
+                        postMessage({ type: 'st_stateEdited', stateId: stateId, label: newLabel });
+                    }
+                }
+                e.preventDefault();
+                return;
+            }
+
+            if (transGroup) {
+                const idx = parseInt(transGroup.getAttribute('data-trans-index'), 10);
+                if (idx >= 0 && idx < stDiagram.transitions.length) {
+                    const trans = stDiagram.transitions[idx];
+                    const newLabel = prompt('Transition label:', trans.label || '');
+                    if (newLabel !== null) {
+                        postMessage({ type: 'st_transitionEdited', index: idx, label: newLabel });
+                    }
+                }
+                e.preventDefault();
+                return;
+            }
+        });
+
+        // ===== State Diagram Property Panel =====
+
+        function stShowStateProperties(stateId) {
+            const state = stFindState(stateId);
+            if (!state) return;
+
+            const propContent = propertyPanel.querySelector('.property-content');
+            propContent.innerHTML = `
+                <div class="property-row">
+                    <div class="property-label">ID</div>
+                    <input class="property-input" id="st-state-id" value="${escapeHtml(state.id)}" readonly />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Label</div>
+                    <input class="property-input" id="st-state-label" value="${escapeHtml(state.label || '')}" placeholder="State label" />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Type</div>
+                    <select class="property-input" id="st-state-type">
+                        <option value="Simple" ${state.type === 'Simple' ? 'selected' : ''}>Simple</option>
+                        <option value="Composite" ${state.type === 'Composite' ? 'selected' : ''}>Composite</option>
+                        <option value="Fork" ${state.type === 'Fork' ? 'selected' : ''}>Fork</option>
+                        <option value="Join" ${state.type === 'Join' ? 'selected' : ''}>Join</option>
+                        <option value="Choice" ${state.type === 'Choice' ? 'selected' : ''}>Choice</option>
+                    </select>
+                </div>
+            `;
+
+            document.getElementById('st-state-label').addEventListener('change', function() {
+                postMessage({ type: 'st_stateEdited', stateId: stateId, label: this.value });
+            });
+            document.getElementById('st-state-type').addEventListener('change', function() {
+                postMessage({ type: 'st_stateEdited', stateId: stateId, type: this.value });
+            });
+
+            propertyPanel.classList.add('visible');
+        }
+
+        function stShowTransitionProperties(idx) {
+            if (!stDiagram || idx < 0 || idx >= stDiagram.transitions.length) return;
+            const trans = stDiagram.transitions[idx];
+
+            const propContent = propertyPanel.querySelector('.property-content');
+            propContent.innerHTML = `
+                <div class="property-row">
+                    <div class="property-label">From</div>
+                    <input class="property-input" value="${escapeHtml(trans.fromId)}" readonly />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">To</div>
+                    <input class="property-input" value="${escapeHtml(trans.toId)}" readonly />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Label</div>
+                    <input class="property-input" id="st-trans-label" value="${escapeHtml(trans.label || '')}" placeholder="Transition label" />
+                </div>
+            `;
+
+            document.getElementById('st-trans-label').addEventListener('change', function() {
+                postMessage({ type: 'st_transitionEdited', index: idx, label: this.value });
+            });
+
+            propertyPanel.classList.add('visible');
+        }
+
+        // ===== State Diagram Context Menu =====
+
+        svg.addEventListener('contextmenu', function(e) {
+            if (!stDiagram) return;
+            e.preventDefault();
+            e.stopPropagation();
+
+            const stateGroup = e.target.closest('.st-state');
+            const transGroup = e.target.closest('.st-transition');
+            const noteGroup = e.target.closest('.st-note');
+
+            contextMenu.innerHTML = '';
+
+            if (stateGroup) {
+                const stateId = stateGroup.getAttribute('data-state-id');
+                stSelectedStateId = stateId;
+
+                addStContextMenuItem('Edit State', () => {
+                    const state = stFindState(stateId);
+                    if (state) {
+                        const newLabel = prompt('State label:', state.label || state.id);
+                        if (newLabel !== null) {
+                            postMessage({ type: 'st_stateEdited', stateId: stateId, label: newLabel });
+                        }
+                    }
+                });
+                addStContextMenuItem('Add Note', () => {
+                    const text = prompt('Note text:', '');
+                    if (text !== null && text.trim()) {
+                        postMessage({ type: 'st_noteCreated', stateId: stateId, text: text, position: 'RightOf' });
+                    }
+                });
+                addStContextMenuSeparator();
+                addStContextMenuItem('Delete State', () => {
+                    postMessage({ type: 'st_stateDeleted', stateId: stateId });
+                });
+            } else if (transGroup) {
+                const idx = parseInt(transGroup.getAttribute('data-trans-index'), 10);
+                stSelectedTransIndex = idx;
+
+                addStContextMenuItem('Edit Label', () => {
+                    if (idx >= 0 && idx < stDiagram.transitions.length) {
+                        const trans = stDiagram.transitions[idx];
+                        const newLabel = prompt('Transition label:', trans.label || '');
+                        if (newLabel !== null) {
+                            postMessage({ type: 'st_transitionEdited', index: idx, label: newLabel });
+                        }
+                    }
+                });
+                addStContextMenuSeparator();
+                addStContextMenuItem('Delete Transition', () => {
+                    postMessage({ type: 'st_transitionDeleted', index: idx });
+                });
+            } else if (noteGroup) {
+                const idx = parseInt(noteGroup.getAttribute('data-note-index'), 10);
+                addStContextMenuItem('Delete Note', () => {
+                    postMessage({ type: 'st_noteDeleted', index: idx });
+                });
+            } else {
+                // Empty space
+                addStContextMenuItem('Add State', () => {
+                    const svgPt = getSVGPoint(e);
+                    const newId = 'State' + (stDiagram.states.length + 1);
+                    stStatePositions[newId] = {
+                        x: Math.round(svgPt.x / SNAP_GRID) * SNAP_GRID,
+                        y: Math.round(svgPt.y / SNAP_GRID) * SNAP_GRID
+                    };
+                    postMessage({ type: 'st_stateCreated', stateId: newId, label: newId, type: 'Simple' });
+                });
+                addStContextMenuItem('Add Fork/Join', () => {
+                    const svgPt = getSVGPoint(e);
+                    const newId = 'ForkJoin' + (stDiagram.states.length + 1);
+                    stStatePositions[newId] = {
+                        x: Math.round(svgPt.x / SNAP_GRID) * SNAP_GRID,
+                        y: Math.round(svgPt.y / SNAP_GRID) * SNAP_GRID
+                    };
+                    postMessage({ type: 'st_stateCreated', stateId: newId, type: 'Fork' });
+                });
+                addStContextMenuItem('Add Choice', () => {
+                    const svgPt = getSVGPoint(e);
+                    const newId = 'Choice' + (stDiagram.states.length + 1);
+                    stStatePositions[newId] = {
+                        x: Math.round(svgPt.x / SNAP_GRID) * SNAP_GRID,
+                        y: Math.round(svgPt.y / SNAP_GRID) * SNAP_GRID
+                    };
+                    postMessage({ type: 'st_stateCreated', stateId: newId, type: 'Choice' });
+                });
+            }
+
+            contextMenu.style.left = e.clientX + 'px';
+            contextMenu.style.top = e.clientY + 'px';
+            contextMenu.classList.add('visible');
+            renderStateDiagram();
+        });
+
+        function addStContextMenuItem(label, onClick) {
+            const item = document.createElement('div');
+            item.classList.add('context-menu-item');
+            item.textContent = label;
+            item.addEventListener('click', function(e) {
+                e.stopPropagation();
+                contextMenu.classList.remove('visible');
+                onClick();
+            });
+            contextMenu.appendChild(item);
+        }
+
+        function addStContextMenuSeparator() {
+            const sep = document.createElement('div');
+            sep.classList.add('context-menu-separator');
+            contextMenu.appendChild(sep);
+        }
+
+        // Delete key for state diagram elements
+        document.addEventListener('keydown', function(e) {
+            if (!stDiagram) return;
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) return;
+
+                if (stSelectedStateId) {
+                    postMessage({ type: 'st_stateDeleted', stateId: stSelectedStateId });
+                    stSelectedStateId = null;
+                    e.preventDefault();
+                } else if (stSelectedTransIndex >= 0) {
+                    postMessage({ type: 'st_transitionDeleted', index: stSelectedTransIndex });
+                    stSelectedTransIndex = -1;
+                    e.preventDefault();
+                }
+            }
+        });
+
+        // ========== ER Diagram Visual Editor ==========
+
+        let erDiagram = null; // When non-null, we're in ER diagram mode
+        let erSelectedEntityName = null;
+        let erSelectedRelIndex = -1;
+        let erDraggingEntityName = null;
+        let erDragOffsetX = 0;
+        let erDragOffsetY = 0;
+        let erDrawingRelFrom = null; // entityName when drawing a relationship
+        let erEntityPositions = {}; // { entityName: { x, y, width, height } }
+
+        const ER_BOX_MIN_WIDTH = 160;
+        const ER_BOX_PADDING = 10;
+        const ER_HEADER_HEIGHT = 28;
+        const ER_ATTR_HEIGHT = 22;
+        const ER_TOP_MARGIN = 40;
+        const ER_LEFT_MARGIN = 60;
+        const ER_GAP_X = 240;
+        const ER_GAP_Y = 60;
+
+        window.loadERDiagram = function(jsonData) {
+            try {
+                const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+                erDiagram = {
+                    entities: (data.entities || []).map(e => ({
+                        name: e.name || '',
+                        isExplicit: e.isExplicit !== false,
+                        attributes: (e.attributes || []).map(a => ({
+                            type: a.type || 'string',
+                            name: a.name || '',
+                            key: a.key || null,
+                            comment: a.comment || null
+                        }))
+                    })),
+                    relationships: (data.relationships || []).map(r => ({
+                        fromEntity: r.fromEntity || '',
+                        toEntity: r.toEntity || '',
+                        leftCardinality: r.leftCardinality || 'ExactlyOne',
+                        rightCardinality: r.rightCardinality || 'ExactlyOne',
+                        isIdentifying: r.isIdentifying || false,
+                        label: r.label || null
+                    })),
+                    preambleLines: data.preambleLines || [],
+                    declarationLineIndex: data.declarationLineIndex || 0
+                };
+
+                // Clear other diagram states
+                diagram.nodes = [];
+                diagram.edges = [];
+                diagram.subgraphs = [];
+                seqDiagram = null;
+                clsDiagram = null;
+                stDiagram = null;
+
+                erAutoLayoutEntities();
+                updateToolbarForERDiagram();
+                renderERDiagram();
+                centerView();
+            } catch (err) {
+                console.error('Failed to load ER diagram:', err);
+            }
+        };
+
+        function updateToolbarForERDiagram() {
+            const hideBtns = ['tb-add-node', 'tb-add-edge', 'tb-add-subgraph', 'tb-auto-layout'];
+            hideBtns.forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) btn.style.display = erDiagram ? 'none' : '';
+            });
+        }
+
+        function erAutoLayoutEntities() {
+            if (!erDiagram) return;
+            const cols = Math.max(1, Math.ceil(Math.sqrt(erDiagram.entities.length)));
+            erDiagram.entities.forEach((entity, idx) => {
+                if (!erEntityPositions[entity.name]) {
+                    const col = idx % cols;
+                    const row = Math.floor(idx / cols);
+                    erEntityPositions[entity.name] = {
+                        x: ER_LEFT_MARGIN + col * ER_GAP_X,
+                        y: ER_TOP_MARGIN + row * (200 + ER_GAP_Y)
+                    };
+                }
+            });
+        }
+
+        function erGetEntityBoxDimensions(entity) {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.font = 'bold 13px monospace';
+            let maxTextWidth = ER_BOX_MIN_WIDTH;
+            const nameWidth = ctx.measureText(entity.name).width + ER_BOX_PADDING * 2 + 20;
+            maxTextWidth = Math.max(maxTextWidth, nameWidth);
+
+            ctx.font = '12px monospace';
+            entity.attributes.forEach(attr => {
+                const attrText = erFormatAttribute(attr);
+                const w = ctx.measureText(attrText).width + ER_BOX_PADDING * 2 + 10;
+                maxTextWidth = Math.max(maxTextWidth, w);
+            });
+
+            const width = Math.ceil(maxTextWidth);
+            const height = ER_HEADER_HEIGHT + 1 + Math.max(1, entity.attributes.length) * ER_ATTR_HEIGHT + ER_BOX_PADDING;
+            return { width, height };
+        }
+
+        function erFormatAttribute(attr) {
+            let text = attr.type + ' ' + attr.name;
+            if (attr.key) text += ' ' + attr.key;
+            if (attr.comment) text += ' "' + attr.comment + '"';
+            return text;
+        }
+
+        function erCardinalitySymbol(cardinality) {
+            switch (cardinality) {
+                case 'ExactlyOne': return '||';
+                case 'ZeroOrOne': return '|o';
+                case 'ZeroOrMore': return '}o';
+                case 'OneOrMore': return '}|';
+                default: return '||';
+            }
+        }
+
+        function erCardinalityLabel(cardinality) {
+            switch (cardinality) {
+                case 'ExactlyOne': return '1';
+                case 'ZeroOrOne': return '0..1';
+                case 'ZeroOrMore': return '0..*';
+                case 'OneOrMore': return '1..*';
+                default: return '1';
+            }
+        }
+
+        function renderERDiagram() {
+            if (!erDiagram) return;
+
+            nodesLayer.innerHTML = '';
+            edgesLayer.innerHTML = '';
+            subgraphsLayer.innerHTML = '';
+
+            // Render entities
+            erDiagram.entities.forEach(entity => {
+                erRenderEntity(entity);
+            });
+
+            // Render relationships
+            erDiagram.relationships.forEach((rel, idx) => {
+                erRenderRelationship(rel, idx);
+            });
+        }
+
+        function erRenderEntity(entity) {
+            const pos = erEntityPositions[entity.name];
+            if (!pos) return;
+            const dim = erGetEntityBoxDimensions(entity);
+            pos.width = dim.width;
+            pos.height = dim.height;
+
+            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.classList.add('node-group', 'er-entity');
+            g.setAttribute('data-entity-name', entity.name);
+            g.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
+
+            // Main box
+            const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            rect.setAttribute('x', '0');
+            rect.setAttribute('y', '0');
+            rect.setAttribute('width', dim.width);
+            rect.setAttribute('height', dim.height);
+            rect.setAttribute('rx', '3');
+            rect.classList.add('node-shape');
+            if (erSelectedEntityName === entity.name) rect.classList.add('selected');
+            g.appendChild(rect);
+
+            // Entity name header
+            const headerBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            headerBg.setAttribute('x', '0');
+            headerBg.setAttribute('y', '0');
+            headerBg.setAttribute('width', dim.width);
+            headerBg.setAttribute('height', ER_HEADER_HEIGHT);
+            headerBg.setAttribute('rx', '3');
+            headerBg.setAttribute('fill', 'var(--node-header-fill, rgba(100,100,200,0.15))');
+            g.appendChild(headerBg);
+
+            const nameText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            nameText.setAttribute('x', dim.width / 2);
+            nameText.setAttribute('y', ER_HEADER_HEIGHT / 2 + 5);
+            nameText.setAttribute('text-anchor', 'middle');
+            nameText.setAttribute('fill', 'var(--text-color)');
+            nameText.setAttribute('font-size', '13');
+            nameText.setAttribute('font-weight', 'bold');
+            nameText.textContent = entity.name;
+            g.appendChild(nameText);
+
+            // Divider
+            const divider = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            divider.setAttribute('x1', '0');
+            divider.setAttribute('y1', ER_HEADER_HEIGHT);
+            divider.setAttribute('x2', dim.width);
+            divider.setAttribute('y2', ER_HEADER_HEIGHT);
+            divider.setAttribute('stroke', 'var(--node-stroke)');
+            divider.setAttribute('stroke-width', '1');
+            g.appendChild(divider);
+
+            // Attributes
+            let yOffset = ER_HEADER_HEIGHT + 1;
+            if (entity.attributes.length === 0) {
+                const emptyText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                emptyText.setAttribute('x', ER_BOX_PADDING);
+                emptyText.setAttribute('y', yOffset + ER_ATTR_HEIGHT / 2 + 4);
+                emptyText.setAttribute('fill', 'var(--text-muted, #888)');
+                emptyText.setAttribute('font-size', '11');
+                emptyText.setAttribute('font-style', 'italic');
+                emptyText.textContent = '(no attributes)';
+                g.appendChild(emptyText);
+            } else {
+                entity.attributes.forEach((attr, attrIdx) => {
+                    const attrG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                    attrG.classList.add('er-attribute');
+                    attrG.setAttribute('data-entity-name', entity.name);
+                    attrG.setAttribute('data-attr-index', attrIdx);
+
+                    // Attribute row background for hover
+                    const attrBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    attrBg.setAttribute('x', '1');
+                    attrBg.setAttribute('y', yOffset);
+                    attrBg.setAttribute('width', dim.width - 2);
+                    attrBg.setAttribute('height', ER_ATTR_HEIGHT);
+                    attrBg.setAttribute('fill', 'transparent');
+                    attrBg.style.cursor = 'pointer';
+                    attrG.appendChild(attrBg);
+
+                    // Key indicator
+                    if (attr.key === 'PK') {
+                        const keyText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        keyText.setAttribute('x', ER_BOX_PADDING);
+                        keyText.setAttribute('y', yOffset + ER_ATTR_HEIGHT / 2 + 4);
+                        keyText.setAttribute('fill', 'var(--accent-color, #4a9eff)');
+                        keyText.setAttribute('font-size', '10');
+                        keyText.setAttribute('font-weight', 'bold');
+                        keyText.textContent = 'PK';
+                        attrG.appendChild(keyText);
+                    } else if (attr.key === 'FK') {
+                        const keyText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        keyText.setAttribute('x', ER_BOX_PADDING);
+                        keyText.setAttribute('y', yOffset + ER_ATTR_HEIGHT / 2 + 4);
+                        keyText.setAttribute('fill', 'var(--accent-color-secondary, #ff9f43)');
+                        keyText.setAttribute('font-size', '10');
+                        keyText.setAttribute('font-weight', 'bold');
+                        keyText.textContent = 'FK';
+                        attrG.appendChild(keyText);
+                    }
+
+                    const keyOffset = attr.key ? 26 : 0;
+                    const typeText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    typeText.setAttribute('x', ER_BOX_PADDING + keyOffset);
+                    typeText.setAttribute('y', yOffset + ER_ATTR_HEIGHT / 2 + 4);
+                    typeText.setAttribute('fill', 'var(--text-muted, #888)');
+                    typeText.setAttribute('font-size', '11');
+                    typeText.textContent = attr.type;
+                    attrG.appendChild(typeText);
+
+                    const nameTextEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    nameTextEl.setAttribute('x', ER_BOX_PADDING + keyOffset + 60);
+                    nameTextEl.setAttribute('y', yOffset + ER_ATTR_HEIGHT / 2 + 4);
+                    nameTextEl.setAttribute('fill', 'var(--text-color)');
+                    nameTextEl.setAttribute('font-size', '12');
+                    nameTextEl.textContent = attr.name;
+                    attrG.appendChild(nameTextEl);
+
+                    if (attr.comment) {
+                        const commentText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        commentText.setAttribute('x', dim.width - ER_BOX_PADDING);
+                        commentText.setAttribute('y', yOffset + ER_ATTR_HEIGHT / 2 + 4);
+                        commentText.setAttribute('text-anchor', 'end');
+                        commentText.setAttribute('fill', 'var(--text-muted, #888)');
+                        commentText.setAttribute('font-size', '10');
+                        commentText.setAttribute('font-style', 'italic');
+                        commentText.textContent = '"' + attr.comment + '"';
+                        attrG.appendChild(commentText);
+                    }
+
+                    g.appendChild(attrG);
+                    yOffset += ER_ATTR_HEIGHT;
+                });
+            }
+
+            // Connection grip points (N, S, E, W)
+            const grips = [
+                { cx: dim.width / 2, cy: 0 },
+                { cx: dim.width / 2, cy: dim.height },
+                { cx: dim.width, cy: dim.height / 2 },
+                { cx: 0, cy: dim.height / 2 }
+            ];
+            grips.forEach(gp => {
+                const grip = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                grip.setAttribute('cx', gp.cx);
+                grip.setAttribute('cy', gp.cy);
+                grip.setAttribute('r', '5');
+                grip.classList.add('grip-point');
+                grip.setAttribute('data-entity-name', entity.name);
+                g.appendChild(grip);
+            });
+
+            nodesLayer.appendChild(g);
+        }
+
+        function erRenderRelationship(rel, idx) {
+            const fromEntity = erDiagram.entities.find(e => e.name === rel.fromEntity);
+            const toEntity = erDiagram.entities.find(e => e.name === rel.toEntity);
+            if (!fromEntity || !toEntity) return;
+
+            const fromPos = erEntityPositions[rel.fromEntity];
+            const toPos = erEntityPositions[rel.toEntity];
+            if (!fromPos || !toPos) return;
+
+            const fromDim = erGetEntityBoxDimensions(fromEntity);
+            const toDim = erGetEntityBoxDimensions(toEntity);
+
+            const fromBox = { x: fromPos.x, y: fromPos.y, width: fromDim.width, height: fromDim.height };
+            const toBox = { x: toPos.x, y: toPos.y, width: toDim.width, height: toDim.height };
+
+            const fromCx = fromBox.x + fromBox.width / 2;
+            const fromCy = fromBox.y + fromBox.height / 2;
+            const toCx = toBox.x + toBox.width / 2;
+            const toCy = toBox.y + toBox.height / 2;
+
+            const ports = stGetEdgePorts(fromBox, toBox, fromCx, fromCy, toCx, toCy);
+
+            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.classList.add('er-relationship');
+            g.setAttribute('data-rel-index', idx);
+
+            // Main line
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', ports.x1);
+            line.setAttribute('y1', ports.y1);
+            line.setAttribute('x2', ports.x2);
+            line.setAttribute('y2', ports.y2);
+            line.setAttribute('stroke', erSelectedRelIndex === idx ? 'var(--edge-selected)' : 'var(--edge-color)');
+            line.setAttribute('stroke-width', erSelectedRelIndex === idx ? '3' : '2');
+            if (!rel.isIdentifying) {
+                line.setAttribute('stroke-dasharray', '6,3');
+            }
+            g.appendChild(line);
+
+            // Clickable hitbox
+            const hitbox = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            hitbox.setAttribute('x1', ports.x1);
+            hitbox.setAttribute('y1', ports.y1);
+            hitbox.setAttribute('x2', ports.x2);
+            hitbox.setAttribute('y2', ports.y2);
+            hitbox.setAttribute('stroke', 'transparent');
+            hitbox.setAttribute('stroke-width', '12');
+            hitbox.style.cursor = 'pointer';
+            g.appendChild(hitbox);
+
+            // Cardinality labels near endpoints
+            const dx = ports.x2 - ports.x1;
+            const dy = ports.y2 - ports.y1;
+            const len = Math.hypot(dx, dy);
+            if (len > 0) {
+                const nx = dx / len;
+                const ny = dy / len;
+                const offset = 20;
+
+                const leftLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                leftLabel.setAttribute('x', ports.x1 + nx * offset + ny * 10);
+                leftLabel.setAttribute('y', ports.y1 + ny * offset - nx * 10);
+                leftLabel.setAttribute('text-anchor', 'middle');
+                leftLabel.setAttribute('fill', 'var(--text-color)');
+                leftLabel.setAttribute('font-size', '10');
+                leftLabel.setAttribute('font-weight', 'bold');
+                leftLabel.textContent = erCardinalityLabel(rel.leftCardinality);
+                g.appendChild(leftLabel);
+
+                const rightLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                rightLabel.setAttribute('x', ports.x2 - nx * offset + ny * 10);
+                rightLabel.setAttribute('y', ports.y2 - ny * offset - nx * 10);
+                rightLabel.setAttribute('text-anchor', 'middle');
+                rightLabel.setAttribute('fill', 'var(--text-color)');
+                rightLabel.setAttribute('font-size', '10');
+                rightLabel.setAttribute('font-weight', 'bold');
+                rightLabel.textContent = erCardinalityLabel(rel.rightCardinality);
+                g.appendChild(rightLabel);
+            }
+
+            // Relationship label (diamond shape with text)
+            if (rel.label) {
+                const midX = (ports.x1 + ports.x2) / 2;
+                const midY = (ports.y1 + ports.y2) / 2;
+
+                // Diamond background
+                const diamondSize = 8;
+                const diamond = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                diamond.setAttribute('points',
+                    `${midX},${midY - diamondSize} ${midX + diamondSize},${midY} ${midX},${midY + diamondSize} ${midX - diamondSize},${midY}`
+                );
+                diamond.setAttribute('fill', 'var(--bg-color, white)');
+                diamond.setAttribute('stroke', erSelectedRelIndex === idx ? 'var(--edge-selected)' : 'var(--edge-color)');
+                diamond.setAttribute('stroke-width', '1');
+                g.appendChild(diamond);
+
+                const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                labelText.setAttribute('x', midX);
+                labelText.setAttribute('y', midY - diamondSize - 4);
+                labelText.setAttribute('text-anchor', 'middle');
+                labelText.setAttribute('fill', 'var(--text-color)');
+                labelText.setAttribute('font-size', '11');
+                labelText.setAttribute('font-style', 'italic');
+                labelText.textContent = rel.label;
+                g.appendChild(labelText);
+            }
+
+            edgesLayer.appendChild(g);
+        }
+
+        // ===== ER Diagram Mouse Interaction =====
+
+        svg.addEventListener('mousedown', function(e) {
+            if (!erDiagram) return;
+
+            const entityGroup = e.target.closest('.er-entity');
+            const relGroup = e.target.closest('.er-relationship');
+            const gripPoint = e.target.closest('.grip-point');
+
+            if (gripPoint && gripPoint.getAttribute('data-entity-name')) {
+                // Start drawing a relationship
+                const entityName = gripPoint.getAttribute('data-entity-name');
+                erDrawingRelFrom = entityName;
+                const pos = erEntityPositions[entityName];
+                if (pos) {
+                    const dim = erGetEntityBoxDimensions(erDiagram.entities.find(e => e.name === entityName));
+                    const cx = pos.x + (dim ? dim.width : ER_BOX_MIN_WIDTH) / 2;
+                    const cy = pos.y + (dim ? dim.height : 60) / 2;
+                    tempEdge.setAttribute('x1', cx);
+                    tempEdge.setAttribute('y1', cy);
+                    tempEdge.setAttribute('x2', cx);
+                    tempEdge.setAttribute('y2', cy);
+                    tempEdge.style.display = '';
+                }
+                e.preventDefault();
+                return;
+            }
+
+            if (entityGroup) {
+                const entityName = entityGroup.getAttribute('data-entity-name');
+                erSelectedEntityName = entityName;
+                erSelectedRelIndex = -1;
+
+                // Start dragging
+                const svgPt = getSVGPoint(e);
+                const pos = erEntityPositions[entityName];
+                if (pos) {
+                    erDraggingEntityName = entityName;
+                    erDragOffsetX = svgPt.x - pos.x;
+                    erDragOffsetY = svgPt.y - pos.y;
+                }
+
+                erShowEntityProperties(entityName);
+                renderERDiagram();
+                e.preventDefault();
+                return;
+            }
+
+            if (relGroup) {
+                const idx = parseInt(relGroup.getAttribute('data-rel-index'), 10);
+                erSelectedRelIndex = idx;
+                erSelectedEntityName = null;
+                erShowRelationshipProperties(idx);
+                renderERDiagram();
+                e.preventDefault();
+                return;
+            }
+
+            // Click on empty space
+            erSelectedEntityName = null;
+            erSelectedRelIndex = -1;
+            propertyPanel.classList.remove('visible');
+            renderERDiagram();
+        });
+
+        svg.addEventListener('mousemove', function(e) {
+            if (!erDiagram) return;
+            const svgPt = getSVGPoint(e);
+
+            if (erDrawingRelFrom) {
+                tempEdge.setAttribute('x2', svgPt.x);
+                tempEdge.setAttribute('y2', svgPt.y);
+                return;
+            }
+
+            if (erDraggingEntityName) {
+                const newX = Math.round((svgPt.x - erDragOffsetX) / SNAP_GRID) * SNAP_GRID;
+                const newY = Math.round((svgPt.y - erDragOffsetY) / SNAP_GRID) * SNAP_GRID;
+                erEntityPositions[erDraggingEntityName] = {
+                    ...erEntityPositions[erDraggingEntityName],
+                    x: newX,
+                    y: newY
+                };
+                renderERDiagram();
+            }
+        });
+
+        svg.addEventListener('mouseup', function(e) {
+            if (!erDiagram) return;
+
+            if (erDrawingRelFrom) {
+                const targetGroup = e.target.closest('.er-entity');
+                if (targetGroup) {
+                    const toEntityName = targetGroup.getAttribute('data-entity-name');
+                    if (toEntityName && toEntityName !== erDrawingRelFrom) {
+                        postMessage({
+                            type: 'er_relationshipCreated',
+                            fromEntity: erDrawingRelFrom,
+                            toEntity: toEntityName,
+                            leftCardinality: 'ExactlyOne',
+                            rightCardinality: 'ZeroOrMore',
+                            isIdentifying: false,
+                            label: 'relates'
+                        });
+                    }
+                }
+                tempEdge.style.display = 'none';
+                erDrawingRelFrom = null;
+                return;
+            }
+
+            if (erDraggingEntityName) {
+                erDraggingEntityName = null;
+            }
+        });
+
+        // ===== ER Diagram Double-Click to Edit =====
+
+        svg.addEventListener('dblclick', function(e) {
+            if (!erDiagram) return;
+
+            const entityGroup = e.target.closest('.er-entity');
+            const attrGroup = e.target.closest('.er-attribute');
+            const relGroup = e.target.closest('.er-relationship');
+
+            if (attrGroup) {
+                const entityName = attrGroup.getAttribute('data-entity-name');
+                const attrIdx = parseInt(attrGroup.getAttribute('data-attr-index'), 10);
+                const entity = erDiagram.entities.find(ent => ent.name === entityName);
+                if (entity && attrIdx >= 0 && attrIdx < entity.attributes.length) {
+                    const attr = entity.attributes[attrIdx];
+                    const newName = prompt('Attribute name:', attr.name);
+                    if (newName !== null) {
+                        postMessage({ type: 'er_attributeEdited', entityName: entityName, index: attrIdx, name: newName });
+                    }
+                }
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+
+            if (entityGroup) {
+                const entityName = entityGroup.getAttribute('data-entity-name');
+                const newName = prompt('Entity name:', entityName);
+                if (newName !== null && newName.trim()) {
+                    postMessage({ type: 'er_entityEdited', oldName: entityName, name: newName.trim() });
+                }
+                e.preventDefault();
+                return;
+            }
+
+            if (relGroup) {
+                const idx = parseInt(relGroup.getAttribute('data-rel-index'), 10);
+                if (idx >= 0 && idx < erDiagram.relationships.length) {
+                    const rel = erDiagram.relationships[idx];
+                    const newLabel = prompt('Relationship label:', rel.label || '');
+                    if (newLabel !== null) {
+                        postMessage({ type: 'er_relationshipEdited', index: idx, label: newLabel });
+                    }
+                }
+                e.preventDefault();
+                return;
+            }
+        });
+
+        // ===== ER Diagram Property Panel =====
+
+        function erShowEntityProperties(entityName) {
+            const entity = erDiagram.entities.find(e => e.name === entityName);
+            if (!entity) return;
+
+            const propContent = propertyPanel.querySelector('.property-content');
+            propContent.innerHTML = `
+                <div class="property-row">
+                    <div class="property-label">Name</div>
+                    <input class="property-input" id="er-entity-name" value="${escapeHtml(entity.name)}" />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Attributes</div>
+                    <div style="font-size: 11px; color: var(--text-muted, #888);">${entity.attributes.length} attributes</div>
+                </div>
+            `;
+
+            document.getElementById('er-entity-name').addEventListener('change', function() {
+                if (this.value.trim()) {
+                    postMessage({ type: 'er_entityEdited', oldName: entityName, name: this.value.trim() });
+                }
+            });
+
+            propertyPanel.classList.add('visible');
+        }
+
+        function erShowRelationshipProperties(idx) {
+            if (!erDiagram || idx < 0 || idx >= erDiagram.relationships.length) return;
+            const rel = erDiagram.relationships[idx];
+
+            const cardOptions = ['ExactlyOne', 'ZeroOrOne', 'ZeroOrMore', 'OneOrMore'];
+            const cardLabels = { 'ExactlyOne': '1 (Exactly One)', 'ZeroOrOne': '0..1 (Zero or One)', 'ZeroOrMore': '0..* (Zero or More)', 'OneOrMore': '1..* (One or More)' };
+
+            const leftOpts = cardOptions.map(c => `<option value="${c}" ${rel.leftCardinality === c ? 'selected' : ''}>${cardLabels[c]}</option>`).join('');
+            const rightOpts = cardOptions.map(c => `<option value="${c}" ${rel.rightCardinality === c ? 'selected' : ''}>${cardLabels[c]}</option>`).join('');
+
+            const propContent = propertyPanel.querySelector('.property-content');
+            propContent.innerHTML = `
+                <div class="property-row">
+                    <div class="property-label">From</div>
+                    <input class="property-input" value="${escapeHtml(rel.fromEntity)}" readonly />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">To</div>
+                    <input class="property-input" value="${escapeHtml(rel.toEntity)}" readonly />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Label</div>
+                    <input class="property-input" id="er-rel-label" value="${escapeHtml(rel.label || '')}" placeholder="Relationship label" />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Left Card.</div>
+                    <select class="property-input" id="er-rel-left-card">${leftOpts}</select>
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Right Card.</div>
+                    <select class="property-input" id="er-rel-right-card">${rightOpts}</select>
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Identifying</div>
+                    <select class="property-input" id="er-rel-identifying">
+                        <option value="true" ${rel.isIdentifying ? 'selected' : ''}>Yes (solid line)</option>
+                        <option value="false" ${!rel.isIdentifying ? 'selected' : ''}>No (dashed line)</option>
+                    </select>
+                </div>
+            `;
+
+            document.getElementById('er-rel-label').addEventListener('change', function() {
+                postMessage({ type: 'er_relationshipEdited', index: idx, label: this.value });
+            });
+            document.getElementById('er-rel-left-card').addEventListener('change', function() {
+                postMessage({ type: 'er_relationshipEdited', index: idx, leftCardinality: this.value });
+            });
+            document.getElementById('er-rel-right-card').addEventListener('change', function() {
+                postMessage({ type: 'er_relationshipEdited', index: idx, rightCardinality: this.value });
+            });
+            document.getElementById('er-rel-identifying').addEventListener('change', function() {
+                postMessage({ type: 'er_relationshipEdited', index: idx, isIdentifying: this.value === 'true' });
+            });
+
+            propertyPanel.classList.add('visible');
+        }
+
+        // ===== ER Diagram Context Menu =====
+
+        svg.addEventListener('contextmenu', function(e) {
+            if (!erDiagram) return;
+            e.preventDefault();
+            e.stopPropagation();
+
+            const entityGroup = e.target.closest('.er-entity');
+            const attrGroup = e.target.closest('.er-attribute');
+            const relGroup = e.target.closest('.er-relationship');
+
+            contextMenu.innerHTML = '';
+
+            if (attrGroup) {
+                const entityName = attrGroup.getAttribute('data-entity-name');
+                const attrIdx = parseInt(attrGroup.getAttribute('data-attr-index'), 10);
+
+                addErContextMenuItem('Edit Attribute', () => {
+                    const entity = erDiagram.entities.find(ent => ent.name === entityName);
+                    if (entity && attrIdx >= 0 && attrIdx < entity.attributes.length) {
+                        const attr = entity.attributes[attrIdx];
+                        const newName = prompt('Attribute name:', attr.name);
+                        if (newName !== null) {
+                            postMessage({ type: 'er_attributeEdited', entityName: entityName, index: attrIdx, name: newName });
+                        }
+                    }
+                });
+                addErContextMenuItem('Delete Attribute', () => {
+                    postMessage({ type: 'er_attributeDeleted', entityName: entityName, index: attrIdx });
+                });
+            } else if (entityGroup) {
+                const entityName = entityGroup.getAttribute('data-entity-name');
+                erSelectedEntityName = entityName;
+
+                addErContextMenuItem('Edit Entity', () => {
+                    const newName = prompt('Entity name:', entityName);
+                    if (newName !== null && newName.trim()) {
+                        postMessage({ type: 'er_entityEdited', oldName: entityName, name: newName.trim() });
+                    }
+                });
+                addErContextMenuItem('Add Attribute', () => {
+                    postMessage({ type: 'er_attributeAdded', entityName: entityName, type: 'string', name: 'newField' });
+                });
+                addErContextMenuSeparator();
+                addErContextMenuItem('Delete Entity', () => {
+                    postMessage({ type: 'er_entityDeleted', name: entityName });
+                });
+            } else if (relGroup) {
+                const idx = parseInt(relGroup.getAttribute('data-rel-index'), 10);
+                erSelectedRelIndex = idx;
+
+                addErContextMenuItem('Edit Relationship', () => {
+                    if (idx >= 0 && idx < erDiagram.relationships.length) {
+                        const rel = erDiagram.relationships[idx];
+                        const newLabel = prompt('Relationship label:', rel.label || '');
+                        if (newLabel !== null) {
+                            postMessage({ type: 'er_relationshipEdited', index: idx, label: newLabel });
+                        }
+                    }
+                });
+                addErContextMenuSeparator();
+                addErContextMenuItem('Delete Relationship', () => {
+                    postMessage({ type: 'er_relationshipDeleted', index: idx });
+                });
+            } else {
+                // Empty space
+                addErContextMenuItem('Add Entity', () => {
+                    const svgPt = getSVGPoint(e);
+                    const newName = 'Entity' + (erDiagram.entities.length + 1);
+                    erEntityPositions[newName] = {
+                        x: Math.round(svgPt.x / SNAP_GRID) * SNAP_GRID,
+                        y: Math.round(svgPt.y / SNAP_GRID) * SNAP_GRID
+                    };
+                    postMessage({ type: 'er_entityCreated', name: newName });
+                });
+            }
+
+            contextMenu.style.left = e.clientX + 'px';
+            contextMenu.style.top = e.clientY + 'px';
+            contextMenu.classList.add('visible');
+            renderERDiagram();
+        });
+
+        function addErContextMenuItem(label, onClick) {
+            const item = document.createElement('div');
+            item.classList.add('context-menu-item');
+            item.textContent = label;
+            item.addEventListener('click', function(e) {
+                e.stopPropagation();
+                contextMenu.classList.remove('visible');
+                onClick();
+            });
+            contextMenu.appendChild(item);
+        }
+
+        function addErContextMenuSeparator() {
+            const sep = document.createElement('div');
+            sep.classList.add('context-menu-separator');
+            contextMenu.appendChild(sep);
+        }
+
+        // Delete key for ER diagram elements
+        document.addEventListener('keydown', function(e) {
+            if (!erDiagram) return;
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) return;
+
+                if (erSelectedEntityName) {
+                    postMessage({ type: 'er_entityDeleted', name: erSelectedEntityName });
+                    erSelectedEntityName = null;
+                    e.preventDefault();
+                } else if (erSelectedRelIndex >= 0) {
+                    postMessage({ type: 'er_relationshipDeleted', index: erSelectedRelIndex });
+                    erSelectedRelIndex = -1;
+                    e.preventDefault();
+                }
+            }
+        });
+
         // ========== External API for C# ==========
 
         window.updateNode = function(nodeId, props) {

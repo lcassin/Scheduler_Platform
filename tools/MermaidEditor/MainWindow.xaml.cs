@@ -120,6 +120,8 @@ public partial class MainWindow : Window
     private FlowchartModel? _currentFlowchartModel;
     private SequenceDiagramModel? _currentSequenceDiagramModel;
     private ClassDiagramModel? _currentClassDiagramModel;
+    private StateDiagramModel? _currentStateDiagramModel;
+    private ERDiagramModel? _currentERDiagramModel;
     private bool _isVisualEditorUpdating; // Prevent re-entrant updates between text <-> visual
 
     private const string DefaultMermaidCode= @"flowchart TD
@@ -4586,6 +4588,8 @@ Console.WriteLine(""Hello, World!"");
             _visualEditorBridge.ModelChanged += VisualEditorBridge_ModelChanged;
             _visualEditorBridge.SequenceModelChanged += VisualEditorBridge_SequenceModelChanged;
             _visualEditorBridge.ClassDiagramModelChanged += VisualEditorBridge_ClassDiagramModelChanged;
+            _visualEditorBridge.StateDiagramModelChanged += VisualEditorBridge_StateDiagramModelChanged;
+            _visualEditorBridge.ERDiagramModelChanged += VisualEditorBridge_ERDiagramModelChanged;
             _visualEditorBridge.EditorReady += VisualEditorBridge_EditorReady;
 
                 // Apply current theme to visual editor
@@ -4617,7 +4621,15 @@ Console.WriteLine(""Hello, World!"");
         // If we're already in Visual or Split mode and have a model, send it
         if (_visualEditorMode != VisualEditorMode.Text)
         {
-            if (_currentClassDiagramModel != null)
+            if (_currentStateDiagramModel != null)
+            {
+                await _visualEditorBridge.UpdateStateDiagramModelAsync(_currentStateDiagramModel);
+            }
+            else if (_currentERDiagramModel != null)
+            {
+                await _visualEditorBridge.UpdateERDiagramModelAsync(_currentERDiagramModel);
+            }
+            else if (_currentClassDiagramModel != null)
             {
                 await _visualEditorBridge.UpdateClassDiagramModelAsync(_currentClassDiagramModel);
             }
@@ -4747,6 +4759,82 @@ Console.WriteLine(""Hello, World!"");
     }
 
     /// <summary>
+    /// Called when the visual editor modifies the StateDiagramModel (state created, transition added, etc.).
+    /// Serializes the model back to text and updates the code editor + preview.
+    /// </summary>
+    private void VisualEditorBridge_StateDiagramModelChanged(object? sender, StateDiagramModelChangedEventArgs e)
+    {
+        if (_isVisualEditorUpdating) return;
+
+        _isVisualEditorUpdating = true;
+        try
+        {
+            // Serialize the state diagram model back to Mermaid text
+            var text = MermaidSerializer.SerializeStateDiagram(e.Model);
+
+            // Update the code editor text without triggering a re-parse loop
+            if (_visualEditorMode == VisualEditorMode.Visual || _visualEditorMode == VisualEditorMode.Split)
+            {
+                _isSwitchingDocuments = true; // Suppress dirty flag from programmatic text change
+                try { CodeEditor.Text = text; } finally { _isSwitchingDocuments = false; }
+
+                // Mark document as dirty
+                _isDirty = true;
+                if (_activeDocument != null)
+                {
+                    _activeDocument.IsDirty = true;
+                }
+                UpdateTitle();
+
+                // Re-render preview
+                RenderPreview();
+            }
+        }
+        finally
+        {
+            _isVisualEditorUpdating = false;
+        }
+    }
+
+    /// <summary>
+    /// Called when the visual editor modifies the ERDiagramModel (entity created, relationship added, etc.).
+    /// Serializes the model back to text and updates the code editor + preview.
+    /// </summary>
+    private void VisualEditorBridge_ERDiagramModelChanged(object? sender, ERDiagramModelChangedEventArgs e)
+    {
+        if (_isVisualEditorUpdating) return;
+
+        _isVisualEditorUpdating = true;
+        try
+        {
+            // Serialize the ER diagram model back to Mermaid text
+            var text = MermaidSerializer.SerializeERDiagram(e.Model);
+
+            // Update the code editor text without triggering a re-parse loop
+            if (_visualEditorMode == VisualEditorMode.Visual || _visualEditorMode == VisualEditorMode.Split)
+            {
+                _isSwitchingDocuments = true; // Suppress dirty flag from programmatic text change
+                try { CodeEditor.Text = text; } finally { _isSwitchingDocuments = false; }
+
+                // Mark document as dirty
+                _isDirty = true;
+                if (_activeDocument != null)
+                {
+                    _activeDocument.IsDirty = true;
+                }
+                UpdateTitle();
+
+                // Re-render preview
+                RenderPreview();
+            }
+        }
+        finally
+        {
+            _isVisualEditorUpdating = false;
+        }
+    }
+
+    /// <summary>
     /// Updates the visibility of the visual editor mode toolbar based on the current render mode.
     /// Only visible for Mermaid files.
     /// </summary>
@@ -4818,7 +4906,15 @@ Console.WriteLine(""Hello, World!"");
             try
             {
                 string? text = null;
-                if (_currentClassDiagramModel != null)
+                if (_currentStateDiagramModel != null)
+                {
+                    text = MermaidSerializer.SerializeStateDiagram(_currentStateDiagramModel);
+                }
+                else if (_currentERDiagramModel != null)
+                {
+                    text = MermaidSerializer.SerializeERDiagram(_currentERDiagramModel);
+                }
+                else if (_currentClassDiagramModel != null)
                 {
                     text = MermaidSerializer.SerializeClassDiagram(_currentClassDiagramModel);
                 }
@@ -4895,12 +4991,40 @@ Console.WriteLine(""Hello, World!"");
             _isVisualEditorUpdating = true;
             var text = CodeEditor.Text;
 
-            if (IsClassDiagram(text))
+            if (IsStateDiagram(text))
+            {
+                var parsed = MermaidParser.ParseStateDiagram(text);
+                if (parsed != null)
+                {
+                    _currentStateDiagramModel = parsed;
+                    _currentERDiagramModel = null;
+                    _currentClassDiagramModel = null;
+                    _currentSequenceDiagramModel = null;
+                    _currentFlowchartModel = null;
+                    await _visualEditorBridge.UpdateStateDiagramModelAsync(_currentStateDiagramModel);
+                }
+            }
+            else if (IsERDiagram(text))
+            {
+                var parsed = MermaidParser.ParseERDiagram(text);
+                if (parsed != null)
+                {
+                    _currentERDiagramModel = parsed;
+                    _currentStateDiagramModel = null;
+                    _currentClassDiagramModel = null;
+                    _currentSequenceDiagramModel = null;
+                    _currentFlowchartModel = null;
+                    await _visualEditorBridge.UpdateERDiagramModelAsync(_currentERDiagramModel);
+                }
+            }
+            else if (IsClassDiagram(text))
             {
                 var parsed = MermaidParser.ParseClassDiagram(text);
                 if (parsed != null)
                 {
                     _currentClassDiagramModel = parsed;
+                    _currentStateDiagramModel = null;
+                    _currentERDiagramModel = null;
                     _currentSequenceDiagramModel = null;
                     _currentFlowchartModel = null;
                     await _visualEditorBridge.UpdateClassDiagramModelAsync(_currentClassDiagramModel);
@@ -4912,6 +5036,8 @@ Console.WriteLine(""Hello, World!"");
                 if (parsed != null)
                 {
                     _currentSequenceDiagramModel = parsed;
+                    _currentStateDiagramModel = null;
+                    _currentERDiagramModel = null;
                     _currentClassDiagramModel = null;
                     _currentFlowchartModel = null;
                     await _visualEditorBridge.UpdateSequenceModelAsync(_currentSequenceDiagramModel);
@@ -4923,6 +5049,8 @@ Console.WriteLine(""Hello, World!"");
                 if (parsed != null)
                 {
                     _currentFlowchartModel = parsed;
+                    _currentStateDiagramModel = null;
+                    _currentERDiagramModel = null;
                     _currentSequenceDiagramModel = null;
                     _currentClassDiagramModel = null;
                     await _visualEditorBridge.UpdateModelAsync(_currentFlowchartModel);
@@ -4949,8 +5077,8 @@ Console.WriteLine(""Hello, World!"");
         if (_currentRenderMode != RenderMode.Mermaid) return false;
         var text = CodeEditor.Text;
         if (string.IsNullOrWhiteSpace(text)) return true; // empty file — allow visual editor
-        // Flowcharts, sequence diagrams, and class diagrams have visual editing support
-        return IsFlowchart(text) || IsSequenceDiagram(text) || IsClassDiagram(text);
+        // Flowcharts, sequence diagrams, class diagrams, state diagrams, and ER diagrams have visual editing support
+        return IsFlowchart(text) || IsSequenceDiagram(text) || IsClassDiagram(text) || IsStateDiagram(text) || IsERDiagram(text);
     }
 
     /// <summary>
@@ -8141,6 +8269,8 @@ Console.WriteLine(""Hello, World!"");
         _currentFlowchartModel = null;
         _currentSequenceDiagramModel = null;
         _currentClassDiagramModel = null;
+        _currentStateDiagramModel = null;
+        _currentERDiagramModel = null;
         
         // Switch to new document
         _activeDocument = doc;
