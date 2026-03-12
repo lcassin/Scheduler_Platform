@@ -914,4 +914,212 @@ public static class MermaidSerializer
             }
         }
     }
+
+    // =============================================
+    // State Diagram Serializer (Phase 2.3)
+    // =============================================
+
+    /// <summary>
+    /// Serializes a StateDiagramModel to valid Mermaid state diagram text.
+    /// </summary>
+    /// <param name="model">The state diagram model to serialize.</param>
+    /// <returns>Valid Mermaid state diagram text.</returns>
+    public static string SerializeStateDiagram(StateDiagramModel model)
+    {
+        if (model == null)
+            return string.Empty;
+
+        var sb = new StringBuilder();
+
+        // Write preamble lines (config directives, frontmatter, etc.)
+        foreach (var preambleLine in model.PreambleLines)
+        {
+            sb.AppendLine(preambleLine);
+        }
+
+        // Write comments that appeared before the declaration
+        WriteStateDiagramCommentsBeforeLine(sb, model, model.DeclarationLineIndex);
+
+        // Write the stateDiagram declaration
+        sb.AppendLine(model.IsV2 ? "stateDiagram-v2" : "stateDiagram");
+
+        // Write direction if specified
+        if (!string.IsNullOrEmpty(model.Direction))
+        {
+            sb.AppendLine($"{Indent}direction {model.Direction}");
+        }
+
+        // Write state definitions (explicit ones with labels, special types, composites)
+        foreach (var state in model.States)
+        {
+            WriteStateDefinition(sb, state, Indent);
+        }
+
+        // Write transitions
+        foreach (var transition in model.Transitions)
+        {
+            sb.AppendLine($"{Indent}{FormatStateTransition(transition)}");
+        }
+
+        // Write notes
+        foreach (var note in model.Notes)
+        {
+            WriteStateNote(sb, note, Indent);
+        }
+
+        // Write style definitions (classDef)
+        foreach (var style in model.Styles.Where(s => s.IsClassDef))
+        {
+            sb.AppendLine($"{Indent}classDef {style.Target} {style.StyleString}");
+        }
+
+        // Write inline style definitions (style)
+        foreach (var style in model.Styles.Where(s => !s.IsClassDef))
+        {
+            sb.AppendLine($"{Indent}style {style.Target} {style.StyleString}");
+        }
+
+        // Write trailing comments
+        WriteStateDiagramTrailingComments(sb, model);
+
+        return sb.ToString().TrimEnd('\r', '\n') + Environment.NewLine;
+    }
+
+    /// <summary>
+    /// Writes a state definition, including composite states with nested content.
+    /// </summary>
+    private static void WriteStateDefinition(StringBuilder sb, StateDefinition state, string indent)
+    {
+        // Special state types (fork, join, choice)
+        if (state.Type == StateType.Fork || state.Type == StateType.Join || state.Type == StateType.Choice)
+        {
+            var typeStr = state.Type switch
+            {
+                StateType.Fork => "fork",
+                StateType.Join => "join",
+                StateType.Choice => "choice",
+                _ => "fork"
+            };
+            sb.AppendLine($"{indent}state {state.Id} <<{typeStr}>>");
+            return;
+        }
+
+        // Composite state
+        if (state.Type == StateType.Composite)
+        {
+            if (!string.IsNullOrEmpty(state.Label))
+            {
+                sb.AppendLine($"{indent}state \"{state.Label}\" as {state.Id} {{");
+            }
+            else
+            {
+                sb.AppendLine($"{indent}state {state.Id} {{");
+            }
+
+            var innerIndent = indent + Indent;
+
+            // Write nested states
+            foreach (var nested in state.NestedStates)
+            {
+                WriteStateDefinition(sb, nested, innerIndent);
+            }
+
+            // Write nested transitions
+            foreach (var transition in state.NestedTransitions)
+            {
+                sb.AppendLine($"{innerIndent}{FormatStateTransition(transition)}");
+            }
+
+            sb.AppendLine($"{indent}}}");
+            return;
+        }
+
+        // Simple state with label (using "as" syntax or colon syntax)
+        if (!string.IsNullOrEmpty(state.Label) && state.IsExplicit)
+        {
+            sb.AppendLine($"{indent}state \"{state.Label}\" as {state.Id}");
+            return;
+        }
+
+        // Simple state without label — only write if explicitly declared
+        // (states inferred from transitions don't need explicit declarations)
+        // Skip writing — the state will appear in transitions
+    }
+
+    /// <summary>
+    /// Formats a state transition for serialization.
+    /// </summary>
+    private static string FormatStateTransition(StateTransition transition)
+    {
+        var sb = new StringBuilder();
+        sb.Append(transition.FromId);
+        sb.Append(" --> ");
+        sb.Append(transition.ToId);
+
+        if (!string.IsNullOrEmpty(transition.Label))
+        {
+            sb.Append($" : {transition.Label}");
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Writes a state note for serialization.
+    /// Handles both single-line and multi-line notes.
+    /// </summary>
+    private static void WriteStateNote(StringBuilder sb, StateNote note, string indent)
+    {
+        var posStr = note.Position == StateNotePosition.LeftOf ? "left" : "right";
+
+        if (note.Text.Contains('\n'))
+        {
+            // Multi-line note
+            sb.AppendLine($"{indent}note {posStr} of {note.StateId}");
+            foreach (var line in note.Text.Split('\n'))
+            {
+                sb.AppendLine($"{indent}{Indent}{line}");
+            }
+            sb.AppendLine($"{indent}end note");
+        }
+        else
+        {
+            // Single-line note
+            sb.AppendLine($"{indent}note {posStr} of {note.StateId} : {note.Text}");
+        }
+    }
+
+    /// <summary>
+    /// Writes comments that appeared before a given line in the state diagram.
+    /// </summary>
+    private static void WriteStateDiagramCommentsBeforeLine(StringBuilder sb, StateDiagramModel model, int lineIndex)
+    {
+        foreach (var comment in model.Comments.Where(c => c.OriginalLineIndex < lineIndex))
+        {
+            sb.AppendLine($"%%{comment.Text}");
+        }
+    }
+
+    /// <summary>
+    /// Writes trailing comments for a state diagram.
+    /// </summary>
+    private static void WriteStateDiagramTrailingComments(StringBuilder sb, StateDiagramModel model)
+    {
+        if (model.Comments.Count > 0)
+        {
+            var trailingComments = model.Comments
+                .Where(c => c.OriginalLineIndex > model.DeclarationLineIndex)
+                .OrderBy(c => c.OriginalLineIndex)
+                .ToList();
+
+            if (trailingComments.Count > 0)
+            {
+                sb.AppendLine();
+                foreach (var comment in trailingComments)
+                {
+                    sb.AppendLine($"%%{comment.Text}");
+                }
+            }
+        }
+    }
 }

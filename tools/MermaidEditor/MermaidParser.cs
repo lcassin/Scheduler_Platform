@@ -1751,4 +1751,415 @@ public static class MermaidParser
             namespaceStack.Peek().ClassIds.Add(classId);
         }
     }
+
+    // =============================================
+    // State Diagram Parser (Phase 2.3)
+    // =============================================
+
+    // --- State diagram declaration ---
+    // stateDiagram-v2 or stateDiagram
+    private static readonly Regex StateDiagramDeclaration = new(
+        @"^\s*stateDiagram(-v2)?\s*$", RegexOptions.Compiled);
+
+    // --- State declaration with label ---
+    // state "Label" as s1
+    private static readonly Regex StateAsPattern = new(
+        @"^\s*state\s+""([^""]+)""\s+as\s+([\w-]+)\s*$", RegexOptions.Compiled);
+
+    // --- State with colon label ---
+    // s1 : Label text
+    private static readonly Regex StateColonLabelPattern = new(
+        @"^\s*([\w-]+)\s*:\s*(.+)$", RegexOptions.Compiled);
+
+    // --- Composite state start ---
+    // state StateName {
+    // state "Label" as StateName {
+    private static readonly Regex CompositeStatePattern = new(
+        @"^\s*state\s+(?:""([^""]+)""\s+as\s+)?([\w-]+)\s*\{\s*$", RegexOptions.Compiled);
+
+    // --- Special state types ---
+    // state fork_state <<fork>>
+    // state join_state <<join>>
+    // state choice_state <<choice>>
+    private static readonly Regex SpecialStatePattern = new(
+        @"^\s*state\s+([\w-]+)\s+<<(fork|join|choice)>>\s*$", RegexOptions.Compiled);
+
+    // --- Transition pattern ---
+    // [*] --> s1
+    // s1 --> s2 : label
+    // s1 --> [*]
+    private static readonly Regex StateTransitionPattern = new(
+        @"^\s*(\[\*\]|[\w-]+)\s*-->\s*(\[\*\]|[\w-]+)(?:\s*:\s*(.+))?\s*$", RegexOptions.Compiled);
+
+    // --- Note patterns for state diagrams ---
+    // note right of s1 : single line text
+    // note right of s1
+    //   multi-line text
+    // end note
+    private static readonly Regex StateNoteInlinePattern = new(
+        @"^\s*note\s+(right|left)\s+of\s+([\w-]+)\s*:\s*(.+)$", RegexOptions.Compiled);
+    private static readonly Regex StateNoteStartPattern = new(
+        @"^\s*note\s+(right|left)\s+of\s+([\w-]+)\s*$", RegexOptions.Compiled);
+    private static readonly Regex StateNoteEndPattern = new(
+        @"^\s*end\s+note\s*$", RegexOptions.Compiled);
+
+    // --- Direction pattern for state diagrams ---
+    private static readonly Regex StateDirectionPattern = new(
+        @"^\s*direction\s+(TB|TD|BT|RL|LR)\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // --- Style patterns for state diagrams ---
+    private static readonly Regex StateStylePattern = new(@"^\s*style\s+(.+?)\s+(.+)$", RegexOptions.Compiled);
+    private static readonly Regex StateClassDefPattern = new(@"^\s*classDef\s+(\S+)\s+(.+)$", RegexOptions.Compiled);
+
+    // --- Close brace for composite states ---
+    private static readonly Regex CloseBracePattern = new(@"^\s*\}\s*$", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Parses Mermaid state diagram text into a StateDiagramModel.
+    /// </summary>
+    /// <param name="text">The Mermaid state diagram source text.</param>
+    /// <returns>A populated StateDiagramModel, or null if the text is not a valid state diagram.</returns>
+    public static StateDiagramModel? ParseStateDiagram(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        var lines = text.Split('\n');
+        var model = new StateDiagramModel();
+        var knownStates = new HashSet<string>(StringComparer.Ordinal);
+        bool foundDeclaration = false;
+
+        // Stack for nested composite state parsing
+        var compositeStack = new Stack<StateDefinition>();
+
+        // Multi-line note tracking
+        bool inMultiLineNote = false;
+        string noteStateId = string.Empty;
+        StateNotePosition notePosition = StateNotePosition.RightOf;
+        var noteTextLines = new List<string>();
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var rawLine = lines[i];
+            var line = rawLine.TrimEnd('\r');
+
+            // Skip empty lines
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            // Check for comments (before declaration check)
+            var commentMatch = CommentPattern.Match(line);
+            if (commentMatch.Success)
+            {
+                model.Comments.Add(new CommentEntry
+                {
+                    Text = commentMatch.Groups[1].Value,
+                    OriginalLineIndex = i
+                });
+                continue;
+            }
+
+            // Handle multi-line note content
+            if (inMultiLineNote)
+            {
+                var endNoteMatch = StateNoteEndPattern.Match(line);
+                if (endNoteMatch.Success)
+                {
+                    // Finish the multi-line note
+                    var note = new StateNote
+                    {
+                        StateId = noteStateId,
+                        Position = notePosition,
+                        Text = string.Join("\n", noteTextLines)
+                    };
+                    if (compositeStack.Count > 0)
+                    {
+                        // Note inside a composite state — not directly supported in model,
+                        // add to top-level notes with state context
+                        model.Notes.Add(note);
+                    }
+                    else
+                    {
+                        model.Notes.Add(note);
+                    }
+                    inMultiLineNote = false;
+                    noteTextLines.Clear();
+                    continue;
+                }
+                noteTextLines.Add(line.Trim());
+                continue;
+            }
+
+            // Look for the stateDiagram declaration
+            if (!foundDeclaration)
+            {
+                // Preamble lines (frontmatter, config directives, etc.)
+                var declMatch = StateDiagramDeclaration.Match(line);
+                if (declMatch.Success)
+                {
+                    foundDeclaration = true;
+                    model.DeclarationLineIndex = i;
+                    model.IsV2 = declMatch.Groups[1].Success; // -v2 suffix present
+                    continue;
+                }
+
+                // Store as preamble
+                model.PreambleLines.Add(line);
+                continue;
+            }
+
+            // --- After declaration: parse state diagram content ---
+
+            // Direction
+            var dirMatch = StateDirectionPattern.Match(line);
+            if (dirMatch.Success)
+            {
+                if (compositeStack.Count == 0)
+                {
+                    model.Direction = dirMatch.Groups[1].Value.ToUpperInvariant();
+                }
+                continue;
+            }
+
+            // Close brace (end of composite state)
+            var closeBraceMatch = CloseBracePattern.Match(line);
+            if (closeBraceMatch.Success)
+            {
+                if (compositeStack.Count > 0)
+                {
+                    compositeStack.Pop();
+                }
+                continue;
+            }
+
+            // Special state types: <<fork>>, <<join>>, <<choice>>
+            var specialMatch = SpecialStatePattern.Match(line);
+            if (specialMatch.Success)
+            {
+                var stateId = specialMatch.Groups[1].Value;
+                var typeStr = specialMatch.Groups[2].Value.ToLowerInvariant();
+                var stateType = typeStr switch
+                {
+                    "fork" => StateType.Fork,
+                    "join" => StateType.Join,
+                    "choice" => StateType.Choice,
+                    _ => StateType.Simple
+                };
+
+                var stateDef = EnsureStateExists(model, knownStates, stateId, compositeStack);
+                stateDef.Type = stateType;
+                stateDef.IsExplicit = true;
+                continue;
+            }
+
+            // Composite state start: state StateName {
+            var compositeMatch = CompositeStatePattern.Match(line);
+            if (compositeMatch.Success)
+            {
+                var label = compositeMatch.Groups[1].Success ? compositeMatch.Groups[1].Value : null;
+                var stateId = compositeMatch.Groups[2].Value;
+
+                var stateDef = EnsureStateExists(model, knownStates, stateId, compositeStack);
+                stateDef.Type = StateType.Composite;
+                stateDef.IsExplicit = true;
+                if (label != null)
+                {
+                    stateDef.Label = label;
+                }
+
+                compositeStack.Push(stateDef);
+                continue;
+            }
+
+            // State with "as" label: state "Label" as s1
+            var asMatch = StateAsPattern.Match(line);
+            if (asMatch.Success)
+            {
+                var label = asMatch.Groups[1].Value;
+                var stateId = asMatch.Groups[2].Value;
+
+                var stateDef = EnsureStateExists(model, knownStates, stateId, compositeStack);
+                stateDef.Label = label;
+                stateDef.IsExplicit = true;
+                continue;
+            }
+
+            // Inline note: note right of s1 : text
+            var noteInlineMatch = StateNoteInlinePattern.Match(line);
+            if (noteInlineMatch.Success)
+            {
+                var posStr = noteInlineMatch.Groups[1].Value.ToLowerInvariant();
+                var stateId = noteInlineMatch.Groups[2].Value;
+                var noteText = noteInlineMatch.Groups[3].Value.Trim();
+                var pos = posStr == "left" ? StateNotePosition.LeftOf : StateNotePosition.RightOf;
+
+                model.Notes.Add(new StateNote
+                {
+                    StateId = stateId,
+                    Position = pos,
+                    Text = noteText
+                });
+
+                // Ensure state exists
+                EnsureStateExists(model, knownStates, stateId, compositeStack);
+                continue;
+            }
+
+            // Multi-line note start: note right of s1
+            var noteStartMatch = StateNoteStartPattern.Match(line);
+            if (noteStartMatch.Success)
+            {
+                var posStr = noteStartMatch.Groups[1].Value.ToLowerInvariant();
+                noteStateId = noteStartMatch.Groups[2].Value;
+                notePosition = posStr == "left" ? StateNotePosition.LeftOf : StateNotePosition.RightOf;
+                inMultiLineNote = true;
+                noteTextLines.Clear();
+
+                // Ensure state exists
+                EnsureStateExists(model, knownStates, noteStateId, compositeStack);
+                continue;
+            }
+
+            // Style: classDef
+            var classDefMatch = StateClassDefPattern.Match(line);
+            if (classDefMatch.Success)
+            {
+                model.Styles.Add(new StyleDefinition
+                {
+                    Target = classDefMatch.Groups[1].Value,
+                    StyleString = classDefMatch.Groups[2].Value,
+                    IsClassDef = true
+                });
+                continue;
+            }
+
+            // Style: style
+            var styleMatch = StateStylePattern.Match(line);
+            if (styleMatch.Success)
+            {
+                model.Styles.Add(new StyleDefinition
+                {
+                    Target = styleMatch.Groups[1].Value,
+                    StyleString = styleMatch.Groups[2].Value,
+                    IsClassDef = false
+                });
+                continue;
+            }
+
+            // Transition: s1 --> s2 : label
+            var transMatch = StateTransitionPattern.Match(line);
+            if (transMatch.Success)
+            {
+                var fromId = transMatch.Groups[1].Value;
+                var toId = transMatch.Groups[2].Value;
+                var label = transMatch.Groups[3].Success ? transMatch.Groups[3].Value.Trim() : null;
+
+                var transition = new StateTransition
+                {
+                    FromId = fromId,
+                    ToId = toId,
+                    Label = label
+                };
+
+                if (compositeStack.Count > 0)
+                {
+                    compositeStack.Peek().NestedTransitions.Add(transition);
+                }
+                else
+                {
+                    model.Transitions.Add(transition);
+                }
+
+                // Ensure states exist (unless [*])
+                if (fromId != "[*]")
+                    EnsureStateExists(model, knownStates, fromId, compositeStack);
+                if (toId != "[*]")
+                    EnsureStateExists(model, knownStates, toId, compositeStack);
+
+                continue;
+            }
+
+            // State with colon label: s1 : Label text
+            var colonMatch = StateColonLabelPattern.Match(line);
+            if (colonMatch.Success)
+            {
+                var stateId = colonMatch.Groups[1].Value;
+                var label = colonMatch.Groups[2].Value.Trim();
+
+                // Skip keywords that look like state:label
+                if (stateId == "state" || stateId == "note" || stateId == "direction" ||
+                    stateId == "classDef" || stateId == "style")
+                    continue;
+
+                var stateDef = EnsureStateExists(model, knownStates, stateId, compositeStack);
+                stateDef.Label = label;
+                stateDef.IsExplicit = true;
+                continue;
+            }
+        }
+
+        return foundDeclaration ? model : null;
+    }
+
+    /// <summary>
+    /// Ensures a state exists in the model (or in a composite parent), creating it if not already known.
+    /// Returns the existing or newly created state definition.
+    /// </summary>
+    private static StateDefinition EnsureStateExists(StateDiagramModel model, HashSet<string> knownStates,
+        string stateId, Stack<StateDefinition> compositeStack)
+    {
+        // Check if state already exists
+        if (knownStates.Contains(stateId))
+        {
+            // Find and return existing state
+            if (compositeStack.Count > 0)
+            {
+                var parent = compositeStack.Peek();
+                var existing = parent.NestedStates.Find(s => s.Id == stateId);
+                if (existing != null) return existing;
+            }
+            var topLevel = model.States.Find(s => s.Id == stateId);
+            if (topLevel != null) return topLevel;
+
+            // Search nested states recursively
+            foreach (var state in model.States)
+            {
+                var found = FindStateRecursive(state, stateId);
+                if (found != null) return found;
+            }
+
+            // Shouldn't happen, but create a new one as fallback
+            var fallback = new StateDefinition { Id = stateId };
+            model.States.Add(fallback);
+            return fallback;
+        }
+
+        knownStates.Add(stateId);
+        var newState = new StateDefinition { Id = stateId };
+
+        if (compositeStack.Count > 0)
+        {
+            compositeStack.Peek().NestedStates.Add(newState);
+        }
+        else
+        {
+            model.States.Add(newState);
+        }
+
+        return newState;
+    }
+
+    /// <summary>
+    /// Recursively finds a state by ID within nested states.
+    /// </summary>
+    private static StateDefinition? FindStateRecursive(StateDefinition parent, string stateId)
+    {
+        foreach (var nested in parent.NestedStates)
+        {
+            if (nested.Id == stateId) return nested;
+            var found = FindStateRecursive(nested, stateId);
+            if (found != null) return found;
+        }
+        return null;
+    }
 }

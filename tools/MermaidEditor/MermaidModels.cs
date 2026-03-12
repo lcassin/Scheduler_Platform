@@ -937,3 +937,182 @@ public class ClassDiagramCssClass
     /// </summary>
     public string ClassName { get; set; } = string.Empty;
 }
+
+// =============================================
+// State Diagram Models (Phase 2.3)
+// =============================================
+
+/// <summary>
+/// Represents a complete Mermaid state diagram (stateDiagram-v2).
+/// Contains states, transitions, notes, and composite states.
+/// </summary>
+public class StateDiagramModel
+{
+    /// <summary>
+    /// Optional direction for the state diagram (e.g., "LR", "TB").
+    /// </summary>
+    public string? Direction { get; set; }
+
+    /// <summary>
+    /// All state definitions in the diagram.
+    /// </summary>
+    public List<StateDefinition> States { get; set; } = new();
+
+    /// <summary>
+    /// All transitions in the diagram.
+    /// </summary>
+    public List<StateTransition> Transitions { get; set; } = new();
+
+    /// <summary>
+    /// Notes attached to states.
+    /// </summary>
+    public List<StateNote> Notes { get; set; } = new();
+
+    /// <summary>
+    /// Comments preserved from the original text.
+    /// </summary>
+    public List<CommentEntry> Comments { get; set; } = new();
+
+    /// <summary>
+    /// Lines that appeared before the stateDiagram declaration (config directives, frontmatter, etc.).
+    /// </summary>
+    public List<string> PreambleLines { get; set; } = new();
+
+    /// <summary>
+    /// The line index of the stateDiagram declaration in the original text.
+    /// Used for comment placement during serialization.
+    /// </summary>
+    public int DeclarationLineIndex { get; set; }
+
+    /// <summary>
+    /// Style definitions (classDef and style directives).
+    /// </summary>
+    public List<StyleDefinition> Styles { get; set; } = new();
+
+    /// <summary>
+    /// Whether the diagram uses stateDiagram-v2 (true) or stateDiagram (false).
+    /// </summary>
+    public bool IsV2 { get; set; } = true;
+}
+
+/// <summary>
+/// Represents a state in a state diagram.
+/// Can be a simple state, composite state (with nested states), fork/join, or choice.
+/// </summary>
+public class StateDefinition
+{
+    /// <summary>
+    /// The state identifier.
+    /// </summary>
+    public string Id { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional display label for the state.
+    /// </summary>
+    public string? Label { get; set; }
+
+    /// <summary>
+    /// The type of state (simple, composite, fork, join, choice).
+    /// </summary>
+    public StateType Type { get; set; } = StateType.Simple;
+
+    /// <summary>
+    /// Nested states for composite states.
+    /// </summary>
+    public List<StateDefinition> NestedStates { get; set; } = new();
+
+    /// <summary>
+    /// Nested transitions for composite states.
+    /// </summary>
+    public List<StateTransition> NestedTransitions { get; set; } = new();
+
+    /// <summary>
+    /// Optional CSS class assignment.
+    /// </summary>
+    public string? CssClass { get; set; }
+
+    /// <summary>
+    /// Whether this state was explicitly declared (vs. inferred from transitions).
+    /// </summary>
+    public bool IsExplicit { get; set; }
+
+    /// <summary>
+    /// Display label: uses Label if set, otherwise Id.
+    /// </summary>
+    public string DisplayLabel => Label ?? Id;
+}
+
+/// <summary>
+/// Types of states in a state diagram.
+/// </summary>
+public enum StateType
+{
+    /// <summary>A regular state.</summary>
+    Simple,
+
+    /// <summary>A composite state containing nested states and transitions.</summary>
+    Composite,
+
+    /// <summary>A fork pseudo-state (horizontal bar splitting into parallel paths).</summary>
+    Fork,
+
+    /// <summary>A join pseudo-state (horizontal bar merging parallel paths).</summary>
+    Join,
+
+    /// <summary>A choice pseudo-state (diamond decision point).</summary>
+    Choice
+}
+
+/// <summary>
+/// Represents a transition between states in a state diagram.
+/// </summary>
+public class StateTransition
+{
+    /// <summary>
+    /// The source state ID. Use "[*]" for start pseudo-state.
+    /// </summary>
+    public string FromId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The target state ID. Use "[*]" for end pseudo-state.
+    /// </summary>
+    public string ToId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional transition label (event [guard] / action).
+    /// </summary>
+    public string? Label { get; set; }
+}
+
+/// <summary>
+/// Represents a note attached to a state.
+/// </summary>
+public class StateNote
+{
+    /// <summary>
+    /// The note text content.
+    /// </summary>
+    public string Text { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The state ID this note is attached to.
+    /// </summary>
+    public string StateId { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Position of the note relative to the state.
+    /// </summary>
+    public StateNotePosition Position { get; set; } = StateNotePosition.RightOf;
+}
+
+/// <summary>
+/// Position of a note relative to a state.
+/// </summary>
+public enum StateNotePosition
+{
+    /// <summary>Note appears to the right of the state.</summary>
+    RightOf,
+
+    /// <summary>Note appears to the left of the state.</summary>
+    LeftOf
+}

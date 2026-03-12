@@ -1049,4 +1049,380 @@ classDiagram
         Assert.Equal("someclass", model.Classes[0].CssClass);
         Assert.Single(model.Styles);
     }
+
+    // =============================================
+    // State Diagram Tests (Phase 2.3)
+    // =============================================
+
+    /// <summary>
+    /// Helper method to verify state diagram round-trip fidelity.
+    /// Parses text -> serializes -> re-parses -> compares models.
+    /// </summary>
+    private static void AssertStateDiagramRoundTrip(string input)
+    {
+        var model1 = MermaidParser.ParseStateDiagram(input);
+        Assert.NotNull(model1);
+
+        var serialized = MermaidSerializer.SerializeStateDiagram(model1);
+        Assert.False(string.IsNullOrWhiteSpace(serialized), "Serialized output should not be empty");
+
+        var model2 = MermaidParser.ParseStateDiagram(serialized);
+        Assert.NotNull(model2);
+
+        // Compare direction
+        Assert.Equal(model1.Direction, model2.Direction);
+
+        // Compare IsV2
+        Assert.Equal(model1.IsV2, model2.IsV2);
+
+        // Compare states
+        Assert.Equal(model1.States.Count, model2.States.Count);
+        for (int i = 0; i < model1.States.Count; i++)
+        {
+            AssertStateDefinitionEqual(model1.States[i], model2.States[i]);
+        }
+
+        // Compare transitions
+        Assert.Equal(model1.Transitions.Count, model2.Transitions.Count);
+        for (int i = 0; i < model1.Transitions.Count; i++)
+        {
+            Assert.Equal(model1.Transitions[i].FromId, model2.Transitions[i].FromId);
+            Assert.Equal(model1.Transitions[i].ToId, model2.Transitions[i].ToId);
+            Assert.Equal(model1.Transitions[i].Label, model2.Transitions[i].Label);
+        }
+
+        // Compare notes
+        Assert.Equal(model1.Notes.Count, model2.Notes.Count);
+        for (int i = 0; i < model1.Notes.Count; i++)
+        {
+            Assert.Equal(model1.Notes[i].StateId, model2.Notes[i].StateId);
+            Assert.Equal(model1.Notes[i].Position, model2.Notes[i].Position);
+            Assert.Equal(model1.Notes[i].Text, model2.Notes[i].Text);
+        }
+
+        // Compare styles
+        Assert.Equal(model1.Styles.Count, model2.Styles.Count);
+        for (int i = 0; i < model1.Styles.Count; i++)
+        {
+            Assert.Equal(model1.Styles[i].Target, model2.Styles[i].Target);
+            Assert.Equal(model1.Styles[i].StyleString, model2.Styles[i].StyleString);
+            Assert.Equal(model1.Styles[i].IsClassDef, model2.Styles[i].IsClassDef);
+        }
+
+        // Compare preamble
+        Assert.Equal(model1.PreambleLines.Count, model2.PreambleLines.Count);
+        for (int i = 0; i < model1.PreambleLines.Count; i++)
+        {
+            Assert.Equal(model1.PreambleLines[i], model2.PreambleLines[i]);
+        }
+    }
+
+    /// <summary>
+    /// Recursively compares two state definitions for equality.
+    /// </summary>
+    private static void AssertStateDefinitionEqual(StateDefinition expected, StateDefinition actual)
+    {
+        Assert.Equal(expected.Id, actual.Id);
+        Assert.Equal(expected.Label, actual.Label);
+        Assert.Equal(expected.Type, actual.Type);
+
+        // Compare nested states
+        Assert.Equal(expected.NestedStates.Count, actual.NestedStates.Count);
+        for (int i = 0; i < expected.NestedStates.Count; i++)
+        {
+            AssertStateDefinitionEqual(expected.NestedStates[i], actual.NestedStates[i]);
+        }
+
+        // Compare nested transitions
+        Assert.Equal(expected.NestedTransitions.Count, actual.NestedTransitions.Count);
+        for (int i = 0; i < expected.NestedTransitions.Count; i++)
+        {
+            Assert.Equal(expected.NestedTransitions[i].FromId, actual.NestedTransitions[i].FromId);
+            Assert.Equal(expected.NestedTransitions[i].ToId, actual.NestedTransitions[i].ToId);
+            Assert.Equal(expected.NestedTransitions[i].Label, actual.NestedTransitions[i].Label);
+        }
+    }
+
+    [Fact]
+    public void StateDiagram_BasicParsing()
+    {
+        var input = @"stateDiagram-v2
+    [*] --> Still
+    Still --> [*]
+    Still --> Moving
+    Moving --> Still
+    Moving --> Crash
+    Crash --> [*]";
+        var model = MermaidParser.ParseStateDiagram(input);
+        Assert.NotNull(model);
+        Assert.True(model.IsV2);
+        Assert.Equal(3, model.States.Count);
+        Assert.Equal(6, model.Transitions.Count);
+        Assert.Equal("Still", model.States[0].Id);
+        Assert.Equal("Moving", model.States[1].Id);
+        Assert.Equal("Crash", model.States[2].Id);
+    }
+
+    [Fact]
+    public void StateDiagram_RoundTrip_BasicTransitions()
+    {
+        var input = @"stateDiagram-v2
+    [*] --> Still
+    Still --> [*]
+    Still --> Moving
+    Moving --> Still
+    Moving --> Crash
+    Crash --> [*]";
+        AssertStateDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void StateDiagram_RoundTrip_TransitionLabels()
+    {
+        var input = @"stateDiagram-v2
+    [*] --> Still
+    Still --> Moving : A transition
+    Moving --> Still : Another transition
+    Moving --> Crash : Oh no!
+    Crash --> [*]";
+        AssertStateDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void StateDiagram_RoundTrip_StateLabels()
+    {
+        var input = @"stateDiagram-v2
+    state ""This is a state description"" as s1
+    state ""Another state"" as s2
+    [*] --> s1
+    s1 --> s2
+    s2 --> [*]";
+        AssertStateDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void StateDiagram_RoundTrip_CompositeState()
+    {
+        var input = @"stateDiagram-v2
+    [*] --> First
+    state First {
+        [*] --> second
+        second --> [*]
+    }";
+        AssertStateDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void StateDiagram_RoundTrip_NestedComposite()
+    {
+        var input = @"stateDiagram-v2
+    [*] --> First
+    state First {
+        [*] --> Second
+        state Second {
+            [*] --> second
+            second --> Third
+            state Third {
+                [*] --> third
+                third --> [*]
+            }
+        }
+    }";
+        AssertStateDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void StateDiagram_RoundTrip_ForkJoin()
+    {
+        var input = @"stateDiagram-v2
+    state fork_state <<fork>>
+    [*] --> fork_state
+    fork_state --> State2
+    fork_state --> State3
+    state join_state <<join>>
+    State2 --> join_state
+    State3 --> join_state
+    join_state --> State4
+    State4 --> [*]";
+        AssertStateDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void StateDiagram_RoundTrip_Choice()
+    {
+        var input = @"stateDiagram-v2
+    state if_state <<choice>>
+    [*] --> IsPositive
+    IsPositive --> if_state
+    if_state --> False : if n < 0
+    if_state --> True : if n >= 0";
+        AssertStateDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void StateDiagram_RoundTrip_Notes()
+    {
+        var input = @"stateDiagram-v2
+    [*] --> Active
+    Active --> Inactive
+    note right of Active : This is a note
+    note left of Inactive : Another note";
+        AssertStateDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void StateDiagram_RoundTrip_Direction()
+    {
+        var input = @"stateDiagram-v2
+    direction LR
+    [*] --> A
+    A --> B
+    B --> [*]";
+        AssertStateDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void StateDiagram_RoundTrip_Styling()
+    {
+        var input = @"stateDiagram-v2
+    [*] --> Active
+    Active --> Inactive
+    classDef notMoving fill:white
+    classDef movement font-style:italic";
+        AssertStateDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void StateDiagram_RoundTrip_V1Syntax()
+    {
+        var input = @"stateDiagram
+    [*] --> Still
+    Still --> Moving
+    Moving --> [*]";
+        var model = MermaidParser.ParseStateDiagram(input);
+        Assert.NotNull(model);
+        Assert.False(model.IsV2);
+        AssertStateDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void StateDiagram_RoundTrip_PreamblePreserved()
+    {
+        var input = @"---
+title: My State Diagram
+---
+stateDiagram-v2
+    [*] --> Active
+    Active --> [*]";
+        AssertStateDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void StateDiagram_RoundTrip_ComplexDiagram()
+    {
+        var input = @"stateDiagram-v2
+    direction LR
+    state ""Ready State"" as Ready
+    state fork_state <<fork>>
+    state join_state <<join>>
+    [*] --> Ready
+    Ready --> fork_state
+    fork_state --> Processing
+    fork_state --> Validating
+    state Processing {
+        [*] --> Parsing
+        Parsing --> Transforming
+        Transforming --> [*]
+    }
+    Processing --> join_state
+    Validating --> join_state
+    join_state --> Done
+    Done --> [*]
+    note right of Ready : Waiting for input";
+        AssertStateDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void StateDiagram_RoundTrip_ColonLabels()
+    {
+        var input = @"stateDiagram-v2
+    s1 : The first state
+    s2 : The second state
+    [*] --> s1
+    s1 --> s2
+    s2 --> [*]";
+        var model = MermaidParser.ParseStateDiagram(input);
+        Assert.NotNull(model);
+        Assert.Equal("The first state", model.States[0].Label);
+        Assert.Equal("The second state", model.States[1].Label);
+    }
+
+    [Fact]
+    public void StateDiagram_RoundTrip_CompositeWithLabel()
+    {
+        var input = @"stateDiagram-v2
+    state ""Not Moving"" as Still {
+        [*] --> idle
+        idle --> [*]
+    }
+    [*] --> Still
+    Still --> [*]";
+        AssertStateDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void StateDiagram_Parse_ReturnsNull_ForNonStateDiagram()
+    {
+        var input = @"flowchart TD
+    A --> B";
+        var model = MermaidParser.ParseStateDiagram(input);
+        Assert.Null(model);
+    }
+
+    [Fact]
+    public void StateDiagram_Parse_ReturnsNull_ForEmptyInput()
+    {
+        var model = MermaidParser.ParseStateDiagram("");
+        Assert.Null(model);
+    }
+
+    [Fact]
+    public void StateDiagram_Serialize_ReturnsEmpty_ForNullModel()
+    {
+        var result = MermaidSerializer.SerializeStateDiagram(null!);
+        Assert.Equal(string.Empty, result);
+    }
+
+    [Fact]
+    public void StateDiagram_RoundTrip_MultiLineNote()
+    {
+        var input = @"stateDiagram-v2
+    [*] --> Active
+    note right of Active
+        This is line 1
+        This is line 2
+    end note
+    Active --> [*]";
+        AssertStateDiagramRoundTrip(input);
+    }
+
+    [Fact]
+    public void StateDiagram_RoundTrip_AllSpecialTypes()
+    {
+        var input = @"stateDiagram-v2
+    state fork1 <<fork>>
+    state join1 <<join>>
+    state choice1 <<choice>>
+    [*] --> fork1
+    fork1 --> A
+    fork1 --> B
+    A --> choice1
+    choice1 --> C : yes
+    choice1 --> D : no
+    B --> join1
+    C --> join1
+    D --> join1
+    join1 --> [*]";
+        AssertStateDiagramRoundTrip(input);
+    }
 }
