@@ -638,6 +638,11 @@
         <div class="context-menu-item" data-action="delete-selected">&#128465; Delete Selected</div>
         <div class="context-menu-separator"></div>
         <div class="context-menu-item" data-action="add-subgraph">&#9634; Add Subgraph</div>
+        <div class="context-menu-item has-submenu" id="move-to-subgraph-menu" style="display:none">
+            &#8618; Move to Subgraph
+            <div class="context-submenu" id="move-to-subgraph-submenu"></div>
+        </div>
+        <div class="context-menu-item" data-action="remove-from-subgraph" id="remove-from-subgraph-menu" style="display:none">&#8617; Remove from Subgraph</div>
         <div class="context-menu-separator"></div>
         <div class="context-menu-item" data-action="auto-layout">&#9783; Auto Layout</div>
     </div>
@@ -758,6 +763,7 @@
         let contextMenuX = 0;
         let contextMenuY = 0;
         let selectedNodeIds = [];  // For multi-select (Ctrl+A)
+        let selectedSubgraphId = null;
         const SNAP_GRID = 20;     // Snap-to-grid size in pixels
         let isResizing = false;
         let resizeNodeId = null;
@@ -1466,39 +1472,61 @@
             subgraphsLayer.innerHTML = '';
 
             diagram.subgraphs.forEach(sg => {
-                const sgNodes = diagram.nodes.filter(n => sg.nodeIds.includes(n.id));
-                if (sgNodes.length === 0) return;
-
-                // Calculate bounding box
-                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-                sgNodes.forEach(n => {
-                    const hw = (n.width || 80) / 2;
-                    const hh = (n.height || 40) / 2;
-                    minX = Math.min(minX, n.x - hw);
-                    minY = Math.min(minY, n.y - hh);
-                    maxX = Math.max(maxX, n.x + hw);
-                    maxY = Math.max(maxY, n.y + hh);
-                });
+                // Skip proxy nodes when looking up contained nodes
+                const sgIds = new Set(diagram.subgraphs.map(s => s.id));
+                const sgNodes = diagram.nodes.filter(n => sg.nodeIds.includes(n.id) && !sgIds.has(n.id));
 
                 const padding = 30;
                 const labelHeight = 24;
+                let minX, minY, maxX, maxY;
+
+                if (sgNodes.length === 0) {
+                    // Empty subgraph: render placeholder box at a default position
+                    // Use the subgraph's stored position or a default
+                    const px = sg._emptyX || 200;
+                    const py = sg._emptyY || 200;
+                    const pw = 140;
+                    const ph = 80;
+                    minX = px - pw / 2;
+                    minY = py - ph / 2;
+                    maxX = px + pw / 2;
+                    maxY = py + ph / 2;
+                } else {
+                    // Calculate bounding box from contained nodes
+                    minX = Infinity; minY = Infinity; maxX = -Infinity; maxY = -Infinity;
+                    sgNodes.forEach(n => {
+                        const hw = (n.width || 80) / 2;
+                        const hh = (n.height || 40) / 2;
+                        minX = Math.min(minX, n.x - hw);
+                        minY = Math.min(minY, n.y - hh);
+                        maxX = Math.max(maxX, n.x + hw);
+                        maxY = Math.max(maxY, n.y + hh);
+                    });
+                }
 
                 const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                 g.classList.add('subgraph-group');
+                g.setAttribute('data-subgraph-id', sg.id);
 
                 const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
                 rect.classList.add('subgraph-rect');
+                if (sgNodes.length === 0) rect.setAttribute('stroke-dasharray', '6,3');
+                if (selectedSubgraphId === sg.id) {
+                    rect.setAttribute('stroke', 'var(--node-selected-stroke)');
+                    rect.setAttribute('stroke-width', '2.5');
+                }
                 rect.setAttribute('x', minX - padding);
                 rect.setAttribute('y', minY - padding - labelHeight);
                 rect.setAttribute('width', maxX - minX + padding * 2);
                 rect.setAttribute('height', maxY - minY + padding * 2 + labelHeight);
+                rect.style.cursor = 'pointer';
                 g.appendChild(rect);
 
                 const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                 text.classList.add('subgraph-label');
                 text.setAttribute('x', minX - padding + 10);
                 text.setAttribute('y', minY - padding - labelHeight + 16);
-                text.textContent = sg.label || sg.id;
+                text.textContent = (sg.label || sg.id) + (sgNodes.length === 0 ? ' (empty)' : '');
                 g.appendChild(text);
 
                 subgraphsLayer.appendChild(g);
@@ -1607,6 +1635,17 @@
                 const idx = parseInt(edgeHit.getAttribute('data-edge-index'));
                 selectEdge(idx);
                 return;
+            }
+
+            // Check for subgraph click
+            const sgGroup = e.target.closest('.subgraph-group');
+            if (sgGroup) {
+                e.stopPropagation();
+                const sgId = sgGroup.getAttribute('data-subgraph-id');
+                if (sgId) {
+                    selectSubgraph(sgId);
+                    return;
+                }
             }
 
             // Clicked on canvas - deselect
@@ -1811,6 +1850,7 @@
         function selectNode(nodeId) {
             selectedNodeId = nodeId;
             selectedEdgeIndex = -1;
+            selectedSubgraphId = null;
             selectedNodeIds = [];  // Clear multi-select on single select
             render();
             showPropertyPanel();
@@ -1820,14 +1860,26 @@
         function selectEdge(idx) {
             selectedNodeId = null;
             selectedEdgeIndex = idx;
+            selectedSubgraphId = null;
             render();
             showPropertyPanel();
             postMessage({ type: 'edgeSelected', edgeIndex: idx });
         }
 
+        function selectSubgraph(sgId) {
+            selectedNodeId = null;
+            selectedEdgeIndex = -1;
+            selectedSubgraphId = sgId;
+            selectedNodeIds = [];
+            render();
+            showPropertyPanel();
+            postMessage({ type: 'subgraphSelected', subgraphId: sgId });
+        }
+
         function deselectAll() {
             selectedNodeId = null;
             selectedEdgeIndex = -1;
+            selectedSubgraphId = null;
             selectedNodeIds = [];
             render();
             hidePropertyPanel();
@@ -1871,6 +1923,16 @@
                     const edge = diagram.edges[selectedEdgeIndex];
                     propPanelTitle.textContent = 'Edge: ' + edge.from + ' → ' + edge.to;
                     propLabel.value = edge.label || '';
+                    propShapeRow.style.display = 'none';
+                    propStyleRow.style.display = 'none';
+
+                    propertyPanel.classList.add('visible');
+                } else if (selectedSubgraphId) {
+                    const sg = diagram.subgraphs.find(s => s.id === selectedSubgraphId);
+                    if (!sg) { hidePropertyPanel(); return; }
+
+                    propPanelTitle.textContent = 'Subgraph: ' + sg.id;
+                    propLabel.value = sg.label || sg.id;
                     propShapeRow.style.display = 'none';
                     propStyleRow.style.display = 'none';
 
@@ -1920,6 +1982,17 @@
                     postMessage({
                         type: 'edgeEdited',
                         edgeIndex: selectedEdgeIndex,
+                        label: newLabel
+                    });
+                }
+            } else if (selectedSubgraphId) {
+                const sg = diagram.subgraphs.find(s => s.id === selectedSubgraphId);
+                if (sg && newLabel) {
+                    sg.label = newLabel;
+                    render();
+                    postMessage({
+                        type: 'subgraphEdited',
+                        subgraphId: sg.id,
                         label: newLabel
                     });
                 }
@@ -2103,6 +2176,47 @@
                 deleteItem.classList.add('disabled');
             }
 
+            // Show/hide "Move to Subgraph" and "Remove from Subgraph" based on selection
+            const moveToSgMenu = document.getElementById('move-to-subgraph-menu');
+            const moveToSgSubmenu = document.getElementById('move-to-subgraph-submenu');
+            const removeFromSgMenu = document.getElementById('remove-from-subgraph-menu');
+
+            if (selectedNodeId && diagram.subgraphs.length > 0) {
+                // Build submenu with available subgraphs
+                moveToSgSubmenu.innerHTML = '';
+                const currentSg = diagram.subgraphs.find(sg => sg.nodeIds.includes(selectedNodeId));
+                diagram.subgraphs.forEach(sg => {
+                    const item = document.createElement('div');
+                    item.classList.add('context-menu-item');
+                    if (currentSg && currentSg.id === sg.id) {
+                        item.classList.add('disabled');
+                        item.textContent = '✓ ' + (sg.label || sg.id);
+                    } else {
+                        item.textContent = (sg.label || sg.id);
+                    }
+                    item.setAttribute('data-action', 'move-to-subgraph:' + sg.id);
+                    item.addEventListener('click', function(e) {
+                        e.stopPropagation();
+                        if (!item.classList.contains('disabled')) {
+                            handleContextMenuAction('move-to-subgraph:' + sg.id);
+                            hideContextMenu();
+                        }
+                    });
+                    moveToSgSubmenu.appendChild(item);
+                });
+                moveToSgMenu.style.display = '';
+
+                // Show "Remove from Subgraph" if the node is currently in one
+                if (currentSg) {
+                    removeFromSgMenu.style.display = '';
+                } else {
+                    removeFromSgMenu.style.display = 'none';
+                }
+            } else {
+                moveToSgMenu.style.display = 'none';
+                removeFromSgMenu.style.display = 'none';
+            }
+
             contextMenu.style.left = x + 'px';
             contextMenu.style.top = y + 'px';
             contextMenu.classList.add('visible');
@@ -2157,6 +2271,11 @@
                 deleteSelected();
             } else if (action === 'add-subgraph') {
                 addSubgraph(contextMenuX, contextMenuY);
+            } else if (action.startsWith('move-to-subgraph:')) {
+                const targetSgId = action.split(':')[1];
+                moveNodeToSubgraph(selectedNodeId, targetSgId);
+            } else if (action === 'remove-from-subgraph') {
+                removeNodeFromSubgraph(selectedNodeId);
             } else if (action === 'auto-layout') {
                 autoLayout();
                 render();
@@ -2232,7 +2351,9 @@
                 id: id,
                 label: label,
                 nodeIds: [],
-                direction: null
+                direction: null,
+                _emptyX: Math.round(x / SNAP_GRID) * SNAP_GRID,
+                _emptyY: Math.round(y / SNAP_GRID) * SNAP_GRID
             };
 
             // If nodes are selected, add them to the new subgraph
@@ -2262,6 +2383,42 @@
                 subgraphId: id,
                 label: label,
                 nodeIds: nodesToAdd
+            });
+        }
+
+        function moveNodeToSubgraph(nodeId, targetSubgraphId) {
+            if (!nodeId || !targetSubgraphId) return;
+
+            // Remove from any existing subgraph
+            diagram.subgraphs.forEach(sg => {
+                sg.nodeIds = sg.nodeIds.filter(id => id !== nodeId);
+            });
+
+            // Add to target subgraph
+            const targetSg = diagram.subgraphs.find(sg => sg.id === targetSubgraphId);
+            if (targetSg) {
+                targetSg.nodeIds.push(nodeId);
+                render();
+                postMessage({
+                    type: 'nodeSubgraphChanged',
+                    nodeId: nodeId,
+                    subgraphId: targetSubgraphId
+                });
+            }
+        }
+
+        function removeNodeFromSubgraph(nodeId) {
+            if (!nodeId) return;
+
+            diagram.subgraphs.forEach(sg => {
+                sg.nodeIds = sg.nodeIds.filter(id => id !== nodeId);
+            });
+
+            render();
+            postMessage({
+                type: 'nodeSubgraphChanged',
+                nodeId: nodeId,
+                subgraphId: null
             });
         }
 
