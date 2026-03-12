@@ -350,6 +350,23 @@ Console.WriteLine(""Hello, World!"");
         {
             StatusText.Text = $"Line {CodeEditor.TextArea.Caret.Line}, Col {CodeEditor.TextArea.Caret.Column}";
             UpdateToggleCommentIconColor();
+            
+            // Ensure the editor scrolls to keep the caret visible when navigating
+            // with arrow keys, Tab, Home/End, etc. on long lines without word wrap.
+            // The root fix is CanContentScroll in the ScrollViewer template (MainWindow.xaml)
+            // which restores AvalonEdit's native IScrollInfo chain. This deferred call
+            // is a lightweight safety net that uses AvalonEdit's built-in scroll-to-caret.
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
+            {
+                try
+                {
+                    CodeEditor.TextArea.Caret.BringCaretToView();
+                }
+                catch
+                {
+                    // Ignore errors during document switching
+                }
+            }));
         };
         
         // Intercept Ctrl+F and Ctrl+H before AvalonEdit handles them
@@ -647,6 +664,10 @@ Console.WriteLine(""Hello, World!"");
             
             // Initialize SVG icons for toolbar buttons and menu items
             InitializeIcons();
+            // Force-refresh comment icon color after InitializeIcons resets all icons to default.
+            // This is critical for session restore: the constructor already ran SwitchToDocument()
+            // which set _lastCaretWasInComment, but InitializeIcons() just overwrote the green tint.
+            UpdateToggleCommentIconColor(force: true);
             
             // Load recent files
             LoadRecentFiles();
@@ -822,7 +843,7 @@ Console.WriteLine(""Hello, World!"");
     /// Checks if the current caret line is inside a comment and tints the toggle-comment
     /// toolbar button and menu item icon green when it is.
     /// </summary>
-    private void UpdateToggleCommentIconColor()
+    private void UpdateToggleCommentIconColor(bool force = false)
     {
         try
         {
@@ -843,7 +864,7 @@ Console.WriteLine(""Hello, World!"");
                 isComment = lineText.StartsWith("<!--");
             }
 
-            if (isComment == _lastCaretWasInComment) return;
+            if (!force && isComment == _lastCaretWasInComment) return;
             _lastCaretWasInComment = isComment;
 
             if (isComment)
@@ -1793,9 +1814,10 @@ Console.WriteLine(""Hello, World!"");
                     var scrollTop = _activeDocument.PreviewScrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture);
                     var scrollLeft = _activeDocument.PreviewScrollLeft.ToString(System.Globalization.CultureInfo.InvariantCulture);
                     await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
-                        (function() {{
+                        (async function() {{
                             const markdownContent = {escapedCode};
                             document.getElementById('content').innerHTML = marked.parse(markdownContent);
+                            await renderMermaidBlocks();
                             setupClickHandlers();
                             // Restore scroll position after content is updated
                             // Try all methods since html/body can both have overflow:auto
@@ -1815,9 +1837,10 @@ Console.WriteLine(""Hello, World!"");
                 {
                     // Update content without reloading the page - scroll position is naturally preserved
                     await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
-                        (function() {{
+                        (async function() {{
                             const markdownContent = {escapedCode};
                             document.getElementById('content').innerHTML = marked.parse(markdownContent);
+                            await renderMermaidBlocks();
                             setupClickHandlers();
                         }})();
                     ");
@@ -1868,6 +1891,7 @@ Console.WriteLine(""Hello, World!"");
     <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/xml.min.js""></script>
     <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/json.min.js""></script>
     <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/sql.min.js""></script>
+    <script src=""https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js""></script>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         html, body {{ 
@@ -1915,16 +1939,76 @@ Console.WriteLine(""Hello, World!"");
         @media print {{
             html, body {{ background: white !important; color-scheme: light !important; }}
         }}
+        /* Mermaid diagram containers in markdown */
+        .mermaid-container {{
+            background: #ffffff;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+            overflow: auto;
+            text-align: center;
+        }}
+        .mermaid-container svg {{
+            max-width: 100%;
+            height: auto;
+        }}
+        .mermaid-error {{
+            color: #cf222e;
+            background: #fff5f5;
+            border: 1px solid #cf222e;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+            font-family: monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+        }}
     </style>
 </head>
 <body>
     <article class=""markdown-body"" id=""content""></article>
     <script>
+        // Initialize mermaid for rendering embedded diagrams in markdown
+        mermaid.initialize({{ 
+            startOnLoad: false,
+            theme: 'default',
+            securityLevel: 'loose',
+            fontFamily: 'Segoe UI, Helvetica, Arial, sans-serif'
+        }});
+        
+        // Counter for unique mermaid diagram IDs
+        var mermaidCounter = 0;
+        
+        // Find all mermaid code blocks and render them as diagrams
+        async function renderMermaidBlocks() {{
+            const content = document.getElementById('content');
+            const codeBlocks = content.querySelectorAll('pre code.language-mermaid');
+            
+            for (const codeBlock of codeBlocks) {{
+                const pre = codeBlock.parentElement;
+                const mermaidCode = codeBlock.textContent;
+                const container = document.createElement('div');
+                container.className = 'mermaid-container';
+                
+                try {{
+                    const id = 'mermaid-diagram-' + (mermaidCounter++);
+                    const {{ svg }} = await mermaid.render(id, mermaidCode);
+                    container.innerHTML = svg;
+                }} catch (err) {{
+                    container.className = 'mermaid-error';
+                    container.textContent = 'Mermaid Error: ' + err.message;
+                }}
+                
+                pre.replaceWith(container);
+            }}
+        }}
+        
         const markdownContent = {escapedCode};
         
         marked.setOptions({{
             highlight: function(code, lang) {{
-                if (lang && hljs.getLanguage(lang)) {{
+                if (lang && lang !== 'mermaid' && hljs.getLanguage(lang)) {{
                     try {{
                         return hljs.highlight(code, {{ language: lang }}).value;
                     }} catch (e) {{}}
@@ -1934,11 +2018,6 @@ Console.WriteLine(""Hello, World!"");
             breaks: true,
             gfm: true
         }});
-        
-        document.getElementById('content').innerHTML = marked.parse(markdownContent);
-        
-        // Add click handlers for click-to-highlight feature
-        setupClickHandlers();
         
         function setupClickHandlers() {{
             const content = document.getElementById('content');
@@ -2109,16 +2188,27 @@ Console.WriteLine(""Hello, World!"");
             }});
         }}
         
-        // Notify C# that markdown is ready and pass target scroll position for restoration
-        var targetScrollLeft = {targetScrollLeft};
-        var targetScrollTop = {targetScrollTop};
-        setTimeout(function() {{
-            window.chrome.webview.postMessage({{ 
-                type: 'markdownReady', 
-                targetScrollLeft: targetScrollLeft, 
-                targetScrollTop: targetScrollTop 
-            }});
-        }}, 50);
+        // Run initial render in async IIFE to properly await mermaid rendering
+        (async function() {{
+            document.getElementById('content').innerHTML = marked.parse(markdownContent);
+            
+            // Render any embedded mermaid diagrams
+            await renderMermaidBlocks();
+            
+            // Add click handlers for click-to-highlight feature
+            setupClickHandlers();
+            
+            // Notify C# that markdown is ready and pass target scroll position for restoration
+            var targetScrollLeft = {targetScrollLeft};
+            var targetScrollTop = {targetScrollTop};
+            setTimeout(function() {{
+                window.chrome.webview.postMessage({{ 
+                    type: 'markdownReady', 
+                    targetScrollLeft: targetScrollLeft, 
+                    targetScrollTop: targetScrollTop 
+                }});
+            }}, 50);
+        }})();
     </script>
 </body>
 </html>";
@@ -3321,6 +3411,10 @@ Console.WriteLine(""Hello, World!"");
             // Markdown uses block comments (<!-- -->)
             ToggleMarkdownComment(doc, selection);
         }
+        
+        // Force-refresh the comment icon color since the text changed but
+        // the caret position may not have moved (so PositionChanged won't fire)
+        UpdateToggleCommentIconColor(force: true);
     }
 
     private void ToggleMermaidComment(ICSharpCode.AvalonEdit.Document.TextDocument doc, ICSharpCode.AvalonEdit.Editing.Selection selection)
@@ -6005,7 +6099,14 @@ Console.WriteLine(""Hello, World!"");
                    "- Click-to-navigate between preview and code\n" +
                    "- Navigation dropdown for quick section jumping\n" +
                    "- Export to PNG, SVG, EMF, and Word\n" +
-                   "- Word export embeds images for Markdown files\n" +
+                   "- Save to PDF via Print Preview\n" +
+                   "- Auto-save with session restore\n" +
+                   "- Spell check with suggestions (markdown)\n" +
+                   "- Table generator dialog (markdown)\n" +
+                   "- Ask AI chat with file attachments\n" +
+                   "- Settings/Configuration with theme support\n" +
+                   "- Bracket matching and minimap\n" +
+                   "- Custom SVG toolbar icons\n" +
                    "- New document templates for all diagram types\n" +
                    "- File browser with preview on selection\n" +
                    "- Drag and drop file support\n" +
@@ -6054,6 +6155,8 @@ Console.WriteLine(""Hello, World!"");
         InitializeIcons();
         _mermaidPageLoaded = false; // Force full page reload to pick up new theme colors
         _markdownPageLoaded = false; // Force full page reload for Markdown too
+        // Force-refresh comment icon color since InitializeIcons reset all icons to default
+        UpdateToggleCommentIconColor(force: true);
         RenderPreview(); // Re-render preview with new theme
 
         // Update visual editor theme
@@ -6092,6 +6195,8 @@ Console.WriteLine(""Hello, World!"");
                 InitializeIcons();
                 _mermaidPageLoaded = false; // Force full page reload to pick up new theme colors
                 _markdownPageLoaded = false; // Force full page reload for Markdown too
+                // Force-refresh comment icon color since InitializeIcons reset all icons to default
+                UpdateToggleCommentIconColor(force: true);
                 RenderPreview();
 
                 // Update visual editor theme
@@ -6220,7 +6325,8 @@ Console.WriteLine(""Hello, World!"");
         var keywordColor = isDark ? "#569CD6" : "#0000FF";
         var diagramTypeColor = isDark ? "#C586C0" : "#AF00DB";
         
-        var xshd = "<?xml version=\"1.0\"?>" +
+        // Register Mermaid syntax highlighting
+        var mermaidXshd = "<?xml version=\"1.0\"?>" +
             "<SyntaxDefinition name=\"Mermaid\" xmlns=\"http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008\">" +
             "<Color name=\"Comment\" foreground=\"" + commentColor + "\" />" +
             "<Color name=\"Keyword\" foreground=\"" + keywordColor + "\" fontWeight=\"bold\" />" +
@@ -6251,14 +6357,46 @@ Console.WriteLine(""Hello, World!"");
 
         try
         {
-            using var reader = new XmlTextReader(new StringReader(xshd));
-            var definition = HighlightingLoader.Load(reader, HighlightingManager.Instance);
-            HighlightingManager.Instance.RegisterHighlighting("Mermaid", new[] { ".mmd", ".mermaid" }, definition);
-            CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
+            using var mermaidReader = new XmlTextReader(new StringReader(mermaidXshd));
+            var mermaidDef = HighlightingLoader.Load(mermaidReader, HighlightingManager.Instance);
+            HighlightingManager.Instance.RegisterHighlighting("Mermaid", new[] { ".mmd", ".mermaid" }, mermaidDef);
         }
         catch
         {
             // If syntax highlighting fails, continue without it
+        }
+
+        // Register Markdown syntax highlighting (with theme-aware comment color)
+        var markdownXshd = "<?xml version=\"1.0\"?>" +
+            "<SyntaxDefinition name=\"Markdown\" xmlns=\"http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008\">" +
+            "<Color name=\"Comment\" foreground=\"" + commentColor + "\" />" +
+            "<RuleSet>" +
+            "<Span color=\"Comment\" multiline=\"true\">" +
+            "<Begin>&lt;!--</Begin>" +
+            "<End>--&gt;</End>" +
+            "</Span>" +
+            "</RuleSet>" +
+            "</SyntaxDefinition>";
+
+        try
+        {
+            using var markdownReader = new XmlTextReader(new StringReader(markdownXshd));
+            var markdownDef = HighlightingLoader.Load(markdownReader, HighlightingManager.Instance);
+            HighlightingManager.Instance.RegisterHighlighting("Markdown", new[] { ".md", ".markdown" }, markdownDef);
+        }
+        catch
+        {
+            // If syntax highlighting fails, continue without it
+        }
+
+        // Apply the correct highlighting based on the active document type
+        if (_currentRenderMode == RenderMode.Markdown)
+        {
+            CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Markdown");
+        }
+        else
+        {
+            CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
         }
     }
 
@@ -7311,6 +7449,41 @@ Console.WriteLine(""Hello, World!"");
         contextMenu.Items.Add(closeAllItem);
         contextMenu.Items.Add(closeAllButThisItem);
         
+        // Add file-related context menu items (only for saved documents)
+        if (!string.IsNullOrEmpty(doc.FilePath))
+        {
+            contextMenu.Items.Add(new Separator());
+            
+            var copyPathItem = new System.Windows.Controls.MenuItem { Header = "Copy File Path" };
+            copyPathItem.Click += (s, e) =>
+            {
+                try
+                {
+                    System.Windows.Clipboard.SetText(doc.FilePath);
+                    StatusText.Text = "File path copied to clipboard";
+                }
+                catch { }
+            };
+            
+            var openLocationItem = new System.Windows.Controls.MenuItem { Header = "Open File Location" };
+            openLocationItem.Click += (s, e) =>
+            {
+                try
+                {
+                    var directory = System.IO.Path.GetDirectoryName(doc.FilePath);
+                    if (!string.IsNullOrEmpty(directory) && System.IO.Directory.Exists(directory))
+                    {
+                        // Open Explorer with the file selected
+                        System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{doc.FilePath}\"");
+                    }
+                }
+                catch { }
+            };
+            
+            contextMenu.Items.Add(copyPathItem);
+            contextMenu.Items.Add(openLocationItem);
+        }
+        
         tabBorder.ContextMenu = contextMenu;
         
         // Subscribe to property changes to update tab header
@@ -7677,6 +7850,10 @@ Console.WriteLine(""Hello, World!"");
         UpdateMarkdownFormattingVisibility();
         UpdateZoomControlsVisibility();
         UpdateUndoRedoState();
+        
+        // Force-refresh comment icon color for the new document's caret position
+        _lastCaretWasInComment = false;
+        UpdateToggleCommentIconColor(force: true);
         
         // Re-render preview for the new document
         // This will trigger NavigateToString which resets _hasNavigatedAway to false

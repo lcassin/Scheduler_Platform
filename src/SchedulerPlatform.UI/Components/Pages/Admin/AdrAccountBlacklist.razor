@@ -3,16 +3,20 @@
 @using Microsoft.AspNetCore.Authorization
 @attribute [Authorize]
 @inject AuthenticatedHttpClientService HttpClientService
+@inject IAdrService AdrService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject IPermissionService PermissionService
 @inject IJSRuntime JSRuntime
 
-<PageTitle>ADR Account Blacklist</PageTitle>
+<PageTitle>ADR Blacklist Queue</PageTitle>
 
 <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4">
     <div class="d-flex justify-space-between align-center mb-4">
-        <MudText Typo="Typo.h4">ADR Account Blacklist</MudText>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@CustomIcons.Blacklist" Size="Size.Large" />
+            <MudText Typo="Typo.h4">ADR Blacklist Queue</MudText>
+        </div>
         @if (_hasAccess)
         {
             <MudButton Variant="Variant.Filled" 
@@ -32,6 +36,9 @@
     }
     else
     {
+        <MudAlert Severity="Severity.Info" Class="mb-4" Variant="Variant.Outlined" Dense="true">
+            <strong>Note:</strong> Changes made here are queued and will not be applied to accounts until the next Orchestrator run.
+        </MudAlert>
         <MudPaper Class="pa-4 mb-4">
             <MudGrid Spacing="2">
                 <MudItem xs="12" md="2">
@@ -80,10 +87,27 @@
                     <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ClearFilters" StartIcon="@Icons.Material.Filled.Clear">
                         Clear
                     </MudButton>
-                    <MudMenu Label="Export" StartIcon="@Icons.Material.Filled.Download" Variant="Variant.Outlined" Color="Color.Primary">
-                        <MudMenuItem OnClick="@(() => ExportBlacklist(_filterStatus))">Export Current View</MudMenuItem>
-                        <MudMenuItem OnClick="@(() => ExportBlacklist("all"))">Export All</MudMenuItem>
-                    </MudMenu>
+                    @if (_exporting)
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Primary" Disabled="true">
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            Exporting...
+                        </MudButton>
+                    }
+                    else
+                    {
+                        <MudMenu AnchorOrigin="Origin.BottomLeft" TransformOrigin="Origin.TopLeft">
+                            <ActivatorContent>
+                                <MudButton Variant="Variant.Outlined" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Download" OnClick="@context.ToggleAsync">
+                                    Export
+                                </MudButton>
+                            </ActivatorContent>
+                            <ChildContent>
+                                <MudMenuItem OnClick="@(() => ExportBlacklist("excel"))">Excel</MudMenuItem>
+                                <MudMenuItem OnClick="@(() => ExportBlacklist("csv"))">CSV</MudMenuItem>
+                            </ChildContent>
+                        </MudMenu>
+                    }
                 </MudItem>
             </MudGrid>
         </MudPaper>
@@ -422,40 +446,81 @@
         await _table.ReloadServerData();
     }
 
-    private async Task ExportBlacklist(string status)
+    private async Task ExportBlacklist(string format)
     {
         _exporting = true;
         StateHasChanged();
         try
         {
-            var queryParams = new List<string> { $"status={status}" };
+            var filters = new Dictionary<string, string?>();
+            filters["status"] = _filterStatus;
             
             if (!string.IsNullOrWhiteSpace(_filterMasterVendorCode))
-                queryParams.Add($"masterVendorCode={Uri.EscapeDataString(_filterMasterVendorCode)}");
+                filters["masterVendorCode"] = _filterMasterVendorCode;
             if (!string.IsNullOrWhiteSpace(_filterPrimaryVendorCode))
-                queryParams.Add($"primaryVendorCode={Uri.EscapeDataString(_filterPrimaryVendorCode)}");
+                filters["primaryVendorCode"] = _filterPrimaryVendorCode;
             if (!string.IsNullOrWhiteSpace(_filterAccountNumber))
-                queryParams.Add($"accountNumber={Uri.EscapeDataString(_filterAccountNumber)}");
+                filters["accountNumber"] = _filterAccountNumber;
+
+            // Start background export
+            Snackbar.Add("Starting export... This may take a few minutes for large datasets.", Severity.Info);
+            var startResult = await AdrService.StartBackgroundExportAsync("blacklist", format, filters);
             
-            var url = $"adr/blacklist/export?{string.Join("&", queryParams)}";
-            var response = await HttpClientService.GetAsync(url);
-            
-            if (response.IsSuccessStatusCode)
+            if (string.IsNullOrEmpty(startResult.RequestId))
             {
-                var content = await response.Content.ReadAsByteArrayAsync();
-                var fileName = response.Content.Headers.ContentDisposition?.FileName?.Trim('"') ?? $"ADR_Blacklist_{DateTime.Now:yyyyMMdd}.xlsx";
-                
-                // Trigger download via JavaScript
-                var base64 = Convert.ToBase64String(content);
-                await JSRuntime.InvokeVoidAsync("downloadFile", fileName, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", base64);
-                
-                Snackbar.Add("Export completed successfully", Severity.Success);
+                Snackbar.Add("Failed to start export", Severity.Error);
+                return;
             }
-            else
+
+            // Poll for completion
+            var maxAttempts = 120; // 10 minutes max (5 second intervals)
+            var attempt = 0;
+            while (attempt < maxAttempts)
             {
-                var error = await response.Content.ReadAsStringAsync();
-                Snackbar.Add($"Export failed: {error}", Severity.Error);
+                await Task.Delay(5000);
+                attempt++;
+
+                var status = await AdrService.GetBackgroundExportStatusAsync(startResult.RequestId);
+                if (status == null)
+                {
+                    Snackbar.Add("Export status not found", Severity.Error);
+                    return;
+                }
+
+                if (status.Status == "Completed")
+                {
+                    var bytes = await AdrService.DownloadBackgroundExportAsync(startResult.RequestId);
+                    if (bytes == null || bytes.Length == 0)
+                    {
+                        Snackbar.Add("Failed to download export file", Severity.Error);
+                        return;
+                    }
+
+                    var contentType = status.ContentType ?? (format.Equals("excel", StringComparison.OrdinalIgnoreCase)
+                        ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        : "text/csv");
+
+                    var filename = status.FileName ?? $"adr_blacklist_{DateTime.UtcNow:yyyyMMddHHmmss}.{(format.Equals("excel", StringComparison.OrdinalIgnoreCase) ? "xlsx" : "csv")}";
+
+                    var base64 = Convert.ToBase64String(bytes);
+                    await JSRuntime.InvokeVoidAsync("downloadFile", filename, contentType, base64);
+
+                    Snackbar.Add($"Export downloaded: {filename} ({status.TotalRecords:N0} records)", Severity.Success);
+                    return;
+                }
+                else if (status.Status == "Failed")
+                {
+                    Snackbar.Add($"Export failed: {status.ErrorMessage}", Severity.Error);
+                    return;
+                }
+                else if (status.Status == "Processing" && attempt % 6 == 0)
+                {
+                    Snackbar.Add($"Export in progress... {status.ProcessedRecords:N0} of {status.TotalRecords:N0} records processed", Severity.Info);
+                    StateHasChanged();
+                }
             }
+
+            Snackbar.Add("Export timed out. Please try again later.", Severity.Warning);
         }
         catch (Exception ex)
         {

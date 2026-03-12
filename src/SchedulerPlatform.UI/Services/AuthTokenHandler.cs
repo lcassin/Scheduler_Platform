@@ -215,8 +215,24 @@ public class AuthTokenHandler : DelegatingHandler
                     if (isExpired)
                     {
                         _logger.LogWarning(
-                            "Access token is EXPIRED. Expires: {Expires}, Now: {Now}",
+                            "Access token is EXPIRED. Expires: {Expires}, Now: {Now}. Triggering session expiry redirect.",
                             exp, DateTime.UtcNow);
+                        
+                        // Clear the stale expired token from the store so subsequent requests
+                        // don't keep re-detecting the same expired token in a loop
+                        if (!string.IsNullOrEmpty(userKey))
+                        {
+                            GlobalTokenStore.RemoveToken(userKey);
+                        }
+                        
+                        // Don't send an expired token — trigger session expiry immediately
+                        // This prevents confusing 403 errors when the real issue is token expiration
+                        _sessionStateService.NotifySessionExpired();
+                        return new HttpResponseMessage(HttpStatusCode.Unauthorized)
+                        {
+                            RequestMessage = request,
+                            ReasonPhrase = "Access token expired"
+                        };
                     }
                 }
             }
@@ -240,11 +256,16 @@ public class AuthTokenHandler : DelegatingHandler
         // Check for 401 Unauthorized - session has expired
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {
-            // Log the WWW-Authenticate header to understand why the token was rejected
             var wwwAuthenticate = response.Headers.WwwAuthenticate.ToString();
             _logger.LogWarning(
                 "Received 401 Unauthorized from API. Request: {Method} {Uri}, WWW-Authenticate: {WwwAuthenticate}",
                 request.Method, request.RequestUri, wwwAuthenticate);
+            
+            // Clear the stale token from the store so subsequent requests don't keep using it
+            if (!string.IsNullOrEmpty(userKey))
+            {
+                GlobalTokenStore.RemoveToken(userKey);
+            }
             
             // Notify all subscribers (like MainLayout) that the session has expired
             // This allows centralized handling of session expiration with automatic redirect
@@ -252,6 +273,54 @@ public class AuthTokenHandler : DelegatingHandler
             
             // Return the response without throwing - let the redirect happen gracefully
             // instead of causing exceptions to propagate through the component tree
+        }
+        
+        // Check for 403 Forbidden — but only treat it as session expiration if the token
+        // is near expiry or missing. A 403 with a valid, non-expired token is a legitimate
+        // permission denial (e.g., non-admin hitting admin endpoint) and should NOT trigger logout.
+        if (response.StatusCode == HttpStatusCode.Forbidden)
+        {
+            bool tokenIsExpiredOrMissing = string.IsNullOrEmpty(accessToken);
+            
+            if (!tokenIsExpiredOrMissing && !string.IsNullOrEmpty(accessToken))
+            {
+                try
+                {
+                    var handler = new JwtSecurityTokenHandler();
+                    if (handler.CanReadToken(accessToken))
+                    {
+                        var jwt = handler.ReadJwtToken(accessToken);
+                        // Consider token problematic if it expires within 5 minutes
+                        tokenIsExpiredOrMissing = jwt.ValidTo <= DateTime.UtcNow.AddMinutes(5);
+                    }
+                }
+                catch
+                {
+                    // If we can't parse the token, assume it's bad
+                    tokenIsExpiredOrMissing = true;
+                }
+            }
+            
+            if (tokenIsExpiredOrMissing)
+            {
+                _logger.LogWarning(
+                    "Received 403 Forbidden with expired/missing token — treating as session expiration. Request: {Method} {Uri}",
+                    request.Method, request.RequestUri);
+                
+                if (!string.IsNullOrEmpty(userKey))
+                {
+                    GlobalTokenStore.RemoveToken(userKey);
+                }
+                
+                _sessionStateService.NotifySessionExpired();
+            }
+            else
+            {
+                // Legitimate permission denial — log but do NOT trigger session expiration
+                _logger.LogWarning(
+                    "Received 403 Forbidden (permission denied) from API. Request: {Method} {Uri}",
+                    request.Method, request.RequestUri);
+            }
         }
 
         return response;

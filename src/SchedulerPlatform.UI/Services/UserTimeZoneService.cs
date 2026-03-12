@@ -139,7 +139,10 @@ public class UserTimeZoneService : IUserTimeZoneService, IDisposable
             }
             catch
             {
-                // JS interop failed (e.g., during prerendering), continue to default
+                // JS interop failed (e.g., during prerendering) — do NOT cache the
+                // fallback default so that we re-evaluate once JS interop is available
+                // and the user's preference or browser timezone can be detected.
+                return DefaultTimeZone;
             }
 
             // Ultimate fallback to configured default timezone (not server local)
@@ -147,8 +150,9 @@ public class UserTimeZoneService : IUserTimeZoneService, IDisposable
         }
         catch (Exception)
         {
-            // If anything fails, use the configured default timezone
-            _cachedTimeZoneId = DefaultTimeZone;
+            // Permission cache not ready yet — do NOT cache the fallback default
+            // so we re-evaluate once the cache is populated.
+            return DefaultTimeZone;
         }
 
         return _cachedTimeZoneId;
@@ -207,14 +211,16 @@ public class UserTimeZoneService : IUserTimeZoneService, IDisposable
         
         try
         {
-            _cachedTimeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+            var tz = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+            // Only cache if the timezone ID was also cached (not a temporary fallback)
+            if (_cachedTimeZoneId != null)
+                _cachedTimeZone = tz;
+            return tz;
         }
         catch
         {
-            _cachedTimeZone = TimeZoneInfo.Local;
+            return TimeZoneInfo.Local;
         }
-
-        return _cachedTimeZone;
     }
 
     private static string? FindWindowsTimeZoneFromIana(string ianaId)

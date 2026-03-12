@@ -17,7 +17,10 @@
 
 <PageTitle>Dashboard</PageTitle>
 
-<MudText Typo="Typo.h4" Class="mb-4">Dashboard</MudText>
+<div class="d-flex align-center gap-2 mb-4">
+    <MudIcon Icon="@CustomIcons.Dashboard" Size="Size.Large" />
+    <MudText Typo="Typo.h4">Dashboard</MudText>
+</div>
 
 <MudText Typo="Typo.h5" Class="mb-2">ADR (Automated Document Retrieval)</MudText>
 <MudGrid Class="mb-4" Spacing="2">
@@ -257,8 +260,8 @@
                     </MudItem>
                     <MudItem xs="4">
                         <MudPaper Class="pa-3 d-flex flex-column align-center" Style="background-color: rgba(244, 67, 54, 0.1); border-left: 4px solid #f44336;">
-                            <MudText Typo="Typo.h5" Style="color: #f44336;">@FormatNumber(_adrJobStats.FailedCount)</MudText>
-                            <MudText Typo="Typo.caption">Failed</MudText>
+                            <MudText Typo="Typo.h5" Style="color: #f44336;">@FormatNumber(_adrJobStats.FailedCount + _adrJobStats.CancelledCount)</MudText>
+                            <MudText Typo="Typo.caption">Cancelled / Failed</MudText>
                         </MudPaper>
                     </MudItem>
                     <MudItem xs="4">
@@ -1280,7 +1283,7 @@
                         { "Credential Verified", "#42a5f5" }, // Blue
                         { "ADR Request Sent", "#7e57c2" },  // Purple
                         { "Completed", "#66bb6a" },         // Green
-                        { "Failed", "#f44336" },            // Red
+                        { "Cancelled / Failed", "#f44336" },  // Red
                         { "Needs Review", "#ffa726" }       // Orange
                     };
                     
@@ -1315,11 +1318,11 @@
                         colorList.Add(colorMap["Completed"]);
                         customDataList.Add("Completed");
                     }
-                    if (_adrJobStats.FailedCount > 0)
+                    if (_adrJobStats.FailedCount + _adrJobStats.CancelledCount > 0)
                     {
-                        dataList.Add(_adrJobStats.FailedCount);
-                        labelList.Add("Failed");
-                        colorList.Add(colorMap["Failed"]);
+                        dataList.Add(_adrJobStats.FailedCount + _adrJobStats.CancelledCount);
+                        labelList.Add("Cancelled / Failed");
+                        colorList.Add(colorMap["Cancelled / Failed"]);
                         customDataList.Add("Failed");
                     }
                     if (_adrJobStats.NeedsReviewCount > 0)

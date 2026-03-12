@@ -11,7 +11,10 @@
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
     <div class="d-flex justify-space-between align-center mb-4">
-        <MudText Typo="Typo.h4">ADR Job Types</MudText>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@CustomIcons.AdrJobTypes" Size="Size.Large" />
+            <MudText Typo="Typo.h4">ADR Job Types</MudText>
+        </div>
         @if (_hasAccess)
         {
             <MudButton Variant="Variant.Filled" 
