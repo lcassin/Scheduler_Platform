@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace MermaidEditor;
@@ -100,6 +101,9 @@ public static class MermaidSerializer
 
         // Write trailing comments
         WriteTrailingComments(sb, model);
+
+        // Write @pos comments for manually-positioned nodes
+        WritePositionComments(sb, model);
 
         return sb.ToString().TrimEnd('\r', '\n') + Environment.NewLine;
     }
@@ -284,6 +288,24 @@ public static class MermaidSerializer
                     sb.AppendLine($"%%{comment.Text}");
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Writes %% @pos comments for nodes that have been manually positioned in the visual editor.
+    /// These special comments store node positions so they survive round-trips.
+    /// </summary>
+    private static void WritePositionComments(StringBuilder sb, FlowchartModel model)
+    {
+        var positionedNodes = model.Nodes.Where(n => n.HasManualPosition).ToList();
+        if (positionedNodes.Count == 0) return;
+
+        sb.AppendLine();
+        foreach (var node in positionedNodes)
+        {
+            var x = node.Position.X.ToString("F1", CultureInfo.InvariantCulture);
+            var y = node.Position.Y.ToString("F1", CultureInfo.InvariantCulture);
+            sb.AppendLine($"%% @pos {node.Id} {x},{y}");
         }
     }
 }

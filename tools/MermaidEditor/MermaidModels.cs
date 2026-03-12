@@ -90,6 +90,13 @@ public class FlowchartNode
     public string? CssClass { get; set; }
 
     /// <summary>
+    /// Whether this node has been manually positioned in the visual editor.
+    /// When true, position data is stored as a special comment (%% @pos nodeId x,y)
+    /// during serialization, and restored on parse.
+    /// </summary>
+    public bool HasManualPosition { get; set; }
+
+    /// <summary>
     /// Returns the effective display label (Label if set, otherwise Id).
     /// </summary>
     public string DisplayLabel => Label ?? Id;
