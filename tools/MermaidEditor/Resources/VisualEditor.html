@@ -3824,6 +3824,1059 @@
             }
         });
 
+        // ========== Class Diagram Visual Editor ==========
+
+        let clsDiagram = null; // When non-null, we're in class diagram mode
+        let clsSelectedClassId = null;
+        let clsSelectedRelIndex = -1;
+        let clsDraggingClassId = null;
+        let clsDragOffsetX = 0;
+        let clsDragOffsetY = 0;
+        let clsDrawingRelFrom = null; // classId when drawing a relationship
+        let clsClassPositions = {}; // { classId: { x, y, width, height } }
+
+        const CLS_BOX_MIN_WIDTH = 160;
+        const CLS_BOX_PADDING = 10;
+        const CLS_SECTION_HEIGHT = 24;
+        const CLS_MEMBER_HEIGHT = 20;
+        const CLS_TOP_MARGIN = 40;
+        const CLS_LEFT_MARGIN = 60;
+        const CLS_CLASS_GAP_X = 220;
+        const CLS_CLASS_GAP_Y = 40;
+
+        window.loadClassDiagram = function(jsonData) {
+            try {
+                const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+                clsDiagram = {
+                    direction: data.direction || null,
+                    classes: (data.classes || []).map(c => ({
+                        id: c.id,
+                        label: c.label || null,
+                        annotation: c.annotation || null,
+                        genericType: c.genericType || null,
+                        members: (c.members || []).map(m => ({
+                            rawText: m.rawText || '',
+                            visibility: m.visibility || 'None',
+                            isMethod: m.isMethod || false,
+                            name: m.name || '',
+                            type: m.type || null,
+                            parameters: m.parameters || null,
+                            classifier: m.classifier || 'None'
+                        })),
+                        cssClass: c.cssClass || null,
+                        isExplicit: c.isExplicit !== false
+                    })),
+                    relationships: (data.relationships || []).map(r => ({
+                        fromId: r.fromId,
+                        toId: r.toId,
+                        leftEnd: r.leftEnd || 'None',
+                        rightEnd: r.rightEnd || 'None',
+                        linkStyle: r.linkStyle || 'Solid',
+                        label: r.label || null,
+                        fromCardinality: r.fromCardinality || null,
+                        toCardinality: r.toCardinality || null
+                    })),
+                    namespaces: data.namespaces || [],
+                    notes: data.notes || [],
+                    preambleLines: data.preambleLines || [],
+                    declarationLineIndex: data.declarationLineIndex || 0
+                };
+
+                // Clear other diagram states
+                diagram.nodes = [];
+                diagram.edges = [];
+                diagram.subgraphs = [];
+                seqDiagram = null;
+
+                // Auto-layout class positions if not already set
+                clsAutoLayoutClasses();
+
+                // Hide flowchart/sequence toolbar buttons
+                updateToolbarForClassDiagram();
+
+                renderClassDiagram();
+                centerView();
+            } catch (err) {
+                console.error('Failed to load class diagram:', err);
+            }
+        };
+
+        function updateToolbarForClassDiagram() {
+            const hideBtns = ['tb-add-node', 'tb-add-edge', 'tb-add-subgraph', 'tb-auto-layout'];
+            hideBtns.forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) btn.style.display = clsDiagram ? 'none' : '';
+            });
+        }
+
+        function clsAutoLayoutClasses() {
+            if (!clsDiagram) return;
+            const cols = Math.max(1, Math.ceil(Math.sqrt(clsDiagram.classes.length)));
+            clsDiagram.classes.forEach((cls, idx) => {
+                if (!clsClassPositions[cls.id]) {
+                    const col = idx % cols;
+                    const row = Math.floor(idx / cols);
+                    clsClassPositions[cls.id] = {
+                        x: CLS_LEFT_MARGIN + col * CLS_CLASS_GAP_X,
+                        y: CLS_TOP_MARGIN + row * (200 + CLS_CLASS_GAP_Y)
+                    };
+                }
+            });
+        }
+
+        function clsGetClassBoxDimensions(cls) {
+            const fields = cls.members.filter(m => !m.isMethod);
+            const methods = cls.members.filter(m => m.isMethod);
+
+            // Measure text widths
+            let maxTextWidth = CLS_BOX_MIN_WIDTH;
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.font = 'bold 13px monospace';
+            const nameWidth = ctx.measureText(cls.label || cls.id).width + CLS_BOX_PADDING * 2 + 20;
+            maxTextWidth = Math.max(maxTextWidth, nameWidth);
+
+            if (cls.annotation) {
+                ctx.font = 'italic 11px monospace';
+                const annWidth = ctx.measureText('<<' + cls.annotation + '>>').width + CLS_BOX_PADDING * 2;
+                maxTextWidth = Math.max(maxTextWidth, annWidth);
+            }
+
+            ctx.font = '12px monospace';
+            fields.forEach(f => {
+                const w = ctx.measureText(clsFormatMember(f)).width + CLS_BOX_PADDING * 2 + 10;
+                maxTextWidth = Math.max(maxTextWidth, w);
+            });
+            methods.forEach(m => {
+                const w = ctx.measureText(clsFormatMember(m)).width + CLS_BOX_PADDING * 2 + 10;
+                maxTextWidth = Math.max(maxTextWidth, w);
+            });
+
+            const width = Math.ceil(maxTextWidth);
+
+            // Height: header + annotation? + divider + fields + divider + methods
+            let height = CLS_SECTION_HEIGHT; // Class name
+            if (cls.annotation) height += CLS_MEMBER_HEIGHT;
+            height += 1; // divider
+            height += Math.max(1, fields.length) * CLS_MEMBER_HEIGHT;
+            height += 1; // divider
+            height += Math.max(1, methods.length) * CLS_MEMBER_HEIGHT;
+            height += CLS_BOX_PADDING;
+
+            return { width, height };
+        }
+
+        function clsFormatMember(member) {
+            let prefix = '';
+            switch (member.visibility) {
+                case 'Public': prefix = '+'; break;
+                case 'Private': prefix = '-'; break;
+                case 'Protected': prefix = '#'; break;
+                case 'Package': prefix = '~'; break;
+            }
+            return prefix + (member.rawText || member.name || '');
+        }
+
+        function clsGetVisibilitySymbol(visibility) {
+            switch (visibility) {
+                case 'Public': return '+';
+                case 'Private': return '-';
+                case 'Protected': return '#';
+                case 'Package': return '~';
+                default: return '';
+            }
+        }
+
+        function renderClassDiagram() {
+            if (!clsDiagram) return;
+
+            nodesLayer.innerHTML = '';
+            edgesLayer.innerHTML = '';
+            subgraphsLayer.innerHTML = '';
+
+            // ===== Render Namespaces as background groups =====
+            clsDiagram.namespaces.forEach(ns => {
+                const nsClasses = ns.classIds.map(id => clsDiagram.classes.find(c => c.id === id)).filter(Boolean);
+                if (nsClasses.length === 0) return;
+
+                let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                nsClasses.forEach(cls => {
+                    const pos = clsClassPositions[cls.id];
+                    if (!pos) return;
+                    const dim = clsGetClassBoxDimensions(cls);
+                    minX = Math.min(minX, pos.x);
+                    minY = Math.min(minY, pos.y);
+                    maxX = Math.max(maxX, pos.x + dim.width);
+                    maxY = Math.max(maxY, pos.y + dim.height);
+                });
+
+                const padding = 20;
+                const nsRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                nsRect.setAttribute('x', minX - padding);
+                nsRect.setAttribute('y', minY - padding - 20);
+                nsRect.setAttribute('width', maxX - minX + padding * 2);
+                nsRect.setAttribute('height', maxY - minY + padding * 2 + 20);
+                nsRect.setAttribute('rx', '6');
+                nsRect.setAttribute('fill', 'var(--subgraph-fill)');
+                nsRect.setAttribute('stroke', 'var(--subgraph-stroke)');
+                nsRect.setAttribute('stroke-width', '1');
+                nsRect.setAttribute('stroke-dasharray', '4,4');
+                subgraphsLayer.appendChild(nsRect);
+
+                const nsLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                nsLabel.setAttribute('x', minX - padding + 8);
+                nsLabel.setAttribute('y', minY - padding - 6);
+                nsLabel.setAttribute('fill', 'var(--text-color)');
+                nsLabel.setAttribute('font-size', '12');
+                nsLabel.setAttribute('font-style', 'italic');
+                nsLabel.textContent = ns.name;
+                subgraphsLayer.appendChild(nsLabel);
+            });
+
+            // ===== Render Classes =====
+            clsDiagram.classes.forEach(cls => {
+                const pos = clsClassPositions[cls.id];
+                if (!pos) return;
+                const dim = clsGetClassBoxDimensions(cls);
+                pos.width = dim.width;
+                pos.height = dim.height;
+
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.classList.add('node-group', 'cls-class');
+                g.setAttribute('data-class-id', cls.id);
+                g.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
+
+                // Main box
+                const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                rect.setAttribute('x', '0');
+                rect.setAttribute('y', '0');
+                rect.setAttribute('width', dim.width);
+                rect.setAttribute('height', dim.height);
+                rect.setAttribute('rx', '3');
+                rect.classList.add('node-shape');
+                if (clsSelectedClassId === cls.id) rect.classList.add('selected');
+                g.appendChild(rect);
+
+                let yOffset = 0;
+
+                // Annotation (e.g., <<interface>>)
+                if (cls.annotation) {
+                    yOffset += CLS_MEMBER_HEIGHT;
+                    const annText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    annText.setAttribute('x', dim.width / 2);
+                    annText.setAttribute('y', yOffset);
+                    annText.setAttribute('text-anchor', 'middle');
+                    annText.setAttribute('fill', 'var(--text-color)');
+                    annText.setAttribute('font-size', '11');
+                    annText.setAttribute('font-style', 'italic');
+                    annText.textContent = '<<' + cls.annotation + '>>';
+                    g.appendChild(annText);
+                }
+
+                // Class name header
+                yOffset += CLS_SECTION_HEIGHT;
+                const nameText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                nameText.setAttribute('x', dim.width / 2);
+                nameText.setAttribute('y', yOffset);
+                nameText.setAttribute('text-anchor', 'middle');
+                nameText.setAttribute('fill', 'var(--text-color)');
+                nameText.setAttribute('font-size', '13');
+                nameText.setAttribute('font-weight', 'bold');
+                nameText.setAttribute('font-family', 'monospace');
+                nameText.textContent = cls.label || cls.id;
+                g.appendChild(nameText);
+
+                // Divider line
+                yOffset += 6;
+                const div1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                div1.setAttribute('x1', '0');
+                div1.setAttribute('y1', yOffset);
+                div1.setAttribute('x2', dim.width);
+                div1.setAttribute('y2', yOffset);
+                div1.setAttribute('stroke', 'var(--node-stroke)');
+                div1.setAttribute('stroke-width', '1');
+                g.appendChild(div1);
+
+                // Fields section
+                const fields = cls.members.filter(m => !m.isMethod);
+                if (fields.length === 0) {
+                    yOffset += CLS_MEMBER_HEIGHT;
+                } else {
+                    fields.forEach((f, fi) => {
+                        yOffset += CLS_MEMBER_HEIGHT;
+                        const fText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        fText.setAttribute('x', CLS_BOX_PADDING);
+                        fText.setAttribute('y', yOffset);
+                        fText.setAttribute('fill', 'var(--text-color)');
+                        fText.setAttribute('font-size', '12');
+                        fText.setAttribute('font-family', 'monospace');
+                        fText.textContent = clsFormatMember(f);
+                        fText.classList.add('cls-member');
+                        fText.setAttribute('data-class-id', cls.id);
+                        fText.setAttribute('data-member-index', cls.members.indexOf(f));
+                        g.appendChild(fText);
+                    });
+                }
+
+                // Divider line
+                yOffset += 6;
+                const div2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                div2.setAttribute('x1', '0');
+                div2.setAttribute('y1', yOffset);
+                div2.setAttribute('x2', dim.width);
+                div2.setAttribute('y2', yOffset);
+                div2.setAttribute('stroke', 'var(--node-stroke)');
+                div2.setAttribute('stroke-width', '1');
+                g.appendChild(div2);
+
+                // Methods section
+                const methods = cls.members.filter(m => m.isMethod);
+                if (methods.length === 0) {
+                    yOffset += CLS_MEMBER_HEIGHT;
+                } else {
+                    methods.forEach((m, mi) => {
+                        yOffset += CLS_MEMBER_HEIGHT;
+                        const mText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        mText.setAttribute('x', CLS_BOX_PADDING);
+                        mText.setAttribute('y', yOffset);
+                        mText.setAttribute('fill', 'var(--text-color)');
+                        mText.setAttribute('font-size', '12');
+                        mText.setAttribute('font-family', 'monospace');
+                        mText.textContent = clsFormatMember(m);
+                        mText.classList.add('cls-member');
+                        mText.setAttribute('data-class-id', cls.id);
+                        mText.setAttribute('data-member-index', cls.members.indexOf(m));
+                        g.appendChild(mText);
+                    });
+                }
+
+                // Connection grip points (N, S, E, W)
+                const gripPositions = [
+                    { cx: dim.width / 2, cy: 0 },          // North
+                    { cx: dim.width / 2, cy: dim.height },  // South
+                    { cx: 0, cy: dim.height / 2 },          // West
+                    { cx: dim.width, cy: dim.height / 2 }   // East
+                ];
+                gripPositions.forEach(gp => {
+                    const grip = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    grip.setAttribute('cx', gp.cx);
+                    grip.setAttribute('cy', gp.cy);
+                    grip.setAttribute('r', '5');
+                    grip.classList.add('connection-grip', 'cls-grip');
+                    grip.setAttribute('data-class-id', cls.id);
+                    g.appendChild(grip);
+                });
+
+                nodesLayer.appendChild(g);
+            });
+
+            // ===== Render Relationships =====
+            clsDiagram.relationships.forEach((rel, relIdx) => {
+                const fromPos = clsClassPositions[rel.fromId];
+                const toPos = clsClassPositions[rel.toId];
+                if (!fromPos || !toPos) return;
+
+                const fromCx = fromPos.x + (fromPos.width || CLS_BOX_MIN_WIDTH) / 2;
+                const fromCy = fromPos.y + (fromPos.height || 100) / 2;
+                const toCx = toPos.x + (toPos.width || CLS_BOX_MIN_WIDTH) / 2;
+                const toCy = toPos.y + (toPos.height || 100) / 2;
+
+                // Get best edge points based on direction
+                const pts = clsGetEdgePoints(fromPos, toPos);
+
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.classList.add('cls-relationship');
+                g.setAttribute('data-rel-index', relIdx);
+
+                // Line
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', pts.x1);
+                line.setAttribute('y1', pts.y1);
+                line.setAttribute('x2', pts.x2);
+                line.setAttribute('y2', pts.y2);
+                line.setAttribute('stroke', 'var(--edge-stroke)');
+                line.setAttribute('stroke-width', clsSelectedRelIndex === relIdx ? '2.5' : '1.5');
+
+                // Dashed for dotted link style
+                if (rel.linkStyle === 'Dotted') {
+                    line.setAttribute('stroke-dasharray', '6,4');
+                }
+                g.appendChild(line);
+
+                // Hit area (wider invisible line for clicking)
+                const hitLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                hitLine.setAttribute('x1', pts.x1);
+                hitLine.setAttribute('y1', pts.y1);
+                hitLine.setAttribute('x2', pts.x2);
+                hitLine.setAttribute('y2', pts.y2);
+                hitLine.setAttribute('stroke', 'transparent');
+                hitLine.setAttribute('stroke-width', '12');
+                hitLine.style.cursor = 'pointer';
+                g.appendChild(hitLine);
+
+                // Arrow markers at endpoints
+                const angle = Math.atan2(pts.y2 - pts.y1, pts.x2 - pts.x1);
+                const reverseAngle = angle + Math.PI;
+
+                // Left end marker (at source/from side)
+                clsDrawRelationEndMarker(g, pts.x1, pts.y1, reverseAngle, rel.leftEnd);
+
+                // Right end marker (at target/to side)
+                clsDrawRelationEndMarker(g, pts.x2, pts.y2, angle, rel.rightEnd);
+
+                // Label
+                if (rel.label) {
+                    const midX = (pts.x1 + pts.x2) / 2;
+                    const midY = (pts.y1 + pts.y2) / 2;
+                    const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    labelText.setAttribute('x', midX);
+                    labelText.setAttribute('y', midY - 4);
+                    labelText.setAttribute('text-anchor', 'middle');
+                    labelText.setAttribute('fill', 'var(--text-color)');
+                    labelText.setAttribute('font-size', '11');
+                    labelText.setAttribute('font-style', 'italic');
+                    labelText.textContent = rel.label;
+                    // Background rect
+                    const estWidth = rel.label.length * 7 + 8;
+                    labelBg.setAttribute('x', midX - estWidth / 2);
+                    labelBg.setAttribute('y', midY - 16);
+                    labelBg.setAttribute('width', estWidth);
+                    labelBg.setAttribute('height', '16');
+                    labelBg.setAttribute('fill', 'var(--bg-color)');
+                    labelBg.setAttribute('rx', '2');
+                    g.appendChild(labelBg);
+                    g.appendChild(labelText);
+                }
+
+                // Cardinality labels
+                if (rel.fromCardinality) {
+                    const cardText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    const dx = (pts.x2 - pts.x1) * 0.15;
+                    const dy = (pts.y2 - pts.y1) * 0.15;
+                    cardText.setAttribute('x', pts.x1 + dx);
+                    cardText.setAttribute('y', pts.y1 + dy - 8);
+                    cardText.setAttribute('text-anchor', 'middle');
+                    cardText.setAttribute('fill', 'var(--text-color)');
+                    cardText.setAttribute('font-size', '10');
+                    cardText.textContent = rel.fromCardinality;
+                    g.appendChild(cardText);
+                }
+                if (rel.toCardinality) {
+                    const cardText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    const dx = (pts.x2 - pts.x1) * 0.85;
+                    const dy = (pts.y2 - pts.y1) * 0.85;
+                    cardText.setAttribute('x', pts.x1 + dx);
+                    cardText.setAttribute('y', pts.y1 + dy - 8);
+                    cardText.setAttribute('text-anchor', 'middle');
+                    cardText.setAttribute('fill', 'var(--text-color)');
+                    cardText.setAttribute('font-size', '10');
+                    cardText.textContent = rel.toCardinality;
+                    g.appendChild(cardText);
+                }
+
+                edgesLayer.appendChild(g);
+            });
+
+            // ===== Render Notes =====
+            clsDiagram.notes.forEach(note => {
+                const targetCls = note.forClass ? clsClassPositions[note.forClass] : null;
+                const noteX = targetCls ? targetCls.x + (targetCls.width || CLS_BOX_MIN_WIDTH) + 20 : CLS_LEFT_MARGIN;
+                const noteY = targetCls ? targetCls.y : CLS_TOP_MARGIN;
+
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.setAttribute('transform', `translate(${noteX}, ${noteY})`);
+
+                const noteRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                noteRect.setAttribute('x', '0');
+                noteRect.setAttribute('y', '0');
+                noteRect.setAttribute('width', '140');
+                noteRect.setAttribute('height', '40');
+                noteRect.setAttribute('fill', '#ffffcc');
+                noteRect.setAttribute('stroke', '#cccc00');
+                noteRect.setAttribute('rx', '2');
+                g.appendChild(noteRect);
+
+                const noteText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                noteText.setAttribute('x', '8');
+                noteText.setAttribute('y', '24');
+                noteText.setAttribute('fill', '#333');
+                noteText.setAttribute('font-size', '11');
+                noteText.textContent = note.text.length > 25 ? note.text.substring(0, 25) + '...' : note.text;
+                g.appendChild(noteText);
+
+                subgraphsLayer.appendChild(g);
+            });
+
+            updateMinimap();
+        }
+
+        function clsGetEdgePoints(fromPos, toPos) {
+            const fw = fromPos.width || CLS_BOX_MIN_WIDTH;
+            const fh = fromPos.height || 100;
+            const tw = toPos.width || CLS_BOX_MIN_WIDTH;
+            const th = toPos.height || 100;
+
+            const fromCx = fromPos.x + fw / 2;
+            const fromCy = fromPos.y + fh / 2;
+            const toCx = toPos.x + tw / 2;
+            const toCy = toPos.y + th / 2;
+
+            const dx = toCx - fromCx;
+            const dy = toCy - fromCy;
+
+            let x1, y1, x2, y2;
+
+            // Determine best exit/entry ports based on direction
+            if (Math.abs(dy) > Math.abs(dx)) {
+                // Predominantly vertical
+                if (dy > 0) {
+                    // Target is below
+                    x1 = fromCx; y1 = fromPos.y + fh;
+                    x2 = toCx; y2 = toPos.y;
+                } else {
+                    // Target is above
+                    x1 = fromCx; y1 = fromPos.y;
+                    x2 = toCx; y2 = toPos.y + th;
+                }
+            } else {
+                // Predominantly horizontal
+                if (dx > 0) {
+                    // Target is to the right
+                    x1 = fromPos.x + fw; y1 = fromCy;
+                    x2 = toPos.x; y2 = toCy;
+                } else {
+                    // Target is to the left
+                    x1 = fromPos.x; y1 = fromCy;
+                    x2 = toPos.x + tw; y2 = toCy;
+                }
+            }
+
+            return { x1, y1, x2, y2 };
+        }
+
+        function clsDrawRelationEndMarker(g, px, py, angle, endType) {
+            const size = 10;
+            switch (endType) {
+                case 'Arrow': {
+                    // Open arrowhead (inheritance/realization)
+                    const p1x = px + size * Math.cos(angle + 0.5);
+                    const p1y = py + size * Math.sin(angle + 0.5);
+                    const p2x = px + size * Math.cos(angle - 0.5);
+                    const p2y = py + size * Math.sin(angle - 0.5);
+                    const tri = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                    tri.setAttribute('points', `${px},${py} ${p1x},${p1y} ${p2x},${p2y}`);
+                    tri.setAttribute('fill', 'var(--bg-color)');
+                    tri.setAttribute('stroke', 'var(--edge-stroke)');
+                    tri.setAttribute('stroke-width', '1.5');
+                    g.appendChild(tri);
+                    break;
+                }
+                case 'Diamond': {
+                    // Filled diamond (composition)
+                    const tipX = px;
+                    const tipY = py;
+                    const midX = px + size * Math.cos(angle);
+                    const midY = py + size * Math.sin(angle);
+                    const backX = px + size * 2 * Math.cos(angle);
+                    const backY = py + size * 2 * Math.sin(angle);
+                    const leftX = midX + (size * 0.5) * Math.cos(angle + Math.PI / 2);
+                    const leftY = midY + (size * 0.5) * Math.sin(angle + Math.PI / 2);
+                    const rightX = midX + (size * 0.5) * Math.cos(angle - Math.PI / 2);
+                    const rightY = midY + (size * 0.5) * Math.sin(angle - Math.PI / 2);
+                    const diamond = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                    diamond.setAttribute('points', `${tipX},${tipY} ${leftX},${leftY} ${backX},${backY} ${rightX},${rightY}`);
+                    diamond.setAttribute('fill', 'var(--edge-stroke)');
+                    diamond.setAttribute('stroke', 'var(--edge-stroke)');
+                    diamond.setAttribute('stroke-width', '1');
+                    g.appendChild(diamond);
+                    break;
+                }
+                case 'OpenDiamond': {
+                    // Open diamond (aggregation)
+                    const tipX = px;
+                    const tipY = py;
+                    const midX = px + size * Math.cos(angle);
+                    const midY = py + size * Math.sin(angle);
+                    const backX = px + size * 2 * Math.cos(angle);
+                    const backY = py + size * 2 * Math.sin(angle);
+                    const leftX = midX + (size * 0.5) * Math.cos(angle + Math.PI / 2);
+                    const leftY = midY + (size * 0.5) * Math.sin(angle + Math.PI / 2);
+                    const rightX = midX + (size * 0.5) * Math.cos(angle - Math.PI / 2);
+                    const rightY = midY + (size * 0.5) * Math.sin(angle - Math.PI / 2);
+                    const diamond = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                    diamond.setAttribute('points', `${tipX},${tipY} ${leftX},${leftY} ${backX},${backY} ${rightX},${rightY}`);
+                    diamond.setAttribute('fill', 'var(--bg-color)');
+                    diamond.setAttribute('stroke', 'var(--edge-stroke)');
+                    diamond.setAttribute('stroke-width', '1.5');
+                    g.appendChild(diamond);
+                    break;
+                }
+                case 'Star': {
+                    // Star marker
+                    const star = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    star.setAttribute('cx', px + 6 * Math.cos(angle));
+                    star.setAttribute('cy', py + 6 * Math.sin(angle));
+                    star.setAttribute('r', '4');
+                    star.setAttribute('fill', 'var(--edge-stroke)');
+                    g.appendChild(star);
+                    break;
+                }
+                case 'None':
+                default:
+                    break;
+            }
+        }
+
+        // ===== Class Diagram Interactions =====
+
+        // Click to select class
+        svg.addEventListener('mousedown', function(e) {
+            if (!clsDiagram) return;
+
+            const classGroup = e.target.closest('.cls-class');
+            const relGroup = e.target.closest('.cls-relationship');
+            const gripEl = e.target.closest('.cls-grip');
+
+            // Start drawing relationship from grip
+            if (gripEl) {
+                const classId = gripEl.getAttribute('data-class-id');
+                clsDrawingRelFrom = classId;
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+
+            if (classGroup) {
+                const classId = classGroup.getAttribute('data-class-id');
+                clsSelectedClassId = classId;
+                clsSelectedRelIndex = -1;
+
+                // Start dragging
+                const pos = clsClassPositions[classId];
+                if (pos) {
+                    const svgPt = getSVGPoint(e);
+                    clsDraggingClassId = classId;
+                    clsDragOffsetX = svgPt.x - pos.x;
+                    clsDragOffsetY = svgPt.y - pos.y;
+                }
+
+                renderClassDiagram();
+                clsShowClassPropertyPanel(classId);
+                e.stopPropagation();
+            } else if (relGroup) {
+                const relIdx = parseInt(relGroup.getAttribute('data-rel-index'), 10);
+                clsSelectedRelIndex = relIdx;
+                clsSelectedClassId = null;
+                renderClassDiagram();
+                clsShowRelPropertyPanel(relIdx);
+                e.stopPropagation();
+            } else if (clsDiagram) {
+                // Clicked on empty space
+                clsSelectedClassId = null;
+                clsSelectedRelIndex = -1;
+                propertyPanel.classList.remove('visible');
+                renderClassDiagram();
+            }
+        });
+
+        // Drag class boxes
+        svg.addEventListener('mousemove', function(e) {
+            if (!clsDiagram) return;
+
+            if (clsDraggingClassId) {
+                const svgPt = getSVGPoint(e);
+                const pos = clsClassPositions[clsDraggingClassId];
+                if (pos) {
+                    pos.x = Math.round((svgPt.x - clsDragOffsetX) / SNAP_GRID) * SNAP_GRID;
+                    pos.y = Math.round((svgPt.y - clsDragOffsetY) / SNAP_GRID) * SNAP_GRID;
+                    renderClassDiagram();
+                }
+            }
+
+            if (clsDrawingRelFrom) {
+                // Show temp edge line
+                const fromPos = clsClassPositions[clsDrawingRelFrom];
+                if (fromPos) {
+                    const svgPt = getSVGPoint(e);
+                    tempEdge.setAttribute('x1', fromPos.x + (fromPos.width || CLS_BOX_MIN_WIDTH) / 2);
+                    tempEdge.setAttribute('y1', fromPos.y + (fromPos.height || 100) / 2);
+                    tempEdge.setAttribute('x2', svgPt.x);
+                    tempEdge.setAttribute('y2', svgPt.y);
+                    tempEdge.style.display = '';
+                }
+            }
+        });
+
+        svg.addEventListener('mouseup', function(e) {
+            if (!clsDiagram) return;
+
+            if (clsDraggingClassId) {
+                clsDraggingClassId = null;
+            }
+
+            if (clsDrawingRelFrom) {
+                tempEdge.style.display = 'none';
+                const targetGroup = e.target.closest('.cls-class');
+                if (targetGroup) {
+                    const toId = targetGroup.getAttribute('data-class-id');
+                    if (toId && toId !== clsDrawingRelFrom) {
+                        postMessage({
+                            type: 'cls_relationshipCreated',
+                            fromId: clsDrawingRelFrom,
+                            toId: toId,
+                            leftEnd: 'None',
+                            rightEnd: 'Arrow',
+                            linkStyle: 'Solid'
+                        });
+                    }
+                }
+                clsDrawingRelFrom = null;
+            }
+        });
+
+        // Double-click to edit class name
+        svg.addEventListener('dblclick', function(e) {
+            if (!clsDiagram) return;
+
+            const classGroup = e.target.closest('.cls-class');
+            const memberEl = e.target.closest('.cls-member');
+
+            if (memberEl) {
+                const classId = memberEl.getAttribute('data-class-id');
+                const memberIdx = parseInt(memberEl.getAttribute('data-member-index'), 10);
+                const cls = clsDiagram.classes.find(c => c.id === classId);
+                if (cls && memberIdx >= 0 && memberIdx < cls.members.length) {
+                    clsStartMemberInlineEdit(classId, memberIdx, cls.members[memberIdx], e);
+                }
+                e.stopPropagation();
+            } else if (classGroup) {
+                const classId = classGroup.getAttribute('data-class-id');
+                const cls = clsDiagram.classes.find(c => c.id === classId);
+                if (cls) clsStartClassNameInlineEdit(classId, cls, e);
+                e.stopPropagation();
+            }
+        });
+
+        function clsStartClassNameInlineEdit(classId, cls, event) {
+            const pos = clsClassPositions[classId];
+            if (!pos) return;
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = cls.label || cls.id;
+            input.className = 'inline-edit-input';
+
+            const transform = panzoomInstance ? panzoomInstance.getTransform() : { x: 0, y: 0, scale: 1 };
+            const rect = canvasContainer.getBoundingClientRect();
+            const screenX = pos.x * transform.scale + transform.x + rect.left;
+            const screenY = pos.y * transform.scale + transform.y + rect.top;
+
+            input.style.position = 'fixed';
+            input.style.left = screenX + 'px';
+            input.style.top = screenY + 'px';
+            input.style.width = (pos.width || CLS_BOX_MIN_WIDTH) * transform.scale + 'px';
+            input.style.fontSize = (13 * transform.scale) + 'px';
+            input.style.fontFamily = 'monospace';
+            input.style.fontWeight = 'bold';
+            input.style.textAlign = 'center';
+            input.style.zIndex = '10000';
+            input.style.padding = '2px 4px';
+            input.style.border = '2px solid var(--accent-color)';
+            input.style.background = 'var(--bg-color)';
+            input.style.color = 'var(--text-color)';
+
+            document.body.appendChild(input);
+            input.focus();
+            input.select();
+
+            function commit() {
+                const newLabel = input.value.trim();
+                if (newLabel && newLabel !== (cls.label || cls.id)) {
+                    postMessage({ type: 'cls_classEdited', classId: classId, label: newLabel });
+                }
+                input.remove();
+            }
+
+            input.addEventListener('blur', commit);
+            input.addEventListener('keydown', function(ke) {
+                if (ke.key === 'Enter') { ke.preventDefault(); commit(); }
+                if (ke.key === 'Escape') { input.remove(); }
+            });
+        }
+
+        function clsStartMemberInlineEdit(classId, memberIdx, member, event) {
+            const pos = clsClassPositions[classId];
+            if (!pos) return;
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.value = member.rawText || clsFormatMember(member);
+            input.className = 'inline-edit-input';
+
+            const transform = panzoomInstance ? panzoomInstance.getTransform() : { x: 0, y: 0, scale: 1 };
+            const rect = canvasContainer.getBoundingClientRect();
+            const bbox = event.target.getBBox ? event.target.getBBox() : { x: 0, y: 0, width: pos.width, height: 20 };
+
+            // Get the parent transform for correct positioning
+            const parentTransform = event.target.closest('.cls-class');
+            const parentMatrix = parentTransform ? parentTransform.getCTM() : svg.getCTM();
+
+            const screenX = (pos.x + CLS_BOX_PADDING) * transform.scale + transform.x + rect.left;
+            const screenY = (pos.y + bbox.y - 12) * transform.scale + transform.y + rect.top;
+
+            input.style.position = 'fixed';
+            input.style.left = screenX + 'px';
+            input.style.top = screenY + 'px';
+            input.style.width = ((pos.width || CLS_BOX_MIN_WIDTH) - CLS_BOX_PADDING * 2) * transform.scale + 'px';
+            input.style.fontSize = (12 * transform.scale) + 'px';
+            input.style.fontFamily = 'monospace';
+            input.style.zIndex = '10000';
+            input.style.padding = '1px 4px';
+            input.style.border = '2px solid var(--accent-color)';
+            input.style.background = 'var(--bg-color)';
+            input.style.color = 'var(--text-color)';
+
+            document.body.appendChild(input);
+            input.focus();
+            input.select();
+
+            function commit() {
+                const newText = input.value.trim();
+                if (newText !== (member.rawText || '')) {
+                    postMessage({ type: 'cls_memberEdited', classId: classId, memberIndex: memberIdx, rawText: newText });
+                }
+                input.remove();
+            }
+
+            input.addEventListener('blur', commit);
+            input.addEventListener('keydown', function(ke) {
+                if (ke.key === 'Enter') { ke.preventDefault(); commit(); }
+                if (ke.key === 'Escape') { input.remove(); }
+            });
+        }
+
+        // Property panel for classes
+        function clsShowClassPropertyPanel(classId) {
+            const cls = clsDiagram.classes.find(c => c.id === classId);
+            if (!cls) return;
+
+            propertyPanel.innerHTML = `
+                <div class="property-title">Class: ${escapeHtml(cls.label || cls.id)}</div>
+                <div class="property-row">
+                    <div class="property-label">Name</div>
+                    <input class="property-input" id="cls-name" value="${escapeHtml(cls.label || cls.id)}" />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Annotation</div>
+                    <select class="property-select" id="cls-annotation">
+                        <option value="" ${!cls.annotation ? 'selected' : ''}>(none)</option>
+                        <option value="interface" ${cls.annotation === 'interface' ? 'selected' : ''}>&#60;&#60;interface&#62;&#62;</option>
+                        <option value="abstract" ${cls.annotation === 'abstract' ? 'selected' : ''}>&#60;&#60;abstract&#62;&#62;</option>
+                        <option value="service" ${cls.annotation === 'service' ? 'selected' : ''}>&#60;&#60;service&#62;&#62;</option>
+                        <option value="enumeration" ${cls.annotation === 'enumeration' ? 'selected' : ''}>&#60;&#60;enumeration&#62;&#62;</option>
+                    </select>
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Generic Type</div>
+                    <input class="property-input" id="cls-generic" value="${escapeHtml(cls.genericType || '')}" placeholder="e.g. List~T~" />
+                </div>
+                <div class="property-row" style="margin-top:8px">
+                    <button class="property-btn" id="cls-add-field" style="flex:1;padding:4px 8px;cursor:pointer;">+ Field</button>
+                    <button class="property-btn" id="cls-add-method" style="flex:1;padding:4px 8px;cursor:pointer;margin-left:4px;">+ Method</button>
+                </div>
+            `;
+
+            document.getElementById('cls-name').addEventListener('change', function() {
+                postMessage({ type: 'cls_classEdited', classId: classId, label: this.value });
+            });
+            document.getElementById('cls-annotation').addEventListener('change', function() {
+                postMessage({ type: 'cls_classEdited', classId: classId, annotation: this.value || null });
+            });
+            document.getElementById('cls-generic').addEventListener('change', function() {
+                postMessage({ type: 'cls_classEdited', classId: classId, genericType: this.value || null });
+            });
+            document.getElementById('cls-add-field').addEventListener('click', function() {
+                postMessage({ type: 'cls_memberAdded', classId: classId, rawText: '+newField' });
+            });
+            document.getElementById('cls-add-method').addEventListener('click', function() {
+                postMessage({ type: 'cls_memberAdded', classId: classId, rawText: '+newMethod()' });
+            });
+
+            propertyPanel.classList.add('visible');
+        }
+
+        // Property panel for relationships
+        function clsShowRelPropertyPanel(relIdx) {
+            const rel = clsDiagram.relationships[relIdx];
+            if (!rel) return;
+
+            propertyPanel.innerHTML = `
+                <div class="property-title">Relationship</div>
+                <div class="property-row">
+                    <div class="property-label">From</div>
+                    <span class="property-value">${escapeHtml(rel.fromId)}</span>
+                </div>
+                <div class="property-row">
+                    <div class="property-label">To</div>
+                    <span class="property-value">${escapeHtml(rel.toId)}</span>
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Type</div>
+                    <select class="property-select" id="cls-rel-type">
+                        <option value="association" ${rel.leftEnd === 'None' && rel.rightEnd === 'Arrow' && rel.linkStyle === 'Solid' ? 'selected' : ''}>Association (-->)</option>
+                        <option value="inheritance" ${rel.leftEnd === 'None' && rel.rightEnd === 'Arrow' && rel.linkStyle === 'Dotted' ? 'selected' : ''}>Inheritance (--|>)</option>
+                        <option value="composition" ${rel.leftEnd === 'Diamond' ? 'selected' : ''}>Composition (*--)</option>
+                        <option value="aggregation" ${rel.leftEnd === 'OpenDiamond' ? 'selected' : ''}>Aggregation (o--)</option>
+                        <option value="dependency" ${rel.linkStyle === 'Dotted' && rel.leftEnd === 'None' && rel.rightEnd === 'None' ? 'selected' : ''}>Dependency (..>)</option>
+                        <option value="realization" ${rel.linkStyle === 'Dotted' && rel.rightEnd === 'Arrow' && rel.leftEnd !== 'None' ? 'selected' : ''}>Realization (..|>)</option>
+                    </select>
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Label</div>
+                    <input class="property-input" id="cls-rel-label" value="${escapeHtml(rel.label || '')}" />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">From Card.</div>
+                    <input class="property-input" id="cls-rel-from-card" value="${escapeHtml(rel.fromCardinality || '')}" placeholder='e.g. "1"' />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">To Card.</div>
+                    <input class="property-input" id="cls-rel-to-card" value="${escapeHtml(rel.toCardinality || '')}" placeholder='e.g. "*"' />
+                </div>
+            `;
+
+            document.getElementById('cls-rel-type').addEventListener('change', function() {
+                const typeMap = {
+                    association: { leftEnd: 'None', rightEnd: 'Arrow', linkStyle: 'Solid' },
+                    inheritance: { leftEnd: 'None', rightEnd: 'Arrow', linkStyle: 'Dotted' },
+                    composition: { leftEnd: 'Diamond', rightEnd: 'None', linkStyle: 'Solid' },
+                    aggregation: { leftEnd: 'OpenDiamond', rightEnd: 'None', linkStyle: 'Solid' },
+                    dependency: { leftEnd: 'None', rightEnd: 'None', linkStyle: 'Dotted' },
+                    realization: { leftEnd: 'None', rightEnd: 'Arrow', linkStyle: 'Dotted' }
+                };
+                const t = typeMap[this.value] || typeMap.association;
+                postMessage({ type: 'cls_relationshipEdited', relationshipIndex: relIdx, leftEnd: t.leftEnd, rightEnd: t.rightEnd, linkStyle: t.linkStyle });
+            });
+            document.getElementById('cls-rel-label').addEventListener('change', function() {
+                postMessage({ type: 'cls_relationshipEdited', relationshipIndex: relIdx, label: this.value });
+            });
+            document.getElementById('cls-rel-from-card').addEventListener('change', function() {
+                postMessage({ type: 'cls_relationshipEdited', relationshipIndex: relIdx, fromCardinality: this.value });
+            });
+            document.getElementById('cls-rel-to-card').addEventListener('change', function() {
+                postMessage({ type: 'cls_relationshipEdited', relationshipIndex: relIdx, toCardinality: this.value });
+            });
+
+            propertyPanel.classList.add('visible');
+        }
+
+        // ===== Class Diagram Context Menu =====
+
+        svg.addEventListener('contextmenu', function(e) {
+            if (!clsDiagram) return;
+            e.preventDefault();
+            e.stopPropagation();
+
+            const classGroup = e.target.closest('.cls-class');
+            const relGroup = e.target.closest('.cls-relationship');
+            const memberEl = e.target.closest('.cls-member');
+
+            contextMenu.innerHTML = '';
+
+            if (memberEl) {
+                const classId = memberEl.getAttribute('data-class-id');
+                const memberIdx = parseInt(memberEl.getAttribute('data-member-index'), 10);
+
+                addClsContextMenuItem('Edit Member', () => {
+                    const cls = clsDiagram.classes.find(c => c.id === classId);
+                    if (cls && memberIdx >= 0 && memberIdx < cls.members.length) {
+                        clsStartMemberInlineEdit(classId, memberIdx, cls.members[memberIdx], e);
+                    }
+                });
+                addClsContextMenuItem('Delete Member', () => {
+                    postMessage({ type: 'cls_memberDeleted', classId: classId, memberIndex: memberIdx });
+                });
+            } else if (classGroup) {
+                const classId = classGroup.getAttribute('data-class-id');
+                clsSelectedClassId = classId;
+
+                addClsContextMenuItem('Edit Class', () => {
+                    const cls = clsDiagram.classes.find(c => c.id === classId);
+                    if (cls) clsStartClassNameInlineEdit(classId, cls, e);
+                });
+                addClsContextMenuItem('Add Field', () => {
+                    postMessage({ type: 'cls_memberAdded', classId: classId, rawText: '+newField' });
+                });
+                addClsContextMenuItem('Add Method', () => {
+                    postMessage({ type: 'cls_memberAdded', classId: classId, rawText: '+newMethod()' });
+                });
+                addClsContextMenuSeparator();
+                addClsContextMenuItem('Delete Class', () => {
+                    postMessage({ type: 'cls_classDeleted', classId: classId });
+                });
+            } else if (relGroup) {
+                const relIdx = parseInt(relGroup.getAttribute('data-rel-index'), 10);
+                clsSelectedRelIndex = relIdx;
+
+                addClsContextMenuItem('Delete Relationship', () => {
+                    postMessage({ type: 'cls_relationshipDeleted', relationshipIndex: relIdx });
+                });
+            } else {
+                // Empty space context menu
+                addClsContextMenuItem('Add Class', () => {
+                    const svgPt = getSVGPoint(e);
+                    const newId = 'NewClass' + (clsDiagram.classes.length + 1);
+                    clsClassPositions[newId] = {
+                        x: Math.round(svgPt.x / SNAP_GRID) * SNAP_GRID,
+                        y: Math.round(svgPt.y / SNAP_GRID) * SNAP_GRID
+                    };
+                    postMessage({ type: 'cls_classCreated', classId: newId });
+                });
+            }
+
+            contextMenu.style.left = e.clientX + 'px';
+            contextMenu.style.top = e.clientY + 'px';
+            contextMenu.classList.add('visible');
+            renderClassDiagram();
+        });
+
+        function addClsContextMenuItem(label, onClick) {
+            const item = document.createElement('div');
+            item.classList.add('context-menu-item');
+            item.textContent = label;
+            item.addEventListener('click', function(e) {
+                e.stopPropagation();
+                contextMenu.classList.remove('visible');
+                onClick();
+            });
+            contextMenu.appendChild(item);
+        }
+
+        function addClsContextMenuSeparator() {
+            const sep = document.createElement('div');
+            sep.classList.add('context-menu-separator');
+            contextMenu.appendChild(sep);
+        }
+
+        // Delete key for class diagram elements
+        document.addEventListener('keydown', function(e) {
+            if (!clsDiagram) return;
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) return;
+
+                if (clsSelectedClassId) {
+                    postMessage({ type: 'cls_classDeleted', classId: clsSelectedClassId });
+                    clsSelectedClassId = null;
+                    e.preventDefault();
+                } else if (clsSelectedRelIndex >= 0) {
+                    postMessage({ type: 'cls_relationshipDeleted', relationshipIndex: clsSelectedRelIndex });
+                    clsSelectedRelIndex = -1;
+                    e.preventDefault();
+                }
+            }
+        });
+
         // ========== External API for C# ==========
 
         window.updateNode = function(nodeId, props) {
