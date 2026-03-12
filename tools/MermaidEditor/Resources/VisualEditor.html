@@ -563,6 +563,8 @@
         <div class="context-menu-item" data-action="edit-label">&#9998; Edit Label</div>
         <div class="context-menu-item" data-action="delete-selected">&#128465; Delete Selected</div>
         <div class="context-menu-separator"></div>
+        <div class="context-menu-item" data-action="add-subgraph">&#9634; Add Subgraph</div>
+        <div class="context-menu-separator"></div>
         <div class="context-menu-item" data-action="auto-layout">&#9783; Auto Layout</div>
     </div>
 
@@ -1280,7 +1282,7 @@
                 });
 
                 const padding = 30;
-                const labelHeight = 20;
+                const labelHeight = 24;
 
                 const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                 g.classList.add('subgraph-group');
@@ -1296,7 +1298,7 @@
                 const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                 text.classList.add('subgraph-label');
                 text.setAttribute('x', minX - padding + 10);
-                text.setAttribute('y', minY - padding - 5);
+                text.setAttribute('y', minY - padding - labelHeight + 16);
                 text.textContent = sg.label || sg.id;
                 g.appendChild(text);
 
@@ -1948,6 +1950,8 @@
                 }
             } else if (action === 'delete-selected') {
                 deleteSelected();
+            } else if (action === 'add-subgraph') {
+                addSubgraph(contextMenuX, contextMenuY);
             } else if (action === 'auto-layout') {
                 autoLayout();
                 render();
@@ -2007,6 +2011,53 @@
 
             // Start editing the label immediately
             setTimeout(() => startInlineEdit(id), 100);
+        }
+
+        function addSubgraph(x, y) {
+            // Generate unique subgraph ID
+            let counter = diagram.subgraphs.length + 1;
+            let id = 'subgraph' + counter;
+            while (diagram.subgraphs.some(sg => sg.id === id)) {
+                counter++;
+                id = 'subgraph' + counter;
+            }
+
+            const label = 'New Subgraph';
+            const sg = {
+                id: id,
+                label: label,
+                nodeIds: [],
+                direction: null
+            };
+
+            // If nodes are selected, add them to the new subgraph
+            const nodesToAdd = [];
+            if (selectedNodeIds.length > 0) {
+                selectedNodeIds.forEach(nid => {
+                    // Remove from any existing subgraph first
+                    diagram.subgraphs.forEach(existing => {
+                        existing.nodeIds = existing.nodeIds.filter(eid => eid !== nid);
+                    });
+                    nodesToAdd.push(nid);
+                });
+            } else if (selectedNodeId) {
+                // Remove from any existing subgraph first
+                diagram.subgraphs.forEach(existing => {
+                    existing.nodeIds = existing.nodeIds.filter(eid => eid !== selectedNodeId);
+                });
+                nodesToAdd.push(selectedNodeId);
+            }
+
+            sg.nodeIds = nodesToAdd;
+            diagram.subgraphs.push(sg);
+            render();
+
+            postMessage({
+                type: 'subgraphCreated',
+                subgraphId: id,
+                label: label,
+                nodeIds: nodesToAdd
+            });
         }
 
         function deleteSelected() {

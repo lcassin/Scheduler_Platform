@@ -324,6 +324,10 @@ public class VisualEditorBridge
                     HandleNodeStyleChanged(root);
                     break;
 
+                case "subgraphCreated":
+                    HandleSubgraphCreated(root);
+                    break;
+
                 case "undo":
                     _ = UndoAsync();
                     break;
@@ -573,6 +577,43 @@ public class VisualEditorBridge
         }
 
         RaiseModelChanged("nodeStyleChanged");
+    }
+
+    private void HandleSubgraphCreated(JsonElement root)
+    {
+        var subgraphId = root.GetProperty("subgraphId").GetString();
+        var label = root.GetProperty("label").GetString();
+
+        if (string.IsNullOrEmpty(subgraphId)) return;
+
+        PushUndo();
+
+        var nodeIds = new List<string>();
+        if (root.TryGetProperty("nodeIds", out var nodeIdsArray))
+        {
+            foreach (var nid in nodeIdsArray.EnumerateArray())
+            {
+                var id = nid.GetString();
+                if (!string.IsNullOrEmpty(id))
+                {
+                    // Remove from any existing subgraph
+                    foreach (var existingSg in _model.Subgraphs)
+                    {
+                        existingSg.NodeIds.Remove(id);
+                    }
+                    nodeIds.Add(id);
+                }
+            }
+        }
+
+        _model.Subgraphs.Add(new FlowchartSubgraph
+        {
+            Id = subgraphId,
+            Label = label ?? "New Subgraph",
+            NodeIds = nodeIds
+        });
+
+        RaiseModelChanged("subgraphCreated");
     }
 
     private void HandleAutoLayoutComplete(JsonElement root)
