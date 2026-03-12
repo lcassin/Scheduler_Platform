@@ -4398,8 +4398,26 @@ Console.WriteLine(""Hello, World!"");
     {
         try
         {
+            // Temporarily make the panel visible so WebView2 can initialize
+            // (some systems require the control to be visible for EnsureCoreWebView2Async)
+            var wasCollapsed = VisualEditorPanel.Visibility == Visibility.Collapsed;
+            if (wasCollapsed)
+            {
+                VisualEditorPanel.Visibility = Visibility.Visible;
+                VisualEditorPanel.Width = 0;
+                VisualEditorPanel.Height = 0;
+            }
+
             await VisualEditorWebView.EnsureCoreWebView2Async();
             _visualEditorInitialized = true;
+
+            // Restore collapsed state after init
+            if (wasCollapsed)
+            {
+                VisualEditorPanel.Visibility = Visibility.Collapsed;
+                VisualEditorPanel.ClearValue(FrameworkElement.WidthProperty);
+                VisualEditorPanel.ClearValue(FrameworkElement.HeightProperty);
+            }
 
             // Load the embedded VisualEditor.html resource
             var assembly = System.Reflection.Assembly.GetExecutingAssembly();
@@ -4422,6 +4440,10 @@ Console.WriteLine(""Hello, World!"");
             // Apply current theme to visual editor
             var isDark = ThemeManager.IsDarkTheme;
             await _visualEditorBridge.SetThemeAsync(isDark ? "dark" : "light");
+
+            // Now that visual editor is initialized, refresh toolbar visibility
+            // (SetRenderModeFromFile may have already run before init completed)
+            UpdateVisualEditorModeToolbarVisibility();
         }
         catch (Exception)
         {
