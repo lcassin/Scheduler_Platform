@@ -312,6 +312,10 @@ public class VisualEditorBridge
                     HandleAutoLayoutComplete(root);
                     break;
 
+                case "nodeResized":
+                    HandleNodeResized(root);
+                    break;
+
                 case "nodeShapeChanged":
                     HandleNodeShapeChanged(root);
                     break;
@@ -350,6 +354,22 @@ public class VisualEditorBridge
         node.Position = new System.Windows.Point(x, y);
         node.HasManualPosition = true;
         RaiseModelChanged("nodeMoved");
+    }
+
+    private void HandleNodeResized(JsonElement root)
+    {
+        var nodeId = root.GetProperty("nodeId").GetString();
+        var width = root.GetProperty("width").GetDouble();
+        var height = root.GetProperty("height").GetDouble();
+
+        if (string.IsNullOrEmpty(nodeId)) return;
+
+        var node = _model.Nodes.Find(n => n.Id == nodeId);
+        if (node == null) return;
+
+        PushUndo();
+        node.Size = new System.Windows.Size(width, height);
+        RaiseModelChanged("nodeResized");
     }
 
     private void HandleNodeEdited(JsonElement root)
