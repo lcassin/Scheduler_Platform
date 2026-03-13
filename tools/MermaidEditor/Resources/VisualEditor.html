@@ -6765,13 +6765,8 @@
 
             if (stateGroup) {
                 const stateId = stateGroup.getAttribute('data-state-id');
-                const state = stFindState(stateId);
-                if (state) {
-                    const newLabel = prompt('State label:', state.label || state.id);
-                    if (newLabel !== null) {
-                        postMessage({ type: 'st_stateEdited', stateId: stateId, label: newLabel });
-                    }
-                }
+                stSelectedStateId = stateId;
+                stShowStateProperties(stateId);
                 e.preventDefault();
                 return;
             }
@@ -6779,11 +6774,8 @@
             if (transGroup) {
                 const idx = parseInt(transGroup.getAttribute('data-trans-index'), 10);
                 if (idx >= 0 && idx < stDiagram.transitions.length) {
-                    const trans = stDiagram.transitions[idx];
-                    const newLabel = prompt('Transition label:', trans.label || '');
-                    if (newLabel !== null) {
-                        postMessage({ type: 'st_transitionEdited', index: idx, label: newLabel });
-                    }
+                    stSelectedTransIndex = idx;
+                    stShowTransitionProperties(idx);
                 }
                 e.preventDefault();
                 return;
@@ -6874,19 +6866,10 @@
                 stSelectedStateId = stateId;
 
                 addStContextMenuItem('Edit State', () => {
-                    const state = stFindState(stateId);
-                    if (state) {
-                        const newLabel = prompt('State label:', state.label || state.id);
-                        if (newLabel !== null) {
-                            postMessage({ type: 'st_stateEdited', stateId: stateId, label: newLabel });
-                        }
-                    }
+                    stShowStateProperties(stateId);
                 });
                 addStContextMenuItem('Add Note', () => {
-                    const text = prompt('Note text:', '');
-                    if (text !== null && text.trim()) {
-                        postMessage({ type: 'st_noteCreated', stateId: stateId, text: text, position: 'RightOf' });
-                    }
+                    postMessage({ type: 'st_noteCreated', stateId: stateId, text: 'Note', position: 'RightOf' });
                 });
                 addStContextMenuSeparator();
                 addStContextMenuItem('Delete State', () => {
@@ -6897,13 +6880,7 @@
                 stSelectedTransIndex = idx;
 
                 addStContextMenuItem('Edit Label', () => {
-                    if (idx >= 0 && idx < stDiagram.transitions.length) {
-                        const trans = stDiagram.transitions[idx];
-                        const newLabel = prompt('Transition label:', trans.label || '');
-                        if (newLabel !== null) {
-                            postMessage({ type: 'st_transitionEdited', index: idx, label: newLabel });
-                        }
-                    }
+                    stShowTransitionProperties(idx);
                 });
                 addStContextMenuSeparator();
                 addStContextMenuItem('Delete Transition', () => {
@@ -7587,14 +7564,8 @@
             if (attrGroup) {
                 const entityName = attrGroup.getAttribute('data-entity-name');
                 const attrIdx = parseInt(attrGroup.getAttribute('data-attr-index'), 10);
-                const entity = erDiagram.entities.find(ent => ent.name === entityName);
-                if (entity && attrIdx >= 0 && attrIdx < entity.attributes.length) {
-                    const attr = entity.attributes[attrIdx];
-                    const newName = prompt('Attribute name:', attr.name);
-                    if (newName !== null) {
-                        postMessage({ type: 'er_attributeEdited', entityName: entityName, index: attrIdx, name: newName });
-                    }
-                }
+                erSelectedEntityName = entityName;
+                erShowAttributeProperties(entityName, attrIdx);
                 e.preventDefault();
                 e.stopPropagation();
                 return;
@@ -7602,10 +7573,9 @@
 
             if (entityGroup) {
                 const entityName = entityGroup.getAttribute('data-entity-name');
-                const newName = prompt('Entity name:', entityName);
-                if (newName !== null && newName.trim()) {
-                    postMessage({ type: 'er_entityEdited', oldName: entityName, name: newName.trim() });
-                }
+                erSelectedEntityName = entityName;
+                erSelectedRelIndex = -1;
+                erShowEntityProperties(entityName);
                 e.preventDefault();
                 return;
             }
@@ -7613,11 +7583,9 @@
             if (relGroup) {
                 const idx = parseInt(relGroup.getAttribute('data-rel-index'), 10);
                 if (idx >= 0 && idx < erDiagram.relationships.length) {
-                    const rel = erDiagram.relationships[idx];
-                    const newLabel = prompt('Relationship label:', rel.label || '');
-                    if (newLabel !== null) {
-                        postMessage({ type: 'er_relationshipEdited', index: idx, label: newLabel });
-                    }
+                    erSelectedRelIndex = idx;
+                    erSelectedEntityName = null;
+                    erShowRelationshipProperties(idx);
                 }
                 e.preventDefault();
                 return;
@@ -7646,6 +7614,54 @@
                 if (this.value.trim()) {
                     postMessage({ type: 'er_entityEdited', oldName: entityName, name: this.value.trim() });
                 }
+            });
+
+            propertyPanel.classList.add('visible');
+        }
+
+        function erShowAttributeProperties(entityName, attrIdx) {
+            const entity = erDiagram.entities.find(e => e.name === entityName);
+            if (!entity || attrIdx < 0 || attrIdx >= entity.attributes.length) return;
+            const attr = entity.attributes[attrIdx];
+
+            const keyOptions = ['', 'PK', 'FK'];
+            const keyOpts = keyOptions.map(k => `<option value="${k}" ${(attr.key || '') === k ? 'selected' : ''}>${k || '(none)'}</option>`).join('');
+
+            const propContent = propertyPanel.querySelector('.property-content');
+            propContent.innerHTML = `
+                <div class="property-row">
+                    <div class="property-label">Entity</div>
+                    <input class="property-input" value="${escapeHtml(entityName)}" readonly />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Name</div>
+                    <input class="property-input" id="er-attr-name" value="${escapeHtml(attr.name || '')}" />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Type</div>
+                    <input class="property-input" id="er-attr-type" value="${escapeHtml(attr.type || '')}" />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Key</div>
+                    <select class="property-input" id="er-attr-key">${keyOpts}</select>
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Comment</div>
+                    <input class="property-input" id="er-attr-comment" value="${escapeHtml(attr.comment || '')}" placeholder="Optional comment" />
+                </div>
+            `;
+
+            document.getElementById('er-attr-name').addEventListener('change', function() {
+                postMessage({ type: 'er_attributeEdited', entityName: entityName, index: attrIdx, name: this.value });
+            });
+            document.getElementById('er-attr-type').addEventListener('change', function() {
+                postMessage({ type: 'er_attributeEdited', entityName: entityName, index: attrIdx, type: this.value });
+            });
+            document.getElementById('er-attr-key').addEventListener('change', function() {
+                postMessage({ type: 'er_attributeEdited', entityName: entityName, index: attrIdx, key: this.value });
+            });
+            document.getElementById('er-attr-comment').addEventListener('change', function() {
+                postMessage({ type: 'er_attributeEdited', entityName: entityName, index: attrIdx, comment: this.value });
             });
 
             propertyPanel.classList.add('visible');
@@ -7727,14 +7743,7 @@
                 const attrIdx = parseInt(attrGroup.getAttribute('data-attr-index'), 10);
 
                 addErContextMenuItem('Edit Attribute', () => {
-                    const entity = erDiagram.entities.find(ent => ent.name === entityName);
-                    if (entity && attrIdx >= 0 && attrIdx < entity.attributes.length) {
-                        const attr = entity.attributes[attrIdx];
-                        const newName = prompt('Attribute name:', attr.name);
-                        if (newName !== null) {
-                            postMessage({ type: 'er_attributeEdited', entityName: entityName, index: attrIdx, name: newName });
-                        }
-                    }
+                    erShowAttributeProperties(entityName, attrIdx);
                 });
                 addErContextMenuItem('Delete Attribute', () => {
                     postMessage({ type: 'er_attributeDeleted', entityName: entityName, index: attrIdx });
@@ -7744,10 +7753,7 @@
                 erSelectedEntityName = entityName;
 
                 addErContextMenuItem('Edit Entity', () => {
-                    const newName = prompt('Entity name:', entityName);
-                    if (newName !== null && newName.trim()) {
-                        postMessage({ type: 'er_entityEdited', oldName: entityName, name: newName.trim() });
-                    }
+                    erShowEntityProperties(entityName);
                 });
                 addErContextMenuItem('Add Attribute', () => {
                     postMessage({ type: 'er_attributeAdded', entityName: entityName, type: 'string', name: 'newField' });
@@ -7761,13 +7767,7 @@
                 erSelectedRelIndex = idx;
 
                 addErContextMenuItem('Edit Relationship', () => {
-                    if (idx >= 0 && idx < erDiagram.relationships.length) {
-                        const rel = erDiagram.relationships[idx];
-                        const newLabel = prompt('Relationship label:', rel.label || '');
-                        if (newLabel !== null) {
-                            postMessage({ type: 'er_relationshipEdited', index: idx, label: newLabel });
-                        }
-                    }
+                    erShowRelationshipProperties(idx);
                 });
                 addErContextMenuSeparator();
                 addErContextMenuItem('Delete Relationship', () => {
