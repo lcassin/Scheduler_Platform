@@ -6126,10 +6126,23 @@
             if (memberEl) {
                 const classId = memberEl.getAttribute('data-class-id');
                 const memberIdx = parseInt(memberEl.getAttribute('data-member-index'), 10);
+                const cls = clsDiagram.classes.find(c => c.id === classId);
+                const memberCount = cls ? cls.members.length : 0;
 
                 addClsContextMenuItem('Edit Member', () => {
                     clsShowMemberPropertyPanel(classId, memberIdx);
                 });
+                if (memberIdx > 0) {
+                    addClsContextMenuItem('\u2191 Move Up', () => {
+                        postMessage({ type: 'cls_memberMoved', classId: classId, memberIndex: memberIdx, direction: 'up' });
+                    });
+                }
+                if (memberIdx < memberCount - 1) {
+                    addClsContextMenuItem('\u2193 Move Down', () => {
+                        postMessage({ type: 'cls_memberMoved', classId: classId, memberIndex: memberIdx, direction: 'down' });
+                    });
+                }
+                addClsContextMenuSeparator();
                 addClsContextMenuItem('Delete Member', () => {
                     postMessage({ type: 'cls_memberDeleted', classId: classId, memberIndex: memberIdx });
                 });
