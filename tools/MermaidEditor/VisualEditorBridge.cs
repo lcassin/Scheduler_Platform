@@ -183,6 +183,17 @@ public class VisualEditorBridge
     }
 
     /// <summary>
+    /// Refreshes the visual editor with the current class diagram model without resetting the view.
+    /// </summary>
+    public async Task RefreshClassDiagramAsync()
+    {
+        if (_classDiagramModel == null) return;
+        var json = ConvertClassDiagramModelToJson(_classDiagramModel);
+        var escaped = JsonSerializer.Serialize(json);
+        await _webView.ExecuteScriptAsync($"window.refreshClassDiagram({escaped})");
+    }
+
+    /// <summary>
     /// Updates the class diagram model reference and sends to editor.
     /// </summary>
     public async Task UpdateClassDiagramModelAsync(ClassDiagramModel newModel)
@@ -268,6 +279,18 @@ public class VisualEditorBridge
         var json = ConvertSequenceModelToJson(_sequenceModel);
         var escaped = JsonSerializer.Serialize(json);
         await _webView.ExecuteScriptAsync($"window.loadSequenceDiagram({escaped})");
+    }
+
+    /// <summary>
+    /// Refreshes the visual editor with the current sequence model without resetting the view.
+    /// Used after toolbar/button-triggered model changes.
+    /// </summary>
+    public async Task RefreshSequenceDiagramAsync()
+    {
+        if (_sequenceModel == null) return;
+        var json = ConvertSequenceModelToJson(_sequenceModel);
+        var escaped = JsonSerializer.Serialize(json);
+        await _webView.ExecuteScriptAsync($"window.refreshSequenceDiagram({escaped})");
     }
 
     /// <summary>
@@ -384,6 +407,17 @@ public class VisualEditorBridge
     }
 
     /// <summary>
+    /// Refreshes the visual editor with the current state diagram model without resetting the view.
+    /// </summary>
+    public async Task RefreshStateDiagramAsync()
+    {
+        if (_stateDiagramModel == null) return;
+        var json = ConvertStateDiagramModelToJson(_stateDiagramModel);
+        var escaped = JsonSerializer.Serialize(json);
+        await _webView.ExecuteScriptAsync($"window.refreshStateDiagram({escaped})");
+    }
+
+    /// <summary>
     /// Updates the state diagram model reference and sends to editor.
     /// </summary>
     public async Task UpdateStateDiagramModelAsync(StateDiagramModel newModel)
@@ -460,6 +494,17 @@ public class VisualEditorBridge
         var json = ConvertERDiagramModelToJson(_erDiagramModel);
         var escaped = JsonSerializer.Serialize(json);
         await _webView.ExecuteScriptAsync($"window.loadERDiagram({escaped})");
+    }
+
+    /// <summary>
+    /// Refreshes the visual editor with the current ER diagram model without resetting the view.
+    /// </summary>
+    public async Task RefreshERDiagramAsync()
+    {
+        if (_erDiagramModel == null) return;
+        var json = ConvertERDiagramModelToJson(_erDiagramModel);
+        var escaped = JsonSerializer.Serialize(json);
+        await _webView.ExecuteScriptAsync($"window.refreshERDiagram({escaped})");
     }
 
     /// <summary>
@@ -914,11 +959,25 @@ public class VisualEditorBridge
                     HandleSeqFragmentCreated(root);
                     break;
 
-                case "seq_participantSelected":
-                    // Selection doesn't need model changes
+                case "seq_fragmentEdited":
+                    HandleSeqFragmentEdited(root);
                     break;
 
+                case "seq_fragmentDeleted":
+                    HandleSeqFragmentDeleted(root);
+                    break;
+
+                case "seq_fragmentSectionEdited":
+                    HandleSeqFragmentSectionEdited(root);
+                    break;
+
+                case "seq_fragmentSectionAdded":
+                    HandleSeqFragmentSectionAdded(root);
+                    break;
+
+                case "seq_participantSelected":
                 case "seq_messageSelected":
+                case "seq_fragmentSelected":
                     // Selection doesn't need model changes
                     break;
 
@@ -2615,6 +2674,69 @@ public class VisualEditorBridge
 
         _sequenceModel.Elements.Add(fragment);
         RaiseSequenceModelChanged("seq_fragmentCreated");
+    }
+
+    private void HandleSeqFragmentEdited(JsonElement root)
+    {
+        if (_sequenceModel == null) return;
+        var elementIndex = root.GetProperty("elementIndex").GetInt32();
+
+        if (elementIndex < 0 || elementIndex >= _sequenceModel.Elements.Count) return;
+        if (_sequenceModel.Elements[elementIndex] is not SequenceFragment frag) return;
+
+        PushUndo();
+        if (root.TryGetProperty("fragmentType", out var ftProp))
+        {
+            var ftStr = ftProp.GetString();
+            if (ftStr != null && Enum.TryParse<SequenceFragmentType>(ftStr, true, out var parsed))
+                frag.Type = parsed;
+        }
+        if (root.TryGetProperty("text", out var textProp))
+            frag.Label = textProp.GetString() ?? "";
+
+        RaiseSequenceModelChanged("seq_fragmentEdited");
+    }
+
+    private void HandleSeqFragmentDeleted(JsonElement root)
+    {
+        if (_sequenceModel == null) return;
+        var elementIndex = root.GetProperty("elementIndex").GetInt32();
+
+        if (elementIndex < 0 || elementIndex >= _sequenceModel.Elements.Count) return;
+
+        PushUndo();
+        _sequenceModel.Elements.RemoveAt(elementIndex);
+        RaiseSequenceModelChanged("seq_fragmentDeleted");
+    }
+
+    private void HandleSeqFragmentSectionEdited(JsonElement root)
+    {
+        if (_sequenceModel == null) return;
+        var elementIndex = root.GetProperty("elementIndex").GetInt32();
+        var sectionIndex = root.GetProperty("sectionIndex").GetInt32();
+
+        if (elementIndex < 0 || elementIndex >= _sequenceModel.Elements.Count) return;
+        if (_sequenceModel.Elements[elementIndex] is not SequenceFragment frag) return;
+        if (sectionIndex < 0 || sectionIndex >= frag.Sections.Count) return;
+
+        PushUndo();
+        if (root.TryGetProperty("label", out var labelProp))
+            frag.Sections[sectionIndex].Label = labelProp.GetString();
+
+        RaiseSequenceModelChanged("seq_fragmentSectionEdited");
+    }
+
+    private void HandleSeqFragmentSectionAdded(JsonElement root)
+    {
+        if (_sequenceModel == null) return;
+        var elementIndex = root.GetProperty("elementIndex").GetInt32();
+
+        if (elementIndex < 0 || elementIndex >= _sequenceModel.Elements.Count) return;
+        if (_sequenceModel.Elements[elementIndex] is not SequenceFragment frag) return;
+
+        PushUndo();
+        frag.Sections.Add(new SequenceFragmentSection { Label = "else" });
+        RaiseSequenceModelChanged("seq_fragmentSectionAdded");
     }
 
     // ========== Sequence Model Restore (for undo/redo) ==========

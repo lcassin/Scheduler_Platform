@@ -4686,7 +4686,7 @@ Console.WriteLine(""Hello, World!"");
     /// Called when the visual editor modifies the SequenceDiagramModel (participant reordered, message created, etc.).
     /// Serializes the model back to text and updates the code editor + preview.
     /// </summary>
-    private void VisualEditorBridge_SequenceModelChanged(object? sender, SequenceModelChangedEventArgs e)
+    private async void VisualEditorBridge_SequenceModelChanged(object? sender, SequenceModelChangedEventArgs e)
     {
         if (_isVisualEditorUpdating) return;
 
@@ -4712,6 +4712,9 @@ Console.WriteLine(""Hello, World!"");
 
                 // Re-render preview
                 RenderPreview();
+
+                // Send updated model back to visual editor so it re-renders
+                await _visualEditorBridge.RefreshSequenceDiagramAsync();
             }
         }
         finally
@@ -4724,7 +4727,7 @@ Console.WriteLine(""Hello, World!"");
     /// Called when the visual editor modifies the ClassDiagramModel (class created, member added, relationship changed, etc.).
     /// Serializes the model back to text and updates the code editor + preview.
     /// </summary>
-    private void VisualEditorBridge_ClassDiagramModelChanged(object? sender, ClassDiagramModelChangedEventArgs e)
+    private async void VisualEditorBridge_ClassDiagramModelChanged(object? sender, ClassDiagramModelChangedEventArgs e)
     {
         if (_isVisualEditorUpdating) return;
 
@@ -4750,6 +4753,9 @@ Console.WriteLine(""Hello, World!"");
 
                 // Re-render preview
                 RenderPreview();
+
+                // Send updated model back to visual editor so it re-renders
+                await _visualEditorBridge.RefreshClassDiagramAsync();
             }
         }
         finally
@@ -4762,7 +4768,7 @@ Console.WriteLine(""Hello, World!"");
     /// Called when the visual editor modifies the StateDiagramModel (state created, transition added, etc.).
     /// Serializes the model back to text and updates the code editor + preview.
     /// </summary>
-    private void VisualEditorBridge_StateDiagramModelChanged(object? sender, StateDiagramModelChangedEventArgs e)
+    private async void VisualEditorBridge_StateDiagramModelChanged(object? sender, StateDiagramModelChangedEventArgs e)
     {
         if (_isVisualEditorUpdating) return;
 
@@ -4788,6 +4794,9 @@ Console.WriteLine(""Hello, World!"");
 
                 // Re-render preview
                 RenderPreview();
+
+                // Send updated model back to visual editor so it re-renders
+                await _visualEditorBridge.RefreshStateDiagramAsync();
             }
         }
         finally
@@ -4800,7 +4809,7 @@ Console.WriteLine(""Hello, World!"");
     /// Called when the visual editor modifies the ERDiagramModel (entity created, relationship added, etc.).
     /// Serializes the model back to text and updates the code editor + preview.
     /// </summary>
-    private void VisualEditorBridge_ERDiagramModelChanged(object? sender, ERDiagramModelChangedEventArgs e)
+    private async void VisualEditorBridge_ERDiagramModelChanged(object? sender, ERDiagramModelChangedEventArgs e)
     {
         if (_isVisualEditorUpdating) return;
 
@@ -4826,6 +4835,9 @@ Console.WriteLine(""Hello, World!"");
 
                 // Re-render preview
                 RenderPreview();
+
+                // Send updated model back to visual editor so it re-renders
+                await _visualEditorBridge.RefreshERDiagramAsync();
             }
         }
         finally

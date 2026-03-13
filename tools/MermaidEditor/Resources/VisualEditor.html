@@ -3060,6 +3060,7 @@
         let seqDiagram = null; // When non-null, we're in sequence diagram mode
         let seqSelectedParticipantId = null;
         let seqSelectedMessageIndex = -1;
+        let seqSelectedFragmentIndex = -1;
         let seqDraggingParticipantId = null;
         let seqDragStartX = 0;
         let seqDragParticipantStartIdx = 0;
@@ -3101,6 +3102,29 @@
                 centerView();
             } catch (err) {
                 console.error('Failed to load sequence diagram:', err);
+            }
+        };
+
+        // Refresh sequence diagram data without resetting view (called after C# model changes)
+        window.refreshSequenceDiagram = function(jsonData) {
+            try {
+                const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+                seqDiagram = {
+                    participants: (data.participants || []).map(p => ({
+                        id: p.id,
+                        alias: p.alias || null,
+                        type: p.type || 'Participant',
+                        isExplicit: p.isExplicit !== false,
+                        isDestroyed: p.isDestroyed || false
+                    })),
+                    elements: data.elements || [],
+                    autoNumber: data.autoNumber || false,
+                    preambleLines: data.preambleLines || [],
+                    declarationLineIndex: data.declarationLineIndex || 0
+                };
+                renderSequenceDiagram();
+            } catch (err) {
+                console.error('Failed to refresh sequence diagram:', err);
             }
         };
 
@@ -3658,6 +3682,10 @@
 
             const fragG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             fragG.classList.add('seq-fragment');
+            fragG.setAttribute('data-element-index', elIdx);
+            fragG.style.cursor = 'pointer';
+
+            const isSelected = (seqSelectedFragmentIndex === elIdx);
 
             // Main rectangle
             const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -3666,8 +3694,8 @@
             rect.setAttribute('width', rightX - leftX);
             rect.setAttribute('height', endY - startY);
             rect.setAttribute('fill', 'var(--subgraph-fill)');
-            rect.setAttribute('stroke', 'var(--subgraph-stroke)');
-            rect.setAttribute('stroke-width', '1');
+            rect.setAttribute('stroke', isSelected ? 'var(--node-selected-stroke)' : 'var(--subgraph-stroke)');
+            rect.setAttribute('stroke-width', isSelected ? '2.5' : '1');
             rect.setAttribute('rx', '2');
             fragG.appendChild(rect);
 
@@ -3805,10 +3833,13 @@
             const participantGroup = e.target.closest('.seq-participant');
             const messageGroup = e.target.closest('.seq-message');
 
+            const fragmentGroup = e.target.closest('.seq-fragment');
+
             if (participantGroup) {
                 const pid = participantGroup.getAttribute('data-participant-id');
                 seqSelectedParticipantId = pid;
                 seqSelectedMessageIndex = -1;
+                seqSelectedFragmentIndex = -1;
                 selectedNodeId = null;
                 selectedEdgeIndex = -1;
                 renderSequenceDiagram();
@@ -3821,6 +3852,7 @@
                 const elIdx = parseInt(messageGroup.getAttribute('data-element-index'), 10);
                 seqSelectedMessageIndex = elIdx;
                 seqSelectedParticipantId = null;
+                seqSelectedFragmentIndex = -1;
                 selectedNodeId = null;
                 selectedEdgeIndex = -1;
                 renderSequenceDiagram();
@@ -3829,10 +3861,24 @@
                 return;
             }
 
+            if (fragmentGroup) {
+                const elIdx = parseInt(fragmentGroup.getAttribute('data-element-index'), 10);
+                seqSelectedFragmentIndex = elIdx;
+                seqSelectedParticipantId = null;
+                seqSelectedMessageIndex = -1;
+                selectedNodeId = null;
+                selectedEdgeIndex = -1;
+                renderSequenceDiagram();
+                showSeqFragmentPropertyPanel(elIdx);
+                e.stopPropagation();
+                return;
+            }
+
             // Clicked on empty space — deselect
             if (seqDiagram) {
                 seqSelectedParticipantId = null;
                 seqSelectedMessageIndex = -1;
+                seqSelectedFragmentIndex = -1;
                 propertyPanel.classList.remove('visible');
                 renderSequenceDiagram();
             }
@@ -4001,6 +4047,82 @@
             propertyPanel.classList.add('visible');
         }
 
+        function showSeqFragmentPropertyPanel(elIdx) {
+            if (!seqDiagram) return;
+            const el = seqDiagram.elements[elIdx];
+            if (!el || el.elementType !== 'fragment') return;
+
+            const fragType = (el.fragmentType || el.type || 'loop').toLowerCase();
+            const fragTypes = ['loop', 'alt', 'opt', 'par', 'critical', 'break'];
+
+            propPanelTitle.textContent = 'Fragment';
+            const body = document.querySelector('.property-panel-body');
+
+            let sectionsHtml = '';
+            if (el.sections && el.sections.length > 0) {
+                sectionsHtml = '<div class="property-row"><div class="property-label">Sections</div></div>';
+                el.sections.forEach((sec, si) => {
+                    const secLabel = sec.label || (si === 0 ? '(primary)' : '');
+                    sectionsHtml += `
+                        <div class="property-row" style="padding-left:10px">
+                            <div class="property-label">${si === 0 ? 'Condition' : 'Else Label'} ${si + 1}</div>
+                            <input class="property-input seq-frag-sec-label" data-sec-index="${si}" value="${escapeHtml(secLabel)}" placeholder="${si === 0 ? 'condition' : 'else label'}" />
+                        </div>`;
+                });
+                // Add section button for alt fragments
+                if (fragType === 'alt') {
+                    sectionsHtml += `<div class="property-row" style="padding-left:10px"><button id="seq-frag-add-section" style="padding:4px 10px;cursor:pointer;">+ Add Else Section</button></div>`;
+                }
+            }
+
+            body.innerHTML = `
+                <div class="property-row">
+                    <div class="property-label">Type</div>
+                    <select class="property-select" id="seq-frag-type">
+                        ${fragTypes.map(t => `<option value="${t}" ${fragType === t ? 'selected' : ''}>${t}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Condition</div>
+                    <input class="property-input" id="seq-frag-text" value="${escapeHtml(el.text || '')}" placeholder="e.g. is valid" />
+                </div>
+                ${sectionsHtml}
+                <div class="property-row">
+                    <button id="seq-frag-delete" style="padding:4px 10px;cursor:pointer;color:#cc3333;">Delete Fragment</button>
+                </div>
+            `;
+
+            document.getElementById('seq-frag-type').addEventListener('change', function() {
+                postMessage({ type: 'seq_fragmentEdited', elementIndex: elIdx, fragmentType: this.value });
+            });
+            document.getElementById('seq-frag-text').addEventListener('change', function() {
+                postMessage({ type: 'seq_fragmentEdited', elementIndex: elIdx, text: this.value });
+            });
+            document.getElementById('seq-frag-delete').addEventListener('click', function() {
+                postMessage({ type: 'seq_fragmentDeleted', elementIndex: elIdx });
+                seqSelectedFragmentIndex = -1;
+                propertyPanel.classList.remove('visible');
+            });
+
+            // Section label editors
+            document.querySelectorAll('.seq-frag-sec-label').forEach(input => {
+                input.addEventListener('change', function() {
+                    const secIdx = parseInt(this.getAttribute('data-sec-index'), 10);
+                    postMessage({ type: 'seq_fragmentSectionEdited', elementIndex: elIdx, sectionIndex: secIdx, label: this.value });
+                });
+            });
+
+            // Add section button
+            const addSecBtn = document.getElementById('seq-frag-add-section');
+            if (addSecBtn) {
+                addSecBtn.addEventListener('click', function() {
+                    postMessage({ type: 'seq_fragmentSectionAdded', elementIndex: elIdx });
+                });
+            }
+
+            propertyPanel.classList.add('visible');
+        }
+
         function escapeHtml(str) {
             return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
@@ -4015,6 +4137,7 @@
 
             const participantGroup = e.target.closest('.seq-participant');
             const messageGroup = e.target.closest('.seq-message');
+            const fragmentGroup = e.target.closest('.seq-fragment');
 
             contextMenu.innerHTML = '';
 
@@ -4058,6 +4181,17 @@
                             insertIndex: elIdx + 1
                         });
                     }
+                });
+            } else if (fragmentGroup) {
+                const elIdx = parseInt(fragmentGroup.getAttribute('data-element-index'), 10);
+                seqSelectedFragmentIndex = elIdx;
+
+                addContextMenuItem('Edit Fragment', () => {
+                    showSeqFragmentPropertyPanel(elIdx);
+                });
+                addContextMenuItem('Delete Fragment', () => {
+                    postMessage({ type: 'seq_fragmentDeleted', elementIndex: elIdx });
+                    seqSelectedFragmentIndex = -1;
                 });
             } else {
                 // Empty space context menu
@@ -4118,6 +4252,10 @@
                 } else if (seqSelectedMessageIndex >= 0) {
                     postMessage({ type: 'seq_messageDeleted', elementIndex: seqSelectedMessageIndex });
                     seqSelectedMessageIndex = -1;
+                    e.preventDefault();
+                } else if (seqSelectedFragmentIndex >= 0) {
+                    postMessage({ type: 'seq_fragmentDeleted', elementIndex: seqSelectedFragmentIndex });
+                    seqSelectedFragmentIndex = -1;
                     e.preventDefault();
                 }
             }
@@ -4198,6 +4336,52 @@
                 centerView();
             } catch (err) {
                 console.error('Failed to load class diagram:', err);
+            }
+        };
+
+        // Refresh class diagram data without resetting view (called after C# model changes)
+        window.refreshClassDiagram = function(jsonData) {
+            try {
+                const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+                clsDiagram = {
+                    direction: data.direction || null,
+                    classes: (data.classes || []).map(c => ({
+                        id: c.id,
+                        label: c.label || null,
+                        annotation: c.annotation || null,
+                        genericType: c.genericType || null,
+                        members: (c.members || []).map(m => ({
+                            rawText: m.rawText || '',
+                            visibility: m.visibility || 'None',
+                            isMethod: m.isMethod || false,
+                            name: m.name || '',
+                            type: m.type || null,
+                            parameters: m.parameters || null,
+                            classifier: m.classifier || 'None'
+                        })),
+                        cssClass: c.cssClass || null,
+                        isExplicit: c.isExplicit !== false
+                    })),
+                    relationships: (data.relationships || []).map(r => ({
+                        fromId: r.fromId,
+                        toId: r.toId,
+                        leftEnd: r.leftEnd || 'None',
+                        rightEnd: r.rightEnd || 'None',
+                        linkStyle: r.linkStyle || 'Solid',
+                        label: r.label || null,
+                        fromCardinality: r.fromCardinality || null,
+                        toCardinality: r.toCardinality || null
+                    })),
+                    namespaces: data.namespaces || [],
+                    notes: data.notes || [],
+                    preambleLines: data.preambleLines || [],
+                    declarationLineIndex: data.declarationLineIndex || 0
+                };
+                // Auto-layout only new classes that don't have positions yet
+                clsAutoLayoutClasses();
+                renderClassDiagram();
+            } catch (err) {
+                console.error('Failed to refresh class diagram:', err);
             }
         };
 
@@ -5254,6 +5438,35 @@
             };
         }
 
+        // Refresh state diagram data without resetting view (called after C# model changes)
+        window.refreshStateDiagram = function(jsonData) {
+            try {
+                const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+                stDiagram = {
+                    direction: data.direction || null,
+                    isV2: data.isV2 !== false,
+                    states: (data.states || []).map(s => stParseState(s)),
+                    transitions: (data.transitions || []).map(t => ({
+                        fromId: t.fromId || '',
+                        toId: t.toId || '',
+                        label: t.label || null
+                    })),
+                    notes: (data.notes || []).map(n => ({
+                        text: n.text || '',
+                        stateId: n.stateId || '',
+                        position: n.position || 'RightOf'
+                    })),
+                    preambleLines: data.preambleLines || [],
+                    declarationLineIndex: data.declarationLineIndex || 0
+                };
+                // Auto-layout only new states that don't have positions yet
+                stAutoLayoutStates();
+                renderStateDiagram();
+            } catch (err) {
+                console.error('Failed to refresh state diagram:', err);
+            }
+        };
+
         // updateToolbarForStateDiagram removed - using unified updateToolbarForDiagramType()
 
         function stAutoLayoutStates() {
@@ -6061,6 +6274,40 @@
                 centerView();
             } catch (err) {
                 console.error('Failed to load ER diagram:', err);
+            }
+        };
+
+        // Refresh ER diagram data without resetting view (called after C# model changes)
+        window.refreshERDiagram = function(jsonData) {
+            try {
+                const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+                erDiagram = {
+                    entities: (data.entities || []).map(e => ({
+                        name: e.name || '',
+                        isExplicit: e.isExplicit !== false,
+                        attributes: (e.attributes || []).map(a => ({
+                            type: a.type || 'string',
+                            name: a.name || '',
+                            key: a.key || null,
+                            comment: a.comment || null
+                        }))
+                    })),
+                    relationships: (data.relationships || []).map(r => ({
+                        fromEntity: r.fromEntity || '',
+                        toEntity: r.toEntity || '',
+                        leftCardinality: r.leftCardinality || 'ExactlyOne',
+                        rightCardinality: r.rightCardinality || 'ExactlyOne',
+                        isIdentifying: r.isIdentifying || false,
+                        label: r.label || null
+                    })),
+                    preambleLines: data.preambleLines || [],
+                    declarationLineIndex: data.declarationLineIndex || 0
+                };
+                // Auto-layout only new entities that don't have positions yet
+                erAutoLayoutEntities();
+                renderERDiagram();
+            } catch (err) {
+                console.error('Failed to refresh ER diagram:', err);
             }
         };
 
