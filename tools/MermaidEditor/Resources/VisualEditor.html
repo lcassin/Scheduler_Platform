@@ -506,6 +506,19 @@
             opacity: 1;
         }
 
+        /* State / ER diagram grip points (shown on hover) */
+        .grip-point {
+            fill: var(--node-selected-stroke);
+            stroke: var(--bg-color);
+            stroke-width: 1.5;
+            opacity: 0;
+            cursor: crosshair;
+            transition: opacity 0.15s;
+        }
+        .node-group:hover .grip-point {
+            opacity: 1;
+        }
+
         /* Temp edge being drawn */
         .temp-edge {
             fill: none;
@@ -6427,7 +6440,7 @@
                 const grip = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                 grip.setAttribute('cx', gp.cx);
                 grip.setAttribute('cy', gp.cy);
-                grip.setAttribute('r', '5');
+                grip.setAttribute('r', '3');
                 grip.classList.add('grip-point');
                 grip.setAttribute('data-state-id', state.id);
                 g.appendChild(grip);
@@ -7318,7 +7331,7 @@
                 const grip = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                 grip.setAttribute('cx', gp.cx);
                 grip.setAttribute('cy', gp.cy);
-                grip.setAttribute('r', '5');
+                grip.setAttribute('r', '3');
                 grip.classList.add('grip-point');
                 grip.setAttribute('data-entity-name', entity.name);
                 g.appendChild(grip);
