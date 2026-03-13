@@ -2155,6 +2155,7 @@ public class AdrController : ControllerBase
                 failedCount,
                 cancelledCount,
                 needsReviewCount,
+                blacklistedPendingReviewCount,
                 // Phase breakdown
                 credentialPhaseCount,
                 adrDocumentPhaseCount

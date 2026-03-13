@@ -1733,41 +1733,99 @@
             });
         }
 
+        // ========== Diagram Bounding Box (all types) ==========
+
+        function getDiagramBoundingBox() {
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            let hasContent = false;
+
+            if (currentDiagramType === 'flowchart') {
+                const sgIds = new Set(diagram.subgraphs.map(s => s.id));
+                const realNodes = diagram.nodes.filter(n => !sgIds.has(n.id));
+                realNodes.forEach(n => {
+                    const hw = (n.width || 80) / 2;
+                    const hh = (n.height || 40) / 2;
+                    minX = Math.min(minX, n.x - hw);
+                    minY = Math.min(minY, n.y - hh);
+                    maxX = Math.max(maxX, n.x + hw);
+                    maxY = Math.max(maxY, n.y + hh);
+                    hasContent = true;
+                });
+                diagram.subgraphs.forEach(sg => {
+                    if (sg._rx !== undefined) {
+                        minX = Math.min(minX, sg._rx);
+                        minY = Math.min(minY, sg._ry);
+                        maxX = Math.max(maxX, sg._rx + sg._rw);
+                        maxY = Math.max(maxY, sg._ry + sg._rh);
+                        hasContent = true;
+                    }
+                });
+            } else if (currentDiagramType === 'sequence' && seqDiagram) {
+                const pCount = seqDiagram.participants.length;
+                if (pCount > 0) {
+                    const firstX = getParticipantX(0);
+                    const lastX = getParticipantX(pCount - 1);
+                    minX = firstX - SEQ_PARTICIPANT_WIDTH / 2 - 20;
+                    maxX = lastX + SEQ_PARTICIPANT_WIDTH / 2 + 20;
+                    minY = SEQ_TOP_MARGIN - SEQ_PARTICIPANT_HEIGHT / 2 - 10;
+                    maxY = getTotalVisualHeight() + SEQ_PARTICIPANT_HEIGHT / 2 + 10;
+                    hasContent = true;
+                }
+            } else if (currentDiagramType === 'class' && clsDiagram) {
+                clsDiagram.classes.forEach(cls => {
+                    const pos = clsClassPositions[cls.id];
+                    if (pos) {
+                        const dim = clsGetClassBoxDimensions(cls);
+                        minX = Math.min(minX, pos.x);
+                        minY = Math.min(minY, pos.y);
+                        maxX = Math.max(maxX, pos.x + dim.width);
+                        maxY = Math.max(maxY, pos.y + dim.height);
+                        hasContent = true;
+                    }
+                });
+            } else if (currentDiagramType === 'state' && stDiagram) {
+                const allStates = stGetAllFlatStates();
+                allStates.forEach(s => {
+                    const pos = stStatePositions[s.id];
+                    if (pos) {
+                        const w = pos.width || ST_BOX_MIN_WIDTH;
+                        const h = pos.height || ST_BOX_HEIGHT;
+                        minX = Math.min(minX, pos.x);
+                        minY = Math.min(minY, pos.y);
+                        maxX = Math.max(maxX, pos.x + w);
+                        maxY = Math.max(maxY, pos.y + h);
+                        hasContent = true;
+                    }
+                });
+            } else if (currentDiagramType === 'er' && erDiagram) {
+                erDiagram.entities.forEach(entity => {
+                    const pos = erEntityPositions[entity.name];
+                    if (pos) {
+                        const dim = erGetEntityBoxDimensions(entity);
+                        minX = Math.min(minX, pos.x);
+                        minY = Math.min(minY, pos.y);
+                        maxX = Math.max(maxX, pos.x + dim.width);
+                        maxY = Math.max(maxY, pos.y + dim.height);
+                        hasContent = true;
+                    }
+                });
+            }
+
+            return hasContent ? { minX, minY, maxX, maxY } : null;
+        }
+
         // ========== Center View ==========
 
         function centerView() {
-            if (diagram.nodes.length === 0) return;
             if (!panzoomInstance) return;
 
-            // Skip proxy nodes (nodes whose ID matches a subgraph ID)
-            const sgIds = new Set(diagram.subgraphs.map(s => s.id));
-            const realNodes = diagram.nodes.filter(n => !sgIds.has(n.id));
-            if (realNodes.length === 0) return;
+            const bbox = getDiagramBoundingBox();
+            if (!bbox) return;
 
-            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            realNodes.forEach(n => {
-                const hw = (n.width || 80) / 2;
-                const hh = (n.height || 40) / 2;
-                minX = Math.min(minX, n.x - hw);
-                minY = Math.min(minY, n.y - hh);
-                maxX = Math.max(maxX, n.x + hw);
-                maxY = Math.max(maxY, n.y + hh);
-            });
-
-            // Also include subgraph bounding boxes
-            diagram.subgraphs.forEach(sg => {
-                if (sg._rx !== undefined) {
-                    minX = Math.min(minX, sg._rx);
-                    minY = Math.min(minY, sg._ry);
-                    maxX = Math.max(maxX, sg._rx + sg._rw);
-                    maxY = Math.max(maxY, sg._ry + sg._rh);
-                }
-            });
-
-            const contentW = maxX - minX;
-            const contentH = maxY - minY;
-            const cx = (minX + maxX) / 2;
-            const cy = (minY + maxY) / 2;
+            const contentW = bbox.maxX - bbox.minX;
+            const contentH = bbox.maxY - bbox.minY;
+            const cx = (bbox.minX + bbox.maxX) / 2;
+            const cy = (bbox.minY + bbox.maxY) / 2;
             const vw = canvasContainer.clientWidth;
             const vh = canvasContainer.clientHeight;
 
@@ -2758,11 +2816,8 @@
         function updateMinimap() {
             if (!minimapCanvas || !minimapCtx) return;
 
-            // Skip proxy nodes (nodes whose ID matches a subgraph ID)
-            const sgIds = new Set(diagram.subgraphs.map(s => s.id));
-            const realNodes = diagram.nodes.filter(n => !sgIds.has(n.id));
-
-            if (realNodes.length === 0) {
+            const bbox = getDiagramBoundingBox();
+            if (!bbox) {
                 minimapCtx.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
                 minimapViewport.style.display = 'none';
                 return;
@@ -2771,20 +2826,11 @@
             const cw = minimapCanvas.width;
             const ch = minimapCanvas.height;
 
-            // Calculate diagram bounding box
-            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-            realNodes.forEach(n => {
-                const hw = (n.width || 80) / 2;
-                const hh = (n.height || 40) / 2;
-                minX = Math.min(minX, n.x - hw);
-                minY = Math.min(minY, n.y - hh);
-                maxX = Math.max(maxX, n.x + hw);
-                maxY = Math.max(maxY, n.y + hh);
-            });
-
             const padding = 40;
-            minX -= padding; minY -= padding;
-            maxX += padding; maxY += padding;
+            const minX = bbox.minX - padding;
+            const minY = bbox.minY - padding;
+            const maxX = bbox.maxX + padding;
+            const maxY = bbox.maxY + padding;
 
             const dw = maxX - minX || 1;
             const dh = maxY - minY || 1;
@@ -2792,52 +2838,208 @@
 
             minimapCtx.clearRect(0, 0, cw, ch);
 
-            // Draw edges (resolve subgraph IDs to first contained node)
-            const isDark = !document.body.classList.contains('theme-light'); // Both dark and twilight are "dark"
-            minimapCtx.strokeStyle = isDark ? '#555' : '#bbb';
-            minimapCtx.lineWidth = 1;
-            diagram.edges.forEach(edge => {
-                let fromId = edge.from, toId = edge.to;
-                if (sgIds.has(fromId)) {
-                    const sg = diagram.subgraphs.find(s => s.id === fromId);
-                    if (sg && sg.nodeIds.length > 0) fromId = sg.nodeIds[0];
-                }
-                if (sgIds.has(toId)) {
-                    const sg = diagram.subgraphs.find(s => s.id === toId);
-                    if (sg && sg.nodeIds.length > 0) toId = sg.nodeIds[0];
-                }
-                const fromNode = diagram.nodes.find(n => n.id === fromId);
-                const toNode = diagram.nodes.find(n => n.id === toId);
-                if (!fromNode || !toNode) return;
-                minimapCtx.beginPath();
-                minimapCtx.moveTo((fromNode.x - minX) * scale, (fromNode.y - minY) * scale);
-                minimapCtx.lineTo((toNode.x - minX) * scale, (toNode.y - minY) * scale);
-                minimapCtx.stroke();
-            });
+            const isDark = !document.body.classList.contains('theme-light');
 
-            // Draw nodes (skip proxy nodes)
-            realNodes.forEach(n => {
-                const nx = (n.x - minX) * scale;
-                const ny = (n.y - minY) * scale;
-                const nw = (n.width || 80) * scale;
-                const nh = (n.height || 40) * scale;
+            if (currentDiagramType === 'flowchart') {
+                // Draw edges (resolve subgraph IDs to first contained node)
+                const sgIds = new Set(diagram.subgraphs.map(s => s.id));
+                minimapCtx.strokeStyle = isDark ? '#555' : '#bbb';
+                minimapCtx.lineWidth = 1;
+                diagram.edges.forEach(edge => {
+                    let fromId = edge.from, toId = edge.to;
+                    if (sgIds.has(fromId)) {
+                        const sg = diagram.subgraphs.find(s => s.id === fromId);
+                        if (sg && sg.nodeIds.length > 0) fromId = sg.nodeIds[0];
+                    }
+                    if (sgIds.has(toId)) {
+                        const sg = diagram.subgraphs.find(s => s.id === toId);
+                        if (sg && sg.nodeIds.length > 0) toId = sg.nodeIds[0];
+                    }
+                    const fromNode = diagram.nodes.find(n => n.id === fromId);
+                    const toNode = diagram.nodes.find(n => n.id === toId);
+                    if (!fromNode || !toNode) return;
+                    minimapCtx.beginPath();
+                    minimapCtx.moveTo((fromNode.x - minX) * scale, (fromNode.y - minY) * scale);
+                    minimapCtx.lineTo((toNode.x - minX) * scale, (toNode.y - minY) * scale);
+                    minimapCtx.stroke();
+                });
 
-                const isSelected = (n.id === selectedNodeId || selectedNodeIds.includes(n.id));
-                minimapCtx.fillStyle = isSelected ? (isDark ? '#007ACC' : '#0078D4') : (isDark ? '#3E3E42' : '#CCCCCC');
-                minimapCtx.fillRect(nx - nw / 2, ny - nh / 2, nw, nh);
-            });
+                // Draw nodes (skip proxy nodes)
+                const realNodes = diagram.nodes.filter(n => !sgIds.has(n.id));
+                realNodes.forEach(n => {
+                    const nx = (n.x - minX) * scale;
+                    const ny = (n.y - minY) * scale;
+                    const nw = (n.width || 80) * scale;
+                    const nh = (n.height || 40) * scale;
+                    const isSelected = (n.id === selectedNodeId || selectedNodeIds.includes(n.id));
+                    minimapCtx.fillStyle = isSelected ? (isDark ? '#007ACC' : '#0078D4') : (isDark ? '#3E3E42' : '#CCCCCC');
+                    minimapCtx.fillRect(nx - nw / 2, ny - nh / 2, nw, nh);
+                });
+            } else if (currentDiagramType === 'sequence' && seqDiagram) {
+                // Draw participant boxes
+                seqDiagram.participants.forEach((p, idx) => {
+                    const px = (getParticipantX(idx) - SEQ_PARTICIPANT_WIDTH / 2 - minX) * scale;
+                    const py = (SEQ_TOP_MARGIN - SEQ_PARTICIPANT_HEIGHT / 2 - minY) * scale;
+                    const pw = SEQ_PARTICIPANT_WIDTH * scale;
+                    const ph = SEQ_PARTICIPANT_HEIGHT * scale;
+                    const isSelected = (seqSelectedParticipantId === p.id);
+                    minimapCtx.fillStyle = isSelected ? (isDark ? '#007ACC' : '#0078D4') : (isDark ? '#3E3E42' : '#CCCCCC');
+                    minimapCtx.fillRect(px, py, pw, ph);
+                });
+
+                // Draw lifelines
+                minimapCtx.strokeStyle = isDark ? '#555' : '#bbb';
+                minimapCtx.lineWidth = 0.5;
+                const totalH = getTotalVisualHeight();
+                seqDiagram.participants.forEach((p, idx) => {
+                    const lx = (getParticipantX(idx) - minX) * scale;
+                    const ly1 = (SEQ_LIFELINE_START_Y - minY) * scale;
+                    const ly2 = (totalH - minY) * scale;
+                    minimapCtx.beginPath();
+                    minimapCtx.moveTo(lx, ly1);
+                    minimapCtx.lineTo(lx, ly2);
+                    minimapCtx.stroke();
+                });
+
+                // Draw messages as horizontal lines
+                minimapCtx.strokeStyle = isDark ? '#888' : '#666';
+                minimapCtx.lineWidth = 1;
+                let currentY = SEQ_LIFELINE_START_Y + 30;
+                seqDiagram.elements.forEach(el => {
+                    if (el.elementType === 'message') {
+                        const fromIdx = getParticipantIndex(el.fromId);
+                        const toIdx = getParticipantIndex(el.toId);
+                        if (fromIdx >= 0 && toIdx >= 0) {
+                            const x1 = (getParticipantX(fromIdx) - minX) * scale;
+                            const x2 = (getParticipantX(toIdx) - minX) * scale;
+                            const y = (currentY - minY) * scale;
+                            minimapCtx.beginPath();
+                            minimapCtx.moveTo(x1, y);
+                            minimapCtx.lineTo(x2, y);
+                            minimapCtx.stroke();
+                        }
+                        currentY += SEQ_MESSAGE_SPACING;
+                    } else if (el.elementType === 'note') {
+                        currentY += 40;
+                    } else if (el.elementType === 'fragment') {
+                        currentY += 25;
+                        if (el.sections) {
+                            el.sections.forEach((s, sIdx) => {
+                                if (sIdx > 0) currentY += 20;
+                                if (s.elements) {
+                                    s.elements.forEach(se => {
+                                        if (se.elementType === 'message') currentY += SEQ_MESSAGE_SPACING;
+                                    });
+                                }
+                            });
+                        }
+                        currentY += 15;
+                    }
+                });
+            } else if (currentDiagramType === 'class' && clsDiagram) {
+                // Draw class boxes
+                clsDiagram.classes.forEach(cls => {
+                    const pos = clsClassPositions[cls.id];
+                    if (!pos) return;
+                    const dim = clsGetClassBoxDimensions(cls);
+                    const rx = (pos.x - minX) * scale;
+                    const ry = (pos.y - minY) * scale;
+                    const rw = dim.width * scale;
+                    const rh = dim.height * scale;
+                    minimapCtx.fillStyle = isDark ? '#3E3E42' : '#CCCCCC';
+                    minimapCtx.fillRect(rx, ry, rw, rh);
+                });
+                // Draw relationships
+                minimapCtx.strokeStyle = isDark ? '#555' : '#bbb';
+                minimapCtx.lineWidth = 1;
+                clsDiagram.relationships.forEach(rel => {
+                    const fromPos = clsClassPositions[rel.fromId];
+                    const toPos = clsClassPositions[rel.toId];
+                    if (!fromPos || !toPos) return;
+                    const fromDim = clsGetClassBoxDimensions(clsDiagram.classes.find(c => c.id === rel.fromId));
+                    const toDim = clsGetClassBoxDimensions(clsDiagram.classes.find(c => c.id === rel.toId));
+                    const fx = (fromPos.x + (fromDim ? fromDim.width / 2 : 80) - minX) * scale;
+                    const fy = (fromPos.y + (fromDim ? fromDim.height / 2 : 50) - minY) * scale;
+                    const tx = (toPos.x + (toDim ? toDim.width / 2 : 80) - minX) * scale;
+                    const ty = (toPos.y + (toDim ? toDim.height / 2 : 50) - minY) * scale;
+                    minimapCtx.beginPath();
+                    minimapCtx.moveTo(fx, fy);
+                    minimapCtx.lineTo(tx, ty);
+                    minimapCtx.stroke();
+                });
+            } else if (currentDiagramType === 'state' && stDiagram) {
+                // Draw state boxes
+                const allStates = stGetAllFlatStates();
+                allStates.forEach(s => {
+                    const pos = stStatePositions[s.id];
+                    if (!pos) return;
+                    const w = pos.width || ST_BOX_MIN_WIDTH;
+                    const h = pos.height || ST_BOX_HEIGHT;
+                    const rx = (pos.x - minX) * scale;
+                    const ry = (pos.y - minY) * scale;
+                    const rw = w * scale;
+                    const rh = h * scale;
+                    minimapCtx.fillStyle = isDark ? '#3E3E42' : '#CCCCCC';
+                    minimapCtx.fillRect(rx, ry, rw, rh);
+                });
+                // Draw transitions
+                minimapCtx.strokeStyle = isDark ? '#555' : '#bbb';
+                minimapCtx.lineWidth = 1;
+                stDiagram.transitions.forEach(t => {
+                    const fromPos = stStatePositions[t.fromId];
+                    const toPos = stStatePositions[t.toId];
+                    if (!fromPos || !toPos) return;
+                    const fx = (fromPos.x + (fromPos.width || ST_BOX_MIN_WIDTH) / 2 - minX) * scale;
+                    const fy = (fromPos.y + (fromPos.height || ST_BOX_HEIGHT) / 2 - minY) * scale;
+                    const tx = (toPos.x + (toPos.width || ST_BOX_MIN_WIDTH) / 2 - minX) * scale;
+                    const ty = (toPos.y + (toPos.height || ST_BOX_HEIGHT) / 2 - minY) * scale;
+                    minimapCtx.beginPath();
+                    minimapCtx.moveTo(fx, fy);
+                    minimapCtx.lineTo(tx, ty);
+                    minimapCtx.stroke();
+                });
+            } else if (currentDiagramType === 'er' && erDiagram) {
+                // Draw entity boxes
+                erDiagram.entities.forEach(entity => {
+                    const pos = erEntityPositions[entity.name];
+                    if (!pos) return;
+                    const dim = erGetEntityBoxDimensions(entity);
+                    const rx = (pos.x - minX) * scale;
+                    const ry = (pos.y - minY) * scale;
+                    const rw = dim.width * scale;
+                    const rh = dim.height * scale;
+                    minimapCtx.fillStyle = isDark ? '#3E3E42' : '#CCCCCC';
+                    minimapCtx.fillRect(rx, ry, rw, rh);
+                });
+                // Draw relationships
+                minimapCtx.strokeStyle = isDark ? '#555' : '#bbb';
+                minimapCtx.lineWidth = 1;
+                erDiagram.relationships.forEach(rel => {
+                    const fromPos = erEntityPositions[rel.fromEntity];
+                    const toPos = erEntityPositions[rel.toEntity];
+                    if (!fromPos || !toPos) return;
+                    const fromDim = erGetEntityBoxDimensions(erDiagram.entities.find(e => e.name === rel.fromEntity));
+                    const toDim = erGetEntityBoxDimensions(erDiagram.entities.find(e => e.name === rel.toEntity));
+                    const fx = (fromPos.x + (fromDim ? fromDim.width / 2 : 80) - minX) * scale;
+                    const fy = (fromPos.y + (fromDim ? fromDim.height / 2 : 50) - minY) * scale;
+                    const tx = (toPos.x + (toDim ? toDim.width / 2 : 80) - minX) * scale;
+                    const ty = (toPos.y + (toDim ? toDim.height / 2 : 50) - minY) * scale;
+                    minimapCtx.beginPath();
+                    minimapCtx.moveTo(fx, fy);
+                    minimapCtx.lineTo(tx, ty);
+                    minimapCtx.stroke();
+                });
+            }
 
             // Update viewport indicator
             if (panzoomInstance) {
                 const transform = panzoomInstance.getTransform();
                 const container = canvasContainer.getBoundingClientRect();
-                // Viewport in SVG coordinates
                 const vx = (-transform.x / transform.scale);
                 const vy = (-transform.y / transform.scale);
                 const vw = container.width / transform.scale;
                 const vh = container.height / transform.scale;
 
-                // Map to minimap coordinates
                 const mvx = (vx - minX) * scale;
                 const mvy = (vy - minY) * scale;
                 const mvw = vw * scale;
@@ -5143,6 +5345,8 @@
             stDiagram.notes.forEach((note, idx) => {
                 stRenderNote(note, idx);
             });
+
+            updateMinimap();
         }
 
         function stRenderState(state) {
@@ -5940,6 +6144,8 @@
             erDiagram.relationships.forEach((rel, idx) => {
                 erRenderRelationship(rel, idx);
             });
+
+            updateMinimap();
         }
 
         function erRenderEntity(entity) {
