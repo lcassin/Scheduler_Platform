@@ -493,6 +493,19 @@
             opacity: 1;
         }
 
+        /* Class diagram connection grips (shown on hover) */
+        .connection-grip {
+            fill: var(--node-selected-stroke);
+            stroke: var(--bg-color);
+            stroke-width: 1.5;
+            opacity: 0;
+            cursor: crosshair;
+            transition: opacity 0.15s;
+        }
+        .cls-class:hover .connection-grip {
+            opacity: 1;
+        }
+
         /* Temp edge being drawn */
         .temp-edge {
             fill: none;
@@ -4986,7 +4999,7 @@
         let clsDrawingRelFrom = null; // classId when drawing a relationship
         let clsClassPositions = {}; // { classId: { x, y, width, height } }
 
-        const CLS_BOX_MIN_WIDTH = 160;
+        const CLS_BOX_MIN_WIDTH = 140;
         const CLS_BOX_PADDING = 10;
         const CLS_SECTION_HEIGHT = 24;
         const CLS_MEMBER_HEIGHT = 20;
@@ -5166,7 +5179,9 @@
                 case 'Protected': prefix = '#'; break;
                 case 'Package': prefix = '~'; break;
             }
-            return prefix + (member.rawText || member.name || '');
+            // Use member.name (prefix stripped) to avoid doubling the visibility symbol
+            // rawText already contains the prefix, so using it would produce e.g. "++field"
+            return prefix + (member.name || '');
         }
 
         function clsGetVisibilitySymbol(visibility) {
@@ -5218,7 +5233,7 @@
                 const nsLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                 nsLabel.setAttribute('x', minX - padding + 8);
                 nsLabel.setAttribute('y', minY - padding - 6);
-                nsLabel.setAttribute('fill', 'var(--text-color)');
+                nsLabel.setAttribute('fill', 'var(--node-text)');
                 nsLabel.setAttribute('font-size', '12');
                 nsLabel.setAttribute('font-style', 'italic');
                 nsLabel.textContent = ns.name;
@@ -5258,7 +5273,7 @@
                     annText.setAttribute('x', dim.width / 2);
                     annText.setAttribute('y', yOffset);
                     annText.setAttribute('text-anchor', 'middle');
-                    annText.setAttribute('fill', 'var(--text-color)');
+                    annText.setAttribute('fill', 'var(--node-text)');
                     annText.setAttribute('font-size', '11');
                     annText.setAttribute('font-style', 'italic');
                     annText.textContent = '<<' + cls.annotation + '>>';
@@ -5271,7 +5286,7 @@
                 nameText.setAttribute('x', dim.width / 2);
                 nameText.setAttribute('y', yOffset);
                 nameText.setAttribute('text-anchor', 'middle');
-                nameText.setAttribute('fill', 'var(--text-color)');
+                nameText.setAttribute('fill', 'var(--node-text)');
                 nameText.setAttribute('font-size', '13');
                 nameText.setAttribute('font-weight', 'bold');
                 nameText.setAttribute('font-family', 'monospace');
@@ -5299,7 +5314,7 @@
                         const fText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                         fText.setAttribute('x', CLS_BOX_PADDING);
                         fText.setAttribute('y', yOffset);
-                        fText.setAttribute('fill', 'var(--text-color)');
+                        fText.setAttribute('fill', 'var(--node-text)');
                         fText.setAttribute('font-size', '12');
                         fText.setAttribute('font-family', 'monospace');
                         fText.textContent = clsFormatMember(f);
@@ -5331,7 +5346,7 @@
                         const mText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                         mText.setAttribute('x', CLS_BOX_PADDING);
                         mText.setAttribute('y', yOffset);
-                        mText.setAttribute('fill', 'var(--text-color)');
+                        mText.setAttribute('fill', 'var(--node-text)');
                         mText.setAttribute('font-size', '12');
                         mText.setAttribute('font-family', 'monospace');
                         mText.textContent = clsFormatMember(m);
@@ -5353,7 +5368,7 @@
                     const grip = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                     grip.setAttribute('cx', gp.cx);
                     grip.setAttribute('cy', gp.cy);
-                    grip.setAttribute('r', '5');
+                    grip.setAttribute('r', '3');
                     grip.classList.add('connection-grip', 'cls-grip');
                     grip.setAttribute('data-class-id', cls.id);
                     g.appendChild(grip);
@@ -5386,7 +5401,7 @@
                 line.setAttribute('y1', pts.y1);
                 line.setAttribute('x2', pts.x2);
                 line.setAttribute('y2', pts.y2);
-                line.setAttribute('stroke', 'var(--edge-stroke)');
+                line.setAttribute('stroke', 'var(--edge-color)');
                 line.setAttribute('stroke-width', clsSelectedRelIndex === relIdx ? '2.5' : '1.5');
 
                 // Dashed for dotted link style
@@ -5425,7 +5440,7 @@
                     labelText.setAttribute('x', midX);
                     labelText.setAttribute('y', midY - 4);
                     labelText.setAttribute('text-anchor', 'middle');
-                    labelText.setAttribute('fill', 'var(--text-color)');
+                    labelText.setAttribute('fill', 'var(--node-text)');
                     labelText.setAttribute('font-size', '11');
                     labelText.setAttribute('font-style', 'italic');
                     labelText.textContent = rel.label;
@@ -5449,7 +5464,7 @@
                     cardText.setAttribute('x', pts.x1 + dx);
                     cardText.setAttribute('y', pts.y1 + dy - 8);
                     cardText.setAttribute('text-anchor', 'middle');
-                    cardText.setAttribute('fill', 'var(--text-color)');
+                    cardText.setAttribute('fill', 'var(--node-text)');
                     cardText.setAttribute('font-size', '10');
                     cardText.textContent = rel.fromCardinality;
                     g.appendChild(cardText);
@@ -5461,7 +5476,7 @@
                     cardText.setAttribute('x', pts.x1 + dx);
                     cardText.setAttribute('y', pts.y1 + dy - 8);
                     cardText.setAttribute('text-anchor', 'middle');
-                    cardText.setAttribute('fill', 'var(--text-color)');
+                    cardText.setAttribute('fill', 'var(--node-text)');
                     cardText.setAttribute('font-size', '10');
                     cardText.textContent = rel.toCardinality;
                     g.appendChild(cardText);
@@ -5551,8 +5566,8 @@
         function clsDrawRelationEndMarker(g, px, py, angle, endType) {
             const size = 10;
             switch (endType) {
-                case 'Arrow': {
-                    // Open arrowhead (inheritance/realization)
+                case 'Inheritance': {
+                    // Hollow triangle arrowhead (inheritance/realization)
                     const p1x = px + size * Math.cos(angle + 0.5);
                     const p1y = py + size * Math.sin(angle + 0.5);
                     const p2x = px + size * Math.cos(angle - 0.5);
@@ -5560,12 +5575,26 @@
                     const tri = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
                     tri.setAttribute('points', `${px},${py} ${p1x},${p1y} ${p2x},${p2y}`);
                     tri.setAttribute('fill', 'var(--bg-color)');
-                    tri.setAttribute('stroke', 'var(--edge-stroke)');
+                    tri.setAttribute('stroke', 'var(--edge-color)');
                     tri.setAttribute('stroke-width', '1.5');
                     g.appendChild(tri);
                     break;
                 }
-                case 'Diamond': {
+                case 'Arrow': {
+                    // Open chevron arrowhead (association/dependency)
+                    const p1x = px + size * Math.cos(angle + 0.5);
+                    const p1y = py + size * Math.sin(angle + 0.5);
+                    const p2x = px + size * Math.cos(angle - 0.5);
+                    const p2y = py + size * Math.sin(angle - 0.5);
+                    const chevron = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+                    chevron.setAttribute('points', `${p1x},${p1y} ${px},${py} ${p2x},${p2y}`);
+                    chevron.setAttribute('fill', 'none');
+                    chevron.setAttribute('stroke', 'var(--edge-color)');
+                    chevron.setAttribute('stroke-width', '1.5');
+                    g.appendChild(chevron);
+                    break;
+                }
+                case 'Composition': {
                     // Filled diamond (composition)
                     const tipX = px;
                     const tipY = py;
@@ -5579,13 +5608,13 @@
                     const rightY = midY + (size * 0.5) * Math.sin(angle - Math.PI / 2);
                     const diamond = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
                     diamond.setAttribute('points', `${tipX},${tipY} ${leftX},${leftY} ${backX},${backY} ${rightX},${rightY}`);
-                    diamond.setAttribute('fill', 'var(--edge-stroke)');
-                    diamond.setAttribute('stroke', 'var(--edge-stroke)');
+                    diamond.setAttribute('fill', 'var(--edge-color)');
+                    diamond.setAttribute('stroke', 'var(--edge-color)');
                     diamond.setAttribute('stroke-width', '1');
                     g.appendChild(diamond);
                     break;
                 }
-                case 'OpenDiamond': {
+                case 'Aggregation': {
                     // Open diamond (aggregation)
                     const tipX = px;
                     const tipY = py;
@@ -5600,7 +5629,7 @@
                     const diamond = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
                     diamond.setAttribute('points', `${tipX},${tipY} ${leftX},${leftY} ${backX},${backY} ${rightX},${rightY}`);
                     diamond.setAttribute('fill', 'var(--bg-color)');
-                    diamond.setAttribute('stroke', 'var(--edge-stroke)');
+                    diamond.setAttribute('stroke', 'var(--edge-color)');
                     diamond.setAttribute('stroke-width', '1.5');
                     g.appendChild(diamond);
                     break;
@@ -5611,7 +5640,7 @@
                     star.setAttribute('cx', px + 6 * Math.cos(angle));
                     star.setAttribute('cy', py + 6 * Math.sin(angle));
                     star.setAttribute('r', '4');
-                    star.setAttribute('fill', 'var(--edge-stroke)');
+                    star.setAttribute('fill', 'var(--edge-color)');
                     g.appendChild(star);
                     break;
                 }
@@ -5781,7 +5810,7 @@
             input.style.padding = '2px 4px';
             input.style.border = '2px solid var(--accent-color)';
             input.style.background = 'var(--bg-color)';
-            input.style.color = 'var(--text-color)';
+            input.style.color = 'var(--node-text)';
 
             document.body.appendChild(input);
             input.focus();
@@ -5832,7 +5861,7 @@
             input.style.padding = '1px 4px';
             input.style.border = '2px solid var(--accent-color)';
             input.style.background = 'var(--bg-color)';
-            input.style.color = 'var(--text-color)';
+            input.style.color = 'var(--node-text)';
 
             document.body.appendChild(input);
             input.focus();
@@ -5921,12 +5950,14 @@
                 <div class="property-row">
                     <div class="property-label">Type</div>
                     <select class="property-select" id="cls-rel-type">
-                        <option value="association" ${rel.leftEnd === 'None' && rel.rightEnd === 'Arrow' && rel.linkStyle === 'Solid' ? 'selected' : ''}>Association (-->)</option>
-                        <option value="inheritance" ${rel.leftEnd === 'None' && rel.rightEnd === 'Arrow' && rel.linkStyle === 'Dotted' ? 'selected' : ''}>Inheritance (--|>)</option>
-                        <option value="composition" ${rel.leftEnd === 'Diamond' ? 'selected' : ''}>Composition (*--)</option>
-                        <option value="aggregation" ${rel.leftEnd === 'OpenDiamond' ? 'selected' : ''}>Aggregation (o--)</option>
-                        <option value="dependency" ${rel.linkStyle === 'Dotted' && rel.leftEnd === 'None' && rel.rightEnd === 'None' ? 'selected' : ''}>Dependency (..>)</option>
-                        <option value="realization" ${rel.linkStyle === 'Dotted' && rel.rightEnd === 'Arrow' && rel.leftEnd !== 'None' ? 'selected' : ''}>Realization (..|>)</option>
+                        <option value="inheritance" ${(rel.leftEnd === 'Inheritance' || rel.rightEnd === 'Inheritance') && rel.linkStyle === 'Solid' ? 'selected' : ''}>Inheritance (<|--)</option>
+                        <option value="realization" ${(rel.leftEnd === 'Inheritance' || rel.rightEnd === 'Inheritance') && rel.linkStyle === 'Dotted' ? 'selected' : ''}>Realization (<|..)</option>
+                        <option value="composition" ${rel.leftEnd === 'Composition' || rel.rightEnd === 'Composition' ? 'selected' : ''}>Composition (*--)</option>
+                        <option value="aggregation" ${rel.leftEnd === 'Aggregation' || rel.rightEnd === 'Aggregation' ? 'selected' : ''}>Aggregation (o--)</option>
+                        <option value="association" ${(rel.leftEnd === 'Arrow' || rel.rightEnd === 'Arrow') && rel.linkStyle === 'Solid' ? 'selected' : ''}>Association (-->)</option>
+                        <option value="dependency" ${(rel.leftEnd === 'Arrow' || rel.rightEnd === 'Arrow') && rel.linkStyle === 'Dotted' ? 'selected' : ''}>Dependency (..>)</option>
+                        <option value="link-solid" ${rel.leftEnd === 'None' && rel.rightEnd === 'None' && rel.linkStyle === 'Solid' ? 'selected' : ''}>Link (--)</option>
+                        <option value="link-dashed" ${rel.leftEnd === 'None' && rel.rightEnd === 'None' && rel.linkStyle === 'Dotted' ? 'selected' : ''}>Link (..)</option>
                     </select>
                 </div>
                 <div class="property-row">
@@ -5945,12 +5976,14 @@
 
             document.getElementById('cls-rel-type').addEventListener('change', function() {
                 const typeMap = {
+                    inheritance: { leftEnd: 'Inheritance', rightEnd: 'None', linkStyle: 'Solid' },
+                    realization: { leftEnd: 'Inheritance', rightEnd: 'None', linkStyle: 'Dotted' },
+                    composition: { leftEnd: 'Composition', rightEnd: 'None', linkStyle: 'Solid' },
+                    aggregation: { leftEnd: 'Aggregation', rightEnd: 'None', linkStyle: 'Solid' },
                     association: { leftEnd: 'None', rightEnd: 'Arrow', linkStyle: 'Solid' },
-                    inheritance: { leftEnd: 'None', rightEnd: 'Arrow', linkStyle: 'Dotted' },
-                    composition: { leftEnd: 'Diamond', rightEnd: 'None', linkStyle: 'Solid' },
-                    aggregation: { leftEnd: 'OpenDiamond', rightEnd: 'None', linkStyle: 'Solid' },
-                    dependency: { leftEnd: 'None', rightEnd: 'None', linkStyle: 'Dotted' },
-                    realization: { leftEnd: 'None', rightEnd: 'Arrow', linkStyle: 'Dotted' }
+                    dependency: { leftEnd: 'None', rightEnd: 'Arrow', linkStyle: 'Dotted' },
+                    'link-solid': { leftEnd: 'None', rightEnd: 'None', linkStyle: 'Solid' },
+                    'link-dashed': { leftEnd: 'None', rightEnd: 'None', linkStyle: 'Dotted' }
                 };
                 const t = typeMap[this.value] || typeMap.association;
                 postMessage({ type: 'cls_relationshipEdited', relationshipIndex: relIdx, leftEnd: t.leftEnd, rightEnd: t.rightEnd, linkStyle: t.linkStyle });
@@ -6310,8 +6343,8 @@
                 rect.setAttribute('width', box.width);
                 rect.setAttribute('height', box.height);
                 rect.setAttribute('rx', '3');
-                rect.setAttribute('fill', 'var(--text-color)');
-                rect.setAttribute('stroke', 'var(--text-color)');
+                rect.setAttribute('fill', 'var(--node-text)');
+                rect.setAttribute('stroke', 'var(--node-text)');
                 if (stSelectedStateId === state.id) rect.classList.add('selected');
                 g.appendChild(rect);
             } else if (state.type === 'Choice') {
@@ -6340,7 +6373,7 @@
                 const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                 label.setAttribute('x', ST_BOX_PADDING);
                 label.setAttribute('y', '20');
-                label.setAttribute('fill', 'var(--text-color)');
+                label.setAttribute('fill', 'var(--node-text)');
                 label.setAttribute('font-size', '13');
                 label.setAttribute('font-weight', 'bold');
                 label.textContent = state.label || state.id;
@@ -6377,7 +6410,7 @@
                 text.setAttribute('x', box.width / 2);
                 text.setAttribute('y', box.height / 2 + 5);
                 text.setAttribute('text-anchor', 'middle');
-                text.setAttribute('fill', 'var(--text-color)');
+                text.setAttribute('fill', 'var(--node-text)');
                 text.setAttribute('font-size', '13');
                 text.textContent = state.label || state.id;
                 g.appendChild(text);
@@ -6424,7 +6457,7 @@
                 startCircle.setAttribute('cx', fromBox.x + 8);
                 startCircle.setAttribute('cy', fromBox.y + 8);
                 startCircle.setAttribute('r', '8');
-                startCircle.setAttribute('fill', 'var(--text-color)');
+                startCircle.setAttribute('fill', 'var(--node-text)');
                 subgraphsLayer.appendChild(startCircle);
             } else {
                 fromBox = fromState ? stGetStateBox(fromState) : null;
@@ -6445,14 +6478,14 @@
                 endOuter.setAttribute('cy', toBox.y + 10);
                 endOuter.setAttribute('r', '10');
                 endOuter.setAttribute('fill', 'none');
-                endOuter.setAttribute('stroke', 'var(--text-color)');
+                endOuter.setAttribute('stroke', 'var(--node-text)');
                 endOuter.setAttribute('stroke-width', '2');
                 subgraphsLayer.appendChild(endOuter);
                 const endInner = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                 endInner.setAttribute('cx', toBox.x + 10);
                 endInner.setAttribute('cy', toBox.y + 10);
                 endInner.setAttribute('r', '6');
-                endInner.setAttribute('fill', 'var(--text-color)');
+                endInner.setAttribute('fill', 'var(--node-text)');
                 subgraphsLayer.appendChild(endInner);
             } else {
                 toBox = toState ? stGetStateBox(toState) : null;
@@ -6501,7 +6534,7 @@
                 labelText.setAttribute('x', midX);
                 labelText.setAttribute('y', midY - 6);
                 labelText.setAttribute('text-anchor', 'middle');
-                labelText.setAttribute('fill', 'var(--text-color)');
+                labelText.setAttribute('fill', 'var(--node-text)');
                 labelText.setAttribute('font-size', '11');
                 labelText.setAttribute('font-style', 'italic');
                 labelText.textContent = trans.label;
@@ -6567,7 +6600,7 @@
             const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
             text.setAttribute('x', noteX + 6);
             text.setAttribute('y', noteY + 16);
-            text.setAttribute('fill', 'var(--text-color)');
+            text.setAttribute('fill', 'var(--node-text)');
             text.setAttribute('font-size', '11');
             const lines = (note.text || '').split('\n');
             lines.forEach((line, lineIdx) => {
@@ -7175,7 +7208,7 @@
             nameText.setAttribute('x', dim.width / 2);
             nameText.setAttribute('y', ER_HEADER_HEIGHT / 2 + 5);
             nameText.setAttribute('text-anchor', 'middle');
-            nameText.setAttribute('fill', 'var(--text-color)');
+            nameText.setAttribute('fill', 'var(--node-text)');
             nameText.setAttribute('font-size', '13');
             nameText.setAttribute('font-weight', 'bold');
             nameText.textContent = entity.name;
@@ -7252,7 +7285,7 @@
                     const nameTextEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                     nameTextEl.setAttribute('x', ER_BOX_PADDING + keyOffset + 60);
                     nameTextEl.setAttribute('y', yOffset + ER_ATTR_HEIGHT / 2 + 4);
-                    nameTextEl.setAttribute('fill', 'var(--text-color)');
+                    nameTextEl.setAttribute('fill', 'var(--node-text)');
                     nameTextEl.setAttribute('font-size', '12');
                     nameTextEl.textContent = attr.name;
                     attrG.appendChild(nameTextEl);
@@ -7357,7 +7390,7 @@
                 leftLabel.setAttribute('x', ports.x1 + nx * offset + ny * 10);
                 leftLabel.setAttribute('y', ports.y1 + ny * offset - nx * 10);
                 leftLabel.setAttribute('text-anchor', 'middle');
-                leftLabel.setAttribute('fill', 'var(--text-color)');
+                leftLabel.setAttribute('fill', 'var(--node-text)');
                 leftLabel.setAttribute('font-size', '10');
                 leftLabel.setAttribute('font-weight', 'bold');
                 leftLabel.textContent = erCardinalityLabel(rel.leftCardinality);
@@ -7367,7 +7400,7 @@
                 rightLabel.setAttribute('x', ports.x2 - nx * offset + ny * 10);
                 rightLabel.setAttribute('y', ports.y2 - ny * offset - nx * 10);
                 rightLabel.setAttribute('text-anchor', 'middle');
-                rightLabel.setAttribute('fill', 'var(--text-color)');
+                rightLabel.setAttribute('fill', 'var(--node-text)');
                 rightLabel.setAttribute('font-size', '10');
                 rightLabel.setAttribute('font-weight', 'bold');
                 rightLabel.textContent = erCardinalityLabel(rel.rightCardinality);
@@ -7394,7 +7427,7 @@
                 labelText.setAttribute('x', midX);
                 labelText.setAttribute('y', midY - diamondSize - 4);
                 labelText.setAttribute('text-anchor', 'middle');
-                labelText.setAttribute('fill', 'var(--text-color)');
+                labelText.setAttribute('fill', 'var(--node-text)');
                 labelText.setAttribute('font-size', '11');
                 labelText.setAttribute('font-style', 'italic');
                 labelText.textContent = rel.label;
