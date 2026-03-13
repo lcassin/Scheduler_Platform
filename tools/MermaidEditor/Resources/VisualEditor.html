@@ -901,6 +901,53 @@
         const shapePickerDropdown = document.getElementById('shape-picker-dropdown');
         const shapePickerLabel = document.getElementById('shape-picker-label');
 
+        // ========== Context Menu Viewport Clamping ==========
+        // Positions the context menu so it stays within the visible viewport.
+        // Call AFTER populating the menu and making it visible so we can measure it.
+        function positionContextMenu(menu, x, y) {
+            // First place it at (0,0) visible so we can measure its size
+            menu.style.left = '0px';
+            menu.style.top = '0px';
+            menu.classList.add('visible');
+            const menuW = menu.offsetWidth;
+            const menuH = menu.offsetHeight;
+            const vw = window.innerWidth;
+            const vh = window.innerHeight;
+            // Clamp so menu stays within viewport with a small margin
+            const margin = 4;
+            if (x + menuW > vw - margin) x = Math.max(margin, vw - menuW - margin);
+            if (y + menuH > vh - margin) y = Math.max(margin, vh - menuH - margin);
+            menu.style.left = x + 'px';
+            menu.style.top = y + 'px';
+            // Also flip submenus that would overflow the right edge
+            menu.querySelectorAll('.context-submenu').forEach(sub => {
+                sub.style.left = '';
+                sub.style.right = '';
+                // Measure parent position
+                const parentRect = sub.parentElement.getBoundingClientRect();
+                if (parentRect.right + 180 > vw - margin) {
+                    // Flip submenu to the left
+                    sub.style.left = 'auto';
+                    sub.style.right = '100%';
+                } else {
+                    sub.style.left = '100%';
+                    sub.style.right = 'auto';
+                }
+            });
+        }
+
+        // ========== Close Menus on Focus Loss (Tab Switch) ==========
+        // When the user switches to another document tab, the WebView2 loses
+        // focus. Hide context menus and property panels so they don't linger.
+        function dismissAllPopups() {
+            contextMenu.classList.remove('visible');
+            if (propertyPanel) propertyPanel.classList.remove('visible');
+            inlineEditor.style.display = 'none';
+        }
+        window.addEventListener('blur', dismissAllPopups);
+        // Also expose for C# to call directly
+        window.dismissAllPopups = dismissAllPopups;
+
         // ========== Shape Picker (visual shape dropdown) ==========
 
         const shapeDefinitions = [
@@ -1039,9 +1086,7 @@
                             postMessage({ type: 'seq_fragmentCreated', fragmentType: 'loop', condition: 'condition', sections: [{ label: 'condition', elements: [] }] });
                         });
                     }
-                    contextMenu.style.left = e.clientX + 'px';
-                    contextMenu.style.top = e.clientY + 'px';
-                    contextMenu.classList.add('visible');
+                    positionContextMenu(contextMenu, e.clientX, e.clientY);
                 } else {
                     // For class/state/ER, just suppress the browser menu
                     // (their context menus are handled on-SVG only)
@@ -2657,9 +2702,7 @@
             copyMenu.style.display = (selectedNodeId || selectedSubgraphId || selectedEdgeIndex >= 0) ? '' : 'none';
             pasteMenu.style.display = clipboard ? '' : 'none';
 
-            contextMenu.style.left = x + 'px';
-            contextMenu.style.top = y + 'px';
-            contextMenu.classList.add('visible');
+            positionContextMenu(contextMenu, x, y);
         }
 
         function hideContextMenu() {
@@ -4877,9 +4920,7 @@
 
             const svgPt = getSVGPoint(e);
             const rect = canvasContainer.getBoundingClientRect();
-            contextMenu.style.left = e.clientX + 'px';
-            contextMenu.style.top = e.clientY + 'px';
-            contextMenu.classList.add('visible');
+            positionContextMenu(contextMenu, e.clientX, e.clientY);
             renderSequenceDiagram();
         });
 
@@ -6001,9 +6042,7 @@
                 addClsContextMenuItem('\u{1F4CB} Paste', () => { pasteClipboard(0, 0); });
             }
 
-            contextMenu.style.left = e.clientX + 'px';
-            contextMenu.style.top = e.clientY + 'px';
-            contextMenu.classList.add('visible');
+            positionContextMenu(contextMenu, e.clientX, e.clientY);
             renderClassDiagram();
         });
 
@@ -6869,9 +6908,7 @@
                 addStContextMenuItem('\u{1F4CB} Paste', () => { pasteClipboard(0, 0); });
             }
 
-            contextMenu.style.left = e.clientX + 'px';
-            contextMenu.style.top = e.clientY + 'px';
-            contextMenu.classList.add('visible');
+            positionContextMenu(contextMenu, e.clientX, e.clientY);
             renderStateDiagram();
         });
 
@@ -7707,9 +7744,7 @@
                 addErContextMenuItem('\u{1F4CB} Paste', () => { pasteClipboard(0, 0); });
             }
 
-            contextMenu.style.left = e.clientX + 'px';
-            contextMenu.style.top = e.clientY + 'px';
-            contextMenu.classList.add('visible');
+            positionContextMenu(contextMenu, e.clientX, e.clientY);
             renderERDiagram();
         });
 
