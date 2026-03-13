@@ -717,17 +717,66 @@
 
     <!-- Editor Toolbar -->
     <div id="editor-toolbar" class="editor-toolbar">
-        <button class="toolbar-btn" id="tb-add-node" title="Add Node">
+        <!-- Flowchart-specific buttons -->
+        <button class="toolbar-btn toolbar-flowchart" id="tb-add-node" title="Add Node">
             <svg viewBox="0 0 16 16"><rect x="2" y="4" width="12" height="8" rx="1" fill="none" stroke-width="1.5"/><line x1="8" y1="6" x2="8" y2="10" stroke-width="1.5"/><line x1="6" y1="8" x2="10" y2="8" stroke-width="1.5"/></svg>
             <span class="tooltip">Add Node</span>
         </button>
-        <button class="toolbar-btn" id="tb-add-edge" title="Draw Edge">
+        <button class="toolbar-btn toolbar-flowchart" id="tb-add-edge" title="Draw Edge">
             <svg viewBox="0 0 16 16"><line x1="3" y1="13" x2="13" y2="3" stroke-width="1.5" fill="none"/><polygon points="13,3 9,4 12,7" fill="currentColor" stroke="none"/></svg>
             <span class="tooltip">Draw Edge</span>
         </button>
-        <button class="toolbar-btn" id="tb-add-subgraph" title="Add Subgraph">
+        <button class="toolbar-btn toolbar-flowchart" id="tb-add-subgraph" title="Add Subgraph">
             <svg viewBox="0 0 16 16"><rect x="1" y="3" width="14" height="12" rx="1.5" fill="none" stroke-width="1.2" stroke-dasharray="3,1.5"/><text x="3" y="5.5" font-size="4" fill="currentColor" stroke="none" font-weight="bold">SG</text><rect x="3.5" y="7" width="4" height="3" rx="0.5" fill="none" stroke-width="0.8"/><rect x="8.5" y="7" width="4" height="3" rx="0.5" fill="none" stroke-width="0.8"/></svg>
             <span class="tooltip">Add Subgraph</span>
+        </button>
+        <button class="toolbar-btn toolbar-flowchart" id="tb-auto-layout" title="Auto Layout">
+            <svg viewBox="0 0 16 16"><rect x="1" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1.2"/><rect x="10" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1.2"/><rect x="5.5" y="11" width="5" height="4" rx="0.5" fill="none" stroke-width="1.2"/><line x1="3.5" y1="5" x2="3.5" y2="7" stroke-width="1"/><line x1="12.5" y1="5" x2="12.5" y2="7" stroke-width="1"/><line x1="3.5" y1="7" x2="12.5" y2="7" stroke-width="1"/><line x1="8" y1="7" x2="8" y2="11" stroke-width="1"/></svg>
+            <span class="tooltip">Auto Layout</span>
+        </button>
+        <!-- Sequence-specific buttons -->
+        <button class="toolbar-btn toolbar-sequence" id="tb-seq-add-participant" title="Add Participant" style="display:none">
+            <svg viewBox="0 0 16 16"><circle cx="8" cy="4" r="3" fill="none" stroke-width="1.3"/><line x1="8" y1="7" x2="8" y2="12" stroke-width="1.3"/><line x1="5" y1="9" x2="11" y2="9" stroke-width="1.3"/><line x1="12" y1="12" x2="14" y2="14" stroke-width="1.5"/><line x1="12" y1="14" x2="14" y2="12" stroke-width="1.5"/></svg>
+            <span class="tooltip">Add Participant</span>
+        </button>
+        <button class="toolbar-btn toolbar-sequence" id="tb-seq-add-message" title="Add Message" style="display:none">
+            <svg viewBox="0 0 16 16"><line x1="2" y1="8" x2="14" y2="8" stroke-width="1.5"/><polygon points="14,8 10,5 10,11" fill="currentColor" stroke="none"/></svg>
+            <span class="tooltip">Add Message</span>
+        </button>
+        <button class="toolbar-btn toolbar-sequence" id="tb-seq-add-note" title="Add Note" style="display:none">
+            <svg viewBox="0 0 16 16"><rect x="2" y="2" width="10" height="12" rx="1" fill="none" stroke-width="1.2"/><path d="M9,2 V6 H13" fill="none" stroke-width="1"/><line x1="4" y1="6" x2="8" y2="6" stroke-width="0.8"/><line x1="4" y1="8.5" x2="10" y2="8.5" stroke-width="0.8"/><line x1="4" y1="11" x2="9" y2="11" stroke-width="0.8"/></svg>
+            <span class="tooltip">Add Note</span>
+        </button>
+        <button class="toolbar-btn toolbar-sequence" id="tb-seq-add-fragment" title="Add Fragment (Alt/Loop)" style="display:none">
+            <svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="12" rx="1" fill="none" stroke-width="1.2"/><rect x="1" y="2" width="6" height="4" rx="0.5" fill="none" stroke-width="0.8"/><text x="2.5" y="5" font-size="3.5" fill="currentColor" stroke="none" font-weight="bold">alt</text><line x1="1" y1="9" x2="15" y2="9" stroke-width="0.8" stroke-dasharray="2,1"/></svg>
+            <span class="tooltip">Add Fragment</span>
+        </button>
+        <!-- Class-specific buttons -->
+        <button class="toolbar-btn toolbar-class" id="tb-cls-add-class" title="Add Class" style="display:none">
+            <svg viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="1" fill="none" stroke-width="1.2"/><line x1="2" y1="6" x2="14" y2="6" stroke-width="0.8"/><line x1="2" y1="10" x2="14" y2="10" stroke-width="0.8"/><text x="4" y="5" font-size="3.5" fill="currentColor" stroke="none" font-weight="bold">C+</text></svg>
+            <span class="tooltip">Add Class</span>
+        </button>
+        <button class="toolbar-btn toolbar-class" id="tb-cls-add-relation" title="Add Relationship" style="display:none">
+            <svg viewBox="0 0 16 16"><line x1="3" y1="8" x2="13" y2="8" stroke-width="1.5"/><polygon points="13,8 10,5 10,11" fill="none" stroke="currentColor" stroke-width="1"/></svg>
+            <span class="tooltip">Add Relationship</span>
+        </button>
+        <!-- State-specific buttons -->
+        <button class="toolbar-btn toolbar-state" id="tb-st-add-state" title="Add State" style="display:none">
+            <svg viewBox="0 0 16 16"><rect x="2" y="4" width="12" height="8" rx="4" fill="none" stroke-width="1.3"/><line x1="8" y1="6" x2="8" y2="10" stroke-width="1.3"/><line x1="6" y1="8" x2="10" y2="8" stroke-width="1.3"/></svg>
+            <span class="tooltip">Add State</span>
+        </button>
+        <button class="toolbar-btn toolbar-state" id="tb-st-add-transition" title="Add Transition" style="display:none">
+            <svg viewBox="0 0 16 16"><line x1="2" y1="8" x2="14" y2="8" stroke-width="1.5"/><polygon points="14,8 10,5 10,11" fill="currentColor" stroke="none"/></svg>
+            <span class="tooltip">Add Transition</span>
+        </button>
+        <!-- ER-specific buttons -->
+        <button class="toolbar-btn toolbar-er" id="tb-er-add-entity" title="Add Entity" style="display:none">
+            <svg viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="1" fill="none" stroke-width="1.2"/><line x1="2" y1="6" x2="14" y2="6" stroke-width="0.8"/><text x="4" y="5" font-size="3.5" fill="currentColor" stroke="none" font-weight="bold">E+</text></svg>
+            <span class="tooltip">Add Entity</span>
+        </button>
+        <button class="toolbar-btn toolbar-er" id="tb-er-add-relationship" title="Add Relationship" style="display:none">
+            <svg viewBox="0 0 16 16"><line x1="2" y1="8" x2="14" y2="8" stroke-width="1.5"/><circle cx="5" cy="8" r="2" fill="none" stroke-width="1"/><circle cx="11" cy="8" r="2" fill="none" stroke-width="1"/></svg>
+            <span class="tooltip">Add Relationship</span>
         </button>
         <div class="toolbar-sep"></div>
         <button class="toolbar-btn" id="tb-delete" title="Delete Selected (Del)">
@@ -742,11 +791,6 @@
         <button class="toolbar-btn" id="tb-redo" title="Redo (Ctrl+Y)">
             <svg viewBox="0 0 16 16"><path d="M12,8 L9,5 M12,8 L9,11 M11,8 H5 A3,3 0 0,0 5,14 H8" fill="none" stroke-width="1.5"/></svg>
             <span class="tooltip">Redo (Ctrl+Y)</span>
-        </button>
-        <div class="toolbar-sep"></div>
-        <button class="toolbar-btn" id="tb-auto-layout" title="Auto Layout">
-            <svg viewBox="0 0 16 16"><rect x="1" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1.2"/><rect x="10" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1.2"/><rect x="5.5" y="11" width="5" height="4" rx="0.5" fill="none" stroke-width="1.2"/><line x1="3.5" y1="5" x2="3.5" y2="7" stroke-width="1"/><line x1="12.5" y1="5" x2="12.5" y2="7" stroke-width="1"/><line x1="3.5" y1="7" x2="12.5" y2="7" stroke-width="1"/><line x1="8" y1="7" x2="8" y2="11" stroke-width="1"/></svg>
-            <span class="tooltip">Auto Layout</span>
         </button>
         <div class="toolbar-sep"></div>
         <button class="toolbar-btn" id="tb-zoom-in" title="Zoom In">
@@ -780,6 +824,17 @@
         // Tracks which diagram type is currently loaded so event handlers
         // only fire for the active type. Values: 'flowchart', 'sequence', 'class', 'state', 'er'
         let currentDiagramType = 'flowchart';
+
+        // Unified toolbar visibility based on current diagram type
+        function updateToolbarForDiagramType() {
+            const typeClasses = ['toolbar-flowchart', 'toolbar-sequence', 'toolbar-class', 'toolbar-state', 'toolbar-er'];
+            const activeClass = 'toolbar-' + currentDiagramType;
+            typeClasses.forEach(cls => {
+                document.querySelectorAll('.' + cls).forEach(btn => {
+                    btn.style.display = (cls === activeClass) ? '' : 'none';
+                });
+            });
+        }
 
         // ========== State ==========
         let diagram = {
@@ -991,6 +1046,7 @@
                     autoLayout();
                 }
 
+                updateToolbarForDiagramType();
                 render();
                 centerView();
             } catch (err) {
@@ -2825,8 +2881,8 @@
                 diagram.edges = [];
                 diagram.subgraphs = [];
 
-                // Hide flowchart-specific toolbar buttons, show sequence-specific ones
-                updateToolbarForSequenceDiagram();
+                // Update toolbar buttons for sequence diagram
+                updateToolbarForDiagramType();
 
                 renderSequenceDiagram();
                 centerView();
@@ -2835,13 +2891,7 @@
             }
         };
 
-        function updateToolbarForSequenceDiagram() {
-            const flowchartBtns = ['tb-add-node', 'tb-add-edge', 'tb-add-subgraph', 'tb-auto-layout'];
-            flowchartBtns.forEach(id => {
-                const btn = document.getElementById(id);
-                if (btn) btn.style.display = seqDiagram ? 'none' : '';
-            });
-        }
+        // updateToolbarForSequenceDiagram removed - using unified updateToolbarForDiagramType()
 
         function getParticipantX(index) {
             return SEQ_LEFT_MARGIN + index * SEQ_PARTICIPANT_GAP;
@@ -3927,8 +3977,8 @@
                 // Auto-layout class positions if not already set
                 clsAutoLayoutClasses();
 
-                // Hide flowchart/sequence toolbar buttons
-                updateToolbarForClassDiagram();
+                // Update toolbar buttons for class diagram
+                updateToolbarForDiagramType();
 
                 renderClassDiagram();
                 centerView();
@@ -3937,13 +3987,7 @@
             }
         };
 
-        function updateToolbarForClassDiagram() {
-            const hideBtns = ['tb-add-node', 'tb-add-edge', 'tb-add-subgraph', 'tb-auto-layout'];
-            hideBtns.forEach(id => {
-                const btn = document.getElementById(id);
-                if (btn) btn.style.display = clsDiagram ? 'none' : '';
-            });
-        }
+        // updateToolbarForClassDiagram removed - using unified updateToolbarForDiagramType()
 
         function clsAutoLayoutClasses() {
             if (!clsDiagram) return;
@@ -4972,7 +5016,7 @@
                 clsDiagram = null;
 
                 stAutoLayoutStates();
-                updateToolbarForStateDiagram();
+                updateToolbarForDiagramType();
                 renderStateDiagram();
                 centerView();
             } catch (err) {
@@ -4996,13 +5040,7 @@
             };
         }
 
-        function updateToolbarForStateDiagram() {
-            const hideBtns = ['tb-add-node', 'tb-add-edge', 'tb-add-subgraph', 'tb-auto-layout'];
-            hideBtns.forEach(id => {
-                const btn = document.getElementById(id);
-                if (btn) btn.style.display = stDiagram ? 'none' : '';
-            });
-        }
+        // updateToolbarForStateDiagram removed - using unified updateToolbarForDiagramType()
 
         function stAutoLayoutStates() {
             if (!stDiagram) return;
@@ -5802,7 +5840,7 @@
                 stDiagram = null;
 
                 erAutoLayoutEntities();
-                updateToolbarForERDiagram();
+                updateToolbarForDiagramType();
                 renderERDiagram();
                 centerView();
             } catch (err) {
@@ -5810,13 +5848,7 @@
             }
         };
 
-        function updateToolbarForERDiagram() {
-            const hideBtns = ['tb-add-node', 'tb-add-edge', 'tb-add-subgraph', 'tb-auto-layout'];
-            hideBtns.forEach(id => {
-                const btn = document.getElementById(id);
-                if (btn) btn.style.display = erDiagram ? 'none' : '';
-            });
-        }
+        // updateToolbarForERDiagram removed - using unified updateToolbarForDiagramType()
 
         function erAutoLayoutEntities() {
             if (!erDiagram) return;
@@ -6648,6 +6680,74 @@
                 nodeId: n.id, x: n.x, y: n.y, width: n.width, height: n.height
             }));
             postMessage({ type: 'autoLayoutComplete', positions: positions });
+        });
+
+        // ===== Sequence diagram toolbar buttons =====
+        document.getElementById('tb-seq-add-participant').addEventListener('click', function() {
+            if (!seqDiagram) return;
+            postMessage({ type: 'seq_participantCreated', participantId: 'Participant' + (seqDiagram.participants.length + 1), participantType: 'Participant' });
+        });
+
+        document.getElementById('tb-seq-add-message').addEventListener('click', function() {
+            if (!seqDiagram || seqDiagram.participants.length < 2) return;
+            const fromId = seqDiagram.participants[0].id;
+            const toId = seqDiagram.participants[1].id;
+            postMessage({ type: 'seq_messageCreated', fromId: fromId, toId: toId, text: 'Message', arrowType: 'SolidArrow' });
+        });
+
+        document.getElementById('tb-seq-add-note').addEventListener('click', function() {
+            if (!seqDiagram || seqDiagram.participants.length < 1) return;
+            const overId = seqDiagram.participants[0].id;
+            postMessage({ type: 'seq_noteCreated', position: 'RightOf', overParticipants: overId, text: 'Note' });
+        });
+
+        document.getElementById('tb-seq-add-fragment').addEventListener('click', function() {
+            if (!seqDiagram || seqDiagram.participants.length < 2) return;
+            const fromId = seqDiagram.participants[0].id;
+            const toId = seqDiagram.participants[1].id;
+            postMessage({ type: 'seq_fragmentCreated', fragmentType: 'alt', condition: 'condition', sections: [
+                { label: 'condition', elements: [{ elementType: 'message', fromId: fromId, toId: toId, text: 'Message', arrowType: 'SolidArrow' }] },
+                { label: 'else', elements: [{ elementType: 'message', fromId: toId, toId: fromId, text: 'Response', arrowType: 'DottedArrow' }] }
+            ]});
+        });
+
+        // ===== Class diagram toolbar buttons =====
+        document.getElementById('tb-cls-add-class').addEventListener('click', function() {
+            if (!clsDiagram) return;
+            postMessage({ type: 'cls_classCreated', className: 'NewClass' + (clsDiagram.classes.length + 1) });
+        });
+
+        document.getElementById('tb-cls-add-relation').addEventListener('click', function() {
+            if (!clsDiagram || clsDiagram.classes.length < 2) return;
+            const fromId = clsDiagram.classes[0].id;
+            const toId = clsDiagram.classes[1].id;
+            postMessage({ type: 'cls_relationCreated', fromId: fromId, toId: toId, relationType: 'Association', label: '' });
+        });
+
+        // ===== State diagram toolbar buttons =====
+        document.getElementById('tb-st-add-state').addEventListener('click', function() {
+            if (!stDiagram) return;
+            postMessage({ type: 'st_stateCreated', stateId: 'State' + (stDiagram.states.length + 1) });
+        });
+
+        document.getElementById('tb-st-add-transition').addEventListener('click', function() {
+            if (!stDiagram || stDiagram.states.length < 2) return;
+            const fromId = stDiagram.states[0].id;
+            const toId = stDiagram.states[1].id;
+            postMessage({ type: 'st_transitionCreated', fromId: fromId, toId: toId, label: '' });
+        });
+
+        // ===== ER diagram toolbar buttons =====
+        document.getElementById('tb-er-add-entity').addEventListener('click', function() {
+            if (!erDiagram) return;
+            postMessage({ type: 'er_entityCreated', entityName: 'ENTITY' + (erDiagram.entities.length + 1) });
+        });
+
+        document.getElementById('tb-er-add-relationship').addEventListener('click', function() {
+            if (!erDiagram || erDiagram.entities.length < 2) return;
+            const fromName = erDiagram.entities[0].name;
+            const toName = erDiagram.entities[1].name;
+            postMessage({ type: 'er_relationshipCreated', fromEntity: fromName, toEntity: toName, fromCardinality: 'ExactlyOne', toCardinality: 'ZeroOrMore', label: 'has' });
         });
 
         document.getElementById('tb-zoom-in').addEventListener('click', function() {
