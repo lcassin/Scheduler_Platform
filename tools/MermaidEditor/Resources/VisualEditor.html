@@ -5199,12 +5199,13 @@
 
             const width = Math.ceil(maxTextWidth);
 
-            // Height: header + annotation? + divider + fields + divider + methods
+            // Height: header + annotation? + divider + fields + divider + methods + bottom padding
+            // Dividers use 6px in rendering, so must match here
             let height = CLS_SECTION_HEIGHT; // Class name
             if (cls.annotation) height += CLS_MEMBER_HEIGHT;
-            height += 1; // divider
+            height += 6; // divider gap (matches rendering yOffset += 6)
             height += Math.max(1, fields.length) * CLS_MEMBER_HEIGHT;
-            height += 1; // divider
+            height += 6; // divider gap (matches rendering yOffset += 6)
             height += Math.max(1, methods.length) * CLS_MEMBER_HEIGHT;
             height += CLS_BOX_PADDING;
 
