@@ -6301,19 +6301,23 @@ Console.WriteLine(""Hello, World!"");
                         // Small delay for styles to apply
                         await new Promise(r => setTimeout(r, 50));
                         
-                        // Compute full height including bottom margins of last children.
-                        // scrollHeight can miss trailing margins, so we also check the
-                        // bounding rect of the last child and add a small buffer.
+                        // Compute the true full height of the content.
+                        // scrollHeight can miss trailing margins and doesn't always
+                        // account for content rendered inside embedded elements (e.g.
+                        // Mermaid SVGs).  Walk ALL direct children of the inner
+                        // container (usually .markdown-body) to find the real bottom.
                         let fullHeight = content.scrollHeight;
-                        const lastChild = content.lastElementChild;
-                        if (lastChild) {
-                            const contentRect = content.getBoundingClientRect();
-                            const lastRect = lastChild.getBoundingClientRect();
-                            const lastStyle = window.getComputedStyle(lastChild);
-                            const lastBottom = lastRect.bottom + parseFloat(lastStyle.marginBottom || '0') - contentRect.top + content.scrollTop;
-                            fullHeight = Math.max(fullHeight, Math.ceil(lastBottom));
+                        const contentRect = content.getBoundingClientRect();
+                        const inner = content.querySelector('.markdown-body') || content;
+                        const kids = inner.children;
+                        for (let i = 0; i < kids.length; i++) {
+                            const rect = kids[i].getBoundingClientRect();
+                            const style = window.getComputedStyle(kids[i]);
+                            const bottom = rect.bottom + parseFloat(style.marginBottom || '0')
+                                           - contentRect.top + content.scrollTop;
+                            if (bottom > fullHeight) fullHeight = Math.ceil(bottom);
                         }
-                        // Add a small buffer to avoid any pixel-rounding cutoff
+                        // Add a buffer to avoid any pixel-rounding cutoff
                         fullHeight += 40;
                         
                         // Capture the full content with white background
