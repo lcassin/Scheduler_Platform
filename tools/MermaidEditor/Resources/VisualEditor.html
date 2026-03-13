@@ -1820,24 +1820,31 @@
                 e.preventDefault();
                 isDrawingEdge = true;
                 drawEdgeFromId = connectionPt.getAttribute('data-node-id');
-                // Use connection point position as the start of the temp edge
+                // Connection point cx/cy are in LOCAL coordinates (relative to the parent group's transform).
+                // For nodes, the group has translate(node.x, node.y), so we must add node position.
+                // For subgraphs, cx/cy are already in absolute SVG coords.
                 const cpX = parseFloat(connectionPt.getAttribute('cx'));
                 const cpY = parseFloat(connectionPt.getAttribute('cy'));
-                if (!isNaN(cpX) && !isNaN(cpY)) {
-                    tempEdge.setAttribute('x1', cpX);
-                    tempEdge.setAttribute('y1', cpY);
-                    tempEdge.setAttribute('x2', cpX);
-                    tempEdge.setAttribute('y2', cpY);
+                const fromNode = diagram.nodes.find(n => n.id === drawEdgeFromId);
+                let absX, absY;
+                if (fromNode && !isNaN(cpX) && !isNaN(cpY)) {
+                    // Node connection points: local coords → add node center position
+                    absX = fromNode.x + cpX;
+                    absY = fromNode.y + cpY;
+                } else if (!isNaN(cpX) && !isNaN(cpY)) {
+                    // Subgraph connection points: already absolute
+                    absX = cpX;
+                    absY = cpY;
+                } else if (fromNode) {
+                    absX = fromNode.x;
+                    absY = fromNode.y;
+                }
+                if (absX !== undefined) {
+                    tempEdge.setAttribute('x1', absX);
+                    tempEdge.setAttribute('y1', absY);
+                    tempEdge.setAttribute('x2', absX);
+                    tempEdge.setAttribute('y2', absY);
                     tempEdge.style.display = '';
-                } else {
-                    const fromNode = diagram.nodes.find(n => n.id === drawEdgeFromId);
-                    if (fromNode) {
-                        tempEdge.setAttribute('x1', fromNode.x);
-                        tempEdge.setAttribute('y1', fromNode.y);
-                        tempEdge.setAttribute('x2', fromNode.x);
-                        tempEdge.setAttribute('y2', fromNode.y);
-                        tempEdge.style.display = '';
-                    }
                 }
                 return;
             }
