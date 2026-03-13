@@ -6301,6 +6301,21 @@ Console.WriteLine(""Hello, World!"");
                         // Small delay for styles to apply
                         await new Promise(r => setTimeout(r, 50));
                         
+                        // Compute full height including bottom margins of last children.
+                        // scrollHeight can miss trailing margins, so we also check the
+                        // bounding rect of the last child and add a small buffer.
+                        let fullHeight = content.scrollHeight;
+                        const lastChild = content.lastElementChild;
+                        if (lastChild) {
+                            const contentRect = content.getBoundingClientRect();
+                            const lastRect = lastChild.getBoundingClientRect();
+                            const lastStyle = window.getComputedStyle(lastChild);
+                            const lastBottom = lastRect.bottom + parseFloat(lastStyle.marginBottom || '0') - contentRect.top + content.scrollTop;
+                            fullHeight = Math.max(fullHeight, Math.ceil(lastBottom));
+                        }
+                        // Add a small buffer to avoid any pixel-rounding cutoff
+                        fullHeight += 40;
+                        
                         // Capture the full content with white background
                         const canvas = await html2canvas(content, {
                             scale: 2,
@@ -6308,9 +6323,9 @@ Console.WriteLine(""Hello, World!"");
                             allowTaint: true,
                             backgroundColor: '#ffffff',
                             width: content.scrollWidth,
-                            height: content.scrollHeight,
+                            height: fullHeight,
                             windowWidth: content.scrollWidth,
-                            windowHeight: content.scrollHeight
+                            windowHeight: fullHeight
                         });
                         
                         // --- Restore original styles ---
