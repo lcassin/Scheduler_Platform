@@ -3881,6 +3881,15 @@
                     applyArrowStyle(path, el.arrowType);
                     msgGroup.appendChild(path);
 
+                    // Invisible wider hit area for self-message
+                    const hitPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    hitPath.setAttribute('d', `M ${fromX} ${y} H ${fromX + loopW} V ${y + loopH} H ${fromX}`);
+                    hitPath.setAttribute('stroke', 'transparent');
+                    hitPath.setAttribute('stroke-width', '12');
+                    hitPath.setAttribute('fill', 'none');
+                    hitPath.setAttribute('cursor', 'pointer');
+                    msgGroup.appendChild(hitPath);
+
                     // Arrowhead for self-message
                     const arrowPoly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
                     arrowPoly.setAttribute('points', `${fromX + 8},${y + loopH - 4} ${fromX},${y + loopH} ${fromX + 8},${y + loopH + 4}`);
@@ -3949,6 +3958,17 @@
                         if (seqSelectedMessageIndex === elIdx) arrowPoly.classList.add('selected');
                         msgGroup.appendChild(arrowPoly);
                     }
+
+                    // Invisible wider hit area for easier click/right-click target
+                    const hitLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    hitLine.setAttribute('x1', fromX);
+                    hitLine.setAttribute('y1', y);
+                    hitLine.setAttribute('x2', toX);
+                    hitLine.setAttribute('y2', y);
+                    hitLine.setAttribute('stroke', 'transparent');
+                    hitLine.setAttribute('stroke-width', '12');
+                    hitLine.setAttribute('cursor', 'pointer');
+                    msgGroup.appendChild(hitLine);
 
                     // Label
                     if (el.text) {
