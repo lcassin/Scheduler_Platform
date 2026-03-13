@@ -339,14 +339,27 @@ public class AdrAccountSyncService : IAdrAccountSyncService
         // Count query must match the streaming query's logic:
         // - Uses ADRInvoiceAccountData.AccountNumber (not Account.AccountNumber)
         // - Same joins and filters as GetAccountSyncQuery()
+        // Count query uses same credential resolution as GetAccountSyncQuery():
+        // Try PrimaryVendor credential first, fall back to MasterVendor credential.
+        // CredentialAccount is NOT used (it's for PIN/SSO type, not credential existence).
         var countQuery = @"
 SELECT COUNT(DISTINCT CONCAT(AD.VCAccountId, '_', AD.AccountNumber))
 FROM [dbo].[ADRInvoiceAccountData] AD
 INNER JOIN Account A ON AD.VCAccountId = A.AccountId AND A.IsActive = 1
 INNER JOIN Client CL ON A.ClientId = CL.ClientId AND CL.IsActive = 1
-INNER JOIN CredentialAccount CA ON AD.VCAccountId = CA.AccountId
-INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId
-WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL)";
+LEFT OUTER JOIN Vendor V ON A.VendorId = V.VendorId
+LEFT OUTER JOIN VendorXRef VX ON V.VendorId = VX.PrimaryVendorId
+-- Primary credential: directly on the account's vendor
+LEFT OUTER JOIN [Credential] PC ON PC.VendorId = A.VendorId 
+    AND PC.IsActive = 1 
+    AND (PC.ExpirationDate IS NULL OR PC.ExpirationDate >= CAST(GETDATE() AS DATE))
+-- Master credential fallback: on the master vendor (only when no primary credential)
+LEFT OUTER JOIN [Credential] MC ON MC.VendorId = VX.MasterVendorId 
+    AND MC.IsActive = 1 
+    AND (MC.ExpirationDate IS NULL OR MC.ExpirationDate >= CAST(GETDATE() AS DATE))
+    AND PC.CredentialId IS NULL
+WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL)
+  AND COALESCE(PC.CredentialId, MC.CredentialId) IS NOT NULL";
 
         await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
@@ -366,13 +379,26 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
         AdrAccountSyncResult result,
         CancellationToken cancellationToken)
     {
-        // Query unique clients from external database (only active clients)
+        // Query unique clients from external database (only active clients whose accounts have valid credentials).
+        // Uses same credential resolution as GetAccountSyncQuery(): PrimaryVendor first, MasterVendor fallback.
         var clientQuery = @"
 SELECT DISTINCT CL.ClientId, CL.ClientName
 FROM [dbo].[ADRInvoiceAccountData] AD
     INNER JOIN Account A ON AD.VCAccountId = A.AccountId AND A.IsActive = 1
     INNER JOIN Client CL ON A.ClientId = CL.ClientId AND CL.IsActive = 1
-WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL)";
+    LEFT OUTER JOIN Vendor V ON A.VendorId = V.VendorId
+    LEFT OUTER JOIN VendorXRef VX ON V.VendorId = VX.PrimaryVendorId
+    -- Primary credential: directly on the account's vendor
+    LEFT OUTER JOIN [Credential] PC ON PC.VendorId = A.VendorId 
+        AND PC.IsActive = 1 
+        AND (PC.ExpirationDate IS NULL OR PC.ExpirationDate >= CAST(GETDATE() AS DATE))
+    -- Master credential fallback: on the master vendor (only when no primary credential)
+    LEFT OUTER JOIN [Credential] MC ON MC.VendorId = VX.MasterVendorId 
+        AND MC.IsActive = 1 
+        AND (MC.ExpirationDate IS NULL OR MC.ExpirationDate >= CAST(GETDATE() AS DATE))
+        AND PC.CredentialId IS NULL
+WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL)
+  AND COALESCE(PC.CredentialId, MC.CredentialId) IS NOT NULL";
 
         var uniqueClients = new List<(int ExternalClientId, string ClientName)>();
         
@@ -833,7 +859,7 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
               AND j.[IsDeleted] = 0
               AND j.[Status] IN ('Pending', 'CredentialCheckRequested', 'CredentialCheckInProgress', 
                                   'CredentialVerified', 'CredentialFailed', 'ScrapeRequested', 
-                                  'ScrapeInProgress', 'StatusCheckInProgress')";
+                                  'ScrapeInProgress', 'StatusCheckInProgress', 'BlacklistedPendingReview')";
 
         var cancelledCount = await _dbContext.Database.ExecuteSqlRawAsync(cancelSql, new object[] { now }, cancellationToken);
         _logger.LogInformation("Cancelled {Count} non-terminal jobs for deleted accounts", cancelledCount);
@@ -1071,6 +1097,10 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
         return @"
 		DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
 
+		-- Resolve credentials: try PrimaryVendor first, fall back to MasterVendor.
+		-- The Credential table links to Vendor via VendorId. We do NOT use CredentialAccount
+		-- (that table is for PIN/SSO type determination used by the downstream API, not the scheduler).
+		-- Filter: IsActive = 1 AND (ExpirationDate IS NULL OR ExpirationDate >= today)
 		SELECT [RecId]
 			  ,AD.[InterfaceAccountId]
 			  ,[BillId]
@@ -1079,20 +1109,29 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
 			  ,AD.[VendorCode] AS PrimaryVendorCode
 			  ,MV.[PrimaryVendorCode] AS MasterVendorCode
 			  ,[VCAccountId] AS AccountId
-			  ,C.[CredentialId]
-			  ,C.ExpirationDate
+			  ,COALESCE(PC.CredentialId, MC.CredentialId) AS CredentialId
+			  ,COALESCE(PC.ExpirationDate, MC.ExpirationDate) AS ExpirationDate
 			  ,CL.ClientId
 			  ,CL.ClientName
 		INTO #tmpCredentialAccountBilling
 		FROM [dbo].[ADRInvoiceAccountData] AD
 			INNER JOIN Account A ON AD.VCAccountId = A.AccountId AND A.IsActive = 1
 			INNER JOIN Client CL ON A.ClientId = CL.ClientId AND CL.IsActive = 1
-			INNER JOIN CredentialAccount CA ON AD.VCAccountId = CA.AccountId
-			INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId
-			LEFT OUTER JOIN Vendor V ON AD.VendorCode = V.PrimaryVendorCode
+			-- Vendor hierarchy: Account.VendorId -> Vendor (primary), then VendorXRef -> Vendor (master)
+			LEFT OUTER JOIN Vendor V ON A.VendorId = V.VendorId
 			LEFT OUTER JOIN VendorXRef VX ON V.VendorId = VX.PrimaryVendorId
 			LEFT OUTER JOIN Vendor MV ON VX.MasterVendorId = MV.VendorId
-		WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL);
+			-- Primary credential: directly on the account's vendor
+			LEFT OUTER JOIN [Credential] PC ON PC.VendorId = A.VendorId 
+				AND PC.IsActive = 1 
+				AND (PC.ExpirationDate IS NULL OR PC.ExpirationDate >= CAST(GETDATE() AS DATE))
+			-- Master credential fallback: on the master vendor (only used when primary credential is NULL)
+			LEFT OUTER JOIN [Credential] MC ON MC.VendorId = VX.MasterVendorId 
+				AND MC.IsActive = 1 
+				AND (MC.ExpirationDate IS NULL OR MC.ExpirationDate >= CAST(GETDATE() AS DATE))
+				AND PC.CredentialId IS NULL
+		WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL)
+		  AND COALESCE(PC.CredentialId, MC.CredentialId) IS NOT NULL;
 
 		;WITH AccountStats AS (
 			SELECT AccountId,
