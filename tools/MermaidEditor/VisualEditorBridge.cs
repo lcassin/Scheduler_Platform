@@ -1160,6 +1160,21 @@ public class VisualEditorBridge
         }
 
         _model.Nodes.Add(newNode);
+
+        // If a subgraphId was provided, add the node to that subgraph
+        if (root.TryGetProperty("subgraphId", out var sgProp))
+        {
+            var subgraphId = sgProp.GetString();
+            if (!string.IsNullOrEmpty(subgraphId))
+            {
+                var subgraph = _model.Subgraphs.Find(s => s.Id == subgraphId);
+                if (subgraph != null && !subgraph.NodeIds.Contains(nodeId!))
+                {
+                    subgraph.NodeIds.Add(nodeId!);
+                }
+            }
+        }
+
         RaiseModelChanged("nodeCreated");
     }
 

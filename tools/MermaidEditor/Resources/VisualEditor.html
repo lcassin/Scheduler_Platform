@@ -671,6 +671,9 @@
         <div class="context-menu-item" data-action="edit-label">&#9998; Edit Label</div>
         <div class="context-menu-item" data-action="delete-selected">&#128465; Delete Selected</div>
         <div class="context-menu-separator"></div>
+        <div class="context-menu-item" data-action="copy-selected" id="copy-selected-menu" style="display:none">&#128203; Copy</div>
+        <div class="context-menu-item" data-action="paste" id="paste-menu" style="display:none">&#128203; Paste</div>
+        <div class="context-menu-separator"></div>
         <div class="context-menu-item" data-action="add-subgraph">&#9634; Add Subgraph</div>
         <div class="context-menu-item has-submenu" id="move-to-subgraph-menu" style="display:none">
             &#8618; Move to Subgraph
@@ -859,6 +862,7 @@
         let contextMenuY = 0;
         let selectedNodeIds = [];  // For multi-select (Ctrl+A)
         let selectedSubgraphId = null;
+        let clipboard = null;  // { type: 'node'|'subgraph', data: ... } for copy/paste
         const SNAP_GRID = 20;     // Snap-to-grid size in pixels
         let isResizing = false;
         let resizeNodeId = null;
@@ -2233,16 +2237,28 @@
                 e.preventDefault();
             } else if (e.key === 'Escape') {
                 deselectAll();
+            } else if (e.key === 'c' && (e.ctrlKey || e.metaKey)) {
+                copySelected();
+                e.preventDefault();
+            } else if (e.key === 'v' && (e.ctrlKey || e.metaKey)) {
+                // Paste at center of viewport
+                const vw = canvasContainer.clientWidth;
+                const vh = canvasContainer.clientHeight;
+                const transform = panzoomInstance ? panzoomInstance.getTransform() : { x: 0, y: 0, scale: 1 };
+                const cx = (vw / 2 - transform.x) / transform.scale;
+                const cy = (vh / 2 - transform.y) / transform.scale;
+                pasteClipboard(cx, cy);
+                e.preventDefault();
             } else if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
                 postMessage({ type: 'undo' });
                 e.preventDefault();
             } else if (e.key === 'y' && (e.ctrlKey || e.metaKey)) {
                 postMessage({ type: 'redo' });
                 e.preventDefault();
-                } else if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
-                    selectAllNodes();
-                    e.preventDefault();
-                }
+            } else if (e.key === 'a' && (e.ctrlKey || e.metaKey)) {
+                selectAllNodes();
+                e.preventDefault();
+            }
         });
 
         // ========== Selection ==========
@@ -2636,6 +2652,12 @@
             const deleteSgMenu = document.getElementById('delete-subgraph-menu');
             deleteSgMenu.style.display = selectedSubgraphId ? '' : 'none';
 
+            // Show/hide Copy/Paste based on selection and clipboard
+            const copyMenu = document.getElementById('copy-selected-menu');
+            const pasteMenu = document.getElementById('paste-menu');
+            copyMenu.style.display = (selectedNodeId || selectedSubgraphId || selectedEdgeIndex >= 0) ? '' : 'none';
+            pasteMenu.style.display = clipboard ? '' : 'none';
+
             contextMenu.style.left = x + 'px';
             contextMenu.style.top = y + 'px';
             contextMenu.classList.add('visible');
@@ -2710,6 +2732,10 @@
                 removeNodeFromSubgraph(selectedNodeId);
             } else if (action === 'delete-subgraph') {
                 deleteSelected();
+            } else if (action === 'copy-selected') {
+                copySelected();
+            } else if (action === 'paste') {
+                pasteClipboard(contextMenuX, contextMenuY);
             } else if (action === 'auto-layout') {
                 autoLayout();
                 render();
@@ -2727,7 +2753,7 @@
 
         // ========== Node/Edge Operations ==========
 
-        function addNode(shape, x, y) {
+        function addNode(shape, x, y, targetSubgraphId) {
             // Generate unique ID
             let counter = diagram.nodes.length + 1;
             let id = 'node' + counter;
@@ -2753,6 +2779,16 @@
             node.height = size.height;
 
             diagram.nodes.push(node);
+
+            // If a target subgraph is specified, add the node to it
+            const sgId = targetSubgraphId || selectedSubgraphId;
+            if (sgId) {
+                const targetSg = diagram.subgraphs.find(sg => sg.id === sgId);
+                if (targetSg) {
+                    targetSg.nodeIds.push(id);
+                }
+            }
+
             render();
             selectNode(id);
 
@@ -2764,7 +2800,8 @@
                 x: x,
                 y: y,
                 width: node.width,
-                height: node.height
+                height: node.height,
+                subgraphId: sgId || null
             });
 
             // Start editing the label immediately
@@ -2854,6 +2891,305 @@
                 nodeId: nodeId,
                 subgraphId: null
             });
+        }
+
+        // ========== Copy/Paste ==========
+
+        function copySelected() {
+            if (currentDiagramType === 'flowchart') {
+                if (selectedSubgraphId) {
+                    // Copy entire subgraph with its nodes
+                    const sg = diagram.subgraphs.find(s => s.id === selectedSubgraphId);
+                    if (sg) {
+                        const nodes = diagram.nodes.filter(n => sg.nodeIds.includes(n.id));
+                        const edges = diagram.edges.filter(e => sg.nodeIds.includes(e.from) && sg.nodeIds.includes(e.to));
+                        clipboard = {
+                            type: 'subgraph',
+                            diagramType: 'flowchart',
+                            subgraph: { label: sg.label, direction: sg.direction },
+                            nodes: nodes.map(n => ({ label: n.label, shape: n.shape, width: n.width, height: n.height, cssClass: n.cssClass, style: n.style })),
+                            edges: edges.map(e => {
+                                const fromIdx = nodes.findIndex(n => n.id === e.from);
+                                const toIdx = nodes.findIndex(n => n.id === e.to);
+                                return { fromIdx, toIdx, label: e.label, style: e.style, arrowType: e.arrowType };
+                            })
+                        };
+                    }
+                } else if (selectedNodeId) {
+                    const node = diagram.nodes.find(n => n.id === selectedNodeId);
+                    if (node) {
+                        clipboard = {
+                            type: 'node',
+                            diagramType: 'flowchart',
+                            label: node.label,
+                            shape: node.shape,
+                            width: node.width,
+                            height: node.height,
+                            cssClass: node.cssClass,
+                            style: node.style
+                        };
+                    }
+                } else if (selectedEdgeIndex >= 0) {
+                    const edge = diagram.edges[selectedEdgeIndex];
+                    if (edge) {
+                        clipboard = {
+                            type: 'edge',
+                            diagramType: 'flowchart',
+                            label: edge.label,
+                            style: edge.style,
+                            arrowType: edge.arrowType
+                        };
+                    }
+                }
+            } else if (currentDiagramType === 'sequence' && seqDiagram) {
+                if (seqSelectedParticipantId) {
+                    const p = seqDiagram.participants.find(pp => pp.id === seqSelectedParticipantId);
+                    if (p) {
+                        clipboard = { type: 'seq_participant', diagramType: 'sequence', label: p.label || p.id, participantType: p.type || 'Participant' };
+                    }
+                } else if (seqSelectedMessageIndex >= 0) {
+                    const flatElements = flattenSeqElements();
+                    const el = flatElements[seqSelectedMessageIndex];
+                    if (el && el.elementType === 'message') {
+                        clipboard = { type: 'seq_message', diagramType: 'sequence', text: el.text, arrowType: el.arrowType };
+                    } else if (el && el.elementType === 'note') {
+                        clipboard = { type: 'seq_note', diagramType: 'sequence', text: el.text, position: el.position };
+                    }
+                }
+            } else if (currentDiagramType === 'class' && clsDiagram) {
+                if (clsSelectedClassId) {
+                    const cls = clsDiagram.classes.find(c => c.id === clsSelectedClassId);
+                    if (cls) {
+                        clipboard = {
+                            type: 'cls_class',
+                            diagramType: 'class',
+                            label: cls.label || cls.id,
+                            stereotype: cls.stereotype,
+                            members: cls.members ? cls.members.map(m => ({ ...m })) : []
+                        };
+                    }
+                }
+            } else if (currentDiagramType === 'state' && stDiagram) {
+                if (stSelectedStateId) {
+                    const st = stDiagram.states.find(s => s.id === stSelectedStateId);
+                    if (st) {
+                        clipboard = {
+                            type: 'st_state',
+                            diagramType: 'state',
+                            label: st.label || st.id,
+                            description: st.description,
+                            stateType: st.type
+                        };
+                    }
+                }
+            } else if (currentDiagramType === 'er' && erDiagram) {
+                if (erSelectedEntityName) {
+                    const ent = erDiagram.entities.find(e => e.name === erSelectedEntityName);
+                    if (ent) {
+                        clipboard = {
+                            type: 'er_entity',
+                            diagramType: 'er',
+                            name: ent.name,
+                            attributes: ent.attributes ? ent.attributes.map(a => ({ ...a })) : []
+                        };
+                    }
+                }
+            }
+        }
+
+        function pasteClipboard(x, y) {
+            if (!clipboard) return;
+
+            if (clipboard.diagramType === 'flowchart') {
+                if (clipboard.type === 'node') {
+                    pasteFlowchartNode(x, y);
+                } else if (clipboard.type === 'subgraph') {
+                    pasteFlowchartSubgraph(x, y);
+                }
+            } else if (clipboard.diagramType === 'sequence') {
+                pasteSequenceElement();
+            } else if (clipboard.diagramType === 'class') {
+                pasteClassElement();
+            } else if (clipboard.diagramType === 'state') {
+                pasteStateElement();
+            } else if (clipboard.diagramType === 'er') {
+                pasteERElement();
+            }
+        }
+
+        function pasteFlowchartNode(x, y) {
+            let counter = diagram.nodes.length + 1;
+            let id = 'node' + counter;
+            while (diagram.nodes.some(n => n.id === id)) { counter++; id = 'node' + counter; }
+
+            const node = {
+                id: id,
+                label: clipboard.label + ' (copy)',
+                shape: clipboard.shape,
+                x: Math.round(x / SNAP_GRID) * SNAP_GRID,
+                y: Math.round(y / SNAP_GRID) * SNAP_GRID,
+                width: clipboard.width || 0,
+                height: clipboard.height || 0,
+                cssClass: clipboard.cssClass,
+                style: clipboard.style ? { ...clipboard.style } : undefined
+            };
+
+            const size = estimateNodeSize(node);
+            node.width = size.width;
+            node.height = size.height;
+            diagram.nodes.push(node);
+
+            // Add to selected subgraph if one is selected
+            if (selectedSubgraphId) {
+                const sg = diagram.subgraphs.find(s => s.id === selectedSubgraphId);
+                if (sg) sg.nodeIds.push(id);
+            }
+
+            render();
+            selectNode(id);
+            postMessage({
+                type: 'nodeCreated',
+                nodeId: id, label: node.label, shape: node.shape,
+                x: node.x, y: node.y, width: node.width, height: node.height,
+                subgraphId: selectedSubgraphId || null
+            });
+        }
+
+        function pasteFlowchartSubgraph(x, y) {
+            // Generate unique subgraph ID
+            let sgCounter = diagram.subgraphs.length + 1;
+            let sgId = 'subgraph' + sgCounter;
+            while (diagram.subgraphs.some(s => s.id === sgId)) { sgCounter++; sgId = 'subgraph' + sgCounter; }
+
+            const newNodeIds = [];
+            const idMap = {};  // old index -> new node id
+
+            // Create copies of all nodes with offset position
+            clipboard.nodes.forEach((srcNode, idx) => {
+                let nodeCounter = diagram.nodes.length + 1;
+                let nodeId = 'node' + nodeCounter;
+                while (diagram.nodes.some(n => n.id === nodeId)) { nodeCounter++; nodeId = 'node' + nodeCounter; }
+
+                const node = {
+                    id: nodeId,
+                    label: srcNode.label,
+                    shape: srcNode.shape,
+                    x: Math.round((x + idx * 40) / SNAP_GRID) * SNAP_GRID,
+                    y: Math.round((y + idx * 40) / SNAP_GRID) * SNAP_GRID,
+                    width: srcNode.width || 0,
+                    height: srcNode.height || 0,
+                    cssClass: srcNode.cssClass,
+                    style: srcNode.style ? { ...srcNode.style } : undefined
+                };
+
+                const size = estimateNodeSize(node);
+                node.width = size.width;
+                node.height = size.height;
+                diagram.nodes.push(node);
+                newNodeIds.push(nodeId);
+                idMap[idx] = nodeId;
+            });
+
+            // Recreate internal edges
+            clipboard.edges.forEach(srcEdge => {
+                if (idMap[srcEdge.fromIdx] !== undefined && idMap[srcEdge.toIdx] !== undefined) {
+                    diagram.edges.push({
+                        from: idMap[srcEdge.fromIdx],
+                        to: idMap[srcEdge.toIdx],
+                        label: srcEdge.label || '',
+                        style: srcEdge.style || 'Solid',
+                        arrowType: srcEdge.arrowType || 'Arrow'
+                    });
+                }
+            });
+
+            // Create the subgraph
+            const sg = {
+                id: sgId,
+                label: clipboard.subgraph.label + ' (copy)',
+                nodeIds: newNodeIds,
+                direction: clipboard.subgraph.direction
+            };
+            diagram.subgraphs.push(sg);
+            render();
+
+            // Notify C# about all the new nodes
+            newNodeIds.forEach((nid, idx) => {
+                const node = diagram.nodes.find(n => n.id === nid);
+                postMessage({
+                    type: 'nodeCreated',
+                    nodeId: nid, label: node.label, shape: node.shape,
+                    x: node.x, y: node.y, width: node.width, height: node.height,
+                    subgraphId: sgId
+                });
+            });
+            // Notify about new edges
+            clipboard.edges.forEach(srcEdge => {
+                if (idMap[srcEdge.fromIdx] !== undefined && idMap[srcEdge.toIdx] !== undefined) {
+                    postMessage({
+                        type: 'edgeCreated',
+                        from: idMap[srcEdge.fromIdx], to: idMap[srcEdge.toIdx],
+                        label: srcEdge.label || '', style: srcEdge.style || 'Solid',
+                        arrowType: srcEdge.arrowType || 'Arrow'
+                    });
+                }
+            });
+            // Notify about the subgraph
+            postMessage({
+                type: 'subgraphCreated',
+                subgraphId: sgId, label: sg.label, nodeIds: newNodeIds
+            });
+
+            // Auto-layout so pasted nodes spread out nicely
+            autoLayout();
+            render();
+            const positions = diagram.nodes.map(n => ({ nodeId: n.id, x: n.x, y: n.y, width: n.width, height: n.height }));
+            postMessage({ type: 'autoLayoutComplete', positions: positions });
+        }
+
+        function pasteSequenceElement() {
+            if (!seqDiagram) return;
+            if (clipboard.type === 'seq_participant') {
+                postMessage({ type: 'seq_participantCreated', participantId: clipboard.label + '_copy', participantType: clipboard.participantType });
+            } else if (clipboard.type === 'seq_message') {
+                if (seqDiagram.participants.length >= 2) {
+                    postMessage({ type: 'seq_messageCreated', fromId: seqDiagram.participants[0].id, toId: seqDiagram.participants[1].id, text: clipboard.text, arrowType: clipboard.arrowType });
+                }
+            } else if (clipboard.type === 'seq_note') {
+                if (seqDiagram.participants.length >= 1) {
+                    postMessage({ type: 'seq_noteCreated', position: clipboard.position, overParticipants: seqDiagram.participants[0].id, text: clipboard.text });
+                }
+            }
+        }
+
+        function pasteClassElement() {
+            if (!clsDiagram || clipboard.type !== 'cls_class') return;
+            const newId = clipboard.label + '_copy';
+            postMessage({ type: 'cls_classCreated', classId: newId });
+            // After creation, also send member additions
+            if (clipboard.members && clipboard.members.length > 0) {
+                clipboard.members.forEach(m => {
+                    postMessage({ type: 'cls_memberAdded', classId: newId, memberName: m.name, memberType: m.type || 'String', memberVisibility: m.visibility || 'Public', memberKind: m.kind || 'Property' });
+                });
+            }
+        }
+
+        function pasteStateElement() {
+            if (!stDiagram || clipboard.type !== 'st_state') return;
+            const newId = clipboard.label + '_copy';
+            postMessage({ type: 'st_stateCreated', stateId: newId, description: clipboard.description || '' });
+        }
+
+        function pasteERElement() {
+            if (!erDiagram || clipboard.type !== 'er_entity') return;
+            const newName = clipboard.name + '_COPY';
+            postMessage({ type: 'er_entityCreated', entityName: newName });
+            // After creation, also send attribute additions
+            if (clipboard.attributes && clipboard.attributes.length > 0) {
+                clipboard.attributes.forEach(a => {
+                    postMessage({ type: 'er_attributeAdded', entityName: newName, attrName: a.name, attrType: a.type || 'string', isPK: a.isPK || false, isFK: a.isFK || false });
+                });
+            }
         }
 
         function deleteSelected() {
@@ -3584,7 +3920,7 @@
                 else if (el.elementType === 'fragment') {
                     const fragStartY = currentY;
                     currentY += 25; // fragment header height
-                    // Render messages inside fragment sections
+                    // Render messages and notes inside fragment sections
                     if (el.sections) {
                         el.sections.forEach((s, sIdx) => {
                             if (sIdx > 0) currentY += 20; // section divider space
@@ -3594,6 +3930,9 @@
                                         renderMessageArrow(se, elIdx, currentY);
                                         if (msgNumber > 0) msgNumber++;
                                         currentY += SEQ_MESSAGE_SPACING;
+                                    } else if (se.elementType === 'note') {
+                                        renderSequenceNote(se, currentY, elIdx);
+                                        currentY += 40;
                                     }
                                 });
                             }
@@ -4429,6 +4768,15 @@
                 }
             }
 
+            // Copy/Paste for sequence diagrams
+            if (seqSelectedParticipantId || seqSelectedMessageIndex >= 0 || seqSelectedNoteIndex >= 0 || seqSelectedFragmentIndex >= 0) {
+                addContextMenuSeparator();
+                addContextMenuItem('\u{1F4CB} Copy', () => { copySelected(); });
+            }
+            if (clipboard && clipboard.diagramType === 'sequence') {
+                addContextMenuItem('\u{1F4CB} Paste', () => { pasteClipboard(0, 0); });
+            }
+
             const svgPt = getSVGPoint(e);
             const rect = canvasContainer.getBoundingClientRect();
             contextMenu.style.left = e.clientX + 'px';
@@ -4455,13 +4803,13 @@
             contextMenu.appendChild(sep);
         }
 
-        // Delete key for sequence elements
+        // Keyboard shortcuts for sequence elements
         document.addEventListener('keydown', function(e) {
             if (currentDiagramType !== 'sequence') return;
             if (!seqDiagram) return;
-            if (e.key === 'Delete' || e.key === 'Backspace') {
-                if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) return;
+            if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) return;
 
+            if (e.key === 'Delete' || e.key === 'Backspace') {
                 if (seqSelectedParticipantId) {
                     postMessage({ type: 'seq_participantDeleted', participantId: seqSelectedParticipantId });
                     seqSelectedParticipantId = null;
@@ -4479,6 +4827,12 @@
                     seqSelectedNoteIndex = -1;
                     e.preventDefault();
                 }
+            } else if (e.key === 'c' && (e.ctrlKey || e.metaKey)) {
+                copySelected();
+                e.preventDefault();
+            } else if (e.key === 'v' && (e.ctrlKey || e.metaKey)) {
+                pasteClipboard(0, 0);
+                e.preventDefault();
             }
         });
 
@@ -5540,6 +5894,15 @@
                 });
             }
 
+            // Copy/Paste for class diagrams
+            if (clsSelectedClassId) {
+                addClsContextMenuSeparator();
+                addClsContextMenuItem('\u{1F4CB} Copy', () => { copySelected(); });
+            }
+            if (clipboard && clipboard.diagramType === 'class') {
+                addClsContextMenuItem('\u{1F4CB} Paste', () => { pasteClipboard(0, 0); });
+            }
+
             contextMenu.style.left = e.clientX + 'px';
             contextMenu.style.top = e.clientY + 'px';
             contextMenu.classList.add('visible');
@@ -5564,13 +5927,13 @@
             contextMenu.appendChild(sep);
         }
 
-        // Delete key for class diagram elements
+        // Keyboard shortcuts for class diagram elements
         document.addEventListener('keydown', function(e) {
             if (currentDiagramType !== 'class') return;
             if (!clsDiagram) return;
-            if (e.key === 'Delete' || e.key === 'Backspace') {
-                if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) return;
+            if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) return;
 
+            if (e.key === 'Delete' || e.key === 'Backspace') {
                 if (clsSelectedClassId) {
                     postMessage({ type: 'cls_classDeleted', classId: clsSelectedClassId });
                     clsSelectedClassId = null;
@@ -5580,6 +5943,12 @@
                     clsSelectedRelIndex = -1;
                     e.preventDefault();
                 }
+            } else if (e.key === 'c' && (e.ctrlKey || e.metaKey)) {
+                copySelected();
+                e.preventDefault();
+            } else if (e.key === 'v' && (e.ctrlKey || e.metaKey)) {
+                pasteClipboard(0, 0);
+                e.preventDefault();
             }
         });
 
@@ -6393,6 +6762,15 @@
                 });
             }
 
+            // Copy/Paste for state diagrams
+            if (stSelectedStateId) {
+                addStContextMenuSeparator();
+                addStContextMenuItem('\u{1F4CB} Copy', () => { copySelected(); });
+            }
+            if (clipboard && clipboard.diagramType === 'state') {
+                addStContextMenuItem('\u{1F4CB} Paste', () => { pasteClipboard(0, 0); });
+            }
+
             contextMenu.style.left = e.clientX + 'px';
             contextMenu.style.top = e.clientY + 'px';
             contextMenu.classList.add('visible');
@@ -6417,13 +6795,13 @@
             contextMenu.appendChild(sep);
         }
 
-        // Delete key for state diagram elements
+        // Keyboard shortcuts for state diagram elements
         document.addEventListener('keydown', function(e) {
             if (currentDiagramType !== 'state') return;
             if (!stDiagram) return;
-            if (e.key === 'Delete' || e.key === 'Backspace') {
-                if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) return;
+            if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) return;
 
+            if (e.key === 'Delete' || e.key === 'Backspace') {
                 if (stSelectedStateId) {
                     postMessage({ type: 'st_stateDeleted', stateId: stSelectedStateId });
                     stSelectedStateId = null;
@@ -6433,6 +6811,12 @@
                     stSelectedTransIndex = -1;
                     e.preventDefault();
                 }
+            } else if (e.key === 'c' && (e.ctrlKey || e.metaKey)) {
+                copySelected();
+                e.preventDefault();
+            } else if (e.key === 'v' && (e.ctrlKey || e.metaKey)) {
+                pasteClipboard(0, 0);
+                e.preventDefault();
             }
         });
 
@@ -7216,6 +7600,15 @@
                 });
             }
 
+            // Copy/Paste for ER diagrams
+            if (erSelectedEntityName) {
+                addErContextMenuSeparator();
+                addErContextMenuItem('\u{1F4CB} Copy', () => { copySelected(); });
+            }
+            if (clipboard && clipboard.diagramType === 'er') {
+                addErContextMenuItem('\u{1F4CB} Paste', () => { pasteClipboard(0, 0); });
+            }
+
             contextMenu.style.left = e.clientX + 'px';
             contextMenu.style.top = e.clientY + 'px';
             contextMenu.classList.add('visible');
@@ -7240,13 +7633,13 @@
             contextMenu.appendChild(sep);
         }
 
-        // Delete key for ER diagram elements
+        // Keyboard shortcuts for ER diagram elements
         document.addEventListener('keydown', function(e) {
             if (currentDiagramType !== 'er') return;
             if (!erDiagram) return;
-            if (e.key === 'Delete' || e.key === 'Backspace') {
-                if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) return;
+            if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) return;
 
+            if (e.key === 'Delete' || e.key === 'Backspace') {
                 if (erSelectedEntityName) {
                     postMessage({ type: 'er_entityDeleted', name: erSelectedEntityName });
                     erSelectedEntityName = null;
@@ -7256,6 +7649,12 @@
                     erSelectedRelIndex = -1;
                     e.preventDefault();
                 }
+            } else if (e.key === 'c' && (e.ctrlKey || e.metaKey)) {
+                copySelected();
+                e.preventDefault();
+            } else if (e.key === 'v' && (e.ctrlKey || e.metaKey)) {
+                pasteClipboard(0, 0);
+                e.preventDefault();
             }
         });
 
