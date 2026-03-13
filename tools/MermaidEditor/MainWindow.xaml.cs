@@ -6125,14 +6125,39 @@ Console.WriteLine(""Hello, World!"");
                 return;
             }
 
-            // Convert bytes to BitmapSource
-            using var stream = new MemoryStream(pngBytes);
-            var bitmap = new System.Windows.Media.Imaging.BitmapImage();
-            bitmap.BeginInit();
-            bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-            bitmap.StreamSource = stream;
-            bitmap.EndInit();
-            bitmap.Freeze();
+            // Convert bytes to BitmapSource.
+            // html2canvas captures at scale=2 for quality, so the PNG has 2x the pixel
+            // dimensions of the actual content.  We must set the image DPI to 192 (2*96)
+            // so that WPF's DPI-normalised layout treats the image at its correct
+            // content size.  Without this, the image appears 2x too large, causing
+            // "33% scale" and text cut between pages.
+            const double captureDpi = 192; // html2canvas scale=2 → 2*96
+            System.Windows.Media.Imaging.BitmapSource printBitmap;
+            using (var stream = new MemoryStream(pngBytes))
+            {
+                var decoder = System.Windows.Media.Imaging.BitmapDecoder.Create(stream,
+                    System.Windows.Media.Imaging.BitmapCreateOptions.PreservePixelFormat,
+                    System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
+                var frame = decoder.Frames[0];
+
+                // Re-encode with correct DPI if needed
+                if (Math.Abs(frame.DpiX - captureDpi) > 1)
+                {
+                    // Create a new bitmap with the correct DPI
+                    int stride = (frame.PixelWidth * frame.Format.BitsPerPixel + 7) / 8;
+                    var pixels = new byte[stride * frame.PixelHeight];
+                    frame.CopyPixels(pixels, stride, 0);
+                    printBitmap = System.Windows.Media.Imaging.BitmapSource.Create(
+                        frame.PixelWidth, frame.PixelHeight,
+                        captureDpi, captureDpi,
+                        frame.Format, frame.Palette, pixels, stride);
+                }
+                else
+                {
+                    printBitmap = frame;
+                }
+                printBitmap.Freeze();
+            }
 
             // Get document title for print job
             var documentTitle = _activeDocument?.DisplayName ?? "Untitled";
@@ -6141,7 +6166,7 @@ Console.WriteLine(""Hello, World!"");
 
             // Show print preview dialog (pass isMarkdown flag for default scaling)
             var isMarkdown = _currentRenderMode == RenderMode.Markdown;
-            var printDialog = new PrintPreviewDialog(bitmap, documentTitle, isMarkdown);
+            var printDialog = new PrintPreviewDialog(printBitmap, documentTitle, isMarkdown);
             printDialog.Owner = this;
             printDialog.ShowDialog();
         }
@@ -6216,108 +6241,65 @@ Console.WriteLine(""Hello, World!"");
             // Use callback pattern with postMessage (same as mermaid export)
             _pngExportTcs = new TaskCompletionSource<string>();
             
-            // Inject html2canvas and capture full content, sending result via postMessage.
-            // IMPORTANT: html2canvas cannot reliably render SVG elements (Mermaid diagrams).
-            // We attempt to convert SVGs to <img> elements before capture for better fidelity,
-            // but this is wrapped in a timeout so a hung image load can't block the entire print.
+            // Inject html2canvas and capture full scrollable content with a forced
+            // white background and dark text (overriding the current theme) so that
+            // printing always produces light-mode output regardless of theme.
             var script = @"
                 (async function() {
                     try {
                         // Check if html2canvas is available, if not load it
                         if (typeof html2canvas === 'undefined') {
-                            await Promise.race([
-                                new Promise((resolve, reject) => {
-                                    const script = document.createElement('script');
-                                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-                                    script.onload = resolve;
-                                    script.onerror = reject;
-                                    document.head.appendChild(script);
-                                }),
-                                new Promise((_, reject) => setTimeout(() => reject(new Error('html2canvas CDN load timeout')), 10000))
-                            ]);
+                            await new Promise((resolve, reject) => {
+                                const script = document.createElement('script');
+                                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+                                script.onload = resolve;
+                                script.onerror = reject;
+                                document.head.appendChild(script);
+                            });
                         }
                         
                         // Get the content element
                         const content = document.getElementById('content') || document.body;
                         
-                        // --- Optionally convert SVGs to images for html2canvas compatibility ---
-                        // This entire block is wrapped in a try/catch + timeout so failures
-                        // never prevent the print from proceeding.
-                        const svgBackups = [];
-                        try {
-                            const svgConversionTimeout = 8000; // 8 seconds max for all SVG conversions
-                            const perImageTimeout = 3000; // 3 seconds per image load
-                            
-                            await Promise.race([
-                                (async () => {
-                                    const svgElements = Array.from(content.querySelectorAll('svg'));
-                                    
-                                    for (const svg of svgElements) {
-                                        try {
-                                            const clone = svg.cloneNode(true);
-                                            const bbox = svg.getBoundingClientRect();
-                                            // Skip zero-size SVGs (hidden or not laid out)
-                                            if (bbox.width < 1 || bbox.height < 1) continue;
-                                            
-                                            if (!clone.getAttribute('width')) clone.setAttribute('width', bbox.width);
-                                            if (!clone.getAttribute('height')) clone.setAttribute('height', bbox.height);
-                                            clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-                                            clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
-                                            
-                                            // Inline key computed styles
-                                            const allEls = clone.querySelectorAll('*');
-                                            const origEls = svg.querySelectorAll('*');
-                                            for (let i = 0; i < allEls.length && i < origEls.length; i++) {
-                                                const computed = window.getComputedStyle(origEls[i]);
-                                                const important = ['fill', 'stroke', 'stroke-width', 'font-family', 'font-size', 
-                                                                   'font-weight', 'text-anchor', 'dominant-baseline', 'opacity',
-                                                                   'visibility', 'display', 'color', 'stroke-dasharray',
-                                                                   'stroke-linecap', 'stroke-linejoin', 'marker-end', 'marker-start'];
-                                                for (const prop of important) {
-                                                    const val = computed.getPropertyValue(prop);
-                                                    if (val) allEls[i].style[prop] = val;
-                                                }
-                                            }
-                                            
-                                            const svgData = new XMLSerializer().serializeToString(clone);
-                                            const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-                                            const url = URL.createObjectURL(svgBlob);
-                                            
-                                            const img = document.createElement('img');
-                                            img.style.width = bbox.width + 'px';
-                                            img.style.height = bbox.height + 'px';
-                                            img.style.display = 'block';
-                                            img.style.maxWidth = '100%';
-                                            
-                                            // Wait for image load with per-image timeout to prevent hangs
-                                            await Promise.race([
-                                                new Promise((resolve, reject) => {
-                                                    img.onload = resolve;
-                                                    img.onerror = reject;
-                                                    img.src = url;
-                                                }),
-                                                new Promise((_, reject) => setTimeout(() => reject(new Error('Image load timeout')), perImageTimeout))
-                                            ]);
-                                            
-                                            svgBackups.push({ parent: svg.parentNode, svg: svg, img: img, url: url });
-                                            svg.parentNode.replaceChild(img, svg);
-                                        } catch (svgErr) {
-                                            console.warn('SVG conversion failed (skipping):', svgErr);
-                                        }
-                                    }
-                                })(),
-                                new Promise((_, reject) => setTimeout(() => reject(new Error('SVG conversion overall timeout')), svgConversionTimeout))
-                            ]);
-                        } catch (svgBlockErr) {
-                            // SVG conversion timed out or failed entirely - that's OK,
-                            // html2canvas will still capture the content (SVGs may appear blank but text/images will be fine)
-                            console.warn('SVG conversion block failed (proceeding without SVG conversion):', svgBlockErr);
-                        }
+                        // --- Force light-mode styles for print capture ---
+                        // Save originals so we can restore after capture.
+                        const origStyles = {
+                            htmlBg: document.documentElement.style.background,
+                            htmlColorScheme: document.documentElement.style.colorScheme,
+                            bodyBg: document.body.style.background,
+                            bodyColor: document.body.style.color,
+                            contentBg: content.style.background,
+                            contentColor: content.style.color
+                        };
+                        document.documentElement.style.background = '#ffffff';
+                        document.documentElement.style.colorScheme = 'light';
+                        document.body.style.background = '#ffffff';
+                        document.body.style.color = '#1f2328';
+                        content.style.background = '#ffffff';
+                        content.style.color = '#1f2328';
                         
-                        // Small delay to let layout settle after SVG replacement
-                        if (svgBackups.length > 0) {
-                            await new Promise(r => setTimeout(r, 100));
+                        // Also override code block and table backgrounds for light print
+                        const printStyleId = '__printOverrideStyle';
+                        let printStyle = document.getElementById(printStyleId);
+                        if (!printStyle) {
+                            printStyle = document.createElement('style');
+                            printStyle.id = printStyleId;
+                            document.head.appendChild(printStyle);
                         }
+                        printStyle.textContent = `
+                            .markdown-body { background: #ffffff !important; color: #1f2328 !important; }
+                            .markdown-body pre, .markdown-body code { background-color: #f6f8fa !important; color: #1f2328 !important; }
+                            .markdown-body table th, .markdown-body table td { border-color: #d0d7de !important; color: #1f2328 !important; }
+                            .markdown-body table tr:nth-child(2n) { background-color: #f6f8fa !important; }
+                            .markdown-body h1, .markdown-body h2, .markdown-body h3,
+                            .markdown-body h4, .markdown-body h5, .markdown-body h6 { color: #1f2328 !important; }
+                            .markdown-body a { color: #0969da !important; }
+                            .markdown-body blockquote { border-left-color: #d0d7de !important; color: #656d76 !important; }
+                            .markdown-body hr { background-color: #d8dee4 !important; }
+                        `;
+                        
+                        // Small delay for styles to apply
+                        await new Promise(r => setTimeout(r, 50));
                         
                         // Capture the full content with white background
                         const canvas = await html2canvas(content, {
@@ -6331,15 +6313,14 @@ Console.WriteLine(""Hello, World!"");
                             windowHeight: content.scrollHeight
                         });
                         
-                        // --- Restore original SVGs ---
-                        for (const backup of svgBackups) {
-                            try {
-                                backup.parent.replaceChild(backup.svg, backup.img);
-                                URL.revokeObjectURL(backup.url);
-                            } catch (restoreErr) {
-                                console.warn('SVG restore failed:', restoreErr);
-                            }
-                        }
+                        // --- Restore original styles ---
+                        document.documentElement.style.background = origStyles.htmlBg;
+                        document.documentElement.style.colorScheme = origStyles.htmlColorScheme;
+                        document.body.style.background = origStyles.bodyBg;
+                        document.body.style.color = origStyles.bodyColor;
+                        content.style.background = origStyles.contentBg;
+                        content.style.color = origStyles.contentColor;
+                        if (printStyle) printStyle.textContent = '';
                         
                         const dataUrl = canvas.toDataURL('image/png');
                         window.chrome.webview.postMessage({ type: 'pngExport', data: dataUrl });
@@ -6351,8 +6332,8 @@ Console.WriteLine(""Hello, World!"");
             
             await PreviewWebView.CoreWebView2.ExecuteScriptAsync(script);
             
-            // Wait for the callback with a generous timeout (large markdown docs with
-            // many embedded diagrams can take a while for html2canvas to render)
+            // Wait for the callback with a generous timeout (large markdown docs can
+            // take a while for html2canvas to render at 2x scale)
             var timeoutTask = Task.Delay(30000); // 30 second timeout
             var completedTask = await Task.WhenAny(_pngExportTcs.Task, timeoutTask);
             
