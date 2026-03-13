@@ -5192,9 +5192,22 @@
                 case 'Protected': prefix = '#'; break;
                 case 'Package': prefix = '~'; break;
             }
-            // Use member.name (prefix stripped) to avoid doubling the visibility symbol
-            // rawText already contains the prefix, so using it would produce e.g. "++field"
-            return prefix + (member.name || '');
+            // Build the full member signature matching Mermaid rendering:
+            //   Fields:  +Type name          (e.g. +String name)
+            //   Methods: +name(params) : Type (e.g. +makeSound() : void)
+            let text = prefix;
+            if (member.isMethod) {
+                text += (member.name || '');
+                text += '(' + (member.parameters || '') + ')';
+                if (member.type) text += ' : ' + member.type;
+            } else {
+                if (member.type) text += member.type + ' ';
+                text += (member.name || '');
+            }
+            // Classifier suffix (* abstract, $ static)
+            if (member.classifier === 'Abstract') text += '*';
+            else if (member.classifier === 'Static') text += '$';
+            return text;
         }
 
         function clsGetVisibilitySymbol(visibility) {
@@ -7657,7 +7670,7 @@
                 postMessage({ type: 'er_attributeEdited', entityName: entityName, index: attrIdx, name: this.value });
             });
             document.getElementById('er-attr-type').addEventListener('change', function() {
-                postMessage({ type: 'er_attributeEdited', entityName: entityName, index: attrIdx, type: this.value });
+                postMessage({ type: 'er_attributeEdited', entityName: entityName, index: attrIdx, attrType: this.value });
             });
             document.getElementById('er-attr-key').addEventListener('change', function() {
                 postMessage({ type: 'er_attributeEdited', entityName: entityName, index: attrIdx, key: this.value });
@@ -7758,7 +7771,7 @@
                     erShowEntityProperties(entityName);
                 });
                 addErContextMenuItem('Add Attribute', () => {
-                    postMessage({ type: 'er_attributeAdded', entityName: entityName, type: 'string', name: 'newField' });
+                    postMessage({ type: 'er_attributeAdded', entityName: entityName, attrType: 'string', name: 'newField' });
                 });
                 addErContextMenuSeparator();
                 addErContextMenuItem('Delete Entity', () => {
