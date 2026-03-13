@@ -353,10 +353,12 @@ LEFT OUTER JOIN VendorXRef VX ON V.VendorId = VX.PrimaryVendorId
 LEFT OUTER JOIN [Credential] PC ON PC.VendorId = A.VendorId 
     AND PC.IsActive = 1 
     AND (PC.ExpirationDate IS NULL OR PC.ExpirationDate >= CAST(GETDATE() AS DATE))
+    AND PC.[Password] IS NOT NULL AND PC.[Password] != ''
 -- Master credential fallback: on the master vendor (only when no primary credential)
 LEFT OUTER JOIN [Credential] MC ON MC.VendorId = VX.MasterVendorId 
     AND MC.IsActive = 1 
     AND (MC.ExpirationDate IS NULL OR MC.ExpirationDate >= CAST(GETDATE() AS DATE))
+    AND MC.[Password] IS NOT NULL AND MC.[Password] != ''
     AND PC.CredentialId IS NULL
 WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL)
   AND COALESCE(PC.CredentialId, MC.CredentialId) IS NOT NULL";
@@ -392,10 +394,12 @@ FROM [dbo].[ADRInvoiceAccountData] AD
     LEFT OUTER JOIN [Credential] PC ON PC.VendorId = A.VendorId 
         AND PC.IsActive = 1 
         AND (PC.ExpirationDate IS NULL OR PC.ExpirationDate >= CAST(GETDATE() AS DATE))
+        AND PC.[Password] IS NOT NULL AND PC.[Password] != ''
     -- Master credential fallback: on the master vendor (only when no primary credential)
     LEFT OUTER JOIN [Credential] MC ON MC.VendorId = VX.MasterVendorId 
         AND MC.IsActive = 1 
         AND (MC.ExpirationDate IS NULL OR MC.ExpirationDate >= CAST(GETDATE() AS DATE))
+        AND MC.[Password] IS NOT NULL AND MC.[Password] != ''
         AND PC.CredentialId IS NULL
 WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL)
   AND COALESCE(PC.CredentialId, MC.CredentialId) IS NOT NULL";
@@ -1100,7 +1104,7 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
 		-- Resolve credentials: try PrimaryVendor first, fall back to MasterVendor.
 		-- The Credential table links to Vendor via VendorId. We do NOT use CredentialAccount
 		-- (that table is for PIN/SSO type determination used by the downstream API, not the scheduler).
-		-- Filter: IsActive = 1 AND (ExpirationDate IS NULL OR ExpirationDate >= today)
+		-- Filter: IsActive = 1, non-null/non-blank Password, AND (ExpirationDate IS NULL OR ExpirationDate >= today)
 		SELECT [RecId]
 			  ,AD.[InterfaceAccountId]
 			  ,[BillId]
@@ -1125,10 +1129,12 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
 			LEFT OUTER JOIN [Credential] PC ON PC.VendorId = A.VendorId 
 				AND PC.IsActive = 1 
 				AND (PC.ExpirationDate IS NULL OR PC.ExpirationDate >= CAST(GETDATE() AS DATE))
+				AND PC.[Password] IS NOT NULL AND PC.[Password] != ''
 			-- Master credential fallback: on the master vendor (only used when primary credential is NULL)
 			LEFT OUTER JOIN [Credential] MC ON MC.VendorId = VX.MasterVendorId 
 				AND MC.IsActive = 1 
 				AND (MC.ExpirationDate IS NULL OR MC.ExpirationDate >= CAST(GETDATE() AS DATE))
+				AND MC.[Password] IS NOT NULL AND MC.[Password] != ''
 				AND PC.CredentialId IS NULL
 		WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL)
 		  AND COALESCE(PC.CredentialId, MC.CredentialId) IS NOT NULL;
