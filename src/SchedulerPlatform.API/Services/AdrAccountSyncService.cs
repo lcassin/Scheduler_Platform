@@ -343,13 +343,18 @@ public class AdrAccountSyncService : IAdrAccountSyncService
         // Try PrimaryVendor credential first, fall back to MasterVendor credential.
         // CredentialAccount is NOT used (it's for PIN/SSO type, not credential existence).
         var countQuery = @"
--- Pre-resolve: one credential per vendor (latest active, non-expired)
-;WITH VendorCred AS (
-    SELECT VendorId, MAX(CredentialId) AS CredentialId
+-- Pre-resolve: one credential per vendor (prefer credentials with passwords, then latest CredentialId)
+;WITH RankedCred AS (
+    SELECT VendorId, CredentialId,
+           ROW_NUMBER() OVER (PARTITION BY VendorId ORDER BY 
+               CASE WHEN [Password] IS NOT NULL AND [Password] != '' THEN 0 ELSE 1 END,
+               CredentialId DESC) AS rn
     FROM [Credential]
     WHERE IsActive = 1
       AND (ExpirationDate IS NULL OR ExpirationDate >= CAST(GETDATE() AS DATE))
-    GROUP BY VendorId
+),
+VendorCred AS (
+    SELECT VendorId, CredentialId FROM RankedCred WHERE rn = 1
 )
 SELECT COUNT(DISTINCT CONCAT(AD.VCAccountId, '_', AD.AccountNumber))
 FROM [dbo].[ADRInvoiceAccountData] AD
@@ -385,13 +390,18 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
         // Query unique clients from external database (only active clients whose accounts have valid credentials).
         // Uses same credential resolution as GetAccountSyncQuery(): PrimaryVendor first, MasterVendor fallback.
         var clientQuery = @"
--- Pre-resolve: one credential per vendor (latest active, non-expired)
-;WITH VendorCred AS (
-    SELECT VendorId, MAX(CredentialId) AS CredentialId
+-- Pre-resolve: one credential per vendor (prefer credentials with passwords, then latest CredentialId)
+;WITH RankedCred AS (
+    SELECT VendorId, CredentialId,
+           ROW_NUMBER() OVER (PARTITION BY VendorId ORDER BY 
+               CASE WHEN [Password] IS NOT NULL AND [Password] != '' THEN 0 ELSE 1 END,
+               CredentialId DESC) AS rn
     FROM [Credential]
     WHERE IsActive = 1
       AND (ExpirationDate IS NULL OR ExpirationDate >= CAST(GETDATE() AS DATE))
-    GROUP BY VendorId
+),
+VendorCred AS (
+    SELECT VendorId, CredentialId FROM RankedCred WHERE rn = 1
 )
 SELECT DISTINCT CL.ClientId, CL.ClientName
 FROM [dbo].[ADRInvoiceAccountData] AD
@@ -1103,16 +1113,22 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
         return @"
 		DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
 
-		-- Pre-resolve credentials: one row per vendor (latest active, non-expired credential).
+		-- Pre-resolve credentials: one row per vendor (prefer credentials with passwords, then latest CredentialId).
 		-- This prevents row multiplication when joining Credential to the main query.
 		-- Without this, a vendor with N active credentials would multiply every invoice row by N.
 		DROP TABLE IF EXISTS #tmpVendorCred;
-		SELECT VendorId, MAX(CredentialId) AS CredentialId
+		SELECT VendorId, CredentialId
 		INTO #tmpVendorCred
-		FROM [Credential]
-		WHERE IsActive = 1
-		  AND (ExpirationDate IS NULL OR ExpirationDate >= CAST(GETDATE() AS DATE))
-		GROUP BY VendorId;
+		FROM (
+			SELECT VendorId, CredentialId,
+			       ROW_NUMBER() OVER (PARTITION BY VendorId ORDER BY 
+			           CASE WHEN [Password] IS NOT NULL AND [Password] != '' THEN 0 ELSE 1 END,
+			           CredentialId DESC) AS rn
+			FROM [Credential]
+			WHERE IsActive = 1
+			  AND (ExpirationDate IS NULL OR ExpirationDate >= CAST(GETDATE() AS DATE))
+		) ranked
+		WHERE rn = 1;
 
 		-- Resolve credentials: try PrimaryVendor first, fall back to MasterVendor.
 		-- The Credential table links to Vendor via VendorId. We do NOT use CredentialAccount
