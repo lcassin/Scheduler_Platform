@@ -119,8 +119,8 @@
         }
 
         #diagram-svg {
-            width: 4000px;
-            height: 4000px;
+            width: 10000px;
+            height: 10000px;
             cursor: grab;
         }
 
@@ -875,6 +875,9 @@
         const edgesLayer = document.getElementById('edges-layer');
         const subgraphsLayer = document.getElementById('subgraphs-layer');
         const contextMenu = document.getElementById('context-menu');
+        // Save the original flowchart context menu HTML so it can be restored
+        // after other diagram types clear it with innerHTML = ''
+        const flowchartContextMenuHTML = contextMenu.innerHTML;
         const inlineEditor = document.getElementById('inline-editor');
         const tempEdge = document.getElementById('temp-edge');
         const canvasContainer = document.getElementById('canvas-container');
@@ -978,13 +981,15 @@
             }
             panzoomInstance = panzoom(svg, {
                 maxZoom: 5,
-                minZoom: 0.1,
+                minZoom: 0.3,
                 initialZoom: 1,
                 bounds: false,
                 boundsPadding: 0.1,
                 smoothScroll: false,
                 // Don't pan when dragging nodes
                 beforeMouseDown: function(e) {
+                    // Cancel panzoom (return true) for right-clicks so context menu works
+                    if (e.button === 2) return true;
                     // Allow pan only if not clicking on a node or edge
                     const target = e.target;
                     const isInteractive = target.closest('.node-group') ||
@@ -994,6 +999,81 @@
                     return isInteractive;
                 }
             });
+        }
+
+        // Prevent native browser context menu on the entire canvas container.
+        // If the click is outside the SVG (zoomed out), show the empty-space context menu
+        // for the current diagram type so right-click always works.
+        canvasContainer.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            // If the click target is inside the SVG, the SVG's own contextmenu handler
+            // already ran (it fires first because SVG is a child). Only act when
+            // the target is the container itself (outside the SVG boundary).
+            if (e.target === canvasContainer || !svg.contains(e.target)) {
+                // Show the appropriate empty-space context menu
+                if (currentDiagramType === 'flowchart') {
+                    selectedNodeId = null;
+                    selectedEdgeIndex = -1;
+                    selectedSubgraphId = null;
+                    render();
+                    showContextMenu(e.clientX, e.clientY);
+                } else if (currentDiagramType === 'sequence' && seqDiagram) {
+                    contextMenu.innerHTML = '';
+                    addContextMenuItem('Add Participant', () => {
+                        const newId = 'Participant' + (seqDiagram.participants.length + 1);
+                        postMessage({ type: 'seq_participantCreated', participantId: newId });
+                    });
+                    if (seqDiagram.participants.length >= 2) {
+                        addContextMenuItem('Add Message', () => {
+                            postMessage({ type: 'seq_messageCreated', fromId: seqDiagram.participants[0].id, toId: seqDiagram.participants[1].id, text: 'Message', arrowType: 'SolidArrow' });
+                        });
+                        addContextMenuItem('Add Note', () => {
+                            postMessage({ type: 'seq_noteCreated', position: 'RightOf', overParticipants: seqDiagram.participants[0].id, text: 'Note' });
+                        });
+                        addContextMenuItem('Add Fragment', () => {
+                            postMessage({ type: 'seq_fragmentCreated', fragmentType: 'loop', condition: 'condition', sections: [{ label: 'condition', elements: [] }] });
+                        });
+                    }
+                    contextMenu.style.left = e.clientX + 'px';
+                    contextMenu.style.top = e.clientY + 'px';
+                    contextMenu.classList.add('visible');
+                } else {
+                    // For class/state/ER, just suppress the browser menu
+                    // (their context menus are handled on-SVG only)
+                }
+            }
+        });
+
+        // Dynamically update SVG canvas size and minZoom to fit diagram content
+        function updateCanvasAndZoomLimits() {
+            const bbox = getDiagramBoundingBox();
+            if (!bbox) {
+                // No content — set a reasonable default canvas
+                svg.style.width = '10000px';
+                svg.style.height = '10000px';
+                if (panzoomInstance) panzoomInstance.setMinZoom(0.3);
+                return;
+            }
+
+            // Expand SVG to cover diagram content plus generous padding on all sides
+            const padding = 2000;
+            const svgW = Math.max(10000, bbox.maxX + padding, (bbox.maxX - bbox.minX) + padding * 2);
+            const svgH = Math.max(10000, bbox.maxY + padding, (bbox.maxY - bbox.minY) + padding * 2);
+            svg.style.width = svgW + 'px';
+            svg.style.height = svgH + 'px';
+
+            // Clamp minZoom so the diagram content always fills a reasonable
+            // portion of the viewport (can't zoom out past content fitting in view)
+            const vw = canvasContainer.clientWidth;
+            const vh = canvasContainer.clientHeight;
+            const contentW = bbox.maxX - bbox.minX;
+            const contentH = bbox.maxY - bbox.minY;
+            if (contentW > 0 && contentH > 0) {
+                const fitScale = Math.min(vw / (contentW + 200), vh / (contentH + 200));
+                // Allow zooming out to 70% of the fit-to-view scale (slight breathing room)
+                const clampedMin = Math.max(0.15, fitScale * 0.7);
+                if (panzoomInstance) panzoomInstance.setMinZoom(clampedMin);
+            }
         }
 
         // ========== Theme ==========
@@ -1176,6 +1256,7 @@
             renderEdges();
             renderNodes();
             updateMinimap();
+            updateCanvasAndZoomLimits();
         }
 
         function renderNodes() {
@@ -2483,6 +2564,21 @@
         // ========== Context Menu ==========
 
         function showContextMenu(x, y) {
+            // Restore the static flowchart context menu HTML (other diagram types
+            // clear it with innerHTML = '' when building their dynamic menus)
+            contextMenu.innerHTML = flowchartContextMenuHTML;
+
+            // Re-attach click handler for dynamically restored menu items
+            contextMenu.querySelectorAll('.context-menu-item[data-action]').forEach(item => {
+                item.addEventListener('click', function(e) {
+                    const action = item.getAttribute('data-action');
+                    if (action) {
+                        handleContextMenuAction(action);
+                        hideContextMenu();
+                    }
+                });
+            });
+
             // Enable/disable items based on selection
             const editItem = contextMenu.querySelector('[data-action="edit-label"]');
             const deleteItem = contextMenu.querySelector('[data-action="delete-selected"]');
@@ -3582,6 +3678,7 @@
             }
 
             updateMinimap();
+            updateCanvasAndZoomLimits();
         }
 
         function applyArrowStyle(lineEl, arrowType) {
@@ -4905,6 +5002,7 @@
             });
 
             updateMinimap();
+            updateCanvasAndZoomLimits();
         }
 
         function clsGetEdgePoints(fromPos, toPos) {
@@ -5678,6 +5776,7 @@
             });
 
             updateMinimap();
+            updateCanvasAndZoomLimits();
         }
 
         function stRenderState(state) {
@@ -6511,6 +6610,7 @@
             });
 
             updateMinimap();
+            updateCanvasAndZoomLimits();
         }
 
         function erRenderEntity(entity) {
