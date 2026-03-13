@@ -343,21 +343,29 @@ public class AdrAccountSyncService : IAdrAccountSyncService
         // Try PrimaryVendor credential first, fall back to MasterVendor credential.
         // CredentialAccount is NOT used (it's for PIN/SSO type, not credential existence).
         var countQuery = @"
+-- Pre-resolve: one credential per vendor (prefer credentials with passwords, then latest CredentialId)
+;WITH RankedCred AS (
+    SELECT VendorId, CredentialId,
+           ROW_NUMBER() OVER (PARTITION BY VendorId ORDER BY 
+               CASE WHEN [Password] IS NOT NULL AND [Password] != '' THEN 0 ELSE 1 END,
+               CredentialId DESC) AS rn
+    FROM [Credential]
+    WHERE IsActive = 1
+      AND (ExpirationDate IS NULL OR ExpirationDate >= CAST(GETDATE() AS DATE))
+),
+VendorCred AS (
+    SELECT VendorId, CredentialId FROM RankedCred WHERE rn = 1
+)
 SELECT COUNT(DISTINCT CONCAT(AD.VCAccountId, '_', AD.AccountNumber))
 FROM [dbo].[ADRInvoiceAccountData] AD
 INNER JOIN Account A ON AD.VCAccountId = A.AccountId AND A.IsActive = 1
 INNER JOIN Client CL ON A.ClientId = CL.ClientId AND CL.IsActive = 1
 LEFT OUTER JOIN Vendor V ON A.VendorId = V.VendorId
 LEFT OUTER JOIN VendorXRef VX ON V.VendorId = VX.PrimaryVendorId
--- Primary credential: directly on the account's vendor
-LEFT OUTER JOIN [Credential] PC ON PC.VendorId = A.VendorId 
-    AND PC.IsActive = 1 
-    AND (PC.ExpirationDate IS NULL OR PC.ExpirationDate >= CAST(GETDATE() AS DATE))
--- Master credential fallback: on the master vendor (only when no primary credential)
-LEFT OUTER JOIN [Credential] MC ON MC.VendorId = VX.MasterVendorId 
-    AND MC.IsActive = 1 
-    AND (MC.ExpirationDate IS NULL OR MC.ExpirationDate >= CAST(GETDATE() AS DATE))
-    AND PC.CredentialId IS NULL
+-- Primary credential: pre-resolved to 1 per vendor
+LEFT OUTER JOIN VendorCred PC ON PC.VendorId = A.VendorId
+-- Master credential fallback (only when no primary credential)
+LEFT OUTER JOIN VendorCred MC ON MC.VendorId = VX.MasterVendorId AND PC.CredentialId IS NULL
 WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL)
   AND COALESCE(PC.CredentialId, MC.CredentialId) IS NOT NULL";
 
@@ -382,21 +390,29 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
         // Query unique clients from external database (only active clients whose accounts have valid credentials).
         // Uses same credential resolution as GetAccountSyncQuery(): PrimaryVendor first, MasterVendor fallback.
         var clientQuery = @"
+-- Pre-resolve: one credential per vendor (prefer credentials with passwords, then latest CredentialId)
+;WITH RankedCred AS (
+    SELECT VendorId, CredentialId,
+           ROW_NUMBER() OVER (PARTITION BY VendorId ORDER BY 
+               CASE WHEN [Password] IS NOT NULL AND [Password] != '' THEN 0 ELSE 1 END,
+               CredentialId DESC) AS rn
+    FROM [Credential]
+    WHERE IsActive = 1
+      AND (ExpirationDate IS NULL OR ExpirationDate >= CAST(GETDATE() AS DATE))
+),
+VendorCred AS (
+    SELECT VendorId, CredentialId FROM RankedCred WHERE rn = 1
+)
 SELECT DISTINCT CL.ClientId, CL.ClientName
 FROM [dbo].[ADRInvoiceAccountData] AD
     INNER JOIN Account A ON AD.VCAccountId = A.AccountId AND A.IsActive = 1
     INNER JOIN Client CL ON A.ClientId = CL.ClientId AND CL.IsActive = 1
     LEFT OUTER JOIN Vendor V ON A.VendorId = V.VendorId
     LEFT OUTER JOIN VendorXRef VX ON V.VendorId = VX.PrimaryVendorId
-    -- Primary credential: directly on the account's vendor
-    LEFT OUTER JOIN [Credential] PC ON PC.VendorId = A.VendorId 
-        AND PC.IsActive = 1 
-        AND (PC.ExpirationDate IS NULL OR PC.ExpirationDate >= CAST(GETDATE() AS DATE))
-    -- Master credential fallback: on the master vendor (only when no primary credential)
-    LEFT OUTER JOIN [Credential] MC ON MC.VendorId = VX.MasterVendorId 
-        AND MC.IsActive = 1 
-        AND (MC.ExpirationDate IS NULL OR MC.ExpirationDate >= CAST(GETDATE() AS DATE))
-        AND PC.CredentialId IS NULL
+    -- Primary credential: pre-resolved to 1 per vendor
+    LEFT OUTER JOIN VendorCred PC ON PC.VendorId = A.VendorId
+    -- Master credential fallback (only when no primary credential)
+    LEFT OUTER JOIN VendorCred MC ON MC.VendorId = VX.MasterVendorId AND PC.CredentialId IS NULL
 WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL)
   AND COALESCE(PC.CredentialId, MC.CredentialId) IS NOT NULL";
 
@@ -1097,10 +1113,26 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
         return @"
 		DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
 
+		-- Pre-resolve credentials: one row per vendor (prefer credentials with passwords, then latest CredentialId).
+		-- This prevents row multiplication when joining Credential to the main query.
+		-- Without this, a vendor with N active credentials would multiply every invoice row by N.
+		DROP TABLE IF EXISTS #tmpVendorCred;
+		SELECT VendorId, CredentialId
+		INTO #tmpVendorCred
+		FROM (
+			SELECT VendorId, CredentialId,
+			       ROW_NUMBER() OVER (PARTITION BY VendorId ORDER BY 
+			           CASE WHEN [Password] IS NOT NULL AND [Password] != '' THEN 0 ELSE 1 END,
+			           CredentialId DESC) AS rn
+			FROM [Credential]
+			WHERE IsActive = 1
+			  AND (ExpirationDate IS NULL OR ExpirationDate >= CAST(GETDATE() AS DATE))
+		) ranked
+		WHERE rn = 1;
+
 		-- Resolve credentials: try PrimaryVendor first, fall back to MasterVendor.
 		-- The Credential table links to Vendor via VendorId. We do NOT use CredentialAccount
 		-- (that table is for PIN/SSO type determination used by the downstream API, not the scheduler).
-		-- Filter: IsActive = 1 AND (ExpirationDate IS NULL OR ExpirationDate >= today)
 		SELECT [RecId]
 			  ,AD.[InterfaceAccountId]
 			  ,[BillId]
@@ -1110,7 +1142,7 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
 			  ,MV.[PrimaryVendorCode] AS MasterVendorCode
 			  ,[VCAccountId] AS AccountId
 			  ,COALESCE(PC.CredentialId, MC.CredentialId) AS CredentialId
-			  ,COALESCE(PC.ExpirationDate, MC.ExpirationDate) AS ExpirationDate
+			  ,COALESCE(PCFull.ExpirationDate, MCFull.ExpirationDate) AS ExpirationDate
 			  ,CL.ClientId
 			  ,CL.ClientName
 		INTO #tmpCredentialAccountBilling
@@ -1121,17 +1153,17 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
 			LEFT OUTER JOIN Vendor V ON A.VendorId = V.VendorId
 			LEFT OUTER JOIN VendorXRef VX ON V.VendorId = VX.PrimaryVendorId
 			LEFT OUTER JOIN Vendor MV ON VX.MasterVendorId = MV.VendorId
-			-- Primary credential: directly on the account's vendor
-			LEFT OUTER JOIN [Credential] PC ON PC.VendorId = A.VendorId 
-				AND PC.IsActive = 1 
-				AND (PC.ExpirationDate IS NULL OR PC.ExpirationDate >= CAST(GETDATE() AS DATE))
-			-- Master credential fallback: on the master vendor (only used when primary credential is NULL)
-			LEFT OUTER JOIN [Credential] MC ON MC.VendorId = VX.MasterVendorId 
-				AND MC.IsActive = 1 
-				AND (MC.ExpirationDate IS NULL OR MC.ExpirationDate >= CAST(GETDATE() AS DATE))
-				AND PC.CredentialId IS NULL
+			-- Primary credential: pre-resolved to 1 per vendor (no row multiplication)
+			LEFT OUTER JOIN #tmpVendorCred PC ON PC.VendorId = A.VendorId
+			-- Master credential fallback (only when no primary credential found)
+			LEFT OUTER JOIN #tmpVendorCred MC ON MC.VendorId = VX.MasterVendorId AND PC.CredentialId IS NULL
+			-- Get ExpirationDate from full Credential table for the resolved credential
+			LEFT OUTER JOIN [Credential] PCFull ON PCFull.CredentialId = PC.CredentialId
+			LEFT OUTER JOIN [Credential] MCFull ON MCFull.CredentialId = MC.CredentialId
 		WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL)
 		  AND COALESCE(PC.CredentialId, MC.CredentialId) IS NOT NULL;
+
+		DROP TABLE IF EXISTS #tmpVendorCred;
 
 		;WITH AccountStats AS (
 			SELECT AccountId,
