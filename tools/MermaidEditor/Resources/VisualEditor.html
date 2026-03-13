@@ -506,6 +506,19 @@
             opacity: 1;
         }
 
+        /* State / ER diagram grip points (shown on hover) */
+        .grip-point {
+            fill: var(--node-selected-stroke);
+            stroke: var(--bg-color);
+            stroke-width: 1.5;
+            opacity: 0;
+            cursor: crosshair;
+            transition: opacity 0.15s;
+        }
+        .node-group:hover .grip-point {
+            opacity: 1;
+        }
+
         /* Temp edge being drawn */
         .temp-edge {
             fill: none;
@@ -6427,7 +6440,7 @@
                 const grip = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                 grip.setAttribute('cx', gp.cx);
                 grip.setAttribute('cy', gp.cy);
-                grip.setAttribute('r', '5');
+                grip.setAttribute('r', '3');
                 grip.classList.add('grip-point');
                 grip.setAttribute('data-state-id', state.id);
                 g.appendChild(grip);
@@ -7112,9 +7125,13 @@
             maxTextWidth = Math.max(maxTextWidth, nameWidth);
 
             ctx.font = '12px monospace';
+            const keyColumnWidth = 26; // Always reserved for PK/FK column
             entity.attributes.forEach(attr => {
-                const attrText = erFormatAttribute(attr);
-                const w = ctx.measureText(attrText).width + ER_BOX_PADDING * 2 + 10;
+                ctx.font = '11px monospace';
+                const typeWidth = ctx.measureText(attr.type || '').width;
+                ctx.font = '12px monospace';
+                const nameWidth2 = ctx.measureText(attr.name || '').width;
+                const w = ER_BOX_PADDING + keyColumnWidth + typeWidth + 14 + nameWidth2 + ER_BOX_PADDING + 10;
                 maxTextWidth = Math.max(maxTextWidth, w);
             });
 
@@ -7273,9 +7290,10 @@
                         attrG.appendChild(keyText);
                     }
 
-                    const keyOffset = attr.key ? 26 : 0;
+                    // Always reserve key column width so type/name columns stay aligned
+                    const keyColumnWidth = 26;
                     const typeText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                    typeText.setAttribute('x', ER_BOX_PADDING + keyOffset);
+                    typeText.setAttribute('x', ER_BOX_PADDING + keyColumnWidth);
                     typeText.setAttribute('y', yOffset + ER_ATTR_HEIGHT / 2 + 4);
                     typeText.setAttribute('fill', 'var(--text-muted, #888)');
                     typeText.setAttribute('font-size', '11');
@@ -7283,7 +7301,7 @@
                     attrG.appendChild(typeText);
 
                     const nameTextEl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                    nameTextEl.setAttribute('x', ER_BOX_PADDING + keyOffset + 60);
+                    nameTextEl.setAttribute('x', ER_BOX_PADDING + keyColumnWidth + 60);
                     nameTextEl.setAttribute('y', yOffset + ER_ATTR_HEIGHT / 2 + 4);
                     nameTextEl.setAttribute('fill', 'var(--node-text)');
                     nameTextEl.setAttribute('font-size', '12');
@@ -7318,7 +7336,7 @@
                 const grip = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                 grip.setAttribute('cx', gp.cx);
                 grip.setAttribute('cy', gp.cy);
-                grip.setAttribute('r', '5');
+                grip.setAttribute('r', '3');
                 grip.classList.add('grip-point');
                 grip.setAttribute('data-entity-name', entity.name);
                 g.appendChild(grip);
