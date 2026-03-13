@@ -6261,20 +6261,31 @@ Console.WriteLine(""Hello, World!"");
                         // Get the content element
                         const content = document.getElementById('content') || document.body;
                         
-                        // --- Force light-mode styles for print capture ---
-                        // Save originals so we can restore after capture.
+                        // --- Force light-mode styles AND expand containers for print capture ---
+                        // The page CSS sets html,body { height:100%; overflow:auto }
+                        // which clips content to viewport height.  html2canvas respects
+                        // this clipping, so we must temporarily expand everything to
+                        // its natural height and remove overflow clipping.
                         const origStyles = {
                             htmlBg: document.documentElement.style.background,
                             htmlColorScheme: document.documentElement.style.colorScheme,
+                            htmlHeight: document.documentElement.style.height,
+                            htmlOverflow: document.documentElement.style.overflow,
                             bodyBg: document.body.style.background,
                             bodyColor: document.body.style.color,
+                            bodyHeight: document.body.style.height,
+                            bodyOverflow: document.body.style.overflow,
                             contentBg: content.style.background,
                             contentColor: content.style.color
                         };
                         document.documentElement.style.background = '#ffffff';
                         document.documentElement.style.colorScheme = 'light';
+                        document.documentElement.style.height = 'auto';
+                        document.documentElement.style.overflow = 'visible';
                         document.body.style.background = '#ffffff';
                         document.body.style.color = '#1f2328';
+                        document.body.style.height = 'auto';
+                        document.body.style.overflow = 'visible';
                         content.style.background = '#ffffff';
                         content.style.color = '#1f2328';
                         
@@ -6335,8 +6346,12 @@ Console.WriteLine(""Hello, World!"");
                         // --- Restore original styles ---
                         document.documentElement.style.background = origStyles.htmlBg;
                         document.documentElement.style.colorScheme = origStyles.htmlColorScheme;
+                        document.documentElement.style.height = origStyles.htmlHeight;
+                        document.documentElement.style.overflow = origStyles.htmlOverflow;
                         document.body.style.background = origStyles.bodyBg;
                         document.body.style.color = origStyles.bodyColor;
+                        document.body.style.height = origStyles.bodyHeight;
+                        document.body.style.overflow = origStyles.bodyOverflow;
                         content.style.background = origStyles.contentBg;
                         content.style.color = origStyles.contentColor;
                         if (printStyle) printStyle.textContent = '';
