@@ -906,6 +906,14 @@ public class VisualEditorBridge
                     HandleSeqMessageDeleted(root);
                     break;
 
+                case "seq_noteCreated":
+                    HandleSeqNoteCreated(root);
+                    break;
+
+                case "seq_fragmentCreated":
+                    HandleSeqFragmentCreated(root);
+                    break;
+
                 case "seq_participantSelected":
                     // Selection doesn't need model changes
                     break;
@@ -2521,6 +2529,92 @@ public class VisualEditorBridge
         PushUndo();
         _sequenceModel.Elements.RemoveAt(elementIndex);
         RaiseSequenceModelChanged("seq_messageDeleted");
+    }
+
+    private void HandleSeqNoteCreated(JsonElement root)
+    {
+        if (_sequenceModel == null) return;
+
+        var positionStr = root.TryGetProperty("position", out var posProp) ? posProp.GetString() ?? "RightOf" : "RightOf";
+        var overParticipants = root.TryGetProperty("overParticipants", out var overProp) ? overProp.GetString() ?? "" : "";
+        var text = root.TryGetProperty("text", out var textProp) ? textProp.GetString() ?? "Note" : "Note";
+
+        PushUndo();
+        var note = new SequenceNote
+        {
+            Text = text,
+            OverParticipants = overParticipants
+        };
+        if (Enum.TryParse<SequenceNotePosition>(positionStr, out var pos))
+            note.Position = pos;
+
+        _sequenceModel.Elements.Add(note);
+        RaiseSequenceModelChanged("seq_noteCreated");
+    }
+
+    private void HandleSeqFragmentCreated(JsonElement root)
+    {
+        if (_sequenceModel == null) return;
+
+        var fragTypeStr = root.TryGetProperty("fragmentType", out var ftProp) ? ftProp.GetString() ?? "alt" : "alt";
+        var condition = root.TryGetProperty("condition", out var condProp) ? condProp.GetString() ?? "" : "";
+
+        PushUndo();
+        var fragment = new SequenceFragment
+        {
+            Label = condition
+        };
+        if (Enum.TryParse<SequenceFragmentType>(fragTypeStr, true, out var fType))
+            fragment.Type = fType;
+
+        // Build sections from JSON
+        if (root.TryGetProperty("sections", out var sectionsProp) && sectionsProp.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var secEl in sectionsProp.EnumerateArray())
+            {
+                var section = new SequenceFragmentSection
+                {
+                    Label = secEl.TryGetProperty("label", out var lblProp) ? lblProp.GetString() : null
+                };
+
+                if (secEl.TryGetProperty("elements", out var elemsProp) && elemsProp.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var elem in elemsProp.EnumerateArray())
+                    {
+                        var elemType = elem.TryGetProperty("elementType", out var etProp) ? etProp.GetString() : null;
+                        if (elemType == "message")
+                        {
+                            var fromId = elem.TryGetProperty("fromId", out var fProp) ? fProp.GetString() ?? "" : "";
+                            var toId = elem.TryGetProperty("toId", out var tProp) ? tProp.GetString() ?? "" : "";
+                            var msgText = elem.TryGetProperty("text", out var mtProp) ? mtProp.GetString() ?? "" : "";
+                            var arrowType = SequenceArrowType.SolidArrow;
+                            if (elem.TryGetProperty("arrowType", out var atProp))
+                            {
+                                if (Enum.TryParse<SequenceArrowType>(atProp.GetString(), out var parsed))
+                                    arrowType = parsed;
+                            }
+                            section.Elements.Add(new SequenceMessage
+                            {
+                                FromId = fromId,
+                                ToId = toId,
+                                Text = msgText,
+                                ArrowType = arrowType
+                            });
+                        }
+                    }
+                }
+
+                fragment.Sections.Add(section);
+            }
+        }
+        else
+        {
+            // Default: single section with no elements
+            fragment.Sections.Add(new SequenceFragmentSection { Label = condition });
+        }
+
+        _sequenceModel.Elements.Add(fragment);
+        RaiseSequenceModelChanged("seq_fragmentCreated");
     }
 
     // ========== Sequence Model Restore (for undo/redo) ==========

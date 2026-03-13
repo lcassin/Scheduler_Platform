@@ -2039,10 +2039,14 @@
             }
         });
 
-        // Context menu
+        // Always prevent browser default context menu on SVG
+        svg.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+        });
+
+        // Context menu - flowchart
         svg.addEventListener('contextmenu', function(e) {
             if (currentDiagramType !== 'flowchart') return;
-            e.preventDefault();
             const pt = getSVGPoint(e);
             contextMenuX = pt.x;
             contextMenuY = pt.y;
@@ -2923,26 +2927,26 @@
 
         function getTotalVisualHeight() {
             if (!seqDiagram) return 400;
-            let msgCount = 0;
-            let fragDepth = 0;
-            let extraSpace = 0;
+            let y = SEQ_LIFELINE_START_Y + 30;
             seqDiagram.elements.forEach(el => {
-                if (el.elementType === 'message') msgCount++;
-                else if (el.elementType === 'fragment') {
-                    // Fragments add extra vertical space
-                    let sectionMsgCount = 0;
+                if (el.elementType === 'message') {
+                    y += SEQ_MESSAGE_SPACING;
+                } else if (el.elementType === 'fragment') {
+                    y += 25; // fragment header
                     if (el.sections) {
-                        el.sections.forEach(s => {
+                        el.sections.forEach((s, sIdx) => {
+                            if (sIdx > 0) y += 20; // section divider
                             if (s.elements) {
-                                s.elements.forEach(se => { if (se.elementType === 'message') sectionMsgCount++; });
+                                s.elements.forEach(se => { if (se.elementType === 'message') y += SEQ_MESSAGE_SPACING; });
                             }
                         });
                     }
-                    extraSpace += 40 + (el.sections ? (el.sections.length - 1) * 20 : 0);
+                    y += 15; // fragment bottom padding
+                } else if (el.elementType === 'note') {
+                    y += 40;
                 }
-                else if (el.elementType === 'note') extraSpace += 30;
             });
-            return SEQ_LIFELINE_START_Y + 60 + (msgCount + 1) * SEQ_MESSAGE_SPACING + extraSpace;
+            return y + SEQ_PARTICIPANT_HEIGHT + 30;
         }
 
         function renderSequenceDiagram() {
@@ -3094,19 +3098,19 @@
             });
 
             // ===== Render Elements (messages, notes, fragments) =====
-            let visualMsgIdx = 0;
+            let currentY = SEQ_LIFELINE_START_Y + 30; // cumulative Y position tracker
             let msgNumber = seqDiagram.autoNumber ? 1 : 0;
             const activationStacks = {}; // participantId -> [{startY}]
 
             // Helper: render a single message arrow (used for both top-level and fragment-inner messages)
-            function renderMessageArrow(el, elIdx, vIdx) {
+            function renderMessageArrow(el, elIdx, absY) {
                 const fromIdx = getParticipantIndex(el.fromId);
                 const toIdx = getParticipantIndex(el.toId);
                 if (fromIdx < 0 || toIdx < 0) return;
 
                 const fromX = getParticipantX(fromIdx);
                 const toX = getParticipantX(toIdx);
-                const y = getMessageY(vIdx);
+                const y = absY;
                 const isSelfMessage = el.fromId === el.toId;
 
                 const msgGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -3236,42 +3240,47 @@
                 if (el.elementType === 'message') {
                     const fromIdx = getParticipantIndex(el.fromId);
                     const toIdx = getParticipantIndex(el.toId);
-                    if (fromIdx < 0 || toIdx < 0) { visualMsgIdx++; return; }
+                    if (fromIdx < 0 || toIdx < 0) { currentY += SEQ_MESSAGE_SPACING; return; }
 
-                    renderMessageArrow(el, elIdx, visualMsgIdx);
+                    renderMessageArrow(el, elIdx, currentY);
 
                     if (msgNumber > 0) msgNumber++;
-                    visualMsgIdx++;
+                    currentY += SEQ_MESSAGE_SPACING;
                 }
                 else if (el.elementType === 'note') {
-                    renderSequenceNote(el, visualMsgIdx);
+                    renderSequenceNote(el, currentY);
+                    currentY += 40; // note height + spacing
                 }
                 else if (el.elementType === 'fragment') {
-                    renderSequenceFragment(el, elIdx, visualMsgIdx);
-                    // Render and count messages inside fragment sections
+                    const fragStartY = currentY;
+                    currentY += 25; // fragment header height
+                    // Render messages inside fragment sections
                     if (el.sections) {
-                        el.sections.forEach(s => {
+                        el.sections.forEach((s, sIdx) => {
+                            if (sIdx > 0) currentY += 20; // section divider space
                             if (s.elements) {
                                 s.elements.forEach(se => {
                                     if (se.elementType === 'message') {
-                                        renderMessageArrow(se, elIdx, visualMsgIdx);
+                                        renderMessageArrow(se, elIdx, currentY);
                                         if (msgNumber > 0) msgNumber++;
-                                        visualMsgIdx++;
+                                        currentY += SEQ_MESSAGE_SPACING;
                                     }
                                 });
                             }
                         });
                     }
+                    currentY += 15; // fragment bottom padding
+                    renderSequenceFragment(el, elIdx, fragStartY, currentY);
                 }
                 else if (el.elementType === 'activate') {
                     if (!activationStacks[el.participantId]) activationStacks[el.participantId] = [];
-                    activationStacks[el.participantId].push({ startY: getMessageY(visualMsgIdx) });
+                    activationStacks[el.participantId].push({ startY: currentY });
                 }
                 else if (el.elementType === 'deactivate') {
                     const stack = activationStacks[el.participantId];
                     if (stack && stack.length > 0) {
                         const activation = stack.pop();
-                        renderActivationBox(el.participantId, activation.startY, getMessageY(visualMsgIdx));
+                        renderActivationBox(el.participantId, activation.startY, currentY);
                     }
                 }
             });
@@ -3366,9 +3375,9 @@
             subgraphsLayer.appendChild(rect);
         }
 
-        function renderSequenceNote(note, visualMsgIdx) {
+        function renderSequenceNote(note, absY) {
             if (!seqDiagram) return;
-            const y = getMessageY(visualMsgIdx) - 10;
+            const y = absY - 10;
 
             // Parse overParticipants to find positioning
             const overParts = (note.overParticipants || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -3428,20 +3437,10 @@
             edgesLayer.appendChild(noteG);
         }
 
-        function renderSequenceFragment(fragment, elIdx, visualMsgIdx) {
+        function renderSequenceFragment(fragment, elIdx, fragStartY, fragEndY) {
             if (!seqDiagram) return;
-            const startY = getMessageY(visualMsgIdx) - 20;
-
-            // Count total messages inside all sections
-            let totalMsgs = 0;
-            if (fragment.sections) {
-                fragment.sections.forEach(s => {
-                    if (s.elements) {
-                        s.elements.forEach(se => { if (se.elementType === 'message') totalMsgs++; });
-                    }
-                });
-            }
-            const endY = startY + (totalMsgs + 1) * SEQ_MESSAGE_SPACING + 30;
+            const startY = fragStartY - 10;
+            const endY = fragEndY;
 
             // Determine horizontal extent (span all participants by default)
             const participants = seqDiagram.participants;
@@ -3500,34 +3499,40 @@
 
             // Section dividers (for alt/else etc.)
             if (fragment.sections && fragment.sections.length > 1) {
-                let sectionMsgOffset = 0;
-                for (let si = 1; si < fragment.sections.length; si++) {
-                    // Count messages in previous section
-                    const prevSection = fragment.sections[si - 1];
-                    if (prevSection.elements) {
-                        prevSection.elements.forEach(se => { if (se.elementType === 'message') sectionMsgOffset++; });
+                // Compute divider positions by walking through sections
+                let divY = startY + 25; // after fragment header
+                for (let si = 0; si < fragment.sections.length; si++) {
+                    // Count messages in this section
+                    let secMsgCount = 0;
+                    if (fragment.sections[si].elements) {
+                        fragment.sections[si].elements.forEach(se => { if (se.elementType === 'message') secMsgCount++; });
                     }
-                    const dividerY = startY + 25 + sectionMsgOffset * SEQ_MESSAGE_SPACING + 10;
+                    divY += secMsgCount * SEQ_MESSAGE_SPACING;
 
-                    const divider = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                    divider.setAttribute('x1', leftX);
-                    divider.setAttribute('y1', dividerY);
-                    divider.setAttribute('x2', rightX);
-                    divider.setAttribute('y2', dividerY);
-                    divider.setAttribute('stroke', 'var(--subgraph-stroke)');
-                    divider.setAttribute('stroke-width', '1');
-                    divider.setAttribute('stroke-dasharray', '5,3');
-                    fragG.appendChild(divider);
+                    if (si < fragment.sections.length - 1) {
+                        // Draw divider between sections
+                        const divider = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        divider.setAttribute('x1', leftX);
+                        divider.setAttribute('y1', divY);
+                        divider.setAttribute('x2', rightX);
+                        divider.setAttribute('y2', divY);
+                        divider.setAttribute('stroke', 'var(--subgraph-stroke)');
+                        divider.setAttribute('stroke-width', '1');
+                        divider.setAttribute('stroke-dasharray', '5,3');
+                        fragG.appendChild(divider);
 
-                    // Section label
-                    if (fragment.sections[si].label) {
-                        const secLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                        secLabel.setAttribute('x', leftX + 10);
-                        secLabel.setAttribute('y', dividerY + 14);
-                        secLabel.setAttribute('font-size', '11');
-                        secLabel.setAttribute('fill', 'var(--subgraph-text)');
-                        secLabel.textContent = '[' + fragment.sections[si].label + ']';
-                        fragG.appendChild(secLabel);
+                        // Section label
+                        if (fragment.sections[si + 1].label) {
+                            const secLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                            secLabel.setAttribute('x', leftX + 10);
+                            secLabel.setAttribute('y', divY + 14);
+                            secLabel.setAttribute('font-size', '11');
+                            secLabel.setAttribute('fill', 'var(--subgraph-text)');
+                            secLabel.textContent = '[' + fragment.sections[si + 1].label + ']';
+                            fragG.appendChild(secLabel);
+                        }
+
+                        divY += 20; // section divider space
                     }
                 }
             }
@@ -6714,14 +6719,14 @@
         // ===== Class diagram toolbar buttons =====
         document.getElementById('tb-cls-add-class').addEventListener('click', function() {
             if (!clsDiagram) return;
-            postMessage({ type: 'cls_classCreated', className: 'NewClass' + (clsDiagram.classes.length + 1) });
+            postMessage({ type: 'cls_classCreated', classId: 'NewClass' + (clsDiagram.classes.length + 1) });
         });
 
         document.getElementById('tb-cls-add-relation').addEventListener('click', function() {
             if (!clsDiagram || clsDiagram.classes.length < 2) return;
             const fromId = clsDiagram.classes[0].id;
             const toId = clsDiagram.classes[1].id;
-            postMessage({ type: 'cls_relationCreated', fromId: fromId, toId: toId, relationType: 'Association', label: '' });
+            postMessage({ type: 'cls_relationshipCreated', fromId: fromId, toId: toId, relationType: 'Association', label: '' });
         });
 
         // ===== State diagram toolbar buttons =====
