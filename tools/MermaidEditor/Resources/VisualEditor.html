@@ -5182,11 +5182,11 @@
 
             ctx.font = '12px monospace';
             fields.forEach(f => {
-                const w = ctx.measureText(clsFormatMember(f)).width + CLS_BOX_PADDING * 2 + 10;
+                const w = ctx.measureText(clsFormatMember(f)).width + CLS_BOX_PADDING * 2 + 20;
                 maxTextWidth = Math.max(maxTextWidth, w);
             });
             methods.forEach(m => {
-                const w = ctx.measureText(clsFormatMember(m)).width + CLS_BOX_PADDING * 2 + 10;
+                const w = ctx.measureText(clsFormatMember(m)).width + CLS_BOX_PADDING * 2 + 20;
                 maxTextWidth = Math.max(maxTextWidth, w);
             });
 
@@ -5450,8 +5450,8 @@
                 line.setAttribute('stroke', 'var(--edge-color)');
                 line.setAttribute('stroke-width', clsSelectedRelIndex === relIdx ? '2.5' : '1.5');
 
-                // Dashed for dotted link style
-                if (rel.linkStyle === 'Dotted') {
+                // Dashed for dashed link style (C# enum: ClassLinkStyle.Dashed)
+                if (rel.linkStyle === 'Dashed') {
                     line.setAttribute('stroke-dasharray', '6,4');
                 }
                 g.appendChild(line);
@@ -5468,14 +5468,19 @@
                 g.appendChild(hitLine);
 
                 // Arrow markers at endpoints
+                // angle: direction from source toward target
+                // reverseAngle: direction from target toward source
+                // End markers point AWAY from the line (toward the node), so:
+                //   - Left end (source side): marker points toward source = use angle (away from target)
+                //   - Right end (target side): marker points toward target = use reverseAngle (away from source)
                 const angle = Math.atan2(pts.y2 - pts.y1, pts.x2 - pts.x1);
                 const reverseAngle = angle + Math.PI;
 
-                // Left end marker (at source/from side)
-                clsDrawRelationEndMarker(g, pts.x1, pts.y1, reverseAngle, rel.leftEnd);
+                // Left end marker (at source/from side) - marker shape extends toward source
+                clsDrawRelationEndMarker(g, pts.x1, pts.y1, angle, rel.leftEnd);
 
-                // Right end marker (at target/to side)
-                clsDrawRelationEndMarker(g, pts.x2, pts.y2, angle, rel.rightEnd);
+                // Right end marker (at target/to side) - marker shape extends toward target
+                clsDrawRelationEndMarker(g, pts.x2, pts.y2, reverseAngle, rel.rightEnd);
 
                 // Label
                 if (rel.label) {
@@ -5678,6 +5683,18 @@
                     diamond.setAttribute('stroke', 'var(--edge-color)');
                     diamond.setAttribute('stroke-width', '1.5');
                     g.appendChild(diamond);
+                    break;
+                }
+                case 'Lollipop': {
+                    // Lollipop / interface marker (circle at end of line)
+                    const lolli = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    lolli.setAttribute('cx', px + 8 * Math.cos(angle));
+                    lolli.setAttribute('cy', py + 8 * Math.sin(angle));
+                    lolli.setAttribute('r', '6');
+                    lolli.setAttribute('fill', 'var(--bg-color)');
+                    lolli.setAttribute('stroke', 'var(--edge-color)');
+                    lolli.setAttribute('stroke-width', '1.5');
+                    g.appendChild(lolli);
                     break;
                 }
                 case 'Star': {
