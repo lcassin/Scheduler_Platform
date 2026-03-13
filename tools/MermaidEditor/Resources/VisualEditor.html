@@ -6788,7 +6788,7 @@
             const state = stFindState(stateId);
             if (!state) return;
 
-            const propContent = propertyPanel.querySelector('.property-content');
+            const propContent = propertyPanel.querySelector('.property-panel-body');
             propContent.innerHTML = `
                 <div class="property-row">
                     <div class="property-label">ID</div>
@@ -6824,7 +6824,7 @@
             if (!stDiagram || idx < 0 || idx >= stDiagram.transitions.length) return;
             const trans = stDiagram.transitions[idx];
 
-            const propContent = propertyPanel.querySelector('.property-content');
+            const propContent = propertyPanel.querySelector('.property-panel-body');
             propContent.innerHTML = `
                 <div class="property-row">
                     <div class="property-label">From</div>
@@ -6941,8 +6941,10 @@
             item.textContent = label;
             item.addEventListener('click', function(e) {
                 e.stopPropagation();
+                e.preventDefault();
                 contextMenu.classList.remove('visible');
-                onClick();
+                // Defer so the click event finishes propagating before the panel opens
+                setTimeout(onClick, 0);
             });
             contextMenu.appendChild(item);
         }
@@ -7598,7 +7600,7 @@
             const entity = erDiagram.entities.find(e => e.name === entityName);
             if (!entity) return;
 
-            const propContent = propertyPanel.querySelector('.property-content');
+            const propContent = propertyPanel.querySelector('.property-panel-body');
             propContent.innerHTML = `
                 <div class="property-row">
                     <div class="property-label">Name</div>
@@ -7627,7 +7629,7 @@
             const keyOptions = ['', 'PK', 'FK'];
             const keyOpts = keyOptions.map(k => `<option value="${k}" ${(attr.key || '') === k ? 'selected' : ''}>${k || '(none)'}</option>`).join('');
 
-            const propContent = propertyPanel.querySelector('.property-content');
+            const propContent = propertyPanel.querySelector('.property-panel-body');
             propContent.innerHTML = `
                 <div class="property-row">
                     <div class="property-label">Entity</div>
@@ -7677,7 +7679,7 @@
             const leftOpts = cardOptions.map(c => `<option value="${c}" ${rel.leftCardinality === c ? 'selected' : ''}>${cardLabels[c]}</option>`).join('');
             const rightOpts = cardOptions.map(c => `<option value="${c}" ${rel.rightCardinality === c ? 'selected' : ''}>${cardLabels[c]}</option>`).join('');
 
-            const propContent = propertyPanel.querySelector('.property-content');
+            const propContent = propertyPanel.querySelector('.property-panel-body');
             propContent.innerHTML = `
                 <div class="property-row">
                     <div class="property-label">From</div>
@@ -7805,8 +7807,10 @@
             item.textContent = label;
             item.addEventListener('click', function(e) {
                 e.stopPropagation();
+                e.preventDefault();
                 contextMenu.classList.remove('visible');
-                onClick();
+                // Defer so the click event finishes propagating before the panel opens
+                setTimeout(onClick, 0);
             });
             contextMenu.appendChild(item);
         }
