@@ -3727,10 +3727,16 @@
             const position = note.notePosition || 'RightOf';
             if (position === 'LeftOf' && overParts.length > 0) {
                 const idx = getParticipantIndex(overParts[0]);
-                if (idx >= 0) noteX = getParticipantX(idx) - noteWidth - 20;
+                // Position note so its right edge is to the left of the participant
+                // noteRect x = noteX - noteWidth/2, so left edge of note = noteX - noteWidth/2
+                // We want: right edge of note (noteX + noteWidth/2) = participantX - gap
+                if (idx >= 0) noteX = getParticipantX(idx) - SEQ_PARTICIPANT_WIDTH / 2 - 10 - noteWidth / 2;
             } else if (position === 'RightOf' && overParts.length > 0) {
                 const idx = getParticipantIndex(overParts[0]);
-                if (idx >= 0) noteX = getParticipantX(idx) + 20;
+                // Position note so its left edge is to the right of the participant
+                // noteRect x = noteX - noteWidth/2, so left edge = noteX - noteWidth/2
+                // We want: left edge of note (noteX - noteWidth/2) = participantX + participant_half_width + gap
+                if (idx >= 0) noteX = getParticipantX(idx) + SEQ_PARTICIPANT_WIDTH / 2 + 10 + noteWidth / 2;
             }
 
             const isSelected = (seqSelectedNoteIndex === elIdx);

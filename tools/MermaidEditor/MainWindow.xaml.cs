@@ -8260,6 +8260,9 @@ Console.WriteLine(""Hello, World!"");
             _activeDocument.HasNavigatedAway = _hasNavigatedAway;
             _activeDocument.IsSelected = false;
             
+            // Save the current visual editor mode so we can restore it when switching back
+            _activeDocument.SavedVisualEditorMode = _visualEditorMode;
+            
             // Save preview scroll position - must await to ensure it's saved before switching
             await SavePreviewScrollPositionAsync(_activeDocument);
         }
@@ -8356,6 +8359,20 @@ Console.WriteLine(""Hello, World!"");
         RenderPreview();
         
         _isSwitchingDocuments = false;
+        
+        // Restore the saved visual editor mode for this document (after all UI is set up)
+        if (doc.RenderMode == RenderMode.Mermaid && doc.SavedVisualEditorMode != VisualEditorMode.Text
+            && IsVisualEditorSupportedForCurrentDiagram() && _visualEditorInitialized)
+        {
+            if (doc.SavedVisualEditorMode == VisualEditorMode.Visual)
+            {
+                SwitchToVisualMode();
+            }
+            else if (doc.SavedVisualEditorMode == VisualEditorMode.Split)
+            {
+                SwitchToSplitMode();
+            }
+        }
     }
     
     /// <summary>
@@ -8788,6 +8805,7 @@ Console.WriteLine(""Hello, World!"");
             _activeDocument.SelectionLength = CodeEditor.SelectionLength;
             _activeDocument.PreviewZoom = _currentZoom;
             _activeDocument.HasNavigatedAway = _hasNavigatedAway;
+            _activeDocument.SavedVisualEditorMode = _visualEditorMode;
         }
         catch
         {
@@ -9155,6 +9173,9 @@ public class DocumentModel : System.ComponentModel.INotifyPropertyChanged
     
     // Preview state
     public double PreviewZoom { get; set; } = 1.0;
+    
+    // Visual editor mode (Text/Visual/Split) - persisted per document
+    public VisualEditorMode SavedVisualEditorMode { get; set; } = VisualEditorMode.Text;
     public bool HasNavigatedAway { get; set; }
     public double PreviewScrollLeft { get; set; }
     public double PreviewScrollTop { get; set; }
