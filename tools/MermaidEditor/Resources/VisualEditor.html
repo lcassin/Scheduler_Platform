@@ -4986,7 +4986,7 @@
         let clsDrawingRelFrom = null; // classId when drawing a relationship
         let clsClassPositions = {}; // { classId: { x, y, width, height } }
 
-        const CLS_BOX_MIN_WIDTH = 160;
+        const CLS_BOX_MIN_WIDTH = 140;
         const CLS_BOX_PADDING = 10;
         const CLS_SECTION_HEIGHT = 24;
         const CLS_MEMBER_HEIGHT = 20;
@@ -5166,7 +5166,9 @@
                 case 'Protected': prefix = '#'; break;
                 case 'Package': prefix = '~'; break;
             }
-            return prefix + (member.rawText || member.name || '');
+            // Use member.name (prefix stripped) to avoid doubling the visibility symbol
+            // rawText already contains the prefix, so using it would produce e.g. "++field"
+            return prefix + (member.name || '');
         }
 
         function clsGetVisibilitySymbol(visibility) {
@@ -5353,7 +5355,7 @@
                     const grip = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
                     grip.setAttribute('cx', gp.cx);
                     grip.setAttribute('cy', gp.cy);
-                    grip.setAttribute('r', '5');
+                    grip.setAttribute('r', '3');
                     grip.classList.add('connection-grip', 'cls-grip');
                     grip.setAttribute('data-class-id', cls.id);
                     g.appendChild(grip);
@@ -5551,8 +5553,8 @@
         function clsDrawRelationEndMarker(g, px, py, angle, endType) {
             const size = 10;
             switch (endType) {
-                case 'Arrow': {
-                    // Open arrowhead (inheritance/realization)
+                case 'Inheritance': {
+                    // Hollow triangle arrowhead (inheritance/realization)
                     const p1x = px + size * Math.cos(angle + 0.5);
                     const p1y = py + size * Math.sin(angle + 0.5);
                     const p2x = px + size * Math.cos(angle - 0.5);
@@ -5565,7 +5567,21 @@
                     g.appendChild(tri);
                     break;
                 }
-                case 'Diamond': {
+                case 'Arrow': {
+                    // Open chevron arrowhead (association/dependency)
+                    const p1x = px + size * Math.cos(angle + 0.5);
+                    const p1y = py + size * Math.sin(angle + 0.5);
+                    const p2x = px + size * Math.cos(angle - 0.5);
+                    const p2y = py + size * Math.sin(angle - 0.5);
+                    const chevron = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+                    chevron.setAttribute('points', `${p1x},${p1y} ${px},${py} ${p2x},${p2y}`);
+                    chevron.setAttribute('fill', 'none');
+                    chevron.setAttribute('stroke', 'var(--edge-stroke)');
+                    chevron.setAttribute('stroke-width', '1.5');
+                    g.appendChild(chevron);
+                    break;
+                }
+                case 'Composition': {
                     // Filled diamond (composition)
                     const tipX = px;
                     const tipY = py;
@@ -5585,7 +5601,7 @@
                     g.appendChild(diamond);
                     break;
                 }
-                case 'OpenDiamond': {
+                case 'Aggregation': {
                     // Open diamond (aggregation)
                     const tipX = px;
                     const tipY = py;
@@ -5921,12 +5937,14 @@
                 <div class="property-row">
                     <div class="property-label">Type</div>
                     <select class="property-select" id="cls-rel-type">
-                        <option value="association" ${rel.leftEnd === 'None' && rel.rightEnd === 'Arrow' && rel.linkStyle === 'Solid' ? 'selected' : ''}>Association (-->)</option>
-                        <option value="inheritance" ${rel.leftEnd === 'None' && rel.rightEnd === 'Arrow' && rel.linkStyle === 'Dotted' ? 'selected' : ''}>Inheritance (--|>)</option>
-                        <option value="composition" ${rel.leftEnd === 'Diamond' ? 'selected' : ''}>Composition (*--)</option>
-                        <option value="aggregation" ${rel.leftEnd === 'OpenDiamond' ? 'selected' : ''}>Aggregation (o--)</option>
-                        <option value="dependency" ${rel.linkStyle === 'Dotted' && rel.leftEnd === 'None' && rel.rightEnd === 'None' ? 'selected' : ''}>Dependency (..>)</option>
-                        <option value="realization" ${rel.linkStyle === 'Dotted' && rel.rightEnd === 'Arrow' && rel.leftEnd !== 'None' ? 'selected' : ''}>Realization (..|>)</option>
+                        <option value="inheritance" ${(rel.leftEnd === 'Inheritance' || rel.rightEnd === 'Inheritance') && rel.linkStyle === 'Solid' ? 'selected' : ''}>Inheritance (<|--)</option>
+                        <option value="realization" ${(rel.leftEnd === 'Inheritance' || rel.rightEnd === 'Inheritance') && rel.linkStyle === 'Dotted' ? 'selected' : ''}>Realization (<|..)</option>
+                        <option value="composition" ${rel.leftEnd === 'Composition' || rel.rightEnd === 'Composition' ? 'selected' : ''}>Composition (*--)</option>
+                        <option value="aggregation" ${rel.leftEnd === 'Aggregation' || rel.rightEnd === 'Aggregation' ? 'selected' : ''}>Aggregation (o--)</option>
+                        <option value="association" ${(rel.leftEnd === 'Arrow' || rel.rightEnd === 'Arrow') && rel.linkStyle === 'Solid' ? 'selected' : ''}>Association (-->)</option>
+                        <option value="dependency" ${(rel.leftEnd === 'Arrow' || rel.rightEnd === 'Arrow') && rel.linkStyle === 'Dotted' ? 'selected' : ''}>Dependency (..>)</option>
+                        <option value="link-solid" ${rel.leftEnd === 'None' && rel.rightEnd === 'None' && rel.linkStyle === 'Solid' ? 'selected' : ''}>Link (--)</option>
+                        <option value="link-dashed" ${rel.leftEnd === 'None' && rel.rightEnd === 'None' && rel.linkStyle === 'Dotted' ? 'selected' : ''}>Link (..)</option>
                     </select>
                 </div>
                 <div class="property-row">
@@ -5945,12 +5963,14 @@
 
             document.getElementById('cls-rel-type').addEventListener('change', function() {
                 const typeMap = {
+                    inheritance: { leftEnd: 'Inheritance', rightEnd: 'None', linkStyle: 'Solid' },
+                    realization: { leftEnd: 'Inheritance', rightEnd: 'None', linkStyle: 'Dotted' },
+                    composition: { leftEnd: 'Composition', rightEnd: 'None', linkStyle: 'Solid' },
+                    aggregation: { leftEnd: 'Aggregation', rightEnd: 'None', linkStyle: 'Solid' },
                     association: { leftEnd: 'None', rightEnd: 'Arrow', linkStyle: 'Solid' },
-                    inheritance: { leftEnd: 'None', rightEnd: 'Arrow', linkStyle: 'Dotted' },
-                    composition: { leftEnd: 'Diamond', rightEnd: 'None', linkStyle: 'Solid' },
-                    aggregation: { leftEnd: 'OpenDiamond', rightEnd: 'None', linkStyle: 'Solid' },
-                    dependency: { leftEnd: 'None', rightEnd: 'None', linkStyle: 'Dotted' },
-                    realization: { leftEnd: 'None', rightEnd: 'Arrow', linkStyle: 'Dotted' }
+                    dependency: { leftEnd: 'None', rightEnd: 'Arrow', linkStyle: 'Dotted' },
+                    'link-solid': { leftEnd: 'None', rightEnd: 'None', linkStyle: 'Solid' },
+                    'link-dashed': { leftEnd: 'None', rightEnd: 'None', linkStyle: 'Dotted' }
                 };
                 const t = typeMap[this.value] || typeMap.association;
                 postMessage({ type: 'cls_relationshipEdited', relationshipIndex: relIdx, leftEnd: t.leftEnd, rightEnd: t.rightEnd, linkStyle: t.linkStyle });
