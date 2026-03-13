@@ -1998,16 +1998,18 @@
                 const nodeId = nodeGroup.getAttribute('data-node-id');
                 selectNode(nodeId);
 
-                // Start drag
-                const node = diagram.nodes.find(n => n.id === nodeId);
-                if (node) {
-                    isDragging = true;
-                    dragNodeId = nodeId;
-                    const pt = getSVGPoint(e);
-                    dragStartX = pt.x;
-                    dragStartY = pt.y;
-                    dragNodeStartX = node.x;
-                    dragNodeStartY = node.y;
+                // Start drag (only for left-click, not right-click)
+                if (e.button !== 2) {
+                    const node = diagram.nodes.find(n => n.id === nodeId);
+                    if (node) {
+                        isDragging = true;
+                        dragNodeId = nodeId;
+                        const pt = getSVGPoint(e);
+                        dragStartX = pt.x;
+                        dragStartY = pt.y;
+                        dragNodeStartX = node.x;
+                        dragNodeStartY = node.y;
+                    }
                 }
                 return;
             }
@@ -2190,9 +2192,15 @@
             }
         });
 
-        // Always prevent browser default context menu on SVG
+        // Always prevent browser default context menu on SVG.
+        // Also stop propagation so the canvasContainer contextmenu handler
+        // (which clears selection) doesn't fire for clicks inside the SVG.
+        // After render() rebuilds the DOM, e.target becomes a stale/detached
+        // element, causing svg.contains(e.target) to return false and the
+        // canvasContainer handler to incorrectly clear selectedNodeId.
         svg.addEventListener('contextmenu', function(e) {
             e.preventDefault();
+            e.stopPropagation();
         });
 
         // Context menu - flowchart
