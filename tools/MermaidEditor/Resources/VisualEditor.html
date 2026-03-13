@@ -5180,14 +5180,21 @@
                 maxTextWidth = Math.max(maxTextWidth, annWidth);
             }
 
+            // For monospace 12px, use both canvas measurement AND character-count fallback
+            // to handle WebView2 font metric differences
             ctx.font = '12px monospace';
+            const MONO_CHAR_WIDTH = 7.25; // conservative monospace 12px char width
             fields.forEach(f => {
-                const w = ctx.measureText(clsFormatMember(f)).width + CLS_BOX_PADDING * 2 + 20;
-                maxTextWidth = Math.max(maxTextWidth, w);
+                const text = clsFormatMember(f);
+                const measured = ctx.measureText(text).width + CLS_BOX_PADDING * 2 + 20;
+                const charBased = text.length * MONO_CHAR_WIDTH + CLS_BOX_PADDING * 2 + 20;
+                maxTextWidth = Math.max(maxTextWidth, measured, charBased);
             });
             methods.forEach(m => {
-                const w = ctx.measureText(clsFormatMember(m)).width + CLS_BOX_PADDING * 2 + 20;
-                maxTextWidth = Math.max(maxTextWidth, w);
+                const text = clsFormatMember(m);
+                const measured = ctx.measureText(text).width + CLS_BOX_PADDING * 2 + 20;
+                const charBased = text.length * MONO_CHAR_WIDTH + CLS_BOX_PADDING * 2 + 20;
+                maxTextWidth = Math.max(maxTextWidth, measured, charBased);
             });
 
             const width = Math.ceil(maxTextWidth);
@@ -5836,13 +5843,13 @@
                 const memberIdx = parseInt(memberEl.getAttribute('data-member-index'), 10);
                 const cls = clsDiagram.classes.find(c => c.id === classId);
                 if (cls && memberIdx >= 0 && memberIdx < cls.members.length) {
-                    clsStartMemberInlineEdit(classId, memberIdx, cls.members[memberIdx], e);
+                    clsShowMemberPropertyPanel(classId, memberIdx);
                 }
                 e.stopPropagation();
             } else if (classGroup) {
                 const classId = classGroup.getAttribute('data-class-id');
                 const cls = clsDiagram.classes.find(c => c.id === classId);
-                if (cls) clsStartClassNameInlineEdit(classId, cls, e);
+                if (cls) clsShowClassPropertyPanel(classId);
                 e.stopPropagation();
             }
         });
@@ -5894,55 +5901,83 @@
             });
         }
 
-        function clsStartMemberInlineEdit(classId, memberIdx, member, event) {
-            const pos = clsClassPositions[classId];
-            if (!pos) return;
+        function clsShowMemberPropertyPanel(classId, memberIdx) {
+            const cls = clsDiagram.classes.find(c => c.id === classId);
+            if (!cls || memberIdx < 0 || memberIdx >= cls.members.length) return;
+            const member = cls.members[memberIdx];
 
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.value = member.rawText || clsFormatMember(member);
-            input.className = 'inline-edit-input';
+            const visOptions = ['Public', 'Private', 'Protected', 'Package'];
+            const visSymbols = { 'Public': '+', 'Private': '-', 'Protected': '#', 'Package': '~' };
+            const visOpts = visOptions.map(v => `<option value="${v}" ${(member.visibility || '') === v ? 'selected' : ''}>${visSymbols[v]} ${v}</option>`).join('');
 
-            const transform = panzoomInstance ? panzoomInstance.getTransform() : { x: 0, y: 0, scale: 1 };
-            const rect = canvasContainer.getBoundingClientRect();
-            const bbox = event.target.getBBox ? event.target.getBBox() : { x: 0, y: 0, width: pos.width, height: 20 };
+            const classifierOpts = `
+                <option value="None" ${(!member.classifier || member.classifier === 'None') ? 'selected' : ''}>(none)</option>
+                <option value="Abstract" ${member.classifier === 'Abstract' ? 'selected' : ''}>Abstract *</option>
+                <option value="Static" ${member.classifier === 'Static' ? 'selected' : ''}>Static $</option>
+            `;
 
-            // Get the parent transform for correct positioning
-            const parentTransform = event.target.closest('.cls-class');
-            const parentMatrix = parentTransform ? parentTransform.getCTM() : svg.getCTM();
+            propPanelTitle.textContent = member.isMethod ? 'Method' : 'Field';
+            const propContent = propertyPanel.querySelector('.property-panel-body');
+            propContent.innerHTML = `
+                <div class="property-row">
+                    <div class="property-label">Class</div>
+                    <input class="property-input" value="${escapeHtml(cls.label || cls.id)}" readonly />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Visibility</div>
+                    <select class="property-input" id="cls-mem-vis">${visOpts}</select>
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Name</div>
+                    <input class="property-input" id="cls-mem-name" value="${escapeHtml(member.name || '')}" />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">${member.isMethod ? 'Return Type' : 'Type'}</div>
+                    <input class="property-input" id="cls-mem-type" value="${escapeHtml(member.type || '')}" placeholder="e.g. String" />
+                </div>
+                ${member.isMethod ? `<div class="property-row">
+                    <div class="property-label">Parameters</div>
+                    <input class="property-input" id="cls-mem-params" value="${escapeHtml(member.parameters || '')}" placeholder="e.g. x int, y int" />
+                </div>` : ''}
+                <div class="property-row">
+                    <div class="property-label">Classifier</div>
+                    <select class="property-input" id="cls-mem-classifier">${classifierOpts}</select>
+                </div>
+            `;
 
-            const screenX = (pos.x + CLS_BOX_PADDING) * transform.scale + transform.x + rect.left;
-            const screenY = (pos.y + bbox.y - 12) * transform.scale + transform.y + rect.top;
+            // Helper to rebuild rawText from structured fields and send edit
+            function commitMemberEdit() {
+                const vis = document.getElementById('cls-mem-vis').value;
+                const name = document.getElementById('cls-mem-name').value.trim();
+                const type = document.getElementById('cls-mem-type').value.trim();
+                const params = member.isMethod ? (document.getElementById('cls-mem-params')?.value || '') : '';
+                const classifier = document.getElementById('cls-mem-classifier').value;
 
-            input.style.position = 'fixed';
-            input.style.left = screenX + 'px';
-            input.style.top = screenY + 'px';
-            input.style.width = ((pos.width || CLS_BOX_MIN_WIDTH) - CLS_BOX_PADDING * 2) * transform.scale + 'px';
-            input.style.fontSize = (12 * transform.scale) + 'px';
-            input.style.fontFamily = 'monospace';
-            input.style.zIndex = '10000';
-            input.style.padding = '1px 4px';
-            input.style.border = '2px solid var(--accent-color)';
-            input.style.background = 'var(--bg-color)';
-            input.style.color = 'var(--node-text)';
-
-            document.body.appendChild(input);
-            input.focus();
-            input.select();
-
-            function commit() {
-                const newText = input.value.trim();
-                if (newText !== (member.rawText || '')) {
-                    postMessage({ type: 'cls_memberEdited', classId: classId, memberIndex: memberIdx, rawText: newText });
+                // Build rawText in Mermaid format
+                let prefix = visSymbols[vis] || '+';
+                let rawText = prefix;
+                if (member.isMethod) {
+                    if (type) rawText += type + ' ';
+                    rawText += name + '(' + params + ')';
+                } else {
+                    if (type) rawText += type + ' ';
+                    rawText += name;
                 }
-                input.remove();
+                if (classifier === 'Abstract') rawText += '*';
+                else if (classifier === 'Static') rawText += '$';
+
+                postMessage({ type: 'cls_memberEdited', classId: classId, memberIndex: memberIdx, rawText: rawText });
             }
 
-            input.addEventListener('blur', commit);
-            input.addEventListener('keydown', function(ke) {
-                if (ke.key === 'Enter') { ke.preventDefault(); commit(); }
-                if (ke.key === 'Escape') { input.remove(); }
-            });
+            document.getElementById('cls-mem-vis').addEventListener('change', commitMemberEdit);
+            document.getElementById('cls-mem-name').addEventListener('change', commitMemberEdit);
+            document.getElementById('cls-mem-type').addEventListener('change', commitMemberEdit);
+            if (member.isMethod && document.getElementById('cls-mem-params')) {
+                document.getElementById('cls-mem-params').addEventListener('change', commitMemberEdit);
+            }
+            document.getElementById('cls-mem-classifier').addEventListener('change', commitMemberEdit);
+
+            propertyPanel.classList.add('visible');
         }
 
         // Property panel for classes
@@ -5950,15 +5985,16 @@
             const cls = clsDiagram.classes.find(c => c.id === classId);
             if (!cls) return;
 
-            propertyPanel.innerHTML = `
-                <div class="property-title">Class: ${escapeHtml(cls.label || cls.id)}</div>
+            propPanelTitle.textContent = 'Class: ' + (cls.label || cls.id);
+            const propContent = propertyPanel.querySelector('.property-panel-body');
+            propContent.innerHTML = `
                 <div class="property-row">
                     <div class="property-label">Name</div>
                     <input class="property-input" id="cls-name" value="${escapeHtml(cls.label || cls.id)}" />
                 </div>
                 <div class="property-row">
                     <div class="property-label">Annotation</div>
-                    <select class="property-select" id="cls-annotation">
+                    <select class="property-input" id="cls-annotation">
                         <option value="" ${!cls.annotation ? 'selected' : ''}>(none)</option>
                         <option value="interface" ${cls.annotation === 'interface' ? 'selected' : ''}>&#60;&#60;interface&#62;&#62;</option>
                         <option value="abstract" ${cls.annotation === 'abstract' ? 'selected' : ''}>&#60;&#60;abstract&#62;&#62;</option>
@@ -6000,27 +6036,28 @@
             const rel = clsDiagram.relationships[relIdx];
             if (!rel) return;
 
-            propertyPanel.innerHTML = `
-                <div class="property-title">Relationship</div>
+            propPanelTitle.textContent = 'Relationship';
+            const propContent = propertyPanel.querySelector('.property-panel-body');
+            propContent.innerHTML = `
                 <div class="property-row">
                     <div class="property-label">From</div>
-                    <span class="property-value">${escapeHtml(rel.fromId)}</span>
+                    <input class="property-input" value="${escapeHtml(rel.fromId)}" readonly />
                 </div>
                 <div class="property-row">
                     <div class="property-label">To</div>
-                    <span class="property-value">${escapeHtml(rel.toId)}</span>
+                    <input class="property-input" value="${escapeHtml(rel.toId)}" readonly />
                 </div>
                 <div class="property-row">
                     <div class="property-label">Type</div>
-                    <select class="property-select" id="cls-rel-type">
+                    <select class="property-input" id="cls-rel-type">
                         <option value="inheritance" ${(rel.leftEnd === 'Inheritance' || rel.rightEnd === 'Inheritance') && rel.linkStyle === 'Solid' ? 'selected' : ''}>Inheritance (<|--)</option>
-                        <option value="realization" ${(rel.leftEnd === 'Inheritance' || rel.rightEnd === 'Inheritance') && rel.linkStyle === 'Dotted' ? 'selected' : ''}>Realization (<|..)</option>
+                        <option value="realization" ${(rel.leftEnd === 'Inheritance' || rel.rightEnd === 'Inheritance') && rel.linkStyle === 'Dashed' ? 'selected' : ''}>Realization (<|..)</option>
                         <option value="composition" ${rel.leftEnd === 'Composition' || rel.rightEnd === 'Composition' ? 'selected' : ''}>Composition (*--)</option>
                         <option value="aggregation" ${rel.leftEnd === 'Aggregation' || rel.rightEnd === 'Aggregation' ? 'selected' : ''}>Aggregation (o--)</option>
                         <option value="association" ${(rel.leftEnd === 'Arrow' || rel.rightEnd === 'Arrow') && rel.linkStyle === 'Solid' ? 'selected' : ''}>Association (-->)</option>
-                        <option value="dependency" ${(rel.leftEnd === 'Arrow' || rel.rightEnd === 'Arrow') && rel.linkStyle === 'Dotted' ? 'selected' : ''}>Dependency (..>)</option>
+                        <option value="dependency" ${(rel.leftEnd === 'Arrow' || rel.rightEnd === 'Arrow') && rel.linkStyle === 'Dashed' ? 'selected' : ''}>Dependency (..>)</option>
                         <option value="link-solid" ${rel.leftEnd === 'None' && rel.rightEnd === 'None' && rel.linkStyle === 'Solid' ? 'selected' : ''}>Link (--)</option>
-                        <option value="link-dashed" ${rel.leftEnd === 'None' && rel.rightEnd === 'None' && rel.linkStyle === 'Dotted' ? 'selected' : ''}>Link (..)</option>
+                        <option value="link-dashed" ${rel.leftEnd === 'None' && rel.rightEnd === 'None' && rel.linkStyle === 'Dashed' ? 'selected' : ''}>Link (..)</option>
                     </select>
                 </div>
                 <div class="property-row">
@@ -6040,13 +6077,13 @@
             document.getElementById('cls-rel-type').addEventListener('change', function() {
                 const typeMap = {
                     inheritance: { leftEnd: 'Inheritance', rightEnd: 'None', linkStyle: 'Solid' },
-                    realization: { leftEnd: 'Inheritance', rightEnd: 'None', linkStyle: 'Dotted' },
+                    realization: { leftEnd: 'Inheritance', rightEnd: 'None', linkStyle: 'Dashed' },
                     composition: { leftEnd: 'Composition', rightEnd: 'None', linkStyle: 'Solid' },
                     aggregation: { leftEnd: 'Aggregation', rightEnd: 'None', linkStyle: 'Solid' },
                     association: { leftEnd: 'None', rightEnd: 'Arrow', linkStyle: 'Solid' },
-                    dependency: { leftEnd: 'None', rightEnd: 'Arrow', linkStyle: 'Dotted' },
+                    dependency: { leftEnd: 'None', rightEnd: 'Arrow', linkStyle: 'Dashed' },
                     'link-solid': { leftEnd: 'None', rightEnd: 'None', linkStyle: 'Solid' },
-                    'link-dashed': { leftEnd: 'None', rightEnd: 'None', linkStyle: 'Dotted' }
+                    'link-dashed': { leftEnd: 'None', rightEnd: 'None', linkStyle: 'Dashed' }
                 };
                 const t = typeMap[this.value] || typeMap.association;
                 postMessage({ type: 'cls_relationshipEdited', relationshipIndex: relIdx, leftEnd: t.leftEnd, rightEnd: t.rightEnd, linkStyle: t.linkStyle });
@@ -6083,10 +6120,7 @@
                 const memberIdx = parseInt(memberEl.getAttribute('data-member-index'), 10);
 
                 addClsContextMenuItem('Edit Member', () => {
-                    const cls = clsDiagram.classes.find(c => c.id === classId);
-                    if (cls && memberIdx >= 0 && memberIdx < cls.members.length) {
-                        clsStartMemberInlineEdit(classId, memberIdx, cls.members[memberIdx], e);
-                    }
+                    clsShowMemberPropertyPanel(classId, memberIdx);
                 });
                 addClsContextMenuItem('Delete Member', () => {
                     postMessage({ type: 'cls_memberDeleted', classId: classId, memberIndex: memberIdx });
@@ -6096,8 +6130,7 @@
                 clsSelectedClassId = classId;
 
                 addClsContextMenuItem('Edit Class', () => {
-                    const cls = clsDiagram.classes.find(c => c.id === classId);
-                    if (cls) clsStartClassNameInlineEdit(classId, cls, e);
+                    clsShowClassPropertyPanel(classId);
                 });
                 addClsContextMenuItem('Add Field', () => {
                     postMessage({ type: 'cls_memberAdded', classId: classId, rawText: '+newField' });
