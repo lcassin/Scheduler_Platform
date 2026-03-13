@@ -6218,85 +6218,108 @@ Console.WriteLine(""Hello, World!"");
             
             // Inject html2canvas and capture full content, sending result via postMessage.
             // IMPORTANT: html2canvas cannot reliably render SVG elements (Mermaid diagrams).
-            // We convert all SVGs to <img> elements with data URIs before capture, then restore them.
+            // We attempt to convert SVGs to <img> elements before capture for better fidelity,
+            // but this is wrapped in a timeout so a hung image load can't block the entire print.
             var script = @"
                 (async function() {
                     try {
                         // Check if html2canvas is available, if not load it
                         if (typeof html2canvas === 'undefined') {
-                            await new Promise((resolve, reject) => {
-                                const script = document.createElement('script');
-                                script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-                                script.onload = resolve;
-                                script.onerror = reject;
-                                document.head.appendChild(script);
-                            });
+                            await Promise.race([
+                                new Promise((resolve, reject) => {
+                                    const script = document.createElement('script');
+                                    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+                                    script.onload = resolve;
+                                    script.onerror = reject;
+                                    document.head.appendChild(script);
+                                }),
+                                new Promise((_, reject) => setTimeout(() => reject(new Error('html2canvas CDN load timeout')), 10000))
+                            ]);
                         }
                         
                         // Get the content element
                         const content = document.getElementById('content') || document.body;
                         
-                        // --- Convert SVGs to images for html2canvas compatibility ---
-                        const svgElements = content.querySelectorAll('svg');
+                        // --- Optionally convert SVGs to images for html2canvas compatibility ---
+                        // This entire block is wrapped in a try/catch + timeout so failures
+                        // never prevent the print from proceeding.
                         const svgBackups = [];
-                        
-                        for (const svg of svgElements) {
-                            try {
-                                // Clone the SVG and ensure it has explicit width/height
-                                const clone = svg.cloneNode(true);
-                                const bbox = svg.getBoundingClientRect();
-                                if (!clone.getAttribute('width')) clone.setAttribute('width', bbox.width);
-                                if (!clone.getAttribute('height')) clone.setAttribute('height', bbox.height);
-                                // Ensure xmlns is set for standalone SVG serialization
-                                clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
-                                clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
-                                
-                                // Inline all computed styles into the SVG elements
-                                const allEls = clone.querySelectorAll('*');
-                                const origEls = svg.querySelectorAll('*');
-                                for (let i = 0; i < allEls.length && i < origEls.length; i++) {
-                                    const computed = window.getComputedStyle(origEls[i]);
-                                    const important = ['fill', 'stroke', 'stroke-width', 'font-family', 'font-size', 
-                                                       'font-weight', 'text-anchor', 'dominant-baseline', 'opacity',
-                                                       'visibility', 'display', 'color', 'stroke-dasharray',
-                                                       'stroke-linecap', 'stroke-linejoin', 'marker-end', 'marker-start'];
-                                    for (const prop of important) {
-                                        const val = computed.getPropertyValue(prop);
-                                        if (val) allEls[i].style[prop] = val;
+                        try {
+                            const svgConversionTimeout = 8000; // 8 seconds max for all SVG conversions
+                            const perImageTimeout = 3000; // 3 seconds per image load
+                            
+                            await Promise.race([
+                                (async () => {
+                                    const svgElements = Array.from(content.querySelectorAll('svg'));
+                                    
+                                    for (const svg of svgElements) {
+                                        try {
+                                            const clone = svg.cloneNode(true);
+                                            const bbox = svg.getBoundingClientRect();
+                                            // Skip zero-size SVGs (hidden or not laid out)
+                                            if (bbox.width < 1 || bbox.height < 1) continue;
+                                            
+                                            if (!clone.getAttribute('width')) clone.setAttribute('width', bbox.width);
+                                            if (!clone.getAttribute('height')) clone.setAttribute('height', bbox.height);
+                                            clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+                                            clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+                                            
+                                            // Inline key computed styles
+                                            const allEls = clone.querySelectorAll('*');
+                                            const origEls = svg.querySelectorAll('*');
+                                            for (let i = 0; i < allEls.length && i < origEls.length; i++) {
+                                                const computed = window.getComputedStyle(origEls[i]);
+                                                const important = ['fill', 'stroke', 'stroke-width', 'font-family', 'font-size', 
+                                                                   'font-weight', 'text-anchor', 'dominant-baseline', 'opacity',
+                                                                   'visibility', 'display', 'color', 'stroke-dasharray',
+                                                                   'stroke-linecap', 'stroke-linejoin', 'marker-end', 'marker-start'];
+                                                for (const prop of important) {
+                                                    const val = computed.getPropertyValue(prop);
+                                                    if (val) allEls[i].style[prop] = val;
+                                                }
+                                            }
+                                            
+                                            const svgData = new XMLSerializer().serializeToString(clone);
+                                            const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+                                            const url = URL.createObjectURL(svgBlob);
+                                            
+                                            const img = document.createElement('img');
+                                            img.style.width = bbox.width + 'px';
+                                            img.style.height = bbox.height + 'px';
+                                            img.style.display = 'block';
+                                            img.style.maxWidth = '100%';
+                                            
+                                            // Wait for image load with per-image timeout to prevent hangs
+                                            await Promise.race([
+                                                new Promise((resolve, reject) => {
+                                                    img.onload = resolve;
+                                                    img.onerror = reject;
+                                                    img.src = url;
+                                                }),
+                                                new Promise((_, reject) => setTimeout(() => reject(new Error('Image load timeout')), perImageTimeout))
+                                            ]);
+                                            
+                                            svgBackups.push({ parent: svg.parentNode, svg: svg, img: img, url: url });
+                                            svg.parentNode.replaceChild(img, svg);
+                                        } catch (svgErr) {
+                                            console.warn('SVG conversion failed (skipping):', svgErr);
+                                        }
                                     }
-                                }
-                                
-                                const svgData = new XMLSerializer().serializeToString(clone);
-                                const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-                                const url = URL.createObjectURL(svgBlob);
-                                
-                                // Create an img element to replace the SVG
-                                const img = document.createElement('img');
-                                img.style.width = bbox.width + 'px';
-                                img.style.height = bbox.height + 'px';
-                                img.style.display = 'block';
-                                img.style.maxWidth = '100%';
-                                
-                                // Wait for the image to load
-                                await new Promise((resolve, reject) => {
-                                    img.onload = resolve;
-                                    img.onerror = reject;
-                                    img.src = url;
-                                });
-                                
-                                // Replace SVG with img
-                                svgBackups.push({ parent: svg.parentNode, svg: svg, img: img, url: url });
-                                svg.parentNode.replaceChild(img, svg);
-                            } catch (svgErr) {
-                                // If individual SVG conversion fails, skip it
-                                console.warn('SVG conversion failed:', svgErr);
-                            }
+                                })(),
+                                new Promise((_, reject) => setTimeout(() => reject(new Error('SVG conversion overall timeout')), svgConversionTimeout))
+                            ]);
+                        } catch (svgBlockErr) {
+                            // SVG conversion timed out or failed entirely - that's OK,
+                            // html2canvas will still capture the content (SVGs may appear blank but text/images will be fine)
+                            console.warn('SVG conversion block failed (proceeding without SVG conversion):', svgBlockErr);
                         }
                         
                         // Small delay to let layout settle after SVG replacement
-                        await new Promise(r => setTimeout(r, 100));
+                        if (svgBackups.length > 0) {
+                            await new Promise(r => setTimeout(r, 100));
+                        }
                         
-                        // Capture the full content
+                        // Capture the full content with white background
                         const canvas = await html2canvas(content, {
                             scale: 2,
                             useCORS: true,
@@ -6328,8 +6351,9 @@ Console.WriteLine(""Hello, World!"");
             
             await PreviewWebView.CoreWebView2.ExecuteScriptAsync(script);
             
-            // Wait for the callback with a timeout
-            var timeoutTask = Task.Delay(15000); // 15 second timeout
+            // Wait for the callback with a generous timeout (large markdown docs with
+            // many embedded diagrams can take a while for html2canvas to render)
+            var timeoutTask = Task.Delay(30000); // 30 second timeout
             var completedTask = await Task.WhenAny(_pngExportTcs.Task, timeoutTask);
             
             if (completedTask == timeoutTask)
@@ -6361,11 +6385,44 @@ Console.WriteLine(""Hello, World!"");
 
     private async Task<byte[]?> CaptureViewportAsPngBytes()
     {
+        // Temporarily set a white background for print-friendly capture,
+        // then restore the original theme background after capturing.
+        try
+        {
+            await PreviewWebView.CoreWebView2.ExecuteScriptAsync(@"
+                (function() {
+                    var html = document.documentElement;
+                    var body = document.body;
+                    window.__printOrigBg = { htmlBg: html.style.background, bodyBg: body.style.background };
+                    html.style.background = '#ffffff';
+                    body.style.background = '#ffffff';
+                })();
+            ");
+        }
+        catch { /* proceed with capture even if bg override fails */ }
+
         using var memoryStream = new MemoryStream();
         await PreviewWebView.CoreWebView2.CapturePreviewAsync(
             CoreWebView2CapturePreviewImageFormat.Png, memoryStream);
         memoryStream.Position = 0;
-        return memoryStream.ToArray();
+        var result = memoryStream.ToArray();
+
+        // Restore the original background
+        try
+        {
+            await PreviewWebView.CoreWebView2.ExecuteScriptAsync(@"
+                (function() {
+                    if (window.__printOrigBg) {
+                        document.documentElement.style.background = window.__printOrigBg.htmlBg;
+                        document.body.style.background = window.__printOrigBg.bodyBg;
+                        delete window.__printOrigBg;
+                    }
+                })();
+            ");
+        }
+        catch { /* best effort restore */ }
+
+        return result;
     }
 
     private void PrintCode_Click(object sender, RoutedEventArgs e)
