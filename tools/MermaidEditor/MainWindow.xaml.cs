@@ -6216,7 +6216,9 @@ Console.WriteLine(""Hello, World!"");
             // Use callback pattern with postMessage (same as mermaid export)
             _pngExportTcs = new TaskCompletionSource<string>();
             
-            // Inject html2canvas and capture full content, sending result via postMessage
+            // Inject html2canvas and capture full content, sending result via postMessage.
+            // IMPORTANT: html2canvas cannot reliably render SVG elements (Mermaid diagrams).
+            // We convert all SVGs to <img> elements with data URIs before capture, then restore them.
             var script = @"
                 (async function() {
                     try {
@@ -6234,6 +6236,66 @@ Console.WriteLine(""Hello, World!"");
                         // Get the content element
                         const content = document.getElementById('content') || document.body;
                         
+                        // --- Convert SVGs to images for html2canvas compatibility ---
+                        const svgElements = content.querySelectorAll('svg');
+                        const svgBackups = [];
+                        
+                        for (const svg of svgElements) {
+                            try {
+                                // Clone the SVG and ensure it has explicit width/height
+                                const clone = svg.cloneNode(true);
+                                const bbox = svg.getBoundingClientRect();
+                                if (!clone.getAttribute('width')) clone.setAttribute('width', bbox.width);
+                                if (!clone.getAttribute('height')) clone.setAttribute('height', bbox.height);
+                                // Ensure xmlns is set for standalone SVG serialization
+                                clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+                                clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+                                
+                                // Inline all computed styles into the SVG elements
+                                const allEls = clone.querySelectorAll('*');
+                                const origEls = svg.querySelectorAll('*');
+                                for (let i = 0; i < allEls.length && i < origEls.length; i++) {
+                                    const computed = window.getComputedStyle(origEls[i]);
+                                    const important = ['fill', 'stroke', 'stroke-width', 'font-family', 'font-size', 
+                                                       'font-weight', 'text-anchor', 'dominant-baseline', 'opacity',
+                                                       'visibility', 'display', 'color', 'stroke-dasharray',
+                                                       'stroke-linecap', 'stroke-linejoin', 'marker-end', 'marker-start'];
+                                    for (const prop of important) {
+                                        const val = computed.getPropertyValue(prop);
+                                        if (val) allEls[i].style[prop] = val;
+                                    }
+                                }
+                                
+                                const svgData = new XMLSerializer().serializeToString(clone);
+                                const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+                                const url = URL.createObjectURL(svgBlob);
+                                
+                                // Create an img element to replace the SVG
+                                const img = document.createElement('img');
+                                img.style.width = bbox.width + 'px';
+                                img.style.height = bbox.height + 'px';
+                                img.style.display = 'block';
+                                img.style.maxWidth = '100%';
+                                
+                                // Wait for the image to load
+                                await new Promise((resolve, reject) => {
+                                    img.onload = resolve;
+                                    img.onerror = reject;
+                                    img.src = url;
+                                });
+                                
+                                // Replace SVG with img
+                                svgBackups.push({ parent: svg.parentNode, svg: svg, img: img, url: url });
+                                svg.parentNode.replaceChild(img, svg);
+                            } catch (svgErr) {
+                                // If individual SVG conversion fails, skip it
+                                console.warn('SVG conversion failed:', svgErr);
+                            }
+                        }
+                        
+                        // Small delay to let layout settle after SVG replacement
+                        await new Promise(r => setTimeout(r, 100));
+                        
                         // Capture the full content
                         const canvas = await html2canvas(content, {
                             scale: 2,
@@ -6245,6 +6307,16 @@ Console.WriteLine(""Hello, World!"");
                             windowWidth: content.scrollWidth,
                             windowHeight: content.scrollHeight
                         });
+                        
+                        // --- Restore original SVGs ---
+                        for (const backup of svgBackups) {
+                            try {
+                                backup.parent.replaceChild(backup.svg, backup.img);
+                                URL.revokeObjectURL(backup.url);
+                            } catch (restoreErr) {
+                                console.warn('SVG restore failed:', restoreErr);
+                            }
+                        }
                         
                         const dataUrl = canvas.toDataURL('image/png');
                         window.chrome.webview.postMessage({ type: 'pngExport', data: dataUrl });
