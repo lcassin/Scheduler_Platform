@@ -776,6 +776,11 @@
     (function() {
         'use strict';
 
+        // ========== Active Diagram Type ==========
+        // Tracks which diagram type is currently loaded so event handlers
+        // only fire for the active type. Values: 'flowchart', 'sequence', 'class', 'state', 'er'
+        let currentDiagramType = 'flowchart';
+
         // ========== State ==========
         let diagram = {
             direction: 'TD',
@@ -951,6 +956,7 @@
 
         window.loadDiagram = function(jsonData) {
             try {
+                currentDiagramType = 'flowchart';
                 const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
                 diagram.direction = data.direction || 'TD';
                 diagram.nodes = (data.nodes || []).map(n => ({
@@ -1724,6 +1730,7 @@
 
         // Node click/drag
         svg.addEventListener('mousedown', function(e) {
+            if (currentDiagramType !== 'flowchart') return;
             const nodeGroup = e.target.closest('.node-group');
             const edgeHit = e.target.closest('[data-edge-index]');
             const connectionPt = e.target.closest('.connection-point');
@@ -1826,6 +1833,7 @@
         });
 
         svg.addEventListener('mousemove', function(e) {
+            if (currentDiagramType !== 'flowchart') return;
             if (isResizing && resizeNodeId) {
                 const pt = getSVGPoint(e);
                 const dx = pt.x - resizeStartX;
@@ -1884,6 +1892,7 @@
         });
 
         svg.addEventListener('mouseup', function(e) {
+            if (currentDiagramType !== 'flowchart') return;
             if (isResizing && resizeNodeId) {
                 const node = diagram.nodes.find(n => n.id === resizeNodeId);
                 if (node) {
@@ -1958,6 +1967,7 @@
 
         // Double-click to edit label
         svg.addEventListener('dblclick', function(e) {
+            if (currentDiagramType !== 'flowchart') return;
             const nodeGroup = e.target.closest('.node-group');
             if (nodeGroup) {
                 const nodeId = nodeGroup.getAttribute('data-node-id');
@@ -1975,6 +1985,7 @@
 
         // Context menu
         svg.addEventListener('contextmenu', function(e) {
+            if (currentDiagramType !== 'flowchart') return;
             e.preventDefault();
             const pt = getSVGPoint(e);
             contextMenuX = pt.x;
@@ -2007,6 +2018,7 @@
 
         // Keyboard shortcuts
         document.addEventListener('keydown', function(e) {
+            if (currentDiagramType !== 'flowchart') return;
             // Don't handle shortcuts when editing text
             if (inlineEditor.style.display !== 'none') return;
 
@@ -2792,6 +2804,7 @@
 
         window.loadSequenceDiagram = function(jsonData) {
             try {
+                currentDiagramType = 'sequence';
                 const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
                 seqDiagram = {
                     participants: (data.participants || []).map(p => ({
@@ -3035,138 +3048,147 @@
             let msgNumber = seqDiagram.autoNumber ? 1 : 0;
             const activationStacks = {}; // participantId -> [{startY}]
 
+            // Helper: render a single message arrow (used for both top-level and fragment-inner messages)
+            function renderMessageArrow(el, elIdx, vIdx) {
+                const fromIdx = getParticipantIndex(el.fromId);
+                const toIdx = getParticipantIndex(el.toId);
+                if (fromIdx < 0 || toIdx < 0) return;
+
+                const fromX = getParticipantX(fromIdx);
+                const toX = getParticipantX(toIdx);
+                const y = getMessageY(vIdx);
+                const isSelfMessage = el.fromId === el.toId;
+
+                const msgGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                msgGroup.classList.add('edge-group', 'seq-message');
+                msgGroup.setAttribute('data-element-index', elIdx);
+
+                if (isSelfMessage) {
+                    // Self-message: loop arrow
+                    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    const loopW = 40;
+                    const loopH = 30;
+                    path.setAttribute('d', `M ${fromX} ${y} H ${fromX + loopW} V ${y + loopH} H ${fromX}`);
+                    path.classList.add('edge-line');
+                    if (seqSelectedMessageIndex === elIdx) path.classList.add('selected');
+                    applyArrowStyle(path, el.arrowType);
+                    msgGroup.appendChild(path);
+
+                    // Arrowhead for self-message
+                    const arrowPoly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                    arrowPoly.setAttribute('points', `${fromX + 8},${y + loopH - 4} ${fromX},${y + loopH} ${fromX + 8},${y + loopH + 4}`);
+                    arrowPoly.classList.add('edge-arrowhead');
+                    if (seqSelectedMessageIndex === elIdx) arrowPoly.classList.add('selected');
+                    msgGroup.appendChild(arrowPoly);
+
+                    // Label
+                    if (el.text) {
+                        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        label.classList.add('edge-label');
+                        label.setAttribute('x', fromX + loopW + 5);
+                        label.setAttribute('y', y + loopH / 2);
+                        label.setAttribute('text-anchor', 'start');
+                        label.textContent = (msgNumber > 0 ? msgNumber + '. ' : '') + el.text;
+                        msgGroup.appendChild(label);
+                    }
+                } else {
+                    // Normal message: horizontal arrow
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                    line.setAttribute('x1', fromX);
+                    line.setAttribute('y1', y);
+                    line.setAttribute('x2', toX);
+                    line.setAttribute('y2', y);
+                    line.classList.add('edge-line');
+                    if (seqSelectedMessageIndex === elIdx) line.classList.add('selected');
+                    applyArrowStyle(line, el.arrowType);
+                    msgGroup.appendChild(line);
+
+                    // Arrowhead
+                    const isOpen = (el.arrowType || '').includes('Open') || (el.arrowType || '').includes('Async');
+                    const isCross = (el.arrowType || '').includes('Cross');
+                    const dir = toX > fromX ? 1 : -1;
+
+                    if (isCross) {
+                        // Cross (X) arrowhead
+                        const size = 6;
+                        const cx = toX;
+                        const cy = y;
+                        const cross1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        cross1.setAttribute('x1', cx - size); cross1.setAttribute('y1', cy - size);
+                        cross1.setAttribute('x2', cx + size); cross1.setAttribute('y2', cy + size);
+                        cross1.setAttribute('stroke', 'var(--edge-color)'); cross1.setAttribute('stroke-width', '2');
+                        if (seqSelectedMessageIndex === elIdx) cross1.setAttribute('stroke', 'var(--node-selected-stroke)');
+                        msgGroup.appendChild(cross1);
+                        const cross2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        cross2.setAttribute('x1', cx - size); cross2.setAttribute('y1', cy + size);
+                        cross2.setAttribute('x2', cx + size); cross2.setAttribute('y2', cy - size);
+                        cross2.setAttribute('stroke', 'var(--edge-color)'); cross2.setAttribute('stroke-width', '2');
+                        if (seqSelectedMessageIndex === elIdx) cross2.setAttribute('stroke', 'var(--node-selected-stroke)');
+                        msgGroup.appendChild(cross2);
+                    } else if (isOpen) {
+                        // Open arrowhead (V shape, no fill)
+                        const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+                        arrow.setAttribute('points', `${toX - dir * 10},${y - 5} ${toX},${y} ${toX - dir * 10},${y + 5}`);
+                        arrow.setAttribute('fill', 'none');
+                        arrow.setAttribute('stroke', 'var(--edge-color)');
+                        arrow.setAttribute('stroke-width', '1.5');
+                        if (seqSelectedMessageIndex === elIdx) arrow.setAttribute('stroke', 'var(--node-selected-stroke)');
+                        msgGroup.appendChild(arrow);
+                    } else {
+                        // Filled arrowhead
+                        const arrowPoly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                        arrowPoly.setAttribute('points', `${toX - dir * 10},${y - 5} ${toX},${y} ${toX - dir * 10},${y + 5}`);
+                        arrowPoly.classList.add('edge-arrowhead');
+                        if (seqSelectedMessageIndex === elIdx) arrowPoly.classList.add('selected');
+                        msgGroup.appendChild(arrowPoly);
+                    }
+
+                    // Label
+                    if (el.text) {
+                        const midX = (fromX + toX) / 2;
+                        const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                        const labelText = (msgNumber > 0 ? msgNumber + '. ' : '') + el.text;
+                        const textWidth = labelText.length * 7 + 12;
+                        labelBg.setAttribute('x', midX - textWidth / 2);
+                        labelBg.setAttribute('y', y - 18);
+                        labelBg.setAttribute('width', textWidth);
+                        labelBg.setAttribute('height', 16);
+                        labelBg.setAttribute('rx', '2');
+                        labelBg.classList.add('edge-label-bg');
+                        msgGroup.appendChild(labelBg);
+
+                        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        label.classList.add('edge-label');
+                        label.setAttribute('x', midX);
+                        label.setAttribute('y', y - 10);
+                        label.textContent = labelText;
+                        msgGroup.appendChild(label);
+                    }
+                }
+
+                edgesLayer.appendChild(msgGroup);
+
+                // Handle activation
+                if (el.activateTarget) {
+                    if (!activationStacks[el.toId]) activationStacks[el.toId] = [];
+                    activationStacks[el.toId].push({ startY: y });
+                }
+                if (el.deactivateSource) {
+                    const stack = activationStacks[el.fromId];
+                    if (stack && stack.length > 0) {
+                        const activation = stack.pop();
+                        renderActivationBox(el.fromId, activation.startY, y);
+                    }
+                }
+            }
+
             seqDiagram.elements.forEach((el, elIdx) => {
                 if (el.elementType === 'message') {
                     const fromIdx = getParticipantIndex(el.fromId);
                     const toIdx = getParticipantIndex(el.toId);
                     if (fromIdx < 0 || toIdx < 0) { visualMsgIdx++; return; }
 
-                    const fromX = getParticipantX(fromIdx);
-                    const toX = getParticipantX(toIdx);
-                    const y = getMessageY(visualMsgIdx);
-                    const isSelfMessage = el.fromId === el.toId;
-
-                    const msgGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-                    msgGroup.classList.add('edge-group', 'seq-message');
-                    msgGroup.setAttribute('data-element-index', elIdx);
-
-                    if (isSelfMessage) {
-                        // Self-message: loop arrow
-                        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                        const loopW = 40;
-                        const loopH = 30;
-                        path.setAttribute('d', `M ${fromX} ${y} H ${fromX + loopW} V ${y + loopH} H ${fromX}`);
-                        path.classList.add('edge-line');
-                        if (seqSelectedMessageIndex === elIdx) path.classList.add('selected');
-                        applyArrowStyle(path, el.arrowType);
-                        msgGroup.appendChild(path);
-
-                        // Arrowhead for self-message
-                        const arrowPoly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-                        arrowPoly.setAttribute('points', `${fromX + 8},${y + loopH - 4} ${fromX},${y + loopH} ${fromX + 8},${y + loopH + 4}`);
-                        arrowPoly.classList.add('edge-arrowhead');
-                        if (seqSelectedMessageIndex === elIdx) arrowPoly.classList.add('selected');
-                        msgGroup.appendChild(arrowPoly);
-
-                        // Label
-                        if (el.text) {
-                            const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                            label.classList.add('edge-label');
-                            label.setAttribute('x', fromX + loopW + 5);
-                            label.setAttribute('y', y + loopH / 2);
-                            label.setAttribute('text-anchor', 'start');
-                            label.textContent = (msgNumber > 0 ? msgNumber + '. ' : '') + el.text;
-                            msgGroup.appendChild(label);
-                        }
-                    } else {
-                        // Normal message: horizontal arrow
-                        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                        line.setAttribute('x1', fromX);
-                        line.setAttribute('y1', y);
-                        line.setAttribute('x2', toX);
-                        line.setAttribute('y2', y);
-                        line.classList.add('edge-line');
-                        if (seqSelectedMessageIndex === elIdx) line.classList.add('selected');
-                        applyArrowStyle(line, el.arrowType);
-                        msgGroup.appendChild(line);
-
-                        // Arrowhead
-                        const isOpen = (el.arrowType || '').includes('Open') || (el.arrowType || '').includes('Async');
-                        const isCross = (el.arrowType || '').includes('Cross');
-                        const dir = toX > fromX ? 1 : -1;
-
-                        if (isCross) {
-                            // Cross (X) arrowhead
-                            const size = 6;
-                            const cx = toX;
-                            const cy = y;
-                            const cross1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                            cross1.setAttribute('x1', cx - size); cross1.setAttribute('y1', cy - size);
-                            cross1.setAttribute('x2', cx + size); cross1.setAttribute('y2', cy + size);
-                            cross1.setAttribute('stroke', 'var(--edge-color)'); cross1.setAttribute('stroke-width', '2');
-                            if (seqSelectedMessageIndex === elIdx) cross1.setAttribute('stroke', 'var(--node-selected-stroke)');
-                            msgGroup.appendChild(cross1);
-                            const cross2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                            cross2.setAttribute('x1', cx - size); cross2.setAttribute('y1', cy + size);
-                            cross2.setAttribute('x2', cx + size); cross2.setAttribute('y2', cy - size);
-                            cross2.setAttribute('stroke', 'var(--edge-color)'); cross2.setAttribute('stroke-width', '2');
-                            if (seqSelectedMessageIndex === elIdx) cross2.setAttribute('stroke', 'var(--node-selected-stroke)');
-                            msgGroup.appendChild(cross2);
-                        } else if (isOpen) {
-                            // Open arrowhead (V shape, no fill)
-                            const arrow = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-                            arrow.setAttribute('points', `${toX - dir * 10},${y - 5} ${toX},${y} ${toX - dir * 10},${y + 5}`);
-                            arrow.setAttribute('fill', 'none');
-                            arrow.setAttribute('stroke', 'var(--edge-color)');
-                            arrow.setAttribute('stroke-width', '1.5');
-                            if (seqSelectedMessageIndex === elIdx) arrow.setAttribute('stroke', 'var(--node-selected-stroke)');
-                            msgGroup.appendChild(arrow);
-                        } else {
-                            // Filled arrowhead
-                            const arrowPoly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-                            arrowPoly.setAttribute('points', `${toX - dir * 10},${y - 5} ${toX},${y} ${toX - dir * 10},${y + 5}`);
-                            arrowPoly.classList.add('edge-arrowhead');
-                            if (seqSelectedMessageIndex === elIdx) arrowPoly.classList.add('selected');
-                            msgGroup.appendChild(arrowPoly);
-                        }
-
-                        // Label
-                        if (el.text) {
-                            const midX = (fromX + toX) / 2;
-                            const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-                            const labelText = (msgNumber > 0 ? msgNumber + '. ' : '') + el.text;
-                            const textWidth = labelText.length * 7 + 12;
-                            labelBg.setAttribute('x', midX - textWidth / 2);
-                            labelBg.setAttribute('y', y - 18);
-                            labelBg.setAttribute('width', textWidth);
-                            labelBg.setAttribute('height', 16);
-                            labelBg.setAttribute('rx', '2');
-                            labelBg.classList.add('edge-label-bg');
-                            msgGroup.appendChild(labelBg);
-
-                            const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                            label.classList.add('edge-label');
-                            label.setAttribute('x', midX);
-                            label.setAttribute('y', y - 10);
-                            label.textContent = labelText;
-                            msgGroup.appendChild(label);
-                        }
-                    }
-
-                    edgesLayer.appendChild(msgGroup);
-
-                    // Handle activation
-                    if (el.activateTarget) {
-                        if (!activationStacks[el.toId]) activationStacks[el.toId] = [];
-                        activationStacks[el.toId].push({ startY: y });
-                    }
-                    if (el.deactivateSource) {
-                        const stack = activationStacks[el.fromId];
-                        if (stack && stack.length > 0) {
-                            const activation = stack.pop();
-                            renderActivationBox(el.fromId, activation.startY, y);
-                        }
-                    }
+                    renderMessageArrow(el, elIdx, visualMsgIdx);
 
                     if (msgNumber > 0) msgNumber++;
                     visualMsgIdx++;
@@ -3176,11 +3198,17 @@
                 }
                 else if (el.elementType === 'fragment') {
                     renderSequenceFragment(el, elIdx, visualMsgIdx);
-                    // Count messages inside fragment for positioning
+                    // Render and count messages inside fragment sections
                     if (el.sections) {
                         el.sections.forEach(s => {
                             if (s.elements) {
-                                s.elements.forEach(se => { if (se.elementType === 'message') visualMsgIdx++; });
+                                s.elements.forEach(se => {
+                                    if (se.elementType === 'message') {
+                                        renderMessageArrow(se, elIdx, visualMsgIdx);
+                                        if (msgNumber > 0) msgNumber++;
+                                        visualMsgIdx++;
+                                    }
+                                });
                             }
                         });
                     }
@@ -3461,6 +3489,7 @@
 
         // Participant drag to reorder
         svg.addEventListener('mousedown', function(e) {
+            if (currentDiagramType !== 'sequence') return;
             if (!seqDiagram) return;
             const participantGroup = e.target.closest('.seq-participant');
             if (participantGroup) {
@@ -3476,12 +3505,14 @@
         });
 
         svg.addEventListener('mousemove', function(e) {
+            if (currentDiagramType !== 'sequence') return;
             if (!seqDiagram || !seqDraggingParticipantId) return;
             // Visual feedback during drag would require re-rendering on each mouse move
             // For now, we just track the drag
         });
 
         svg.addEventListener('mouseup', function(e) {
+            if (currentDiagramType !== 'sequence') return;
             if (!seqDiagram || !seqDraggingParticipantId) return;
             const dx = e.clientX - seqDragStartX;
             const transform = panzoomInstance ? panzoomInstance.getTransform() : { scale: 1 };
@@ -3505,6 +3536,7 @@
 
         // Click on participant to select
         svg.addEventListener('click', function(e) {
+            if (currentDiagramType !== 'sequence') return;
             if (!seqDiagram) return;
             const participantGroup = e.target.closest('.seq-participant');
             const messageGroup = e.target.closest('.seq-message');
@@ -3544,6 +3576,7 @@
 
         // Double-click to edit message text inline
         svg.addEventListener('dblclick', function(e) {
+            if (currentDiagramType !== 'sequence') return;
             if (!seqDiagram) return;
             const messageGroup = e.target.closest('.seq-message');
             if (messageGroup) {
@@ -3711,6 +3744,7 @@
         // ===== Sequence Diagram Context Menu =====
 
         svg.addEventListener('contextmenu', function(e) {
+            if (currentDiagramType !== 'sequence') return;
             if (!seqDiagram) return;
             e.preventDefault();
             e.stopPropagation();
@@ -3808,6 +3842,7 @@
 
         // Delete key for sequence elements
         document.addEventListener('keydown', function(e) {
+            if (currentDiagramType !== 'sequence') return;
             if (!seqDiagram) return;
             if (e.key === 'Delete' || e.key === 'Backspace') {
                 if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) return;
@@ -3846,6 +3881,7 @@
 
         window.loadClassDiagram = function(jsonData) {
             try {
+                currentDiagramType = 'class';
                 const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
                 clsDiagram = {
                     direction: data.direction || null,
@@ -4432,6 +4468,7 @@
 
         // Click to select class
         svg.addEventListener('mousedown', function(e) {
+            if (currentDiagramType !== 'class') return;
             if (!clsDiagram) return;
 
             const classGroup = e.target.closest('.cls-class');
@@ -4482,6 +4519,7 @@
 
         // Drag class boxes
         svg.addEventListener('mousemove', function(e) {
+            if (currentDiagramType !== 'class') return;
             if (!clsDiagram) return;
 
             if (clsDraggingClassId) {
@@ -4509,6 +4547,7 @@
         });
 
         svg.addEventListener('mouseup', function(e) {
+            if (currentDiagramType !== 'class') return;
             if (!clsDiagram) return;
 
             if (clsDraggingClassId) {
@@ -4537,6 +4576,7 @@
 
         // Double-click to edit class name
         svg.addEventListener('dblclick', function(e) {
+            if (currentDiagramType !== 'class') return;
             if (!clsDiagram) return;
 
             const classGroup = e.target.closest('.cls-class');
@@ -4774,6 +4814,7 @@
         // ===== Class Diagram Context Menu =====
 
         svg.addEventListener('contextmenu', function(e) {
+            if (currentDiagramType !== 'class') return;
             if (!clsDiagram) return;
             e.preventDefault();
             e.stopPropagation();
@@ -4861,6 +4902,7 @@
 
         // Delete key for class diagram elements
         document.addEventListener('keydown', function(e) {
+            if (currentDiagramType !== 'class') return;
             if (!clsDiagram) return;
             if (e.key === 'Delete' || e.key === 'Backspace') {
                 if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) return;
@@ -4902,6 +4944,7 @@
 
         window.loadStateDiagram = function(jsonData) {
             try {
+                currentDiagramType = 'state';
                 const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
                 stDiagram = {
                     direction: data.direction || null,
@@ -5359,6 +5402,7 @@
         // ===== State Diagram Mouse Interaction =====
 
         svg.addEventListener('mousedown', function(e) {
+            if (currentDiagramType !== 'state') return;
             if (!stDiagram) return;
 
             const stateGroup = e.target.closest('.st-state');
@@ -5422,6 +5466,7 @@
         });
 
         svg.addEventListener('mousemove', function(e) {
+            if (currentDiagramType !== 'state') return;
             if (!stDiagram) return;
             const svgPt = getSVGPoint(e);
 
@@ -5444,6 +5489,7 @@
         });
 
         svg.addEventListener('mouseup', function(e) {
+            if (currentDiagramType !== 'state') return;
             if (!stDiagram) return;
 
             if (stDrawingTransFrom) {
@@ -5469,6 +5515,7 @@
         // ===== State Diagram Double-Click to Edit =====
 
         svg.addEventListener('dblclick', function(e) {
+            if (currentDiagramType !== 'state') return;
             if (!stDiagram) return;
 
             const stateGroup = e.target.closest('.st-state');
@@ -5569,6 +5616,7 @@
         // ===== State Diagram Context Menu =====
 
         svg.addEventListener('contextmenu', function(e) {
+            if (currentDiagramType !== 'state') return;
             if (!stDiagram) return;
             e.preventDefault();
             e.stopPropagation();
@@ -5681,6 +5729,7 @@
 
         // Delete key for state diagram elements
         document.addEventListener('keydown', function(e) {
+            if (currentDiagramType !== 'state') return;
             if (!stDiagram) return;
             if (e.key === 'Delete' || e.key === 'Backspace') {
                 if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) return;
@@ -5719,6 +5768,7 @@
 
         window.loadERDiagram = function(jsonData) {
             try {
+                currentDiagramType = 'er';
                 const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
                 erDiagram = {
                     entities: (data.entities || []).map(e => ({
@@ -6117,6 +6167,7 @@
         // ===== ER Diagram Mouse Interaction =====
 
         svg.addEventListener('mousedown', function(e) {
+            if (currentDiagramType !== 'er') return;
             if (!erDiagram) return;
 
             const entityGroup = e.target.closest('.er-entity');
@@ -6180,6 +6231,7 @@
         });
 
         svg.addEventListener('mousemove', function(e) {
+            if (currentDiagramType !== 'er') return;
             if (!erDiagram) return;
             const svgPt = getSVGPoint(e);
 
@@ -6202,6 +6254,7 @@
         });
 
         svg.addEventListener('mouseup', function(e) {
+            if (currentDiagramType !== 'er') return;
             if (!erDiagram) return;
 
             if (erDrawingRelFrom) {
@@ -6233,6 +6286,7 @@
         // ===== ER Diagram Double-Click to Edit =====
 
         svg.addEventListener('dblclick', function(e) {
+            if (currentDiagramType !== 'er') return;
             if (!erDiagram) return;
 
             const entityGroup = e.target.closest('.er-entity');
@@ -6366,6 +6420,7 @@
         // ===== ER Diagram Context Menu =====
 
         svg.addEventListener('contextmenu', function(e) {
+            if (currentDiagramType !== 'er') return;
             if (!erDiagram) return;
             e.preventDefault();
             e.stopPropagation();
@@ -6466,6 +6521,7 @@
 
         // Delete key for ER diagram elements
         document.addEventListener('keydown', function(e) {
+            if (currentDiagramType !== 'er') return;
             if (!erDiagram) return;
             if (e.key === 'Delete' || e.key === 'Backspace') {
                 if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) return;
