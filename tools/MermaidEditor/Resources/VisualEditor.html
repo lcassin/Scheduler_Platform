@@ -6160,6 +6160,11 @@
                     postMessage({ type: 'cls_memberAdded', classId: classId, rawText: '+newMethod()' });
                 });
                 addClsContextMenuSeparator();
+                addClsContextMenuItem('Add Relationship', () => {
+                    clsDrawingRelFrom = classId;
+                    svg.classList.add('edge-drawing-active');
+                });
+                addClsContextMenuSeparator();
                 addClsContextMenuItem('Delete Class', () => {
                     postMessage({ type: 'cls_classDeleted', classId: classId });
                 });
