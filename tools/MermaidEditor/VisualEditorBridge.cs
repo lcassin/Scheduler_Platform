@@ -2263,7 +2263,7 @@ public class VisualEditorBridge
         PushUndo();
         var attr = new ERAttribute
         {
-            Type = root.TryGetProperty("type", out var tProp) ? tProp.GetString() ?? "string" : "string",
+            Type = root.TryGetProperty("attrType", out var tProp) ? tProp.GetString() ?? "string" : "string",
             Name = root.TryGetProperty("name", out var nProp) ? nProp.GetString() ?? "field" : "field"
         };
         if (root.TryGetProperty("key", out var kProp))
@@ -2286,7 +2286,7 @@ public class VisualEditorBridge
 
         PushUndo();
         var attr = entity.Attributes[index];
-        if (root.TryGetProperty("type", out var tProp))
+        if (root.TryGetProperty("attrType", out var tProp))
             attr.Type = tProp.GetString() ?? "string";
         if (root.TryGetProperty("name", out var nProp))
             attr.Name = nProp.GetString() ?? "field";
