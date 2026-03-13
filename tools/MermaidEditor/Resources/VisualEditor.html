@@ -1032,6 +1032,7 @@
                             postMessage({ type: 'seq_messageCreated', fromId: seqDiagram.participants[0].id, toId: seqDiagram.participants[1].id, text: 'Message', arrowType: 'SolidArrow' });
                         });
                         addContextMenuItem('Add Note', () => {
+                            _seqPendingNoteSelect = true;
                             postMessage({ type: 'seq_noteCreated', position: 'RightOf', overParticipants: seqDiagram.participants[0].id, text: 'Note' });
                         });
                         addContextMenuItem('Add Fragment', () => {
@@ -2210,11 +2211,12 @@
             showContextMenu(e.clientX, e.clientY);
         });
 
-        // Context menu item clicks
+        // Context menu item clicks (single delegated handler for all flowchart context menu items)
         contextMenu.addEventListener('click', function(e) {
             const item = e.target.closest('.context-menu-item');
             if (!item) return;
             const action = item.getAttribute('data-action');
+            if (!action) return; // Skip parent items without data-action (e.g. submenu parents)
             handleContextMenuAction(action);
             hideContextMenu();
         });
@@ -2584,22 +2586,11 @@
             // clear it with innerHTML = '' when building their dynamic menus)
             contextMenu.innerHTML = flowchartContextMenuHTML;
 
-            // Re-attach click handler for dynamically restored menu items
-            contextMenu.querySelectorAll('.context-menu-item[data-action]').forEach(item => {
-                item.addEventListener('click', function(e) {
-                    const action = item.getAttribute('data-action');
-                    if (action) {
-                        handleContextMenuAction(action);
-                        hideContextMenu();
-                    }
-                });
-            });
-
             // Enable/disable items based on selection
             const editItem = contextMenu.querySelector('[data-action="edit-label"]');
             const deleteItem = contextMenu.querySelector('[data-action="delete-selected"]');
 
-            if (selectedNodeId || selectedEdgeIndex >= 0) {
+            if (selectedNodeId || selectedEdgeIndex >= 0 || selectedSubgraphId) {
                 editItem.classList.remove('disabled');
                 deleteItem.classList.remove('disabled');
             } else {
@@ -3157,6 +3148,7 @@
                 }
             } else if (clipboard.type === 'seq_note') {
                 if (seqDiagram.participants.length >= 1) {
+                    _seqPendingNoteSelect = true;
                     postMessage({ type: 'seq_noteCreated', position: clipboard.position, overParticipants: seqDiagram.participants[0].id, text: clipboard.text });
                 }
             }
@@ -3494,6 +3486,7 @@
         let seqSelectedMessageIndex = -1;
         let seqSelectedFragmentIndex = -1;
         let seqSelectedNoteIndex = -1;
+        let _seqPendingNoteSelect = false; // Auto-select newly created notes
         let seqDraggingParticipantId = null;
         let seqDragStartX = 0;
         let seqDragParticipantStartIdx = 0;
@@ -3555,6 +3548,23 @@
                     preambleLines: data.preambleLines || [],
                     declarationLineIndex: data.declarationLineIndex || 0
                 };
+
+                // Auto-select newly created note so property panel targets the correct one
+                if (_seqPendingNoteSelect) {
+                    _seqPendingNoteSelect = false;
+                    for (let i = seqDiagram.elements.length - 1; i >= 0; i--) {
+                        if (seqDiagram.elements[i].elementType === 'note') {
+                            seqSelectedNoteIndex = i;
+                            seqSelectedParticipantId = null;
+                            seqSelectedMessageIndex = -1;
+                            seqSelectedFragmentIndex = -1;
+                            renderSequenceDiagram();
+                            showSeqNotePropertyPanel(i);
+                            return;
+                        }
+                    }
+                }
+
                 renderSequenceDiagram();
             } catch (err) {
                 console.error('Failed to refresh sequence diagram:', err);
@@ -4750,6 +4760,7 @@
                         });
                     });
                     addContextMenuItem('Add Note', () => {
+                        _seqPendingNoteSelect = true;
                         postMessage({
                             type: 'seq_noteCreated',
                             position: 'RightOf',
@@ -7786,6 +7797,7 @@
         document.getElementById('tb-seq-add-note').addEventListener('click', function() {
             if (!seqDiagram || seqDiagram.participants.length < 1) return;
             const overId = seqDiagram.participants[0].id;
+            _seqPendingNoteSelect = true;
             postMessage({ type: 'seq_noteCreated', position: 'RightOf', overParticipants: overId, text: 'Note' });
         });
 
