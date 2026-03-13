@@ -4037,6 +4037,12 @@
                 </div>
             `;
 
+            document.getElementById('seq-msg-from').addEventListener('change', function() {
+                postMessage({ type: 'seq_messageEdited', elementIndex: elIdx, fromId: this.value });
+            });
+            document.getElementById('seq-msg-to').addEventListener('change', function() {
+                postMessage({ type: 'seq_messageEdited', elementIndex: elIdx, toId: this.value });
+            });
             document.getElementById('seq-msg-text').addEventListener('change', function() {
                 postMessage({ type: 'seq_messageEdited', elementIndex: elIdx, text: this.value });
             });

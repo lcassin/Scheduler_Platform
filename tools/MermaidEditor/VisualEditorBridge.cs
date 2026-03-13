@@ -2567,6 +2567,10 @@ public class VisualEditorBridge
         if (_sequenceModel.Elements[elementIndex] is not SequenceMessage msg) return;
 
         PushUndo();
+        if (root.TryGetProperty("fromId", out var fromProp))
+            msg.FromId = fromProp.GetString() ?? msg.FromId;
+        if (root.TryGetProperty("toId", out var toProp))
+            msg.ToId = toProp.GetString() ?? msg.ToId;
         if (root.TryGetProperty("text", out var textProp))
             msg.Text = textProp.GetString() ?? "";
         if (root.TryGetProperty("arrowType", out var arrowProp))
