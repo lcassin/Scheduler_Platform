@@ -3061,6 +3061,7 @@
         let seqSelectedParticipantId = null;
         let seqSelectedMessageIndex = -1;
         let seqSelectedFragmentIndex = -1;
+        let seqSelectedNoteIndex = -1;
         let seqDraggingParticipantId = null;
         let seqDragStartX = 0;
         let seqDragParticipantStartIdx = 0;
@@ -3481,7 +3482,7 @@
                     currentY += SEQ_MESSAGE_SPACING;
                 }
                 else if (el.elementType === 'note') {
-                    renderSequenceNote(el, currentY);
+                    renderSequenceNote(el, currentY, elIdx);
                     currentY += 40; // note height + spacing
                 }
                 else if (el.elementType === 'fragment') {
@@ -3608,7 +3609,7 @@
             subgraphsLayer.appendChild(rect);
         }
 
-        function renderSequenceNote(note, absY) {
+        function renderSequenceNote(note, absY, elIdx) {
             if (!seqDiagram) return;
             const y = absY - 10;
 
@@ -3635,8 +3636,12 @@
                 if (idx >= 0) noteX = getParticipantX(idx) + 20;
             }
 
+            const isSelected = (seqSelectedNoteIndex === elIdx);
+
             const noteG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             noteG.classList.add('seq-note');
+            noteG.setAttribute('data-element-index', elIdx);
+            noteG.style.cursor = 'pointer';
 
             const noteRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
             noteRect.setAttribute('x', noteX - noteWidth / 2);
@@ -3645,8 +3650,8 @@
             noteRect.setAttribute('height', 30);
             noteRect.setAttribute('rx', '2');
             noteRect.setAttribute('fill', '#FFFFCC');
-            noteRect.setAttribute('stroke', '#999900');
-            noteRect.setAttribute('stroke-width', '1');
+            noteRect.setAttribute('stroke', isSelected ? 'var(--node-selected-stroke)' : '#999900');
+            noteRect.setAttribute('stroke-width', isSelected ? '2.5' : '1');
             noteG.appendChild(noteRect);
 
             // Fold corner
@@ -3840,6 +3845,7 @@
                 seqSelectedParticipantId = pid;
                 seqSelectedMessageIndex = -1;
                 seqSelectedFragmentIndex = -1;
+                seqSelectedNoteIndex = -1;
                 selectedNodeId = null;
                 selectedEdgeIndex = -1;
                 renderSequenceDiagram();
@@ -3853,6 +3859,7 @@
                 seqSelectedMessageIndex = elIdx;
                 seqSelectedParticipantId = null;
                 seqSelectedFragmentIndex = -1;
+                seqSelectedNoteIndex = -1;
                 selectedNodeId = null;
                 selectedEdgeIndex = -1;
                 renderSequenceDiagram();
@@ -3866,10 +3873,26 @@
                 seqSelectedFragmentIndex = elIdx;
                 seqSelectedParticipantId = null;
                 seqSelectedMessageIndex = -1;
+                seqSelectedNoteIndex = -1;
                 selectedNodeId = null;
                 selectedEdgeIndex = -1;
                 renderSequenceDiagram();
                 showSeqFragmentPropertyPanel(elIdx);
+                e.stopPropagation();
+                return;
+            }
+
+            const noteGroup = e.target.closest('.seq-note');
+            if (noteGroup) {
+                const elIdx = parseInt(noteGroup.getAttribute('data-element-index'), 10);
+                seqSelectedNoteIndex = elIdx;
+                seqSelectedParticipantId = null;
+                seqSelectedMessageIndex = -1;
+                seqSelectedFragmentIndex = -1;
+                selectedNodeId = null;
+                selectedEdgeIndex = -1;
+                renderSequenceDiagram();
+                showSeqNotePropertyPanel(elIdx);
                 e.stopPropagation();
                 return;
             }
@@ -3879,6 +3902,7 @@
                 seqSelectedParticipantId = null;
                 seqSelectedMessageIndex = -1;
                 seqSelectedFragmentIndex = -1;
+                seqSelectedNoteIndex = -1;
                 propertyPanel.classList.remove('visible');
                 renderSequenceDiagram();
             }
@@ -4132,6 +4156,59 @@
             propertyPanel.classList.add('visible');
         }
 
+        function showSeqNotePropertyPanel(elIdx) {
+            if (!seqDiagram) return;
+            const el = seqDiagram.elements[elIdx];
+            if (!el || el.elementType !== 'note') return;
+
+            const notePosition = el.notePosition || 'RightOf';
+            const overParts = (el.overParticipants || '').split(',').map(s => s.trim()).filter(Boolean);
+            const firstParticipant = overParts.length > 0 ? overParts[0] : (seqDiagram.participants.length > 0 ? seqDiagram.participants[0].id : '');
+
+            propPanelTitle.textContent = 'Note';
+            const body = document.querySelector('.property-panel-body');
+            body.innerHTML = `
+                <div class="property-row">
+                    <div class="property-label">Text</div>
+                    <input class="property-input" id="seq-note-text" value="${escapeHtml(el.text || '')}" />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Position</div>
+                    <select class="property-select" id="seq-note-position">
+                        <option value="RightOf" ${notePosition === 'RightOf' ? 'selected' : ''}>Right of</option>
+                        <option value="LeftOf" ${notePosition === 'LeftOf' ? 'selected' : ''}>Left of</option>
+                        <option value="Over" ${notePosition === 'Over' ? 'selected' : ''}>Over</option>
+                    </select>
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Participant</div>
+                    <select class="property-select" id="seq-note-participant">
+                        ${seqDiagram.participants.map(p => `<option value="${escapeHtml(p.id)}" ${firstParticipant === p.id ? 'selected' : ''}>${escapeHtml(getParticipantLabel(p))}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="property-row">
+                    <button id="seq-note-delete" style="padding:4px 10px;cursor:pointer;color:#cc3333;">Delete Note</button>
+                </div>
+            `;
+
+            document.getElementById('seq-note-text').addEventListener('change', function() {
+                postMessage({ type: 'seq_noteEdited', elementIndex: elIdx, text: this.value });
+            });
+            document.getElementById('seq-note-position').addEventListener('change', function() {
+                postMessage({ type: 'seq_noteEdited', elementIndex: elIdx, position: this.value, overParticipants: document.getElementById('seq-note-participant').value });
+            });
+            document.getElementById('seq-note-participant').addEventListener('change', function() {
+                postMessage({ type: 'seq_noteEdited', elementIndex: elIdx, position: document.getElementById('seq-note-position').value, overParticipants: this.value });
+            });
+            document.getElementById('seq-note-delete').addEventListener('click', function() {
+                postMessage({ type: 'seq_noteDeleted', elementIndex: elIdx });
+                seqSelectedNoteIndex = -1;
+                propertyPanel.classList.remove('visible');
+            });
+
+            propertyPanel.classList.add('visible');
+        }
+
         function escapeHtml(str) {
             return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         }
@@ -4147,6 +4224,7 @@
             const participantGroup = e.target.closest('.seq-participant');
             const messageGroup = e.target.closest('.seq-message');
             const fragmentGroup = e.target.closest('.seq-fragment');
+            const noteGroup = e.target.closest('.seq-note');
 
             contextMenu.innerHTML = '';
 
@@ -4165,6 +4243,17 @@
                 addContextMenuItem('Add Participant After', () => {
                     const newId = 'Participant' + (seqDiagram.participants.length + 1);
                     postMessage({ type: 'seq_participantCreated', participantId: newId });
+                });
+            } else if (noteGroup) {
+                const elIdx = parseInt(noteGroup.getAttribute('data-element-index'), 10);
+                seqSelectedNoteIndex = elIdx;
+
+                addContextMenuItem('Edit Note', () => {
+                    showSeqNotePropertyPanel(elIdx);
+                });
+                addContextMenuItem('Delete Note', () => {
+                    postMessage({ type: 'seq_noteDeleted', elementIndex: elIdx });
+                    seqSelectedNoteIndex = -1;
                 });
             } else if (messageGroup) {
                 const elIdx = parseInt(messageGroup.getAttribute('data-element-index'), 10);
@@ -4218,6 +4307,22 @@
                             arrowType: 'SolidArrow'
                         });
                     });
+                    addContextMenuItem('Add Note', () => {
+                        postMessage({
+                            type: 'seq_noteCreated',
+                            position: 'RightOf',
+                            overParticipants: seqDiagram.participants[0].id,
+                            text: 'Note'
+                        });
+                    });
+                    addContextMenuItem('Add Fragment', () => {
+                        postMessage({
+                            type: 'seq_fragmentCreated',
+                            fragmentType: 'loop',
+                            condition: 'condition',
+                            sections: [{ label: 'condition', elements: [] }]
+                        });
+                    });
                 }
             }
 
@@ -4265,6 +4370,10 @@
                 } else if (seqSelectedFragmentIndex >= 0) {
                     postMessage({ type: 'seq_fragmentDeleted', elementIndex: seqSelectedFragmentIndex });
                     seqSelectedFragmentIndex = -1;
+                    e.preventDefault();
+                } else if (seqSelectedNoteIndex >= 0) {
+                    postMessage({ type: 'seq_noteDeleted', elementIndex: seqSelectedNoteIndex });
+                    seqSelectedNoteIndex = -1;
                     e.preventDefault();
                 }
             }

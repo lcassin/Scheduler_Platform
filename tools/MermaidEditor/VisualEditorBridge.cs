@@ -955,6 +955,14 @@ public class VisualEditorBridge
                     HandleSeqNoteCreated(root);
                     break;
 
+                case "seq_noteEdited":
+                    HandleSeqNoteEdited(root);
+                    break;
+
+                case "seq_noteDeleted":
+                    HandleSeqNoteDeleted(root);
+                    break;
+
                 case "seq_fragmentCreated":
                     HandleSeqFragmentCreated(root);
                     break;
@@ -2613,6 +2621,40 @@ public class VisualEditorBridge
 
         _sequenceModel.Elements.Add(note);
         RaiseSequenceModelChanged("seq_noteCreated");
+    }
+
+    private void HandleSeqNoteEdited(JsonElement root)
+    {
+        if (_sequenceModel == null) return;
+        var elementIndex = root.GetProperty("elementIndex").GetInt32();
+
+        if (elementIndex < 0 || elementIndex >= _sequenceModel.Elements.Count) return;
+        if (_sequenceModel.Elements[elementIndex] is not SequenceNote note) return;
+
+        PushUndo();
+        if (root.TryGetProperty("text", out var textProp))
+            note.Text = textProp.GetString() ?? "";
+        if (root.TryGetProperty("position", out var posProp))
+        {
+            var posStr = posProp.GetString();
+            if (Enum.TryParse<SequenceNotePosition>(posStr, out var parsed))
+                note.Position = parsed;
+        }
+        if (root.TryGetProperty("overParticipants", out var overProp))
+            note.OverParticipants = overProp.GetString() ?? "";
+        RaiseSequenceModelChanged("seq_noteEdited");
+    }
+
+    private void HandleSeqNoteDeleted(JsonElement root)
+    {
+        if (_sequenceModel == null) return;
+        var elementIndex = root.GetProperty("elementIndex").GetInt32();
+
+        if (elementIndex < 0 || elementIndex >= _sequenceModel.Elements.Count) return;
+
+        PushUndo();
+        _sequenceModel.Elements.RemoveAt(elementIndex);
+        RaiseSequenceModelChanged("seq_noteDeleted");
     }
 
     private void HandleSeqFragmentCreated(JsonElement root)
