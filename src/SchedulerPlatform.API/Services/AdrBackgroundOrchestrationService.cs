@@ -37,6 +37,14 @@ public class AdrOrchestrationRequest
     /// Optional limit on the number of accounts to process during bulk credential verification.
     /// </summary>
     public int? TestRunLimit { get; set; }
+    
+    /// <summary>
+    /// The Windows timezone ID to use for billing date calculations (e.g., "Central Standard Time", "Eastern Standard Time").
+    /// When set, all date comparisons in the orchestrator ("today", billing windows, etc.) will use this timezone
+    /// instead of UTC. This is critical for manual orchestration runs where the user expects dates to match
+    /// their local timezone. When null, falls back to the orchestrator's default (Central Standard Time).
+    /// </summary>
+    public string? BillingTimeZoneId { get; set; }
 }
 
 /// <summary>
@@ -384,6 +392,10 @@ public class AdrBackgroundOrchestrationService : BackgroundService
             using var scope = _scopeFactory.CreateScope();
             var syncService = scope.ServiceProvider.GetRequiredService<IAdrAccountSyncService>();
             var orchestratorService = scope.ServiceProvider.GetRequiredService<IAdrOrchestratorService>();
+            
+            // Pass the user's timezone through to all orchestrator methods so date comparisons
+            // ("today", billing windows, etc.) match the user's local date, not UTC
+            var billingTz = request.BillingTimeZoneId;
 
             // Bulk credential verification runs as a standalone operation
             if (request.RunBulkCredentialVerification)
@@ -497,7 +509,8 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                         s.CurrentStepTotal = total;
                     }),
                     token,
-                    orchestrationRequestId: request.RequestId);
+                    orchestrationRequestId: request.RequestId,
+                    billingTimeZoneId: billingTz);
                 _queue.UpdateStatus(request.RequestId, s => s.JobCreationResult = jobResult);
                 
                 _logger.LogInformation(
@@ -534,7 +547,8 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                         s.CurrentStepTotal = total;
                     }),
                     token,
-                    orchestrationRequestId: request.RequestId);
+                    orchestrationRequestId: request.RequestId,
+                    billingTimeZoneId: billingTz);
                 _queue.UpdateStatus(request.RequestId, s => 
                 {
                     s.CurrentStepPhase = null;
@@ -589,7 +603,8 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                             s.CurrentStepTotal = total;
                         }),
                         token,
-                        orchestrationRequestId: request.RequestId);
+                        orchestrationRequestId: request.RequestId,
+                        billingTimeZoneId: billingTz);
                 }
                 else
                 {
@@ -615,7 +630,8 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                             s.CurrentStepTotal = total;
                         }),
                         token,
-                        orchestrationRequestId: request.RequestId);
+                        orchestrationRequestId: request.RequestId,
+                        billingTimeZoneId: billingTz);
                 }
                 _queue.UpdateStatus(request.RequestId, s => 
                 {
@@ -657,7 +673,8 @@ public class AdrBackgroundOrchestrationService : BackgroundService
                         s.CurrentStepTotal = total;
                     }),
                     token,
-                    orchestrationRequestId: request.RequestId);
+                    orchestrationRequestId: request.RequestId,
+                    billingTimeZoneId: billingTz);
                 _queue.UpdateStatus(request.RequestId, s => 
                 {
                     s.CurrentStepPhase = null;

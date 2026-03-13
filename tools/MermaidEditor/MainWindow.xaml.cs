@@ -42,6 +42,13 @@ public enum RenderMode
     Markdown
 }
 
+public enum VisualEditorMode
+{
+    Text,
+    Visual,
+    Split
+}
+
 public partial class MainWindow : Window
 {
     // P/Invoke for dark title bar
@@ -105,6 +112,17 @@ public partial class MainWindow : Window
     private SpellCheckService? _spellCheckService;
     private SpellCheckBackgroundRenderer? _spellCheckRenderer;
     private bool _isSpellCheckEnabled;
+
+    // Visual editor
+    private VisualEditorMode _visualEditorMode = VisualEditorMode.Text;
+    private VisualEditorBridge? _visualEditorBridge;
+    private bool _visualEditorInitialized;
+    private FlowchartModel? _currentFlowchartModel;
+    private SequenceDiagramModel? _currentSequenceDiagramModel;
+    private ClassDiagramModel? _currentClassDiagramModel;
+    private StateDiagramModel? _currentStateDiagramModel;
+    private ERDiagramModel? _currentERDiagramModel;
+    private bool _isVisualEditorUpdating; // Prevent re-entrant updates between text <-> visual
 
     private const string DefaultMermaidCode= @"flowchart TD
     A[Start] --> B[End]";
@@ -336,6 +354,23 @@ Console.WriteLine(""Hello, World!"");
         {
             StatusText.Text = $"Line {CodeEditor.TextArea.Caret.Line}, Col {CodeEditor.TextArea.Caret.Column}";
             UpdateToggleCommentIconColor();
+            
+            // Ensure the editor scrolls to keep the caret visible when navigating
+            // with arrow keys, Tab, Home/End, etc. on long lines without word wrap.
+            // The root fix is CanContentScroll in the ScrollViewer template (MainWindow.xaml)
+            // which restores AvalonEdit's native IScrollInfo chain. This deferred call
+            // is a lightweight safety net that uses AvalonEdit's built-in scroll-to-caret.
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
+            {
+                try
+                {
+                    CodeEditor.TextArea.Caret.BringCaretToView();
+                }
+                catch
+                {
+                    // Ignore errors during document switching
+                }
+            }));
         };
         
         // Intercept Ctrl+F and Ctrl+H before AvalonEdit handles them
@@ -633,6 +668,10 @@ Console.WriteLine(""Hello, World!"");
             
             // Initialize SVG icons for toolbar buttons and menu items
             InitializeIcons();
+            // Force-refresh comment icon color after InitializeIcons resets all icons to default.
+            // This is critical for session restore: the constructor already ran SwitchToDocument()
+            // which set _lastCaretWasInComment, but InitializeIcons() just overwrote the green tint.
+            UpdateToggleCommentIconColor(force: true);
             
             // Load recent files
             LoadRecentFiles();
@@ -656,6 +695,9 @@ Console.WriteLine(""Hello, World!"");
             
             // Initialize spell check
             await InitializeSpellCheckAsync();
+            
+            // Initialize Visual Editor WebView2
+            await InitializeVisualEditorAsync();
         }
         catch (Exception ex)
         {
@@ -805,7 +847,7 @@ Console.WriteLine(""Hello, World!"");
     /// Checks if the current caret line is inside a comment and tints the toggle-comment
     /// toolbar button and menu item icon green when it is.
     /// </summary>
-    private void UpdateToggleCommentIconColor()
+    private void UpdateToggleCommentIconColor(bool force = false)
     {
         try
         {
@@ -826,7 +868,7 @@ Console.WriteLine(""Hello, World!"");
                 isComment = lineText.StartsWith("<!--");
             }
 
-            if (isComment == _lastCaretWasInComment) return;
+            if (!force && isComment == _lastCaretWasInComment) return;
             _lastCaretWasInComment = isComment;
 
             if (isComment)
@@ -1127,11 +1169,18 @@ Console.WriteLine(""Hello, World!"");
         RedoMenuItem.IsEnabled = canRedo;
     }
 
-    private void RenderTimer_Tick(object? sender, EventArgs e)
+    private async void RenderTimer_Tick(object? sender, EventArgs e)
     {
         _renderTimer.Stop();
         RenderPreview();
         UpdateNavigationDropdown();
+
+        // In Split mode, re-parse the code editor text and send to visual editor
+        // so the visual model stays in sync with text edits
+        if (_visualEditorMode == VisualEditorMode.Split && !_isVisualEditorUpdating)
+        {
+            await ParseAndSendToVisualEditor();
+        }
     }
 
     private void RenderPreview()
@@ -1218,6 +1267,19 @@ Console.WriteLine(""Hello, World!"");
             ? _activeDocument.PreviewZoom.ToString(System.Globalization.CultureInfo.InvariantCulture) 
             : "1";
 
+        var theme = ThemeManager.CurrentTheme;
+        var bodyBg = theme switch { AppTheme.Light => "#f5f5f5", AppTheme.Twilight => "#1A1A2E", _ => "#1e1e1e" };
+        // Use a lighter diagram card background for dark themes so Mermaid's dark-colored edges/arrows stay visible
+        var diagramBg = theme switch { AppTheme.Light => "white", AppTheme.Twilight => "#B8C4D8", _ => "#B0B0B0" };
+        var diagramShadow = theme == AppTheme.Light ? "0 2px 10px rgba(0,0,0,0.1)" : "0 2px 10px rgba(0,0,0,0.4)";
+        var errorColor = theme == AppTheme.Light ? "#d32f2f" : "#ef9a9a";
+        var errorBg = theme switch { AppTheme.Light => "#ffebee", AppTheme.Twilight => "#2E1A2E", _ => "#4e1a1a" };
+
+        // Scrollbar theming for dark/twilight themes
+        var scrollbarTrack = theme switch { AppTheme.Light => "#f0f0f0", AppTheme.Twilight => "#16213E", _ => "#2a2a2a" };
+        var scrollbarThumb = theme switch { AppTheme.Light => "#c1c1c1", AppTheme.Twilight => "#3a4a6b", _ => "#555555" };
+        var scrollbarThumbHover = theme switch { AppTheme.Light => "#a8a8a8", AppTheme.Twilight => "#4a5a7b", _ => "#666666" };
+
         var html = $@"<!DOCTYPE html>
 <html>
 <head>
@@ -1230,7 +1292,7 @@ Console.WriteLine(""Hello, World!"");
             width: 100%; 
             height: 100%; 
             overflow: hidden;
-            background: #f5f5f5;
+            background: {bodyBg};
         }}
         #container {{
             width: 100%;
@@ -1242,10 +1304,10 @@ Console.WriteLine(""Hello, World!"");
             overflow: auto;
         }}
         #diagram {{
-            background: white;
+            background: {diagramBg};
             padding: 20px;
             border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: {diagramShadow};
             display: inline-block;
         }}
         #diagram.has-error {{
@@ -1261,17 +1323,28 @@ Console.WriteLine(""Hello, World!"");
             max-width: none !important;
         }}
         .error {{
-            color: #d32f2f;
+            color: {errorColor};
             padding: 20px;
             font-family: Consolas, monospace;
             white-space: pre-wrap;
             word-wrap: break-word;
             word-break: break-word;
             overflow-wrap: break-word;
-            background: #ffebee;
+            background: {errorBg};
             border-radius: 8px;
             max-width: 100%;
             overflow-x: auto;
+        }}
+        /* Scrollbar theming */
+        ::-webkit-scrollbar {{ width: 10px; height: 10px; }}
+        ::-webkit-scrollbar-track {{ background: {scrollbarTrack}; }}
+        ::-webkit-scrollbar-thumb {{ background: {scrollbarThumb}; border-radius: 5px; }}
+        ::-webkit-scrollbar-thumb:hover {{ background: {scrollbarThumbHover}; }}
+        ::-webkit-scrollbar-corner {{ background: {scrollbarTrack}; }}
+        /* Force white background for printing */
+        @media print {{
+            html, body {{ background: white !important; }}
+            #diagram {{ background: white !important; box-shadow: none !important; }}
         }}
     </style>
 </head>
@@ -1757,9 +1830,10 @@ Console.WriteLine(""Hello, World!"");
                     var scrollTop = _activeDocument.PreviewScrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture);
                     var scrollLeft = _activeDocument.PreviewScrollLeft.ToString(System.Globalization.CultureInfo.InvariantCulture);
                     await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
-                        (function() {{
+                        (async function() {{
                             const markdownContent = {escapedCode};
                             document.getElementById('content').innerHTML = marked.parse(markdownContent);
+                            await renderMermaidBlocks();
                             setupClickHandlers();
                             // Restore scroll position after content is updated
                             // Try all methods since html/body can both have overflow:auto
@@ -1779,9 +1853,10 @@ Console.WriteLine(""Hello, World!"");
                 {
                     // Update content without reloading the page - scroll position is naturally preserved
                     await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
-                        (function() {{
+                        (async function() {{
                             const markdownContent = {escapedCode};
                             document.getElementById('content').innerHTML = marked.parse(markdownContent);
+                            await renderMermaidBlocks();
                             setupClickHandlers();
                         }})();
                     ");
@@ -1816,14 +1891,25 @@ Console.WriteLine(""Hello, World!"");
             ? _activeDocument.PreviewScrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture) 
             : "0";
 
+        var mdTheme = ThemeManager.CurrentTheme;
+        var mdCssVariant = mdTheme == AppTheme.Light ? "light" : "dark"; // Twilight uses dark CSS
+        var mdHljsStyle = mdTheme == AppTheme.Light ? "github" : "github-dark";
+        var mdBodyBg = mdTheme switch { AppTheme.Light => "#ffffff", AppTheme.Twilight => "#1A1A2E", _ => "#1e1e1e" };
+        var mdColorScheme = mdTheme == AppTheme.Light ? "light" : "dark";
+        var mdCodeBg = mdTheme switch { AppTheme.Light => "#f6f8fa", AppTheme.Twilight => "#141428", _ => "#161b22" };
+        var mdTableBorder = mdTheme switch { AppTheme.Light => "#d0d7de", AppTheme.Twilight => "#3D4A6B", _ => "#30363d" };
+        var mdScrollbarTrack = mdTheme switch { AppTheme.Light => "#f0f0f0", AppTheme.Twilight => "#16213E", _ => "#2a2a2a" };
+        var mdScrollbarThumb = mdTheme switch { AppTheme.Light => "#c1c1c1", AppTheme.Twilight => "#3a4a6b", _ => "#555555" };
+        var mdScrollbarThumbHover = mdTheme switch { AppTheme.Light => "#a8a8a8", AppTheme.Twilight => "#4a5a7b", _ => "#666666" };
+
         var html = $@"<!DOCTYPE html
 <html>
 <head>
     <meta charset=""UTF-8"">
     {baseTag}
     <script src=""https://cdn.jsdelivr.net/npm/marked/marked.min.js""></script>
-    <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-light.min.css"">
-    <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/highlight.js@11/styles/github.min.css"">
+    <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-{mdCssVariant}.min.css"">
+    <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/highlight.js@11/styles/{mdHljsStyle}.min.css"">
     <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/core.min.js""></script>
     <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/javascript.min.js""></script>
     <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/csharp.min.js""></script>
@@ -1832,13 +1918,15 @@ Console.WriteLine(""Hello, World!"");
     <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/xml.min.js""></script>
     <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/json.min.js""></script>
     <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/sql.min.js""></script>
+    <script src=""https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js""></script>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         html, body {{ 
             width: 100%; 
             height: 100%; 
             overflow: auto;
-            background: #ffffff;
+            background: {mdBodyBg};
+            color-scheme: {mdColorScheme};
         }}
         .markdown-body {{
             padding: 20px 32px;
@@ -1846,13 +1934,13 @@ Console.WriteLine(""Hello, World!"");
             margin: 0 auto;
         }}
         .markdown-body pre {{
-            background-color: #f6f8fa;
+            background-color: {mdCodeBg};
             border-radius: 6px;
             padding: 16px;
             overflow: auto;
         }}
         .markdown-body code {{
-            background-color: #f6f8fa;
+            background-color: {mdCodeBg};
             border-radius: 3px;
             padding: 0.2em 0.4em;
             font-size: 85%;
@@ -1868,22 +1956,92 @@ Console.WriteLine(""Hello, World!"");
         }}
         .markdown-body table th,
         .markdown-body table td {{
-            border: 1px solid #d0d7de;
+            border: 1px solid {mdTableBorder};
             padding: 6px 13px;
         }}
         .markdown-body table tr:nth-child(2n) {{
-            background-color: #f6f8fa;
+            background-color: {mdCodeBg};
+        }}
+        /* Scrollbar theming */
+        ::-webkit-scrollbar {{ width: 10px; height: 10px; }}
+        ::-webkit-scrollbar-track {{ background: {mdScrollbarTrack}; }}
+        ::-webkit-scrollbar-thumb {{ background: {mdScrollbarThumb}; border-radius: 5px; }}
+        ::-webkit-scrollbar-thumb:hover {{ background: {mdScrollbarThumbHover}; }}
+        ::-webkit-scrollbar-corner {{ background: {mdScrollbarTrack}; }}
+        /* Force white/light background for printing */
+        @media print {{
+            html, body {{ background: white !important; color-scheme: light !important; }}
+        }}
+        /* Mermaid diagram containers in markdown */
+        .mermaid-container {{
+            background: #ffffff;
+            border: 1px solid #d0d7de;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+            overflow: auto;
+            text-align: center;
+        }}
+        .mermaid-container svg {{
+            max-width: 100%;
+            height: auto;
+        }}
+        .mermaid-error {{
+            color: #cf222e;
+            background: #fff5f5;
+            border: 1px solid #cf222e;
+            border-radius: 6px;
+            padding: 16px;
+            margin: 16px 0;
+            font-family: monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
         }}
     </style>
 </head>
 <body>
     <article class=""markdown-body"" id=""content""></article>
     <script>
+        // Initialize mermaid for rendering embedded diagrams in markdown
+        mermaid.initialize({{ 
+            startOnLoad: false,
+            theme: 'default',
+            securityLevel: 'loose',
+            fontFamily: 'Segoe UI, Helvetica, Arial, sans-serif'
+        }});
+        
+        // Counter for unique mermaid diagram IDs
+        var mermaidCounter = 0;
+        
+        // Find all mermaid code blocks and render them as diagrams
+        async function renderMermaidBlocks() {{
+            const content = document.getElementById('content');
+            const codeBlocks = content.querySelectorAll('pre code.language-mermaid');
+            
+            for (const codeBlock of codeBlocks) {{
+                const pre = codeBlock.parentElement;
+                const mermaidCode = codeBlock.textContent;
+                const container = document.createElement('div');
+                container.className = 'mermaid-container';
+                
+                try {{
+                    const id = 'mermaid-diagram-' + (mermaidCounter++);
+                    const {{ svg }} = await mermaid.render(id, mermaidCode);
+                    container.innerHTML = svg;
+                }} catch (err) {{
+                    container.className = 'mermaid-error';
+                    container.textContent = 'Mermaid Error: ' + err.message;
+                }}
+                
+                pre.replaceWith(container);
+            }}
+        }}
+        
         const markdownContent = {escapedCode};
         
         marked.setOptions({{
             highlight: function(code, lang) {{
-                if (lang && hljs.getLanguage(lang)) {{
+                if (lang && lang !== 'mermaid' && hljs.getLanguage(lang)) {{
                     try {{
                         return hljs.highlight(code, {{ language: lang }}).value;
                     }} catch (e) {{}}
@@ -1893,11 +2051,6 @@ Console.WriteLine(""Hello, World!"");
             breaks: true,
             gfm: true
         }});
-        
-        document.getElementById('content').innerHTML = marked.parse(markdownContent);
-        
-        // Add click handlers for click-to-highlight feature
-        setupClickHandlers();
         
         function setupClickHandlers() {{
             const content = document.getElementById('content');
@@ -2068,16 +2221,27 @@ Console.WriteLine(""Hello, World!"");
             }});
         }}
         
-        // Notify C# that markdown is ready and pass target scroll position for restoration
-        var targetScrollLeft = {targetScrollLeft};
-        var targetScrollTop = {targetScrollTop};
-        setTimeout(function() {{
-            window.chrome.webview.postMessage({{ 
-                type: 'markdownReady', 
-                targetScrollLeft: targetScrollLeft, 
-                targetScrollTop: targetScrollTop 
-            }});
-        }}, 50);
+        // Run initial render in async IIFE to properly await mermaid rendering
+        (async function() {{
+            document.getElementById('content').innerHTML = marked.parse(markdownContent);
+            
+            // Render any embedded mermaid diagrams
+            await renderMermaidBlocks();
+            
+            // Add click handlers for click-to-highlight feature
+            setupClickHandlers();
+            
+            // Notify C# that markdown is ready and pass target scroll position for restoration
+            var targetScrollLeft = {targetScrollLeft};
+            var targetScrollTop = {targetScrollTop};
+            setTimeout(function() {{
+                window.chrome.webview.postMessage({{ 
+                    type: 'markdownReady', 
+                    targetScrollLeft: targetScrollLeft, 
+                    targetScrollTop: targetScrollTop 
+                }});
+            }}, 50);
+        }})();
     </script>
 </body>
 </html>";
@@ -2683,6 +2847,9 @@ Console.WriteLine(""Hello, World!"");
                 _spellCheckRenderer.InvalidateSpelling();
             }
         }
+
+        // Update visual editor mode toolbar visibility
+        UpdateVisualEditorModeToolbarVisibility();
     }
 
     private void New_Click(object sender, RoutedEventArgs e)
@@ -3277,6 +3444,10 @@ Console.WriteLine(""Hello, World!"");
             // Markdown uses block comments (<!-- -->)
             ToggleMarkdownComment(doc, selection);
         }
+        
+        // Force-refresh the comment icon color since the text changed but
+        // the caret position may not have moved (so PositionChanged won't fire)
+        UpdateToggleCommentIconColor(force: true);
     }
 
     private void ToggleMermaidComment(ICSharpCode.AvalonEdit.Document.TextDocument doc, ICSharpCode.AvalonEdit.Editing.Selection selection)
@@ -4369,6 +4540,721 @@ Console.WriteLine(""Hello, World!"");
 
     #endregion
 
+    #region Visual Editor Integration
+
+    /// <summary>
+    /// Initializes the Visual Editor WebView2 control and loads the embedded VisualEditor.html.
+    /// </summary>
+    private async Task InitializeVisualEditorAsync()
+    {
+        try
+        {
+            // Temporarily make the panel visible so WebView2 can initialize
+            // (some systems require the control to be visible for EnsureCoreWebView2Async)
+            var wasCollapsed = VisualEditorPanel.Visibility == Visibility.Collapsed;
+            if (wasCollapsed)
+            {
+                VisualEditorPanel.Visibility = Visibility.Visible;
+                VisualEditorPanel.Width = 0;
+                VisualEditorPanel.Height = 0;
+            }
+
+            await VisualEditorWebView.EnsureCoreWebView2Async();
+            _visualEditorInitialized = true;
+
+            // Restore collapsed state after init
+            if (wasCollapsed)
+            {
+                VisualEditorPanel.Visibility = Visibility.Collapsed;
+                VisualEditorPanel.ClearValue(FrameworkElement.WidthProperty);
+                VisualEditorPanel.ClearValue(FrameworkElement.HeightProperty);
+            }
+
+            // Load the embedded VisualEditor.html resource
+            var assembly = System.Reflection.Assembly.GetExecutingAssembly();
+            using var stream = assembly.GetManifestResourceStream("MermaidEditor.Resources.VisualEditor.html");
+            if (stream != null)
+            {
+                using var reader = new StreamReader(stream);
+                var html = await reader.ReadToEndAsync();
+                VisualEditorWebView.NavigateToString(html);
+            }
+
+            // Initialize the bridge with a default model
+            _currentFlowchartModel = new FlowchartModel();
+            _visualEditorBridge = new VisualEditorBridge(VisualEditorWebView, _currentFlowchartModel);
+
+            // Wire up events
+            _visualEditorBridge.ModelChanged += VisualEditorBridge_ModelChanged;
+            _visualEditorBridge.SequenceModelChanged += VisualEditorBridge_SequenceModelChanged;
+            _visualEditorBridge.ClassDiagramModelChanged += VisualEditorBridge_ClassDiagramModelChanged;
+            _visualEditorBridge.StateDiagramModelChanged += VisualEditorBridge_StateDiagramModelChanged;
+            _visualEditorBridge.ERDiagramModelChanged += VisualEditorBridge_ERDiagramModelChanged;
+            _visualEditorBridge.EditorReady += VisualEditorBridge_EditorReady;
+
+                // Apply current theme to visual editor
+                await _visualEditorBridge.SetThemeAsync(GetVisualEditorThemeString());
+
+            // Now that visual editor is initialized, refresh toolbar visibility
+            // (SetRenderModeFromFile may have already run before init completed)
+            UpdateVisualEditorModeToolbarVisibility();
+        }
+        catch (Exception)
+        {
+            // Visual editor is optional - silently fail if WebView2 can't init for it
+            _visualEditorInitialized = false;
+        }
+    }
+
+    /// <summary>
+    /// Called when the visual editor JS signals it is ready to receive diagram data.
+    /// </summary>
+    private async void VisualEditorBridge_EditorReady(object? sender, EventArgs e)
+    {
+        if (_visualEditorBridge == null) return;
+
+        // Always apply the current theme when the editor signals ready —
+        // the SetThemeAsync in InitializeVisualEditorAsync fires before
+        // the page has finished loading, so the theme is lost.
+        await _visualEditorBridge.SetThemeAsync(GetVisualEditorThemeString());
+
+        // If we're already in Visual or Split mode and have a model, send it
+        if (_visualEditorMode != VisualEditorMode.Text)
+        {
+            if (_currentStateDiagramModel != null)
+            {
+                await _visualEditorBridge.UpdateStateDiagramModelAsync(_currentStateDiagramModel);
+            }
+            else if (_currentERDiagramModel != null)
+            {
+                await _visualEditorBridge.UpdateERDiagramModelAsync(_currentERDiagramModel);
+            }
+            else if (_currentClassDiagramModel != null)
+            {
+                await _visualEditorBridge.UpdateClassDiagramModelAsync(_currentClassDiagramModel);
+            }
+            else if (_currentSequenceDiagramModel != null)
+            {
+                await _visualEditorBridge.UpdateSequenceModelAsync(_currentSequenceDiagramModel);
+            }
+            else if (_currentFlowchartModel != null)
+            {
+                await _visualEditorBridge.SendDiagramToEditorAsync();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Called when the visual editor modifies the FlowchartModel (node moved, created, deleted, etc.).
+    /// Serializes the model back to text and updates the code editor + preview.
+    /// </summary>
+    private void VisualEditorBridge_ModelChanged(object? sender, ModelChangedEventArgs e)
+    {
+        if (_isVisualEditorUpdating) return;
+
+        _isVisualEditorUpdating = true;
+        try
+        {
+            // Serialize the model back to Mermaid text
+            var text = MermaidSerializer.Serialize(e.Model);
+
+            // Update the code editor text without triggering a re-parse loop
+            if (_visualEditorMode == VisualEditorMode.Visual || _visualEditorMode == VisualEditorMode.Split)
+            {
+                _isSwitchingDocuments = true; // Suppress dirty flag from programmatic text change
+                try { CodeEditor.Text = text; } finally { _isSwitchingDocuments = false; }
+
+                // Mark document as dirty
+                _isDirty = true;
+                if (_activeDocument != null)
+                {
+                    _activeDocument.IsDirty = true;
+                }
+                UpdateTitle();
+
+                // Re-render preview
+                RenderPreview();
+            }
+        }
+        finally
+        {
+            _isVisualEditorUpdating = false;
+        }
+    }
+
+    /// <summary>
+    /// Called when the visual editor modifies the SequenceDiagramModel (participant reordered, message created, etc.).
+    /// Serializes the model back to text and updates the code editor + preview.
+    /// </summary>
+    private async void VisualEditorBridge_SequenceModelChanged(object? sender, SequenceModelChangedEventArgs e)
+    {
+        if (_isVisualEditorUpdating) return;
+
+        _isVisualEditorUpdating = true;
+        try
+        {
+            // Serialize the sequence model back to Mermaid text
+            var text = MermaidSerializer.SerializeSequenceDiagram(e.Model);
+
+            // Update the code editor text without triggering a re-parse loop
+            if (_visualEditorMode == VisualEditorMode.Visual || _visualEditorMode == VisualEditorMode.Split)
+            {
+                _isSwitchingDocuments = true; // Suppress dirty flag from programmatic text change
+                try { CodeEditor.Text = text; } finally { _isSwitchingDocuments = false; }
+
+                // Mark document as dirty
+                _isDirty = true;
+                if (_activeDocument != null)
+                {
+                    _activeDocument.IsDirty = true;
+                }
+                UpdateTitle();
+
+                // Re-render preview
+                RenderPreview();
+
+                // Send updated model back to visual editor so it re-renders
+                await _visualEditorBridge.RefreshSequenceDiagramAsync();
+            }
+        }
+        finally
+        {
+            _isVisualEditorUpdating = false;
+        }
+    }
+
+    /// <summary>
+    /// Called when the visual editor modifies the ClassDiagramModel (class created, member added, relationship changed, etc.).
+    /// Serializes the model back to text and updates the code editor + preview.
+    /// </summary>
+    private async void VisualEditorBridge_ClassDiagramModelChanged(object? sender, ClassDiagramModelChangedEventArgs e)
+    {
+        if (_isVisualEditorUpdating) return;
+
+        _isVisualEditorUpdating = true;
+        try
+        {
+            // Serialize the class diagram model back to Mermaid text
+            var text = MermaidSerializer.SerializeClassDiagram(e.Model);
+
+            // Update the code editor text without triggering a re-parse loop
+            if (_visualEditorMode == VisualEditorMode.Visual || _visualEditorMode == VisualEditorMode.Split)
+            {
+                _isSwitchingDocuments = true; // Suppress dirty flag from programmatic text change
+                try { CodeEditor.Text = text; } finally { _isSwitchingDocuments = false; }
+
+                // Mark document as dirty
+                _isDirty = true;
+                if (_activeDocument != null)
+                {
+                    _activeDocument.IsDirty = true;
+                }
+                UpdateTitle();
+
+                // Re-render preview
+                RenderPreview();
+
+                // Send updated model back to visual editor so it re-renders
+                await _visualEditorBridge.RefreshClassDiagramAsync();
+            }
+        }
+        finally
+        {
+            _isVisualEditorUpdating = false;
+        }
+    }
+
+    /// <summary>
+    /// Called when the visual editor modifies the StateDiagramModel (state created, transition added, etc.).
+    /// Serializes the model back to text and updates the code editor + preview.
+    /// </summary>
+    private async void VisualEditorBridge_StateDiagramModelChanged(object? sender, StateDiagramModelChangedEventArgs e)
+    {
+        if (_isVisualEditorUpdating) return;
+
+        _isVisualEditorUpdating = true;
+        try
+        {
+            // Serialize the state diagram model back to Mermaid text
+            var text = MermaidSerializer.SerializeStateDiagram(e.Model);
+
+            // Update the code editor text without triggering a re-parse loop
+            if (_visualEditorMode == VisualEditorMode.Visual || _visualEditorMode == VisualEditorMode.Split)
+            {
+                _isSwitchingDocuments = true; // Suppress dirty flag from programmatic text change
+                try { CodeEditor.Text = text; } finally { _isSwitchingDocuments = false; }
+
+                // Mark document as dirty
+                _isDirty = true;
+                if (_activeDocument != null)
+                {
+                    _activeDocument.IsDirty = true;
+                }
+                UpdateTitle();
+
+                // Re-render preview
+                RenderPreview();
+
+                // Send updated model back to visual editor so it re-renders
+                await _visualEditorBridge.RefreshStateDiagramAsync();
+            }
+        }
+        finally
+        {
+            _isVisualEditorUpdating = false;
+        }
+    }
+
+    /// <summary>
+    /// Called when the visual editor modifies the ERDiagramModel (entity created, relationship added, etc.).
+    /// Serializes the model back to text and updates the code editor + preview.
+    /// </summary>
+    private async void VisualEditorBridge_ERDiagramModelChanged(object? sender, ERDiagramModelChangedEventArgs e)
+    {
+        if (_isVisualEditorUpdating) return;
+
+        _isVisualEditorUpdating = true;
+        try
+        {
+            // Serialize the ER diagram model back to Mermaid text
+            var text = MermaidSerializer.SerializeERDiagram(e.Model);
+
+            // Update the code editor text without triggering a re-parse loop
+            if (_visualEditorMode == VisualEditorMode.Visual || _visualEditorMode == VisualEditorMode.Split)
+            {
+                _isSwitchingDocuments = true; // Suppress dirty flag from programmatic text change
+                try { CodeEditor.Text = text; } finally { _isSwitchingDocuments = false; }
+
+                // Mark document as dirty
+                _isDirty = true;
+                if (_activeDocument != null)
+                {
+                    _activeDocument.IsDirty = true;
+                }
+                UpdateTitle();
+
+                // Re-render preview
+                RenderPreview();
+
+                // Send updated model back to visual editor so it re-renders
+                await _visualEditorBridge.RefreshERDiagramAsync();
+            }
+        }
+        finally
+        {
+            _isVisualEditorUpdating = false;
+        }
+    }
+
+    /// <summary>
+    /// Updates the visibility of the visual editor mode toolbar based on the current render mode.
+    /// Only visible for Mermaid files.
+    /// </summary>
+    private void UpdateVisualEditorModeToolbarVisibility()
+    {
+        if (VisualEditorModeToolbar != null)
+        {
+            VisualEditorModeToolbar.Visibility = _currentRenderMode == RenderMode.Mermaid && _visualEditorInitialized
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+
+        // If switching to a non-Mermaid file while in Visual/Split mode, revert to Text mode
+        if (_currentRenderMode != RenderMode.Mermaid && _visualEditorMode != VisualEditorMode.Text)
+        {
+            SwitchToTextMode();
+        }
+
+        // Enable/disable Visual and Split buttons based on whether the current diagram
+        // type is supported by the visual editor (currently only flowcharts).
+        var visualSupported = IsVisualEditorSupportedForCurrentDiagram();
+        if (VisualModeToggle != null)
+        {
+            VisualModeToggle.IsEnabled = visualSupported;
+            VisualModeToggle.ToolTip = visualSupported
+                ? "Visual Mode"
+                : "Visual editor is not yet available for this diagram type";
+        }
+        if (SplitModeToggle != null)
+        {
+            SplitModeToggle.IsEnabled = visualSupported;
+            SplitModeToggle.ToolTip = visualSupported
+                ? "Split Mode (Text + Visual)"
+                : "Visual editor is not yet available for this diagram type";
+        }
+
+        // If currently in Visual/Split mode and the diagram type is unsupported, revert to Text
+        if (!visualSupported && _visualEditorMode != VisualEditorMode.Text)
+        {
+            SwitchToTextMode();
+        }
+    }
+
+    private void TextMode_Click(object sender, RoutedEventArgs e)
+    {
+        SwitchToTextMode();
+    }
+
+    private void VisualMode_Click(object sender, RoutedEventArgs e)
+    {
+        SwitchToVisualMode();
+    }
+
+    private void SplitMode_Click(object sender, RoutedEventArgs e)
+    {
+        SwitchToSplitMode();
+    }
+
+    /// <summary>
+    /// Switches to Text Mode: shows CodeEditor + Preview, hides Visual Editor.
+    /// Serializes the current visual model back to text if coming from Visual/Split mode.
+    /// </summary>
+    private void SwitchToTextMode()
+    {
+        if (_visualEditorMode != VisualEditorMode.Text && _visualEditorBridge != null)
+        {
+            // Serialize the active model back to text
+            _isVisualEditorUpdating = true;
+            try
+            {
+                string? text = null;
+                if (_currentStateDiagramModel != null)
+                {
+                    text = MermaidSerializer.SerializeStateDiagram(_currentStateDiagramModel);
+                }
+                else if (_currentERDiagramModel != null)
+                {
+                    text = MermaidSerializer.SerializeERDiagram(_currentERDiagramModel);
+                }
+                else if (_currentClassDiagramModel != null)
+                {
+                    text = MermaidSerializer.SerializeClassDiagram(_currentClassDiagramModel);
+                }
+                else if (_currentSequenceDiagramModel != null)
+                {
+                    text = MermaidSerializer.SerializeSequenceDiagram(_currentSequenceDiagramModel);
+                }
+                else if (_currentFlowchartModel != null)
+                {
+                    text = MermaidSerializer.Serialize(_currentFlowchartModel);
+                }
+
+                if (text != null)
+                {
+                    _isSwitchingDocuments = true;
+                    try { CodeEditor.Text = text; } finally { _isSwitchingDocuments = false; }
+                }
+            }
+            finally
+            {
+                _isVisualEditorUpdating = false;
+            }
+        }
+
+        _visualEditorMode = VisualEditorMode.Text;
+        UpdateModeToggleButtons();
+        ApplyVisualEditorLayout();
+    }
+
+    /// <summary>
+    /// Switches to Visual Mode: shows VisualEditor + Preview, hides CodeEditor.
+    /// Parses current text into the FlowchartModel and sends to visual editor.
+    /// </summary>
+    private async void SwitchToVisualMode()
+    {
+        // Guard: don't switch to visual mode for unsupported diagram types
+        if (!IsVisualEditorSupportedForCurrentDiagram()) return;
+
+        _visualEditorMode = VisualEditorMode.Visual;
+        UpdateModeToggleButtons();
+        ApplyVisualEditorLayout();
+
+        // Parse current text into model and send to visual editor
+        await ParseAndSendToVisualEditor();
+    }
+
+    /// <summary>
+    /// Switches to Split Mode: shows CodeEditor + VisualEditor + Preview (all three).
+    /// Parses current text and sends to visual editor.
+    /// </summary>
+    private async void SwitchToSplitMode()
+    {
+        // Guard: don't switch to split mode for unsupported diagram types
+        if (!IsVisualEditorSupportedForCurrentDiagram()) return;
+
+        _visualEditorMode = VisualEditorMode.Split;
+        UpdateModeToggleButtons();
+        ApplyVisualEditorLayout();
+
+        // Parse current text into model and send to visual editor
+        await ParseAndSendToVisualEditor();
+    }
+
+    /// <summary>
+    /// Parses the current CodeEditor text via MermaidParser and sends the model to the visual editor.
+    /// Detects diagram type (flowchart vs sequence) and routes to the correct parser.
+    /// </summary>
+    private async Task ParseAndSendToVisualEditor()
+    {
+        if (_visualEditorBridge == null || !_visualEditorInitialized) return;
+
+        try
+        {
+            _isVisualEditorUpdating = true;
+            var text = CodeEditor.Text;
+
+            if (IsStateDiagram(text))
+            {
+                var parsed = MermaidParser.ParseStateDiagram(text);
+                if (parsed != null)
+                {
+                    _currentStateDiagramModel = parsed;
+                    _currentERDiagramModel = null;
+                    _currentClassDiagramModel = null;
+                    _currentSequenceDiagramModel = null;
+                    _currentFlowchartModel = null;
+                    await _visualEditorBridge.UpdateStateDiagramModelAsync(_currentStateDiagramModel);
+                }
+            }
+            else if (IsERDiagram(text))
+            {
+                var parsed = MermaidParser.ParseERDiagram(text);
+                if (parsed != null)
+                {
+                    _currentERDiagramModel = parsed;
+                    _currentStateDiagramModel = null;
+                    _currentClassDiagramModel = null;
+                    _currentSequenceDiagramModel = null;
+                    _currentFlowchartModel = null;
+                    await _visualEditorBridge.UpdateERDiagramModelAsync(_currentERDiagramModel);
+                }
+            }
+            else if (IsClassDiagram(text))
+            {
+                var parsed = MermaidParser.ParseClassDiagram(text);
+                if (parsed != null)
+                {
+                    _currentClassDiagramModel = parsed;
+                    _currentStateDiagramModel = null;
+                    _currentERDiagramModel = null;
+                    _currentSequenceDiagramModel = null;
+                    _currentFlowchartModel = null;
+                    await _visualEditorBridge.UpdateClassDiagramModelAsync(_currentClassDiagramModel);
+                }
+            }
+            else if (IsSequenceDiagram(text))
+            {
+                var parsed = MermaidParser.ParseSequenceDiagram(text);
+                if (parsed != null)
+                {
+                    _currentSequenceDiagramModel = parsed;
+                    _currentStateDiagramModel = null;
+                    _currentERDiagramModel = null;
+                    _currentClassDiagramModel = null;
+                    _currentFlowchartModel = null;
+                    await _visualEditorBridge.UpdateSequenceModelAsync(_currentSequenceDiagramModel);
+                }
+            }
+            else
+            {
+                var parsed = MermaidParser.ParseFlowchart(text);
+                if (parsed != null)
+                {
+                    _currentFlowchartModel = parsed;
+                    _currentStateDiagramModel = null;
+                    _currentERDiagramModel = null;
+                    _currentSequenceDiagramModel = null;
+                    _currentClassDiagramModel = null;
+                    await _visualEditorBridge.UpdateModelAsync(_currentFlowchartModel);
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // If parsing fails, keep the existing model
+        }
+        finally
+        {
+            _isVisualEditorUpdating = false;
+        }
+    }
+
+    /// <summary>
+    /// Returns true if the current Mermaid text uses a diagram type that has visual editor support.
+    /// Currently only flowcharts (graph/flowchart) are supported. Sequence diagrams and other
+    /// types will be added in future phases.
+    /// </summary>
+    private bool IsVisualEditorSupportedForCurrentDiagram()
+    {
+        if (_currentRenderMode != RenderMode.Mermaid) return false;
+        var text = CodeEditor.Text;
+        if (string.IsNullOrWhiteSpace(text)) return true; // empty file — allow visual editor
+        // Flowcharts, sequence diagrams, class diagrams, state diagrams, and ER diagrams have visual editing support
+        return IsFlowchart(text) || IsSequenceDiagram(text) || IsClassDiagram(text) || IsStateDiagram(text) || IsERDiagram(text);
+    }
+
+    /// <summary>
+    /// Finds the first meaningful Mermaid line, skipping frontmatter (--- blocks),
+    /// config directives (%%{...}%%), comments (%%), and empty lines.
+    /// Returns null if no meaningful line is found.
+    /// </summary>
+    private static string? GetFirstMeaningfulMermaidLine(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return null;
+
+        bool inFrontmatter = false;
+        bool frontmatterOpened = false;
+
+        foreach (var rawLine in text.Split('\n'))
+        {
+            var line = rawLine.TrimEnd('\r').Trim();
+            if (string.IsNullOrEmpty(line)) continue;
+
+            // Handle --- YAML frontmatter blocks
+            if (line == "---")
+            {
+                if (!frontmatterOpened)
+                {
+                    inFrontmatter = true;
+                    frontmatterOpened = true;
+                }
+                else
+                {
+                    inFrontmatter = false;
+                }
+                continue;
+            }
+
+            // Skip lines inside frontmatter block
+            if (inFrontmatter) continue;
+
+            // Skip config directives like %%{init: ...}%%
+            if (line.StartsWith("%%{")) continue;
+
+            // Skip comments
+            if (line.StartsWith("%% ") || line.StartsWith("%%\t") || line == "%%") continue;
+
+            return line;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Detects whether the given Mermaid text is a flowchart (graph/flowchart declaration).
+    /// Returns true if the first meaningful line starts with "graph" or "flowchart".
+    /// </summary>
+    private static bool IsFlowchart(string text)
+    {
+        var line = GetFirstMeaningfulMermaidLine(text);
+        if (line == null) return false;
+        return line.StartsWith("graph ", StringComparison.OrdinalIgnoreCase)
+            || line.StartsWith("graph\t", StringComparison.OrdinalIgnoreCase)
+            || line.StartsWith("flowchart ", StringComparison.OrdinalIgnoreCase)
+            || line.StartsWith("flowchart\t", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Detects whether the given Mermaid text is a sequence diagram.
+    /// </summary>
+    private static bool IsSequenceDiagram(string text)
+    {
+        var line = GetFirstMeaningfulMermaidLine(text);
+        return line != null && line.Equals("sequenceDiagram", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Detects whether the given Mermaid text is a class diagram.
+    /// </summary>
+    private static bool IsClassDiagram(string text)
+    {
+        var line = GetFirstMeaningfulMermaidLine(text);
+        return line != null && line.Equals("classDiagram", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Detects whether the given Mermaid text is a state diagram.
+    /// </summary>
+    private static bool IsStateDiagram(string text)
+    {
+        var line = GetFirstMeaningfulMermaidLine(text);
+        return line != null && (line.Equals("stateDiagram-v2", StringComparison.Ordinal)
+            || line.Equals("stateDiagram", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Detects whether the given Mermaid text is an ER diagram.
+    /// </summary>
+    private static bool IsERDiagram(string text)
+    {
+        var line = GetFirstMeaningfulMermaidLine(text);
+        return line != null && line.Equals("erDiagram", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Updates the toggle button checked states to reflect the current mode.
+    /// </summary>
+    private void UpdateModeToggleButtons()
+    {
+        TextModeToggle.IsChecked = _visualEditorMode == VisualEditorMode.Text;
+        VisualModeToggle.IsChecked = _visualEditorMode == VisualEditorMode.Visual;
+        SplitModeToggle.IsChecked = _visualEditorMode == VisualEditorMode.Split;
+    }
+
+    /// <summary>
+    /// Applies the grid layout based on the current VisualEditorMode.
+    /// Controls column widths and panel visibility.
+    /// </summary>
+    private void ApplyVisualEditorLayout()
+    {
+        switch (_visualEditorMode)
+        {
+            case VisualEditorMode.Text:
+                // Show CodeEditor + Preview, hide Visual Editor
+                CodeEditorColumn.Width = new GridLength(1, GridUnitType.Star);
+                CodeEditorColumn.MinWidth = 200;
+                VisualSplitterColumn.Width = new GridLength(0);
+                VisualEditorColumn.Width = new GridLength(0);
+                VisualEditorColumn.MinWidth = 0;
+                VisualEditorPanel.Visibility = Visibility.Collapsed;
+                VisualEditorSplitter.Visibility = Visibility.Collapsed;
+                break;
+
+            case VisualEditorMode.Visual:
+                // Show Visual Editor + Preview, hide CodeEditor
+                CodeEditorColumn.Width = new GridLength(0);
+                CodeEditorColumn.MinWidth = 0;
+                VisualSplitterColumn.Width = new GridLength(0);
+                VisualEditorColumn.Width = new GridLength(1, GridUnitType.Star);
+                VisualEditorColumn.MinWidth = 200;
+                VisualEditorPanel.Visibility = Visibility.Visible;
+                VisualEditorSplitter.Visibility = Visibility.Collapsed;
+                break;
+
+            case VisualEditorMode.Split:
+                // Show all three: CodeEditor + Visual Editor + Preview
+                CodeEditorColumn.Width = new GridLength(1, GridUnitType.Star);
+                CodeEditorColumn.MinWidth = 200;
+                VisualSplitterColumn.Width = new GridLength(5);
+                VisualEditorColumn.Width = new GridLength(1, GridUnitType.Star);
+                VisualEditorColumn.MinWidth = 200;
+                VisualEditorPanel.Visibility = Visibility.Visible;
+                VisualEditorSplitter.Visibility = Visibility.Visible;
+                break;
+        }
+
+        // Ensure preview column stays visible in all modes
+        if (_isPreviewVisible)
+        {
+            SplitterColumn.Width = new GridLength(5);
+            PreviewColumn.Width = _savedPreviewColumnWidth.Value > 0
+                ? _savedPreviewColumnWidth
+                : new GridLength(1, GridUnitType.Star);
+            PreviewColumn.MinWidth = 200;
+        }
+    }
+
+    #endregion
+
     private async void ExportPng_Click(object sender, RoutedEventArgs e)
     {
         if (!_webViewInitialized) return;
@@ -5239,14 +6125,39 @@ Console.WriteLine(""Hello, World!"");
                 return;
             }
 
-            // Convert bytes to BitmapSource
-            using var stream = new MemoryStream(pngBytes);
-            var bitmap = new System.Windows.Media.Imaging.BitmapImage();
-            bitmap.BeginInit();
-            bitmap.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-            bitmap.StreamSource = stream;
-            bitmap.EndInit();
-            bitmap.Freeze();
+            // Convert bytes to BitmapSource.
+            // html2canvas captures at scale=2 for quality, so the PNG has 2x the pixel
+            // dimensions of the actual content.  We must set the image DPI to 192 (2*96)
+            // so that WPF's DPI-normalised layout treats the image at its correct
+            // content size.  Without this, the image appears 2x too large, causing
+            // "33% scale" and text cut between pages.
+            const double captureDpi = 192; // html2canvas scale=2 → 2*96
+            System.Windows.Media.Imaging.BitmapSource printBitmap;
+            using (var stream = new MemoryStream(pngBytes))
+            {
+                var decoder = System.Windows.Media.Imaging.BitmapDecoder.Create(stream,
+                    System.Windows.Media.Imaging.BitmapCreateOptions.PreservePixelFormat,
+                    System.Windows.Media.Imaging.BitmapCacheOption.OnLoad);
+                var frame = decoder.Frames[0];
+
+                // Re-encode with correct DPI if needed
+                if (Math.Abs(frame.DpiX - captureDpi) > 1)
+                {
+                    // Create a new bitmap with the correct DPI
+                    int stride = (frame.PixelWidth * frame.Format.BitsPerPixel + 7) / 8;
+                    var pixels = new byte[stride * frame.PixelHeight];
+                    frame.CopyPixels(pixels, stride, 0);
+                    printBitmap = System.Windows.Media.Imaging.BitmapSource.Create(
+                        frame.PixelWidth, frame.PixelHeight,
+                        captureDpi, captureDpi,
+                        frame.Format, frame.Palette, pixels, stride);
+                }
+                else
+                {
+                    printBitmap = frame;
+                }
+                printBitmap.Freeze();
+            }
 
             // Get document title for print job
             var documentTitle = _activeDocument?.DisplayName ?? "Untitled";
@@ -5255,7 +6166,7 @@ Console.WriteLine(""Hello, World!"");
 
             // Show print preview dialog (pass isMarkdown flag for default scaling)
             var isMarkdown = _currentRenderMode == RenderMode.Markdown;
-            var printDialog = new PrintPreviewDialog(bitmap, documentTitle, isMarkdown);
+            var printDialog = new PrintPreviewDialog(printBitmap, documentTitle, isMarkdown);
             printDialog.Owner = this;
             printDialog.ShowDialog();
         }
@@ -5330,7 +6241,9 @@ Console.WriteLine(""Hello, World!"");
             // Use callback pattern with postMessage (same as mermaid export)
             _pngExportTcs = new TaskCompletionSource<string>();
             
-            // Inject html2canvas and capture full content, sending result via postMessage
+            // Inject html2canvas and capture full scrollable content with a forced
+            // white background and dark text (overriding the current theme) so that
+            // printing always produces light-mode output regardless of theme.
             var script = @"
                 (async function() {
                     try {
@@ -5348,17 +6261,100 @@ Console.WriteLine(""Hello, World!"");
                         // Get the content element
                         const content = document.getElementById('content') || document.body;
                         
-                        // Capture the full content
+                        // --- Force light-mode styles AND expand containers for print capture ---
+                        // The page CSS sets html,body { height:100%; overflow:auto }
+                        // which clips content to viewport height.  html2canvas respects
+                        // this clipping, so we must temporarily expand everything to
+                        // its natural height and remove overflow clipping.
+                        const origStyles = {
+                            htmlBg: document.documentElement.style.background,
+                            htmlColorScheme: document.documentElement.style.colorScheme,
+                            htmlHeight: document.documentElement.style.height,
+                            htmlOverflow: document.documentElement.style.overflow,
+                            bodyBg: document.body.style.background,
+                            bodyColor: document.body.style.color,
+                            bodyHeight: document.body.style.height,
+                            bodyOverflow: document.body.style.overflow,
+                            contentBg: content.style.background,
+                            contentColor: content.style.color
+                        };
+                        document.documentElement.style.background = '#ffffff';
+                        document.documentElement.style.colorScheme = 'light';
+                        document.documentElement.style.height = 'auto';
+                        document.documentElement.style.overflow = 'visible';
+                        document.body.style.background = '#ffffff';
+                        document.body.style.color = '#1f2328';
+                        document.body.style.height = 'auto';
+                        document.body.style.overflow = 'visible';
+                        content.style.background = '#ffffff';
+                        content.style.color = '#1f2328';
+                        
+                        // Also override code block and table backgrounds for light print
+                        const printStyleId = '__printOverrideStyle';
+                        let printStyle = document.getElementById(printStyleId);
+                        if (!printStyle) {
+                            printStyle = document.createElement('style');
+                            printStyle.id = printStyleId;
+                            document.head.appendChild(printStyle);
+                        }
+                        printStyle.textContent = `
+                            .markdown-body { background: #ffffff !important; color: #1f2328 !important; }
+                            .markdown-body pre, .markdown-body code { background-color: #f6f8fa !important; color: #1f2328 !important; }
+                            .markdown-body table th, .markdown-body table td { border-color: #d0d7de !important; color: #1f2328 !important; }
+                            .markdown-body table tr:nth-child(2n) { background-color: #f6f8fa !important; }
+                            .markdown-body h1, .markdown-body h2, .markdown-body h3,
+                            .markdown-body h4, .markdown-body h5, .markdown-body h6 { color: #1f2328 !important; }
+                            .markdown-body a { color: #0969da !important; }
+                            .markdown-body blockquote { border-left-color: #d0d7de !important; color: #656d76 !important; }
+                            .markdown-body hr { background-color: #d8dee4 !important; }
+                        `;
+                        
+                        // Small delay for styles to apply
+                        await new Promise(r => setTimeout(r, 50));
+                        
+                        // Compute the true full height of the content.
+                        // scrollHeight can miss trailing margins and doesn't always
+                        // account for content rendered inside embedded elements (e.g.
+                        // Mermaid SVGs).  Walk ALL direct children of the inner
+                        // container (usually .markdown-body) to find the real bottom.
+                        let fullHeight = content.scrollHeight;
+                        const contentRect = content.getBoundingClientRect();
+                        const inner = content.querySelector('.markdown-body') || content;
+                        const kids = inner.children;
+                        for (let i = 0; i < kids.length; i++) {
+                            const rect = kids[i].getBoundingClientRect();
+                            const style = window.getComputedStyle(kids[i]);
+                            const bottom = rect.bottom + parseFloat(style.marginBottom || '0')
+                                           - contentRect.top + content.scrollTop;
+                            if (bottom > fullHeight) fullHeight = Math.ceil(bottom);
+                        }
+                        // Add a buffer to avoid any pixel-rounding cutoff
+                        fullHeight += 40;
+                        
+                        // Capture the full content with white background
                         const canvas = await html2canvas(content, {
                             scale: 2,
                             useCORS: true,
                             allowTaint: true,
                             backgroundColor: '#ffffff',
                             width: content.scrollWidth,
-                            height: content.scrollHeight,
+                            height: fullHeight,
                             windowWidth: content.scrollWidth,
-                            windowHeight: content.scrollHeight
+                            windowHeight: fullHeight
                         });
+                        
+                        // --- Restore original styles ---
+                        document.documentElement.style.background = origStyles.htmlBg;
+                        document.documentElement.style.colorScheme = origStyles.htmlColorScheme;
+                        document.documentElement.style.height = origStyles.htmlHeight;
+                        document.documentElement.style.overflow = origStyles.htmlOverflow;
+                        document.body.style.background = origStyles.bodyBg;
+                        document.body.style.color = origStyles.bodyColor;
+                        document.body.style.height = origStyles.bodyHeight;
+                        document.body.style.overflow = origStyles.bodyOverflow;
+                        content.style.background = origStyles.contentBg;
+                        content.style.color = origStyles.contentColor;
+                        if (printStyle) printStyle.textContent = '';
                         
                         const dataUrl = canvas.toDataURL('image/png');
                         window.chrome.webview.postMessage({ type: 'pngExport', data: dataUrl });
@@ -5370,8 +6366,9 @@ Console.WriteLine(""Hello, World!"");
             
             await PreviewWebView.CoreWebView2.ExecuteScriptAsync(script);
             
-            // Wait for the callback with a timeout
-            var timeoutTask = Task.Delay(15000); // 15 second timeout
+            // Wait for the callback with a generous timeout (large markdown docs can
+            // take a while for html2canvas to render at 2x scale)
+            var timeoutTask = Task.Delay(30000); // 30 second timeout
             var completedTask = await Task.WhenAny(_pngExportTcs.Task, timeoutTask);
             
             if (completedTask == timeoutTask)
@@ -5403,11 +6400,44 @@ Console.WriteLine(""Hello, World!"");
 
     private async Task<byte[]?> CaptureViewportAsPngBytes()
     {
+        // Temporarily set a white background for print-friendly capture,
+        // then restore the original theme background after capturing.
+        try
+        {
+            await PreviewWebView.CoreWebView2.ExecuteScriptAsync(@"
+                (function() {
+                    var html = document.documentElement;
+                    var body = document.body;
+                    window.__printOrigBg = { htmlBg: html.style.background, bodyBg: body.style.background };
+                    html.style.background = '#ffffff';
+                    body.style.background = '#ffffff';
+                })();
+            ");
+        }
+        catch { /* proceed with capture even if bg override fails */ }
+
         using var memoryStream = new MemoryStream();
         await PreviewWebView.CoreWebView2.CapturePreviewAsync(
             CoreWebView2CapturePreviewImageFormat.Png, memoryStream);
         memoryStream.Position = 0;
-        return memoryStream.ToArray();
+        var result = memoryStream.ToArray();
+
+        // Restore the original background
+        try
+        {
+            await PreviewWebView.CoreWebView2.ExecuteScriptAsync(@"
+                (function() {
+                    if (window.__printOrigBg) {
+                        document.documentElement.style.background = window.__printOrigBg.htmlBg;
+                        document.body.style.background = window.__printOrigBg.bodyBg;
+                        delete window.__printOrigBg;
+                    }
+                })();
+            ");
+        }
+        catch { /* best effort restore */ }
+
+        return result;
     }
 
     private void PrintCode_Click(object sender, RoutedEventArgs e)
@@ -5666,7 +6696,14 @@ Console.WriteLine(""Hello, World!"");
                    "- Click-to-navigate between preview and code\n" +
                    "- Navigation dropdown for quick section jumping\n" +
                    "- Export to PNG, SVG, EMF, and Word\n" +
-                   "- Word export embeds images for Markdown files\n" +
+                   "- Save to PDF via Print Preview\n" +
+                   "- Auto-save with session restore\n" +
+                   "- Spell check with suggestions (markdown)\n" +
+                   "- Table generator dialog (markdown)\n" +
+                   "- Ask AI chat with file attachments\n" +
+                   "- Settings/Configuration with theme support\n" +
+                   "- Bracket matching and minimap\n" +
+                   "- Custom SVG toolbar icons\n" +
                    "- New document templates for all diagram types\n" +
                    "- File browser with preview on selection\n" +
                    "- Drag and drop file support\n" +
@@ -5705,7 +6742,7 @@ Console.WriteLine(""Hello, World!"");
         aboutWindow.ShowDialog();
     }
 
-    private void ApplyTheme(AppTheme theme)
+    private async void ApplyTheme(AppTheme theme)
     {
         ThemeManager.ApplyTheme(theme);
         UpdateEditorTheme();
@@ -5713,7 +6750,30 @@ Console.WriteLine(""Hello, World!"");
         UpdateTabStyles(); // Update tab colors for new theme
         SvgIconHelper.ClearCache();
         InitializeIcons();
+        _mermaidPageLoaded = false; // Force full page reload to pick up new theme colors
+        _markdownPageLoaded = false; // Force full page reload for Markdown too
+        // Force-refresh comment icon color since InitializeIcons reset all icons to default
+        UpdateToggleCommentIconColor(force: true);
         RenderPreview(); // Re-render preview with new theme
+
+        // Update visual editor theme
+        if (_visualEditorBridge != null && _visualEditorInitialized)
+        {
+            await _visualEditorBridge.SetThemeAsync(GetVisualEditorThemeString());
+        }
+    }
+
+    /// <summary>
+    /// Returns the visual editor theme string for the current app theme: "dark", "light", or "twilight".
+    /// </summary>
+    private static string GetVisualEditorThemeString()
+    {
+        return ThemeManager.CurrentTheme switch
+        {
+            AppTheme.Light => "light",
+            AppTheme.Twilight => "twilight",
+            _ => "dark"
+        };
     }
 
     private void UpdateEditorTheme()
@@ -5742,7 +6802,17 @@ Console.WriteLine(""Hello, World!"");
                 UpdateTabStyles();
                 SvgIconHelper.ClearCache();
                 InitializeIcons();
+                _mermaidPageLoaded = false; // Force full page reload to pick up new theme colors
+                _markdownPageLoaded = false; // Force full page reload for Markdown too
+                // Force-refresh comment icon color since InitializeIcons reset all icons to default
+                UpdateToggleCommentIconColor(force: true);
                 RenderPreview();
+
+                // Update visual editor theme
+                if (_visualEditorBridge != null && _visualEditorInitialized)
+                {
+                    _ = _visualEditorBridge.SetThemeAsync(GetVisualEditorThemeString());
+                }
             }
 
             // Apply editor settings
@@ -5863,7 +6933,8 @@ Console.WriteLine(""Hello, World!"");
         var keywordColor = isDark ? "#569CD6" : "#0000FF";
         var diagramTypeColor = isDark ? "#C586C0" : "#AF00DB";
         
-        var xshd = "<?xml version=\"1.0\"?>" +
+        // Register Mermaid syntax highlighting
+        var mermaidXshd = "<?xml version=\"1.0\"?>" +
             "<SyntaxDefinition name=\"Mermaid\" xmlns=\"http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008\">" +
             "<Color name=\"Comment\" foreground=\"" + commentColor + "\" />" +
             "<Color name=\"Keyword\" foreground=\"" + keywordColor + "\" fontWeight=\"bold\" />" +
@@ -5894,14 +6965,46 @@ Console.WriteLine(""Hello, World!"");
 
         try
         {
-            using var reader = new XmlTextReader(new StringReader(xshd));
-            var definition = HighlightingLoader.Load(reader, HighlightingManager.Instance);
-            HighlightingManager.Instance.RegisterHighlighting("Mermaid", new[] { ".mmd", ".mermaid" }, definition);
-            CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
+            using var mermaidReader = new XmlTextReader(new StringReader(mermaidXshd));
+            var mermaidDef = HighlightingLoader.Load(mermaidReader, HighlightingManager.Instance);
+            HighlightingManager.Instance.RegisterHighlighting("Mermaid", new[] { ".mmd", ".mermaid" }, mermaidDef);
         }
         catch
         {
             // If syntax highlighting fails, continue without it
+        }
+
+        // Register Markdown syntax highlighting (with theme-aware comment color)
+        var markdownXshd = "<?xml version=\"1.0\"?>" +
+            "<SyntaxDefinition name=\"Markdown\" xmlns=\"http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008\">" +
+            "<Color name=\"Comment\" foreground=\"" + commentColor + "\" />" +
+            "<RuleSet>" +
+            "<Span color=\"Comment\" multiline=\"true\">" +
+            "<Begin>&lt;!--</Begin>" +
+            "<End>--&gt;</End>" +
+            "</Span>" +
+            "</RuleSet>" +
+            "</SyntaxDefinition>";
+
+        try
+        {
+            using var markdownReader = new XmlTextReader(new StringReader(markdownXshd));
+            var markdownDef = HighlightingLoader.Load(markdownReader, HighlightingManager.Instance);
+            HighlightingManager.Instance.RegisterHighlighting("Markdown", new[] { ".md", ".markdown" }, markdownDef);
+        }
+        catch
+        {
+            // If syntax highlighting fails, continue without it
+        }
+
+        // Apply the correct highlighting based on the active document type
+        if (_currentRenderMode == RenderMode.Markdown)
+        {
+            CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Markdown");
+        }
+        else
+        {
+            CodeEditor.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("Mermaid");
         }
     }
 
@@ -5968,6 +7071,13 @@ Console.WriteLine(""Hello, World!"");
 
     private void RenderMermaidPreview(string code)
     {
+        var pvTheme = ThemeManager.CurrentTheme;
+        var pvBodyBg = pvTheme switch { AppTheme.Light => "#f5f5f5", AppTheme.Twilight => "#1A1A2E", _ => "#1e1e1e" };
+        // Use a lighter diagram card background for dark themes so Mermaid's dark-colored edges/arrows stay visible
+        var pvDiagramBg = pvTheme switch { AppTheme.Light => "white", AppTheme.Twilight => "#B8C4D8", _ => "#B0B0B0" };
+        var pvShadow = pvTheme == AppTheme.Light ? "0 2px 10px rgba(0,0,0,0.1)" : "0 2px 10px rgba(0,0,0,0.4)";
+        var pvMermaidTheme = pvTheme == AppTheme.Light ? "default" : "dark";
+
         var html = $@"<!DOCTYPE html>
 <html>
 <head>
@@ -5979,7 +7089,7 @@ Console.WriteLine(""Hello, World!"");
             width: 100%; 
             height: 100%; 
             overflow: hidden;
-            background: #f5f5f5;
+            background: {pvBodyBg};
         }}
         #container {{
             width: 100%;
@@ -5991,10 +7101,10 @@ Console.WriteLine(""Hello, World!"");
             overflow: auto;
         }}
         #diagram {{
-            background: white;
+            background: {pvDiagramBg};
             padding: 20px;
             border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: {pvShadow};
             display: inline-block;
         }}
         #diagram.has-error {{
@@ -6020,7 +7130,7 @@ Console.WriteLine(""Hello, World!"");
     <script>
         mermaid.initialize({{ 
             startOnLoad: true, 
-            theme: 'default', 
+            theme: '{pvMermaidTheme}', 
             securityLevel: 'loose'
         }});
         mermaid.run().then(() => {{
@@ -6101,10 +7211,11 @@ Console.WriteLine(""Hello, World!"");
 <head>
     {baseTag}
     <script src=""https://cdn.jsdelivr.net/npm/marked/marked.min.js""></script>
-    <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-light.min.css"">
+    <link rel=""stylesheet"" href=""https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown-{(ThemeManager.CurrentTheme == AppTheme.Light ? "light" : "dark")}.min.css"">
     <style>
-        body {{ margin: 0; padding: 20px; background: #ffffff; }}
+        body {{ margin: 0; padding: 20px; background: {(ThemeManager.CurrentTheme switch { AppTheme.Light => "#ffffff", AppTheme.Twilight => "#1A1A2E", _ => "#1e1e1e" })}; color-scheme: {(ThemeManager.CurrentTheme == AppTheme.Light ? "light" : "dark")}; }}
         .markdown-body {{ box-sizing: border-box; min-width: 200px; max-width: 980px; margin: 0 auto; }}
+        @media print {{ body {{ background: white !important; color-scheme: light !important; }} }}
     </style>
 </head>
 <body>
@@ -6953,6 +8064,41 @@ Console.WriteLine(""Hello, World!"");
         contextMenu.Items.Add(closeAllItem);
         contextMenu.Items.Add(closeAllButThisItem);
         
+        // Add file-related context menu items (only for saved documents)
+        if (!string.IsNullOrEmpty(doc.FilePath))
+        {
+            contextMenu.Items.Add(new Separator());
+            
+            var copyPathItem = new System.Windows.Controls.MenuItem { Header = "Copy File Path" };
+            copyPathItem.Click += (s, e) =>
+            {
+                try
+                {
+                    System.Windows.Clipboard.SetText(doc.FilePath);
+                    StatusText.Text = "File path copied to clipboard";
+                }
+                catch { }
+            };
+            
+            var openLocationItem = new System.Windows.Controls.MenuItem { Header = "Open File Location" };
+            openLocationItem.Click += (s, e) =>
+            {
+                try
+                {
+                    var directory = System.IO.Path.GetDirectoryName(doc.FilePath);
+                    if (!string.IsNullOrEmpty(directory) && System.IO.Directory.Exists(directory))
+                    {
+                        // Open Explorer with the file selected
+                        System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{doc.FilePath}\"");
+                    }
+                }
+                catch { }
+            };
+            
+            contextMenu.Items.Add(copyPathItem);
+            contextMenu.Items.Add(openLocationItem);
+        }
+        
         tabBorder.ContextMenu = contextMenu;
         
         // Subscribe to property changes to update tab header
@@ -7258,9 +8404,32 @@ Console.WriteLine(""Hello, World!"");
             _activeDocument.HasNavigatedAway = _hasNavigatedAway;
             _activeDocument.IsSelected = false;
             
+            // Save the current visual editor mode so we can restore it when switching back
+            _activeDocument.SavedVisualEditorMode = _visualEditorMode;
+            
             // Save preview scroll position - must await to ensure it's saved before switching
             await SavePreviewScrollPositionAsync(_activeDocument);
         }
+        
+        // If we're in Visual or Split mode, revert to Text mode BEFORE switching
+        // documents. This prevents the stale visual editor model from being
+        // serialized back into the wrong document's text buffer.
+        if (_visualEditorMode != VisualEditorMode.Text)
+        {
+            // Directly set mode to Text without serializing the model back to text —
+            // the current document's text is already correct, we just need to hide
+            // the visual editor and reset the layout.
+            _visualEditorMode = VisualEditorMode.Text;
+            UpdateModeToggleButtons();
+            ApplyVisualEditorLayout();
+        }
+        
+        // Clear the current models so they don't bleed into the new document
+        _currentFlowchartModel = null;
+        _currentSequenceDiagramModel = null;
+        _currentClassDiagramModel = null;
+        _currentStateDiagramModel = null;
+        _currentERDiagramModel = null;
         
         // Switch to new document
         _activeDocument = doc;
@@ -7320,6 +8489,13 @@ Console.WriteLine(""Hello, World!"");
         UpdateZoomControlsVisibility();
         UpdateUndoRedoState();
         
+        // Update visual editor toolbar visibility for the new document's render mode
+        UpdateVisualEditorModeToolbarVisibility();
+        
+        // Force-refresh comment icon color for the new document's caret position
+        _lastCaretWasInComment = false;
+        UpdateToggleCommentIconColor(force: true);
+        
         // Re-render preview for the new document
         // This will trigger NavigateToString which resets _hasNavigatedAway to false
         // and keeps the back button disabled for fresh renders
@@ -7327,6 +8503,20 @@ Console.WriteLine(""Hello, World!"");
         RenderPreview();
         
         _isSwitchingDocuments = false;
+        
+        // Restore the saved visual editor mode for this document (after all UI is set up)
+        if (doc.RenderMode == RenderMode.Mermaid && doc.SavedVisualEditorMode != VisualEditorMode.Text
+            && IsVisualEditorSupportedForCurrentDiagram() && _visualEditorInitialized)
+        {
+            if (doc.SavedVisualEditorMode == VisualEditorMode.Visual)
+            {
+                SwitchToVisualMode();
+            }
+            else if (doc.SavedVisualEditorMode == VisualEditorMode.Split)
+            {
+                SwitchToSplitMode();
+            }
+        }
     }
     
     /// <summary>
@@ -7759,6 +8949,7 @@ Console.WriteLine(""Hello, World!"");
             _activeDocument.SelectionLength = CodeEditor.SelectionLength;
             _activeDocument.PreviewZoom = _currentZoom;
             _activeDocument.HasNavigatedAway = _hasNavigatedAway;
+            _activeDocument.SavedVisualEditorMode = _visualEditorMode;
         }
         catch
         {
@@ -8126,6 +9317,9 @@ public class DocumentModel : System.ComponentModel.INotifyPropertyChanged
     
     // Preview state
     public double PreviewZoom { get; set; } = 1.0;
+    
+    // Visual editor mode (Text/Visual/Split) - persisted per document
+    public VisualEditorMode SavedVisualEditorMode { get; set; } = VisualEditorMode.Text;
     public bool HasNavigatedAway { get; set; }
     public double PreviewScrollLeft { get; set; }
     public double PreviewScrollTop { get; set; }

@@ -356,6 +356,10 @@ public partial class PrintPreviewDialog : Window
         if (ScaleText != null)
             ScaleText.Text = $"Scale: {_scale * 100:F0}%";
 
+        // Update page range defaults
+        if (ToPageTextBox != null && AllPagesRadio?.IsChecked == true)
+            ToPageTextBox.Text = _totalPages.ToString();
+
         // Generate preview pages
         GeneratePreviewPages(effectivePageWidth, effectivePageHeight, printableWidth, printableHeight);
 
@@ -492,6 +496,35 @@ public partial class PrintPreviewDialog : Window
         return pageBorder;
     }
 
+    private void PageRange_Changed(object sender, RoutedEventArgs e)
+    {
+        if (FromPageTextBox == null || ToPageTextBox == null) return;
+        bool isRange = PageRangeRadio?.IsChecked == true;
+        FromPageTextBox.IsEnabled = isRange;
+        ToPageTextBox.IsEnabled = isRange;
+    }
+
+    private void PageRangeValue_Changed(object sender, TextChangedEventArgs e)
+    {
+        // Validation happens at print/save time
+    }
+
+    /// <summary>
+    /// Returns the 1-based (fromPage, toPage) range clamped to [1, _totalPages].
+    /// </summary>
+    private (int from, int to) GetPageRange()
+    {
+        if (AllPagesRadio?.IsChecked == true)
+            return (1, _totalPages);
+
+        int from = 1, to = _totalPages;
+        if (int.TryParse(FromPageTextBox?.Text, out int f))
+            from = Math.Max(1, Math.Min(f, _totalPages));
+        if (int.TryParse(ToPageTextBox?.Text, out int t))
+            to = Math.Max(from, Math.Min(t, _totalPages));
+        return (from, to);
+    }
+
     private void UpdatePageNavigation()
     {
         if (CurrentPageText != null)
@@ -598,12 +631,18 @@ public partial class PrintPreviewDialog : Window
         double scaledWidth = normalizedImageWidth * scale;
         double scaledHeight = normalizedImageHeight * scale;
 
+        // Apply page range
+        var (fromPage, toPage) = GetPageRange();
+
         // Create visual for printing
         if (FitToPageRadio?.IsChecked == true || (FitToWidthRadio?.IsChecked == true && scaledHeight <= printableHeight))
         {
-            // Single page print
-            var visual = CreatePrintVisual(pageSize, scaledWidth, scaledHeight, 0, printableWidth, printableHeight);
-            printDialog.PrintVisual(visual, _documentTitle);
+            // Single page print (only print if page 1 is in range)
+            if (fromPage <= 1 && toPage >= 1)
+            {
+                var visual = CreatePrintVisual(pageSize, scaledWidth, scaledHeight, 0, printableWidth, printableHeight);
+                printDialog.PrintVisual(visual, _documentTitle);
+            }
         }
         else
         {
@@ -615,6 +654,10 @@ public partial class PrintPreviewDialog : Window
 
             for (int page = 0; page < totalPages; page++)
             {
+                int pageNum = page + 1; // 1-based
+                if (pageNum < fromPage || pageNum > toPage)
+                    continue;
+
                 double yOffset = page * printableHeight;
                 var visual = CreatePrintVisual(pageSize, scaledWidth, scaledHeight, yOffset, printableWidth, printableHeight);
 
@@ -744,17 +787,29 @@ public partial class PrintPreviewDialog : Window
             var pagePixelWidths = new List<int>();
             var pagePixelHeights = new List<int>();
 
+            // Apply page range
+            var (fromPage, toPage) = GetPageRange();
+
             // Determine page offsets
-            var pageOffsets = new List<double>();
+            var allPageOffsets = new List<double>();
             if (FitToPageRadio?.IsChecked == true || (FitToWidthRadio?.IsChecked == true && scaledHeight <= printableHeight))
             {
-                pageOffsets.Add(0);
+                allPageOffsets.Add(0);
             }
             else
             {
                 int totalPages = (int)Math.Ceiling(scaledHeight / printableHeight);
                 for (int page = 0; page < totalPages; page++)
-                    pageOffsets.Add(page * printableHeight);
+                    allPageOffsets.Add(page * printableHeight);
+            }
+
+            // Filter to selected page range
+            var pageOffsets = new List<double>();
+            for (int i = 0; i < allPageOffsets.Count; i++)
+            {
+                int pageNum = i + 1; // 1-based
+                if (pageNum >= fromPage && pageNum <= toPage)
+                    pageOffsets.Add(allPageOffsets[i]);
             }
 
             foreach (double yOffset in pageOffsets)
@@ -916,7 +971,7 @@ public partial class PrintPreviewDialog : Window
             Write($"/Width {pixelWidths[i]} /Height {pixelHeights[i]} ");
             Write("/ColorSpace /DeviceRGB /BitsPerComponent 8 ");
             Write("/Filter /DCTDecode ");
-            Write($"/Length {jpeg.Length} ");
+            Write($"/Length {jpeg.Length + 1} ");
             Write(">>\n");
             Write("stream\n");
             WriteBytes(jpeg);

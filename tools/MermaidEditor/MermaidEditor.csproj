@@ -14,6 +14,7 @@
     <ItemGroup>
       <Resource Include="Resources\TemplateThumbnails\*.png" />
       <Resource Include="app.ico" />
+      <EmbeddedResource Include="Resources\VisualEditor.html" />
       <EmbeddedResource Include="Icons\*.svg" />
       <EmbeddedResource Include="Dictionaries\*.aff" />
       <EmbeddedResource Include="Dictionaries\*.dic" />

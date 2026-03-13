@@ -8,11 +8,11 @@
     
     <Window.Resources>
         <!-- Override system colors for ComboBox popup and selection -->
-        <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="#3E3E42"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#007ACC"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="{DynamicResource ThemeBorderColor}"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="{DynamicResource ThemeAccentColor}"/>
         <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#FFFFFF"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}" Color="#3E3E42"/>
-        <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="#F1F1F1"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}" Color="{DynamicResource ThemeBorderColor}"/>
+        <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="{DynamicResource ThemeForegroundColor}"/>
 
         <!-- Dark ComboBox Toggle Button Template -->
         <ControlTemplate x:Key="DarkComboBoxToggleButton" TargetType="ToggleButton">
@@ -21,16 +21,16 @@
                     <ColumnDefinition/>
                     <ColumnDefinition Width="20"/>
                 </Grid.ColumnDefinitions>
-                <Border x:Name="Border" Grid.ColumnSpan="2" Background="#3E3E42" BorderBrush="#555555" BorderThickness="1" CornerRadius="2"/>
-                <Border Grid.Column="0" Background="#3E3E42" BorderBrush="Transparent" BorderThickness="0" CornerRadius="2,0,0,2"/>
-                <Path x:Name="Arrow" Grid.Column="1" Fill="#F1F1F1" HorizontalAlignment="Center" VerticalAlignment="Center" Data="M 0 0 L 4 4 L 8 0 Z"/>
+                    <Border x:Name="Border" Grid.ColumnSpan="2" Background="{DynamicResource ThemeToolbarBackgroundBrush}" BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1" CornerRadius="2"/>
+                    <Border Grid.Column="0" Background="{DynamicResource ThemeToolbarBackgroundBrush}" BorderBrush="Transparent" BorderThickness="0" CornerRadius="2,0,0,2"/>
+                    <Path x:Name="Arrow" Grid.Column="1" Fill="{DynamicResource ThemeForegroundBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" Data="M 0 0 L 4 4 L 8 0 Z"/>
             </Grid>
             <ControlTemplate.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter TargetName="Border" Property="Background" Value="#4E4E52"/>
+                    <Setter TargetName="Border" Property="Background" Value="{DynamicResource ThemeHoverBrush}"/>
                 </Trigger>
                 <Trigger Property="IsChecked" Value="True">
-                    <Setter TargetName="Border" Property="Background" Value="#4E4E52"/>
+                    <Setter TargetName="Border" Property="Background" Value="{DynamicResource ThemeHoverBrush}"/>
                 </Trigger>
             </ControlTemplate.Triggers>
         </ControlTemplate>
@@ -48,14 +48,14 @@
                                   Margin="8,4,28,4" VerticalAlignment="Center" HorizontalAlignment="Left">
                     <ContentPresenter.Resources>
                         <Style TargetType="TextBlock">
-                            <Setter Property="Foreground" Value="#F1F1F1"/>
+                            <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
                         </Style>
                     </ContentPresenter.Resources>
                 </ContentPresenter>
                 <Popup x:Name="Popup" Placement="Bottom" IsOpen="{TemplateBinding IsDropDownOpen}" 
                        AllowsTransparency="True" Focusable="False" PopupAnimation="Slide">
                     <Grid x:Name="DropDown" SnapsToDevicePixels="True" MinWidth="{TemplateBinding ActualWidth}" MaxHeight="{TemplateBinding MaxDropDownHeight}">
-                        <Border x:Name="DropDownBorder" Background="#2D2D30" BorderBrush="#555555" BorderThickness="1"/>
+                        <Border x:Name="DropDownBorder" Background="{DynamicResource ThemeMenuBackgroundBrush}" BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"/>
                         <ScrollViewer Margin="2" SnapsToDevicePixels="True">
                             <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/>
                         </ScrollViewer>
@@ -66,22 +66,24 @@
 
         <Style TargetType="ComboBox">
             <Setter Property="Template" Value="{StaticResource DarkComboBoxTemplate}"/>
-            <Setter Property="Foreground" Value="#F1F1F1"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
             <Setter Property="Height" Value="30"/>
         </Style>
         <Style TargetType="ComboBoxItem">
-            <Setter Property="Background" Value="#2D2D30"/>
-            <Setter Property="Foreground" Value="#F1F1F1"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeMenuBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Padding" Value="8,6"/>
             <Setter Property="BorderThickness" Value="0"/>
             <Style.Triggers>
                 <Trigger Property="IsHighlighted" Value="True">
-                    <Setter Property="Background" Value="#007ACC"/>
+                    <Setter Property="Background" Value="{DynamicResource ThemeAccentBrush}"/>
                     <Setter Property="Foreground" Value="#FFFFFF"/>
                 </Trigger>
                 <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="#3E3E42"/>
-                    <Setter Property="Foreground" Value="#F1F1F1"/>
+                    <Setter Property="Background" Value="{DynamicResource ThemeBorderBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -102,12 +104,12 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#3E3E42"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="#007ACC"/>
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource ThemeHoverBrush}"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource ThemeAccentBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#007ACC"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="#007ACC"/>
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource ThemeAccentBrush}"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource ThemeAccentBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -117,24 +119,24 @@
 
         <!-- Dark TextBox Style -->
         <Style TargetType="TextBox">
-            <Setter Property="Background" Value="#3E3E42"/>
-            <Setter Property="Foreground" Value="#F1F1F1"/>
-            <Setter Property="BorderBrush" Value="#555555"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeToolbarBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="6,4"/>
-            <Setter Property="CaretBrush" Value="#F1F1F1"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource ThemeForegroundBrush}"/>
             <Setter Property="Height" Value="30"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
 
         <!-- Dark PasswordBox Style -->
         <Style TargetType="PasswordBox">
-            <Setter Property="Background" Value="#3E3E42"/>
-            <Setter Property="Foreground" Value="#F1F1F1"/>
-            <Setter Property="BorderBrush" Value="#555555"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeToolbarBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="Padding" Value="6,4"/>
-            <Setter Property="CaretBrush" Value="#F1F1F1"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource ThemeForegroundBrush}"/>
             <Setter Property="Height" Value="30"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
@@ -168,14 +170,14 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Thumb">
-                        <Border x:Name="thumbBorder" Background="#686868" CornerRadius="4" 
+                        <Border x:Name="thumbBorder" Background="{DynamicResource ThemeSliderThumbBrush}" CornerRadius="4" 
                                 Margin="2" MinHeight="18" MinWidth="18"/>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="thumbBorder" Property="Background" Value="#9E9E9E"/>
+                                <Setter TargetName="thumbBorder" Property="Background" Value="{DynamicResource ThemeSliderThumbHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsDragging" Value="True">
-                                <Setter TargetName="thumbBorder" Property="Background" Value="#BFBFBF"/>
+                                <Setter TargetName="thumbBorder" Property="Background" Value="{DynamicResource ThemeSliderThumbHoverBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -189,7 +191,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RepeatButton">
-                        <Border Background="#3E3E42" Height="0" Width="0">
+                        <Border Background="{DynamicResource ThemeBorderBrush}" Height="0" Width="0">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                     </ControlTemplate>
@@ -211,7 +213,7 @@
         </Style>
 
         <ControlTemplate x:Key="DarkVerticalScrollBar" TargetType="ScrollBar">
-            <Grid Background="#2D2D30">
+            <Grid Background="{DynamicResource ThemeToolbarBackgroundBrush}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
@@ -302,7 +304,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="Color theme:" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="ThemeCombo" Grid.Column="1" SelectionChanged="ThemeCombo_SelectionChanged">
+                            <ComboBox x:Name="ThemeCombo" Grid.Column="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" SelectionChanged="ThemeCombo_SelectionChanged">
                                 <ComboBoxItem Content="Dark"/>
                                 <ComboBoxItem Content="Light"/>
                                 <ComboBoxItem Content="Twilight"/>
@@ -317,7 +319,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="New file type:" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="DefaultFileTypeCombo" Grid.Column="1">
+                            <ComboBox x:Name="DefaultFileTypeCombo" Grid.Column="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center">
                                 <ComboBoxItem Content="Mermaid"/>
                                 <ComboBoxItem Content="Markdown"/>
                             </ComboBox>
@@ -338,7 +340,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="Font family:" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="FontFamilyCombo" Grid.Column="1" SelectionChanged="FontFamilyCombo_SelectionChanged">
+                            <ComboBox x:Name="FontFamilyCombo" Grid.Column="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" SelectionChanged="FontFamilyCombo_SelectionChanged">
                                 <ComboBoxItem Content="Consolas"/>
                                 <ComboBoxItem Content="Cascadia Code"/>
                                 <ComboBoxItem Content="Cascadia Mono"/>
@@ -361,7 +363,7 @@
                         </Grid>
 
                         <!-- Font Preview -->
-                        <Border Background="#2D2D30" CornerRadius="4" Padding="12" Margin="0,4,0,8">
+                        <Border Background="{DynamicResource ThemeToolbarBackgroundBrush}" CornerRadius="4" Padding="12" Margin="0,4,0,8">
                             <StackPanel>
                                 <TextBlock Text="Preview" FontSize="11" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" Margin="0,0,0,4"/>
                                 <TextBlock x:Name="FontPreviewText" Text="The quick brown fox jumps over the lazy dog. 0123456789"
@@ -422,7 +424,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="Provider:" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="AiProviderCombo" Grid.Column="1" SelectionChanged="AiProviderCombo_SelectionChanged">
+                            <ComboBox x:Name="AiProviderCombo" Grid.Column="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" SelectionChanged="AiProviderCombo_SelectionChanged">
                                 <ComboBoxItem Content="OpenAI"/>
                                 <ComboBoxItem Content="Anthropic"/>
                             </ComboBox>
@@ -443,7 +445,7 @@
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" Text="Model:" Style="{StaticResource FieldLabel}"/>
-                            <ComboBox x:Name="AiModelCombo" Grid.Column="1" IsEditable="True">
+                            <ComboBox x:Name="AiModelCombo" Grid.Column="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" IsEditable="True">
                                 <!-- OpenAI models (default) -->
                                 <ComboBoxItem Content="gpt-4o"/>
                                 <ComboBoxItem Content="gpt-4o-mini"/>
