@@ -904,6 +904,10 @@ public class VisualEditorBridge
                     HandleClsMemberDeleted(root);
                     break;
 
+                case "cls_memberMoved":
+                    HandleClsMemberMoved(root);
+                    break;
+
                 case "cls_relationshipCreated":
                     HandleClsRelationshipCreated(root);
                     break;
@@ -1771,6 +1775,27 @@ public class VisualEditorBridge
         PushUndo();
         cls.Members.RemoveAt(memberIndex);
         RaiseClassDiagramModelChanged("cls_memberDeleted");
+    }
+
+    private void HandleClsMemberMoved(JsonElement root)
+    {
+        if (_classDiagramModel == null) return;
+        var classId = root.GetProperty("classId").GetString();
+        var memberIndex = root.GetProperty("memberIndex").GetInt32();
+        var direction = root.GetProperty("direction").GetString() ?? "";
+        if (string.IsNullOrEmpty(classId)) return;
+
+        var cls = _classDiagramModel.Classes.Find(c => c.Id == classId);
+        if (cls == null || memberIndex < 0 || memberIndex >= cls.Members.Count) return;
+
+        var newIndex = direction == "up" ? memberIndex - 1 : memberIndex + 1;
+        if (newIndex < 0 || newIndex >= cls.Members.Count) return;
+
+        PushUndo();
+        var member = cls.Members[memberIndex];
+        cls.Members.RemoveAt(memberIndex);
+        cls.Members.Insert(newIndex, member);
+        RaiseClassDiagramModelChanged("cls_memberMoved");
     }
 
     private void HandleClsRelationshipCreated(JsonElement root)

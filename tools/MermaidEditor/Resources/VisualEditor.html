@@ -5199,12 +5199,13 @@
 
             const width = Math.ceil(maxTextWidth);
 
-            // Height: header + annotation? + divider + fields + divider + methods
+            // Height: header + annotation? + divider + fields + divider + methods + bottom padding
+            // Dividers use 6px in rendering, so must match here
             let height = CLS_SECTION_HEIGHT; // Class name
             if (cls.annotation) height += CLS_MEMBER_HEIGHT;
-            height += 1; // divider
+            height += 6; // divider gap (matches rendering yOffset += 6)
             height += Math.max(1, fields.length) * CLS_MEMBER_HEIGHT;
-            height += 1; // divider
+            height += 6; // divider gap (matches rendering yOffset += 6)
             height += Math.max(1, methods.length) * CLS_MEMBER_HEIGHT;
             height += CLS_BOX_PADDING;
 
@@ -6125,10 +6126,23 @@
             if (memberEl) {
                 const classId = memberEl.getAttribute('data-class-id');
                 const memberIdx = parseInt(memberEl.getAttribute('data-member-index'), 10);
+                const cls = clsDiagram.classes.find(c => c.id === classId);
+                const memberCount = cls ? cls.members.length : 0;
 
                 addClsContextMenuItem('Edit Member', () => {
                     clsShowMemberPropertyPanel(classId, memberIdx);
                 });
+                if (memberIdx > 0) {
+                    addClsContextMenuItem('\u2191 Move Up', () => {
+                        postMessage({ type: 'cls_memberMoved', classId: classId, memberIndex: memberIdx, direction: 'up' });
+                    });
+                }
+                if (memberIdx < memberCount - 1) {
+                    addClsContextMenuItem('\u2193 Move Down', () => {
+                        postMessage({ type: 'cls_memberMoved', classId: classId, memberIndex: memberIdx, direction: 'down' });
+                    });
+                }
+                addClsContextMenuSeparator();
                 addClsContextMenuItem('Delete Member', () => {
                     postMessage({ type: 'cls_memberDeleted', classId: classId, memberIndex: memberIdx });
                 });
@@ -6144,6 +6158,11 @@
                 });
                 addClsContextMenuItem('Add Method', () => {
                     postMessage({ type: 'cls_memberAdded', classId: classId, rawText: '+newMethod()' });
+                });
+                addClsContextMenuSeparator();
+                addClsContextMenuItem('Add Relationship', () => {
+                    clsDrawingRelFrom = classId;
+                    svg.classList.add('edge-drawing-active');
                 });
                 addClsContextMenuSeparator();
                 addClsContextMenuItem('Delete Class', () => {
