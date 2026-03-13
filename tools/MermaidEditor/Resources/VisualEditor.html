@@ -4055,24 +4055,27 @@
             const fragType = (el.fragmentType || el.type || 'loop').toLowerCase();
             const fragTypes = ['loop', 'alt', 'opt', 'par', 'critical', 'break'];
 
+            // Multi-section types: alt (else), par (and), critical (option)
+            const multiSectionTypes = ['alt', 'par', 'critical'];
+            const isMultiSection = multiSectionTypes.includes(fragType);
+            // Section divider keyword varies by type
+            const sectionKeyword = fragType === 'par' ? 'and' : fragType === 'critical' ? 'option' : 'else';
+
             propPanelTitle.textContent = 'Fragment';
             const body = document.querySelector('.property-panel-body');
 
             let sectionsHtml = '';
-            if (el.sections && el.sections.length > 0) {
+            if (el.sections && el.sections.length > 0 && isMultiSection) {
                 sectionsHtml = '<div class="property-row"><div class="property-label">Sections</div></div>';
                 el.sections.forEach((sec, si) => {
                     const secLabel = sec.label || (si === 0 ? '(primary)' : '');
                     sectionsHtml += `
                         <div class="property-row" style="padding-left:10px">
-                            <div class="property-label">${si === 0 ? 'Condition' : 'Else Label'} ${si + 1}</div>
-                            <input class="property-input seq-frag-sec-label" data-sec-index="${si}" value="${escapeHtml(secLabel)}" placeholder="${si === 0 ? 'condition' : 'else label'}" />
+                            <div class="property-label">${si === 0 ? 'Condition' : sectionKeyword + ' label'} ${si + 1}</div>
+                            <input class="property-input seq-frag-sec-label" data-sec-index="${si}" value="${escapeHtml(secLabel)}" placeholder="${si === 0 ? 'condition' : sectionKeyword + ' label'}" />
                         </div>`;
                 });
-                // Add section button for alt fragments
-                if (fragType === 'alt') {
-                    sectionsHtml += `<div class="property-row" style="padding-left:10px"><button id="seq-frag-add-section" style="padding:4px 10px;cursor:pointer;">+ Add Else Section</button></div>`;
-                }
+                sectionsHtml += `<div class="property-row" style="padding-left:10px"><button id="seq-frag-add-section" style="padding:4px 10px;cursor:pointer;">+ Add ${sectionKeyword} Section</button></div>`;
             }
 
             body.innerHTML = `

@@ -2689,7 +2689,27 @@ public class VisualEditorBridge
         {
             var ftStr = ftProp.GetString();
             if (ftStr != null && Enum.TryParse<SequenceFragmentType>(ftStr, true, out var parsed))
+            {
                 frag.Type = parsed;
+
+                // Multi-section types: Alt (else), Par (and), Critical (option)
+                // Single-section types: Loop, Opt, Break, Rect
+                bool supportsMultipleSections = parsed is SequenceFragmentType.Alt
+                    or SequenceFragmentType.Par
+                    or SequenceFragmentType.Critical;
+
+                if (!supportsMultipleSections && frag.Sections.Count > 1)
+                {
+                    // Merge all child elements into the first section, then remove extras
+                    var firstSection = frag.Sections[0];
+                    for (int i = 1; i < frag.Sections.Count; i++)
+                    {
+                        foreach (var el in frag.Sections[i].Elements)
+                            firstSection.Elements.Add(el);
+                    }
+                    frag.Sections.RemoveRange(1, frag.Sections.Count - 1);
+                }
+            }
         }
         if (root.TryGetProperty("text", out var textProp))
             frag.Label = textProp.GetString() ?? "";
