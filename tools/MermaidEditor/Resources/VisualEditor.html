@@ -1998,16 +1998,18 @@
                 const nodeId = nodeGroup.getAttribute('data-node-id');
                 selectNode(nodeId);
 
-                // Start drag
-                const node = diagram.nodes.find(n => n.id === nodeId);
-                if (node) {
-                    isDragging = true;
-                    dragNodeId = nodeId;
-                    const pt = getSVGPoint(e);
-                    dragStartX = pt.x;
-                    dragStartY = pt.y;
-                    dragNodeStartX = node.x;
-                    dragNodeStartY = node.y;
+                // Start drag (only for left-click, not right-click)
+                if (e.button !== 2) {
+                    const node = diagram.nodes.find(n => n.id === nodeId);
+                    if (node) {
+                        isDragging = true;
+                        dragNodeId = nodeId;
+                        const pt = getSVGPoint(e);
+                        dragStartX = pt.x;
+                        dragStartY = pt.y;
+                        dragNodeStartX = node.x;
+                        dragNodeStartY = node.y;
+                    }
                 }
                 return;
             }
@@ -2190,9 +2192,15 @@
             }
         });
 
-        // Always prevent browser default context menu on SVG
+        // Always prevent browser default context menu on SVG.
+        // Also stop propagation so the canvasContainer contextmenu handler
+        // (which clears selection) doesn't fire for clicks inside the SVG.
+        // After render() rebuilds the DOM, e.target becomes a stale/detached
+        // element, causing svg.contains(e.target) to return false and the
+        // canvasContainer handler to incorrectly clear selectedNodeId.
         svg.addEventListener('contextmenu', function(e) {
             e.preventDefault();
+            e.stopPropagation();
         });
 
         // Context menu - flowchart
@@ -4721,6 +4729,32 @@
                     postMessage({ type: 'seq_noteDeleted', elementIndex: elIdx });
                     seqSelectedNoteIndex = -1;
                 });
+                addContextMenuSeparator();
+                if (elIdx > 0) {
+                    addContextMenuItem('\u2191 Move Up', () => {
+                        postMessage({ type: 'seq_elementReordered', fromIndex: elIdx, toIndex: elIdx - 1 });
+                    });
+                }
+                if (elIdx < seqDiagram.elements.length - 1) {
+                    addContextMenuItem('\u2193 Move Down', () => {
+                        postMessage({ type: 'seq_elementReordered', fromIndex: elIdx, toIndex: elIdx + 1 });
+                    });
+                }
+                addContextMenuSeparator();
+                addContextMenuItem('Insert Message Above', () => {
+                    postMessage({ type: 'seq_messageCreated', fromId: seqDiagram.participants[0].id, toId: seqDiagram.participants.length > 1 ? seqDiagram.participants[1].id : seqDiagram.participants[0].id, text: 'Message', arrowType: 'SolidArrow', insertIndex: elIdx });
+                });
+                addContextMenuItem('Insert Message Below', () => {
+                    postMessage({ type: 'seq_messageCreated', fromId: seqDiagram.participants[0].id, toId: seqDiagram.participants.length > 1 ? seqDiagram.participants[1].id : seqDiagram.participants[0].id, text: 'Message', arrowType: 'SolidArrow', insertIndex: elIdx + 1 });
+                });
+                addContextMenuItem('Insert Note Above', () => {
+                    _seqPendingNoteSelect = true;
+                    postMessage({ type: 'seq_noteCreated', position: 'RightOf', overParticipants: seqDiagram.participants[0].id, text: 'Note', insertIndex: elIdx });
+                });
+                addContextMenuItem('Insert Note Below', () => {
+                    _seqPendingNoteSelect = true;
+                    postMessage({ type: 'seq_noteCreated', position: 'RightOf', overParticipants: seqDiagram.participants[0].id, text: 'Note', insertIndex: elIdx + 1 });
+                });
             } else if (messageGroup) {
                 const elIdx = parseInt(messageGroup.getAttribute('data-element-index'), 10);
                 seqSelectedMessageIndex = elIdx;
@@ -4733,18 +4767,39 @@
                     postMessage({ type: 'seq_messageDeleted', elementIndex: elIdx });
                 });
                 addContextMenuSeparator();
-                addContextMenuItem('Add Message Below', () => {
+                if (elIdx > 0) {
+                    addContextMenuItem('\u2191 Move Up', () => {
+                        postMessage({ type: 'seq_elementReordered', fromIndex: elIdx, toIndex: elIdx - 1 });
+                    });
+                }
+                if (elIdx < seqDiagram.elements.length - 1) {
+                    addContextMenuItem('\u2193 Move Down', () => {
+                        postMessage({ type: 'seq_elementReordered', fromIndex: elIdx, toIndex: elIdx + 1 });
+                    });
+                }
+                addContextMenuSeparator();
+                addContextMenuItem('Insert Message Above', () => {
                     const el = seqDiagram.elements[elIdx];
                     if (el && el.elementType === 'message') {
-                        postMessage({
-                            type: 'seq_messageCreated',
-                            fromId: el.fromId,
-                            toId: el.toId,
-                            text: 'Message',
-                            arrowType: 'SolidArrow',
-                            insertIndex: elIdx + 1
-                        });
+                        postMessage({ type: 'seq_messageCreated', fromId: el.fromId, toId: el.toId, text: 'Message', arrowType: 'SolidArrow', insertIndex: elIdx });
                     }
+                });
+                addContextMenuItem('Insert Message Below', () => {
+                    const el = seqDiagram.elements[elIdx];
+                    if (el && el.elementType === 'message') {
+                        postMessage({ type: 'seq_messageCreated', fromId: el.fromId, toId: el.toId, text: 'Message', arrowType: 'SolidArrow', insertIndex: elIdx + 1 });
+                    }
+                });
+                addContextMenuItem('Insert Note Above', () => {
+                    _seqPendingNoteSelect = true;
+                    postMessage({ type: 'seq_noteCreated', position: 'RightOf', overParticipants: seqDiagram.participants[0].id, text: 'Note', insertIndex: elIdx });
+                });
+                addContextMenuItem('Insert Note Below', () => {
+                    _seqPendingNoteSelect = true;
+                    postMessage({ type: 'seq_noteCreated', position: 'RightOf', overParticipants: seqDiagram.participants[0].id, text: 'Note', insertIndex: elIdx + 1 });
+                });
+                addContextMenuItem('Insert Fragment Below', () => {
+                    postMessage({ type: 'seq_fragmentCreated', fragmentType: 'loop', condition: 'condition', sections: [{ label: 'condition', elements: [] }], insertIndex: elIdx + 1 });
                 });
             } else if (fragmentGroup) {
                 const elIdx = parseInt(fragmentGroup.getAttribute('data-element-index'), 10);
@@ -4756,6 +4811,24 @@
                 addContextMenuItem('Delete Fragment', () => {
                     postMessage({ type: 'seq_fragmentDeleted', elementIndex: elIdx });
                     seqSelectedFragmentIndex = -1;
+                });
+                addContextMenuSeparator();
+                if (elIdx > 0) {
+                    addContextMenuItem('\u2191 Move Up', () => {
+                        postMessage({ type: 'seq_elementReordered', fromIndex: elIdx, toIndex: elIdx - 1 });
+                    });
+                }
+                if (elIdx < seqDiagram.elements.length - 1) {
+                    addContextMenuItem('\u2193 Move Down', () => {
+                        postMessage({ type: 'seq_elementReordered', fromIndex: elIdx, toIndex: elIdx + 1 });
+                    });
+                }
+                addContextMenuSeparator();
+                addContextMenuItem('Insert Message Above', () => {
+                    postMessage({ type: 'seq_messageCreated', fromId: seqDiagram.participants[0].id, toId: seqDiagram.participants.length > 1 ? seqDiagram.participants[1].id : seqDiagram.participants[0].id, text: 'Message', arrowType: 'SolidArrow', insertIndex: elIdx });
+                });
+                addContextMenuItem('Insert Message Below', () => {
+                    postMessage({ type: 'seq_messageCreated', fromId: seqDiagram.participants[0].id, toId: seqDiagram.participants.length > 1 ? seqDiagram.participants[1].id : seqDiagram.participants[0].id, text: 'Message', arrowType: 'SolidArrow', insertIndex: elIdx + 1 });
                 });
             } else {
                 // Empty space context menu

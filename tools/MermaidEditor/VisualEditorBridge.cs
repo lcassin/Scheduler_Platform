@@ -983,6 +983,10 @@ public class VisualEditorBridge
                     HandleSeqFragmentSectionAdded(root);
                     break;
 
+                case "seq_elementReordered":
+                    HandleSeqElementReordered(root);
+                    break;
+
                 case "seq_participantSelected":
                 case "seq_messageSelected":
                 case "seq_fragmentSelected":
@@ -2634,7 +2638,19 @@ public class VisualEditorBridge
         if (Enum.TryParse<SequenceNotePosition>(positionStr, out var pos))
             note.Position = pos;
 
-        _sequenceModel.Elements.Add(note);
+        // Insert at specified index or append
+        if (root.TryGetProperty("insertIndex", out var noteIdxProp))
+        {
+            var idx = noteIdxProp.GetInt32();
+            if (idx >= 0 && idx <= _sequenceModel.Elements.Count)
+                _sequenceModel.Elements.Insert(idx, note);
+            else
+                _sequenceModel.Elements.Add(note);
+        }
+        else
+        {
+            _sequenceModel.Elements.Add(note);
+        }
         RaiseSequenceModelChanged("seq_noteCreated");
     }
 
@@ -2733,7 +2749,19 @@ public class VisualEditorBridge
             fragment.Sections.Add(new SequenceFragmentSection { Label = condition });
         }
 
-        _sequenceModel.Elements.Add(fragment);
+        // Insert at specified index or append
+        if (root.TryGetProperty("insertIndex", out var fragIdxProp))
+        {
+            var idx = fragIdxProp.GetInt32();
+            if (idx >= 0 && idx <= _sequenceModel.Elements.Count)
+                _sequenceModel.Elements.Insert(idx, fragment);
+            else
+                _sequenceModel.Elements.Add(fragment);
+        }
+        else
+        {
+            _sequenceModel.Elements.Add(fragment);
+        }
         RaiseSequenceModelChanged("seq_fragmentCreated");
     }
 
@@ -2818,6 +2846,23 @@ public class VisualEditorBridge
         PushUndo();
         frag.Sections.Add(new SequenceFragmentSection { Label = "else" });
         RaiseSequenceModelChanged("seq_fragmentSectionAdded");
+    }
+
+    private void HandleSeqElementReordered(JsonElement root)
+    {
+        if (_sequenceModel == null) return;
+        var fromIndex = root.GetProperty("fromIndex").GetInt32();
+        var toIndex = root.GetProperty("toIndex").GetInt32();
+
+        if (fromIndex < 0 || fromIndex >= _sequenceModel.Elements.Count) return;
+        if (toIndex < 0 || toIndex >= _sequenceModel.Elements.Count) return;
+        if (fromIndex == toIndex) return;
+
+        PushUndo();
+        var element = _sequenceModel.Elements[fromIndex];
+        _sequenceModel.Elements.RemoveAt(fromIndex);
+        _sequenceModel.Elements.Insert(toIndex, element);
+        RaiseSequenceModelChanged("seq_elementReordered");
     }
 
     // ========== Sequence Model Restore (for undo/redo) ==========
