@@ -6167,9 +6167,13 @@
             document.getElementById('cls-rel-from').value = rel.fromId;
             document.getElementById('cls-rel-to').value = rel.toId;
             document.getElementById('cls-rel-from').addEventListener('change', function() {
+                rel.fromId = this.value;
+                renderClassDiagram();
                 postMessage({ type: 'cls_relationshipEdited', relationshipIndex: relIdx, fromId: this.value });
             });
             document.getElementById('cls-rel-to').addEventListener('change', function() {
+                rel.toId = this.value;
+                renderClassDiagram();
                 postMessage({ type: 'cls_relationshipEdited', relationshipIndex: relIdx, toId: this.value });
             });
             document.getElementById('cls-rel-type').addEventListener('change', function() {
@@ -6184,15 +6188,25 @@
                     'link-dashed': { leftEnd: 'None', rightEnd: 'None', linkStyle: 'Dashed' }
                 };
                 const t = typeMap[this.value] || typeMap.association;
+                rel.leftEnd = t.leftEnd;
+                rel.rightEnd = t.rightEnd;
+                rel.linkStyle = t.linkStyle;
+                renderClassDiagram();
                 postMessage({ type: 'cls_relationshipEdited', relationshipIndex: relIdx, leftEnd: t.leftEnd, rightEnd: t.rightEnd, linkStyle: t.linkStyle });
             });
             document.getElementById('cls-rel-label').addEventListener('change', function() {
+                rel.label = this.value || null;
+                renderClassDiagram();
                 postMessage({ type: 'cls_relationshipEdited', relationshipIndex: relIdx, label: this.value });
             });
             document.getElementById('cls-rel-from-card').addEventListener('change', function() {
+                rel.fromCardinality = this.value || null;
+                renderClassDiagram();
                 postMessage({ type: 'cls_relationshipEdited', relationshipIndex: relIdx, fromCardinality: this.value });
             });
             document.getElementById('cls-rel-to-card').addEventListener('change', function() {
+                rel.toCardinality = this.value || null;
+                renderClassDiagram();
                 postMessage({ type: 'cls_relationshipEdited', relationshipIndex: relIdx, toCardinality: this.value });
             });
 
