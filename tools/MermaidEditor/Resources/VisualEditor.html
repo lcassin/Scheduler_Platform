@@ -3913,8 +3913,20 @@
             let msgNumber = seqDiagram.autoNumber ? 1 : 0;
             const activationStacks = {}; // participantId -> [{startY}]
 
+            // Helper: resolve a fragment-inner message element from data attributes
+            function getFragmentInnerMessage(fragIdx, sectionIdx, subIdx) {
+                if (!seqDiagram) return null;
+                const frag = seqDiagram.elements[fragIdx];
+                if (!frag || frag.elementType !== 'fragment') return null;
+                if (!frag.sections || sectionIdx < 0 || sectionIdx >= frag.sections.length) return null;
+                const sec = frag.sections[sectionIdx];
+                if (!sec.elements || subIdx < 0 || subIdx >= sec.elements.length) return null;
+                return sec.elements[subIdx];
+            }
+
             // Helper: render a single message arrow (used for both top-level and fragment-inner messages)
-            function renderMessageArrow(el, elIdx, absY) {
+            // For fragment-inner messages, pass sectionIdx and subIdx to tag them appropriately
+            function renderMessageArrow(el, elIdx, absY, sectionIdx, subIdx) {
                 const fromIdx = getParticipantIndex(el.fromId);
                 const toIdx = getParticipantIndex(el.toId);
                 if (fromIdx < 0 || toIdx < 0) return;
@@ -3923,10 +3935,16 @@
                 const toX = getParticipantX(toIdx);
                 const y = absY;
                 const isSelfMessage = el.fromId === el.toId;
+                const isFragmentInner = (sectionIdx !== undefined && subIdx !== undefined);
 
                 const msgGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                 msgGroup.classList.add('edge-group', 'seq-message');
                 msgGroup.setAttribute('data-element-index', elIdx);
+                if (isFragmentInner) {
+                    msgGroup.setAttribute('data-section-index', sectionIdx);
+                    msgGroup.setAttribute('data-sub-index', subIdx);
+                    msgGroup.classList.add('seq-fragment-inner-message');
+                }
 
                 if (isSelfMessage) {
                     // Self-message: loop arrow
@@ -4090,9 +4108,9 @@
                         el.sections.forEach((s, sIdx) => {
                             if (sIdx > 0) currentY += 20; // section divider space
                             if (s.elements) {
-                                s.elements.forEach(se => {
+                                s.elements.forEach((se, seIdx) => {
                                     if (se.elementType === 'message') {
-                                        renderMessageArrow(se, elIdx, currentY);
+                                        renderMessageArrow(se, elIdx, currentY, sIdx, seIdx);
                                         if (msgNumber > 0) msgNumber++;
                                         currentY += SEQ_MESSAGE_SPACING;
                                     } else if (se.elementType === 'note') {
@@ -4477,14 +4495,24 @@
 
             if (messageGroup) {
                 const elIdx = parseInt(messageGroup.getAttribute('data-element-index'), 10);
-                seqSelectedMessageIndex = elIdx;
+                const isFragInner = messageGroup.hasAttribute('data-section-index');
                 seqSelectedParticipantId = null;
-                seqSelectedFragmentIndex = -1;
                 seqSelectedNoteIndex = -1;
                 selectedNodeId = null;
                 selectedEdgeIndex = -1;
-                renderSequenceDiagram();
-                showSeqMessagePropertyPanel(elIdx);
+                if (isFragInner) {
+                    const secIdx = parseInt(messageGroup.getAttribute('data-section-index'), 10);
+                    const subIdx = parseInt(messageGroup.getAttribute('data-sub-index'), 10);
+                    seqSelectedMessageIndex = -1;
+                    seqSelectedFragmentIndex = elIdx;
+                    renderSequenceDiagram();
+                    showSeqFragmentInnerMessagePropertyPanel(elIdx, secIdx, subIdx);
+                } else {
+                    seqSelectedMessageIndex = elIdx;
+                    seqSelectedFragmentIndex = -1;
+                    renderSequenceDiagram();
+                    showSeqMessagePropertyPanel(elIdx);
+                }
                 e.stopPropagation();
                 return;
             }
@@ -4536,9 +4564,17 @@
             const messageGroup = e.target.closest('.seq-message');
             if (messageGroup) {
                 const elIdx = parseInt(messageGroup.getAttribute('data-element-index'), 10);
-                const el = seqDiagram.elements[elIdx];
-                if (el && el.elementType === 'message') {
-                    startSeqInlineEdit(elIdx, el, e);
+                const isFragInner = messageGroup.hasAttribute('data-section-index');
+                if (isFragInner) {
+                    const secIdx = parseInt(messageGroup.getAttribute('data-section-index'), 10);
+                    const subIdx = parseInt(messageGroup.getAttribute('data-sub-index'), 10);
+                    const el = getFragmentInnerMessage(elIdx, secIdx, subIdx);
+                    if (el) startSeqFragmentInnerInlineEdit(elIdx, secIdx, subIdx, el, e);
+                } else {
+                    const el = seqDiagram.elements[elIdx];
+                    if (el && el.elementType === 'message') {
+                        startSeqInlineEdit(elIdx, el, e);
+                    }
                 }
                 e.stopPropagation();
                 return;
@@ -4571,6 +4607,32 @@
                 inlineEditor.removeEventListener('keydown', onKey);
                 if (newText !== (el.text || '')) {
                     postMessage({ type: 'seq_messageEdited', elementIndex: elIdx, text: newText });
+                }
+            }
+            function onKey(e) {
+                if (e.key === 'Enter') { finishEdit(); e.preventDefault(); }
+                if (e.key === 'Escape') { inlineEditor.style.display = 'none'; inlineEditor.removeEventListener('blur', finishEdit); inlineEditor.removeEventListener('keydown', onKey); }
+            }
+            inlineEditor.addEventListener('blur', finishEdit);
+            inlineEditor.addEventListener('keydown', onKey);
+        }
+
+        // Inline edit for messages inside fragments
+        function startSeqFragmentInnerInlineEdit(fragIdx, sectionIdx, subIdx, el, e) {
+            inlineEditor.style.display = '';
+            inlineEditor.style.left = (e.clientX - 50) + 'px';
+            inlineEditor.style.top = (e.clientY - 15) + 'px';
+            inlineEditor.value = el.text || '';
+            inlineEditor.focus();
+            inlineEditor.select();
+
+            function finishEdit() {
+                const newText = inlineEditor.value.trim();
+                inlineEditor.style.display = 'none';
+                inlineEditor.removeEventListener('blur', finishEdit);
+                inlineEditor.removeEventListener('keydown', onKey);
+                if (newText !== (el.text || '')) {
+                    postMessage({ type: 'seq_fragmentInnerMessageEdited', elementIndex: fragIdx, sectionIndex: sectionIdx, subIndex: subIdx, text: newText });
                 }
             }
             function onKey(e) {
@@ -4693,6 +4755,62 @@
             });
             document.getElementById('seq-msg-arrow').addEventListener('change', function() {
                 postMessage({ type: 'seq_messageEdited', elementIndex: elIdx, arrowType: this.value });
+            });
+
+            propertyPanel.classList.add('visible');
+        }
+
+        // Property panel for messages inside fragments
+        function showSeqFragmentInnerMessagePropertyPanel(fragIdx, sectionIdx, subIdx) {
+            if (!seqDiagram) return;
+            const el = getFragmentInnerMessage(fragIdx, sectionIdx, subIdx);
+            if (!el || el.elementType !== 'message') return;
+
+            propPanelTitle.textContent = 'Message (in Fragment)';
+            const body = document.querySelector('.property-panel-body');
+            body.innerHTML = `
+                <div class="property-row">
+                    <div class="property-label">From</div>
+                    <select class="property-select" id="seq-msg-from">
+                        ${seqDiagram.participants.map(p => `<option value="${escapeHtml(p.id)}" ${el.fromId === p.id ? 'selected' : ''}>${escapeHtml(getParticipantLabel(p))}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="property-row">
+                    <div class="property-label">To</div>
+                    <select class="property-select" id="seq-msg-to">
+                        ${seqDiagram.participants.map(p => `<option value="${escapeHtml(p.id)}" ${el.toId === p.id ? 'selected' : ''}>${escapeHtml(getParticipantLabel(p))}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Text</div>
+                    <input class="property-input" id="seq-msg-text" value="${escapeHtml(el.text || '')}" />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Arrow Type</div>
+                    <select class="property-select" id="seq-msg-arrow">
+                        <option value="SolidArrow" ${el.arrowType === 'SolidArrow' ? 'selected' : ''}>Solid Arrow (->>) </option>
+                        <option value="DottedArrow" ${el.arrowType === 'DottedArrow' ? 'selected' : ''}>Dotted Arrow (-->>)</option>
+                        <option value="SolidOpen" ${el.arrowType === 'SolidOpen' ? 'selected' : ''}>Solid Open (->)</option>
+                        <option value="DottedOpen" ${el.arrowType === 'DottedOpen' ? 'selected' : ''}>Dotted Open (-->)</option>
+                        <option value="SolidCross" ${el.arrowType === 'SolidCross' ? 'selected' : ''}>Solid Cross (-x)</option>
+                        <option value="DottedCross" ${el.arrowType === 'DottedCross' ? 'selected' : ''}>Dotted Cross (--x)</option>
+                        <option value="SolidAsync" ${el.arrowType === 'SolidAsync' ? 'selected' : ''}>Solid Async (-))</option>
+                        <option value="DottedAsync" ${el.arrowType === 'DottedAsync' ? 'selected' : ''}>Dotted Async (--))</option>
+                    </select>
+                </div>
+            `;
+
+            document.getElementById('seq-msg-from').addEventListener('change', function() {
+                postMessage({ type: 'seq_fragmentInnerMessageEdited', elementIndex: fragIdx, sectionIndex: sectionIdx, subIndex: subIdx, fromId: this.value });
+            });
+            document.getElementById('seq-msg-to').addEventListener('change', function() {
+                postMessage({ type: 'seq_fragmentInnerMessageEdited', elementIndex: fragIdx, sectionIndex: sectionIdx, subIndex: subIdx, toId: this.value });
+            });
+            document.getElementById('seq-msg-text').addEventListener('change', function() {
+                postMessage({ type: 'seq_fragmentInnerMessageEdited', elementIndex: fragIdx, sectionIndex: sectionIdx, subIndex: subIdx, text: this.value });
+            });
+            document.getElementById('seq-msg-arrow').addEventListener('change', function() {
+                postMessage({ type: 'seq_fragmentInnerMessageEdited', elementIndex: fragIdx, sectionIndex: sectionIdx, subIndex: subIdx, arrowType: this.value });
             });
 
             propertyPanel.classList.add('visible');
@@ -4904,50 +5022,80 @@
                 });
             } else if (messageGroup) {
                 const elIdx = parseInt(messageGroup.getAttribute('data-element-index'), 10);
-                seqSelectedMessageIndex = elIdx;
+                const isFragInner = messageGroup.hasAttribute('data-section-index');
 
-                addContextMenuItem('Edit Message', () => {
-                    const el = seqDiagram.elements[elIdx];
-                    if (el) startSeqInlineEdit(elIdx, el, e);
-                });
-                addContextMenuItem('Delete Message', () => {
-                    postMessage({ type: 'seq_messageDeleted', elementIndex: elIdx });
-                });
-                addContextMenuSeparator();
-                if (elIdx > 0) {
-                    addContextMenuItem('\u2191 Move Up', () => {
-                        postMessage({ type: 'seq_elementReordered', fromIndex: elIdx, toIndex: elIdx - 1 });
+                if (isFragInner) {
+                    // Message inside a fragment — show fragment-inner message context menu
+                    const secIdx = parseInt(messageGroup.getAttribute('data-section-index'), 10);
+                    const subIdx = parseInt(messageGroup.getAttribute('data-sub-index'), 10);
+                    const innerEl = getFragmentInnerMessage(elIdx, secIdx, subIdx);
+                    seqSelectedFragmentIndex = elIdx;
+                    seqSelectedMessageIndex = -1;
+
+                    addContextMenuItem('Edit Message', () => {
+                        if (innerEl) startSeqFragmentInnerInlineEdit(elIdx, secIdx, subIdx, innerEl, e);
+                    });
+                    addContextMenuItem('Delete Message', () => {
+                        postMessage({ type: 'seq_fragmentInnerMessageDeleted', elementIndex: elIdx, sectionIndex: secIdx, subIndex: subIdx });
+                    });
+                    addContextMenuSeparator();
+                    addContextMenuItem('Insert Message Above', () => {
+                        const fromId = innerEl ? innerEl.fromId : seqDiagram.participants[0].id;
+                        const toId = innerEl ? innerEl.toId : (seqDiagram.participants.length > 1 ? seqDiagram.participants[1].id : seqDiagram.participants[0].id);
+                        postMessage({ type: 'seq_fragmentInnerMessageCreated', elementIndex: elIdx, sectionIndex: secIdx, subIndex: subIdx, fromId: fromId, toId: toId, text: 'Message', arrowType: 'SolidArrow' });
+                    });
+                    addContextMenuItem('Insert Message Below', () => {
+                        const fromId = innerEl ? innerEl.fromId : seqDiagram.participants[0].id;
+                        const toId = innerEl ? innerEl.toId : (seqDiagram.participants.length > 1 ? seqDiagram.participants[1].id : seqDiagram.participants[0].id);
+                        postMessage({ type: 'seq_fragmentInnerMessageCreated', elementIndex: elIdx, sectionIndex: secIdx, subIndex: subIdx + 1, fromId: fromId, toId: toId, text: 'Message', arrowType: 'SolidArrow' });
+                    });
+                } else {
+                    // Top-level message — original behavior
+                    seqSelectedMessageIndex = elIdx;
+
+                    addContextMenuItem('Edit Message', () => {
+                        const el = seqDiagram.elements[elIdx];
+                        if (el) startSeqInlineEdit(elIdx, el, e);
+                    });
+                    addContextMenuItem('Delete Message', () => {
+                        postMessage({ type: 'seq_messageDeleted', elementIndex: elIdx });
+                    });
+                    addContextMenuSeparator();
+                    if (elIdx > 0) {
+                        addContextMenuItem('\u2191 Move Up', () => {
+                            postMessage({ type: 'seq_elementReordered', fromIndex: elIdx, toIndex: elIdx - 1 });
+                        });
+                    }
+                    if (elIdx < seqDiagram.elements.length - 1) {
+                        addContextMenuItem('\u2193 Move Down', () => {
+                            postMessage({ type: 'seq_elementReordered', fromIndex: elIdx, toIndex: elIdx + 1 });
+                        });
+                    }
+                    addContextMenuSeparator();
+                    addContextMenuItem('Insert Message Above', () => {
+                        const el = seqDiagram.elements[elIdx];
+                        if (el && el.elementType === 'message') {
+                            postMessage({ type: 'seq_messageCreated', fromId: el.fromId, toId: el.toId, text: 'Message', arrowType: 'SolidArrow', insertIndex: elIdx });
+                        }
+                    });
+                    addContextMenuItem('Insert Message Below', () => {
+                        const el = seqDiagram.elements[elIdx];
+                        if (el && el.elementType === 'message') {
+                            postMessage({ type: 'seq_messageCreated', fromId: el.fromId, toId: el.toId, text: 'Message', arrowType: 'SolidArrow', insertIndex: elIdx + 1 });
+                        }
+                    });
+                    addContextMenuItem('Insert Note Above', () => {
+                        _seqPendingNoteSelect = true;
+                        postMessage({ type: 'seq_noteCreated', position: 'RightOf', overParticipants: seqDiagram.participants[0].id, text: 'Note', insertIndex: elIdx });
+                    });
+                    addContextMenuItem('Insert Note Below', () => {
+                        _seqPendingNoteSelect = true;
+                        postMessage({ type: 'seq_noteCreated', position: 'RightOf', overParticipants: seqDiagram.participants[0].id, text: 'Note', insertIndex: elIdx + 1 });
+                    });
+                    addContextMenuItem('Insert Fragment Below', () => {
+                        postMessage({ type: 'seq_fragmentCreated', fragmentType: 'loop', condition: 'condition', sections: [{ label: 'condition', elements: [] }], insertIndex: elIdx + 1 });
                     });
                 }
-                if (elIdx < seqDiagram.elements.length - 1) {
-                    addContextMenuItem('\u2193 Move Down', () => {
-                        postMessage({ type: 'seq_elementReordered', fromIndex: elIdx, toIndex: elIdx + 1 });
-                    });
-                }
-                addContextMenuSeparator();
-                addContextMenuItem('Insert Message Above', () => {
-                    const el = seqDiagram.elements[elIdx];
-                    if (el && el.elementType === 'message') {
-                        postMessage({ type: 'seq_messageCreated', fromId: el.fromId, toId: el.toId, text: 'Message', arrowType: 'SolidArrow', insertIndex: elIdx });
-                    }
-                });
-                addContextMenuItem('Insert Message Below', () => {
-                    const el = seqDiagram.elements[elIdx];
-                    if (el && el.elementType === 'message') {
-                        postMessage({ type: 'seq_messageCreated', fromId: el.fromId, toId: el.toId, text: 'Message', arrowType: 'SolidArrow', insertIndex: elIdx + 1 });
-                    }
-                });
-                addContextMenuItem('Insert Note Above', () => {
-                    _seqPendingNoteSelect = true;
-                    postMessage({ type: 'seq_noteCreated', position: 'RightOf', overParticipants: seqDiagram.participants[0].id, text: 'Note', insertIndex: elIdx });
-                });
-                addContextMenuItem('Insert Note Below', () => {
-                    _seqPendingNoteSelect = true;
-                    postMessage({ type: 'seq_noteCreated', position: 'RightOf', overParticipants: seqDiagram.participants[0].id, text: 'Note', insertIndex: elIdx + 1 });
-                });
-                addContextMenuItem('Insert Fragment Below', () => {
-                    postMessage({ type: 'seq_fragmentCreated', fragmentType: 'loop', condition: 'condition', sections: [{ label: 'condition', elements: [] }], insertIndex: elIdx + 1 });
-                });
             } else if (fragmentGroup) {
                 const elIdx = parseInt(fragmentGroup.getAttribute('data-element-index'), 10);
                 seqSelectedFragmentIndex = elIdx;
