@@ -1136,6 +1136,24 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
 
 		DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
 
+		-- Vendor-level credential fallback: one row per vendor (prefer passwords, then latest CredentialId).
+		-- Used when no CredentialAccount link exists for the account.
+		-- Tries primary vendor first, then master vendor.
+		DROP TABLE IF EXISTS #tmpVendorCred;
+		SELECT VendorId, CredentialId, ExpirationDate
+		INTO #tmpVendorCred
+		FROM (
+			SELECT VendorId, CredentialId, ExpirationDate,
+			       ROW_NUMBER() OVER (PARTITION BY VendorId ORDER BY 
+			           CASE WHEN [Password] IS NOT NULL AND [Password] != '' THEN 0 ELSE 1 END,
+			           CASE WHEN ExpirationDate IS NULL OR ExpirationDate >= CAST(GETDATE() AS DATE) THEN 0 ELSE 1 END,
+			           CreatedDate DESC,
+			           CredentialId DESC) AS rn
+			FROM [Credential]
+			WHERE IsActive = 1
+		) ranked
+		WHERE rn = 1;
+
 		SELECT [RecId]
 			  ,AD.[InterfaceAccountId]
 			  ,[BillId]
@@ -1144,19 +1162,32 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
 			  ,AD.[VendorCode] AS PrimaryVendorCode
 			  ,MV.[PrimaryVendorCode] AS MasterVendorCode
 			  ,[VCAccountId] AS AccountId
-			  ,BC.[CredentialId]
-			  ,BC.ExpirationDate
+			  -- Credential resolution: CredentialAccount first, then vendor-level fallback
+			  ,COALESCE(BC.CredentialId, PC.CredentialId, MC.CredentialId) AS CredentialId
+			  ,COALESCE(BC.ExpirationDate, PCFull.ExpirationDate, MCFull.ExpirationDate) AS ExpirationDate
 			  ,CL.ClientId
 			  ,CL.ClientName
 		INTO #tmpCredentialAccountBilling
 		FROM [dbo].[ADRInvoiceAccountData] AD
 			INNER JOIN Account A ON AD.VCAccountId = A.AccountId AND A.IsActive = 1
 			INNER JOIN Client CL ON A.ClientId = CL.ClientId AND CL.IsActive = 1
-			INNER JOIN #tmpBestCredential BC ON AD.VCAccountId = BC.AccountId
+			-- Primary: CredentialAccount linking (direct account->credential)
+			LEFT OUTER JOIN #tmpBestCredential BC ON AD.VCAccountId = BC.AccountId
+			-- Vendor hierarchy for fallback
 			LEFT OUTER JOIN Vendor V ON AD.VendorCode = V.PrimaryVendorCode
 			LEFT OUTER JOIN VendorXRef VX ON V.VendorId = VX.PrimaryVendorId
 			LEFT OUTER JOIN Vendor MV ON VX.MasterVendorId = MV.VendorId
-		WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL);
+			-- Vendor-level fallback: primary vendor credential
+			LEFT OUTER JOIN #tmpVendorCred PC ON PC.VendorId = V.VendorId AND BC.CredentialId IS NULL
+			-- Vendor-level fallback: master vendor credential (only when no primary vendor credential)
+			LEFT OUTER JOIN #tmpVendorCred MC ON MC.VendorId = MV.VendorId AND BC.CredentialId IS NULL AND PC.CredentialId IS NULL
+			-- Get ExpirationDate from full Credential table for vendor-level fallback credentials
+			LEFT OUTER JOIN [Credential] PCFull ON PCFull.CredentialId = PC.CredentialId
+			LEFT OUTER JOIN [Credential] MCFull ON MCFull.CredentialId = MC.CredentialId
+		WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL)
+		  AND COALESCE(BC.CredentialId, PC.CredentialId, MC.CredentialId) IS NOT NULL;
+
+		DROP TABLE IF EXISTS #tmpVendorCred;
 
 		;WITH AccountStats AS (
 			SELECT AccountId,
