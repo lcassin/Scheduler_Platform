@@ -1847,6 +1847,10 @@ public class VisualEditorBridge
 
         PushUndo();
         var rel = _classDiagramModel.Relationships[relIndex];
+        if (root.TryGetProperty("fromId", out var fromIdProp))
+            rel.FromId = fromIdProp.GetString() ?? rel.FromId;
+        if (root.TryGetProperty("toId", out var toIdProp))
+            rel.ToId = toIdProp.GetString() ?? rel.ToId;
         if (root.TryGetProperty("leftEnd", out var leftProp))
         {
             if (Enum.TryParse<ClassRelationEnd>(leftProp.GetString(), out var le))

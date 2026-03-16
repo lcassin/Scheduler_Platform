@@ -349,6 +349,19 @@
         .property-select:focus {
             border-color: var(--node-selected-stroke);
         }
+        .property-btn {
+            background: var(--input-bg);
+            border: 1px solid var(--context-menu-border);
+            border-radius: 3px;
+            color: var(--input-text);
+            font-size: 12px;
+            padding: 4px 8px;
+            cursor: pointer;
+        }
+        .property-btn:hover {
+            border-color: var(--node-selected-stroke);
+            background: var(--context-menu-hover);
+        }
 
         /* Shape Picker (custom dropdown with SVG previews) */
         .shape-picker {
@@ -3598,6 +3611,9 @@
                 diagram.edges = [];
                 diagram.subgraphs = [];
 
+                // Hide property panel from previous diagram
+                propertyPanel.classList.remove('visible');
+
                 // Update toolbar buttons for sequence diagram
                 updateToolbarForDiagramType();
 
@@ -5086,6 +5102,9 @@
                 diagram.subgraphs = [];
                 seqDiagram = null;
 
+                // Hide property panel from previous diagram
+                propertyPanel.classList.remove('visible');
+
                 // Auto-layout class positions if not already set
                 clsAutoLayoutClasses();
 
@@ -6046,14 +6065,15 @@
 
             propPanelTitle.textContent = 'Relationship';
             const propContent = propertyPanel.querySelector('.property-panel-body');
+            const classOpts = clsDiagram.classes.map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.label || c.id)}</option>`).join('');
             propContent.innerHTML = `
                 <div class="property-row">
                     <div class="property-label">From</div>
-                    <input class="property-input" value="${escapeHtml(rel.fromId)}" readonly />
+                    <select class="property-select" id="cls-rel-from">${classOpts}</select>
                 </div>
                 <div class="property-row">
                     <div class="property-label">To</div>
-                    <input class="property-input" value="${escapeHtml(rel.toId)}" readonly />
+                    <select class="property-select" id="cls-rel-to">${classOpts}</select>
                 </div>
                 <div class="property-row">
                     <div class="property-label">Type</div>
@@ -6082,6 +6102,15 @@
                 </div>
             `;
 
+            // Set selected values for From/To dropdowns
+            document.getElementById('cls-rel-from').value = rel.fromId;
+            document.getElementById('cls-rel-to').value = rel.toId;
+            document.getElementById('cls-rel-from').addEventListener('change', function() {
+                postMessage({ type: 'cls_relationshipEdited', relationshipIndex: relIdx, fromId: this.value });
+            });
+            document.getElementById('cls-rel-to').addEventListener('change', function() {
+                postMessage({ type: 'cls_relationshipEdited', relationshipIndex: relIdx, toId: this.value });
+            });
             document.getElementById('cls-rel-type').addEventListener('change', function() {
                 const typeMap = {
                     inheritance: { leftEnd: 'Inheritance', rightEnd: 'None', linkStyle: 'Solid' },
@@ -6295,6 +6324,9 @@
                 diagram.subgraphs = [];
                 seqDiagram = null;
                 clsDiagram = null;
+
+                // Hide property panel from previous diagram
+                propertyPanel.classList.remove('visible');
 
                 stAutoLayoutStates();
                 updateToolbarForDiagramType();
@@ -7143,6 +7175,9 @@
                 seqDiagram = null;
                 clsDiagram = null;
                 stDiagram = null;
+
+                // Hide property panel from previous diagram
+                propertyPanel.classList.remove('visible');
 
                 erAutoLayoutEntities();
                 updateToolbarForDiagramType();
