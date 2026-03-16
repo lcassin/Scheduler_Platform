@@ -877,6 +877,13 @@
                             <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.RateReview" Size="Size.Small" Color="Color.Warning" Class="mr-2" />Needs Review</td>
                             <td class="text-right"><strong style="color: var(--mud-palette-warning);">@_jobStats.NeedsReviewCount</strong></td>
                         </tr>
+                        @if (_jobStats.BlacklistedPendingReviewCount > 0)
+                        {
+                            <tr style="cursor: pointer;" @onclick="@(() => OnJobPipelineChartClick("BlacklistedPendingReview"))">
+                                <td class="pl-6"><MudIcon Icon="@Icons.Material.Filled.Pending" Size="Size.Small" Style="color: #e65100;" Class="mr-2" />Blacklisted Pending Review</td>
+                                <td class="text-right"><strong style="color: #e65100;">@_jobStats.BlacklistedPendingReviewCount</strong></td>
+                            </tr>
+                        }
                         @if (_blacklistCounts != null && _blacklistCounts.CurrentAccountCount > 0)
                         {
                             <tr style="background-color: rgba(var(--mud-palette-error-rgb), 0.05);">
@@ -1523,7 +1530,8 @@
             { "Completed", "#66bb6a" },          // Green/Success
             { "Failed", "#f44336" },             // Red/Error
             { "Cancelled", "#795548" },          // Brown (distinct from Failed red and Credential Failed orange)
-            { "Needs Review", "#ffa726" }        // Orange/Warning - slightly different shade
+            { "Needs Review", "#ffa726" },       // Orange/Warning - slightly different shade
+            { "Blacklisted Pending Review", "#e65100" }  // Deep Orange - distinct from NeedsReview
         };
         
         // Build chart data - order matches the color palette
@@ -1588,6 +1596,13 @@
             labelList.Add("Needs Review");
             colorList.Add(statusColorMap["Needs Review"]);
             customDataList.Add("NeedsReview");
+        }
+        if (_jobStats.BlacklistedPendingReviewCount > 0)
+        {
+            dataList.Add(_jobStats.BlacklistedPendingReviewCount);
+            labelList.Add("Blacklisted Pending Review");
+            colorList.Add(statusColorMap["Blacklisted Pending Review"]);
+            customDataList.Add("BlacklistedPendingReview");
         }
         
         _jobPipelineChartData = dataList.ToArray();

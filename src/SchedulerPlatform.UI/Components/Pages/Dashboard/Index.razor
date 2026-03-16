@@ -1284,7 +1284,8 @@
                         { "ADR Request Sent", "#7e57c2" },  // Purple
                         { "Completed", "#66bb6a" },         // Green
                         { "Cancelled / Failed", "#f44336" },  // Red
-                        { "Needs Review", "#ffa726" }       // Orange
+                        { "Needs Review", "#ffa726" },      // Orange
+                        { "Blacklisted Pending Review", "#e65100" }  // Deep Orange
                     };
                     
                     // CustomData maps display labels to internal status values for navigation
@@ -1331,6 +1332,13 @@
                         labelList.Add("Needs Review");
                         colorList.Add(colorMap["Needs Review"]);
                         customDataList.Add("NeedsReview");
+                    }
+                    if (_adrJobStats.BlacklistedPendingReviewCount > 0)
+                    {
+                        dataList.Add(_adrJobStats.BlacklistedPendingReviewCount);
+                        labelList.Add("Blacklisted Pending Review");
+                        colorList.Add(colorMap["Blacklisted Pending Review"]);
+                        customDataList.Add("BlacklistedPendingReview");
                     }
                     
                     _adrJobChartData = dataList.ToArray();
