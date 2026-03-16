@@ -876,11 +876,11 @@
                                 @context.Status
                             </MudChip>
                         </MudTd>
-                        <MudTd DataLabel="Started">@context.StartDateTime.ToString("MM/dd/yyyy hh:mm:ss tt")</MudTd>
+                        <MudTd DataLabel="Started">@FormatDashboardDateTime(context.StartDateTime)</MudTd>
                         <MudTd DataLabel="Ended">
                             @if (context.EndDateTime.HasValue)
                             {
-                                @context.EndDateTime.Value.ToString("MM/dd/yyyy hh:mm:ss tt")
+                                @FormatDashboardDateTime(context.EndDateTime.Value)
                             }
                             else
                             {
@@ -1130,7 +1130,7 @@
             var statusList = _selectedStatusesBackingField?.ToList();
             var trendsData = await DashboardService.GetExecutionTrendsAsync(_selectedTimeWindow, statuses: statusList);
             
-            _durationLabels = trendsData.Select(x => FormatDateLabel(x.Hour)).ToArray();
+            _durationLabels = trendsData.Select(x => FormatDateLabel(ConvertToUserTimezone(x.Hour))).ToArray();
             _durationSeriesPlotly = new List<PlotlyLineChart.ChartSeriesData>
             {
                 new PlotlyLineChart.ChartSeriesData
@@ -1140,7 +1140,7 @@
                 }
             };
 
-            _concurrentLabels = trendsData.Select(x => FormatDateLabel(x.Hour)).ToArray();
+            _concurrentLabels = trendsData.Select(x => FormatDateLabel(ConvertToUserTimezone(x.Hour))).ToArray();
             _concurrentSeriesPlotly = new List<PlotlyLineChart.ChartSeriesData>
             {
                 new PlotlyLineChart.ChartSeriesData
@@ -1578,10 +1578,10 @@
         StateHasChanged();
     }
 
-    private string FormatDashboardDateTime(DateTime dateTime)
+    private DateTime ConvertToUserTimezone(DateTime dateTime)
     {
         if (!_timezoneLoaded || string.IsNullOrEmpty(_browserTimeZone))
-            return dateTime.ToString("MM/dd/yyyy hh:mm:ss tt");
+            return dateTime;
         
         try
         {
@@ -1589,13 +1589,18 @@
                 ? DateTime.SpecifyKind(dateTime, DateTimeKind.Utc) 
                 : dateTime;
             var tz = TimeZoneInfo.FindSystemTimeZoneById(_browserTimeZone);
-            var localTime = TimeZoneInfo.ConvertTimeFromUtc(utcDt, tz);
-            return localTime.ToString("MM/dd/yyyy hh:mm:ss tt");
+            return TimeZoneInfo.ConvertTimeFromUtc(utcDt, tz);
         }
         catch
         {
-            return dateTime.ToString("MM/dd/yyyy hh:mm:ss tt");
+            return dateTime;
         }
+    }
+
+    private string FormatDashboardDateTime(DateTime dateTime)
+    {
+        var localTime = ConvertToUserTimezone(dateTime);
+        return localTime.ToString("MM/dd/yyyy hh:mm:ss tt");
     }
 
     private Color GetDashboardStepColor(AdrOrchestrationStatus run, string stepName)
