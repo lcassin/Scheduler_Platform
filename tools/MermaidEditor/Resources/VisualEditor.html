@@ -1348,6 +1348,37 @@
             return label.split(/<br\s*\/?>/gi);
         }
 
+        // Populate an SVG <text> element with multi-line support (splits on <br/> tags).
+        // If the label contains no <br/> tags it behaves like textContent assignment.
+        // Returns the number of lines rendered.
+        function setTextWithLineBreaks(textEl, label) {
+            const lines = splitLabelLines(label);
+            if (lines.length <= 1) {
+                textEl.textContent = label;
+                return 1;
+            }
+            // Clear any existing content
+            textEl.textContent = '';
+            const lineHeight = 16;
+            const totalHeight = lines.length * lineHeight;
+            const startY = -totalHeight / 2 + lineHeight / 2 + 2;
+            lines.forEach((line, i) => {
+                const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+                tspan.setAttribute('x', textEl.getAttribute('x') || '0');
+                tspan.setAttribute('dy', i === 0 ? `${startY}` : `${lineHeight}`);
+                tspan.textContent = line;
+                textEl.appendChild(tspan);
+            });
+            return lines.length;
+        }
+
+        // Estimate display width of a label accounting for <br/> line breaks
+        function estimateLabelWidth(label, charWidth) {
+            const lines = splitLabelLines(label);
+            const longest = lines.reduce((max, l) => Math.max(max, l.length), 0);
+            return longest * (charWidth || 7);
+        }
+
         function estimateNodeSize(node) {
             const label = node.label || node.id;
             const lines = splitLabelLines(label);
@@ -1419,24 +1450,8 @@
                 const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                 text.classList.add('node-label');
                 text.setAttribute('x', '0');
-                const rawLabel = node.label || node.id;
-                const labelLines = splitLabelLines(rawLabel);
-                if (labelLines.length <= 1) {
-                    text.setAttribute('y', '0');
-                    text.textContent = rawLabel;
-                } else {
-                    // Center multi-line text vertically
-                    const lineHeight = 18;
-                    const totalHeight = labelLines.length * lineHeight;
-                    const startY = -totalHeight / 2 + lineHeight / 2 + 2;
-                    labelLines.forEach((line, i) => {
-                        const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
-                        tspan.setAttribute('x', '0');
-                        tspan.setAttribute('dy', i === 0 ? `${startY}` : `${lineHeight}`);
-                        tspan.textContent = line;
-                        text.appendChild(tspan);
-                    });
-                }
+                text.setAttribute('y', '0');
+                setTextWithLineBreaks(text, node.label || node.id);
                 g.appendChild(text);
 
                 // Connection points (N, S, E, W)
@@ -1727,10 +1742,10 @@
                     labelText.classList.add('edge-label');
                     labelText.setAttribute('x', mx);
                     labelText.setAttribute('y', my);
-                    labelText.textContent = edge.label;
+                    setTextWithLineBreaks(labelText, edge.label);
 
                     // Background rect sized to text
-                    const tw = edge.label.length * 7 + 12;
+                    const tw = estimateLabelWidth(edge.label, 7) + 12;
                     labelBg.classList.add('edge-label-bg');
                     labelBg.setAttribute('x', mx - tw / 2);
                     labelBg.setAttribute('y', my - 9);
@@ -1925,7 +1940,7 @@
                 text.classList.add('subgraph-label');
                 text.setAttribute('x', minX - padding + 10);
                 text.setAttribute('y', minY - padding - labelHeight + 16);
-                text.textContent = (sg.label || sg.id) + (sgNodes.length === 0 ? ' (empty)' : '');
+                setTextWithLineBreaks(text, (sg.label || sg.id) + (sgNodes.length === 0 ? ' (empty)' : ''));
                 g.appendChild(text);
 
                 // Store bounding box on subgraph for centerView / fitToView
@@ -4027,7 +4042,7 @@
                         label.setAttribute('x', fromX + loopW + 5);
                         label.setAttribute('y', y + loopH / 2);
                         label.setAttribute('text-anchor', 'start');
-                        label.textContent = (msgNumber > 0 ? msgNumber + '. ' : '') + el.text;
+                        setTextWithLineBreaks(label, (msgNumber > 0 ? msgNumber + '. ' : '') + el.text);
                         msgGroup.appendChild(label);
                     }
                 } else {
@@ -4099,7 +4114,7 @@
                         const midX = (fromX + toX) / 2;
                         const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
                         const labelText = (msgNumber > 0 ? msgNumber + '. ' : '') + el.text;
-                        const textWidth = labelText.length * 7 + 12;
+                        const textWidth = estimateLabelWidth(labelText, 7) + 12;
                         labelBg.setAttribute('x', midX - textWidth / 2);
                         labelBg.setAttribute('y', y - 18);
                         labelBg.setAttribute('width', textWidth);
@@ -4112,7 +4127,7 @@
                         label.classList.add('edge-label');
                         label.setAttribute('x', midX);
                         label.setAttribute('y', y - 10);
-                        label.textContent = labelText;
+                        setTextWithLineBreaks(label, labelText);
                         msgGroup.appendChild(label);
                     }
                 }
@@ -4356,7 +4371,7 @@
             noteText.setAttribute('text-anchor', 'middle');
             noteText.setAttribute('font-size', '11');
             noteText.setAttribute('fill', '#333');
-            noteText.textContent = note.text || '';
+            setTextWithLineBreaks(noteText, note.text || '');
             noteG.appendChild(noteText);
 
             edgesLayer.appendChild(noteG);
@@ -5615,7 +5630,7 @@
                 nameText.setAttribute('font-size', '13');
                 nameText.setAttribute('font-weight', 'bold');
                 nameText.setAttribute('font-family', 'monospace');
-                nameText.textContent = cls.label || cls.id;
+                setTextWithLineBreaks(nameText, cls.label || cls.id);
                 g.appendChild(nameText);
 
                 // Divider line
@@ -5780,9 +5795,9 @@
                     labelText.setAttribute('fill', 'var(--node-text)');
                     labelText.setAttribute('font-size', '11');
                     labelText.setAttribute('font-style', 'italic');
-                    labelText.textContent = rel.label;
+                    setTextWithLineBreaks(labelText, rel.label);
                     // Background rect
-                    const estWidth = rel.label.length * 7 + 8;
+                    const estWidth = estimateLabelWidth(rel.label, 7) + 8;
                     labelBg.setAttribute('x', labelX - estWidth / 2);
                     labelBg.setAttribute('y', labelY - 16);
                     labelBg.setAttribute('width', estWidth);
@@ -5846,7 +5861,8 @@
                 noteText.setAttribute('y', '24');
                 noteText.setAttribute('fill', '#333');
                 noteText.setAttribute('font-size', '11');
-                noteText.textContent = note.text.length > 25 ? note.text.substring(0, 25) + '...' : note.text;
+                const displayNoteText = note.text.length > 25 ? note.text.substring(0, 25) + '...' : note.text;
+                setTextWithLineBreaks(noteText, displayNoteText);
                 g.appendChild(noteText);
 
                 subgraphsLayer.appendChild(g);
@@ -6796,7 +6812,7 @@
                 label.setAttribute('fill', 'var(--node-text)');
                 label.setAttribute('font-size', '13');
                 label.setAttribute('font-weight', 'bold');
-                label.textContent = state.label || state.id;
+                setTextWithLineBreaks(label, state.label || state.id);
                 g.appendChild(label);
 
                 // Divider
@@ -6832,7 +6848,7 @@
                 text.setAttribute('text-anchor', 'middle');
                 text.setAttribute('fill', 'var(--node-text)');
                 text.setAttribute('font-size', '13');
-                text.textContent = state.label || state.id;
+                setTextWithLineBreaks(text, state.label || state.id);
                 g.appendChild(text);
             }
 
@@ -6957,7 +6973,7 @@
                 labelText.setAttribute('fill', 'var(--node-text)');
                 labelText.setAttribute('font-size', '11');
                 labelText.setAttribute('font-style', 'italic');
-                labelText.textContent = trans.label;
+                setTextWithLineBreaks(labelText, trans.label);
                 g.appendChild(labelText);
             }
 
@@ -7837,7 +7853,7 @@
                 labelText.setAttribute('fill', 'var(--node-text)');
                 labelText.setAttribute('font-size', '11');
                 labelText.setAttribute('font-style', 'italic');
-                labelText.textContent = rel.label;
+                setTextWithLineBreaks(labelText, rel.label);
                 g.appendChild(labelText);
             }
 
