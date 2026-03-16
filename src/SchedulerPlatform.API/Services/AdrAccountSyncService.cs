@@ -1003,6 +1003,29 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
     private static string GetAccountSyncQuery()
     {
         return @"
+		-- Pre-resolve: best credential per account via CredentialAccount linking.
+		-- Priority: 1) prefer credentials with non-null/non-empty passwords,
+		--           2) prefer non-expired credentials,
+		--           3) latest CreatedDate,
+		--           4) latest CredentialId as tiebreaker.
+		-- If all linked credentials have null passwords, we still pick the latest one
+		-- so that downstream processes can create a Zendesk ticket to fix the credential.
+		DROP TABLE IF EXISTS #tmpBestCredential;
+		SELECT AccountId, CredentialId, ExpirationDate
+		INTO #tmpBestCredential
+		FROM (
+			SELECT CA.AccountId, C.CredentialId, C.ExpirationDate,
+			       ROW_NUMBER() OVER (PARTITION BY CA.AccountId ORDER BY 
+			           CASE WHEN C.[Password] IS NOT NULL AND C.[Password] != '' THEN 0 ELSE 1 END,
+			           CASE WHEN C.ExpirationDate IS NULL OR C.ExpirationDate >= CAST(GETDATE() AS DATE) THEN 0 ELSE 1 END,
+			           C.CreatedDate DESC,
+			           C.CredentialId DESC) AS rn
+			FROM CredentialAccount CA
+			INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId
+			INNER JOIN Account A ON CA.AccountId = A.AccountId AND A.IsActive = 1
+		) ranked
+		WHERE rn = 1;
+
 		DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
 
 		SELECT [RecId]
@@ -1013,16 +1036,15 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
 			  ,AD.[VendorCode] AS PrimaryVendorCode
 			  ,MV.[PrimaryVendorCode] AS MasterVendorCode
 			  ,[VCAccountId] AS AccountId
-			  ,C.[CredentialId]
-			  ,C.ExpirationDate
+			  ,BC.[CredentialId]
+			  ,BC.ExpirationDate
 			  ,CL.ClientId
 			  ,CL.ClientName
 		INTO #tmpCredentialAccountBilling
 		FROM [dbo].[ADRInvoiceAccountData] AD
 			INNER JOIN Account A ON AD.VCAccountId = A.AccountId AND A.IsActive = 1
 			INNER JOIN Client CL ON A.ClientId = CL.ClientId AND CL.IsActive = 1
-			INNER JOIN CredentialAccount CA ON AD.VCAccountId = CA.AccountId
-			INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId
+			INNER JOIN #tmpBestCredential BC ON AD.VCAccountId = BC.AccountId
 			LEFT OUTER JOIN Vendor V ON AD.VendorCode = V.PrimaryVendorCode
 			LEFT OUTER JOIN VendorXRef VX ON V.VendorId = VX.PrimaryVendorId
 			LEFT OUTER JOIN Vendor MV ON VX.MasterVendorId = MV.VendorId
@@ -1175,6 +1197,7 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
 		ORDER BY VMAccountId;
 
 		DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
+		DROP TABLE IF EXISTS #tmpBestCredential;
 		";
     }
 
