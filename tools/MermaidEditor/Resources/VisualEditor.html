@@ -3356,6 +3356,7 @@
         }
 
         function deleteSelected() {
+            // Flowchart elements
             if (selectedNodeId) {
                 const nodeId = selectedNodeId;
                 diagram.nodes = diagram.nodes.filter(n => n.id !== nodeId);
@@ -3382,6 +3383,25 @@
                 render();
                 hidePropertyPanel();
                 postMessage({ type: 'subgraphDeleted', subgraphId: sgId });
+            }
+            // Sequence diagram elements
+            else if (currentDiagramType === 'sequence' && seqDiagram) {
+                if (seqSelectedParticipantId) {
+                    postMessage({ type: 'seq_participantDeleted', participantId: seqSelectedParticipantId });
+                    seqSelectedParticipantId = null;
+                } else if (seqSelectedFragInnerMsg) {
+                    postMessage({ type: 'seq_fragmentInnerMessageDeleted', elementIndex: seqSelectedFragInnerMsg.fragIdx, sectionIndex: seqSelectedFragInnerMsg.secIdx, subIndex: seqSelectedFragInnerMsg.subIdx });
+                    seqSelectedFragInnerMsg = null;
+                } else if (seqSelectedMessageIndex >= 0) {
+                    postMessage({ type: 'seq_messageDeleted', elementIndex: seqSelectedMessageIndex });
+                    seqSelectedMessageIndex = -1;
+                } else if (seqSelectedFragmentIndex >= 0) {
+                    postMessage({ type: 'seq_fragmentDeleted', elementIndex: seqSelectedFragmentIndex });
+                    seqSelectedFragmentIndex = -1;
+                } else if (seqSelectedNoteIndex >= 0) {
+                    postMessage({ type: 'seq_noteDeleted', elementIndex: seqSelectedNoteIndex });
+                    seqSelectedNoteIndex = -1;
+                }
             }
         }
 
@@ -3762,6 +3782,18 @@
             return seqDiagram.participants.findIndex(p => p.id === participantId);
         }
 
+        // Resolve a fragment-inner message element from data attributes
+        // (must be in outer scope so property panel and context menu handlers can access it)
+        function getFragmentInnerMessage(fragIdx, sectionIdx, subIdx) {
+            if (!seqDiagram) return null;
+            const frag = seqDiagram.elements[fragIdx];
+            if (!frag || frag.elementType !== 'fragment') return null;
+            if (!frag.sections || sectionIdx < 0 || sectionIdx >= frag.sections.length) return null;
+            const sec = frag.sections[sectionIdx];
+            if (!sec.elements || subIdx < 0 || subIdx >= sec.elements.length) return null;
+            return sec.elements[subIdx];
+        }
+
         function getMessageY(msgIndex) {
             return SEQ_LIFELINE_START_Y + 30 + msgIndex * SEQ_MESSAGE_SPACING;
         }
@@ -3953,17 +3985,6 @@
             let currentY = SEQ_LIFELINE_START_Y + 30; // cumulative Y position tracker
             let msgNumber = seqDiagram.autoNumber ? 1 : 0;
             const activationStacks = {}; // participantId -> [{startY}]
-
-            // Helper: resolve a fragment-inner message element from data attributes
-            function getFragmentInnerMessage(fragIdx, sectionIdx, subIdx) {
-                if (!seqDiagram) return null;
-                const frag = seqDiagram.elements[fragIdx];
-                if (!frag || frag.elementType !== 'fragment') return null;
-                if (!frag.sections || sectionIdx < 0 || sectionIdx >= frag.sections.length) return null;
-                const sec = frag.sections[sectionIdx];
-                if (!sec.elements || subIdx < 0 || subIdx >= sec.elements.length) return null;
-                return sec.elements[subIdx];
-            }
 
             // Helper: render a single message arrow (used for both top-level and fragment-inner messages)
             // For fragment-inner messages, pass sectionIdx and subIdx to tag them appropriately
@@ -5084,6 +5105,7 @@
             if (!seqDiagram) return;
 
             _seqRightClickHandled = true;
+            e.preventDefault(); // Suppress native context menu early
             const target = e.target;
 
             const participantGroup = target.closest('.seq-participant');
@@ -5100,20 +5122,30 @@
                 }
             }
 
-            // Fallback 2: check all rendered message groups via SVG bounding box
+            // Fallback 2: check all rendered message groups via SVG bounding box.
+            // Always run this if no message was found yet — even if we found a fragment
+            // or other element, because fragment-inner messages sit inside fragment rects
+            // and the click target may be the fragment background instead.
             if (!messageGroup && !participantGroup && !noteGroup) {
                 const svgPt = getSVGPoint(e);
                 const allMsgs = svg.querySelectorAll('.seq-message');
+                let bestMsg = null;
+                let bestArea = Infinity;
                 for (const msg of allMsgs) {
                     try {
                         const bbox = msg.getBBox();
                         if (svgPt.x >= bbox.x && svgPt.x <= bbox.x + bbox.width &&
                             svgPt.y >= bbox.y && svgPt.y <= bbox.y + bbox.height) {
-                            messageGroup = msg;
-                            break;
+                            // Prefer the smallest (most specific) bounding box match
+                            const area = bbox.width * bbox.height;
+                            if (area < bestArea) {
+                                bestMsg = msg;
+                                bestArea = area;
+                            }
                         }
                     } catch(ex) { /* ignore getBBox errors */ }
                 }
+                if (bestMsg) messageGroup = bestMsg;
             }
 
             // If we found a message, clear fragment selection to avoid confusion
@@ -5355,10 +5387,10 @@
         // The contextmenu event just suppresses the native menu — all logic is in mousedown above
         svg.addEventListener('contextmenu', function(e) {
             if (currentDiagramType !== 'sequence') return;
-            if (!_seqRightClickHandled) return;
-            _seqRightClickHandled = false;
+            // Always suppress native context menu for sequence diagrams on the SVG
             e.preventDefault();
             e.stopPropagation();
+            _seqRightClickHandled = false;
         });
 
         function addContextMenuItem(label, onClick) {
