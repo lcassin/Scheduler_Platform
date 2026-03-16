@@ -3656,6 +3656,7 @@
         let seqSelectedParticipantId = null;
         let seqSelectedMessageIndex = -1;
         let seqSelectedFragmentIndex = -1;
+        let seqSelectedFragInnerMsg = null; // { fragIdx, secIdx, subIdx } when a fragment-inner message is selected
         let seqSelectedNoteIndex = -1;
         let _seqPendingNoteSelect = false; // Auto-select newly created notes
         let seqDraggingParticipantId = null;
@@ -3732,6 +3733,7 @@
                             seqSelectedParticipantId = null;
                             seqSelectedMessageIndex = -1;
                             seqSelectedFragmentIndex = -1;
+                            seqSelectedFragInnerMsg = null;
                             renderSequenceDiagram();
                             showSeqNotePropertyPanel(i);
                             return;
@@ -3975,6 +3977,10 @@
                 const y = absY;
                 const isSelfMessage = el.fromId === el.toId;
                 const isFragmentInner = (sectionIdx !== undefined && subIdx !== undefined);
+                // Determine if this specific message is selected
+                const isThisMsgSelected = isFragmentInner
+                    ? (seqSelectedFragInnerMsg && seqSelectedFragInnerMsg.fragIdx === elIdx && seqSelectedFragInnerMsg.secIdx === sectionIdx && seqSelectedFragInnerMsg.subIdx === subIdx)
+                    : (seqSelectedMessageIndex === elIdx);
 
                 const msgGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                 msgGroup.classList.add('edge-group', 'seq-message');
@@ -4014,7 +4020,7 @@
                     const loopH = 30;
                     path.setAttribute('d', `M ${fromX} ${y} H ${fromX + loopW} V ${y + loopH} H ${fromX}`);
                     path.classList.add('edge-line');
-                    if (seqSelectedMessageIndex === elIdx) path.classList.add('selected');
+                    if (isThisMsgSelected) path.classList.add('selected');
                     applyArrowStyle(path, el.arrowType);
                     msgGroup.appendChild(path);
 
@@ -4032,7 +4038,7 @@
                     const arrowPoly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
                     arrowPoly.setAttribute('points', `${fromX + 8},${y + loopH - 4} ${fromX},${y + loopH} ${fromX + 8},${y + loopH + 4}`);
                     arrowPoly.classList.add('edge-arrowhead');
-                    if (seqSelectedMessageIndex === elIdx) arrowPoly.classList.add('selected');
+                    if (isThisMsgSelected) arrowPoly.classList.add('selected');
                     msgGroup.appendChild(arrowPoly);
 
                     // Label
@@ -4053,7 +4059,7 @@
                     line.setAttribute('x2', toX);
                     line.setAttribute('y2', y);
                     line.classList.add('edge-line');
-                    if (seqSelectedMessageIndex === elIdx) line.classList.add('selected');
+                    if (isThisMsgSelected) line.classList.add('selected');
                     applyArrowStyle(line, el.arrowType);
                     msgGroup.appendChild(line);
 
@@ -4071,13 +4077,13 @@
                         cross1.setAttribute('x1', cx - size); cross1.setAttribute('y1', cy - size);
                         cross1.setAttribute('x2', cx + size); cross1.setAttribute('y2', cy + size);
                         cross1.setAttribute('stroke', 'var(--edge-color)'); cross1.setAttribute('stroke-width', '2');
-                        if (seqSelectedMessageIndex === elIdx) cross1.setAttribute('stroke', 'var(--node-selected-stroke)');
+                        if (isThisMsgSelected) cross1.setAttribute('stroke', 'var(--node-selected-stroke)');
                         msgGroup.appendChild(cross1);
                         const cross2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
                         cross2.setAttribute('x1', cx - size); cross2.setAttribute('y1', cy + size);
                         cross2.setAttribute('x2', cx + size); cross2.setAttribute('y2', cy - size);
                         cross2.setAttribute('stroke', 'var(--edge-color)'); cross2.setAttribute('stroke-width', '2');
-                        if (seqSelectedMessageIndex === elIdx) cross2.setAttribute('stroke', 'var(--node-selected-stroke)');
+                        if (isThisMsgSelected) cross2.setAttribute('stroke', 'var(--node-selected-stroke)');
                         msgGroup.appendChild(cross2);
                     } else if (isOpen) {
                         // Open arrowhead (V shape, no fill)
@@ -4086,14 +4092,14 @@
                         arrow.setAttribute('fill', 'none');
                         arrow.setAttribute('stroke', 'var(--edge-color)');
                         arrow.setAttribute('stroke-width', '1.5');
-                        if (seqSelectedMessageIndex === elIdx) arrow.setAttribute('stroke', 'var(--node-selected-stroke)');
+                        if (isThisMsgSelected) arrow.setAttribute('stroke', 'var(--node-selected-stroke)');
                         msgGroup.appendChild(arrow);
                     } else {
                         // Filled arrowhead
                         const arrowPoly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
                         arrowPoly.setAttribute('points', `${toX - dir * 10},${y - 5} ${toX},${y} ${toX - dir * 10},${y + 5}`);
                         arrowPoly.classList.add('edge-arrowhead');
-                        if (seqSelectedMessageIndex === elIdx) arrowPoly.classList.add('selected');
+                        if (isThisMsgSelected) arrowPoly.classList.add('selected');
                         msgGroup.appendChild(arrowPoly);
                     }
 
@@ -4382,10 +4388,28 @@
             const startY = fragStartY - 10;
             const endY = fragEndY;
 
-            // Determine horizontal extent (span all participants by default)
+            // Determine horizontal extent based on participants used by messages inside the fragment
             const participants = seqDiagram.participants;
-            const leftX = participants.length > 0 ? getParticipantX(0) - SEQ_PARTICIPANT_WIDTH / 2 - 10 : SEQ_LEFT_MARGIN - 40;
-            const rightX = participants.length > 0 ? getParticipantX(participants.length - 1) + SEQ_PARTICIPANT_WIDTH / 2 + 10 : SEQ_LEFT_MARGIN + 200;
+            let minPIdx = participants.length - 1;
+            let maxPIdx = 0;
+            if (fragment.sections) {
+                fragment.sections.forEach(sec => {
+                    if (sec.elements) {
+                        sec.elements.forEach(se => {
+                            if (se.elementType === 'message') {
+                                const fi = getParticipantIndex(se.fromId);
+                                const ti = getParticipantIndex(se.toId);
+                                if (fi >= 0) { minPIdx = Math.min(minPIdx, fi); maxPIdx = Math.max(maxPIdx, fi); }
+                                if (ti >= 0) { minPIdx = Math.min(minPIdx, ti); maxPIdx = Math.max(maxPIdx, ti); }
+                            }
+                        });
+                    }
+                });
+            }
+            // If no messages found, fall back to spanning all participants
+            if (minPIdx > maxPIdx) { minPIdx = 0; maxPIdx = participants.length - 1; }
+            const leftX = participants.length > 0 ? getParticipantX(minPIdx) - SEQ_PARTICIPANT_WIDTH / 2 - 10 : SEQ_LEFT_MARGIN - 40;
+            const rightX = participants.length > 0 ? getParticipantX(maxPIdx) + SEQ_PARTICIPANT_WIDTH / 2 + 10 : SEQ_LEFT_MARGIN + 200;
 
             const fragG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             fragG.classList.add('seq-fragment');
@@ -4434,6 +4458,7 @@
 
             // Fragment type label (e.g., "loop", "alt", "opt")
             const typeLabel = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            typeLabel.setAttribute('pointer-events', 'none');
             const typeBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
             const fragTypeText = (fragment.fragmentType || fragment.type || 'loop').toLowerCase();
             const typeWidth = fragTypeText.length * 8 + 16;
@@ -4463,6 +4488,7 @@
                 condText.setAttribute('y', startY + 14);
                 condText.setAttribute('font-size', '11');
                 condText.setAttribute('fill', 'var(--subgraph-text)');
+                condText.setAttribute('pointer-events', 'none');
                 condText.textContent = '[' + fragment.text + ']';
                 fragG.appendChild(condText);
             }
@@ -4489,6 +4515,7 @@
                         divider.setAttribute('stroke', 'var(--subgraph-stroke)');
                         divider.setAttribute('stroke-width', '1');
                         divider.setAttribute('stroke-dasharray', '5,3');
+                        divider.setAttribute('pointer-events', 'none');
                         fragG.appendChild(divider);
 
                         // Section label
@@ -4498,6 +4525,7 @@
                             secLabel.setAttribute('y', divY + 14);
                             secLabel.setAttribute('font-size', '11');
                             secLabel.setAttribute('fill', 'var(--subgraph-text)');
+                            secLabel.setAttribute('pointer-events', 'none');
                             secLabel.textContent = '[' + fragment.sections[si + 1].label + ']';
                             fragG.appendChild(secLabel);
                         }
@@ -4573,6 +4601,7 @@
                 seqSelectedParticipantId = pid;
                 seqSelectedMessageIndex = -1;
                 seqSelectedFragmentIndex = -1;
+                seqSelectedFragInnerMsg = null;
                 seqSelectedNoteIndex = -1;
                 selectedNodeId = null;
                 selectedEdgeIndex = -1;
@@ -4593,12 +4622,14 @@
                     const secIdx = parseInt(messageGroup.getAttribute('data-section-index'), 10);
                     const subIdx = parseInt(messageGroup.getAttribute('data-sub-index'), 10);
                     seqSelectedMessageIndex = -1;
-                    seqSelectedFragmentIndex = elIdx;
+                    seqSelectedFragmentIndex = -1;
+                    seqSelectedFragInnerMsg = { fragIdx: elIdx, secIdx: secIdx, subIdx: subIdx };
                     renderSequenceDiagram();
                     showSeqFragmentInnerMessagePropertyPanel(elIdx, secIdx, subIdx);
                 } else {
                     seqSelectedMessageIndex = elIdx;
                     seqSelectedFragmentIndex = -1;
+                    seqSelectedFragInnerMsg = null;
                     renderSequenceDiagram();
                     showSeqMessagePropertyPanel(elIdx);
                 }
@@ -4609,6 +4640,7 @@
             if (fragmentGroup) {
                 const elIdx = parseInt(fragmentGroup.getAttribute('data-element-index'), 10);
                 seqSelectedFragmentIndex = elIdx;
+                seqSelectedFragInnerMsg = null;
                 seqSelectedParticipantId = null;
                 seqSelectedMessageIndex = -1;
                 seqSelectedNoteIndex = -1;
@@ -4627,6 +4659,7 @@
                 seqSelectedParticipantId = null;
                 seqSelectedMessageIndex = -1;
                 seqSelectedFragmentIndex = -1;
+                seqSelectedFragInnerMsg = null;
                 selectedNodeId = null;
                 selectedEdgeIndex = -1;
                 renderSequenceDiagram();
@@ -4640,6 +4673,7 @@
                 seqSelectedParticipantId = null;
                 seqSelectedMessageIndex = -1;
                 seqSelectedFragmentIndex = -1;
+                seqSelectedFragInnerMsg = null;
                 seqSelectedNoteIndex = -1;
                 propertyPanel.classList.remove('visible');
                 renderSequenceDiagram();
@@ -5046,9 +5080,19 @@
             e.stopPropagation();
 
             const participantGroup = e.target.closest('.seq-participant');
-            const messageGroup = e.target.closest('.seq-message');
+            let messageGroup = e.target.closest('.seq-message');
             const fragmentGroup = e.target.closest('.seq-fragment');
             const noteGroup = e.target.closest('.seq-note');
+
+            // Fallback: if the right-click hit a fragment element (label, divider, etc.)
+            // but there's a message underneath, find it via elementsFromPoint
+            if (!messageGroup && fragmentGroup) {
+                const allEls = document.elementsFromPoint(e.clientX, e.clientY);
+                for (const el of allEls) {
+                    const msg = el.closest('.seq-message');
+                    if (msg) { messageGroup = msg; break; }
+                }
+            }
 
             contextMenu.innerHTML = '';
 
@@ -5114,7 +5158,8 @@
                     const secIdx = parseInt(messageGroup.getAttribute('data-section-index'), 10);
                     const subIdx = parseInt(messageGroup.getAttribute('data-sub-index'), 10);
                     const innerEl = getFragmentInnerMessage(elIdx, secIdx, subIdx);
-                    seqSelectedFragmentIndex = elIdx;
+                    seqSelectedFragmentIndex = -1;
+                    seqSelectedFragInnerMsg = { fragIdx: elIdx, secIdx: secIdx, subIdx: subIdx };
                     seqSelectedMessageIndex = -1;
 
                     addContextMenuItem('Edit Message', () => {
@@ -5183,6 +5228,7 @@
             } else if (fragmentGroup) {
                 const elIdx = parseInt(fragmentGroup.getAttribute('data-element-index'), 10);
                 seqSelectedFragmentIndex = elIdx;
+                seqSelectedFragInnerMsg = null;
 
                 addContextMenuItem('Edit Fragment', () => {
                     showSeqFragmentPropertyPanel(elIdx);
@@ -5200,6 +5246,29 @@
                 if (elIdx < seqDiagram.elements.length - 1) {
                     addContextMenuItem('\u2193 Move Down', () => {
                         postMessage({ type: 'seq_elementReordered', fromIndex: elIdx, toIndex: elIdx + 1 });
+                    });
+                }
+                addContextMenuSeparator();
+                // Add message INTO the fragment (first section, at the end)
+                const frag = seqDiagram.elements[elIdx];
+                if (frag && frag.sections) {
+                    frag.sections.forEach((sec, secIdx) => {
+                        const secLabel = sec.label || ('Section ' + (secIdx + 1));
+                        const subIdx = sec.elements ? sec.elements.length : 0;
+                        // Determine default from/to from existing messages in this section
+                        let defFrom = seqDiagram.participants[0].id;
+                        let defTo = seqDiagram.participants.length > 1 ? seqDiagram.participants[1].id : seqDiagram.participants[0].id;
+                        if (sec.elements && sec.elements.length > 0) {
+                            const lastMsg = sec.elements[sec.elements.length - 1];
+                            if (lastMsg.fromId) defFrom = lastMsg.fromId;
+                            if (lastMsg.toId) defTo = lastMsg.toId;
+                        }
+                        const menuLabel = frag.sections.length > 1
+                            ? 'Add Message Into [' + secLabel + ']'
+                            : 'Add Message Into Fragment';
+                        addContextMenuItem(menuLabel, () => {
+                            postMessage({ type: 'seq_fragmentInnerMessageCreated', elementIndex: elIdx, sectionIndex: secIdx, subIndex: subIdx, fromId: defFrom, toId: defTo, text: 'Message', arrowType: 'SolidArrow' });
+                        });
                     });
                 }
                 addContextMenuSeparator();
@@ -5246,7 +5315,7 @@
             }
 
             // Copy/Paste for sequence diagrams
-            if (seqSelectedParticipantId || seqSelectedMessageIndex >= 0 || seqSelectedNoteIndex >= 0 || seqSelectedFragmentIndex >= 0) {
+            if (seqSelectedParticipantId || seqSelectedMessageIndex >= 0 || seqSelectedNoteIndex >= 0 || seqSelectedFragmentIndex >= 0 || seqSelectedFragInnerMsg) {
                 addContextMenuSeparator();
                 addContextMenuItem('\u{1F4CB} Copy', () => { copySelected(); });
             }
@@ -5292,6 +5361,10 @@
                 } else if (seqSelectedMessageIndex >= 0) {
                     postMessage({ type: 'seq_messageDeleted', elementIndex: seqSelectedMessageIndex });
                     seqSelectedMessageIndex = -1;
+                    e.preventDefault();
+                } else if (seqSelectedFragInnerMsg) {
+                    postMessage({ type: 'seq_fragmentInnerMessageDeleted', elementIndex: seqSelectedFragInnerMsg.fragIdx, sectionIndex: seqSelectedFragInnerMsg.secIdx, subIndex: seqSelectedFragInnerMsg.subIdx });
+                    seqSelectedFragInnerMsg = null;
                     e.preventDefault();
                 } else if (seqSelectedFragmentIndex >= 0) {
                     postMessage({ type: 'seq_fragmentDeleted', elementIndex: seqSelectedFragmentIndex });
