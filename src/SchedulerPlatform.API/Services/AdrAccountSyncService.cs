@@ -1111,28 +1111,31 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
     private static string GetAccountSyncQuery()
     {
         return @"
-		DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
-
-		-- Pre-resolve credentials: one row per vendor (prefer credentials with passwords, then latest CredentialId).
-		-- This prevents row multiplication when joining Credential to the main query.
-		-- Without this, a vendor with N active credentials would multiply every invoice row by N.
-		DROP TABLE IF EXISTS #tmpVendorCred;
-		SELECT VendorId, CredentialId
-		INTO #tmpVendorCred
+		-- Pre-resolve: best credential per account via CredentialAccount linking.
+		-- Priority: 1) prefer credentials with non-null/non-empty passwords,
+		--           2) prefer non-expired credentials,
+		--           3) latest CreatedDate,
+		--           4) latest CredentialId as tiebreaker.
+		-- If all linked credentials have null passwords, we still pick the latest one
+		-- so that downstream processes can create a Zendesk ticket to fix the credential.
+		DROP TABLE IF EXISTS #tmpBestCredential;
+		SELECT AccountId, CredentialId, ExpirationDate
+		INTO #tmpBestCredential
 		FROM (
-			SELECT VendorId, CredentialId,
-			       ROW_NUMBER() OVER (PARTITION BY VendorId ORDER BY 
-			           CASE WHEN [Password] IS NOT NULL AND [Password] != '' THEN 0 ELSE 1 END,
-			           CredentialId DESC) AS rn
-			FROM [Credential]
-			WHERE IsActive = 1
-			  AND (ExpirationDate IS NULL OR ExpirationDate >= CAST(GETDATE() AS DATE))
+			SELECT CA.AccountId, C.CredentialId, C.ExpirationDate,
+			       ROW_NUMBER() OVER (PARTITION BY CA.AccountId ORDER BY 
+			           CASE WHEN C.[Password] IS NOT NULL AND C.[Password] != '' THEN 0 ELSE 1 END,
+			           CASE WHEN C.ExpirationDate IS NULL OR C.ExpirationDate >= CAST(GETDATE() AS DATE) THEN 0 ELSE 1 END,
+			           C.CreatedDate DESC,
+			           C.CredentialId DESC) AS rn
+			FROM CredentialAccount CA
+			INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId
+			INNER JOIN Account A ON CA.AccountId = A.AccountId AND A.IsActive = 1
 		) ranked
 		WHERE rn = 1;
 
-		-- Resolve credentials: try PrimaryVendor first, fall back to MasterVendor.
-		-- The Credential table links to Vendor via VendorId. We do NOT use CredentialAccount
-		-- (that table is for PIN/SSO type determination used by the downstream API, not the scheduler).
+		DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
+
 		SELECT [RecId]
 			  ,AD.[InterfaceAccountId]
 			  ,[BillId]
@@ -1141,29 +1144,19 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
 			  ,AD.[VendorCode] AS PrimaryVendorCode
 			  ,MV.[PrimaryVendorCode] AS MasterVendorCode
 			  ,[VCAccountId] AS AccountId
-			  ,COALESCE(PC.CredentialId, MC.CredentialId) AS CredentialId
-			  ,COALESCE(PCFull.ExpirationDate, MCFull.ExpirationDate) AS ExpirationDate
+			  ,BC.[CredentialId]
+			  ,BC.ExpirationDate
 			  ,CL.ClientId
 			  ,CL.ClientName
 		INTO #tmpCredentialAccountBilling
 		FROM [dbo].[ADRInvoiceAccountData] AD
 			INNER JOIN Account A ON AD.VCAccountId = A.AccountId AND A.IsActive = 1
 			INNER JOIN Client CL ON A.ClientId = CL.ClientId AND CL.IsActive = 1
-			-- Vendor hierarchy: Account.VendorId -> Vendor (primary), then VendorXRef -> Vendor (master)
-			LEFT OUTER JOIN Vendor V ON A.VendorId = V.VendorId
+			INNER JOIN #tmpBestCredential BC ON AD.VCAccountId = BC.AccountId
+			LEFT OUTER JOIN Vendor V ON AD.VendorCode = V.PrimaryVendorCode
 			LEFT OUTER JOIN VendorXRef VX ON V.VendorId = VX.PrimaryVendorId
 			LEFT OUTER JOIN Vendor MV ON VX.MasterVendorId = MV.VendorId
-			-- Primary credential: pre-resolved to 1 per vendor (no row multiplication)
-			LEFT OUTER JOIN #tmpVendorCred PC ON PC.VendorId = A.VendorId
-			-- Master credential fallback (only when no primary credential found)
-			LEFT OUTER JOIN #tmpVendorCred MC ON MC.VendorId = VX.MasterVendorId AND PC.CredentialId IS NULL
-			-- Get ExpirationDate from full Credential table for the resolved credential
-			LEFT OUTER JOIN [Credential] PCFull ON PCFull.CredentialId = PC.CredentialId
-			LEFT OUTER JOIN [Credential] MCFull ON MCFull.CredentialId = MC.CredentialId
-		WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL)
-		  AND COALESCE(PC.CredentialId, MC.CredentialId) IS NOT NULL;
-
-		DROP TABLE IF EXISTS #tmpVendorCred;
+		WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL);
 
 		;WITH AccountStats AS (
 			SELECT AccountId,
@@ -1312,6 +1305,7 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
 		ORDER BY VMAccountId;
 
 		DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
+		DROP TABLE IF EXISTS #tmpBestCredential;
 		";
     }
 
