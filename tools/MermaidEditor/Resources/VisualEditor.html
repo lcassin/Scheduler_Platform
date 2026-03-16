@@ -5073,26 +5073,56 @@
 
         // ===== Sequence Diagram Context Menu =====
 
+        // Capture right-click target during mousedown (fires before contextmenu)
+        // because contextmenu e.target can sometimes miss SVG elements
+        let _seqRightClickTarget = null;
+        svg.addEventListener('mousedown', function(e) {
+            if (e.button === 2) _seqRightClickTarget = e.target;
+        }, true);
+
         svg.addEventListener('contextmenu', function(e) {
             if (currentDiagramType !== 'sequence') return;
             if (!seqDiagram) return;
             e.preventDefault();
             e.stopPropagation();
 
-            const participantGroup = e.target.closest('.seq-participant');
-            let messageGroup = e.target.closest('.seq-message');
-            const fragmentGroup = e.target.closest('.seq-fragment');
-            const noteGroup = e.target.closest('.seq-note');
+            // Use the mousedown target as primary, contextmenu target as fallback
+            const target = _seqRightClickTarget || e.target;
+            _seqRightClickTarget = null;
 
-            // Fallback: if the right-click hit a fragment element (label, divider, etc.)
-            // but there's a message underneath, find it via elementsFromPoint
-            if (!messageGroup && fragmentGroup) {
+            const participantGroup = target.closest('.seq-participant');
+            let messageGroup = target.closest('.seq-message');
+            let fragmentGroup = target.closest('.seq-fragment');
+            const noteGroup = target.closest('.seq-note');
+
+            // Fallback 1: elementsFromPoint - find messages at the click coordinates
+            if (!messageGroup) {
                 const allEls = document.elementsFromPoint(e.clientX, e.clientY);
                 for (const el of allEls) {
                     const msg = el.closest('.seq-message');
                     if (msg) { messageGroup = msg; break; }
                 }
             }
+
+            // Fallback 2: if still no message found, check all rendered message groups
+            // via SVG bounding box intersection with click point
+            if (!messageGroup && !participantGroup && !noteGroup) {
+                const svgPt = getSVGPoint(e);
+                const allMsgs = svg.querySelectorAll('.seq-message');
+                for (const msg of allMsgs) {
+                    try {
+                        const bbox = msg.getBBox();
+                        if (svgPt.x >= bbox.x && svgPt.x <= bbox.x + bbox.width &&
+                            svgPt.y >= bbox.y && svgPt.y <= bbox.y + bbox.height) {
+                            messageGroup = msg;
+                            break;
+                        }
+                    } catch(ex) { /* ignore getBBox errors */ }
+                }
+            }
+
+            // If we found a message, clear fragment selection to avoid confusion
+            if (messageGroup) fragmentGroup = null;
 
             contextMenu.innerHTML = '';
 
