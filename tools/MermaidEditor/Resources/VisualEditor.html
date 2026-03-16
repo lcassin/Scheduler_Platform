@@ -5517,13 +5517,20 @@
                     frag.sections.forEach((sec, secIdx) => {
                         const secLabel = sec.label || ('Section ' + (secIdx + 1));
                         const subIdx = sec.elements ? sec.elements.length : 0;
-                        // Determine default from/to from existing messages in this section
+                        // Determine default from/to: use fragment participant range if set,
+                        // otherwise use existing messages, otherwise fall back to first two participants
                         let defFrom = seqDiagram.participants[0].id;
                         let defTo = seqDiagram.participants.length > 1 ? seqDiagram.participants[1].id : seqDiagram.participants[0].id;
                         if (sec.elements && sec.elements.length > 0) {
                             const lastMsg = sec.elements[sec.elements.length - 1];
                             if (lastMsg.fromId) defFrom = lastMsg.fromId;
                             if (lastMsg.toId) defTo = lastMsg.toId;
+                        } else if (frag.overParticipantStart || frag.overParticipantEnd) {
+                            // No existing messages — use fragment's participant range
+                            if (frag.overParticipantStart) defFrom = frag.overParticipantStart;
+                            if (frag.overParticipantEnd) defTo = frag.overParticipantEnd;
+                            else defTo = defFrom; // If only start is set, self-message
+                            if (!frag.overParticipantStart && frag.overParticipantEnd) defFrom = frag.overParticipantEnd;
                         }
                         const menuLabel = frag.sections.length > 1
                             ? 'Add Message Into [' + secLabel + ']'

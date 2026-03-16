@@ -2988,7 +2988,76 @@ public class VisualEditorBridge
         if (root.TryGetProperty("overParticipantEnd", out var opeProp))
             frag.OverParticipantEnd = opeProp.GetString();
 
+        // Auto-eject messages that fall outside the new participant range
+        EjectMessagesOutsideFragmentRange(frag, elementIndex);
+
         RaiseSequenceModelChanged("seq_fragmentEdited");
+    }
+
+    /// <summary>
+    /// When a fragment's participant range (overParticipantStart/overParticipantEnd) is set,
+    /// eject any inner messages whose from/to participants both fall outside the new range.
+    /// Ejected messages become top-level elements inserted right after the fragment.
+    /// </summary>
+    private void EjectMessagesOutsideFragmentRange(SequenceFragment frag, int fragmentElementIndex)
+    {
+        if (_sequenceModel == null) return;
+
+        // Only eject if a manual range is set
+        var startId = frag.OverParticipantStart;
+        var endId = frag.OverParticipantEnd;
+        if (string.IsNullOrEmpty(startId) && string.IsNullOrEmpty(endId)) return;
+
+        // Build participant index lookup
+        var participantIndices = new Dictionary<string, int>();
+        for (int i = 0; i < _sequenceModel.Participants.Count; i++)
+            participantIndices[_sequenceModel.Participants[i].Id] = i;
+
+        // Determine the valid range of participant indices
+        int minIdx = 0;
+        int maxIdx = _sequenceModel.Participants.Count - 1;
+        if (!string.IsNullOrEmpty(startId) && participantIndices.TryGetValue(startId, out var si))
+            minIdx = si;
+        if (!string.IsNullOrEmpty(endId) && participantIndices.TryGetValue(endId, out var ei))
+            maxIdx = ei;
+        // Ensure min <= max (swap if backwards)
+        if (minIdx > maxIdx) (minIdx, maxIdx) = (maxIdx, minIdx);
+
+        // Collect messages to eject from each section
+        var ejected = new List<SequenceElement>();
+        foreach (var section in frag.Sections)
+        {
+            var toRemove = new List<SequenceElement>();
+            foreach (var el in section.Elements)
+            {
+                if (el is SequenceMessage msg)
+                {
+                    bool fromInRange = participantIndices.TryGetValue(msg.FromId, out var fi) && fi >= minIdx && fi <= maxIdx;
+                    bool toInRange = participantIndices.TryGetValue(msg.ToId, out var ti) && ti >= minIdx && ti <= maxIdx;
+                    // Eject if NEITHER endpoint is within the fragment's range
+                    if (!fromInRange && !toInRange)
+                    {
+                        toRemove.Add(el);
+                    }
+                }
+            }
+            foreach (var el in toRemove)
+            {
+                section.Elements.Remove(el);
+                ejected.Add(el);
+            }
+        }
+
+        // Insert ejected messages as top-level elements right after the fragment
+        if (ejected.Count > 0)
+        {
+            var insertIdx = fragmentElementIndex + 1;
+            foreach (var el in ejected)
+            {
+                _sequenceModel.Elements.Insert(insertIdx, el);
+                insertIdx++;
+            }
+        }
     }
 
     private void HandleSeqFragmentDeleted(JsonElement root)
