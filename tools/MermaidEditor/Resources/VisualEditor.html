@@ -938,7 +938,7 @@
         const minimapCtx = minimapCanvas.getContext('2d');
         let shapePickerSelected = document.getElementById('shape-picker-selected');
         let shapePickerDropdown = document.getElementById('shape-picker-dropdown');
-        const shapePickerLabel = document.getElementById('shape-picker-label');
+        let shapePickerLabel = document.getElementById('shape-picker-label');
 
         // Save the default property panel body HTML so it can be restored
         // after other diagram types replace it with custom content
@@ -5281,6 +5281,32 @@
                     addContextMenuItem('Insert Fragment Below', () => {
                         postMessage({ type: 'seq_fragmentCreated', fragmentType: 'loop', condition: 'condition', sections: [{ label: 'condition', elements: [] }], insertIndex: elIdx + 1 });
                     });
+                    // "Move to Fragment" submenu — only show if there are fragments in the diagram
+                    const fragments = seqDiagram.elements
+                        .map((el, idx) => ({ el, idx }))
+                        .filter(item => item.el.elementType === 'fragment');
+                    if (fragments.length > 0) {
+                        addContextMenuSeparator();
+                        const parentItem = document.createElement('div');
+                        parentItem.classList.add('context-menu-item', 'has-submenu');
+                        parentItem.textContent = 'Move to Fragment';
+                        const submenu = document.createElement('div');
+                        submenu.classList.add('context-submenu');
+                        fragments.forEach(f => {
+                            const fragLabel = f.el.fragmentType + (f.el.sections && f.el.sections[0] && f.el.sections[0].label ? ' [' + f.el.sections[0].label + ']' : '');
+                            const subItem = document.createElement('div');
+                            subItem.classList.add('context-menu-item');
+                            subItem.textContent = fragLabel;
+                            subItem.addEventListener('click', function(ev) {
+                                ev.stopPropagation();
+                                contextMenu.classList.remove('visible');
+                                postMessage({ type: 'seq_messageMovedToFragment', messageIndex: elIdx, fragmentIndex: f.idx });
+                            });
+                            submenu.appendChild(subItem);
+                        });
+                        parentItem.appendChild(submenu);
+                        contextMenu.appendChild(parentItem);
+                    }
                 }
             } else if (fragmentGroup) {
                 const elIdx = parseInt(fragmentGroup.getAttribute('data-element-index'), 10);

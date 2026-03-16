@@ -999,6 +999,10 @@ public class VisualEditorBridge
                     HandleSeqFragmentInnerMessageCreated(root);
                     break;
 
+                case "seq_messageMovedToFragment":
+                    HandleSeqMessageMovedToFragment(root);
+                    break;
+
                 case "seq_elementReordered":
                     HandleSeqElementReordered(root);
                     break;
@@ -2758,6 +2762,40 @@ public class VisualEditorBridge
             section.Elements.Add(msg);
 
         RaiseSequenceModelChanged("seq_fragmentInnerMessageCreated");
+    }
+
+    /// <summary>
+    /// Moves a top-level message into a fragment section.
+    /// Removes the message from elements[] and appends it to the target fragment's section.
+    /// </summary>
+    private void HandleSeqMessageMovedToFragment(JsonElement root)
+    {
+        if (_sequenceModel == null) return;
+        var messageIndex = root.GetProperty("messageIndex").GetInt32();
+        var fragmentIndex = root.GetProperty("fragmentIndex").GetInt32();
+        var sectionIndex = root.TryGetProperty("sectionIndex", out var secProp) ? secProp.GetInt32() : 0;
+
+        if (messageIndex < 0 || messageIndex >= _sequenceModel.Elements.Count) return;
+        if (_sequenceModel.Elements[messageIndex] is not SequenceMessage msg) return;
+
+        // The fragment index might shift after removal if the message is before the fragment
+        var adjustedFragIndex = messageIndex < fragmentIndex ? fragmentIndex - 1 : fragmentIndex;
+
+        if (adjustedFragIndex < 0 || adjustedFragIndex >= _sequenceModel.Elements.Count - 1) return;
+
+        // Peek at the target before removing to validate
+        var targetEl = messageIndex < fragmentIndex
+            ? _sequenceModel.Elements[fragmentIndex]
+            : _sequenceModel.Elements[fragmentIndex];
+        if (targetEl is not SequenceFragment frag) return;
+        if (sectionIndex < 0 || sectionIndex >= frag.Sections.Count) return;
+
+        PushUndo();
+        // Remove the message from top-level elements
+        _sequenceModel.Elements.RemoveAt(messageIndex);
+        // Add it to the target fragment section
+        frag.Sections[sectionIndex].Elements.Add(msg);
+        RaiseSequenceModelChanged("seq_messageMovedToFragment");
     }
 
     private void HandleSeqNoteCreated(JsonElement root)
