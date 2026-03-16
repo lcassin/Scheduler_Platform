@@ -922,6 +922,10 @@ public class VisualEditorBridge
                     HandleClsRelationshipDeleted(root);
                     break;
 
+                case "cls_autoLayoutComplete":
+                    HandleClsAutoLayoutComplete(root);
+                    break;
+
                 case "cls_classSelected":
                 case "cls_relationshipSelected":
                     // Selection doesn't need model changes
@@ -1049,6 +1053,10 @@ public class VisualEditorBridge
                     HandleStNoteDeleted(root);
                     break;
 
+                case "st_autoLayoutComplete":
+                    HandleStAutoLayoutComplete(root);
+                    break;
+
                 case "st_stateSelected":
                 case "st_transitionSelected":
                     // Selection doesn't need model changes
@@ -1090,6 +1098,10 @@ public class VisualEditorBridge
 
                 case "er_relationshipDeleted":
                     HandleErRelationshipDeleted(root);
+                    break;
+
+                case "er_autoLayoutComplete":
+                    HandleErAutoLayoutComplete(root);
                     break;
 
                 case "er_entitySelected":
@@ -1500,6 +1512,26 @@ public class VisualEditorBridge
         }
 
         RaiseModelChanged("autoLayoutComplete");
+    }
+
+    private void HandleClsAutoLayoutComplete(JsonElement root)
+    {
+        // Class diagram positions are managed by JS (clsClassPositions dict).
+        // The C# model doesn't store position data for class diagram nodes.
+        // We just need to raise model changed so the text editor stays in sync.
+        RaiseClassDiagramModelChanged("cls_autoLayoutComplete");
+    }
+
+    private void HandleStAutoLayoutComplete(JsonElement root)
+    {
+        // State diagram positions are managed by JS (stStatePositions dict).
+        RaiseStateDiagramModelChanged("st_autoLayoutComplete");
+    }
+
+    private void HandleErAutoLayoutComplete(JsonElement root)
+    {
+        // ER diagram positions are managed by JS (erEntityPositions dict).
+        RaiseERDiagramModelChanged("er_autoLayoutComplete");
     }
 
     // ========== Undo/Redo History ==========

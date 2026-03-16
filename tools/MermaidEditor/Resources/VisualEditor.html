@@ -808,6 +808,10 @@
             <svg viewBox="0 0 16 16"><line x1="3" y1="8" x2="13" y2="8" stroke-width="1.5"/><polygon points="13,8 10,5 10,11" fill="none" stroke="currentColor" stroke-width="1"/></svg>
             <span class="tooltip">Add Relationship</span>
         </button>
+        <button class="toolbar-btn toolbar-class" id="tb-cls-auto-layout" title="Auto Layout" style="display:none">
+            <svg viewBox="0 0 16 16"><rect x="1" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><rect x="10" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><rect x="5.5" y="11" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><line x1="3.5" y1="5" x2="3.5" y2="8" stroke-width="0.8"/><line x1="12.5" y1="5" x2="12.5" y2="8" stroke-width="0.8"/><line x1="3.5" y1="8" x2="12.5" y2="8" stroke-width="0.8"/><line x1="8" y1="8" x2="8" y2="11" stroke-width="0.8"/></svg>
+            <span class="tooltip">Auto Layout</span>
+        </button>
         <!-- State-specific buttons -->
         <button class="toolbar-btn toolbar-state" id="tb-st-add-state" title="Add State" style="display:none">
             <svg viewBox="0 0 16 16"><rect x="2" y="4" width="12" height="8" rx="4" fill="none" stroke-width="1.3"/><line x1="8" y1="6" x2="8" y2="10" stroke-width="1.3"/><line x1="6" y1="8" x2="10" y2="8" stroke-width="1.3"/></svg>
@@ -817,6 +821,10 @@
             <svg viewBox="0 0 16 16"><line x1="2" y1="8" x2="14" y2="8" stroke-width="1.5"/><polygon points="14,8 10,5 10,11" fill="currentColor" stroke="none"/></svg>
             <span class="tooltip">Add Transition</span>
         </button>
+        <button class="toolbar-btn toolbar-state" id="tb-st-auto-layout" title="Auto Layout" style="display:none">
+            <svg viewBox="0 0 16 16"><rect x="1" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><rect x="10" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><rect x="5.5" y="11" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><line x1="3.5" y1="5" x2="3.5" y2="8" stroke-width="0.8"/><line x1="12.5" y1="5" x2="12.5" y2="8" stroke-width="0.8"/><line x1="3.5" y1="8" x2="12.5" y2="8" stroke-width="0.8"/><line x1="8" y1="8" x2="8" y2="11" stroke-width="0.8"/></svg>
+            <span class="tooltip">Auto Layout</span>
+        </button>
         <!-- ER-specific buttons -->
         <button class="toolbar-btn toolbar-er" id="tb-er-add-entity" title="Add Entity" style="display:none">
             <svg viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="1" fill="none" stroke-width="1.2"/><line x1="2" y1="6" x2="14" y2="6" stroke-width="0.8"/><text x="4" y="5" font-size="3.5" fill="currentColor" stroke="none" font-weight="bold">E+</text></svg>
@@ -825,6 +833,10 @@
         <button class="toolbar-btn toolbar-er" id="tb-er-add-relationship" title="Add Relationship" style="display:none">
             <svg viewBox="0 0 16 16"><line x1="2" y1="8" x2="14" y2="8" stroke-width="1.5"/><circle cx="5" cy="8" r="2" fill="none" stroke-width="1"/><circle cx="11" cy="8" r="2" fill="none" stroke-width="1"/></svg>
             <span class="tooltip">Add Relationship</span>
+        </button>
+        <button class="toolbar-btn toolbar-er" id="tb-er-auto-layout" title="Auto Layout" style="display:none">
+            <svg viewBox="0 0 16 16"><rect x="1" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><rect x="10" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><rect x="5.5" y="11" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><line x1="3.5" y1="5" x2="3.5" y2="8" stroke-width="0.8"/><line x1="12.5" y1="5" x2="12.5" y2="8" stroke-width="0.8"/><line x1="3.5" y1="8" x2="12.5" y2="8" stroke-width="0.8"/><line x1="8" y1="8" x2="8" y2="11" stroke-width="0.8"/></svg>
+            <span class="tooltip">Auto Layout</span>
         </button>
         <div class="toolbar-sep"></div>
         <button class="toolbar-btn" id="tb-delete" title="Delete Selected (Del)">
@@ -5816,6 +5828,7 @@
 
         function clsAutoLayoutClasses() {
             if (!clsDiagram) return;
+            // Simple grid fallback for initial placement of new classes only
             const cols = Math.max(1, Math.ceil(Math.sqrt(clsDiagram.classes.length)));
             clsDiagram.classes.forEach((cls, idx) => {
                 if (!clsClassPositions[cls.id]) {
@@ -5824,6 +5837,55 @@
                     clsClassPositions[cls.id] = {
                         x: CLS_LEFT_MARGIN + col * CLS_CLASS_GAP_X,
                         y: CLS_TOP_MARGIN + row * (200 + CLS_CLASS_GAP_Y)
+                    };
+                }
+            });
+        }
+
+        // Dagre-based auto layout for class diagrams (uses relationships as edges)
+        function clsDagreAutoLayout() {
+            if (!clsDiagram || typeof dagre === 'undefined') return;
+
+            const g = new dagre.graphlib.Graph();
+            g.setGraph({
+                rankdir: 'TB',
+                nodesep: 80,
+                ranksep: 100,
+                edgesep: 30,
+                marginx: CLS_LEFT_MARGIN,
+                marginy: CLS_TOP_MARGIN
+            });
+            g.setDefaultEdgeLabel(function() { return {}; });
+
+            // Register all class nodes with their measured dimensions
+            clsDiagram.classes.forEach(cls => {
+                const dim = clsGetClassBoxDimensions(cls);
+                g.setNode(cls.id, { width: dim.width, height: dim.height });
+            });
+
+            // Register relationships as edges
+            clsDiagram.relationships.forEach(rel => {
+                if (g.hasNode(rel.fromId) && g.hasNode(rel.toId)) {
+                    g.setEdge(rel.fromId, rel.toId);
+                }
+            });
+
+            try {
+                dagre.layout(g);
+            } catch (e) {
+                console.error('Class diagram dagre layout failed:', e);
+                return;
+            }
+
+            // Apply computed positions
+            clsDiagram.classes.forEach(cls => {
+                const layoutNode = g.node(cls.id);
+                if (layoutNode) {
+                    clsClassPositions[cls.id] = {
+                        x: layoutNode.x - layoutNode.width / 2,
+                        y: layoutNode.y - layoutNode.height / 2,
+                        width: layoutNode.width,
+                        height: layoutNode.height
                     };
                 }
             });
@@ -7049,6 +7111,7 @@
 
         function stAutoLayoutStates() {
             if (!stDiagram) return;
+            // Simple grid fallback for initial placement of new states only
             const allStates = stGetAllFlatStates();
             const cols = Math.max(1, Math.ceil(Math.sqrt(allStates.length)));
             allStates.forEach((s, idx) => {
@@ -7058,6 +7121,70 @@
                     stStatePositions[s.id] = {
                         x: ST_LEFT_MARGIN + col * ST_GAP_X,
                         y: ST_TOP_MARGIN + row * ST_GAP_Y
+                    };
+                }
+            });
+        }
+
+        // Dagre-based auto layout for state diagrams (uses transitions as edges)
+        function stDagreAutoLayout() {
+            if (!stDiagram || typeof dagre === 'undefined') return;
+
+            const g = new dagre.graphlib.Graph();
+            g.setGraph({
+                rankdir: 'TB',
+                nodesep: 60,
+                ranksep: 80,
+                edgesep: 20,
+                marginx: ST_LEFT_MARGIN,
+                marginy: ST_TOP_MARGIN
+            });
+            g.setDefaultEdgeLabel(function() { return {}; });
+
+            // Register all states with estimated dimensions
+            const allStates = stGetAllFlatStates();
+            allStates.forEach(state => {
+                const box = stGetStateBox(state);
+                const w = box.width || ST_BOX_MIN_WIDTH;
+                const h = box.height || ST_BOX_HEIGHT;
+                g.setNode(state.id, { width: w, height: h });
+            });
+
+            // Also add [*] pseudo-nodes for start/end if used in transitions
+            stDiagram.transitions.forEach(trans => {
+                if (trans.fromId === '[*]' && !g.hasNode('[*]_start')) {
+                    g.setNode('[*]_start', { width: 20, height: 20 });
+                }
+                if (trans.toId === '[*]' && !g.hasNode('[*]_end')) {
+                    g.setNode('[*]_end', { width: 20, height: 20 });
+                }
+            });
+
+            // Register transitions as edges
+            stDiagram.transitions.forEach(trans => {
+                const from = trans.fromId === '[*]' ? '[*]_start' : trans.fromId;
+                const to = trans.toId === '[*]' ? '[*]_end' : trans.toId;
+                if (g.hasNode(from) && g.hasNode(to)) {
+                    g.setEdge(from, to);
+                }
+            });
+
+            try {
+                dagre.layout(g);
+            } catch (e) {
+                console.error('State diagram dagre layout failed:', e);
+                return;
+            }
+
+            // Apply computed positions to states
+            allStates.forEach(state => {
+                const layoutNode = g.node(state.id);
+                if (layoutNode) {
+                    stStatePositions[state.id] = {
+                        x: layoutNode.x - layoutNode.width / 2,
+                        y: layoutNode.y - layoutNode.height / 2,
+                        width: layoutNode.width,
+                        height: layoutNode.height
                     };
                 }
             });
@@ -7889,6 +8016,7 @@
 
         function erAutoLayoutEntities() {
             if (!erDiagram) return;
+            // Simple grid fallback for initial placement of new entities only
             const cols = Math.max(1, Math.ceil(Math.sqrt(erDiagram.entities.length)));
             erDiagram.entities.forEach((entity, idx) => {
                 if (!erEntityPositions[entity.name]) {
@@ -7897,6 +8025,55 @@
                     erEntityPositions[entity.name] = {
                         x: ER_LEFT_MARGIN + col * ER_GAP_X,
                         y: ER_TOP_MARGIN + row * (200 + ER_GAP_Y)
+                    };
+                }
+            });
+        }
+
+        // Dagre-based auto layout for ER diagrams (uses relationships as edges)
+        function erDagreAutoLayout() {
+            if (!erDiagram || typeof dagre === 'undefined') return;
+
+            const g = new dagre.graphlib.Graph();
+            g.setGraph({
+                rankdir: 'TB',
+                nodesep: 80,
+                ranksep: 100,
+                edgesep: 30,
+                marginx: ER_LEFT_MARGIN,
+                marginy: ER_TOP_MARGIN
+            });
+            g.setDefaultEdgeLabel(function() { return {}; });
+
+            // Register all entity nodes with their measured dimensions
+            erDiagram.entities.forEach(entity => {
+                const dim = erGetEntityBoxDimensions(entity);
+                g.setNode(entity.name, { width: dim.width, height: dim.height });
+            });
+
+            // Register relationships as edges
+            erDiagram.relationships.forEach(rel => {
+                if (g.hasNode(rel.fromEntity) && g.hasNode(rel.toEntity)) {
+                    g.setEdge(rel.fromEntity, rel.toEntity);
+                }
+            });
+
+            try {
+                dagre.layout(g);
+            } catch (e) {
+                console.error('ER diagram dagre layout failed:', e);
+                return;
+            }
+
+            // Apply computed positions
+            erDiagram.entities.forEach(entity => {
+                const layoutNode = g.node(entity.name);
+                if (layoutNode) {
+                    erEntityPositions[entity.name] = {
+                        x: layoutNode.x - layoutNode.width / 2,
+                        y: layoutNode.y - layoutNode.height / 2,
+                        width: layoutNode.width,
+                        height: layoutNode.height
                     };
                 }
             });
@@ -8808,6 +8985,19 @@
             postMessage({ type: 'cls_relationshipCreated', fromId: fromId, toId: toId, relationType: 'Association', label: '' });
         });
 
+        document.getElementById('tb-cls-auto-layout').addEventListener('click', function() {
+            clsDagreAutoLayout();
+            renderClassDiagram();
+            const positions = [];
+            clsDiagram.classes.forEach(cls => {
+                const pos = clsClassPositions[cls.id];
+                if (pos) {
+                    positions.push({ classId: cls.id, x: pos.x, y: pos.y, width: pos.width || 0, height: pos.height || 0 });
+                }
+            });
+            postMessage({ type: 'cls_autoLayoutComplete', positions: positions });
+        });
+
         // ===== State diagram toolbar buttons =====
         document.getElementById('tb-st-add-state').addEventListener('click', function() {
             if (!stDiagram) return;
@@ -8821,6 +9011,20 @@
             postMessage({ type: 'st_transitionCreated', fromId: fromId, toId: toId, label: '' });
         });
 
+        document.getElementById('tb-st-auto-layout').addEventListener('click', function() {
+            stDagreAutoLayout();
+            renderStateDiagram();
+            const positions = [];
+            const allStates = stGetAllFlatStates();
+            allStates.forEach(state => {
+                const pos = stStatePositions[state.id];
+                if (pos) {
+                    positions.push({ stateId: state.id, x: pos.x, y: pos.y, width: pos.width || 0, height: pos.height || 0 });
+                }
+            });
+            postMessage({ type: 'st_autoLayoutComplete', positions: positions });
+        });
+
         // ===== ER diagram toolbar buttons =====
         document.getElementById('tb-er-add-entity').addEventListener('click', function() {
             if (!erDiagram) return;
@@ -8832,6 +9036,19 @@
             const fromName = erDiagram.entities[0].name;
             const toName = erDiagram.entities[1].name;
             postMessage({ type: 'er_relationshipCreated', fromEntity: fromName, toEntity: toName, fromCardinality: 'ExactlyOne', toCardinality: 'ZeroOrMore', label: 'has' });
+        });
+
+        document.getElementById('tb-er-auto-layout').addEventListener('click', function() {
+            erDagreAutoLayout();
+            renderERDiagram();
+            const positions = [];
+            erDiagram.entities.forEach(entity => {
+                const pos = erEntityPositions[entity.name];
+                if (pos) {
+                    positions.push({ entityName: entity.name, x: pos.x, y: pos.y, width: pos.width || 0, height: pos.height || 0 });
+                }
+            });
+            postMessage({ type: 'er_autoLayoutComplete', positions: positions });
         });
 
         document.getElementById('tb-zoom-in').addEventListener('click', function() {
