@@ -808,6 +808,10 @@
             <svg viewBox="0 0 16 16"><line x1="3" y1="8" x2="13" y2="8" stroke-width="1.5"/><polygon points="13,8 10,5 10,11" fill="none" stroke="currentColor" stroke-width="1"/></svg>
             <span class="tooltip">Add Relationship</span>
         </button>
+        <button class="toolbar-btn toolbar-class" id="tb-cls-auto-layout" title="Auto Layout" style="display:none">
+            <svg viewBox="0 0 16 16"><rect x="1" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><rect x="10" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><rect x="5.5" y="11" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><line x1="3.5" y1="5" x2="3.5" y2="8" stroke-width="0.8"/><line x1="12.5" y1="5" x2="12.5" y2="8" stroke-width="0.8"/><line x1="3.5" y1="8" x2="12.5" y2="8" stroke-width="0.8"/><line x1="8" y1="8" x2="8" y2="11" stroke-width="0.8"/></svg>
+            <span class="tooltip">Auto Layout</span>
+        </button>
         <!-- State-specific buttons -->
         <button class="toolbar-btn toolbar-state" id="tb-st-add-state" title="Add State" style="display:none">
             <svg viewBox="0 0 16 16"><rect x="2" y="4" width="12" height="8" rx="4" fill="none" stroke-width="1.3"/><line x1="8" y1="6" x2="8" y2="10" stroke-width="1.3"/><line x1="6" y1="8" x2="10" y2="8" stroke-width="1.3"/></svg>
@@ -817,6 +821,10 @@
             <svg viewBox="0 0 16 16"><line x1="2" y1="8" x2="14" y2="8" stroke-width="1.5"/><polygon points="14,8 10,5 10,11" fill="currentColor" stroke="none"/></svg>
             <span class="tooltip">Add Transition</span>
         </button>
+        <button class="toolbar-btn toolbar-state" id="tb-st-auto-layout" title="Auto Layout" style="display:none">
+            <svg viewBox="0 0 16 16"><rect x="1" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><rect x="10" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><rect x="5.5" y="11" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><line x1="3.5" y1="5" x2="3.5" y2="8" stroke-width="0.8"/><line x1="12.5" y1="5" x2="12.5" y2="8" stroke-width="0.8"/><line x1="3.5" y1="8" x2="12.5" y2="8" stroke-width="0.8"/><line x1="8" y1="8" x2="8" y2="11" stroke-width="0.8"/></svg>
+            <span class="tooltip">Auto Layout</span>
+        </button>
         <!-- ER-specific buttons -->
         <button class="toolbar-btn toolbar-er" id="tb-er-add-entity" title="Add Entity" style="display:none">
             <svg viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="1" fill="none" stroke-width="1.2"/><line x1="2" y1="6" x2="14" y2="6" stroke-width="0.8"/><text x="4" y="5" font-size="3.5" fill="currentColor" stroke="none" font-weight="bold">E+</text></svg>
@@ -825,6 +833,10 @@
         <button class="toolbar-btn toolbar-er" id="tb-er-add-relationship" title="Add Relationship" style="display:none">
             <svg viewBox="0 0 16 16"><line x1="2" y1="8" x2="14" y2="8" stroke-width="1.5"/><circle cx="5" cy="8" r="2" fill="none" stroke-width="1"/><circle cx="11" cy="8" r="2" fill="none" stroke-width="1"/></svg>
             <span class="tooltip">Add Relationship</span>
+        </button>
+        <button class="toolbar-btn toolbar-er" id="tb-er-auto-layout" title="Auto Layout" style="display:none">
+            <svg viewBox="0 0 16 16"><rect x="1" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><rect x="10" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><rect x="5.5" y="11" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><line x1="3.5" y1="5" x2="3.5" y2="8" stroke-width="0.8"/><line x1="12.5" y1="5" x2="12.5" y2="8" stroke-width="0.8"/><line x1="3.5" y1="8" x2="12.5" y2="8" stroke-width="0.8"/><line x1="8" y1="8" x2="8" y2="11" stroke-width="0.8"/></svg>
+            <span class="tooltip">Auto Layout</span>
         </button>
         <div class="toolbar-sep"></div>
         <button class="toolbar-btn" id="tb-delete" title="Delete Selected (Del)">
@@ -5816,6 +5828,7 @@
 
         function clsAutoLayoutClasses() {
             if (!clsDiagram) return;
+            // Simple grid fallback for initial placement of new classes only
             const cols = Math.max(1, Math.ceil(Math.sqrt(clsDiagram.classes.length)));
             clsDiagram.classes.forEach((cls, idx) => {
                 if (!clsClassPositions[cls.id]) {
@@ -5824,6 +5837,55 @@
                     clsClassPositions[cls.id] = {
                         x: CLS_LEFT_MARGIN + col * CLS_CLASS_GAP_X,
                         y: CLS_TOP_MARGIN + row * (200 + CLS_CLASS_GAP_Y)
+                    };
+                }
+            });
+        }
+
+        // Dagre-based auto layout for class diagrams (uses relationships as edges)
+        function clsDagreAutoLayout() {
+            if (!clsDiagram || typeof dagre === 'undefined') return;
+
+            const g = new dagre.graphlib.Graph();
+            g.setGraph({
+                rankdir: 'TB',
+                nodesep: 80,
+                ranksep: 100,
+                edgesep: 30,
+                marginx: CLS_LEFT_MARGIN,
+                marginy: CLS_TOP_MARGIN
+            });
+            g.setDefaultEdgeLabel(function() { return {}; });
+
+            // Register all class nodes with their measured dimensions
+            clsDiagram.classes.forEach(cls => {
+                const dim = clsGetClassBoxDimensions(cls);
+                g.setNode(cls.id, { width: dim.width, height: dim.height });
+            });
+
+            // Register relationships as edges
+            clsDiagram.relationships.forEach(rel => {
+                if (g.hasNode(rel.fromId) && g.hasNode(rel.toId)) {
+                    g.setEdge(rel.fromId, rel.toId);
+                }
+            });
+
+            try {
+                dagre.layout(g);
+            } catch (e) {
+                console.error('Class diagram dagre layout failed:', e);
+                return;
+            }
+
+            // Apply computed positions
+            clsDiagram.classes.forEach(cls => {
+                const layoutNode = g.node(cls.id);
+                if (layoutNode) {
+                    clsClassPositions[cls.id] = {
+                        x: layoutNode.x - layoutNode.width / 2,
+                        y: layoutNode.y - layoutNode.height / 2,
+                        width: layoutNode.width,
+                        height: layoutNode.height
                     };
                 }
             });
@@ -7049,17 +7111,157 @@
 
         function stAutoLayoutStates() {
             if (!stDiagram) return;
-            const allStates = stGetAllFlatStates();
-            const cols = Math.max(1, Math.ceil(Math.sqrt(allStates.length)));
-            allStates.forEach((s, idx) => {
+            // Place states in a grid, nesting children inside composite parents
+            stPlaceStatesInGrid(stDiagram.states, ST_LEFT_MARGIN, ST_TOP_MARGIN);
+        }
+
+        function stPlaceStatesInGrid(states, offsetX, offsetY) {
+            const cols = Math.max(1, Math.ceil(Math.sqrt(states.length)));
+            states.forEach((s, idx) => {
                 if (!stStatePositions[s.id]) {
                     const col = idx % cols;
                     const row = Math.floor(idx / cols);
                     stStatePositions[s.id] = {
-                        x: ST_LEFT_MARGIN + col * ST_GAP_X,
-                        y: ST_TOP_MARGIN + row * ST_GAP_Y
+                        x: offsetX + col * ST_GAP_X,
+                        y: offsetY + row * ST_GAP_Y
                     };
                 }
+                // Place nested states inside the composite parent
+                if (s.nestedStates && s.nestedStates.length > 0) {
+                    const parentPos = stStatePositions[s.id];
+                    stPlaceStatesInGrid(s.nestedStates, parentPos.x + ST_COMPOSITE_PADDING, parentPos.y + 35);
+                }
+            });
+        }
+
+        // Dagre-based auto layout for state diagrams using compound graph for nested states
+        function stDagreAutoLayout() {
+            if (!stDiagram || typeof dagre === 'undefined') return;
+
+            const g = new dagre.graphlib.Graph({ compound: true });
+            g.setGraph({
+                rankdir: 'TB',
+                nodesep: 60,
+                ranksep: 80,
+                edgesep: 20,
+                marginx: ST_LEFT_MARGIN,
+                marginy: ST_TOP_MARGIN
+            });
+            g.setDefaultEdgeLabel(function() { return {}; });
+
+            // Recursively register states with compound nesting
+            function registerStates(states, parentId) {
+                states.forEach(state => {
+                    const isComposite = state.type === 'Composite' || (state.nestedStates && state.nestedStates.length > 0);
+                    if (isComposite) {
+                        // Register as compound cluster node (dagre computes size from children)
+                        g.setNode(state.id, { label: state.label || state.id, clusterLabelPos: 'top' });
+                        if (parentId) g.setParent(state.id, parentId);
+                        // Register nested child states
+                        registerStates(state.nestedStates, state.id);
+                        // Register nested [*] pseudo-nodes and transitions within this composite
+                        if (state.nestedTransitions) {
+                            state.nestedTransitions.forEach(trans => {
+                                const startPseudo = '[*]_start_' + state.id;
+                                const endPseudo = '[*]_end_' + state.id;
+                                if (trans.fromId === '[*]' && !g.hasNode(startPseudo)) {
+                                    g.setNode(startPseudo, { width: 20, height: 20 });
+                                    g.setParent(startPseudo, state.id);
+                                }
+                                if (trans.toId === '[*]' && !g.hasNode(endPseudo)) {
+                                    g.setNode(endPseudo, { width: 20, height: 20 });
+                                    g.setParent(endPseudo, state.id);
+                                }
+                            });
+                            // Register nested transitions as edges
+                            state.nestedTransitions.forEach(trans => {
+                                const from = trans.fromId === '[*]' ? '[*]_start_' + state.id : trans.fromId;
+                                const to = trans.toId === '[*]' ? '[*]_end_' + state.id : trans.toId;
+                                if (g.hasNode(from) && g.hasNode(to)) {
+                                    g.setEdge(from, to);
+                                }
+                            });
+                        }
+                    } else {
+                        // Regular state node with estimated dimensions
+                        const box = stGetStateBox(state);
+                        const w = box.width || ST_BOX_MIN_WIDTH;
+                        const h = box.height || ST_BOX_HEIGHT;
+                        g.setNode(state.id, { width: w, height: h });
+                        if (parentId) g.setParent(state.id, parentId);
+                    }
+                });
+            }
+
+            registerStates(stDiagram.states, null);
+
+            // Register top-level [*] pseudo-nodes for start/end if used in transitions
+            stDiagram.transitions.forEach(trans => {
+                if (trans.fromId === '[*]' && !g.hasNode('[*]_start')) {
+                    g.setNode('[*]_start', { width: 20, height: 20 });
+                }
+                if (trans.toId === '[*]' && !g.hasNode('[*]_end')) {
+                    g.setNode('[*]_end', { width: 20, height: 20 });
+                }
+            });
+
+            // Register top-level transitions as edges
+            stDiagram.transitions.forEach(trans => {
+                const from = trans.fromId === '[*]' ? '[*]_start' : trans.fromId;
+                const to = trans.toId === '[*]' ? '[*]_end' : trans.toId;
+                if (g.hasNode(from) && g.hasNode(to)) {
+                    g.setEdge(from, to);
+                }
+            });
+
+            try {
+                dagre.layout(g);
+            } catch (e) {
+                console.error('State diagram dagre layout failed:', e);
+                return;
+            }
+
+            // Apply computed positions to all states (including cluster dimensions for composites)
+            const allStates = stGetAllFlatStates();
+            allStates.forEach(state => {
+                const layoutNode = g.node(state.id);
+                if (layoutNode) {
+                    stStatePositions[state.id] = {
+                        x: layoutNode.x - (layoutNode.width || 0) / 2,
+                        y: layoutNode.y - (layoutNode.height || 0) / 2,
+                        width: layoutNode.width,
+                        height: layoutNode.height
+                    };
+                }
+            });
+
+            // Store top-level [*] pseudo-node positions for rendering
+            ['[*]_start', '[*]_end'].forEach(id => {
+                const node = g.node(id);
+                if (node) {
+                    stStatePositions[id] = {
+                        x: node.x - node.width / 2,
+                        y: node.y - node.height / 2,
+                        width: node.width,
+                        height: node.height
+                    };
+                }
+            });
+
+            // Store nested [*] pseudo-node positions
+            allStates.forEach(state => {
+                ['start', 'end'].forEach(type => {
+                    const pseudoId = '[*]_' + type + '_' + state.id;
+                    const node = g.node(pseudoId);
+                    if (node) {
+                        stStatePositions[pseudoId] = {
+                            x: node.x - node.width / 2,
+                            y: node.y - node.height / 2,
+                            width: node.width,
+                            height: node.height
+                        };
+                    }
+                });
             });
         }
 
@@ -7083,6 +7285,23 @@
             return allStates.find(s => s.id === stateId) || null;
         }
 
+        // Recursively move nested states by a delta (used when dragging composite parent)
+        function stMoveNestedStates(nestedStates, dx, dy) {
+            nestedStates.forEach(ns => {
+                const pos = stStatePositions[ns.id];
+                if (pos) {
+                    stStatePositions[ns.id] = {
+                        ...pos,
+                        x: pos.x + dx,
+                        y: pos.y + dy
+                    };
+                }
+                if (ns.nestedStates && ns.nestedStates.length > 0) {
+                    stMoveNestedStates(ns.nestedStates, dx, dy);
+                }
+            });
+        }
+
         function stGetStateBox(state) {
             const pos = stStatePositions[state.id];
             if (!pos) return { x: 0, y: 0, width: ST_BOX_MIN_WIDTH, height: ST_BOX_HEIGHT };
@@ -7094,8 +7313,11 @@
                 return { x: pos.x, y: pos.y, width: 30, height: 30 };
             }
 
-            // Composite state - larger box
+            // Composite state - use dagre-computed dimensions if available, else estimate
             if (state.type === 'Composite' || (state.nestedStates && state.nestedStates.length > 0)) {
+                if (pos.width && pos.height) {
+                    return { x: pos.x, y: pos.y, width: pos.width, height: pos.height };
+                }
                 const canvas = document.createElement('canvas');
                 const ctx = canvas.getContext('2d');
                 ctx.font = 'bold 13px sans-serif';
@@ -7127,10 +7349,13 @@
             // Render states
             stDiagram.states.forEach(state => stRenderState(state));
 
-            // Render transitions
+            // Render top-level transitions
             stDiagram.transitions.forEach((trans, idx) => {
                 stRenderTransition(trans, idx);
             });
+
+            // Render nested transitions within composite states
+            stRenderNestedTransitions(stDiagram.states);
 
             // Render notes
             stDiagram.notes.forEach((note, idx) => {
@@ -7261,18 +7486,23 @@
 
             // Handle [*] pseudo-states (start/end)
             if (trans.fromId === '[*]') {
-                // Start state: small filled circle above the first real state
-                const toS = stFindState(trans.toId);
-                const toPos = toS ? stStatePositions[toS.id] : null;
-                fromBox = {
-                    x: (toPos ? toPos.x + 40 : ST_LEFT_MARGIN),
-                    y: (toPos ? toPos.y - 40 : ST_TOP_MARGIN - 40),
-                    width: 16, height: 16
-                };
-                // Render start circle
+                // Use dagre-computed position if available, else fall back to relative positioning
+                const pseudoPos = stStatePositions['[*]_start'];
+                if (pseudoPos) {
+                    fromBox = { x: pseudoPos.x, y: pseudoPos.y, width: pseudoPos.width || 20, height: pseudoPos.height || 20 };
+                } else {
+                    const toS = stFindState(trans.toId);
+                    const toPos = toS ? stStatePositions[toS.id] : null;
+                    fromBox = {
+                        x: (toPos ? toPos.x + 40 : ST_LEFT_MARGIN),
+                        y: (toPos ? toPos.y - 40 : ST_TOP_MARGIN - 40),
+                        width: 16, height: 16
+                    };
+                }
+                // Render start circle (filled black circle)
                 const startCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                startCircle.setAttribute('cx', fromBox.x + 8);
-                startCircle.setAttribute('cy', fromBox.y + 8);
+                startCircle.setAttribute('cx', fromBox.x + fromBox.width / 2);
+                startCircle.setAttribute('cy', fromBox.y + fromBox.height / 2);
                 startCircle.setAttribute('r', '8');
                 startCircle.setAttribute('fill', 'var(--node-text)');
                 subgraphsLayer.appendChild(startCircle);
@@ -7281,26 +7511,31 @@
             }
 
             if (trans.toId === '[*]') {
-                // End state: circle with inner dot
-                const fromS = stFindState(trans.fromId);
-                const fromPos = fromS ? stStatePositions[fromS.id] : null;
-                toBox = {
-                    x: (fromPos ? fromPos.x + 40 : ST_LEFT_MARGIN),
-                    y: (fromPos ? fromPos.y + (fromPos.height || ST_BOX_HEIGHT) + 30 : ST_TOP_MARGIN + 100),
-                    width: 20, height: 20
-                };
-                // Render end circle
+                // End state: use dagre-computed position if available
+                const pseudoPos = stStatePositions['[*]_end'];
+                if (pseudoPos) {
+                    toBox = { x: pseudoPos.x, y: pseudoPos.y, width: pseudoPos.width || 20, height: pseudoPos.height || 20 };
+                } else {
+                    const fromS = stFindState(trans.fromId);
+                    const fromPos = fromS ? stStatePositions[fromS.id] : null;
+                    toBox = {
+                        x: (fromPos ? fromPos.x + 40 : ST_LEFT_MARGIN),
+                        y: (fromPos ? fromPos.y + (fromPos.height || ST_BOX_HEIGHT) + 30 : ST_TOP_MARGIN + 100),
+                        width: 20, height: 20
+                    };
+                }
+                // Render end circle (outer ring + inner filled dot)
                 const endOuter = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                endOuter.setAttribute('cx', toBox.x + 10);
-                endOuter.setAttribute('cy', toBox.y + 10);
+                endOuter.setAttribute('cx', toBox.x + toBox.width / 2);
+                endOuter.setAttribute('cy', toBox.y + toBox.height / 2);
                 endOuter.setAttribute('r', '10');
                 endOuter.setAttribute('fill', 'none');
                 endOuter.setAttribute('stroke', 'var(--node-text)');
                 endOuter.setAttribute('stroke-width', '2');
                 subgraphsLayer.appendChild(endOuter);
                 const endInner = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                endInner.setAttribute('cx', toBox.x + 10);
-                endInner.setAttribute('cy', toBox.y + 10);
+                endInner.setAttribute('cx', toBox.x + toBox.width / 2);
+                endInner.setAttribute('cy', toBox.y + toBox.height / 2);
                 endInner.setAttribute('r', '6');
                 endInner.setAttribute('fill', 'var(--node-text)');
                 subgraphsLayer.appendChild(endInner);
@@ -7387,6 +7622,123 @@
                 });
             });
             return best;
+        }
+
+        // Render transitions within composite states (nested transitions)
+        function stRenderNestedTransitions(states) {
+            states.forEach(state => {
+                if (state.nestedTransitions && state.nestedTransitions.length > 0) {
+                    state.nestedTransitions.forEach(trans => {
+                        stRenderNestedTransition(trans, state.id);
+                    });
+                }
+                if (state.nestedStates && state.nestedStates.length > 0) {
+                    stRenderNestedTransitions(state.nestedStates);
+                }
+            });
+        }
+
+        function stRenderNestedTransition(trans, parentId) {
+            let fromBox, toBox;
+
+            if (trans.fromId === '[*]') {
+                const pseudoId = '[*]_start_' + parentId;
+                const pos = stStatePositions[pseudoId];
+                if (pos) {
+                    fromBox = { x: pos.x, y: pos.y, width: pos.width || 20, height: pos.height || 20 };
+                } else {
+                    // Fall back to relative positioning
+                    const toS = stFindState(trans.toId);
+                    const toPos = toS ? stStatePositions[toS.id] : null;
+                    fromBox = {
+                        x: (toPos ? toPos.x + 40 : ST_LEFT_MARGIN),
+                        y: (toPos ? toPos.y - 30 : ST_TOP_MARGIN),
+                        width: 16, height: 16
+                    };
+                }
+                // Render start circle
+                const startCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                startCircle.setAttribute('cx', fromBox.x + fromBox.width / 2);
+                startCircle.setAttribute('cy', fromBox.y + fromBox.height / 2);
+                startCircle.setAttribute('r', '8');
+                startCircle.setAttribute('fill', 'var(--node-text)');
+                subgraphsLayer.appendChild(startCircle);
+            } else {
+                const fromState = stFindState(trans.fromId);
+                fromBox = fromState ? stGetStateBox(fromState) : null;
+            }
+
+            if (trans.toId === '[*]') {
+                const pseudoId = '[*]_end_' + parentId;
+                const pos = stStatePositions[pseudoId];
+                if (pos) {
+                    toBox = { x: pos.x, y: pos.y, width: pos.width || 20, height: pos.height || 20 };
+                } else {
+                    const fromS = stFindState(trans.fromId);
+                    const fromPos = fromS ? stStatePositions[fromS.id] : null;
+                    toBox = {
+                        x: (fromPos ? fromPos.x + 40 : ST_LEFT_MARGIN),
+                        y: (fromPos ? fromPos.y + (fromPos.height || ST_BOX_HEIGHT) + 20 : ST_TOP_MARGIN + 100),
+                        width: 20, height: 20
+                    };
+                }
+                // Render end circle (outer ring + inner dot)
+                const endOuter = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                endOuter.setAttribute('cx', toBox.x + toBox.width / 2);
+                endOuter.setAttribute('cy', toBox.y + toBox.height / 2);
+                endOuter.setAttribute('r', '10');
+                endOuter.setAttribute('fill', 'none');
+                endOuter.setAttribute('stroke', 'var(--node-text)');
+                endOuter.setAttribute('stroke-width', '2');
+                subgraphsLayer.appendChild(endOuter);
+                const endInner = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                endInner.setAttribute('cx', toBox.x + toBox.width / 2);
+                endInner.setAttribute('cy', toBox.y + toBox.height / 2);
+                endInner.setAttribute('r', '6');
+                endInner.setAttribute('fill', 'var(--node-text)');
+                subgraphsLayer.appendChild(endInner);
+            } else {
+                const toState = stFindState(trans.toId);
+                toBox = toState ? stGetStateBox(toState) : null;
+            }
+
+            if (!fromBox || !toBox) return;
+
+            const fromCx = fromBox.x + fromBox.width / 2;
+            const fromCy = fromBox.y + fromBox.height / 2;
+            const toCx = toBox.x + toBox.width / 2;
+            const toCy = toBox.y + toBox.height / 2;
+
+            const ports = stGetEdgePorts(fromBox, toBox, fromCx, fromCy, toCx, toCy);
+
+            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.classList.add('st-transition', 'st-nested-transition');
+
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', ports.x1);
+            line.setAttribute('y1', ports.y1);
+            line.setAttribute('x2', ports.x2);
+            line.setAttribute('y2', ports.y2);
+            line.setAttribute('stroke', 'var(--edge-color)');
+            line.setAttribute('stroke-width', '2');
+            line.setAttribute('marker-end', 'url(#arrowhead)');
+            g.appendChild(line);
+
+            if (trans.label) {
+                const midX = (ports.x1 + ports.x2) / 2;
+                const midY = (ports.y1 + ports.y2) / 2;
+                const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                labelText.setAttribute('x', midX);
+                labelText.setAttribute('y', midY - 6);
+                labelText.setAttribute('text-anchor', 'middle');
+                labelText.setAttribute('fill', 'var(--node-text)');
+                labelText.setAttribute('font-size', '11');
+                labelText.setAttribute('font-style', 'italic');
+                setTextWithLineBreaks(labelText, trans.label);
+                g.appendChild(labelText);
+            }
+
+            edgesLayer.appendChild(g);
         }
 
         function stRenderNote(note, idx) {
@@ -7525,11 +7877,19 @@
             if (stDraggingStateId) {
                 const newX = Math.round((svgPt.x - stDragOffsetX) / SNAP_GRID) * SNAP_GRID;
                 const newY = Math.round((svgPt.y - stDragOffsetY) / SNAP_GRID) * SNAP_GRID;
+                const oldPos = stStatePositions[stDraggingStateId];
+                const dx = newX - (oldPos ? oldPos.x : 0);
+                const dy = newY - (oldPos ? oldPos.y : 0);
                 stStatePositions[stDraggingStateId] = {
                     ...stStatePositions[stDraggingStateId],
                     x: newX,
                     y: newY
                 };
+                // Move nested states along with composite parent
+                const draggedState = stFindState(stDraggingStateId);
+                if (draggedState && draggedState.nestedStates && draggedState.nestedStates.length > 0) {
+                    stMoveNestedStates(draggedState.nestedStates, dx, dy);
+                }
                 renderStateDiagram();
             }
         });
@@ -7621,6 +7981,7 @@
                 postMessage({ type: 'st_stateEdited', stateId: stateId, type: this.value });
             });
 
+            propPanelTitle.textContent = 'State: ' + (state.label || state.id);
             propertyPanel.classList.add('visible');
         }
 
@@ -7648,6 +8009,7 @@
                 postMessage({ type: 'st_transitionEdited', index: idx, label: this.value });
             });
 
+            propPanelTitle.textContent = 'Transition';
             propertyPanel.classList.add('visible');
         }
 
@@ -7889,6 +8251,7 @@
 
         function erAutoLayoutEntities() {
             if (!erDiagram) return;
+            // Simple grid fallback for initial placement of new entities only
             const cols = Math.max(1, Math.ceil(Math.sqrt(erDiagram.entities.length)));
             erDiagram.entities.forEach((entity, idx) => {
                 if (!erEntityPositions[entity.name]) {
@@ -7897,6 +8260,55 @@
                     erEntityPositions[entity.name] = {
                         x: ER_LEFT_MARGIN + col * ER_GAP_X,
                         y: ER_TOP_MARGIN + row * (200 + ER_GAP_Y)
+                    };
+                }
+            });
+        }
+
+        // Dagre-based auto layout for ER diagrams (uses relationships as edges)
+        function erDagreAutoLayout() {
+            if (!erDiagram || typeof dagre === 'undefined') return;
+
+            const g = new dagre.graphlib.Graph();
+            g.setGraph({
+                rankdir: 'TB',
+                nodesep: 80,
+                ranksep: 100,
+                edgesep: 30,
+                marginx: ER_LEFT_MARGIN,
+                marginy: ER_TOP_MARGIN
+            });
+            g.setDefaultEdgeLabel(function() { return {}; });
+
+            // Register all entity nodes with their measured dimensions
+            erDiagram.entities.forEach(entity => {
+                const dim = erGetEntityBoxDimensions(entity);
+                g.setNode(entity.name, { width: dim.width, height: dim.height });
+            });
+
+            // Register relationships as edges
+            erDiagram.relationships.forEach(rel => {
+                if (g.hasNode(rel.fromEntity) && g.hasNode(rel.toEntity)) {
+                    g.setEdge(rel.fromEntity, rel.toEntity);
+                }
+            });
+
+            try {
+                dagre.layout(g);
+            } catch (e) {
+                console.error('ER diagram dagre layout failed:', e);
+                return;
+            }
+
+            // Apply computed positions
+            erDiagram.entities.forEach(entity => {
+                const layoutNode = g.node(entity.name);
+                if (layoutNode) {
+                    erEntityPositions[entity.name] = {
+                        x: layoutNode.x - layoutNode.width / 2,
+                        y: layoutNode.y - layoutNode.height / 2,
+                        width: layoutNode.width,
+                        height: layoutNode.height
                     };
                 }
             });
@@ -8808,6 +9220,19 @@
             postMessage({ type: 'cls_relationshipCreated', fromId: fromId, toId: toId, relationType: 'Association', label: '' });
         });
 
+        document.getElementById('tb-cls-auto-layout').addEventListener('click', function() {
+            clsDagreAutoLayout();
+            renderClassDiagram();
+            const positions = [];
+            clsDiagram.classes.forEach(cls => {
+                const pos = clsClassPositions[cls.id];
+                if (pos) {
+                    positions.push({ classId: cls.id, x: pos.x, y: pos.y, width: pos.width || 0, height: pos.height || 0 });
+                }
+            });
+            postMessage({ type: 'cls_autoLayoutComplete', positions: positions });
+        });
+
         // ===== State diagram toolbar buttons =====
         document.getElementById('tb-st-add-state').addEventListener('click', function() {
             if (!stDiagram) return;
@@ -8821,6 +9246,20 @@
             postMessage({ type: 'st_transitionCreated', fromId: fromId, toId: toId, label: '' });
         });
 
+        document.getElementById('tb-st-auto-layout').addEventListener('click', function() {
+            stDagreAutoLayout();
+            renderStateDiagram();
+            const positions = [];
+            const allStates = stGetAllFlatStates();
+            allStates.forEach(state => {
+                const pos = stStatePositions[state.id];
+                if (pos) {
+                    positions.push({ stateId: state.id, x: pos.x, y: pos.y, width: pos.width || 0, height: pos.height || 0 });
+                }
+            });
+            postMessage({ type: 'st_autoLayoutComplete', positions: positions });
+        });
+
         // ===== ER diagram toolbar buttons =====
         document.getElementById('tb-er-add-entity').addEventListener('click', function() {
             if (!erDiagram) return;
@@ -8832,6 +9271,19 @@
             const fromName = erDiagram.entities[0].name;
             const toName = erDiagram.entities[1].name;
             postMessage({ type: 'er_relationshipCreated', fromEntity: fromName, toEntity: toName, fromCardinality: 'ExactlyOne', toCardinality: 'ZeroOrMore', label: 'has' });
+        });
+
+        document.getElementById('tb-er-auto-layout').addEventListener('click', function() {
+            erDagreAutoLayout();
+            renderERDiagram();
+            const positions = [];
+            erDiagram.entities.forEach(entity => {
+                const pos = erEntityPositions[entity.name];
+                if (pos) {
+                    positions.push({ entityName: entity.name, x: pos.x, y: pos.y, width: pos.width || 0, height: pos.height || 0 });
+                }
+            });
+            postMessage({ type: 'er_autoLayoutComplete', positions: positions });
         });
 
         document.getElementById('tb-zoom-in').addEventListener('click', function() {

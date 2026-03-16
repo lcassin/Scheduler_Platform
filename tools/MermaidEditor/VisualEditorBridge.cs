@@ -922,6 +922,10 @@ public class VisualEditorBridge
                     HandleClsRelationshipDeleted(root);
                     break;
 
+                case "cls_autoLayoutComplete":
+                    HandleClsAutoLayoutComplete(root);
+                    break;
+
                 case "cls_classSelected":
                 case "cls_relationshipSelected":
                     // Selection doesn't need model changes
@@ -1049,6 +1053,10 @@ public class VisualEditorBridge
                     HandleStNoteDeleted(root);
                     break;
 
+                case "st_autoLayoutComplete":
+                    HandleStAutoLayoutComplete(root);
+                    break;
+
                 case "st_stateSelected":
                 case "st_transitionSelected":
                     // Selection doesn't need model changes
@@ -1090,6 +1098,10 @@ public class VisualEditorBridge
 
                 case "er_relationshipDeleted":
                     HandleErRelationshipDeleted(root);
+                    break;
+
+                case "er_autoLayoutComplete":
+                    HandleErAutoLayoutComplete(root);
                     break;
 
                 case "er_entitySelected":
@@ -1502,6 +1514,26 @@ public class VisualEditorBridge
         RaiseModelChanged("autoLayoutComplete");
     }
 
+    private void HandleClsAutoLayoutComplete(JsonElement root)
+    {
+        // Class diagram positions are managed by JS (clsClassPositions dict).
+        // The C# model doesn't store position data for class diagram nodes.
+        // We just need to raise model changed so the text editor stays in sync.
+        RaiseClassDiagramModelChanged("cls_autoLayoutComplete");
+    }
+
+    private void HandleStAutoLayoutComplete(JsonElement root)
+    {
+        // State diagram positions are managed by JS (stStatePositions dict).
+        RaiseStateDiagramModelChanged("st_autoLayoutComplete");
+    }
+
+    private void HandleErAutoLayoutComplete(JsonElement root)
+    {
+        // ER diagram positions are managed by JS (erEntityPositions dict).
+        RaiseERDiagramModelChanged("er_autoLayoutComplete");
+    }
+
     // ========== Undo/Redo History ==========
 
     private void PushUndo()
@@ -1726,27 +1758,8 @@ public class VisualEditorBridge
         if (cls == null) return;
 
         PushUndo();
-        var isMethod = rawText.Contains('(');
-        var visibility = MemberVisibility.None;
-        var name = rawText;
-        if (rawText.Length > 0)
-        {
-            switch (rawText[0])
-            {
-                case '+': visibility = MemberVisibility.Public; name = rawText[1..].TrimStart(); break;
-                case '-': visibility = MemberVisibility.Private; name = rawText[1..].TrimStart(); break;
-                case '#': visibility = MemberVisibility.Protected; name = rawText[1..].TrimStart(); break;
-                case '~': visibility = MemberVisibility.Package; name = rawText[1..].TrimStart(); break;
-            }
-        }
-
-        cls.Members.Add(new ClassMember
-        {
-            RawText = rawText,
-            Visibility = visibility,
-            IsMethod = isMethod,
-            Name = name
-        });
+        var member = ParseClassMemberRawText(rawText);
+        cls.Members.Add(member);
         RaiseClassDiagramModelChanged("cls_memberAdded");
     }
 
@@ -1762,21 +1775,15 @@ public class VisualEditorBridge
         if (cls == null || memberIndex < 0 || memberIndex >= cls.Members.Count) return;
 
         PushUndo();
+        var parsed = ParseClassMemberRawText(rawText);
         var member = cls.Members[memberIndex];
-        member.RawText = rawText;
-        member.IsMethod = rawText.Contains('(');
-        member.Visibility = MemberVisibility.None;
-        member.Name = rawText;
-        if (rawText.Length > 0)
-        {
-            switch (rawText[0])
-            {
-                case '+': member.Visibility = MemberVisibility.Public; member.Name = rawText[1..].TrimStart(); break;
-                case '-': member.Visibility = MemberVisibility.Private; member.Name = rawText[1..].TrimStart(); break;
-                case '#': member.Visibility = MemberVisibility.Protected; member.Name = rawText[1..].TrimStart(); break;
-                case '~': member.Visibility = MemberVisibility.Package; member.Name = rawText[1..].TrimStart(); break;
-            }
-        }
+        member.RawText = parsed.RawText;
+        member.IsMethod = parsed.IsMethod;
+        member.Visibility = parsed.Visibility;
+        member.Name = parsed.Name;
+        member.Type = parsed.Type;
+        member.Parameters = parsed.Parameters;
+        member.Classifier = parsed.Classifier;
         RaiseClassDiagramModelChanged("cls_memberEdited");
     }
 
@@ -1814,6 +1821,103 @@ public class VisualEditorBridge
         cls.Members.RemoveAt(memberIndex);
         cls.Members.Insert(newIndex, member);
         RaiseClassDiagramModelChanged("cls_memberMoved");
+    }
+
+    /// <summary>
+    /// Parses raw member text (e.g. "+newMethod()" or "+void getName(String key)")
+    /// into a fully structured ClassMember, matching the same logic as MermaidParser.ParseClassMember.
+    /// </summary>
+    private static ClassMember ParseClassMemberRawText(string rawText)
+    {
+        var member = new ClassMember { RawText = rawText };
+        var remaining = rawText.Trim();
+
+        // Parse visibility prefix
+        if (remaining.Length > 0)
+        {
+            switch (remaining[0])
+            {
+                case '+': member.Visibility = MemberVisibility.Public; remaining = remaining[1..]; break;
+                case '-': member.Visibility = MemberVisibility.Private; remaining = remaining[1..]; break;
+                case '#': member.Visibility = MemberVisibility.Protected; remaining = remaining[1..]; break;
+                case '~': member.Visibility = MemberVisibility.Package; remaining = remaining[1..]; break;
+            }
+        }
+
+        // Check for classifier suffix (* or $) at the very end
+        if (remaining.EndsWith("*"))
+        {
+            member.Classifier = MemberClassifier.Abstract;
+            remaining = remaining[..^1];
+        }
+        else if (remaining.EndsWith("$"))
+        {
+            member.Classifier = MemberClassifier.Static;
+            remaining = remaining[..^1];
+        }
+
+        // Check if it's a method (contains parentheses)
+        var parenOpen = remaining.IndexOf('(');
+        if (parenOpen >= 0)
+        {
+            member.IsMethod = true;
+            var parenClose = remaining.LastIndexOf(')');
+            if (parenClose > parenOpen)
+            {
+                member.Parameters = remaining[(parenOpen + 1)..parenClose];
+                // Method name is everything before the (
+                var beforeParen = remaining[..parenOpen].Trim();
+                member.Name = beforeParen;
+
+                // Return type: check for "Type name(" pattern (type before name)
+                // or text after closing paren
+                var afterParen = remaining[(parenClose + 1)..].Trim();
+                if (!string.IsNullOrEmpty(afterParen))
+                {
+                    member.Type = afterParen;
+                }
+                else
+                {
+                    // Check if beforeParen has "Type name" (space-separated)
+                    var parts = beforeParen.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length == 2)
+                    {
+                        member.Type = parts[0];
+                        member.Name = parts[1];
+                    }
+                }
+            }
+            else
+            {
+                member.Name = remaining;
+            }
+        }
+        else
+        {
+            // Field
+            member.IsMethod = false;
+            var colonIdx = remaining.IndexOf(':');
+            if (colonIdx >= 0)
+            {
+                member.Name = remaining[..colonIdx].Trim();
+                member.Type = remaining[(colonIdx + 1)..].Trim();
+            }
+            else
+            {
+                var parts = remaining.Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 2)
+                {
+                    member.Type = parts[0];
+                    member.Name = parts[1];
+                }
+                else if (parts.Length == 1)
+                {
+                    member.Name = parts[0];
+                }
+            }
+        }
+
+        return member;
     }
 
     private void HandleClsRelationshipCreated(JsonElement root)
