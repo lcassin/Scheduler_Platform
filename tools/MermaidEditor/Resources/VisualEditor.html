@@ -4418,39 +4418,45 @@
             let minPIdx = participants.length - 1;
             let maxPIdx = 0;
 
+            // First, auto-calculate from inner messages (always needed as fallback)
+            let autoMinP = participants.length - 1;
+            let autoMaxP = 0;
+            if (fragment.sections) {
+                fragment.sections.forEach(sec => {
+                    if (sec.elements) {
+                        sec.elements.forEach(se => {
+                            if (se.elementType === 'message') {
+                                const fi = getParticipantIndex(se.fromId);
+                                const ti = getParticipantIndex(se.toId);
+                                if (fi >= 0) { autoMinP = Math.min(autoMinP, fi); autoMaxP = Math.max(autoMaxP, fi); }
+                                if (ti >= 0) { autoMinP = Math.min(autoMinP, ti); autoMaxP = Math.max(autoMaxP, ti); }
+                            }
+                        });
+                    }
+                });
+            }
+            // If no messages found, fall back to spanning all participants
+            if (autoMinP > autoMaxP) { autoMinP = 0; autoMaxP = Math.max(0, participants.length - 1); }
+
             // Check if manual participant range is set (overParticipantStart / overParticipantEnd)
             const hasManualStart = fragment.overParticipantStart && fragment.overParticipantStart.length > 0;
             const hasManualEnd = fragment.overParticipantEnd && fragment.overParticipantEnd.length > 0;
-            if (hasManualStart || hasManualEnd) {
-                if (hasManualStart) {
-                    const si = getParticipantIndex(fragment.overParticipantStart);
-                    if (si >= 0) minPIdx = si;
-                }
-                if (hasManualEnd) {
-                    const ei = getParticipantIndex(fragment.overParticipantEnd);
-                    if (ei >= 0) maxPIdx = ei;
-                }
-                // Ensure minPIdx <= maxPIdx (swap if user dragged them backwards)
-                if (minPIdx > maxPIdx) { const tmp = minPIdx; minPIdx = maxPIdx; maxPIdx = tmp; }
+            if (hasManualStart) {
+                const si = getParticipantIndex(fragment.overParticipantStart);
+                if (si >= 0) minPIdx = si;
+                else minPIdx = autoMinP;
             } else {
-                // Auto-calculate from inner messages
-                if (fragment.sections) {
-                    fragment.sections.forEach(sec => {
-                        if (sec.elements) {
-                            sec.elements.forEach(se => {
-                                if (se.elementType === 'message') {
-                                    const fi = getParticipantIndex(se.fromId);
-                                    const ti = getParticipantIndex(se.toId);
-                                    if (fi >= 0) { minPIdx = Math.min(minPIdx, fi); maxPIdx = Math.max(maxPIdx, fi); }
-                                    if (ti >= 0) { minPIdx = Math.min(minPIdx, ti); maxPIdx = Math.max(maxPIdx, ti); }
-                                }
-                            });
-                        }
-                    });
-                }
-                // If no messages found, fall back to spanning all participants
-                if (minPIdx > maxPIdx) { minPIdx = 0; maxPIdx = participants.length - 1; }
+                minPIdx = autoMinP;
             }
+            if (hasManualEnd) {
+                const ei = getParticipantIndex(fragment.overParticipantEnd);
+                if (ei >= 0) maxPIdx = ei;
+                else maxPIdx = autoMaxP;
+            } else {
+                maxPIdx = autoMaxP;
+            }
+            // Ensure minPIdx <= maxPIdx (swap if user set them backwards)
+            if (minPIdx > maxPIdx) { const tmp = minPIdx; minPIdx = maxPIdx; maxPIdx = tmp; }
             const leftX = participants.length > 0 ? getParticipantX(minPIdx) - SEQ_PARTICIPANT_WIDTH / 2 - 10 : SEQ_LEFT_MARGIN - 40;
             const rightX = participants.length > 0 ? getParticipantX(maxPIdx) + SEQ_PARTICIPANT_WIDTH / 2 + 10 : SEQ_LEFT_MARGIN + 200;
 
