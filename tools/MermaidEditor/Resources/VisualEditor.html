@@ -5072,23 +5072,19 @@
         }
 
         // ===== Sequence Diagram Context Menu =====
+        // Uses mousedown(button=2) instead of contextmenu event because
+        // the contextmenu event is unreliable in WebView2 for SVG elements
+        // inside fragments. mousedown fires reliably and e.target is correct.
 
-        // Capture right-click target during mousedown (fires before contextmenu)
-        // because contextmenu e.target can sometimes miss SVG elements
-        let _seqRightClickTarget = null;
+        let _seqRightClickHandled = false;
+
         svg.addEventListener('mousedown', function(e) {
-            if (e.button === 2) _seqRightClickTarget = e.target;
-        }, true);
-
-        svg.addEventListener('contextmenu', function(e) {
+            if (e.button !== 2) return;
             if (currentDiagramType !== 'sequence') return;
             if (!seqDiagram) return;
-            e.preventDefault();
-            e.stopPropagation();
 
-            // Use the mousedown target as primary, contextmenu target as fallback
-            const target = _seqRightClickTarget || e.target;
-            _seqRightClickTarget = null;
+            _seqRightClickHandled = true;
+            const target = e.target;
 
             const participantGroup = target.closest('.seq-participant');
             let messageGroup = target.closest('.seq-message');
@@ -5104,8 +5100,7 @@
                 }
             }
 
-            // Fallback 2: if still no message found, check all rendered message groups
-            // via SVG bounding box intersection with click point
+            // Fallback 2: check all rendered message groups via SVG bounding box
             if (!messageGroup && !participantGroup && !noteGroup) {
                 const svgPt = getSVGPoint(e);
                 const allMsgs = svg.querySelectorAll('.seq-message');
@@ -5353,10 +5348,17 @@
                 addContextMenuItem('\u{1F4CB} Paste', () => { pasteClipboard(0, 0); });
             }
 
-            const svgPt = getSVGPoint(e);
-            const rect = canvasContainer.getBoundingClientRect();
             positionContextMenu(contextMenu, e.clientX, e.clientY);
             renderSequenceDiagram();
+        });
+
+        // The contextmenu event just suppresses the native menu — all logic is in mousedown above
+        svg.addEventListener('contextmenu', function(e) {
+            if (currentDiagramType !== 'sequence') return;
+            if (!_seqRightClickHandled) return;
+            _seqRightClickHandled = false;
+            e.preventDefault();
+            e.stopPropagation();
         });
 
         function addContextMenuItem(label, onClick) {
