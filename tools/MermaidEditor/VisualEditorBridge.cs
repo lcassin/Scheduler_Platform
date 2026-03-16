@@ -987,6 +987,14 @@ public class VisualEditorBridge
                     HandleSeqFragmentSectionAdded(root);
                     break;
 
+                case "seq_fragmentMessageEdited":
+                    HandleSeqFragmentMessageEdited(root);
+                    break;
+
+                case "seq_fragmentMessageDeleted":
+                    HandleSeqFragmentMessageDeleted(root);
+                    break;
+
                 case "seq_elementReordered":
                     HandleSeqElementReordered(root);
                     break;
@@ -2875,6 +2883,53 @@ public class VisualEditorBridge
         PushUndo();
         frag.Sections.Add(new SequenceFragmentSection { Label = "else" });
         RaiseSequenceModelChanged("seq_fragmentSectionAdded");
+    }
+
+    private void HandleSeqFragmentMessageEdited(JsonElement root)
+    {
+        if (_sequenceModel == null) return;
+        var fragmentIndex = root.GetProperty("fragmentIndex").GetInt32();
+        var sectionIndex = root.GetProperty("sectionIndex").GetInt32();
+        var innerIndex = root.GetProperty("innerIndex").GetInt32();
+
+        if (fragmentIndex < 0 || fragmentIndex >= _sequenceModel.Elements.Count) return;
+        if (_sequenceModel.Elements[fragmentIndex] is not SequenceFragment frag) return;
+        if (sectionIndex < 0 || sectionIndex >= frag.Sections.Count) return;
+        var section = frag.Sections[sectionIndex];
+        if (innerIndex < 0 || innerIndex >= section.Elements.Count) return;
+        if (section.Elements[innerIndex] is not SequenceMessage msg) return;
+
+        PushUndo();
+        if (root.TryGetProperty("fromId", out var fromProp))
+            msg.FromId = fromProp.GetString() ?? msg.FromId;
+        if (root.TryGetProperty("toId", out var toProp))
+            msg.ToId = toProp.GetString() ?? msg.ToId;
+        if (root.TryGetProperty("text", out var textProp))
+            msg.Text = textProp.GetString() ?? "";
+        if (root.TryGetProperty("arrowType", out var arrowProp))
+        {
+            if (Enum.TryParse<SequenceArrowType>(arrowProp.GetString(), out var parsed))
+                msg.ArrowType = parsed;
+        }
+        RaiseSequenceModelChanged("seq_fragmentMessageEdited");
+    }
+
+    private void HandleSeqFragmentMessageDeleted(JsonElement root)
+    {
+        if (_sequenceModel == null) return;
+        var fragmentIndex = root.GetProperty("fragmentIndex").GetInt32();
+        var sectionIndex = root.GetProperty("sectionIndex").GetInt32();
+        var innerIndex = root.GetProperty("innerIndex").GetInt32();
+
+        if (fragmentIndex < 0 || fragmentIndex >= _sequenceModel.Elements.Count) return;
+        if (_sequenceModel.Elements[fragmentIndex] is not SequenceFragment frag) return;
+        if (sectionIndex < 0 || sectionIndex >= frag.Sections.Count) return;
+        var section = frag.Sections[sectionIndex];
+        if (innerIndex < 0 || innerIndex >= section.Elements.Count) return;
+
+        PushUndo();
+        section.Elements.RemoveAt(innerIndex);
+        RaiseSequenceModelChanged("seq_fragmentMessageDeleted");
     }
 
     private void HandleSeqElementReordered(JsonElement root)
