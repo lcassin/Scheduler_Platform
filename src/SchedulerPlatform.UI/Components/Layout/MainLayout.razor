@@ -17,7 +17,7 @@
             <Authorized Context="authContext">
                 <MudMenu AnchorOrigin="Origin.BottomRight" TransformOrigin="Origin.TopRight">
                     <ActivatorContent>
-                        <MudButton Color="Color.Inherit" Variant="Variant.Text" EndIcon="@Icons.Material.Filled.ArrowDropDown" OnClick="@context.ToggleAsync">
+                        <MudButton Color="Color.Inherit" Variant="Variant.Text" EndIcon="@Icons.Material.Filled.ArrowDropDown">
                             <MudAvatar Size="Size.Small" Style="background-color: #ffffff; color: #3d5afe;" Class="mr-2">
                                 @{
                                     var initials = GetInitials(GetDisplayName(authContext.User));

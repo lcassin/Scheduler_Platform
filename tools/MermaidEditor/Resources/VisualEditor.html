@@ -1343,12 +1343,20 @@
             });
         }
 
+        // Split a label on HTML <br>, <br/>, <br /> variants into lines
+        function splitLabelLines(label) {
+            return label.split(/<br\s*\/?>/gi);
+        }
+
         function estimateNodeSize(node) {
             const label = node.label || node.id;
+            const lines = splitLabelLines(label);
             const charWidth = 8;
-            const textWidth = label.length * charWidth;
+            const longestLine = lines.reduce((max, l) => Math.max(max, l.length), 0);
+            const textWidth = longestLine * charWidth;
             let width = Math.max(textWidth + 40, 80);
-            let height = 40;
+            const lineHeight = 18;
+            let height = Math.max(40, lines.length * lineHeight + 20);
 
             switch (node.shape) {
                 case 'Circle':
@@ -1407,12 +1415,28 @@
                 }
                 g.appendChild(shape);
 
-                // Create label
+                // Create label (supports multi-line via <br/> tags)
                 const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                 text.classList.add('node-label');
                 text.setAttribute('x', '0');
-                text.setAttribute('y', '0');
-                text.textContent = node.label || node.id;
+                const rawLabel = node.label || node.id;
+                const labelLines = splitLabelLines(rawLabel);
+                if (labelLines.length <= 1) {
+                    text.setAttribute('y', '0');
+                    text.textContent = rawLabel;
+                } else {
+                    // Center multi-line text vertically
+                    const lineHeight = 18;
+                    const totalHeight = labelLines.length * lineHeight;
+                    const startY = -totalHeight / 2 + lineHeight / 2 + 2;
+                    labelLines.forEach((line, i) => {
+                        const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+                        tspan.setAttribute('x', '0');
+                        tspan.setAttribute('dy', i === 0 ? `${startY}` : `${lineHeight}`);
+                        tspan.textContent = line;
+                        text.appendChild(tspan);
+                    });
+                }
                 g.appendChild(text);
 
                 // Connection points (N, S, E, W)
@@ -3940,11 +3964,33 @@
                 const msgGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                 msgGroup.classList.add('edge-group', 'seq-message');
                 msgGroup.setAttribute('data-element-index', elIdx);
+                msgGroup.style.cursor = 'pointer';
                 if (isFragmentInner) {
                     msgGroup.setAttribute('data-section-index', sectionIdx);
                     msgGroup.setAttribute('data-sub-index', subIdx);
                     msgGroup.classList.add('seq-fragment-inner-message');
                 }
+
+                // Add a transparent hit-area rect as the first child so the entire
+                // message region is clickable (prevents clicks falling through to
+                // the fragment background underneath for fragment-inner messages).
+                const hitRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                if (isSelfMessage) {
+                    hitRect.setAttribute('x', fromX - 2);
+                    hitRect.setAttribute('y', y - 6);
+                    hitRect.setAttribute('width', 50);
+                    hitRect.setAttribute('height', 42);
+                } else {
+                    const minX = Math.min(fromX, toX);
+                    const maxX = Math.max(fromX, toX);
+                    hitRect.setAttribute('x', minX);
+                    hitRect.setAttribute('y', y - 20);
+                    hitRect.setAttribute('width', maxX - minX);
+                    hitRect.setAttribute('height', 28);
+                }
+                hitRect.setAttribute('fill', 'transparent');
+                hitRect.setAttribute('pointer-events', 'all');
+                msgGroup.appendChild(hitRect);
 
                 if (isSelfMessage) {
                     // Self-message: loop arrow
@@ -3964,6 +4010,7 @@
                     hitPath.setAttribute('stroke-width', '12');
                     hitPath.setAttribute('fill', 'none');
                     hitPath.setAttribute('cursor', 'pointer');
+                    hitPath.setAttribute('pointer-events', 'all');
                     msgGroup.appendChild(hitPath);
 
                     // Arrowhead for self-message
@@ -4044,6 +4091,7 @@
                     hitLine.setAttribute('stroke', 'transparent');
                     hitLine.setAttribute('stroke-width', '12');
                     hitLine.setAttribute('cursor', 'pointer');
+                    hitLine.setAttribute('pointer-events', 'all');
                     msgGroup.appendChild(hitLine);
 
                     // Label

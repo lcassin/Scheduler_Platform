@@ -5401,6 +5401,10 @@ Console.WriteLine(""Hello, World!"");
                     var svg = System.Text.Json.JsonSerializer.Deserialize<string>(svgContent);
                     if (svg != null)
                     {
+                        // Sanitize HTML void elements so the SVG is valid XML
+                        // (browsers render foreignObject HTML fine, but XML parsers
+                        // choke on unclosed <br> / <hr> tags)
+                        svg = SanitizeSvgForXmlLight(svg);
                         await File.WriteAllTextAsync(dialog.FileName, svg);
                         StatusText.Text = "Exported as SVG";
                         MessageBox.Show("SVG exported successfully!", "Export Complete", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -6082,6 +6086,19 @@ Console.WriteLine(""Hello, World!"");
         ExportSvgToolbarButton.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
         ExportEmfToolbarButton.Visibility = isMermaid ? Visibility.Visible : Visibility.Collapsed;
         ExportWordToolbarButton.Visibility = Visibility.Visible; // Always visible - works for both
+    }
+
+    /// <summary>
+    /// Light sanitization for SVG export — only fixes HTML void elements
+    /// (<br>, <hr>) so the file is valid XML while preserving foreignObject
+    /// content that browsers can render.
+    /// </summary>
+    private string SanitizeSvgForXmlLight(string svg)
+    {
+        // Convert self-closing HTML void tags to XML-compliant format
+        svg = Regex.Replace(svg, @"<br\s*>", "<br/>", RegexOptions.IgnoreCase);
+        svg = Regex.Replace(svg, @"<hr\s*>", "<hr/>", RegexOptions.IgnoreCase);
+        return svg;
     }
 
     private string SanitizeSvgForXml(string svg)
