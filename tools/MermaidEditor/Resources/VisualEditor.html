@@ -7441,8 +7441,17 @@
             return id;
         }
 
-        // Recursively move nested states by a delta (used when dragging composite parent)
-        function stMoveNestedStates(nestedStates, dx, dy) {
+        // Recursively move nested states and their pseudo-states by a delta (used when dragging composite parent)
+        function stMoveNestedStates(nestedStates, dx, dy, parentId) {
+            // Move nested pseudo-states for this parent
+            if (parentId) {
+                ['[*]_start_' + parentId, '[*]_end_' + parentId].forEach(pid => {
+                    const pos = stStatePositions[pid];
+                    if (pos) {
+                        stStatePositions[pid] = { ...pos, x: pos.x + dx, y: pos.y + dy };
+                    }
+                });
+            }
             nestedStates.forEach(ns => {
                 const pos = stStatePositions[ns.id];
                 if (pos) {
@@ -7453,7 +7462,7 @@
                     };
                 }
                 if (ns.nestedStates && ns.nestedStates.length > 0) {
-                    stMoveNestedStates(ns.nestedStates, dx, dy);
+                    stMoveNestedStates(ns.nestedStates, dx, dy, ns.id);
                 }
             });
         }
@@ -8116,10 +8125,10 @@
                     x: newX,
                     y: newY
                 };
-                // Move nested states along with composite parent
+                // Move nested states and their pseudo-states along with composite parent
                 const draggedState = stFindState(stDraggingStateId);
                 if (draggedState && draggedState.nestedStates && draggedState.nestedStates.length > 0) {
-                    stMoveNestedStates(draggedState.nestedStates, dx, dy);
+                    stMoveNestedStates(draggedState.nestedStates, dx, dy, stDraggingStateId);
                 }
                 renderStateDiagram();
             }
