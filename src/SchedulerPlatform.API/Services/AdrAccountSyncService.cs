@@ -275,17 +275,18 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             
             progressCallback?.Invoke(totalAccountCount, totalAccountCount);
 
-            // Step 4b: Cancel active jobs for accounts that were just marked as deleted
-            // This prevents orphaned jobs from continuing to run for accounts that no longer exist in vendor master
-            await CancelJobsForDeletedAccountsAsync(subStepCallback, cancellationToken);
-
-            // Step 5: Update blacklist flags on active (non-deleted) accounts
+            // Step 4b: Update blacklist flags on active (non-deleted) accounts
             // This runs AFTER we have determined the true active accounts (after deletion phase)
             // so that only active accounts get flagged. Deleted/inactive accounts are skipped.
             await UpdateBlacklistFlagsAsync(subStepCallback, cancellationToken);
 
-            // Step 5b: Cancel/close non-terminal jobs for newly-blacklisted accounts
+            // Step 4c: Cancel/close non-terminal jobs for newly-blacklisted accounts
+            // Must run BEFORE deleted-account cancellation so BlacklistedPendingReview jobs exist
             await CancelJobsForBlacklistedAccountsAsync(subStepCallback, cancellationToken);
+
+            // Step 5: Cancel active jobs for accounts that were just marked as deleted
+            // Runs AFTER blacklist cancellation so BlacklistedPendingReview jobs for deleted accounts are also caught
+            await CancelJobsForDeletedAccountsAsync(subStepCallback, cancellationToken);
 
             // Step 6: Sync AdrAccountRules using lightweight scheduling data
             // PERFORMANCE OPTIMIZATION: Detach account entities from change tracker before rule sync

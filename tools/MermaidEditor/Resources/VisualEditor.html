@@ -7007,6 +7007,7 @@
         let stDragOffsetX = 0;
         let stDragOffsetY = 0;
         let stDrawingTransFrom = null; // stateId when drawing a transition
+        let stDrawingTransToEnd = false; // true when drawing a transition TO [*] end
         let stStatePositions = {}; // { stateId: { x, y, width, height } }
 
         const ST_BOX_MIN_WIDTH = 120;
@@ -7111,8 +7112,16 @@
 
         function stAutoLayoutStates() {
             if (!stDiagram) return;
-            // Place states in a grid, nesting children inside composite parents
+            // First pass: place states in grid so every state has a position
             stPlaceStatesInGrid(stDiagram.states, ST_LEFT_MARGIN, ST_TOP_MARGIN);
+            // Second pass: if dagre is available, use compound layout for proper nesting
+            if (typeof dagre !== 'undefined') {
+                try {
+                    stDagreAutoLayout();
+                } catch (e) {
+                    console.warn('Initial dagre layout failed, using grid fallback:', e);
+                }
+            }
         }
 
         function stPlaceStatesInGrid(states, offsetX, offsetY) {
@@ -7151,37 +7160,52 @@
 
             // Recursively register states with compound nesting
             function registerStates(states, parentId) {
+                if (!states || !states.length) return;
                 states.forEach(state => {
-                    const isComposite = state.type === 'Composite' || (state.nestedStates && state.nestedStates.length > 0);
+                    const nested = state.nestedStates || [];
+                    const isComposite = state.type === 'Composite' || nested.length > 0;
                     if (isComposite) {
-                        // Register as compound cluster node (dagre computes size from children)
-                        g.setNode(state.id, { label: state.label || state.id, clusterLabelPos: 'top' });
+                        // Register as compound cluster node with minimum dimensions
+                        // (dagre needs at least one child or explicit size to avoid crash)
+                        const box = stGetStateBox(state);
+                        g.setNode(state.id, {
+                            label: state.label || state.id,
+                            clusterLabelPos: 'top',
+                            width: box.width || 200,
+                            height: box.height || 100
+                        });
                         if (parentId) g.setParent(state.id, parentId);
                         // Register nested child states
-                        registerStates(state.nestedStates, state.id);
-                        // Register nested [*] pseudo-nodes and transitions within this composite
-                        if (state.nestedTransitions) {
-                            state.nestedTransitions.forEach(trans => {
-                                const startPseudo = '[*]_start_' + state.id;
-                                const endPseudo = '[*]_end_' + state.id;
-                                if (trans.fromId === '[*]' && !g.hasNode(startPseudo)) {
-                                    g.setNode(startPseudo, { width: 20, height: 20 });
-                                    g.setParent(startPseudo, state.id);
-                                }
-                                if (trans.toId === '[*]' && !g.hasNode(endPseudo)) {
-                                    g.setNode(endPseudo, { width: 20, height: 20 });
-                                    g.setParent(endPseudo, state.id);
-                                }
-                            });
-                            // Register nested transitions as edges
-                            state.nestedTransitions.forEach(trans => {
-                                const from = trans.fromId === '[*]' ? '[*]_start_' + state.id : trans.fromId;
-                                const to = trans.toId === '[*]' ? '[*]_end_' + state.id : trans.toId;
-                                if (g.hasNode(from) && g.hasNode(to)) {
-                                    g.setEdge(from, to);
-                                }
-                            });
+                        if (nested.length > 0) {
+                            registerStates(nested, state.id);
+                        } else {
+                            // Empty composite — add a placeholder child so dagre doesn't crash
+                            const placeholderId = '__placeholder_' + state.id;
+                            g.setNode(placeholderId, { width: 1, height: 1 });
+                            g.setParent(placeholderId, state.id);
                         }
+                        // Register nested [*] pseudo-nodes and transitions within this composite
+                        const nestedTrans = state.nestedTransitions || [];
+                        nestedTrans.forEach(trans => {
+                            const startPseudo = '[*]_start_' + state.id;
+                            const endPseudo = '[*]_end_' + state.id;
+                            if (trans.fromId === '[*]' && !g.hasNode(startPseudo)) {
+                                g.setNode(startPseudo, { width: 20, height: 20 });
+                                g.setParent(startPseudo, state.id);
+                            }
+                            if (trans.toId === '[*]' && !g.hasNode(endPseudo)) {
+                                g.setNode(endPseudo, { width: 20, height: 20 });
+                                g.setParent(endPseudo, state.id);
+                            }
+                        });
+                        // Register nested transitions as edges
+                        nestedTrans.forEach(trans => {
+                            const from = trans.fromId === '[*]' ? '[*]_start_' + state.id : trans.fromId;
+                            const to = trans.toId === '[*]' ? '[*]_end_' + state.id : trans.toId;
+                            if (g.hasNode(from) && g.hasNode(to)) {
+                                g.setEdge(from, to);
+                            }
+                        });
                     } else {
                         // Regular state node with estimated dimensions
                         const box = stGetStateBox(state);
@@ -7202,6 +7226,18 @@
                 }
                 if (trans.toId === '[*]' && !g.hasNode('[*]_end')) {
                     g.setNode('[*]_end', { width: 20, height: 20 });
+                }
+            });
+
+            // Ensure all transition endpoints exist as nodes (prevents dagre crash)
+            stDiagram.transitions.forEach(trans => {
+                const from = trans.fromId === '[*]' ? '[*]_start' : trans.fromId;
+                const to = trans.toId === '[*]' ? '[*]_end' : trans.toId;
+                if (!g.hasNode(from) && from !== '[*]') {
+                    g.setNode(from, { width: ST_BOX_MIN_WIDTH, height: ST_BOX_HEIGHT });
+                }
+                if (!g.hasNode(to) && to !== '[*]') {
+                    g.setNode(to, { width: ST_BOX_MIN_WIDTH, height: ST_BOX_HEIGHT });
                 }
             });
 
@@ -7283,6 +7319,15 @@
         function stFindState(stateId) {
             const allStates = stGetAllFlatStates();
             return allStates.find(s => s.id === stateId) || null;
+        }
+
+        // Generate a unique state ID with the given prefix (avoids collisions)
+        function stNextUniqueId(prefix) {
+            const allIds = new Set(stGetAllFlatStates().map(s => s.id));
+            let counter = stDiagram.states.length + 1;
+            let id = prefix + counter;
+            while (allIds.has(id)) { counter++; id = prefix + counter; }
+            return id;
         }
 
         // Recursively move nested states by a delta (used when dragging composite parent)
@@ -7868,7 +7913,7 @@
             if (!stDiagram) return;
             const svgPt = getSVGPoint(e);
 
-            if (stDrawingTransFrom) {
+            if (stDrawingTransFrom || stDrawingTransToEnd) {
                 tempEdge.setAttribute('x2', svgPt.x);
                 tempEdge.setAttribute('y2', svgPt.y);
                 return;
@@ -7910,6 +7955,20 @@
                 }
                 tempEdge.style.display = 'none';
                 stDrawingTransFrom = null;
+                return;
+            }
+
+            if (stDrawingTransToEnd) {
+                // Drawing a transition TO [*] end - user clicks source state
+                const sourceGroup = e.target.closest('.st-state');
+                if (sourceGroup) {
+                    const fromStateId = sourceGroup.getAttribute('data-state-id');
+                    if (fromStateId) {
+                        postMessage({ type: 'st_transitionCreated', fromId: fromStateId, toId: '[*]' });
+                    }
+                }
+                tempEdge.style.display = 'none';
+                stDrawingTransToEnd = false;
                 return;
             }
 
@@ -8061,7 +8120,7 @@
                 // Empty space
                 addStContextMenuItem('Add State', () => {
                     const svgPt = getSVGPoint(e);
-                    const newId = 'State' + (stDiagram.states.length + 1);
+                    const newId = stNextUniqueId('State');
                     stStatePositions[newId] = {
                         x: Math.round(svgPt.x / SNAP_GRID) * SNAP_GRID,
                         y: Math.round(svgPt.y / SNAP_GRID) * SNAP_GRID
@@ -8070,7 +8129,7 @@
                 });
                 addStContextMenuItem('Add Fork/Join', () => {
                     const svgPt = getSVGPoint(e);
-                    const newId = 'ForkJoin' + (stDiagram.states.length + 1);
+                    const newId = stNextUniqueId('ForkJoin');
                     stStatePositions[newId] = {
                         x: Math.round(svgPt.x / SNAP_GRID) * SNAP_GRID,
                         y: Math.round(svgPt.y / SNAP_GRID) * SNAP_GRID
@@ -8079,12 +8138,34 @@
                 });
                 addStContextMenuItem('Add Choice', () => {
                     const svgPt = getSVGPoint(e);
-                    const newId = 'Choice' + (stDiagram.states.length + 1);
+                    const newId = stNextUniqueId('Choice');
                     stStatePositions[newId] = {
                         x: Math.round(svgPt.x / SNAP_GRID) * SNAP_GRID,
                         y: Math.round(svgPt.y / SNAP_GRID) * SNAP_GRID
                     };
                     postMessage({ type: 'st_stateCreated', stateId: newId, type: 'Choice' });
+                });
+                addStContextMenuSeparator();
+                // [*] pseudo-state transitions
+                addStContextMenuItem('Add Start \u2192 (select target)', () => {
+                    // Enter transition drawing mode from [*] start
+                    stDrawingTransFrom = '[*]';
+                    const svgPt = getSVGPoint(e);
+                    tempEdge.setAttribute('x1', svgPt.x);
+                    tempEdge.setAttribute('y1', svgPt.y);
+                    tempEdge.setAttribute('x2', svgPt.x);
+                    tempEdge.setAttribute('y2', svgPt.y);
+                    tempEdge.style.display = '';
+                });
+                addStContextMenuItem('Add \u2192 End (select source)', () => {
+                    // Enter transition drawing mode to [*] end
+                    stDrawingTransToEnd = true;
+                    const svgPt = getSVGPoint(e);
+                    tempEdge.setAttribute('x1', svgPt.x);
+                    tempEdge.setAttribute('y1', svgPt.y);
+                    tempEdge.setAttribute('x2', svgPt.x);
+                    tempEdge.setAttribute('y2', svgPt.y);
+                    tempEdge.style.display = '';
                 });
             }
 
