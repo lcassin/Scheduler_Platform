@@ -1049,6 +1049,10 @@ public class VisualEditorBridge
                     HandleStNoteCreated(root);
                     break;
 
+                case "st_noteEdited":
+                    HandleStNoteEdited(root);
+                    break;
+
                 case "st_noteDeleted":
                     HandleStNoteDeleted(root);
                     break;
@@ -2234,6 +2238,24 @@ public class VisualEditorBridge
         }
         _stateDiagramModel.Notes.Add(note);
         RaiseStateDiagramModelChanged("st_noteCreated");
+    }
+
+    private void HandleStNoteEdited(JsonElement root)
+    {
+        if (_stateDiagramModel == null) return;
+        var index = root.GetProperty("index").GetInt32();
+        if (index < 0 || index >= _stateDiagramModel.Notes.Count) return;
+
+        PushUndo();
+        if (root.TryGetProperty("text", out var textProp))
+            _stateDiagramModel.Notes[index].Text = textProp.GetString() ?? string.Empty;
+        if (root.TryGetProperty("position", out var posProp))
+        {
+            var posStr = posProp.GetString();
+            if (Enum.TryParse<StateNotePosition>(posStr, true, out var pos))
+                _stateDiagramModel.Notes[index].Position = pos;
+        }
+        RaiseStateDiagramModelChanged("st_noteEdited");
     }
 
     private void HandleStNoteDeleted(JsonElement root)
