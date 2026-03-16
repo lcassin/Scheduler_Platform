@@ -376,7 +376,9 @@ public class VisualEditorBridge
                         {
                             Label = s.Label,
                             Elements = FlattenSequenceElements(s.Elements)
-                        }).ToList()
+                        }).ToList(),
+                        OverParticipantStart = fragment.OverParticipantStart,
+                        OverParticipantEnd = fragment.OverParticipantEnd
                     };
                     result.Add(fragDto);
                     break;
@@ -997,6 +999,10 @@ public class VisualEditorBridge
 
                 case "seq_fragmentInnerMessageCreated":
                     HandleSeqFragmentInnerMessageCreated(root);
+                    break;
+
+                case "seq_messageMovedToFragment":
+                    HandleSeqMessageMovedToFragment(root);
                     break;
 
                 case "seq_elementReordered":
@@ -2760,6 +2766,40 @@ public class VisualEditorBridge
         RaiseSequenceModelChanged("seq_fragmentInnerMessageCreated");
     }
 
+    /// <summary>
+    /// Moves a top-level message into a fragment section.
+    /// Removes the message from elements[] and appends it to the target fragment's section.
+    /// </summary>
+    private void HandleSeqMessageMovedToFragment(JsonElement root)
+    {
+        if (_sequenceModel == null) return;
+        var messageIndex = root.GetProperty("messageIndex").GetInt32();
+        var fragmentIndex = root.GetProperty("fragmentIndex").GetInt32();
+        var sectionIndex = root.TryGetProperty("sectionIndex", out var secProp) ? secProp.GetInt32() : 0;
+
+        if (messageIndex < 0 || messageIndex >= _sequenceModel.Elements.Count) return;
+        if (_sequenceModel.Elements[messageIndex] is not SequenceMessage msg) return;
+
+        // The fragment index might shift after removal if the message is before the fragment
+        var adjustedFragIndex = messageIndex < fragmentIndex ? fragmentIndex - 1 : fragmentIndex;
+
+        if (adjustedFragIndex < 0 || adjustedFragIndex >= _sequenceModel.Elements.Count - 1) return;
+
+        // Peek at the target before removing to validate
+        var targetEl = messageIndex < fragmentIndex
+            ? _sequenceModel.Elements[fragmentIndex]
+            : _sequenceModel.Elements[fragmentIndex];
+        if (targetEl is not SequenceFragment frag) return;
+        if (sectionIndex < 0 || sectionIndex >= frag.Sections.Count) return;
+
+        PushUndo();
+        // Remove the message from top-level elements
+        _sequenceModel.Elements.RemoveAt(messageIndex);
+        // Add it to the target fragment section
+        frag.Sections[sectionIndex].Elements.Add(msg);
+        RaiseSequenceModelChanged("seq_messageMovedToFragment");
+    }
+
     private void HandleSeqNoteCreated(JsonElement root)
     {
         if (_sequenceModel == null) return;
@@ -2837,7 +2877,9 @@ public class VisualEditorBridge
         PushUndo();
         var fragment = new SequenceFragment
         {
-            Label = condition
+            Label = condition,
+            OverParticipantStart = root.TryGetProperty("overParticipantStart", out var opsProp) ? opsProp.GetString() : null,
+            OverParticipantEnd = root.TryGetProperty("overParticipantEnd", out var opeProp) ? opeProp.GetString() : null
         };
         if (Enum.TryParse<SequenceFragmentType>(fragTypeStr, true, out var fType))
             fragment.Type = fType;
@@ -2941,6 +2983,10 @@ public class VisualEditorBridge
         }
         if (root.TryGetProperty("text", out var textProp))
             frag.Label = textProp.GetString() ?? "";
+        if (root.TryGetProperty("overParticipantStart", out var opsProp))
+            frag.OverParticipantStart = opsProp.GetString();
+        if (root.TryGetProperty("overParticipantEnd", out var opeProp))
+            frag.OverParticipantEnd = opeProp.GetString();
 
         RaiseSequenceModelChanged("seq_fragmentEdited");
     }
@@ -3078,7 +3124,9 @@ public class VisualEditorBridge
                     var fragment = new SequenceFragment
                     {
                         Type = fragType,
-                        Label = dto.Text ?? string.Empty
+                        Label = dto.Text ?? string.Empty,
+                        OverParticipantStart = dto.OverParticipantStart,
+                        OverParticipantEnd = dto.OverParticipantEnd
                     };
                     if (dto.Sections != null)
                     {
@@ -3214,6 +3262,8 @@ public class VisualEditorBridge
         // Fragment fields
         public string? FragmentType { get; set; }
         public List<SeqFragmentSectionDto>? Sections { get; set; }
+        public string? OverParticipantStart { get; set; }
+        public string? OverParticipantEnd { get; set; }
         // Activation fields
         public string? ParticipantId { get; set; }
     }

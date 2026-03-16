@@ -534,6 +534,18 @@ public class SequenceFragment : SequenceElement
     /// For par, there is the main section plus "and" sections.
     /// </summary>
     public List<SequenceFragmentSection> Sections { get; set; } = new();
+
+    /// <summary>
+    /// Optional: the participant ID at the left edge of the fragment.
+    /// When null/empty, the fragment auto-sizes based on inner messages (or spans all participants).
+    /// </summary>
+    public string? OverParticipantStart { get; set; }
+
+    /// <summary>
+    /// Optional: the participant ID at the right edge of the fragment.
+    /// When null/empty, the fragment auto-sizes based on inner messages (or spans all participants).
+    /// </summary>
+    public string? OverParticipantEnd { get; set; }
 }
 
 /// <summary>
