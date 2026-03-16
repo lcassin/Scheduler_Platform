@@ -4394,7 +4394,7 @@
 
             const isSelected = (seqSelectedFragmentIndex === elIdx);
 
-            // Main rectangle
+            // Main rectangle (pointer-events: none so clicks pass through to messages in edgesLayer)
             const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
             rect.setAttribute('x', leftX);
             rect.setAttribute('y', startY);
@@ -4404,7 +4404,33 @@
             rect.setAttribute('stroke', isSelected ? 'var(--node-selected-stroke)' : 'var(--subgraph-stroke)');
             rect.setAttribute('stroke-width', isSelected ? '2.5' : '1');
             rect.setAttribute('rx', '2');
+            rect.setAttribute('pointer-events', 'none');
             fragG.appendChild(rect);
+
+            // Clickable border frame around the fragment (thin strips along edges)
+            // so users can still click the fragment border to select it
+            const borderW = 8;
+            const fragW = rightX - leftX;
+            const fragH = endY - startY;
+            ['top', 'bottom', 'left', 'right'].forEach(side => {
+                const strip = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                if (side === 'top') {
+                    strip.setAttribute('x', leftX); strip.setAttribute('y', startY);
+                    strip.setAttribute('width', fragW); strip.setAttribute('height', borderW);
+                } else if (side === 'bottom') {
+                    strip.setAttribute('x', leftX); strip.setAttribute('y', endY - borderW);
+                    strip.setAttribute('width', fragW); strip.setAttribute('height', borderW);
+                } else if (side === 'left') {
+                    strip.setAttribute('x', leftX); strip.setAttribute('y', startY);
+                    strip.setAttribute('width', borderW); strip.setAttribute('height', fragH);
+                } else {
+                    strip.setAttribute('x', rightX - borderW); strip.setAttribute('y', startY);
+                    strip.setAttribute('width', borderW); strip.setAttribute('height', fragH);
+                }
+                strip.setAttribute('fill', 'transparent');
+                strip.setAttribute('pointer-events', 'all');
+                fragG.appendChild(strip);
+            });
 
             // Fragment type label (e.g., "loop", "alt", "opt")
             const typeLabel = document.createElementNS('http://www.w3.org/2000/svg', 'g');
