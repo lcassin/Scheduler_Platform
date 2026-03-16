@@ -376,7 +376,9 @@ public class VisualEditorBridge
                         {
                             Label = s.Label,
                             Elements = FlattenSequenceElements(s.Elements)
-                        }).ToList()
+                        }).ToList(),
+                        OverParticipantStart = fragment.OverParticipantStart,
+                        OverParticipantEnd = fragment.OverParticipantEnd
                     };
                     result.Add(fragDto);
                     break;
@@ -2875,7 +2877,9 @@ public class VisualEditorBridge
         PushUndo();
         var fragment = new SequenceFragment
         {
-            Label = condition
+            Label = condition,
+            OverParticipantStart = root.TryGetProperty("overParticipantStart", out var opsProp) ? opsProp.GetString() : null,
+            OverParticipantEnd = root.TryGetProperty("overParticipantEnd", out var opeProp) ? opeProp.GetString() : null
         };
         if (Enum.TryParse<SequenceFragmentType>(fragTypeStr, true, out var fType))
             fragment.Type = fType;
@@ -2979,6 +2983,10 @@ public class VisualEditorBridge
         }
         if (root.TryGetProperty("text", out var textProp))
             frag.Label = textProp.GetString() ?? "";
+        if (root.TryGetProperty("overParticipantStart", out var opsProp))
+            frag.OverParticipantStart = opsProp.GetString();
+        if (root.TryGetProperty("overParticipantEnd", out var opeProp))
+            frag.OverParticipantEnd = opeProp.GetString();
 
         RaiseSequenceModelChanged("seq_fragmentEdited");
     }
@@ -3116,7 +3124,9 @@ public class VisualEditorBridge
                     var fragment = new SequenceFragment
                     {
                         Type = fragType,
-                        Label = dto.Text ?? string.Empty
+                        Label = dto.Text ?? string.Empty,
+                        OverParticipantStart = dto.OverParticipantStart,
+                        OverParticipantEnd = dto.OverParticipantEnd
                     };
                     if (dto.Sections != null)
                     {
@@ -3252,6 +3262,8 @@ public class VisualEditorBridge
         // Fragment fields
         public string? FragmentType { get; set; }
         public List<SeqFragmentSectionDto>? Sections { get; set; }
+        public string? OverParticipantStart { get; set; }
+        public string? OverParticipantEnd { get; set; }
         // Activation fields
         public string? ParticipantId { get; set; }
     }

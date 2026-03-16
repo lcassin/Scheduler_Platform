@@ -3682,6 +3682,9 @@
         let seqDraggingParticipantId = null;
         let seqDragStartX = 0;
         let seqDragParticipantStartIdx = 0;
+        // Fragment grip dragging state
+        let seqDraggingFragGrip = null; // { elIdx, side: 'left'|'right' }
+        let seqFragGripDragStartX = 0;
         const SEQ_PARTICIPANT_WIDTH = 120;
         const SEQ_PARTICIPANT_HEIGHT = 40;
         const SEQ_PARTICIPANT_GAP = 180;
@@ -4414,22 +4417,40 @@
             const participants = seqDiagram.participants;
             let minPIdx = participants.length - 1;
             let maxPIdx = 0;
-            if (fragment.sections) {
-                fragment.sections.forEach(sec => {
-                    if (sec.elements) {
-                        sec.elements.forEach(se => {
-                            if (se.elementType === 'message') {
-                                const fi = getParticipantIndex(se.fromId);
-                                const ti = getParticipantIndex(se.toId);
-                                if (fi >= 0) { minPIdx = Math.min(minPIdx, fi); maxPIdx = Math.max(maxPIdx, fi); }
-                                if (ti >= 0) { minPIdx = Math.min(minPIdx, ti); maxPIdx = Math.max(maxPIdx, ti); }
-                            }
-                        });
-                    }
-                });
+
+            // Check if manual participant range is set (overParticipantStart / overParticipantEnd)
+            const hasManualStart = fragment.overParticipantStart && fragment.overParticipantStart.length > 0;
+            const hasManualEnd = fragment.overParticipantEnd && fragment.overParticipantEnd.length > 0;
+            if (hasManualStart || hasManualEnd) {
+                if (hasManualStart) {
+                    const si = getParticipantIndex(fragment.overParticipantStart);
+                    if (si >= 0) minPIdx = si;
+                }
+                if (hasManualEnd) {
+                    const ei = getParticipantIndex(fragment.overParticipantEnd);
+                    if (ei >= 0) maxPIdx = ei;
+                }
+                // Ensure minPIdx <= maxPIdx (swap if user dragged them backwards)
+                if (minPIdx > maxPIdx) { const tmp = minPIdx; minPIdx = maxPIdx; maxPIdx = tmp; }
+            } else {
+                // Auto-calculate from inner messages
+                if (fragment.sections) {
+                    fragment.sections.forEach(sec => {
+                        if (sec.elements) {
+                            sec.elements.forEach(se => {
+                                if (se.elementType === 'message') {
+                                    const fi = getParticipantIndex(se.fromId);
+                                    const ti = getParticipantIndex(se.toId);
+                                    if (fi >= 0) { minPIdx = Math.min(minPIdx, fi); maxPIdx = Math.max(maxPIdx, fi); }
+                                    if (ti >= 0) { minPIdx = Math.min(minPIdx, ti); maxPIdx = Math.max(maxPIdx, ti); }
+                                }
+                            });
+                        }
+                    });
+                }
+                // If no messages found, fall back to spanning all participants
+                if (minPIdx > maxPIdx) { minPIdx = 0; maxPIdx = participants.length - 1; }
             }
-            // If no messages found, fall back to spanning all participants
-            if (minPIdx > maxPIdx) { minPIdx = 0; maxPIdx = participants.length - 1; }
             const leftX = participants.length > 0 ? getParticipantX(minPIdx) - SEQ_PARTICIPANT_WIDTH / 2 - 10 : SEQ_LEFT_MARGIN - 40;
             const rightX = participants.length > 0 ? getParticipantX(maxPIdx) + SEQ_PARTICIPANT_WIDTH / 2 + 10 : SEQ_LEFT_MARGIN + 200;
 
@@ -4477,6 +4498,32 @@
                 strip.setAttribute('pointer-events', 'all');
                 fragG.appendChild(strip);
             });
+
+            // Drag grips on left and right edges (only when selected)
+            if (isSelected) {
+                const gripWidth = 6;
+                const gripHeight = 30;
+                const gripY = startY + (endY - startY) / 2 - gripHeight / 2;
+                ['left', 'right'].forEach(side => {
+                    const grip = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                    const gx = side === 'left' ? leftX - gripWidth / 2 : rightX - gripWidth / 2;
+                    grip.setAttribute('x', gx);
+                    grip.setAttribute('y', gripY);
+                    grip.setAttribute('width', gripWidth);
+                    grip.setAttribute('height', gripHeight);
+                    grip.setAttribute('rx', '2');
+                    grip.setAttribute('fill', 'var(--node-selected-stroke)');
+                    grip.setAttribute('fill-opacity', '0.7');
+                    grip.setAttribute('stroke', 'var(--node-selected-stroke)');
+                    grip.setAttribute('stroke-width', '1');
+                    grip.setAttribute('pointer-events', 'all');
+                    grip.style.cursor = 'col-resize';
+                    grip.classList.add('seq-frag-grip');
+                    grip.setAttribute('data-grip-side', side);
+                    grip.setAttribute('data-element-index', elIdx);
+                    fragG.appendChild(grip);
+                });
+            }
 
             // Fragment type label (e.g., "loop", "alt", "opt")
             const typeLabel = document.createElementNS('http://www.w3.org/2000/svg', 'g');
@@ -4562,10 +4609,23 @@
 
         // ===== Sequence Diagram Interaction Handlers =====
 
-        // Participant drag to reorder
+        // Participant drag to reorder + Fragment grip drag to resize
         svg.addEventListener('mousedown', function(e) {
             if (currentDiagramType !== 'sequence') return;
             if (!seqDiagram) return;
+
+            // Check if mousedown is on a fragment grip
+            const gripEl = e.target.closest('.seq-frag-grip');
+            if (gripEl) {
+                const elIdx = parseInt(gripEl.getAttribute('data-element-index'), 10);
+                const side = gripEl.getAttribute('data-grip-side');
+                seqDraggingFragGrip = { elIdx, side };
+                seqFragGripDragStartX = e.clientX;
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+
             const participantGroup = e.target.closest('.seq-participant') || e.target.closest('.seq-participant-bottom');
             if (participantGroup) {
                 const pid = participantGroup.getAttribute('data-participant-id');
@@ -4581,14 +4641,92 @@
 
         svg.addEventListener('mousemove', function(e) {
             if (currentDiagramType !== 'sequence') return;
-            if (!seqDiagram || !seqDraggingParticipantId) return;
+            if (!seqDiagram) return;
+            // Fragment grip drag visual feedback (cursor)
+            if (seqDraggingFragGrip) {
+                e.preventDefault();
+                return;
+            }
+            if (!seqDraggingParticipantId) return;
             // Visual feedback during drag would require re-rendering on each mouse move
             // For now, we just track the drag
         });
 
         svg.addEventListener('mouseup', function(e) {
             if (currentDiagramType !== 'sequence') return;
-            if (!seqDiagram || !seqDraggingParticipantId) return;
+            if (!seqDiagram) return;
+
+            // Handle fragment grip drag end
+            if (seqDraggingFragGrip) {
+                const dx = e.clientX - seqFragGripDragStartX;
+                const transform = panzoomInstance ? panzoomInstance.getTransform() : { scale: 1 };
+                const svgDx = dx / transform.scale;
+                const positionsShifted = Math.round(svgDx / SEQ_PARTICIPANT_GAP);
+
+                if (positionsShifted !== 0) {
+                    const elIdx = seqDraggingFragGrip.elIdx;
+                    const side = seqDraggingFragGrip.side;
+                    const fragment = seqDiagram.elements[elIdx];
+                    if (fragment) {
+                        const participants = seqDiagram.participants;
+                        // Get current start/end indices
+                        let curStartIdx = 0;
+                        let curEndIdx = participants.length - 1;
+                        if (fragment.overParticipantStart) {
+                            const si = getParticipantIndex(fragment.overParticipantStart);
+                            if (si >= 0) curStartIdx = si;
+                        } else {
+                            // Auto-calculate current bounds from inner messages
+                            let autoMin = participants.length - 1, autoMax = 0;
+                            if (fragment.sections) {
+                                fragment.sections.forEach(sec => {
+                                    if (sec.elements) sec.elements.forEach(se => {
+                                        if (se.elementType === 'message') {
+                                            const fi = getParticipantIndex(se.fromId);
+                                            const ti = getParticipantIndex(se.toId);
+                                            if (fi >= 0) { autoMin = Math.min(autoMin, fi); autoMax = Math.max(autoMax, fi); }
+                                            if (ti >= 0) { autoMin = Math.min(autoMin, ti); autoMax = Math.max(autoMax, ti); }
+                                        }
+                                    });
+                                });
+                            }
+                            if (autoMin > autoMax) { autoMin = 0; autoMax = participants.length - 1; }
+                            curStartIdx = autoMin;
+                            curEndIdx = autoMax;
+                        }
+                        if (fragment.overParticipantEnd) {
+                            const ei = getParticipantIndex(fragment.overParticipantEnd);
+                            if (ei >= 0) curEndIdx = ei;
+                        } else if (!fragment.overParticipantStart) {
+                            // Already set above from auto-calc
+                        }
+
+                        let newStartIdx = curStartIdx;
+                        let newEndIdx = curEndIdx;
+                        if (side === 'left') {
+                            newStartIdx = Math.max(0, Math.min(participants.length - 1, curStartIdx + positionsShifted));
+                        } else {
+                            newEndIdx = Math.max(0, Math.min(participants.length - 1, curEndIdx + positionsShifted));
+                        }
+                        // Ensure start <= end
+                        if (newStartIdx > newEndIdx) {
+                            const tmp = newStartIdx; newStartIdx = newEndIdx; newEndIdx = tmp;
+                        }
+                        const newStartId = participants[newStartIdx].id;
+                        const newEndId = participants[newEndIdx].id;
+                        postMessage({
+                            type: 'seq_fragmentEdited',
+                            elementIndex: elIdx,
+                            overParticipantStart: newStartId,
+                            overParticipantEnd: newEndId
+                        });
+                    }
+                }
+                seqDraggingFragGrip = null;
+                return;
+            }
+
+            if (!seqDraggingParticipantId) return;
             const dx = e.clientX - seqDragStartX;
             const transform = panzoomInstance ? panzoomInstance.getTransform() : { scale: 1 };
             const svgDx = dx / transform.scale;
@@ -4988,6 +5126,20 @@
                 sectionsHtml += `<div class="property-row" style="padding-left:10px"><button id="seq-frag-add-section" style="padding:4px 10px;cursor:pointer;">+ Add ${sectionKeyword} Section</button></div>`;
             }
 
+            // Build participant options for Start/End dropdowns
+            const participantOptions = seqDiagram.participants.map(p =>
+                `<option value="${escapeHtml(p.id)}">${escapeHtml(getParticipantLabel(p))}</option>`
+            ).join('');
+            const autoOption = '<option value="">(Auto)</option>';
+            const curStart = el.overParticipantStart || '';
+            const curEnd = el.overParticipantEnd || '';
+            const startOptions = seqDiagram.participants.map(p =>
+                `<option value="${escapeHtml(p.id)}" ${curStart === p.id ? 'selected' : ''}>${escapeHtml(getParticipantLabel(p))}</option>`
+            ).join('');
+            const endOptions = seqDiagram.participants.map(p =>
+                `<option value="${escapeHtml(p.id)}" ${curEnd === p.id ? 'selected' : ''}>${escapeHtml(getParticipantLabel(p))}</option>`
+            ).join('');
+
             body.innerHTML = `
                 <div class="property-row">
                     <div class="property-label">Type</div>
@@ -4998,6 +5150,20 @@
                 <div class="property-row">
                     <div class="property-label">Condition</div>
                     <input class="property-input" id="seq-frag-text" value="${escapeHtml(el.text || '')}" placeholder="e.g. is valid" />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Start Participant</div>
+                    <select class="property-select" id="seq-frag-start-participant">
+                        <option value="" ${!curStart ? 'selected' : ''}>(Auto)</option>
+                        ${startOptions}
+                    </select>
+                </div>
+                <div class="property-row">
+                    <div class="property-label">End Participant</div>
+                    <select class="property-select" id="seq-frag-end-participant">
+                        <option value="" ${!curEnd ? 'selected' : ''}>(Auto)</option>
+                        ${endOptions}
+                    </select>
                 </div>
                 ${sectionsHtml}
                 <div class="property-row">
@@ -5010,6 +5176,12 @@
             });
             document.getElementById('seq-frag-text').addEventListener('change', function() {
                 postMessage({ type: 'seq_fragmentEdited', elementIndex: elIdx, text: this.value });
+            });
+            document.getElementById('seq-frag-start-participant').addEventListener('change', function() {
+                postMessage({ type: 'seq_fragmentEdited', elementIndex: elIdx, overParticipantStart: this.value || null, overParticipantEnd: document.getElementById('seq-frag-end-participant').value || null });
+            });
+            document.getElementById('seq-frag-end-participant').addEventListener('change', function() {
+                postMessage({ type: 'seq_fragmentEdited', elementIndex: elIdx, overParticipantStart: document.getElementById('seq-frag-start-participant').value || null, overParticipantEnd: this.value || null });
             });
             document.getElementById('seq-frag-delete').addEventListener('click', function() {
                 postMessage({ type: 'seq_fragmentDeleted', elementIndex: elIdx });
