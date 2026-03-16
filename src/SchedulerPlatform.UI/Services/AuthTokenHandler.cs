@@ -215,7 +215,7 @@ public class AuthTokenHandler : DelegatingHandler
                     if (isExpired)
                     {
                         _logger.LogWarning(
-                            "Access token is EXPIRED. Expires: {Expires}, Now: {Now}. Triggering session expiry redirect.",
+                            "Access token is EXPIRED. Expires: {Expires}, Now: {Now}. Removing expired token — request will fall through to API key auth.",
                             exp, DateTime.UtcNow);
                         
                         // Clear the stale expired token from the store so subsequent requests
@@ -225,14 +225,14 @@ public class AuthTokenHandler : DelegatingHandler
                             GlobalTokenStore.RemoveToken(userKey);
                         }
                         
-                        // Don't send an expired token — trigger session expiry immediately
-                        // This prevents confusing 403 errors when the real issue is token expiration
+                        // Remove the expired Bearer token from this request so the API
+                        // doesn't reject it outright. The X-Scheduler-Api-Key header
+                        // (added below) will serve as fallback authentication for
+                        // background/scheduled operations that have no active user session.
+                        request.Headers.Authorization = null;
+                        
+                        // Notify session expired so the UI can redirect for interactive users
                         _sessionStateService.NotifySessionExpired();
-                        return new HttpResponseMessage(HttpStatusCode.Unauthorized)
-                        {
-                            RequestMessage = request,
-                            ReasonPhrase = "Access token expired"
-                        };
                     }
                 }
             }
