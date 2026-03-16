@@ -3940,11 +3940,33 @@
                 const msgGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                 msgGroup.classList.add('edge-group', 'seq-message');
                 msgGroup.setAttribute('data-element-index', elIdx);
+                msgGroup.style.cursor = 'pointer';
                 if (isFragmentInner) {
                     msgGroup.setAttribute('data-section-index', sectionIdx);
                     msgGroup.setAttribute('data-sub-index', subIdx);
                     msgGroup.classList.add('seq-fragment-inner-message');
                 }
+
+                // Add a transparent hit-area rect as the first child so the entire
+                // message region is clickable (prevents clicks falling through to
+                // the fragment background underneath for fragment-inner messages).
+                const hitRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                if (isSelfMessage) {
+                    hitRect.setAttribute('x', fromX - 2);
+                    hitRect.setAttribute('y', y - 6);
+                    hitRect.setAttribute('width', 50);
+                    hitRect.setAttribute('height', 42);
+                } else {
+                    const minX = Math.min(fromX, toX);
+                    const maxX = Math.max(fromX, toX);
+                    hitRect.setAttribute('x', minX);
+                    hitRect.setAttribute('y', y - 20);
+                    hitRect.setAttribute('width', maxX - minX);
+                    hitRect.setAttribute('height', 28);
+                }
+                hitRect.setAttribute('fill', 'transparent');
+                hitRect.setAttribute('pointer-events', 'all');
+                msgGroup.appendChild(hitRect);
 
                 if (isSelfMessage) {
                     // Self-message: loop arrow
@@ -3964,6 +3986,7 @@
                     hitPath.setAttribute('stroke-width', '12');
                     hitPath.setAttribute('fill', 'none');
                     hitPath.setAttribute('cursor', 'pointer');
+                    hitPath.setAttribute('pointer-events', 'all');
                     msgGroup.appendChild(hitPath);
 
                     // Arrowhead for self-message
@@ -4044,6 +4067,7 @@
                     hitLine.setAttribute('stroke', 'transparent');
                     hitLine.setAttribute('stroke-width', '12');
                     hitLine.setAttribute('cursor', 'pointer');
+                    hitLine.setAttribute('pointer-events', 'all');
                     msgGroup.appendChild(hitLine);
 
                     // Label
