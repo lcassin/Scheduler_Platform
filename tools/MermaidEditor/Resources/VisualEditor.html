@@ -925,20 +925,53 @@
         const tempEdge = document.getElementById('temp-edge');
         const canvasContainer = document.getElementById('canvas-container');
         const propertyPanel = document.getElementById('property-panel');
-        const propLabel = document.getElementById('prop-label');
-        const propShape = document.getElementById('prop-shape');
-        const propShapeRow = document.getElementById('prop-shape-row');
-        const propStyleRow = document.getElementById('prop-style-row');
-        const propFillColor = document.getElementById('prop-fill-color');
-        const propFillColorText = document.getElementById('prop-fill-color-text');
+        let propLabel = document.getElementById('prop-label');
+        let propShape = document.getElementById('prop-shape');
+        let propShapeRow = document.getElementById('prop-shape-row');
+        let propStyleRow = document.getElementById('prop-style-row');
+        let propFillColor = document.getElementById('prop-fill-color');
+        let propFillColorText = document.getElementById('prop-fill-color-text');
         const propPanelTitle = document.getElementById('property-panel-title');
         const propPanelClose = document.getElementById('property-panel-close');
         const minimapCanvas = document.getElementById('minimap-canvas');
         const minimapViewport = document.getElementById('minimap-viewport');
         const minimapCtx = minimapCanvas.getContext('2d');
-        const shapePickerSelected = document.getElementById('shape-picker-selected');
-        const shapePickerDropdown = document.getElementById('shape-picker-dropdown');
+        let shapePickerSelected = document.getElementById('shape-picker-selected');
+        let shapePickerDropdown = document.getElementById('shape-picker-dropdown');
         const shapePickerLabel = document.getElementById('shape-picker-label');
+
+        // Save the default property panel body HTML so it can be restored
+        // after other diagram types replace it with custom content
+        const defaultPropertyPanelBodyHTML = document.querySelector('.property-panel-body').innerHTML;
+
+        // Restores the default flowchart property panel body HTML and re-queries DOM elements
+        // Called when the panel body has been replaced by another diagram type's custom content
+        function restoreDefaultPropertyPanelBody() {
+            const body = document.querySelector('.property-panel-body');
+            body.innerHTML = defaultPropertyPanelBodyHTML;
+            // Re-bind references to the restored DOM elements
+            propLabel = document.getElementById('prop-label');
+            propShape = document.getElementById('prop-shape');
+            propShapeRow = document.getElementById('prop-shape-row');
+            propStyleRow = document.getElementById('prop-style-row');
+            propFillColor = document.getElementById('prop-fill-color');
+            propFillColorText = document.getElementById('prop-fill-color-text');
+            // Re-attach event listeners for property panel inputs
+            propLabel.addEventListener('change', handlePropLabelChange);
+            propShape.addEventListener('change', handlePropShapeChange);
+            propFillColor.addEventListener('input', handlePropFillColorInput);
+            propFillColorText.addEventListener('change', handlePropFillColorTextChange);
+            // Re-init shape picker elements and dropdown
+            shapePickerSelected = document.getElementById('shape-picker-selected');
+            shapePickerDropdown = document.getElementById('shape-picker-dropdown');
+            shapePickerLabel = document.getElementById('shape-picker-label');
+            buildShapePickerDropdown();
+            updateShapePickerDisplay('Rectangle');
+            shapePickerSelected.addEventListener('click', function(e) {
+                e.stopPropagation();
+                shapePickerDropdown.classList.toggle('open');
+            });
+        }
 
         // ========== Context Menu Viewport Clamping ==========
         // Positions the context menu so it stays within the visible viewport.
@@ -2412,6 +2445,10 @@
         function showPropertyPanel() {
             _isPropPanelUpdating = true;
             try {
+                // Restore default panel body if it was replaced by another diagram type
+                if (!document.contains(propLabel)) {
+                    restoreDefaultPropertyPanelBody();
+                }
                 if (selectedNodeId) {
                     const node = diagram.nodes.find(n => n.id === selectedNodeId);
                     if (!node) { hidePropertyPanel(); return; }
@@ -2464,8 +2501,8 @@
             return '#4a9eff';
         }
 
-        // Property panel event handlers
-        propLabel.addEventListener('change', function() {
+        // Named property panel event handlers (extracted for re-attachment after panel restore)
+        function handlePropLabelChange() {
             if (_isPropPanelUpdating) return;
             const newLabel = propLabel.value.trim();
             if (selectedNodeId) {
@@ -2507,9 +2544,9 @@
                     });
                 }
             }
-        });
+        }
 
-        propShape.addEventListener('change', function() {
+        function handlePropShapeChange() {
             if (_isPropPanelUpdating || !selectedNodeId) return;
             const node = diagram.nodes.find(n => n.id === selectedNodeId);
             if (!node) return;
@@ -2527,22 +2564,27 @@
                 width: node.width,
                 height: node.height
             });
-        });
+        }
 
-        propFillColor.addEventListener('input', function() {
+        function handlePropFillColorInput() {
             if (_isPropPanelUpdating) return;
             propFillColorText.value = propFillColor.value;
             applyNodeFillColor(propFillColor.value);
-        });
+        }
 
-        propFillColorText.addEventListener('change', function() {
+        function handlePropFillColorTextChange() {
             if (_isPropPanelUpdating) return;
             const val = propFillColorText.value.trim();
             if (/^#[0-9a-fA-F]{3,6}$/.test(val)) {
                 propFillColor.value = val;
                 applyNodeFillColor(val);
             }
-        });
+        }
+
+        propLabel.addEventListener('change', handlePropLabelChange);
+        propShape.addEventListener('change', handlePropShapeChange);
+        propFillColor.addEventListener('input', handlePropFillColorInput);
+        propFillColorText.addEventListener('change', handlePropFillColorTextChange);
 
         function applyNodeFillColor(color) {
             if (!selectedNodeId) return;
@@ -5057,6 +5099,25 @@
         const CLS_CLASS_GAP_X = 220;
         const CLS_CLASS_GAP_Y = 40;
 
+        // Normalize a class relationship so the directional marker is always on rightEnd (the TO side).
+        // When Mermaid syntax like "Pet <|.. Dog" is parsed, leftEnd gets the Inheritance marker
+        // and fromId=Pet, toId=Dog. We swap fromId/toId and move the marker to rightEnd so that
+        // visually "From" always means the child/source and "To" always means the parent/target.
+        function clsNormalizeRelationship(rel) {
+            if (rel.leftEnd !== 'None' && rel.rightEnd === 'None') {
+                // Swap: move leftEnd marker to rightEnd, swap fromId/toId and cardinalities
+                const tmp = rel.fromId;
+                rel.fromId = rel.toId;
+                rel.toId = tmp;
+                rel.rightEnd = rel.leftEnd;
+                rel.leftEnd = 'None';
+                const tmpCard = rel.fromCardinality;
+                rel.fromCardinality = rel.toCardinality;
+                rel.toCardinality = tmpCard;
+            }
+            return rel;
+        }
+
         window.loadClassDiagram = function(jsonData) {
             try {
                 currentDiagramType = 'class';
@@ -5080,7 +5141,7 @@
                         cssClass: c.cssClass || null,
                         isExplicit: c.isExplicit !== false
                     })),
-                    relationships: (data.relationships || []).map(r => ({
+                    relationships: (data.relationships || []).map(r => clsNormalizeRelationship({
                         fromId: r.fromId,
                         toId: r.toId,
                         leftEnd: r.leftEnd || 'None',
@@ -5141,7 +5202,7 @@
                         cssClass: c.cssClass || null,
                         isExplicit: c.isExplicit !== false
                     })),
-                    relationships: (data.relationships || []).map(r => ({
+                    relationships: (data.relationships || []).map(r => clsNormalizeRelationship({
                         fromId: r.fromId,
                         toId: r.toId,
                         leftEnd: r.leftEnd || 'None',
@@ -6113,10 +6174,10 @@
             });
             document.getElementById('cls-rel-type').addEventListener('change', function() {
                 const typeMap = {
-                    inheritance: { leftEnd: 'Inheritance', rightEnd: 'None', linkStyle: 'Solid' },
-                    realization: { leftEnd: 'Inheritance', rightEnd: 'None', linkStyle: 'Dashed' },
-                    composition: { leftEnd: 'Composition', rightEnd: 'None', linkStyle: 'Solid' },
-                    aggregation: { leftEnd: 'Aggregation', rightEnd: 'None', linkStyle: 'Solid' },
+                    inheritance: { leftEnd: 'None', rightEnd: 'Inheritance', linkStyle: 'Solid' },
+                    realization: { leftEnd: 'None', rightEnd: 'Inheritance', linkStyle: 'Dashed' },
+                    composition: { leftEnd: 'None', rightEnd: 'Composition', linkStyle: 'Solid' },
+                    aggregation: { leftEnd: 'None', rightEnd: 'Aggregation', linkStyle: 'Solid' },
                     association: { leftEnd: 'None', rightEnd: 'Arrow', linkStyle: 'Solid' },
                     dependency: { leftEnd: 'None', rightEnd: 'Arrow', linkStyle: 'Dashed' },
                     'link-solid': { leftEnd: 'None', rightEnd: 'None', linkStyle: 'Solid' },
