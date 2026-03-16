@@ -3913,9 +3913,20 @@
             let msgNumber = seqDiagram.autoNumber ? 1 : 0;
             const activationStacks = {}; // participantId -> [{startY}]
 
+            // Helper: resolve a fragment-inner message element from data attributes
+            function getFragmentInnerMessage(fragIdx, sectionIdx, subIdx) {
+                if (!seqDiagram) return null;
+                const frag = seqDiagram.elements[fragIdx];
+                if (!frag || frag.elementType !== 'fragment') return null;
+                if (!frag.sections || sectionIdx < 0 || sectionIdx >= frag.sections.length) return null;
+                const sec = frag.sections[sectionIdx];
+                if (!sec.elements || subIdx < 0 || subIdx >= sec.elements.length) return null;
+                return sec.elements[subIdx];
+            }
+
             // Helper: render a single message arrow (used for both top-level and fragment-inner messages)
-            // fragIdx/secIdx/innerIdx are set for messages inside fragments so they can be identified
-            function renderMessageArrow(el, elIdx, absY, fragIdx, secIdx, innerIdx) {
+            // For fragment-inner messages, pass sectionIdx and subIdx to tag them appropriately
+            function renderMessageArrow(el, elIdx, absY, sectionIdx, subIdx) {
                 const fromIdx = getParticipantIndex(el.fromId);
                 const toIdx = getParticipantIndex(el.toId);
                 if (fromIdx < 0 || toIdx < 0) return;
@@ -3924,14 +3935,15 @@
                 const toX = getParticipantX(toIdx);
                 const y = absY;
                 const isSelfMessage = el.fromId === el.toId;
+                const isFragmentInner = (sectionIdx !== undefined && subIdx !== undefined);
 
                 const msgGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                 msgGroup.classList.add('edge-group', 'seq-message');
                 msgGroup.setAttribute('data-element-index', elIdx);
-                if (fragIdx !== undefined) {
-                    msgGroup.setAttribute('data-fragment-index', fragIdx);
-                    msgGroup.setAttribute('data-section-index', secIdx);
-                    msgGroup.setAttribute('data-inner-index', innerIdx);
+                if (isFragmentInner) {
+                    msgGroup.setAttribute('data-section-index', sectionIdx);
+                    msgGroup.setAttribute('data-sub-index', subIdx);
+                    msgGroup.classList.add('seq-fragment-inner-message');
                 }
 
                 if (isSelfMessage) {
@@ -4095,12 +4107,10 @@
                     if (el.sections) {
                         el.sections.forEach((s, sIdx) => {
                             if (sIdx > 0) currentY += 20; // section divider space
-                            let seInnerIdx = 0;
                             if (s.elements) {
-                                s.elements.forEach(se => {
+                                s.elements.forEach((se, seIdx) => {
                                     if (se.elementType === 'message') {
-                                        renderMessageArrow(se, elIdx, currentY, elIdx, sIdx, seInnerIdx);
-                                        seInnerIdx++;
+                                        renderMessageArrow(se, elIdx, currentY, sIdx, seIdx);
                                         if (msgNumber > 0) msgNumber++;
                                         currentY += SEQ_MESSAGE_SPACING;
                                     } else if (se.elementType === 'note') {
@@ -4485,27 +4495,21 @@
 
             if (messageGroup) {
                 const elIdx = parseInt(messageGroup.getAttribute('data-element-index'), 10);
-                const fragIdxAttr = messageGroup.getAttribute('data-fragment-index');
-                if (fragIdxAttr !== null) {
-                    // Message inside a fragment — show fragment message property panel
-                    const fragIdx = parseInt(fragIdxAttr, 10);
+                const isFragInner = messageGroup.hasAttribute('data-section-index');
+                seqSelectedParticipantId = null;
+                seqSelectedNoteIndex = -1;
+                selectedNodeId = null;
+                selectedEdgeIndex = -1;
+                if (isFragInner) {
                     const secIdx = parseInt(messageGroup.getAttribute('data-section-index'), 10);
-                    const innerIdx = parseInt(messageGroup.getAttribute('data-inner-index'), 10);
+                    const subIdx = parseInt(messageGroup.getAttribute('data-sub-index'), 10);
                     seqSelectedMessageIndex = -1;
-                    seqSelectedParticipantId = null;
-                    seqSelectedFragmentIndex = fragIdx;
-                    seqSelectedNoteIndex = -1;
-                    selectedNodeId = null;
-                    selectedEdgeIndex = -1;
+                    seqSelectedFragmentIndex = elIdx;
                     renderSequenceDiagram();
-                    showSeqFragmentMessagePropertyPanel(fragIdx, secIdx, innerIdx);
+                    showSeqFragmentInnerMessagePropertyPanel(elIdx, secIdx, subIdx);
                 } else {
                     seqSelectedMessageIndex = elIdx;
-                    seqSelectedParticipantId = null;
                     seqSelectedFragmentIndex = -1;
-                    seqSelectedNoteIndex = -1;
-                    selectedNodeId = null;
-                    selectedEdgeIndex = -1;
                     renderSequenceDiagram();
                     showSeqMessagePropertyPanel(elIdx);
                 }
@@ -4553,20 +4557,19 @@
             }
         });
 
-        // Double-click to edit message text inline (or show property panel for fragment-inner messages)
+        // Double-click to edit message text inline
         svg.addEventListener('dblclick', function(e) {
             if (currentDiagramType !== 'sequence') return;
             if (!seqDiagram) return;
             const messageGroup = e.target.closest('.seq-message');
             if (messageGroup) {
                 const elIdx = parseInt(messageGroup.getAttribute('data-element-index'), 10);
-                const fragIdxAttr = messageGroup.getAttribute('data-fragment-index');
-                if (fragIdxAttr !== null) {
-                    // Fragment-inner message — show property panel
-                    const fragIdx = parseInt(fragIdxAttr, 10);
+                const isFragInner = messageGroup.hasAttribute('data-section-index');
+                if (isFragInner) {
                     const secIdx = parseInt(messageGroup.getAttribute('data-section-index'), 10);
-                    const innerIdx = parseInt(messageGroup.getAttribute('data-inner-index'), 10);
-                    showSeqFragmentMessagePropertyPanel(fragIdx, secIdx, innerIdx);
+                    const subIdx = parseInt(messageGroup.getAttribute('data-sub-index'), 10);
+                    const el = getFragmentInnerMessage(elIdx, secIdx, subIdx);
+                    if (el) startSeqFragmentInnerInlineEdit(elIdx, secIdx, subIdx, el, e);
                 } else {
                     const el = seqDiagram.elements[elIdx];
                     if (el && el.elementType === 'message') {
@@ -4604,6 +4607,32 @@
                 inlineEditor.removeEventListener('keydown', onKey);
                 if (newText !== (el.text || '')) {
                     postMessage({ type: 'seq_messageEdited', elementIndex: elIdx, text: newText });
+                }
+            }
+            function onKey(e) {
+                if (e.key === 'Enter') { finishEdit(); e.preventDefault(); }
+                if (e.key === 'Escape') { inlineEditor.style.display = 'none'; inlineEditor.removeEventListener('blur', finishEdit); inlineEditor.removeEventListener('keydown', onKey); }
+            }
+            inlineEditor.addEventListener('blur', finishEdit);
+            inlineEditor.addEventListener('keydown', onKey);
+        }
+
+        // Inline edit for messages inside fragments
+        function startSeqFragmentInnerInlineEdit(fragIdx, sectionIdx, subIdx, el, e) {
+            inlineEditor.style.display = '';
+            inlineEditor.style.left = (e.clientX - 50) + 'px';
+            inlineEditor.style.top = (e.clientY - 15) + 'px';
+            inlineEditor.value = el.text || '';
+            inlineEditor.focus();
+            inlineEditor.select();
+
+            function finishEdit() {
+                const newText = inlineEditor.value.trim();
+                inlineEditor.style.display = 'none';
+                inlineEditor.removeEventListener('blur', finishEdit);
+                inlineEditor.removeEventListener('keydown', onKey);
+                if (newText !== (el.text || '')) {
+                    postMessage({ type: 'seq_fragmentInnerMessageEdited', elementIndex: fragIdx, sectionIndex: sectionIdx, subIndex: subIdx, text: newText });
                 }
             }
             function onKey(e) {
@@ -4731,39 +4760,34 @@
             propertyPanel.classList.add('visible');
         }
 
-        // Property panel for messages inside fragment sections
-        function showSeqFragmentMessagePropertyPanel(fragIdx, secIdx, innerIdx) {
+        // Property panel for messages inside fragments
+        function showSeqFragmentInnerMessagePropertyPanel(fragIdx, sectionIdx, subIdx) {
             if (!seqDiagram) return;
-            const fragEl = seqDiagram.elements[fragIdx];
-            if (!fragEl || fragEl.elementType !== 'fragment') return;
-            if (!fragEl.sections || !fragEl.sections[secIdx]) return;
-            const sec = fragEl.sections[secIdx];
-            if (!sec.elements || !sec.elements[innerIdx]) return;
-            const el = sec.elements[innerIdx];
-            if (el.elementType !== 'message') return;
+            const el = getFragmentInnerMessage(fragIdx, sectionIdx, subIdx);
+            if (!el || el.elementType !== 'message') return;
 
-            propPanelTitle.textContent = 'Fragment Message';
+            propPanelTitle.textContent = 'Message (in Fragment)';
             const body = document.querySelector('.property-panel-body');
             body.innerHTML = `
                 <div class="property-row">
                     <div class="property-label">From</div>
-                    <select class="property-select" id="seq-fmsg-from">
+                    <select class="property-select" id="seq-msg-from">
                         ${seqDiagram.participants.map(p => `<option value="${escapeHtml(p.id)}" ${el.fromId === p.id ? 'selected' : ''}>${escapeHtml(getParticipantLabel(p))}</option>`).join('')}
                     </select>
                 </div>
                 <div class="property-row">
                     <div class="property-label">To</div>
-                    <select class="property-select" id="seq-fmsg-to">
+                    <select class="property-select" id="seq-msg-to">
                         ${seqDiagram.participants.map(p => `<option value="${escapeHtml(p.id)}" ${el.toId === p.id ? 'selected' : ''}>${escapeHtml(getParticipantLabel(p))}</option>`).join('')}
                     </select>
                 </div>
                 <div class="property-row">
                     <div class="property-label">Text</div>
-                    <input class="property-input" id="seq-fmsg-text" value="${escapeHtml(el.text || '')}" />
+                    <input class="property-input" id="seq-msg-text" value="${escapeHtml(el.text || '')}" />
                 </div>
                 <div class="property-row">
                     <div class="property-label">Arrow Type</div>
-                    <select class="property-select" id="seq-fmsg-arrow">
+                    <select class="property-select" id="seq-msg-arrow">
                         <option value="SolidArrow" ${el.arrowType === 'SolidArrow' ? 'selected' : ''}>Solid Arrow (->>) </option>
                         <option value="DottedArrow" ${el.arrowType === 'DottedArrow' ? 'selected' : ''}>Dotted Arrow (-->>)</option>
                         <option value="SolidOpen" ${el.arrowType === 'SolidOpen' ? 'selected' : ''}>Solid Open (->)</option>
@@ -4776,17 +4800,17 @@
                 </div>
             `;
 
-            document.getElementById('seq-fmsg-from').addEventListener('change', function() {
-                postMessage({ type: 'seq_fragmentMessageEdited', fragmentIndex: fragIdx, sectionIndex: secIdx, innerIndex: innerIdx, fromId: this.value });
+            document.getElementById('seq-msg-from').addEventListener('change', function() {
+                postMessage({ type: 'seq_fragmentInnerMessageEdited', elementIndex: fragIdx, sectionIndex: sectionIdx, subIndex: subIdx, fromId: this.value });
             });
-            document.getElementById('seq-fmsg-to').addEventListener('change', function() {
-                postMessage({ type: 'seq_fragmentMessageEdited', fragmentIndex: fragIdx, sectionIndex: secIdx, innerIndex: innerIdx, toId: this.value });
+            document.getElementById('seq-msg-to').addEventListener('change', function() {
+                postMessage({ type: 'seq_fragmentInnerMessageEdited', elementIndex: fragIdx, sectionIndex: sectionIdx, subIndex: subIdx, toId: this.value });
             });
-            document.getElementById('seq-fmsg-text').addEventListener('change', function() {
-                postMessage({ type: 'seq_fragmentMessageEdited', fragmentIndex: fragIdx, sectionIndex: secIdx, innerIndex: innerIdx, text: this.value });
+            document.getElementById('seq-msg-text').addEventListener('change', function() {
+                postMessage({ type: 'seq_fragmentInnerMessageEdited', elementIndex: fragIdx, sectionIndex: sectionIdx, subIndex: subIdx, text: this.value });
             });
-            document.getElementById('seq-fmsg-arrow').addEventListener('change', function() {
-                postMessage({ type: 'seq_fragmentMessageEdited', fragmentIndex: fragIdx, sectionIndex: secIdx, innerIndex: innerIdx, arrowType: this.value });
+            document.getElementById('seq-msg-arrow').addEventListener('change', function() {
+                postMessage({ type: 'seq_fragmentInnerMessageEdited', elementIndex: fragIdx, sectionIndex: sectionIdx, subIndex: subIdx, arrowType: this.value });
             });
 
             propertyPanel.classList.add('visible');
@@ -4998,26 +5022,40 @@
                 });
             } else if (messageGroup) {
                 const elIdx = parseInt(messageGroup.getAttribute('data-element-index'), 10);
-                const fragIdxAttr = messageGroup.getAttribute('data-fragment-index');
+                const isFragInner = messageGroup.hasAttribute('data-section-index');
 
-                if (fragIdxAttr !== null) {
-                    // Message inside a fragment
-                    const fragIdx = parseInt(fragIdxAttr, 10);
+                if (isFragInner) {
+                    // Message inside a fragment — show fragment-inner message context menu
                     const secIdx = parseInt(messageGroup.getAttribute('data-section-index'), 10);
-                    const innerIdx = parseInt(messageGroup.getAttribute('data-inner-index'), 10);
+                    const subIdx = parseInt(messageGroup.getAttribute('data-sub-index'), 10);
+                    const innerEl = getFragmentInnerMessage(elIdx, secIdx, subIdx);
+                    seqSelectedFragmentIndex = elIdx;
+                    seqSelectedMessageIndex = -1;
 
                     addContextMenuItem('Edit Message', () => {
-                        showSeqFragmentMessagePropertyPanel(fragIdx, secIdx, innerIdx);
+                        if (innerEl) startSeqFragmentInnerInlineEdit(elIdx, secIdx, subIdx, innerEl, e);
                     });
                     addContextMenuItem('Delete Message', () => {
-                        postMessage({ type: 'seq_fragmentMessageDeleted', fragmentIndex: fragIdx, sectionIndex: secIdx, innerIndex: innerIdx });
+                        postMessage({ type: 'seq_fragmentInnerMessageDeleted', elementIndex: elIdx, sectionIndex: secIdx, subIndex: subIdx });
+                    });
+                    addContextMenuSeparator();
+                    addContextMenuItem('Insert Message Above', () => {
+                        const fromId = innerEl ? innerEl.fromId : seqDiagram.participants[0].id;
+                        const toId = innerEl ? innerEl.toId : (seqDiagram.participants.length > 1 ? seqDiagram.participants[1].id : seqDiagram.participants[0].id);
+                        postMessage({ type: 'seq_fragmentInnerMessageCreated', elementIndex: elIdx, sectionIndex: secIdx, subIndex: subIdx, fromId: fromId, toId: toId, text: 'Message', arrowType: 'SolidArrow' });
+                    });
+                    addContextMenuItem('Insert Message Below', () => {
+                        const fromId = innerEl ? innerEl.fromId : seqDiagram.participants[0].id;
+                        const toId = innerEl ? innerEl.toId : (seqDiagram.participants.length > 1 ? seqDiagram.participants[1].id : seqDiagram.participants[0].id);
+                        postMessage({ type: 'seq_fragmentInnerMessageCreated', elementIndex: elIdx, sectionIndex: secIdx, subIndex: subIdx + 1, fromId: fromId, toId: toId, text: 'Message', arrowType: 'SolidArrow' });
                     });
                 } else {
-                    // Top-level message
+                    // Top-level message — original behavior
                     seqSelectedMessageIndex = elIdx;
 
                     addContextMenuItem('Edit Message', () => {
-                        showSeqMessagePropertyPanel(elIdx);
+                        const el = seqDiagram.elements[elIdx];
+                        if (el) startSeqInlineEdit(elIdx, el, e);
                     });
                     addContextMenuItem('Delete Message', () => {
                         postMessage({ type: 'seq_messageDeleted', elementIndex: elIdx });
