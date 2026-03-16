@@ -3916,6 +3916,7 @@
                 const bottomY = totalHeight;
                 const gBottom = document.createElementNS('http://www.w3.org/2000/svg', 'g');
                 gBottom.classList.add('node-group', 'seq-participant-bottom');
+                gBottom.setAttribute('data-participant-id', p.id);
                 gBottom.setAttribute('transform', `translate(${x}, ${bottomY})`);
 
                 if (isActor) {
@@ -4565,7 +4566,7 @@
         svg.addEventListener('mousedown', function(e) {
             if (currentDiagramType !== 'sequence') return;
             if (!seqDiagram) return;
-            const participantGroup = e.target.closest('.seq-participant');
+            const participantGroup = e.target.closest('.seq-participant') || e.target.closest('.seq-participant-bottom');
             if (participantGroup) {
                 const pid = participantGroup.getAttribute('data-participant-id');
                 if (pid) {
@@ -4612,7 +4613,7 @@
         svg.addEventListener('click', function(e) {
             if (currentDiagramType !== 'sequence') return;
             if (!seqDiagram) return;
-            const participantGroup = e.target.closest('.seq-participant');
+            const participantGroup = e.target.closest('.seq-participant') || e.target.closest('.seq-participant-bottom');
             const messageGroup = e.target.closest('.seq-message');
 
             const fragmentGroup = e.target.closest('.seq-fragment');
@@ -4720,7 +4721,7 @@
                 return;
             }
 
-            const participantGroup = e.target.closest('.seq-participant');
+            const participantGroup = e.target.closest('.seq-participant') || e.target.closest('.seq-participant-bottom');
             if (participantGroup) {
                 const pid = participantGroup.getAttribute('data-participant-id');
                 const p = seqDiagram.participants.find(pp => pp.id === pid);
@@ -5108,7 +5109,7 @@
             e.preventDefault(); // Suppress native context menu early
             const target = e.target;
 
-            const participantGroup = target.closest('.seq-participant');
+            const participantGroup = target.closest('.seq-participant') || target.closest('.seq-participant-bottom');
             let messageGroup = target.closest('.seq-message');
             let fragmentGroup = target.closest('.seq-fragment');
             const noteGroup = target.closest('.seq-note');
