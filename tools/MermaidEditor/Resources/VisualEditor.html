@@ -362,6 +362,12 @@
             border-color: var(--node-selected-stroke);
             background: var(--context-menu-hover);
         }
+        .property-btn-danger {
+            color: #cc3333;
+        }
+        .property-btn-danger:hover {
+            background: rgba(204, 51, 51, 0.15);
+        }
 
         /* Shape Picker (custom dropdown with SVG previews) */
         .shape-picker {
@@ -5129,7 +5135,7 @@
                             <input class="property-input seq-frag-sec-label" data-sec-index="${si}" value="${escapeHtml(secLabel)}" placeholder="${si === 0 ? 'condition' : sectionKeyword + ' label'}" />
                         </div>`;
                 });
-                sectionsHtml += `<div class="property-row" style="padding-left:10px"><button id="seq-frag-add-section" style="padding:4px 10px;cursor:pointer;">+ Add ${sectionKeyword} Section</button></div>`;
+                sectionsHtml += `<div class="property-row" style="padding-left:10px"><button class="property-btn" id="seq-frag-add-section">+ Add ${sectionKeyword} Section</button></div>`;
             }
 
             // Build participant options for Start/End dropdowns
@@ -5173,7 +5179,7 @@
                 </div>
                 ${sectionsHtml}
                 <div class="property-row">
-                    <button id="seq-frag-delete" style="padding:4px 10px;cursor:pointer;color:#cc3333;">Delete Fragment</button>
+                    <button class="property-btn property-btn-danger" id="seq-frag-delete">Delete Fragment</button>
                 </div>
             `;
 
@@ -5245,7 +5251,7 @@
                     </select>
                 </div>
                 <div class="property-row">
-                    <button id="seq-note-delete" style="padding:4px 10px;cursor:pointer;color:#cc3333;">Delete Note</button>
+                    <button class="property-btn property-btn-danger" id="seq-note-delete">Delete Note</button>
                 </div>
             `;
 
