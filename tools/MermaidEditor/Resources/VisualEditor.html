@@ -7143,11 +7143,14 @@
             });
         }
 
-        // Dagre-based auto layout for state diagrams using compound graph for nested states
+        // Dagre-based auto layout for state diagrams.
+        // Uses FLAT (non-compound) graph for top-level states to avoid dagre compound-graph
+        // crash bugs, then manually positions nested states inside their composite parents.
         function stDagreAutoLayout() {
             if (!stDiagram || typeof dagre === 'undefined') return;
 
-            const g = new dagre.graphlib.Graph({ compound: true });
+            // --- Phase 1: Layout top-level states with a flat dagre graph ---
+            const g = new dagre.graphlib.Graph();
             g.setGraph({
                 rankdir: 'TB',
                 nodesep: 60,
@@ -7158,68 +7161,16 @@
             });
             g.setDefaultEdgeLabel(function() { return {}; });
 
-            // Recursively register states with compound nesting
-            function registerStates(states, parentId) {
-                if (!states || !states.length) return;
-                states.forEach(state => {
-                    const nested = state.nestedStates || [];
-                    const isComposite = state.type === 'Composite' || nested.length > 0;
-                    if (isComposite) {
-                        // Register as compound cluster node with minimum dimensions
-                        // (dagre needs at least one child or explicit size to avoid crash)
-                        const box = stGetStateBox(state);
-                        g.setNode(state.id, {
-                            label: state.label || state.id,
-                            clusterLabelPos: 'top',
-                            width: box.width || 200,
-                            height: box.height || 100
-                        });
-                        if (parentId) g.setParent(state.id, parentId);
-                        // Register nested child states
-                        if (nested.length > 0) {
-                            registerStates(nested, state.id);
-                        } else {
-                            // Empty composite — add a placeholder child so dagre doesn't crash
-                            const placeholderId = '__placeholder_' + state.id;
-                            g.setNode(placeholderId, { width: 1, height: 1 });
-                            g.setParent(placeholderId, state.id);
-                        }
-                        // Register nested [*] pseudo-nodes and transitions within this composite
-                        const nestedTrans = state.nestedTransitions || [];
-                        nestedTrans.forEach(trans => {
-                            const startPseudo = '[*]_start_' + state.id;
-                            const endPseudo = '[*]_end_' + state.id;
-                            if (trans.fromId === '[*]' && !g.hasNode(startPseudo)) {
-                                g.setNode(startPseudo, { width: 20, height: 20 });
-                                g.setParent(startPseudo, state.id);
-                            }
-                            if (trans.toId === '[*]' && !g.hasNode(endPseudo)) {
-                                g.setNode(endPseudo, { width: 20, height: 20 });
-                                g.setParent(endPseudo, state.id);
-                            }
-                        });
-                        // Register nested transitions as edges
-                        nestedTrans.forEach(trans => {
-                            const from = trans.fromId === '[*]' ? '[*]_start_' + state.id : trans.fromId;
-                            const to = trans.toId === '[*]' ? '[*]_end_' + state.id : trans.toId;
-                            if (g.hasNode(from) && g.hasNode(to)) {
-                                g.setEdge(from, to);
-                            }
-                        });
-                    } else {
-                        // Regular state node with estimated dimensions
-                        const box = stGetStateBox(state);
-                        const w = box.width || ST_BOX_MIN_WIDTH;
-                        const h = box.height || ST_BOX_HEIGHT;
-                        g.setNode(state.id, { width: w, height: h });
-                        if (parentId) g.setParent(state.id, parentId);
-                    }
+            // Register only top-level states (composites as single large nodes)
+            stDiagram.states.forEach(state => {
+                const box = stGetStateBox(state);
+                g.setNode(state.id, {
+                    width: box.width || ST_BOX_MIN_WIDTH,
+                    height: box.height || ST_BOX_HEIGHT
                 });
-            }
+            });
 
-            registerStates(stDiagram.states, null);
-
-            // Register top-level [*] pseudo-nodes for start/end if used in transitions
+            // Register [*] pseudo-nodes for top-level transitions
             stDiagram.transitions.forEach(trans => {
                 if (trans.fromId === '[*]' && !g.hasNode('[*]_start')) {
                     g.setNode('[*]_start', { width: 20, height: 20 });
@@ -7229,14 +7180,14 @@
                 }
             });
 
-            // Ensure all transition endpoints exist as nodes (prevents dagre crash)
+            // Ensure all transition endpoints exist as nodes
             stDiagram.transitions.forEach(trans => {
                 const from = trans.fromId === '[*]' ? '[*]_start' : trans.fromId;
                 const to = trans.toId === '[*]' ? '[*]_end' : trans.toId;
-                if (!g.hasNode(from) && from !== '[*]') {
+                if (!g.hasNode(from)) {
                     g.setNode(from, { width: ST_BOX_MIN_WIDTH, height: ST_BOX_HEIGHT });
                 }
-                if (!g.hasNode(to) && to !== '[*]') {
+                if (!g.hasNode(to)) {
                     g.setNode(to, { width: ST_BOX_MIN_WIDTH, height: ST_BOX_HEIGHT });
                 }
             });
@@ -7257,9 +7208,8 @@
                 return;
             }
 
-            // Apply computed positions to all states (including cluster dimensions for composites)
-            const allStates = stGetAllFlatStates();
-            allStates.forEach(state => {
+            // Apply computed positions to top-level states
+            stDiagram.states.forEach(state => {
                 const layoutNode = g.node(state.id);
                 if (layoutNode) {
                     stStatePositions[state.id] = {
@@ -7271,7 +7221,7 @@
                 }
             });
 
-            // Store top-level [*] pseudo-node positions for rendering
+            // Store top-level [*] pseudo-node positions
             ['[*]_start', '[*]_end'].forEach(id => {
                 const node = g.node(id);
                 if (node) {
@@ -7284,21 +7234,114 @@
                 }
             });
 
-            // Store nested [*] pseudo-node positions
-            allStates.forEach(state => {
-                ['start', 'end'].forEach(type => {
-                    const pseudoId = '[*]_' + type + '_' + state.id;
-                    const node = g.node(pseudoId);
-                    if (node) {
-                        stStatePositions[pseudoId] = {
-                            x: node.x - node.width / 2,
-                            y: node.y - node.height / 2,
-                            width: node.width,
-                            height: node.height
-                        };
-                    }
-                });
+            // --- Phase 2: Layout nested states inside each composite ---
+            stDiagram.states.forEach(state => {
+                stLayoutNestedStates(state);
             });
+        }
+
+        // Recursively layout nested states inside a composite parent using a sub-dagre graph
+        function stLayoutNestedStates(parentState) {
+            const nested = parentState.nestedStates || [];
+            if (nested.length === 0) return;
+
+            const parentPos = stStatePositions[parentState.id];
+            if (!parentPos) return;
+
+            const nestedTrans = parentState.nestedTransitions || [];
+            const HEADER_HEIGHT = 35; // Space for composite label + divider
+            const PADDING = ST_COMPOSITE_PADDING;
+
+            // Create a separate flat dagre graph for the nested states
+            const ng = new dagre.graphlib.Graph();
+            ng.setGraph({ rankdir: 'TB', nodesep: 40, ranksep: 50, edgesep: 15, marginx: PADDING, marginy: PADDING });
+            ng.setDefaultEdgeLabel(function() { return {}; });
+
+            nested.forEach(ns => {
+                const box = stGetStateBox(ns);
+                ng.setNode(ns.id, { width: box.width || ST_BOX_MIN_WIDTH, height: box.height || ST_BOX_HEIGHT });
+            });
+
+            // Register [*] pseudo-nodes for nested transitions
+            nestedTrans.forEach(trans => {
+                const startPseudo = '[*]_start_' + parentState.id;
+                const endPseudo = '[*]_end_' + parentState.id;
+                if (trans.fromId === '[*]' && !ng.hasNode(startPseudo)) {
+                    ng.setNode(startPseudo, { width: 20, height: 20 });
+                }
+                if (trans.toId === '[*]' && !ng.hasNode(endPseudo)) {
+                    ng.setNode(endPseudo, { width: 20, height: 20 });
+                }
+            });
+
+            // Ensure all nested transition endpoints exist
+            nestedTrans.forEach(trans => {
+                const from = trans.fromId === '[*]' ? '[*]_start_' + parentState.id : trans.fromId;
+                const to = trans.toId === '[*]' ? '[*]_end_' + parentState.id : trans.toId;
+                if (!ng.hasNode(from)) ng.setNode(from, { width: ST_BOX_MIN_WIDTH, height: ST_BOX_HEIGHT });
+                if (!ng.hasNode(to)) ng.setNode(to, { width: ST_BOX_MIN_WIDTH, height: ST_BOX_HEIGHT });
+            });
+
+            // Register nested transitions as edges
+            nestedTrans.forEach(trans => {
+                const from = trans.fromId === '[*]' ? '[*]_start_' + parentState.id : trans.fromId;
+                const to = trans.toId === '[*]' ? '[*]_end_' + parentState.id : trans.toId;
+                if (ng.hasNode(from) && ng.hasNode(to)) {
+                    ng.setEdge(from, to);
+                }
+            });
+
+            try {
+                dagre.layout(ng);
+            } catch (e) {
+                console.warn('Nested dagre layout failed for ' + parentState.id + ':', e);
+                // Fallback: grid placement
+                stPlaceStatesInGrid(nested, parentPos.x + PADDING, parentPos.y + HEADER_HEIGHT);
+                return;
+            }
+
+            // Position nested states relative to parent's top-left corner
+            const offsetX = parentPos.x;
+            const offsetY = parentPos.y + HEADER_HEIGHT;
+
+            nested.forEach(ns => {
+                const layoutNode = ng.node(ns.id);
+                if (layoutNode) {
+                    stStatePositions[ns.id] = {
+                        x: offsetX + layoutNode.x - (layoutNode.width || 0) / 2,
+                        y: offsetY + layoutNode.y - (layoutNode.height || 0) / 2,
+                        width: layoutNode.width,
+                        height: layoutNode.height
+                    };
+                }
+            });
+
+            // Position nested [*] pseudo-nodes
+            ['start', 'end'].forEach(type => {
+                const pseudoId = '[*]_' + type + '_' + parentState.id;
+                const node = ng.node(pseudoId);
+                if (node) {
+                    stStatePositions[pseudoId] = {
+                        x: offsetX + node.x - node.width / 2,
+                        y: offsetY + node.y - node.height / 2,
+                        width: node.width,
+                        height: node.height
+                    };
+                }
+            });
+
+            // Resize parent composite to fit all nested content
+            const graphInfo = ng.graph();
+            const neededWidth = Math.max(200, (graphInfo.width || 200) + PADDING * 2);
+            const neededHeight = Math.max(100, (graphInfo.height || 100) + HEADER_HEIGHT + PADDING);
+            stStatePositions[parentState.id] = {
+                ...parentPos,
+                width: Math.max(parentPos.width || 0, neededWidth),
+                height: Math.max(parentPos.height || 0, neededHeight)
+            };
+
+            // Recurse into deeply nested composites
+            nested.forEach(ns => stLayoutNestedStates(ns));
         }
 
         function stGetAllFlatStates() {
@@ -7985,6 +8028,7 @@
 
             const stateGroup = e.target.closest('.st-state');
             const transGroup = e.target.closest('.st-transition');
+            const noteGroup = e.target.closest('.st-note');
 
             if (stateGroup) {
                 const stateId = stateGroup.getAttribute('data-state-id');
@@ -7999,6 +8043,15 @@
                 if (idx >= 0 && idx < stDiagram.transitions.length) {
                     stSelectedTransIndex = idx;
                     stShowTransitionProperties(idx);
+                }
+                e.preventDefault();
+                return;
+            }
+
+            if (noteGroup) {
+                const idx = parseInt(noteGroup.getAttribute('data-note-index'), 10);
+                if (idx >= 0 && stDiagram.notes && idx < stDiagram.notes.length) {
+                    stShowNoteProperties(idx);
                 }
                 e.preventDefault();
                 return;
@@ -8072,6 +8125,40 @@
             propertyPanel.classList.add('visible');
         }
 
+        function stShowNoteProperties(idx) {
+            if (!stDiagram || idx < 0 || idx >= stDiagram.notes.length) return;
+            const note = stDiagram.notes[idx];
+
+            const propContent = propertyPanel.querySelector('.property-panel-body');
+            propContent.innerHTML = `
+                <div class="property-row">
+                    <div class="property-label">Text</div>
+                    <textarea class="property-input" id="st-note-text" rows="3" style="resize:vertical">${escapeHtml(note.text || '')}</textarea>
+                </div>
+                <div class="property-row">
+                    <div class="property-label">State</div>
+                    <input class="property-input" value="${escapeHtml(note.stateId || '')}" readonly />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Position</div>
+                    <select class="property-input" id="st-note-position">
+                        <option value="RightOf" ${note.position === 'RightOf' ? 'selected' : ''}>Right of</option>
+                        <option value="LeftOf" ${note.position === 'LeftOf' ? 'selected' : ''}>Left of</option>
+                    </select>
+                </div>
+            `;
+
+            document.getElementById('st-note-text').addEventListener('change', function() {
+                postMessage({ type: 'st_noteEdited', index: idx, text: this.value });
+            });
+            document.getElementById('st-note-position').addEventListener('change', function() {
+                postMessage({ type: 'st_noteEdited', index: idx, position: this.value });
+            });
+
+            propPanelTitle.textContent = 'Note';
+            propertyPanel.classList.add('visible');
+        }
+
         // ===== State Diagram Context Menu =====
 
         svg.addEventListener('contextmenu', function(e) {
@@ -8113,6 +8200,10 @@
                 });
             } else if (noteGroup) {
                 const idx = parseInt(noteGroup.getAttribute('data-note-index'), 10);
+                addStContextMenuItem('Edit Note', () => {
+                    stShowNoteProperties(idx);
+                });
+                addStContextMenuSeparator();
                 addStContextMenuItem('Delete Note', () => {
                     postMessage({ type: 'st_noteDeleted', index: idx });
                 });
