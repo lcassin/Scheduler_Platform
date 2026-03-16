@@ -582,17 +582,38 @@ public partial class PrintPreviewDialog : Window
         }
         
         // Apply orientation from our preview settings
-        if (LandscapeRadio?.IsChecked == true)
+        try
         {
-            printDialog.PrintTicket.PageOrientation = PageOrientation.Landscape;
+            if (LandscapeRadio?.IsChecked == true)
+            {
+                printDialog.PrintTicket.PageOrientation = PageOrientation.Landscape;
+            }
+            else
+            {
+                printDialog.PrintTicket.PageOrientation = PageOrientation.Portrait;
+            }
         }
-        else
+        catch (System.Printing.PrintQueueException)
         {
-            printDialog.PrintTicket.PageOrientation = PageOrientation.Portrait;
+            // PrintTicket provider failed to bind — fall back to system print dialog
+            // so the user can select a working printer
+            if (printDialog.ShowDialog() != true) return;
         }
 
         // Print directly without showing system dialog (we already have our own preview)
-        PrintDocument(printDialog);
+        try
+        {
+            PrintDocument(printDialog);
+        }
+        catch (System.Printing.PrintQueueException ex)
+        {
+            System.Windows.MessageBox.Show(
+                $"Unable to print: the selected printer could not be initialized.\n\n{ex.Message}\n\nPlease try selecting a different printer.",
+                "Print Error",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Error);
+            return;
+        }
         DialogResult = true;
         Close();
     }
