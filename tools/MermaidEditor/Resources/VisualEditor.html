@@ -931,6 +931,8 @@
         let dragStartY = 0;
         let dragNodeStartX = 0;
         let dragNodeStartY = 0;
+        let dragSubgraphId = null;  // subgraph being dragged
+        let dragSgNodeStarts = [];  // [{id, startX, startY}] for each node in the dragged subgraph
         let isDrawingEdge = false;
         let drawEdgeFromId = null;
         let panzoomInstance = null;
@@ -2257,6 +2259,24 @@
                         // handled in mouseup
                     } else {
                         selectSubgraph(sgId);
+                        // Start subgraph drag (only for left-click)
+                        if (e.button !== 2) {
+                            const sg = diagram.subgraphs.find(s => s.id === sgId);
+                            if (sg) {
+                                isDragging = true;
+                                dragSubgraphId = sgId;
+                                const pt = getSVGPoint(e);
+                                dragStartX = pt.x;
+                                dragStartY = pt.y;
+                                // Save start positions of all contained nodes
+                                const sgIds = new Set(diagram.subgraphs.map(s => s.id));
+                                const sgNodes = diagram.nodes.filter(n => sg.nodeIds.includes(n.id) && !sgIds.has(n.id));
+                                dragSgNodeStarts = sgNodes.map(n => ({ id: n.id, startX: n.x, startY: n.y }));
+                                // Also save empty subgraph position
+                                dragNodeStartX = sg._emptyX || 200;
+                                dragNodeStartY = sg._emptyY || 200;
+                            }
+                        }
                     }
                     return;
                 }
@@ -2301,6 +2321,29 @@
                 return;
             }
 
+            if (isDragging && dragSubgraphId) {
+                const pt = getSVGPoint(e);
+                const dx = pt.x - dragStartX;
+                const dy = pt.y - dragStartY;
+                const sg = diagram.subgraphs.find(s => s.id === dragSubgraphId);
+                if (sg) {
+                    // Move all contained nodes by the delta
+                    dragSgNodeStarts.forEach(ns => {
+                        const node = diagram.nodes.find(n => n.id === ns.id);
+                        if (node) {
+                            node.x = Math.round((ns.startX + dx) / SNAP_GRID) * SNAP_GRID;
+                            node.y = Math.round((ns.startY + dy) / SNAP_GRID) * SNAP_GRID;
+                        }
+                    });
+                    // Move empty subgraph position too
+                    sg._emptyX = Math.round((dragNodeStartX + dx) / SNAP_GRID) * SNAP_GRID;
+                    sg._emptyY = Math.round((dragNodeStartY + dy) / SNAP_GRID) * SNAP_GRID;
+                    render();
+                    updateMinimap();
+                }
+                return;
+            }
+
             if (isDragging && dragNodeId) {
                 const pt = getSVGPoint(e);
                 const node = diagram.nodes.find(n => n.id === dragNodeId);
@@ -2340,6 +2383,25 @@
                 isResizing = false;
                 resizeNodeId = null;
                 resizeDir = null;
+                return;
+            }
+
+            if (isDragging && dragSubgraphId) {
+                // Send position updates for all moved nodes
+                dragSgNodeStarts.forEach(ns => {
+                    const node = diagram.nodes.find(n => n.id === ns.id);
+                    if (node) {
+                        postMessage({
+                            type: 'nodeMoved',
+                            nodeId: node.id,
+                            x: node.x,
+                            y: node.y
+                        });
+                    }
+                });
+                isDragging = false;
+                dragSubgraphId = null;
+                dragSgNodeStarts = [];
                 return;
             }
 
