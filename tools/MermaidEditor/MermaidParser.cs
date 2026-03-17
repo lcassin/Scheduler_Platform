@@ -83,8 +83,9 @@ public static class MermaidParser
     // --- Comment pattern ---
     private static readonly Regex CommentPattern = new(@"^\s*%%(.*)$", RegexOptions.Compiled);
 
-    // --- Position comment pattern: %% @pos nodeId x,y ---
-    private static readonly Regex PosCommentPattern = new(@"^\s*%%\s*@pos\s+(\S+)\s+(-?[\d.]+)\s*,\s*(-?[\d.]+)\s*$", RegexOptions.Compiled);
+    // --- Position comment pattern: %% @pos nodeId x,y[,w,h] ---
+    // Groups: 1=nodeId, 2=x, 3=y, 4=optional ",w,h" suffix, 5=w, 6=h
+    private static readonly Regex PosCommentPattern = new(@"^\s*%%\s*@pos\s+(\S+)\s+(-?[\d.]+)\s*,\s*(-?[\d.]+)(\s*,\s*(-?[\d.]+)\s*,\s*(-?[\d.]+))?\s*$", RegexOptions.Compiled);
 
     // --- Node-only pattern (just a node ID on a line by itself, no shape) ---
     private static readonly Regex BareNodePattern = new(@"^\s*([a-zA-Z_][\w]*)\s*$", RegexOptions.Compiled);
@@ -1846,7 +1847,7 @@ public static class MermaidParser
         var lines = text.Split('\n');
         var model = new StateDiagramModel();
         var knownStates = new HashSet<string>(StringComparer.Ordinal);
-        var pendingPositions = new Dictionary<string, (double x, double y)>(StringComparer.Ordinal);
+        var pendingPositions = new Dictionary<string, (double x, double y, double w, double h)>(StringComparer.Ordinal);
         bool foundDeclaration = false;
 
         // Stack for nested composite state parsing
@@ -1874,7 +1875,13 @@ public static class MermaidParser
                 var posId = posMatch.Groups[1].Value;
                 var posX = double.Parse(posMatch.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
                 var posY = double.Parse(posMatch.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture);
-                pendingPositions[posId] = (posX, posY);
+                double posW = 0, posH = 0;
+                if (posMatch.Groups[5].Success && posMatch.Groups[6].Success)
+                {
+                    posW = double.Parse(posMatch.Groups[5].Value, System.Globalization.CultureInfo.InvariantCulture);
+                    posH = double.Parse(posMatch.Groups[6].Value, System.Globalization.CultureInfo.InvariantCulture);
+                }
+                pendingPositions[posId] = (posX, posY, posW, posH);
                 continue;
             }
 
@@ -2132,7 +2139,7 @@ public static class MermaidParser
         // Apply any pending @pos position data to states
         if (foundDeclaration)
         {
-            foreach (var (posId, (px, py)) in pendingPositions)
+            foreach (var (posId, (px, py, pw, ph)) in pendingPositions)
             {
                 // Search all states recursively
                 StateDefinition? target = null;
@@ -2145,6 +2152,8 @@ public static class MermaidParser
                 if (target != null)
                 {
                     target.Position = new System.Windows.Point(px, py);
+                    if (pw > 0 && ph > 0)
+                        target.Size = new System.Windows.Size(pw, ph);
                     target.HasManualPosition = true;
                 }
             }

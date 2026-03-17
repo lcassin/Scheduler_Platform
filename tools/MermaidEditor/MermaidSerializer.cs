@@ -1141,6 +1141,7 @@ public static class MermaidSerializer
     /// <summary>
     /// Writes %% @pos comments for states that have been manually positioned in the visual editor.
     /// Recursively collects from nested composite states.
+    /// Format: %% @pos stateId x,y or %% @pos stateId x,y,w,h (when size is saved).
     /// </summary>
     private static void WriteStatePositionComments(StringBuilder sb, StateDiagramModel model)
     {
@@ -1156,7 +1157,16 @@ public static class MermaidSerializer
         {
             var x = state.Position.X.ToString("F1", CultureInfo.InvariantCulture);
             var y = state.Position.Y.ToString("F1", CultureInfo.InvariantCulture);
-            sb.AppendLine($"%% @pos {state.Id} {x},{y}");
+            if (state.Size.Width > 0 && state.Size.Height > 0)
+            {
+                var w = state.Size.Width.ToString("F1", CultureInfo.InvariantCulture);
+                var h = state.Size.Height.ToString("F1", CultureInfo.InvariantCulture);
+                sb.AppendLine($"%% @pos {state.Id} {x},{y},{w},{h}");
+            }
+            else
+            {
+                sb.AppendLine($"%% @pos {state.Id} {x},{y}");
+            }
         }
     }
 

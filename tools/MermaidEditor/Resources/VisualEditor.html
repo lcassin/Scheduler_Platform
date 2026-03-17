@@ -3497,6 +3497,39 @@
                 hidePropertyPanel();
                 postMessage({ type: 'subgraphDeleted', subgraphId: sgId });
             }
+            // State diagram elements
+            else if (currentDiagramType === 'state' && stDiagram) {
+                if (stSelectedStateId) {
+                    postMessage({ type: 'st_stateDeleted', stateId: stSelectedStateId });
+                    stSelectedStateId = null;
+                } else if (stSelectedNestedTrans) {
+                    postMessage({ type: 'st_nestedTransitionDeleted', parentId: stSelectedNestedTrans.parentId, index: stSelectedNestedTrans.idx });
+                    stSelectedNestedTrans = null;
+                } else if (stSelectedTransIndex >= 0) {
+                    postMessage({ type: 'st_transitionDeleted', index: stSelectedTransIndex });
+                    stSelectedTransIndex = -1;
+                }
+            }
+            // Class diagram elements
+            else if (currentDiagramType === 'class' && clsDiagram) {
+                if (clsSelectedClassId) {
+                    postMessage({ type: 'cls_classDeleted', classId: clsSelectedClassId });
+                    clsSelectedClassId = null;
+                } else if (clsSelectedRelIndex >= 0) {
+                    postMessage({ type: 'cls_relationshipDeleted', relationshipIndex: clsSelectedRelIndex });
+                    clsSelectedRelIndex = -1;
+                }
+            }
+            // ER diagram elements
+            else if (currentDiagramType === 'er' && erDiagram) {
+                if (erSelectedEntityName) {
+                    postMessage({ type: 'er_entityDeleted', name: erSelectedEntityName });
+                    erSelectedEntityName = null;
+                } else if (erSelectedRelIndex >= 0) {
+                    postMessage({ type: 'er_relationshipDeleted', index: erSelectedRelIndex });
+                    erSelectedRelIndex = -1;
+                }
+            }
             // Sequence diagram elements
             else if (currentDiagramType === 'sequence' && seqDiagram) {
                 if (seqSelectedParticipantId) {
@@ -6589,6 +6622,27 @@
                 return;
             }
 
+            // Handle toolbar "Add Relationship" pick-source mode
+            if (clsPickingRelSource && classGroup) {
+                const classId = classGroup.getAttribute('data-class-id');
+                if (!clsPickingRelFrom) {
+                    // First click: pick source
+                    clsPickingRelFrom = classId;
+                    clsDrawingRelFrom = classId;
+                    clsSelectedClassId = classId;
+                    renderClassDiagram();
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return;
+                }
+            }
+            if (clsPickingRelSource && !classGroup) {
+                // Clicked empty space: cancel pick mode
+                clsPickingRelSource = false;
+                clsPickingRelFrom = null;
+                document.body.style.cursor = '';
+            }
+
             if (classGroup) {
                 const classId = classGroup.getAttribute('data-class-id');
                 clsSelectedClassId = classId;
@@ -6685,6 +6739,10 @@
                     }
                 }
                 clsDrawingRelFrom = null;
+                // Reset pick mode after relationship created
+                clsPickingRelSource = false;
+                clsPickingRelFrom = null;
+                document.body.style.cursor = '';
             }
         });
 
@@ -7129,6 +7187,8 @@
         let stDragOffsetY = 0;
         let stDrawingTransFrom = null; // stateId when drawing a transition
         let stDrawingTransToEnd = false; // true when drawing a transition TO [*] end
+        let stDrawingNestedParent = null; // parentId when drawing a nested transition from composite context menu
+        let stPickingTransSource = false; // true when toolbar Add Transition is waiting for source click
         let stDraggingPseudoId = null; // pseudo-state id when dragging a [*] circle
         let stDraggingNoteIdx = -1; // note index when dragging a note
         let stSelectedNoteIdx = -1; // currently selected note index
@@ -7188,8 +7248,8 @@
                             stStatePositions[s.id] = {
                                 x: s.x,
                                 y: s.y,
-                                width: stStatePositions[s.id] ? stStatePositions[s.id].width : ST_BOX_MIN_WIDTH,
-                                height: stStatePositions[s.id] ? stStatePositions[s.id].height : ST_BOX_HEIGHT
+                                width: (s.width > 0) ? s.width : (stStatePositions[s.id] ? stStatePositions[s.id].width : ST_BOX_MIN_WIDTH),
+                                height: (s.height > 0) ? s.height : (stStatePositions[s.id] ? stStatePositions[s.id].height : ST_BOX_HEIGHT)
                             };
                             hasHydratedPositions = true;
                         }
@@ -7242,6 +7302,8 @@
                 })),
                 x: s.x || 0,
                 y: s.y || 0,
+                width: s.width || 0,
+                height: s.height || 0,
                 hasManualPosition: s.hasManualPosition || false
             };
         }
@@ -7269,6 +7331,10 @@
                 };
                 // Place only new states that don't have positions yet (don't re-run dagre)
                 stPlaceNewStatesOnly(stDiagram.states);
+                // Clean up orphaned pseudo node positions (e.g. after state deletion)
+                stCleanOrphanedPseudoPositions();
+                // Re-place pseudo nodes for any new transitions
+                stPlacePseudoNodes();
                 renderStateDiagram();
             } catch (err) {
                 console.error('Failed to refresh state diagram:', err);
@@ -7324,6 +7390,60 @@
                     });
                     // Auto-expand composite to fit all nested children
                     stExpandCompositeToFitChildren(s.id);
+                }
+            });
+        }
+
+        // Remove orphaned pseudo node positions that no longer have matching transitions.
+        // Called on refresh after model changes (e.g. state deletion) to clean up stale entries.
+        function stCleanOrphanedPseudoPositions() {
+            if (!stDiagram) return;
+
+            // Collect which pseudo IDs are still needed
+            const neededPseudos = new Set();
+
+            // Top-level transitions
+            stDiagram.transitions.forEach(trans => {
+                if (trans.fromId === '[*]') neededPseudos.add('[*]_start');
+                if (trans.toId === '[*]') neededPseudos.add('[*]_end');
+            });
+
+            // Nested transitions
+            function collectNestedPseudos(states) {
+                states.forEach(state => {
+                    if (state.nestedTransitions) {
+                        state.nestedTransitions.forEach(trans => {
+                            if (trans.fromId === '[*]') neededPseudos.add('[*]_start_' + state.id);
+                            if (trans.toId === '[*]') neededPseudos.add('[*]_end_' + state.id);
+                        });
+                    }
+                    if (state.nestedStates && state.nestedStates.length > 0) {
+                        collectNestedPseudos(state.nestedStates);
+                    }
+                });
+            }
+            collectNestedPseudos(stDiagram.states);
+
+            // Remove positions for pseudo nodes that are no longer needed
+            Object.keys(stStatePositions).forEach(key => {
+                if (key.startsWith('[*]_') && !neededPseudos.has(key)) {
+                    delete stStatePositions[key];
+                }
+            });
+
+            // Also remove positions for states that no longer exist in the model
+            const allStateIds = new Set();
+            function collectStateIds(states) {
+                states.forEach(s => {
+                    allStateIds.add(s.id);
+                    if (s.nestedStates) collectStateIds(s.nestedStates);
+                });
+            }
+            collectStateIds(stDiagram.states);
+
+            Object.keys(stStatePositions).forEach(key => {
+                if (!key.startsWith('[*]_') && !allStateIds.has(key)) {
+                    delete stStatePositions[key];
                 }
             });
         }
@@ -8581,6 +8701,26 @@
                 }
             }
 
+            // Handle toolbar "Add Transition" pick-source mode
+            if (stPickingTransSource && stateGroup) {
+                const stateId = stateGroup.getAttribute('data-state-id');
+                stPickingTransSource = false;
+                stDrawingTransFrom = stateId;
+                const state = stFindState(stateId);
+                if (state) {
+                    const box = stGetStateBox(state);
+                    const cx = box.x + box.width / 2;
+                    const cy = box.y + box.height / 2;
+                    tempEdge.setAttribute('x1', cx);
+                    tempEdge.setAttribute('y1', cy);
+                    tempEdge.setAttribute('x2', cx);
+                    tempEdge.setAttribute('y2', cy);
+                    tempEdge.style.display = '';
+                }
+                e.preventDefault();
+                return;
+            }
+
             if (gripPoint && gripPoint.getAttribute('data-state-id')) {
                 // Start drawing a transition
                 const stateId = gripPoint.getAttribute('data-state-id');
@@ -8720,11 +8860,16 @@
                 if (targetGroup) {
                     const toStateId = targetGroup.getAttribute('data-state-id');
                     if (toStateId && toStateId !== stDrawingTransFrom) {
-                        postMessage({ type: 'st_transitionCreated', fromId: stDrawingTransFrom, toId: toStateId });
+                        if (stDrawingNestedParent) {
+                            postMessage({ type: 'st_nestedTransitionCreated', parentId: stDrawingNestedParent, fromId: stDrawingTransFrom, toId: toStateId });
+                        } else {
+                            postMessage({ type: 'st_transitionCreated', fromId: stDrawingTransFrom, toId: toStateId });
+                        }
                     }
                 }
                 tempEdge.style.display = 'none';
                 stDrawingTransFrom = null;
+                stDrawingNestedParent = null;
                 return;
             }
 
@@ -8734,11 +8879,16 @@
                 if (sourceGroup) {
                     const fromStateId = sourceGroup.getAttribute('data-state-id');
                     if (fromStateId) {
-                        postMessage({ type: 'st_transitionCreated', fromId: fromStateId, toId: '[*]' });
+                        if (stDrawingNestedParent) {
+                            postMessage({ type: 'st_nestedTransitionCreated', parentId: stDrawingNestedParent, fromId: fromStateId, toId: '[*]' });
+                        } else {
+                            postMessage({ type: 'st_transitionCreated', fromId: fromStateId, toId: '[*]' });
+                        }
                     }
                 }
                 tempEdge.style.display = 'none';
                 stDrawingTransToEnd = false;
+                stDrawingNestedParent = null;
                 return;
             }
 
@@ -9230,37 +9380,92 @@
                 addStContextMenuItem('Add Note', () => {
                     postMessage({ type: 'st_noteCreated', stateId: stateId, text: 'Note', position: 'RightOf' });
                 });
-                // Show "Add Nested State" for composite states
+                // Show nested element options for composite states
                 const clickedState = stFindState(stateId);
                 if (clickedState && (clickedState.type === 'Composite' || (clickedState.nestedStates && clickedState.nestedStates.length > 0))) {
+                    // Helper: compute the next Y position inside this composite
+                    function nestedNextY() {
+                        const parentPos = stStatePositions[stateId];
+                        if (!parentPos) return 200;
+                        let maxNY = (parentPos.y || 0) + 35 + ST_COMPOSITE_PADDING;
+                        if (clickedState.nestedStates) {
+                            clickedState.nestedStates.forEach(ns => {
+                                const ep = stStatePositions[ns.id];
+                                if (ep) {
+                                    const bottom = (ep.y || 0) + (ep.height || ST_BOX_HEIGHT);
+                                    if (bottom > maxNY) maxNY = bottom;
+                                }
+                            });
+                        }
+                        return maxNY + 20;
+                    }
+                    function nestedBaseX() {
+                        const parentPos = stStatePositions[stateId];
+                        return parentPos ? (parentPos.x || 0) + ST_COMPOSITE_PADDING : 100;
+                    }
+
                     addStContextMenuItem('Add Nested State', () => {
                         const newId = stNextUniqueId('State');
-                        const parentPos = stStatePositions[stateId];
-                        if (parentPos) {
-                            // Place inside the composite
-                            let maxNY = (parentPos.y || 0) + 35 + ST_COMPOSITE_PADDING;
-                            if (clickedState.nestedStates) {
-                                clickedState.nestedStates.forEach(ns => {
-                                    const ep = stStatePositions[ns.id];
-                                    if (ep) {
-                                        const bottom = (ep.y || 0) + (ep.height || ST_BOX_HEIGHT);
-                                        if (bottom > maxNY) maxNY = bottom;
-                                    }
-                                });
-                            }
-                            stStatePositions[newId] = {
-                                x: (parentPos.x || 0) + ST_COMPOSITE_PADDING,
-                                y: maxNY + 20,
-                                width: ST_BOX_MIN_WIDTH,
-                                height: ST_BOX_HEIGHT
-                            };
-                        }
-                        // Add to local model immediately so expand can see it
+                        stStatePositions[newId] = {
+                            x: nestedBaseX(), y: nestedNextY(),
+                            width: ST_BOX_MIN_WIDTH, height: ST_BOX_HEIGHT
+                        };
                         if (!clickedState.nestedStates) clickedState.nestedStates = [];
                         clickedState.nestedStates.push({ id: newId, label: newId, type: 'Simple', nestedStates: [], nestedTransitions: [] });
                         postMessage({ type: 'st_nestedStateCreated', parentId: stateId, stateId: newId, label: newId });
                         stExpandCompositeChain(stateId);
                         renderStateDiagram();
+                    });
+                    addStContextMenuItem('Add Nested Fork/Join', () => {
+                        const newId = stNextUniqueId('ForkJoin');
+                        stStatePositions[newId] = {
+                            x: nestedBaseX(), y: nestedNextY(),
+                            width: 80, height: 6
+                        };
+                        if (!clickedState.nestedStates) clickedState.nestedStates = [];
+                        clickedState.nestedStates.push({ id: newId, label: null, type: 'Fork', nestedStates: [], nestedTransitions: [] });
+                        postMessage({ type: 'st_nestedStateCreated', parentId: stateId, stateId: newId, label: null, stateType: 'Fork' });
+                        stExpandCompositeChain(stateId);
+                        renderStateDiagram();
+                    });
+                    addStContextMenuItem('Add Nested Choice', () => {
+                        const newId = stNextUniqueId('Choice');
+                        stStatePositions[newId] = {
+                            x: nestedBaseX(), y: nestedNextY(),
+                            width: 30, height: 30
+                        };
+                        if (!clickedState.nestedStates) clickedState.nestedStates = [];
+                        clickedState.nestedStates.push({ id: newId, label: null, type: 'Choice', nestedStates: [], nestedTransitions: [] });
+                        postMessage({ type: 'st_nestedStateCreated', parentId: stateId, stateId: newId, label: null, stateType: 'Choice' });
+                        stExpandCompositeChain(stateId);
+                        renderStateDiagram();
+                    });
+                    addStContextMenuSeparator();
+                    addStContextMenuItem('Add Nested Start \u2192 (select target)', () => {
+                        // Start drawing a nested [*] start transition — source is [*] inside this composite
+                        stDrawingTransFrom = '[*]';
+                        stDrawingNestedParent = stateId;
+                        const parentPos = stStatePositions[stateId];
+                        const cx = parentPos ? parentPos.x + 30 : 100;
+                        const cy = parentPos ? parentPos.y + 50 : 100;
+                        tempEdge.setAttribute('x1', cx);
+                        tempEdge.setAttribute('y1', cy);
+                        tempEdge.setAttribute('x2', cx);
+                        tempEdge.setAttribute('y2', cy);
+                        tempEdge.style.display = '';
+                    });
+                    addStContextMenuItem('Add Nested \u2192 End (select source)', () => {
+                        // Start drawing a nested [*] end transition — target is [*] inside this composite
+                        stDrawingTransToEnd = true;
+                        stDrawingNestedParent = stateId;
+                        const parentPos = stStatePositions[stateId];
+                        const cx = parentPos ? parentPos.x + 30 : 100;
+                        const cy = parentPos ? parentPos.y + 50 : 100;
+                        tempEdge.setAttribute('x1', cx);
+                        tempEdge.setAttribute('y1', cy);
+                        tempEdge.setAttribute('x2', cx);
+                        tempEdge.setAttribute('y2', cy);
+                        tempEdge.style.display = '';
                     });
                 }
                 addStContextMenuSeparator();
@@ -9943,6 +10148,38 @@
                 return;
             }
 
+            // Handle toolbar "Add Relationship" pick-source mode
+            if (erPickingRelSource && entityGroup) {
+                const entityName = entityGroup.getAttribute('data-entity-name');
+                if (!erPickingRelFrom) {
+                    // First click: pick source
+                    erPickingRelFrom = entityName;
+                    erDrawingRelFrom = entityName;
+                    erSelectedEntityName = entityName;
+                    const pos = erEntityPositions[entityName];
+                    if (pos) {
+                        const dim = erGetEntityBoxDimensions(erDiagram.entities.find(e => e.name === entityName));
+                        const cx = pos.x + (dim ? dim.width : ER_BOX_MIN_WIDTH) / 2;
+                        const cy = pos.y + (dim ? dim.height : 60) / 2;
+                        tempEdge.setAttribute('x1', cx);
+                        tempEdge.setAttribute('y1', cy);
+                        tempEdge.setAttribute('x2', cx);
+                        tempEdge.setAttribute('y2', cy);
+                        tempEdge.style.display = '';
+                    }
+                    renderERDiagram();
+                    e.preventDefault();
+                    return;
+                }
+            }
+            if (erPickingRelSource && !entityGroup) {
+                // Clicked empty space: cancel pick mode
+                erPickingRelSource = false;
+                erPickingRelFrom = null;
+                document.body.style.cursor = '';
+                tempEdge.style.display = 'none';
+            }
+
             if (entityGroup) {
                 const entityName = entityGroup.getAttribute('data-entity-name');
                 erSelectedEntityName = entityName;
@@ -10025,6 +10262,10 @@
                 }
                 tempEdge.style.display = 'none';
                 erDrawingRelFrom = null;
+                // Reset pick mode after relationship created
+                erPickingRelSource = false;
+                erPickingRelFrom = null;
+                document.body.style.cursor = '';
                 return;
             }
 
@@ -10438,6 +10679,40 @@
             postMessage({ type: 'redo' });
         });
 
+        // ===== Undo/Redo/Delete button state management =====
+        // Called by C# after each operation to reflect canUndo/canRedo state.
+        window.updateUndoRedoState = function(canUndo, canRedo) {
+            const undoBtn = document.getElementById('tb-undo');
+            const redoBtn = document.getElementById('tb-redo');
+            if (undoBtn) undoBtn.disabled = !canUndo;
+            if (redoBtn) redoBtn.disabled = !canRedo;
+        };
+
+        // Update Delete button enabled state based on current selection
+        function updateDeleteButtonState() {
+            const deleteBtn = document.getElementById('tb-delete');
+            if (!deleteBtn) return;
+            let hasSelection = false;
+            if (selectedNodeId || selectedEdgeIndex >= 0 || selectedSubgraphId) {
+                hasSelection = true;
+            } else if (currentDiagramType === 'state' && stDiagram) {
+                hasSelection = !!(stSelectedStateId || stSelectedNestedTrans || stSelectedTransIndex >= 0);
+            } else if (currentDiagramType === 'class' && clsDiagram) {
+                hasSelection = !!(clsSelectedClassId || clsSelectedRelIndex >= 0);
+            } else if (currentDiagramType === 'er' && erDiagram) {
+                hasSelection = !!(erSelectedEntityName || erSelectedRelIndex >= 0);
+            } else if (currentDiagramType === 'sequence' && seqDiagram) {
+                hasSelection = !!(seqSelectedParticipantId || seqSelectedFragInnerMsg || seqSelectedMessageIdx >= 0 || seqSelectedNoteIdx >= 0 || seqSelectedFragmentIdx >= 0);
+            }
+            deleteBtn.disabled = !hasSelection;
+        }
+
+        // Poll selection state every 200ms to keep delete button in sync
+        setInterval(updateDeleteButtonState, 200);
+
+        // Start with undo/redo disabled (no history yet)
+        updateUndoRedoState(false, false);
+
         document.getElementById('tb-auto-layout').addEventListener('click', function() {
             autoLayout();
             render();
@@ -10483,11 +10758,13 @@
             postMessage({ type: 'cls_classCreated', classId: 'NewClass' + (clsDiagram.classes.length + 1) });
         });
 
+        let clsPickingRelSource = false; // true when toolbar Add Relationship is waiting for source click
+        let clsPickingRelFrom = null; // source class id when picking target
         document.getElementById('tb-cls-add-relation').addEventListener('click', function() {
             if (!clsDiagram || clsDiagram.classes.length < 2) return;
-            const fromId = clsDiagram.classes[0].id;
-            const toId = clsDiagram.classes[1].id;
-            postMessage({ type: 'cls_relationshipCreated', fromId: fromId, toId: toId, relationType: 'Association', label: '' });
+            clsPickingRelSource = true;
+            clsPickingRelFrom = null;
+            document.body.style.cursor = 'crosshair';
         });
 
         document.getElementById('tb-cls-auto-layout').addEventListener('click', function() {
@@ -10504,16 +10781,31 @@
         });
 
         // ===== State diagram toolbar buttons =====
+        // Helper: get SVG coordinates at the center of the current viewport
+        function stGetViewportCenterSVG() {
+            const rect = canvasContainer.getBoundingClientRect();
+            const cx = rect.width / 2;
+            const cy = rect.height / 2;
+            const ctm = svg.getScreenCTM();
+            if (!ctm) return { x: 200, y: 200 };
+            return {
+                x: Math.round(((cx - ctm.e) / ctm.a) / SNAP_GRID) * SNAP_GRID,
+                y: Math.round(((cy - ctm.f) / ctm.d) / SNAP_GRID) * SNAP_GRID
+            };
+        }
+
         document.getElementById('tb-st-add-state').addEventListener('click', function() {
             if (!stDiagram) return;
-            postMessage({ type: 'st_stateCreated', stateId: 'State' + (stDiagram.states.length + 1) });
+            const newId = stNextUniqueId('State');
+            const center = stGetViewportCenterSVG();
+            stStatePositions[newId] = { x: center.x, y: center.y, width: ST_BOX_MIN_WIDTH, height: ST_BOX_HEIGHT };
+            postMessage({ type: 'st_stateCreated', stateId: newId, label: newId, type: 'Simple' });
         });
 
         document.getElementById('tb-st-add-transition').addEventListener('click', function() {
-            if (!stDiagram || stDiagram.states.length < 2) return;
-            const fromId = stDiagram.states[0].id;
-            const toId = stDiagram.states[1].id;
-            postMessage({ type: 'st_transitionCreated', fromId: fromId, toId: toId, label: '' });
+            if (!stDiagram || stDiagram.states.length < 1) return;
+            // Enter pick-source mode: next click on a state picks the source, then drag to target
+            stPickingTransSource = true;
         });
 
         document.getElementById('tb-st-auto-layout').addEventListener('click', function() {
@@ -10578,11 +10870,13 @@
             postMessage({ type: 'er_entityCreated', entityName: 'ENTITY' + (erDiagram.entities.length + 1) });
         });
 
+        let erPickingRelSource = false; // true when toolbar Add Relationship is waiting for source click
+        let erPickingRelFrom = null; // source entity name when picking target
         document.getElementById('tb-er-add-relationship').addEventListener('click', function() {
             if (!erDiagram || erDiagram.entities.length < 2) return;
-            const fromName = erDiagram.entities[0].name;
-            const toName = erDiagram.entities[1].name;
-            postMessage({ type: 'er_relationshipCreated', fromEntity: fromName, toEntity: toName, fromCardinality: 'ExactlyOne', toCardinality: 'ZeroOrMore', label: 'has' });
+            erPickingRelSource = true;
+            erPickingRelFrom = null;
+            document.body.style.cursor = 'crosshair';
         });
 
         document.getElementById('tb-er-auto-layout').addEventListener('click', function() {
