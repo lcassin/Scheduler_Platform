@@ -4852,9 +4852,12 @@ Console.WriteLine(""Hello, World!"");
     /// </summary>
     private void UpdateVisualEditorModeToolbarVisibility()
     {
-        if (VisualEditorModeToolbar != null)
+        var mermaidReady = _currentRenderMode == RenderMode.Mermaid && _visualEditorInitialized;
+
+        // Show/hide mode buttons in the Code Editor header
+        if (CodeHeaderModeButtons != null)
         {
-            VisualEditorModeToolbar.Visibility = _currentRenderMode == RenderMode.Mermaid && _visualEditorInitialized
+            CodeHeaderModeButtons.Visibility = mermaidReady
                 ? Visibility.Visible
                 : Visibility.Collapsed;
         }
@@ -4866,20 +4869,38 @@ Console.WriteLine(""Hello, World!"");
         }
 
         // Enable/disable Visual and Split buttons based on whether the current diagram
-        // type is supported by the visual editor (currently only flowcharts).
+        // type is supported by the visual editor.
         var visualSupported = IsVisualEditorSupportedForCurrentDiagram();
+
+        // Code Editor header buttons
         if (VisualModeToggle != null)
         {
             VisualModeToggle.IsEnabled = visualSupported;
             VisualModeToggle.ToolTip = visualSupported
-                ? "Visual Mode"
+                ? "Visual Editor"
                 : "Visual editor is not yet available for this diagram type";
         }
         if (SplitModeToggle != null)
         {
             SplitModeToggle.IsEnabled = visualSupported;
             SplitModeToggle.ToolTip = visualSupported
-                ? "Split Mode (Text + Visual)"
+                ? "Split View"
+                : "Visual editor is not yet available for this diagram type";
+        }
+
+        // Visual Editor header buttons
+        if (VisualHeaderVisualModeToggle != null)
+        {
+            VisualHeaderVisualModeToggle.IsEnabled = visualSupported;
+            VisualHeaderVisualModeToggle.ToolTip = visualSupported
+                ? "Visual Editor"
+                : "Visual editor is not yet available for this diagram type";
+        }
+        if (VisualHeaderSplitModeToggle != null)
+        {
+            VisualHeaderSplitModeToggle.IsEnabled = visualSupported;
+            VisualHeaderSplitModeToggle.ToolTip = visualSupported
+                ? "Split View"
                 : "Visual editor is not yet available for this diagram type";
         }
 
@@ -5195,9 +5216,18 @@ Console.WriteLine(""Hello, World!"");
     /// </summary>
     private void UpdateModeToggleButtons()
     {
+        // Update Code Editor header buttons
         TextModeToggle.IsChecked = _visualEditorMode == VisualEditorMode.Text;
         VisualModeToggle.IsChecked = _visualEditorMode == VisualEditorMode.Visual;
         SplitModeToggle.IsChecked = _visualEditorMode == VisualEditorMode.Split;
+
+        // Update Visual Editor header buttons
+        if (VisualHeaderTextModeToggle != null)
+        {
+            VisualHeaderTextModeToggle.IsChecked = _visualEditorMode == VisualEditorMode.Text;
+            VisualHeaderVisualModeToggle.IsChecked = _visualEditorMode == VisualEditorMode.Visual;
+            VisualHeaderSplitModeToggle.IsChecked = _visualEditorMode == VisualEditorMode.Split;
+        }
     }
 
     /// <summary>
