@@ -8260,6 +8260,26 @@
             }
 
             if (stDraggingNoteIdx >= 0) {
+                // Auto-update note position (LeftOf/RightOf) based on where the note was dragged
+                const draggedNote = stDiagram.notes[stDraggingNoteIdx];
+                if (draggedNote) {
+                    const notePos = stNotePositions[stDraggingNoteIdx];
+                    const targetState = stFindState(draggedNote.stateId);
+                    if (notePos && targetState) {
+                        const box = stGetStateBox(targetState);
+                        const noteCenterX = notePos.x + ST_NOTE_WIDTH / 2;
+                        const stateCenterX = box.x + box.width / 2;
+                        const newPosition = noteCenterX < stateCenterX ? 'LeftOf' : 'RightOf';
+                        if (newPosition !== draggedNote.position) {
+                            postMessage({ type: 'st_noteEdited', index: stDraggingNoteIdx, position: newPosition });
+                            // Update local model immediately so property panel reflects the change
+                            draggedNote.position = newPosition;
+                            if (stSelectedNoteIdx === stDraggingNoteIdx) {
+                                stShowNoteProperties(stDraggingNoteIdx);
+                            }
+                        }
+                    }
+                }
                 stDraggingNoteIdx = -1;
             }
 
