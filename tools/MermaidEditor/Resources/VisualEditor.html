@@ -7207,6 +7207,8 @@
                             };
                         }
                     });
+                    // Auto-expand composite to fit all nested children
+                    stExpandCompositeToFitChildren(s.id);
                 }
             });
         }
@@ -7572,6 +7574,66 @@
                     stMoveNestedStates(ns.nestedStates, dx, dy, ns.id);
                 }
             });
+        }
+
+        // Expand a composite state's stored dimensions to encompass all its nested children + pseudo-states
+        function stExpandCompositeToFitChildren(parentId) {
+            const parentState = stFindState(parentId);
+            if (!parentState) return;
+            const parentPos = stStatePositions[parentId];
+            if (!parentPos) return;
+
+            const PAD = ST_COMPOSITE_PADDING;
+            const HEADER = 35; // space for label + divider
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+            // Collect bounds from nested states
+            (parentState.nestedStates || []).forEach(ns => {
+                const cp = stStatePositions[ns.id];
+                if (!cp) return;
+                const w = cp.width || ST_BOX_MIN_WIDTH;
+                const h = cp.height || ST_BOX_HEIGHT;
+                if (cp.x < minX) minX = cp.x;
+                if (cp.y < minY) minY = cp.y;
+                if (cp.x + w > maxX) maxX = cp.x + w;
+                if (cp.y + h > maxY) maxY = cp.y + h;
+            });
+
+            // Also consider nested pseudo-states ([*] start/end for this parent)
+            ['[*]_start_' + parentId, '[*]_end_' + parentId].forEach(pid => {
+                const pp = stStatePositions[pid];
+                if (!pp) return;
+                const w = pp.width || 20;
+                const h = pp.height || 20;
+                if (pp.x < minX) minX = pp.x;
+                if (pp.y < minY) minY = pp.y;
+                if (pp.x + w > maxX) maxX = pp.x + w;
+                if (pp.y + h > maxY) maxY = pp.y + h;
+            });
+
+            if (minX === Infinity) return; // no children positioned
+
+            // Required composite bounds to encompass all children
+            const requiredLeft = minX - PAD;
+            const requiredTop = minY - HEADER - PAD;
+            const requiredRight = maxX + PAD;
+            const requiredBottom = maxY + PAD;
+
+            // Expand (never shrink) the composite to fit
+            const newX = Math.min(parentPos.x, requiredLeft);
+            const newY = Math.min(parentPos.y, requiredTop);
+            const currentRight = parentPos.x + (parentPos.width || 200);
+            const currentBottom = parentPos.y + (parentPos.height || 100);
+            const newRight = Math.max(currentRight, requiredRight);
+            const newBottom = Math.max(currentBottom, requiredBottom);
+
+            stStatePositions[parentId] = {
+                ...parentPos,
+                x: newX,
+                y: newY,
+                width: newRight - newX,
+                height: newBottom - newY
+            };
         }
 
         function stGetStateBox(state) {
@@ -8660,6 +8722,7 @@
                                 };
                             }
                             postMessage({ type: 'st_insertStateOnNestedEdge', parentId: parentId, index: nestedIdx, stateId: newId, label: newId });
+                            stExpandCompositeToFitChildren(parentId);
                         }
                     });
                     // Insert Pseudo State on nested edge
@@ -8689,6 +8752,7 @@
                                 width: 16, height: 16
                             };
                             postMessage({ type: 'st_insertPseudoOnNestedEdge', parentId: parentId, index: nestedIdx });
+                            stExpandCompositeToFitChildren(parentId);
                         }
                     });
                     addStContextMenuSeparator();
@@ -8798,6 +8862,7 @@
                             };
                         }
                         postMessage({ type: 'st_nestedStateCreated', parentId: stateId, stateId: newId, label: newId });
+                        stExpandCompositeToFitChildren(stateId);
                     });
                 }
                 addStContextMenuSeparator();
