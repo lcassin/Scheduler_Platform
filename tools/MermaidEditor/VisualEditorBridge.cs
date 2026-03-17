@@ -1065,6 +1065,14 @@ public class VisualEditorBridge
                     HandleStNestedTransitionDeleted(root);
                     break;
 
+                case "st_insertStateOnNestedEdge":
+                    HandleStInsertStateOnNestedEdge(root);
+                    break;
+
+                case "st_insertPseudoOnNestedEdge":
+                    HandleStInsertPseudoOnNestedEdge(root);
+                    break;
+
                 case "st_noteCreated":
                     HandleStNoteCreated(root);
                     break;
@@ -2393,6 +2401,74 @@ public class VisualEditorBridge
         PushUndo();
         parent.NestedTransitions.RemoveAt(index);
         RaiseStateDiagramModelChanged("st_nestedTransitionDeleted");
+    }
+
+    /// <summary>Insert a new nested state on an existing nested transition edge, splitting it into two.</summary>
+    private void HandleStInsertStateOnNestedEdge(JsonElement root)
+    {
+        if (_stateDiagramModel == null) return;
+        var parentId = root.GetProperty("parentId").GetString();
+        var index = root.GetProperty("index").GetInt32();
+        var stateId = root.GetProperty("stateId").GetString();
+        if (string.IsNullOrEmpty(parentId) || string.IsNullOrEmpty(stateId)) return;
+
+        var parent = FindStateRecursive(_stateDiagramModel.States, parentId);
+        if (parent == null || index < 0 || index >= parent.NestedTransitions.Count) return;
+
+        PushUndo();
+        var oldTransition = parent.NestedTransitions[index];
+        var originalTo = oldTransition.ToId;
+
+        // Create the new nested state inside the parent
+        var newState = new StateDefinition
+        {
+            Id = stateId,
+            IsExplicit = true,
+            Type = StateType.Simple
+        };
+        if (root.TryGetProperty("label", out var labelProp))
+            newState.Label = labelProp.GetString();
+        parent.NestedStates.Add(newState);
+
+        // Replace old transition: originalFrom -> newState (keep original label)
+        oldTransition.ToId = stateId;
+
+        // Add new transition: newState -> originalTo (no label)
+        parent.NestedTransitions.Insert(index + 1, new StateTransition
+        {
+            FromId = stateId,
+            ToId = originalTo
+        });
+
+        RaiseStateDiagramModelChanged("st_insertStateOnNestedEdge");
+    }
+
+    /// <summary>Insert pseudo states ([*] end and [*] start) on a nested transition edge.</summary>
+    private void HandleStInsertPseudoOnNestedEdge(JsonElement root)
+    {
+        if (_stateDiagramModel == null) return;
+        var parentId = root.GetProperty("parentId").GetString();
+        var index = root.GetProperty("index").GetInt32();
+        if (string.IsNullOrEmpty(parentId)) return;
+
+        var parent = FindStateRecursive(_stateDiagramModel.States, parentId);
+        if (parent == null || index < 0 || index >= parent.NestedTransitions.Count) return;
+
+        PushUndo();
+        var oldTransition = parent.NestedTransitions[index];
+        var originalTo = oldTransition.ToId;
+
+        // Replace old transition: originalFrom -> [*] (end)
+        oldTransition.ToId = "[*]";
+
+        // Add new transition: [*] (start) -> originalTo
+        parent.NestedTransitions.Insert(index + 1, new StateTransition
+        {
+            FromId = "[*]",
+            ToId = originalTo
+        });
+
+        RaiseStateDiagramModelChanged("st_insertPseudoOnNestedEdge");
     }
 
     private void HandleStNoteCreated(JsonElement root)
