@@ -7182,7 +7182,7 @@
                 const nestedTrans = state.nestedTransitions || [];
 
                 const ng = new dagre.graphlib.Graph();
-                ng.setGraph({ rankdir: 'TB', nodesep: 40, ranksep: 50, edgesep: 15, marginx: PAD, marginy: PAD });
+                ng.setGraph({ rankdir: 'TB', nodesep: 50, ranksep: 60, edgesep: 20, marginx: PAD, marginy: PAD });
                 ng.setDefaultEdgeLabel(function() { return {}; });
 
                 // Register nested states with their sizes (use pre-computed for deeply nested composites)
@@ -7260,9 +7260,9 @@
             const g = new dagre.graphlib.Graph();
             g.setGraph({
                 rankdir: 'TB',
-                nodesep: 60,
-                ranksep: 80,
-                edgesep: 20,
+                nodesep: 80,
+                ranksep: 100,
+                edgesep: 30,
                 marginx: ST_LEFT_MARGIN,
                 marginy: ST_TOP_MARGIN
             });
@@ -7301,11 +7301,18 @@
             });
 
             // Register edges only between nodes in the top-level graph
+            // Include label dimensions so dagre reserves space for transition labels
             stDiagram.transitions.forEach(trans => {
                 const from = trans.fromId === '[*]' ? '[*]_start' : trans.fromId;
                 const to = trans.toId === '[*]' ? '[*]_end' : trans.toId;
                 if (g.hasNode(from) && g.hasNode(to)) {
-                    g.setEdge(from, to);
+                    const edgeOpts = {};
+                    if (trans.label) {
+                        edgeOpts.labelpos = 'c';
+                        edgeOpts.width = Math.max(40, trans.label.length * 7 + 10);
+                        edgeOpts.height = 20;
+                    }
+                    g.setEdge(from, to, edgeOpts);
                 }
             });
 
