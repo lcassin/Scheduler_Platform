@@ -487,6 +487,8 @@ public class VisualEditorBridge
             }).ToList(),
             X = state.Position.X,
             Y = state.Position.Y,
+            Width = state.Size.Width,
+            Height = state.Size.Height,
             HasManualPosition = state.HasManualPosition
         };
     }
@@ -1179,6 +1181,27 @@ public class VisualEditorBridge
         {
             // Ignore malformed messages
         }
+
+        // After processing any message, notify JS of current undo/redo availability
+        _ = SendUndoRedoStateAsync();
+    }
+
+    /// <summary>
+    /// Sends the current undo/redo availability to the JS editor so toolbar buttons
+    /// can be enabled/disabled appropriately.
+    /// </summary>
+    private async Task SendUndoRedoStateAsync()
+    {
+        try
+        {
+            var canUndo = CanUndo ? "true" : "false";
+            var canRedo = CanRedo ? "true" : "false";
+            await _webView.ExecuteScriptAsync($"if(window.updateUndoRedoState) window.updateUndoRedoState({canUndo},{canRedo})");
+        }
+        catch
+        {
+            // Ignore errors (e.g. WebView not ready)
+        }
     }
 
     private void HandleNodeMoved(JsonElement root)
@@ -1661,6 +1684,7 @@ public class VisualEditorBridge
     /// Handles bulk position update sent after any state drag ends.
     /// Updates positions for ALL states so every state gets HasManualPosition=true
     /// and @pos comments are written for the entire layout.
+    /// Also saves width/height so composite container sizes are preserved.
     /// </summary>
     private void HandleStAllPositionsUpdate(JsonElement root)
     {
@@ -1690,6 +1714,16 @@ public class VisualEditorBridge
                 pos.GetProperty("x").GetDouble(),
                 pos.GetProperty("y").GetDouble()
             );
+
+            // Save width/height (primarily for composite states to preserve container dimensions)
+            if (pos.TryGetProperty("width", out var wProp) && pos.TryGetProperty("height", out var hProp))
+            {
+                var w = wProp.GetDouble();
+                var h = hProp.GetDouble();
+                if (w > 0 && h > 0)
+                    state.Size = new System.Windows.Size(w, h);
+            }
+
             state.HasManualPosition = true;
         }
 
@@ -4150,6 +4184,8 @@ public class VisualEditorBridge
         public List<StDiagTransitionDto>? NestedTransitions { get; set; }
         public double X { get; set; }
         public double Y { get; set; }
+        public double Width { get; set; }
+        public double Height { get; set; }
         public bool HasManualPosition { get; set; }
     }
 

@@ -1065,8 +1065,14 @@ public class StateDefinition
     public System.Windows.Point Position { get; set; }
 
     /// <summary>
+    /// Size for the visual editor (width, height). Primarily used for composite states
+    /// so their container dimensions are preserved when switching documents.
+    /// </summary>
+    public System.Windows.Size Size { get; set; }
+
+    /// <summary>
     /// Whether this state has been manually positioned in the visual editor.
-    /// When true, position data is stored as a special comment (%% @pos stateId x,y).
+    /// When true, position data is stored as a special comment (%% @pos stateId x,y,w,h).
     /// </summary>
     public bool HasManualPosition { get; set; }
 
