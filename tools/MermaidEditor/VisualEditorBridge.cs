@@ -455,6 +455,18 @@ public class VisualEditorBridge
             Position = n.Position.ToString()
         }).ToList();
 
+        // Convert pseudo node positions to serializable format [x, y]
+        var pseudoPositions = model.PseudoNodePositions.ToDictionary(
+            kvp => kvp.Key,
+            kvp => new[] { kvp.Value.X, kvp.Value.Y }
+        );
+
+        // Convert note positions to serializable format [x, y]
+        var notePositions = model.NotePositions.ToDictionary(
+            kvp => kvp.Key,
+            kvp => new[] { kvp.Value.X, kvp.Value.Y }
+        );
+
         var dto = new StDiagramDto
         {
             Direction = model.Direction,
@@ -463,7 +475,9 @@ public class VisualEditorBridge
             Transitions = transitions,
             Notes = notes,
             PreambleLines = model.PreambleLines,
-            DeclarationLineIndex = model.DeclarationLineIndex
+            DeclarationLineIndex = model.DeclarationLineIndex,
+            PseudoNodePositions = pseudoPositions,
+            NotePositions = notePositions
         };
 
         return JsonSerializer.Serialize(dto, JsonOptions);
@@ -1518,6 +1532,11 @@ public class VisualEditorBridge
 
         PushUndo();
         _model.Subgraphs.Remove(sg);
+
+        // Remove any edges that reference the deleted subgraph as source or target
+        _model.Edges.RemoveAll(e =>
+            e.FromNodeId == subgraphId || e.ToNodeId == subgraphId);
+
         RaiseModelChanged("subgraphDeleted");
     }
 
@@ -1698,8 +1717,25 @@ public class VisualEditorBridge
             var stateId = pos.GetProperty("stateId").GetString();
             if (string.IsNullOrEmpty(stateId)) continue;
 
-            // Skip pseudo-state IDs ([*]_start, [*]_end, etc.) — they are not real states in the model
-            if (stateId.StartsWith("[*]_")) continue;
+            // Store pseudo-state positions separately (they don't have StateDefinition objects)
+            if (stateId.StartsWith("[*]_"))
+            {
+                _stateDiagramModel.PseudoNodePositions[stateId] = new System.Windows.Point(
+                    pos.GetProperty("x").GetDouble(),
+                    pos.GetProperty("y").GetDouble()
+                );
+                continue;
+            }
+
+            // Store note positions separately
+            if (stateId.StartsWith("note_"))
+            {
+                _stateDiagramModel.NotePositions[stateId] = new System.Windows.Point(
+                    pos.GetProperty("x").GetDouble(),
+                    pos.GetProperty("y").GetDouble()
+                );
+                continue;
+            }
 
             StateDefinition? state = null;
             foreach (var s in _stateDiagramModel.States)
@@ -4171,6 +4207,8 @@ public class VisualEditorBridge
         public List<StDiagNoteDto>? Notes { get; set; }
         public List<string>? PreambleLines { get; set; }
         public int DeclarationLineIndex { get; set; }
+        public Dictionary<string, double[]>? PseudoNodePositions { get; set; }
+        public Dictionary<string, double[]>? NotePositions { get; set; }
     }
 
     private class StDiagStateDto

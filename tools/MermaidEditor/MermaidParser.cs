@@ -2141,6 +2141,19 @@ public static class MermaidParser
         {
             foreach (var (posId, (px, py, pw, ph)) in pendingPositions)
             {
+                // Pseudo-node positions ([*]_start, [*]_end, etc.) and note positions (note_0, note_1, etc.)
+                // go into separate dictionaries since they don't have StateDefinition objects.
+                if (posId.StartsWith("[*]_"))
+                {
+                    model.PseudoNodePositions[posId] = new System.Windows.Point(px, py);
+                    continue;
+                }
+                if (posId.StartsWith("note_"))
+                {
+                    model.NotePositions[posId] = new System.Windows.Point(px, py);
+                    continue;
+                }
+
                 // Search all states recursively
                 StateDefinition? target = null;
                 foreach (var s in model.States)
