@@ -7441,8 +7441,17 @@
             return id;
         }
 
-        // Recursively move nested states by a delta (used when dragging composite parent)
-        function stMoveNestedStates(nestedStates, dx, dy) {
+        // Recursively move nested states and their pseudo-states by a delta (used when dragging composite parent)
+        function stMoveNestedStates(nestedStates, dx, dy, parentId) {
+            // Move nested pseudo-states for this parent
+            if (parentId) {
+                ['[*]_start_' + parentId, '[*]_end_' + parentId].forEach(pid => {
+                    const pos = stStatePositions[pid];
+                    if (pos) {
+                        stStatePositions[pid] = { ...pos, x: pos.x + dx, y: pos.y + dy };
+                    }
+                });
+            }
             nestedStates.forEach(ns => {
                 const pos = stStatePositions[ns.id];
                 if (pos) {
@@ -7453,7 +7462,7 @@
                     };
                 }
                 if (ns.nestedStates && ns.nestedStates.length > 0) {
-                    stMoveNestedStates(ns.nestedStates, dx, dy);
+                    stMoveNestedStates(ns.nestedStates, dx, dy, ns.id);
                 }
             });
         }
@@ -7661,10 +7670,31 @@
                 divider.setAttribute('stroke-width', '1');
                 g.appendChild(divider);
 
-                // Nested states are rendered as top-level via position offsets
+                // Add grip points to composite BEFORE appending
+                const compositeGrips = [
+                    { cx: box.width / 2, cy: 0 },
+                    { cx: box.width / 2, cy: box.height },
+                    { cx: box.width, cy: box.height / 2 },
+                    { cx: 0, cy: box.height / 2 }
+                ];
+                compositeGrips.forEach(gp => {
+                    const grip = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                    grip.setAttribute('cx', gp.cx);
+                    grip.setAttribute('cy', gp.cy);
+                    grip.setAttribute('r', '3');
+                    grip.classList.add('grip-point');
+                    grip.setAttribute('data-state-id', state.id);
+                    g.appendChild(grip);
+                });
+
+                // Append composite box FIRST so nested states render ON TOP
+                nodesLayer.appendChild(g);
+
+                // Render nested states (they append after, appearing on top of composite box)
                 if (state.nestedStates) {
                     state.nestedStates.forEach(ns => stRenderState(ns));
                 }
+                return; // Don't hit final nodesLayer.appendChild(g) again
             } else {
                 // Simple state - rounded rectangle
                 const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -8095,10 +8125,10 @@
                     x: newX,
                     y: newY
                 };
-                // Move nested states along with composite parent
+                // Move nested states and their pseudo-states along with composite parent
                 const draggedState = stFindState(stDraggingStateId);
                 if (draggedState && draggedState.nestedStates && draggedState.nestedStates.length > 0) {
-                    stMoveNestedStates(draggedState.nestedStates, dx, dy);
+                    stMoveNestedStates(draggedState.nestedStates, dx, dy, stDraggingStateId);
                 }
                 renderStateDiagram();
             }
