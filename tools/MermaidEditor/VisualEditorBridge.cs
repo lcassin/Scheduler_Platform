@@ -2286,6 +2286,8 @@ public class VisualEditorBridge
             if (Enum.TryParse<StateType>(typeStr, true, out var st))
                 state.Type = st;
         }
+        // Mark as explicit so the serializer outputs the declaration (label, type stereotype, etc.)
+        state.IsExplicit = true;
         RaiseStateDiagramModelChanged("st_stateEdited");
     }
 
