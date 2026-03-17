@@ -1057,6 +1057,14 @@ public class VisualEditorBridge
                     HandleStTransitionDeleted(root);
                     break;
 
+                case "st_nestedTransitionEdited":
+                    HandleStNestedTransitionEdited(root);
+                    break;
+
+                case "st_nestedTransitionDeleted":
+                    HandleStNestedTransitionDeleted(root);
+                    break;
+
                 case "st_noteCreated":
                     HandleStNoteCreated(root);
                     break;
@@ -2280,10 +2288,34 @@ public class VisualEditorBridge
         if (string.IsNullOrEmpty(stateId)) return;
 
         PushUndo();
-        _stateDiagramModel.States.RemoveAll(s => s.Id == stateId);
+        // Try top-level first
+        int removed = _stateDiagramModel.States.RemoveAll(s => s.Id == stateId);
+        if (removed == 0)
+        {
+            // Not found at top level - search recursively in nested states
+            RemoveNestedStateRecursive(_stateDiagramModel.States, stateId);
+        }
         _stateDiagramModel.Transitions.RemoveAll(t => t.FromId == stateId || t.ToId == stateId);
         _stateDiagramModel.Notes.RemoveAll(n => n.StateId == stateId);
         RaiseStateDiagramModelChanged("st_stateDeleted");
+    }
+
+    /// <summary>Recursively searches nested states and removes the one matching the given id.</summary>
+    private static bool RemoveNestedStateRecursive(List<StateDefinition> states, string id)
+    {
+        foreach (var s in states)
+        {
+            int removed = s.NestedStates.RemoveAll(ns => ns.Id == id);
+            if (removed > 0)
+            {
+                // Also clean up nested transitions referencing the deleted state
+                s.NestedTransitions.RemoveAll(t => t.FromId == id || t.ToId == id);
+                return true;
+            }
+            if (RemoveNestedStateRecursive(s.NestedStates, id))
+                return true;
+        }
+        return false;
     }
 
     private void HandleStTransitionCreated(JsonElement root)
@@ -2330,6 +2362,37 @@ public class VisualEditorBridge
         PushUndo();
         _stateDiagramModel.Transitions.RemoveAt(index);
         RaiseStateDiagramModelChanged("st_transitionDeleted");
+    }
+
+    private void HandleStNestedTransitionEdited(JsonElement root)
+    {
+        if (_stateDiagramModel == null) return;
+        var parentId = root.GetProperty("parentId").GetString();
+        var index = root.GetProperty("index").GetInt32();
+        if (string.IsNullOrEmpty(parentId)) return;
+
+        var parent = FindStateRecursive(_stateDiagramModel.States, parentId);
+        if (parent == null || index < 0 || index >= parent.NestedTransitions.Count) return;
+
+        PushUndo();
+        if (root.TryGetProperty("label", out var labelProp))
+            parent.NestedTransitions[index].Label = labelProp.GetString();
+        RaiseStateDiagramModelChanged("st_nestedTransitionEdited");
+    }
+
+    private void HandleStNestedTransitionDeleted(JsonElement root)
+    {
+        if (_stateDiagramModel == null) return;
+        var parentId = root.GetProperty("parentId").GetString();
+        var index = root.GetProperty("index").GetInt32();
+        if (string.IsNullOrEmpty(parentId)) return;
+
+        var parent = FindStateRecursive(_stateDiagramModel.States, parentId);
+        if (parent == null || index < 0 || index >= parent.NestedTransitions.Count) return;
+
+        PushUndo();
+        parent.NestedTransitions.RemoveAt(index);
+        RaiseStateDiagramModelChanged("st_nestedTransitionDeleted");
     }
 
     private void HandleStNoteCreated(JsonElement root)

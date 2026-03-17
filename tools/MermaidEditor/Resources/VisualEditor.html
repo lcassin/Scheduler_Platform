@@ -7050,6 +7050,7 @@
         let stDiagram = null; // When non-null, we're in state diagram mode
         let stSelectedStateId = null;
         let stSelectedTransIndex = -1;
+        let stSelectedNestedTrans = null; // { parentId, idx } when a nested transition is selected
         let stDraggingStateId = null;
         let stDragOffsetX = 0;
         let stDragOffsetY = 0;
@@ -7970,8 +7971,8 @@
         function stRenderNestedTransitions(states) {
             states.forEach(state => {
                 if (state.nestedTransitions && state.nestedTransitions.length > 0) {
-                    state.nestedTransitions.forEach(trans => {
-                        stRenderNestedTransition(trans, state.id);
+                    state.nestedTransitions.forEach((trans, nIdx) => {
+                        stRenderNestedTransition(trans, state.id, nIdx);
                     });
                 }
                 if (state.nestedStates && state.nestedStates.length > 0) {
@@ -7980,7 +7981,7 @@
             });
         }
 
-        function stRenderNestedTransition(trans, parentId) {
+        function stRenderNestedTransition(trans, parentId, nestedIdx) {
             let fromBox, toBox;
 
             // Pseudo circles are rendered by stRenderAllPseudoStates - just compute boxes here
@@ -8033,16 +8034,29 @@
 
             const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             g.classList.add('st-transition', 'st-nested-transition');
+            g.setAttribute('data-parent-id', parentId);
+            g.setAttribute('data-nested-trans-index', nestedIdx);
 
             const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
             line.setAttribute('x1', ports.x1);
             line.setAttribute('y1', ports.y1);
             line.setAttribute('x2', ports.x2);
             line.setAttribute('y2', ports.y2);
-            line.setAttribute('stroke', 'var(--edge-color)');
-            line.setAttribute('stroke-width', '2');
+            line.setAttribute('stroke', stSelectedNestedTrans && stSelectedNestedTrans.parentId === parentId && stSelectedNestedTrans.idx === nestedIdx ? 'var(--edge-selected)' : 'var(--edge-color)');
+            line.setAttribute('stroke-width', stSelectedNestedTrans && stSelectedNestedTrans.parentId === parentId && stSelectedNestedTrans.idx === nestedIdx ? '3' : '2');
             line.setAttribute('marker-end', 'url(#arrowhead)');
             g.appendChild(line);
+
+            // Clickable hitbox (same as top-level transitions)
+            const hitbox = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            hitbox.setAttribute('x1', ports.x1);
+            hitbox.setAttribute('y1', ports.y1);
+            hitbox.setAttribute('x2', ports.x2);
+            hitbox.setAttribute('y2', ports.y2);
+            hitbox.setAttribute('stroke', 'transparent');
+            hitbox.setAttribute('stroke-width', '12');
+            hitbox.style.cursor = 'pointer';
+            g.appendChild(hitbox);
 
             if (trans.label) {
                 const midX = (ports.x1 + ports.x2) / 2;
@@ -8058,7 +8072,8 @@
                 g.appendChild(labelText);
             }
 
-            edgesLayer.appendChild(g);
+            // Render on nodesLayer so nested transitions appear above nested state rects
+            nodesLayer.appendChild(g);
         }
 
         function stRenderNote(note, idx) {
@@ -8237,11 +8252,23 @@
             }
 
             // Check transitions BEFORE states because transitions inside composite
-            // states are DOM children of the composite's SVG group, so closest('.st-state')
-            // would match the parent composite and swallow the click.
+            // states overlap with the composite's area, so we must prioritize them.
             if (transGroup) {
+                // Check if it's a nested transition (has data-parent-id)
+                const parentId = transGroup.getAttribute('data-parent-id');
+                const nestedIdx = parseInt(transGroup.getAttribute('data-nested-trans-index'), 10);
+                if (parentId && !isNaN(nestedIdx)) {
+                    stSelectedNestedTrans = { parentId, idx: nestedIdx };
+                    stSelectedTransIndex = -1;
+                    stSelectedStateId = null;
+                    stShowNestedTransitionProperties(parentId, nestedIdx);
+                    renderStateDiagram();
+                    e.preventDefault();
+                    return;
+                }
                 const idx = parseInt(transGroup.getAttribute('data-trans-index'), 10);
                 stSelectedTransIndex = idx;
+                stSelectedNestedTrans = null;
                 stSelectedStateId = null;
                 stShowTransitionProperties(idx);
                 renderStateDiagram();
@@ -8253,6 +8280,7 @@
                 const stateId = stateGroup.getAttribute('data-state-id');
                 stSelectedStateId = stateId;
                 stSelectedTransIndex = -1;
+                stSelectedNestedTrans = null;
 
                 // Start dragging
                 const svgPt = getSVGPoint(e);
@@ -8272,6 +8300,7 @@
             // Click on empty space
             stSelectedStateId = null;
             stSelectedTransIndex = -1;
+            stSelectedNestedTrans = null;
             stSelectedNoteIdx = -1;
             propertyPanel.classList.remove('visible');
             renderStateDiagram();
@@ -8404,12 +8433,23 @@
             const transGroup = e.target.closest('.st-transition');
             const noteGroup = e.target.closest('.st-note');
 
-            // Check transitions BEFORE states (transitions inside composites are
-            // DOM children of the composite group, so closest('.st-state') would match first)
+            // Check transitions BEFORE states (transitions inside composites overlap
+            // with the composite's area, so we must prioritize them)
             if (transGroup) {
+                // Check if it's a nested transition
+                const parentId = transGroup.getAttribute('data-parent-id');
+                const nestedIdx = parseInt(transGroup.getAttribute('data-nested-trans-index'), 10);
+                if (parentId && !isNaN(nestedIdx)) {
+                    stSelectedNestedTrans = { parentId, idx: nestedIdx };
+                    stSelectedTransIndex = -1;
+                    stShowNestedTransitionProperties(parentId, nestedIdx);
+                    e.preventDefault();
+                    return;
+                }
                 const idx = parseInt(transGroup.getAttribute('data-trans-index'), 10);
                 if (idx >= 0 && idx < stDiagram.transitions.length) {
                     stSelectedTransIndex = idx;
+                    stSelectedNestedTrans = null;
                     stShowTransitionProperties(idx);
                 }
                 e.preventDefault();
@@ -8502,6 +8542,41 @@
             propertyPanel.classList.add('visible');
         }
 
+        function stShowNestedTransitionProperties(parentId, nestedIdx) {
+            if (!stDiagram) return;
+            const parentState = stFindState(parentId);
+            if (!parentState || !parentState.nestedTransitions || nestedIdx < 0 || nestedIdx >= parentState.nestedTransitions.length) return;
+            const trans = parentState.nestedTransitions[nestedIdx];
+            if (!trans) return;
+
+            const propContent = propertyPanel.querySelector('.property-panel-body');
+            propContent.innerHTML = `
+                <div class="property-row">
+                    <div class="property-label">Parent</div>
+                    <input class="property-input" value="${escapeHtml(parentId)}" readonly />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">From</div>
+                    <input class="property-input" value="${escapeHtml(trans.fromId)}" readonly />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">To</div>
+                    <input class="property-input" value="${escapeHtml(trans.toId)}" readonly />
+                </div>
+                <div class="property-row">
+                    <div class="property-label">Label</div>
+                    <input class="property-input" id="st-nested-trans-label" value="${escapeHtml(trans.label || '')}" placeholder="Transition label" />
+                </div>
+            `;
+
+            document.getElementById('st-nested-trans-label').addEventListener('change', function() {
+                postMessage({ type: 'st_nestedTransitionEdited', parentId: parentId, index: nestedIdx, label: this.value });
+            });
+
+            propPanelTitle.textContent = 'Nested Transition';
+            propertyPanel.classList.add('visible');
+        }
+
         function stShowNoteProperties(idx) {
             if (!stDiagram || idx < 0 || idx >= stDiagram.notes.length) return;
             const note = stDiagram.notes[idx];
@@ -8550,11 +8625,28 @@
 
             contextMenu.innerHTML = '';
 
-            // Check transitions BEFORE states (transitions inside composites are
-            // DOM children of the composite group, so closest('.st-state') would match first)
+            // Check transitions BEFORE states (transitions inside composites overlap
+            // with the composite's area, so we must prioritize them)
             if (transGroup) {
+                // Check if it's a nested transition
+                const parentId = transGroup.getAttribute('data-parent-id');
+                const nestedIdx = parseInt(transGroup.getAttribute('data-nested-trans-index'), 10);
+                if (parentId && !isNaN(nestedIdx)) {
+                    stSelectedNestedTrans = { parentId, idx: nestedIdx };
+                    stSelectedTransIndex = -1;
+
+                    addStContextMenuItem('Edit Label', () => {
+                        stShowNestedTransitionProperties(parentId, nestedIdx);
+                    });
+                    addStContextMenuSeparator();
+                    addStContextMenuItem('Delete Transition', () => {
+                        postMessage({ type: 'st_nestedTransitionDeleted', parentId: parentId, index: nestedIdx });
+                        stSelectedNestedTrans = null;
+                    });
+                } else {
                 const idx = parseInt(transGroup.getAttribute('data-trans-index'), 10);
                 stSelectedTransIndex = idx;
+                stSelectedNestedTrans = null;
 
                 addStContextMenuItem('Edit Label', () => {
                     stShowTransitionProperties(idx);
@@ -8616,6 +8708,7 @@
                 addStContextMenuItem('Delete Transition', () => {
                     postMessage({ type: 'st_transitionDeleted', index: idx });
                 });
+                }
             } else if (stateGroup) {
                 const stateId = stateGroup.getAttribute('data-state-id');
                 stSelectedStateId = stateId;
@@ -8763,6 +8856,10 @@
                 if (stSelectedStateId) {
                     postMessage({ type: 'st_stateDeleted', stateId: stSelectedStateId });
                     stSelectedStateId = null;
+                    e.preventDefault();
+                } else if (stSelectedNestedTrans) {
+                    postMessage({ type: 'st_nestedTransitionDeleted', parentId: stSelectedNestedTrans.parentId, index: stSelectedNestedTrans.idx });
+                    stSelectedNestedTrans = null;
                     e.preventDefault();
                 } else if (stSelectedTransIndex >= 0) {
                     postMessage({ type: 'st_transitionDeleted', index: stSelectedTransIndex });
