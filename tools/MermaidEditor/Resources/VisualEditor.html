@@ -2079,6 +2079,35 @@
                         hasContent = true;
                     }
                 });
+                // Include [*] pseudo-node positions (start/end circles)
+                // Top-level pseudo-states
+                ['[*]_start', '[*]_end'].forEach(pid => {
+                    const pos = stStatePositions[pid];
+                    if (pos) {
+                        const w = pos.width || 20;
+                        const h = pos.height || 20;
+                        minX = Math.min(minX, pos.x);
+                        minY = Math.min(minY, pos.y);
+                        maxX = Math.max(maxX, pos.x + w);
+                        maxY = Math.max(maxY, pos.y + h);
+                        hasContent = true;
+                    }
+                });
+                // Nested pseudo-states inside composites
+                allStates.forEach(s => {
+                    ['[*]_start_' + s.id, '[*]_end_' + s.id].forEach(pid => {
+                        const pos = stStatePositions[pid];
+                        if (pos) {
+                            const w = pos.width || 20;
+                            const h = pos.height || 20;
+                            minX = Math.min(minX, pos.x);
+                            minY = Math.min(minY, pos.y);
+                            maxX = Math.max(maxX, pos.x + w);
+                            maxY = Math.max(maxY, pos.y + h);
+                            hasContent = true;
+                        }
+                    });
+                });
             } else if (currentDiagramType === 'er' && erDiagram) {
                 erDiagram.entities.forEach(entity => {
                     const pos = erEntityPositions[entity.name];
@@ -7787,7 +7816,8 @@
             });
         }
 
-        // Expand a composite state's stored dimensions to encompass all its nested children + pseudo-states
+        // Resize a composite state's stored dimensions to exactly fit its nested children + pseudo-states.
+        // This both expands (when child moved outside) and shrinks (when child moved inward).
         function stExpandCompositeToFitChildren(parentId) {
             const parentState = stFindState(parentId);
             if (!parentState) return;
@@ -7830,13 +7860,19 @@
             const requiredRight = maxX + PAD;
             const requiredBottom = maxY + PAD;
 
-            // Expand (never shrink) the composite to fit
+            // Fit composite exactly to children (both expand and shrink)
+            // Use minimum label width so composite is never narrower than its title
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            ctx.font = 'bold 13px sans-serif';
+            const labelWidth = ctx.measureText(parentState.label || parentState.id).width + PAD * 2 + 20;
+            const minWidth = Math.max(200, labelWidth);
+            const minHeight = 100;
+
             const newX = Math.min(parentPos.x, requiredLeft);
             const newY = Math.min(parentPos.y, requiredTop);
-            const currentRight = parentPos.x + (parentPos.width || 200);
-            const currentBottom = parentPos.y + (parentPos.height || 100);
-            const newRight = Math.max(currentRight, requiredRight);
-            const newBottom = Math.max(currentBottom, requiredBottom);
+            const newRight = Math.max(newX + minWidth, requiredRight);
+            const newBottom = Math.max(newY + minHeight, requiredBottom);
 
             stStatePositions[parentId] = {
                 ...parentPos,
