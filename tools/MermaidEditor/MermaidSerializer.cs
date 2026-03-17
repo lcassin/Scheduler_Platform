@@ -678,6 +678,9 @@ public static class MermaidSerializer
         // Write trailing comments
         WriteClassDiagramTrailingComments(sb, model);
 
+        // Write @pos position comments at the very end
+        WriteClassPositionComments(sb, model);
+
         return sb.ToString().TrimEnd('\r', '\n') + Environment.NewLine;
     }
 
@@ -982,6 +985,9 @@ public static class MermaidSerializer
         // Write trailing comments
         WriteStateDiagramTrailingComments(sb, model);
 
+        // Write @pos position comments at the very end
+        WriteStatePositionComments(sb, model);
+
         return sb.ToString().TrimEnd('\r', '\n') + Environment.NewLine;
     }
 
@@ -1132,6 +1138,41 @@ public static class MermaidSerializer
         }
     }
 
+    /// <summary>
+    /// Writes %% @pos comments for states that have been manually positioned in the visual editor.
+    /// Recursively collects from nested composite states.
+    /// </summary>
+    private static void WriteStatePositionComments(StringBuilder sb, StateDiagramModel model)
+    {
+        var positioned = new List<StateDefinition>();
+        foreach (var state in model.States)
+        {
+            CollectPositionedStates(state, positioned);
+        }
+        if (positioned.Count == 0) return;
+
+        sb.AppendLine();
+        foreach (var state in positioned)
+        {
+            var x = state.Position.X.ToString("F1", CultureInfo.InvariantCulture);
+            var y = state.Position.Y.ToString("F1", CultureInfo.InvariantCulture);
+            sb.AppendLine($"%% @pos {state.Id} {x},{y}");
+        }
+    }
+
+    /// <summary>
+    /// Recursively collects states with HasManualPosition set.
+    /// </summary>
+    private static void CollectPositionedStates(StateDefinition state, List<StateDefinition> result)
+    {
+        if (state.HasManualPosition)
+            result.Add(state);
+        foreach (var nested in state.NestedStates)
+        {
+            CollectPositionedStates(nested, result);
+        }
+    }
+
     // =============================================
     // ER Diagram Serializer (Phase 2.4)
     // =============================================
@@ -1188,6 +1229,9 @@ public static class MermaidSerializer
 
         // Write trailing comments
         WriteERDiagramTrailingComments(sb, model);
+
+        // Write @pos position comments at the very end
+        WriteERPositionComments(sb, model);
 
         return sb.ToString().TrimEnd('\r', '\n') + Environment.NewLine;
     }
@@ -1261,6 +1305,40 @@ public static class MermaidSerializer
                     sb.AppendLine($"%%{comment.Text}");
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Writes %% @pos comments for classes that have been manually positioned in the visual editor.
+    /// </summary>
+    private static void WriteClassPositionComments(StringBuilder sb, ClassDiagramModel model)
+    {
+        var positioned = model.Classes.Where(c => c.HasManualPosition).ToList();
+        if (positioned.Count == 0) return;
+
+        sb.AppendLine();
+        foreach (var cls in positioned)
+        {
+            var x = cls.Position.X.ToString("F1", CultureInfo.InvariantCulture);
+            var y = cls.Position.Y.ToString("F1", CultureInfo.InvariantCulture);
+            sb.AppendLine($"%% @pos {cls.Id} {x},{y}");
+        }
+    }
+
+    /// <summary>
+    /// Writes %% @pos comments for ER entities that have been manually positioned in the visual editor.
+    /// </summary>
+    private static void WriteERPositionComments(StringBuilder sb, ERDiagramModel model)
+    {
+        var positioned = model.Entities.Where(e => e.HasManualPosition).ToList();
+        if (positioned.Count == 0) return;
+
+        sb.AppendLine();
+        foreach (var entity in positioned)
+        {
+            var x = entity.Position.X.ToString("F1", CultureInfo.InvariantCulture);
+            var y = entity.Position.Y.ToString("F1", CultureInfo.InvariantCulture);
+            sb.AppendLine($"%% @pos {entity.Name} {x},{y}");
         }
     }
 }
