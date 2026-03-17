@@ -828,6 +828,10 @@
             <svg viewBox="0 0 16 16"><rect x="1" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><rect x="10" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><rect x="5.5" y="11" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><line x1="3.5" y1="5" x2="3.5" y2="8" stroke-width="0.8"/><line x1="12.5" y1="5" x2="12.5" y2="8" stroke-width="0.8"/><line x1="3.5" y1="8" x2="12.5" y2="8" stroke-width="0.8"/><line x1="8" y1="8" x2="8" y2="11" stroke-width="0.8"/></svg>
             <span class="tooltip">Auto Layout</span>
         </button>
+        <button class="toolbar-btn toolbar-state" id="tb-st-toggle-curves" title="Toggle Curved Edges" style="display:none">
+            <svg viewBox="0 0 16 16"><path d="M3,13 Q3,3 13,3" fill="none" stroke-width="1.5"/><polygon points="13,3 10,1 11,5" fill="currentColor" stroke="none"/></svg>
+            <span class="tooltip">Curved Edges</span>
+        </button>
         <!-- ER-specific buttons -->
         <button class="toolbar-btn toolbar-er" id="tb-er-add-entity" title="Add Entity" style="display:none">
             <svg viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="1" fill="none" stroke-width="1.2"/><line x1="2" y1="6" x2="14" y2="6" stroke-width="0.8"/><text x="4" y="5" font-size="3.5" fill="currentColor" stroke="none" font-weight="bold">E+</text></svg>
@@ -7061,6 +7065,7 @@
         let stSelectedNoteIdx = -1; // currently selected note index
         let stNotePositions = {}; // { noteIndex: { x, y } } - custom note positions from dragging
         let stStatePositions = {}; // { stateId: { x, y, width, height } }
+        let stCurvedEdges = true; // When true, render transitions as Bézier curves
 
         const ST_BOX_MIN_WIDTH = 120;
         const ST_BOX_HEIGHT = 40;
@@ -7962,22 +7967,19 @@
             g.classList.add('st-transition');
             g.setAttribute('data-trans-index', idx);
 
-            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line.setAttribute('x1', ports.x1);
-            line.setAttribute('y1', ports.y1);
-            line.setAttribute('x2', ports.x2);
-            line.setAttribute('y2', ports.y2);
+            const pathD = stBuildEdgePath(ports);
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            line.setAttribute('d', pathD);
+            line.setAttribute('fill', 'none');
             line.setAttribute('stroke', stSelectedTransIndex === idx ? 'var(--edge-selected)' : 'var(--edge-color)');
             line.setAttribute('stroke-width', stSelectedTransIndex === idx ? '3' : '2');
             line.setAttribute('marker-end', 'url(#arrowhead)');
             g.appendChild(line);
 
             // Clickable hitbox
-            const hitbox = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            hitbox.setAttribute('x1', ports.x1);
-            hitbox.setAttribute('y1', ports.y1);
-            hitbox.setAttribute('x2', ports.x2);
-            hitbox.setAttribute('y2', ports.y2);
+            const hitbox = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            hitbox.setAttribute('d', pathD);
+            hitbox.setAttribute('fill', 'none');
             hitbox.setAttribute('stroke', 'transparent');
             hitbox.setAttribute('stroke-width', '12');
             hitbox.style.cursor = 'pointer';
@@ -7985,11 +7987,10 @@
 
             // Label
             if (trans.label) {
-                const midX = (ports.x1 + ports.x2) / 2;
-                const midY = (ports.y1 + ports.y2) / 2;
+                const mid = stEdgeMidpoint(ports);
                 const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                labelText.setAttribute('x', midX);
-                labelText.setAttribute('y', midY - 6);
+                labelText.setAttribute('x', mid.x);
+                labelText.setAttribute('y', mid.y - 6);
                 labelText.setAttribute('text-anchor', 'middle');
                 labelText.setAttribute('fill', 'var(--node-text)');
                 labelText.setAttribute('font-size', '11');
@@ -8016,17 +8017,65 @@
             ];
 
             let bestDist = Infinity;
-            let best = { x1: fromCx, y1: fromCy, x2: toCx, y2: toCy };
+            let best = { x1: fromCx, y1: fromCy, x2: toCx, y2: toCy, fromDir: 'S', toDir: 'N' };
             fromPorts.forEach(fp => {
                 toPorts.forEach(tp => {
                     const d = Math.hypot(fp.x - tp.x, fp.y - tp.y);
                     if (d < bestDist) {
                         bestDist = d;
-                        best = { x1: fp.x, y1: fp.y, x2: tp.x, y2: tp.y };
+                        best = { x1: fp.x, y1: fp.y, x2: tp.x, y2: tp.y, fromDir: fp.dir, toDir: tp.dir };
                     }
                 });
             });
             return best;
+        }
+
+        // Compute a cubic Bézier control point offset based on port direction
+        function stDirOffset(dir, dist) {
+            const d = Math.max(30, Math.min(dist * 0.4, 80));
+            switch (dir) {
+                case 'N': return { dx: 0, dy: -d };
+                case 'S': return { dx: 0, dy: d };
+                case 'E': return { dx: d, dy: 0 };
+                case 'W': return { dx: -d, dy: 0 };
+                default: return { dx: 0, dy: -d };
+            }
+        }
+
+        // Build an SVG path string: straight line or cubic Bézier
+        function stBuildEdgePath(ports) {
+            if (!stCurvedEdges) {
+                return 'M ' + ports.x1 + ',' + ports.y1 + ' L ' + ports.x2 + ',' + ports.y2;
+            }
+            const dist = Math.hypot(ports.x2 - ports.x1, ports.y2 - ports.y1);
+            const c1 = stDirOffset(ports.fromDir, dist);
+            const c2 = stDirOffset(ports.toDir, dist);
+            const cx1 = ports.x1 + c1.dx;
+            const cy1 = ports.y1 + c1.dy;
+            const cx2 = ports.x2 + c2.dx;
+            const cy2 = ports.y2 + c2.dy;
+            return 'M ' + ports.x1 + ',' + ports.y1 +
+                   ' C ' + cx1 + ',' + cy1 + ' ' + cx2 + ',' + cy2 + ' ' + ports.x2 + ',' + ports.y2;
+        }
+
+        // Compute the midpoint (and tangent angle) of the Bézier at t=0.5 for label placement
+        function stEdgeMidpoint(ports) {
+            if (!stCurvedEdges) {
+                return { x: (ports.x1 + ports.x2) / 2, y: (ports.y1 + ports.y2) / 2 };
+            }
+            const dist = Math.hypot(ports.x2 - ports.x1, ports.y2 - ports.y1);
+            const c1 = stDirOffset(ports.fromDir, dist);
+            const c2 = stDirOffset(ports.toDir, dist);
+            const cx1 = ports.x1 + c1.dx;
+            const cy1 = ports.y1 + c1.dy;
+            const cx2 = ports.x2 + c2.dx;
+            const cy2 = ports.y2 + c2.dy;
+            // Cubic Bézier at t=0.5
+            const t = 0.5;
+            const mt = 1 - t;
+            const x = mt*mt*mt*ports.x1 + 3*mt*mt*t*cx1 + 3*mt*t*t*cx2 + t*t*t*ports.x2;
+            const y = mt*mt*mt*ports.y1 + 3*mt*mt*t*cy1 + 3*mt*t*t*cy2 + t*t*t*ports.y2;
+            return { x, y };
         }
 
         // Render transitions within composite states (nested transitions)
@@ -8099,33 +8148,29 @@
             g.setAttribute('data-parent-id', parentId);
             g.setAttribute('data-nested-trans-index', nestedIdx);
 
-            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line.setAttribute('x1', ports.x1);
-            line.setAttribute('y1', ports.y1);
-            line.setAttribute('x2', ports.x2);
-            line.setAttribute('y2', ports.y2);
+            const nestedPathD = stBuildEdgePath(ports);
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            line.setAttribute('d', nestedPathD);
+            line.setAttribute('fill', 'none');
             line.setAttribute('stroke', stSelectedNestedTrans && stSelectedNestedTrans.parentId === parentId && stSelectedNestedTrans.idx === nestedIdx ? 'var(--edge-selected)' : 'var(--edge-color)');
             line.setAttribute('stroke-width', stSelectedNestedTrans && stSelectedNestedTrans.parentId === parentId && stSelectedNestedTrans.idx === nestedIdx ? '3' : '2');
             line.setAttribute('marker-end', 'url(#arrowhead)');
             g.appendChild(line);
 
             // Clickable hitbox (same as top-level transitions)
-            const hitbox = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            hitbox.setAttribute('x1', ports.x1);
-            hitbox.setAttribute('y1', ports.y1);
-            hitbox.setAttribute('x2', ports.x2);
-            hitbox.setAttribute('y2', ports.y2);
+            const hitbox = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            hitbox.setAttribute('d', nestedPathD);
+            hitbox.setAttribute('fill', 'none');
             hitbox.setAttribute('stroke', 'transparent');
             hitbox.setAttribute('stroke-width', '12');
             hitbox.style.cursor = 'pointer';
             g.appendChild(hitbox);
 
             if (trans.label) {
-                const midX = (ports.x1 + ports.x2) / 2;
-                const midY = (ports.y1 + ports.y2) / 2;
+                const mid = stEdgeMidpoint(ports);
                 const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                labelText.setAttribute('x', midX);
-                labelText.setAttribute('y', midY - 6);
+                labelText.setAttribute('x', mid.x);
+                labelText.setAttribute('y', mid.y - 6);
                 labelText.setAttribute('text-anchor', 'middle');
                 labelText.setAttribute('fill', 'var(--node-text)');
                 labelText.setAttribute('font-size', '11');
@@ -8565,10 +8610,20 @@
             `;
 
             document.getElementById('st-state-label').addEventListener('change', function() {
+                // Update local model immediately so clicking off/on shows correct value
+                const s = stFindState(stateId);
+                if (s) s.label = this.value || null;
                 postMessage({ type: 'st_stateEdited', stateId: stateId, label: this.value });
             });
             document.getElementById('st-state-type').addEventListener('change', function() {
+                // Update local model immediately so clicking off/on shows correct type
+                const s = stFindState(stateId);
+                if (s) {
+                    s.type = this.value;
+                    s.isExplicit = true;
+                }
                 postMessage({ type: 'st_stateEdited', stateId: stateId, type: this.value });
+                renderStateDiagram();
             });
 
             propPanelTitle.textContent = 'State: ' + (state.label || state.id);
@@ -8684,12 +8739,26 @@
             const stateGroup = e.target.closest('.st-state');
             const transGroup = e.target.closest('.st-transition');
             const noteGroup = e.target.closest('.st-note');
+            const pseudoNode = e.target.closest('.st-pseudo-node');
 
             contextMenu.innerHTML = '';
 
+            // Check pseudo nodes first (they may overlap with composites)
+            if (pseudoNode) {
+                const pseudoId = pseudoNode.getAttribute('data-pseudo-id');
+                if (pseudoId) {
+                    const pseudoType = pseudoId.includes('_start') ? 'Start [*]' : 'End [*]';
+                    addStContextMenuItem('Delete ' + pseudoType, () => {
+                        // Remove the pseudo state position and re-render
+                        delete stStatePositions[pseudoId];
+                        // Find and remove transitions involving [*] that correspond to this pseudo
+                        // For pseudo states, we need to reconnect or just remove
+                        renderStateDiagram();
+                    });
+                }
             // Check transitions BEFORE states (transitions inside composites overlap
             // with the composite's area, so we must prioritize them)
-            if (transGroup) {
+            } else if (transGroup) {
                 // Check if it's a nested transition
                 const parentId = transGroup.getAttribute('data-parent-id');
                 const nestedIdx = parseInt(transGroup.getAttribute('data-nested-trans-index'), 10);
@@ -8725,8 +8794,8 @@
                             stExpandCompositeToFitChildren(parentId);
                         }
                     });
-                    // Insert Pseudo State on nested edge
-                    addStContextMenuItem('Insert Pseudo State', () => {
+                    // Insert [*] Start/End on nested edge
+                    addStContextMenuItem('Insert [*] (Start/End)', () => {
                         const parentState = stFindState(parentId);
                         if (parentState && parentState.nestedTransitions && parentState.nestedTransitions[nestedIdx]) {
                             const trans = parentState.nestedTransitions[nestedIdx];
@@ -8754,6 +8823,31 @@
                             postMessage({ type: 'st_insertPseudoOnNestedEdge', parentId: parentId, index: nestedIdx });
                             stExpandCompositeToFitChildren(parentId);
                         }
+                    });
+                    // Insert special states (Fork/Join/Choice) on nested edge
+                    ['Fork', 'Join', 'Choice'].forEach(sType => {
+                        addStContextMenuItem('Insert ' + sType, () => {
+                            const parentState = stFindState(parentId);
+                            if (parentState && parentState.nestedTransitions && parentState.nestedTransitions[nestedIdx]) {
+                                const trans = parentState.nestedTransitions[nestedIdx];
+                                const newId = stNextUniqueId(sType);
+                                const fromState = stFindState(trans.fromId);
+                                const toState = stFindState(trans.toId);
+                                const fromBox = fromState ? stGetStateBox(fromState) : null;
+                                const toBox = toState ? stGetStateBox(toState) : null;
+                                if (fromBox && toBox) {
+                                    const midX = (fromBox.x + fromBox.width / 2 + toBox.x + toBox.width / 2) / 2;
+                                    const midY = (fromBox.y + fromBox.height / 2 + toBox.y + toBox.height / 2) / 2;
+                                    stStatePositions[newId] = {
+                                        x: Math.round(midX / SNAP_GRID) * SNAP_GRID - 20,
+                                        y: Math.round(midY / SNAP_GRID) * SNAP_GRID - 5,
+                                        width: 40, height: 10
+                                    };
+                                }
+                                postMessage({ type: 'st_insertSpecialStateOnNestedEdge', parentId: parentId, index: nestedIdx, stateId: newId, stateType: sType });
+                                stExpandCompositeToFitChildren(parentId);
+                            }
+                        });
                     });
                     addStContextMenuSeparator();
                     addStContextMenuItem('Delete Transition', () => {
@@ -8791,8 +8885,8 @@
                         postMessage({ type: 'st_insertStateOnEdge', index: idx, stateId: newId, label: newId });
                     }
                 });
-                // Insert Pseudo State on Edge - replaces A-->B with A-->[*] and [*]-->B
-                addStContextMenuItem('Insert Pseudo State', () => {
+                // Insert [*] Start/End on Edge - replaces A-->B with A-->[*] and [*]-->B
+                addStContextMenuItem('Insert [*] (Start/End)', () => {
                     const trans = stDiagram.transitions[idx];
                     if (trans) {
                         // Position the pseudo circles at the midpoint of the transition
@@ -8820,6 +8914,29 @@
                         };
                         postMessage({ type: 'st_insertPseudoOnEdge', index: idx });
                     }
+                });
+                // Insert special states (Fork/Join/Choice) on Edge
+                ['Fork', 'Join', 'Choice'].forEach(sType => {
+                    addStContextMenuItem('Insert ' + sType, () => {
+                        const trans = stDiagram.transitions[idx];
+                        if (trans) {
+                            const newId = stNextUniqueId(sType);
+                            const fromState = stFindState(trans.fromId);
+                            const toState = stFindState(trans.toId);
+                            const fromBox = fromState ? stGetStateBox(fromState) : null;
+                            const toBox = toState ? stGetStateBox(toState) : null;
+                            if (fromBox && toBox) {
+                                const midX = (fromBox.x + fromBox.width / 2 + toBox.x + toBox.width / 2) / 2;
+                                const midY = (fromBox.y + fromBox.height / 2 + toBox.y + toBox.height / 2) / 2;
+                                stStatePositions[newId] = {
+                                    x: Math.round(midX / SNAP_GRID) * SNAP_GRID - 20,
+                                    y: Math.round(midY / SNAP_GRID) * SNAP_GRID - 5,
+                                    width: 40, height: 10
+                                };
+                            }
+                            postMessage({ type: 'st_insertSpecialStateOnEdge', index: idx, stateId: newId, stateType: sType });
+                        }
+                    });
                 });
                 addStContextMenuSeparator();
                 addStContextMenuItem('Delete Transition', () => {
@@ -10113,6 +10230,15 @@
                 }
             });
             postMessage({ type: 'st_autoLayoutComplete', positions: positions });
+        });
+
+        // Curved edges toggle
+        const curveBtn = document.getElementById('tb-st-toggle-curves');
+        curveBtn.classList.add('active'); // default ON
+        curveBtn.addEventListener('click', function() {
+            stCurvedEdges = !stCurvedEdges;
+            curveBtn.classList.toggle('active', stCurvedEdges);
+            if (stDiagram) renderStateDiagram();
         });
 
         // ===== ER diagram toolbar buttons =====

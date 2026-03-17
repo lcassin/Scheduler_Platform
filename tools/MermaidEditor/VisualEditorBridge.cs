@@ -1037,6 +1037,10 @@ public class VisualEditorBridge
                     HandleStInsertPseudoOnEdge(root);
                     break;
 
+                case "st_insertSpecialStateOnEdge":
+                    HandleStInsertSpecialStateOnEdge(root);
+                    break;
+
                 case "st_stateEdited":
                     HandleStStateEdited(root);
                     break;
@@ -1071,6 +1075,10 @@ public class VisualEditorBridge
 
                 case "st_insertPseudoOnNestedEdge":
                     HandleStInsertPseudoOnNestedEdge(root);
+                    break;
+
+                case "st_insertSpecialStateOnNestedEdge":
+                    HandleStInsertSpecialStateOnNestedEdge(root);
                     break;
 
                 case "st_noteCreated":
@@ -2266,6 +2274,83 @@ public class VisualEditorBridge
         });
 
         RaiseStateDiagramModelChanged("st_insertPseudoOnEdge");
+    }
+
+    /// <summary>Insert a special state (Fork/Join/Choice) on an existing top-level transition edge, splitting it into two.</summary>
+    private void HandleStInsertSpecialStateOnEdge(JsonElement root)
+    {
+        if (_stateDiagramModel == null) return;
+        var index = root.GetProperty("index").GetInt32();
+        var stateId = root.GetProperty("stateId").GetString();
+        var stateTypeStr = root.GetProperty("stateType").GetString();
+        if (string.IsNullOrEmpty(stateId) || string.IsNullOrEmpty(stateTypeStr)) return;
+        if (index < 0 || index >= _stateDiagramModel.Transitions.Count) return;
+        if (!Enum.TryParse<StateType>(stateTypeStr, true, out var stateType)) return;
+
+        PushUndo();
+        var oldTransition = _stateDiagramModel.Transitions[index];
+        var originalTo = oldTransition.ToId;
+
+        // Create the new special state
+        var newState = new StateDefinition
+        {
+            Id = stateId,
+            IsExplicit = true,
+            Type = stateType
+        };
+        _stateDiagramModel.States.Add(newState);
+
+        // Replace old transition: originalFrom -> newState (keep original label)
+        oldTransition.ToId = stateId;
+
+        // Add new transition: newState -> originalTo (no label)
+        _stateDiagramModel.Transitions.Insert(index + 1, new StateTransition
+        {
+            FromId = stateId,
+            ToId = originalTo
+        });
+
+        RaiseStateDiagramModelChanged("st_insertSpecialStateOnEdge");
+    }
+
+    /// <summary>Insert a special state (Fork/Join/Choice) on an existing nested transition edge, splitting it into two.</summary>
+    private void HandleStInsertSpecialStateOnNestedEdge(JsonElement root)
+    {
+        if (_stateDiagramModel == null) return;
+        var parentId = root.GetProperty("parentId").GetString();
+        var index = root.GetProperty("index").GetInt32();
+        var stateId = root.GetProperty("stateId").GetString();
+        var stateTypeStr = root.GetProperty("stateType").GetString();
+        if (string.IsNullOrEmpty(parentId) || string.IsNullOrEmpty(stateId) || string.IsNullOrEmpty(stateTypeStr)) return;
+        if (!Enum.TryParse<StateType>(stateTypeStr, true, out var stateType)) return;
+
+        var parent = FindStateRecursive(_stateDiagramModel.States, parentId);
+        if (parent == null || index < 0 || index >= parent.NestedTransitions.Count) return;
+
+        PushUndo();
+        var oldTransition = parent.NestedTransitions[index];
+        var originalTo = oldTransition.ToId;
+
+        // Create the new special state inside the parent
+        var newState = new StateDefinition
+        {
+            Id = stateId,
+            IsExplicit = true,
+            Type = stateType
+        };
+        parent.NestedStates.Add(newState);
+
+        // Replace old transition: originalFrom -> newState
+        oldTransition.ToId = stateId;
+
+        // Add new transition: newState -> originalTo
+        parent.NestedTransitions.Insert(index + 1, new StateTransition
+        {
+            FromId = stateId,
+            ToId = originalTo
+        });
+
+        RaiseStateDiagramModelChanged("st_insertSpecialStateOnNestedEdge");
     }
 
     private void HandleStStateEdited(JsonElement root)

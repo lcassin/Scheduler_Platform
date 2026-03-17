@@ -524,8 +524,8 @@ public class BackgroundExportService : BackgroundService
                 (j.MasterVendorCode != null && j.MasterVendorCode.Contains(masterVendorCode)) ||
                 (j.MasterVendorCode == null && j.AdrAccount != null && j.AdrAccount.MasterVendorCode != null && j.AdrAccount.MasterVendorCode.Contains(masterVendorCode)));
 
-        if (!showManualJobs)
-            query = query.Where(j => !j.IsManualRequest);
+        if (showManualJobs)
+            query = query.Where(j => j.IsManualRequest);
 
         if (adrJobTypeId.HasValue)
             query = query.Where(j => j.AdrJobTypeId == adrJobTypeId.Value);
