@@ -280,7 +280,9 @@ public class AuthTokenHandler : DelegatingHandler
         // permission denial (e.g., non-admin hitting admin endpoint) and should NOT trigger logout.
         if (response.StatusCode == HttpStatusCode.Forbidden)
         {
-            bool tokenIsExpiredOrMissing = string.IsNullOrEmpty(accessToken) || request.Headers.Authorization == null;
+            // Use accessToken (the original value) rather than request.Headers.Authorization
+            // because Authorization may have been cleared at line 232 for expired tokens.
+            bool tokenIsExpiredOrMissing = string.IsNullOrEmpty(accessToken);
             
             if (!tokenIsExpiredOrMissing)
             {

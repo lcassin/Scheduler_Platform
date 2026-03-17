@@ -2387,10 +2387,14 @@
             contextMenuX = pt.x;
             contextMenuY = pt.y;
 
-            // Check if right-clicked on a node
+            // Check if right-clicked on a node or edge
             const nodeGroup = e.target.closest('.node-group');
+            const edgeGroup = e.target.closest('.edge-group');
             if (nodeGroup) {
                 selectNode(nodeGroup.getAttribute('data-node-id'));
+            } else if (edgeGroup) {
+                const idx = parseInt(edgeGroup.getAttribute('data-edge-index'));
+                selectEdge(idx);
             }
 
             showContextMenu(e.clientX, e.clientY);
@@ -2970,6 +2974,46 @@
                 if (targetSg) {
                     targetSg.nodeIds.push(id);
                 }
+            }
+
+            // If an edge is selected, split it: from→newNode and newNode→to
+            const splitEdgeIdx = selectedEdgeIndex;
+            if (splitEdgeIdx >= 0 && splitEdgeIdx < diagram.edges.length) {
+                const oldEdge = diagram.edges[splitEdgeIdx];
+                const originalFrom = oldEdge.from;
+                const originalTo = oldEdge.to;
+                const originalLabel = oldEdge.label;
+                const originalStyle = oldEdge.style || 'Solid';
+                const originalArrowType = oldEdge.arrowType || 'Arrow';
+
+                // Modify old edge: from → newNode (keep original label)
+                oldEdge.to = id;
+                postMessage({
+                    type: 'edgeEdited',
+                    edgeIndex: splitEdgeIdx,
+                    from: originalFrom,
+                    to: id,
+                    label: originalLabel,
+                    style: originalStyle,
+                    arrowType: originalArrowType
+                });
+
+                // Add new edge: newNode → originalTo (no label)
+                diagram.edges.splice(splitEdgeIdx + 1, 0, {
+                    from: id,
+                    to: originalTo,
+                    label: '',
+                    style: originalStyle,
+                    arrowType: originalArrowType
+                });
+                postMessage({
+                    type: 'edgeCreated',
+                    from: id,
+                    to: originalTo,
+                    label: '',
+                    style: originalStyle,
+                    arrowType: originalArrowType
+                });
             }
 
             render();
@@ -8427,6 +8471,7 @@
         function stShowTransitionProperties(idx) {
             if (!stDiagram || idx < 0 || idx >= stDiagram.transitions.length) return;
             const trans = stDiagram.transitions[idx];
+            if (!trans) return;
 
             const propContent = propertyPanel.querySelector('.property-panel-body');
             propContent.innerHTML = `

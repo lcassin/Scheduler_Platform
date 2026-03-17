@@ -1295,6 +1295,21 @@ public class VisualEditorBridge
 
         PushUndo();
         _model.Edges[edgeIndex].Label = string.IsNullOrEmpty(label) ? null : label;
+
+        // Support updating from/to (used by edge splitting when inserting a node on an edge)
+        if (root.TryGetProperty("from", out var fromProp))
+        {
+            var from = fromProp.GetString();
+            if (!string.IsNullOrEmpty(from))
+                _model.Edges[edgeIndex].FromNodeId = from;
+        }
+        if (root.TryGetProperty("to", out var toProp))
+        {
+            var to = toProp.GetString();
+            if (!string.IsNullOrEmpty(to))
+                _model.Edges[edgeIndex].ToNodeId = to;
+        }
+
         RaiseModelChanged("edgeEdited");
     }
 
