@@ -7965,14 +7965,20 @@
             const box = state ? stGetStateBox(state) : { x: 0, y: 0, width: 100, height: 40 };
 
             // Use custom drag position if available, otherwise compute default position
+            // Default matches Mermaid renderer: note below the state, offset to the right or left
             let noteX, noteY;
             const customPos = stNotePositions[idx];
             if (customPos) {
                 noteX = customPos.x;
                 noteY = customPos.y;
             } else {
-                noteX = note.position === 'LeftOf' ? box.x - ST_NOTE_WIDTH - 20 : box.x + box.width + 20;
-                noteY = box.y;
+                if (note.position === 'LeftOf') {
+                    noteX = box.x - ST_NOTE_WIDTH / 2;
+                    noteY = box.y + box.height + 15;
+                } else {
+                    noteX = box.x + box.width / 2;
+                    noteY = box.y + box.height + 15;
+                }
                 // Store the computed default position for dragging
                 stNotePositions[idx] = { x: noteX, y: noteY };
             }
@@ -8013,14 +8019,43 @@
             });
             g.appendChild(text);
 
-            // Connector line from note to state
+            // Connector line from note to state using nearest-edge ports (clean vertical/horizontal lines)
             const connLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            const connFromX = noteX + ST_NOTE_WIDTH / 2 < box.x + box.width / 2 ? noteX + ST_NOTE_WIDTH : noteX;
-            const connToX = noteX + ST_NOTE_WIDTH / 2 < box.x + box.width / 2 ? box.x : box.x + box.width;
-            connLine.setAttribute('x1', connFromX);
-            connLine.setAttribute('y1', noteY + ST_NOTE_HEIGHT / 2);
-            connLine.setAttribute('x2', connToX);
-            connLine.setAttribute('y2', box.y + box.height / 2);
+            const noteBox = { x: noteX, y: noteY, width: ST_NOTE_WIDTH, height: ST_NOTE_HEIGHT };
+            const noteCx = noteX + ST_NOTE_WIDTH / 2;
+            const noteCy = noteY + ST_NOTE_HEIGHT / 2;
+            const stateCx = box.x + box.width / 2;
+            const stateCy = box.y + box.height / 2;
+            // Note ports: top, bottom, left, right center edges
+            const notePorts = [
+                { x: noteCx, y: noteY },           // top
+                { x: noteCx, y: noteY + ST_NOTE_HEIGHT }, // bottom
+                { x: noteX, y: noteCy },            // left
+                { x: noteX + ST_NOTE_WIDTH, y: noteCy }   // right
+            ];
+            // State ports: top, bottom, left, right center edges
+            const statePorts = [
+                { x: stateCx, y: box.y },           // top
+                { x: stateCx, y: box.y + box.height }, // bottom
+                { x: box.x, y: stateCy },           // left
+                { x: box.x + box.width, y: stateCy }  // right
+            ];
+            let bestDist = Infinity;
+            let bestFrom = notePorts[0], bestTo = statePorts[0];
+            notePorts.forEach(np => {
+                statePorts.forEach(sp => {
+                    const d = Math.hypot(np.x - sp.x, np.y - sp.y);
+                    if (d < bestDist) {
+                        bestDist = d;
+                        bestFrom = np;
+                        bestTo = sp;
+                    }
+                });
+            });
+            connLine.setAttribute('x1', bestFrom.x);
+            connLine.setAttribute('y1', bestFrom.y);
+            connLine.setAttribute('x2', bestTo.x);
+            connLine.setAttribute('y2', bestTo.y);
             connLine.setAttribute('stroke', 'var(--note-stroke, #cccc00)');
             connLine.setAttribute('stroke-width', '1');
             connLine.setAttribute('stroke-dasharray', '4,4');
