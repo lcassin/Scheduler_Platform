@@ -785,6 +785,10 @@
             <svg viewBox="0 0 16 16"><rect x="1" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1.2"/><rect x="10" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1.2"/><rect x="5.5" y="11" width="5" height="4" rx="0.5" fill="none" stroke-width="1.2"/><line x1="3.5" y1="5" x2="3.5" y2="7" stroke-width="1"/><line x1="12.5" y1="5" x2="12.5" y2="7" stroke-width="1"/><line x1="3.5" y1="7" x2="12.5" y2="7" stroke-width="1"/><line x1="8" y1="7" x2="8" y2="11" stroke-width="1"/></svg>
             <span class="tooltip">Auto Layout</span>
         </button>
+        <button class="toolbar-btn toolbar-flowchart" id="tb-fc-toggle-curves" title="Toggle Curved Edges">
+            <svg viewBox="0 0 16 16"><path d="M3,13 Q3,3 13,3" fill="none" stroke-width="1.5"/><polygon points="13,3 10,1 11,5" fill="currentColor" stroke="none"/></svg>
+            <span class="tooltip">Curved Edges</span>
+        </button>
         <!-- Sequence-specific buttons -->
         <button class="toolbar-btn toolbar-sequence" id="tb-seq-add-participant" title="Add Participant" style="display:none">
             <svg viewBox="0 0 16 16"><circle cx="8" cy="4" r="3" fill="none" stroke-width="1.3"/><line x1="8" y1="7" x2="8" y2="12" stroke-width="1.3"/><line x1="5" y1="9" x2="11" y2="9" stroke-width="1.3"/><line x1="12" y1="12" x2="14" y2="14" stroke-width="1.5"/><line x1="12" y1="14" x2="14" y2="12" stroke-width="1.5"/></svg>
@@ -815,6 +819,10 @@
             <svg viewBox="0 0 16 16"><rect x="1" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><rect x="10" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><rect x="5.5" y="11" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><line x1="3.5" y1="5" x2="3.5" y2="8" stroke-width="0.8"/><line x1="12.5" y1="5" x2="12.5" y2="8" stroke-width="0.8"/><line x1="3.5" y1="8" x2="12.5" y2="8" stroke-width="0.8"/><line x1="8" y1="8" x2="8" y2="11" stroke-width="0.8"/></svg>
             <span class="tooltip">Auto Layout</span>
         </button>
+        <button class="toolbar-btn toolbar-class" id="tb-cls-toggle-curves" title="Toggle Curved Edges" style="display:none">
+            <svg viewBox="0 0 16 16"><path d="M3,13 Q3,3 13,3" fill="none" stroke-width="1.5"/><polygon points="13,3 10,1 11,5" fill="currentColor" stroke="none"/></svg>
+            <span class="tooltip">Curved Edges</span>
+        </button>
         <!-- State-specific buttons -->
         <button class="toolbar-btn toolbar-state" id="tb-st-add-state" title="Add State" style="display:none">
             <svg viewBox="0 0 16 16"><rect x="2" y="4" width="12" height="8" rx="4" fill="none" stroke-width="1.3"/><line x1="8" y1="6" x2="8" y2="10" stroke-width="1.3"/><line x1="6" y1="8" x2="10" y2="8" stroke-width="1.3"/></svg>
@@ -844,6 +852,10 @@
         <button class="toolbar-btn toolbar-er" id="tb-er-auto-layout" title="Auto Layout" style="display:none">
             <svg viewBox="0 0 16 16"><rect x="1" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><rect x="10" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><rect x="5.5" y="11" width="5" height="4" rx="0.5" fill="none" stroke-width="1"/><line x1="3.5" y1="5" x2="3.5" y2="8" stroke-width="0.8"/><line x1="12.5" y1="5" x2="12.5" y2="8" stroke-width="0.8"/><line x1="3.5" y1="8" x2="12.5" y2="8" stroke-width="0.8"/><line x1="8" y1="8" x2="8" y2="11" stroke-width="0.8"/></svg>
             <span class="tooltip">Auto Layout</span>
+        </button>
+        <button class="toolbar-btn toolbar-er" id="tb-er-toggle-curves" title="Toggle Curved Edges" style="display:none">
+            <svg viewBox="0 0 16 16"><path d="M3,13 Q3,3 13,3" fill="none" stroke-width="1.5"/><polygon points="13,3 10,1 11,5" fill="currentColor" stroke="none"/></svg>
+            <span class="tooltip">Curved Edges</span>
         </button>
         <div class="toolbar-sep"></div>
         <button class="toolbar-btn" id="tb-delete" title="Delete Selected (Del)">
@@ -1728,12 +1740,11 @@
                     const points = getEdgePoints(fromObj, toObj);
 
                 // Create path
-                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                const edgePathD = buildEdgePath(points);
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 line.classList.add('edge-line');
-                line.setAttribute('x1', points.x1);
-                line.setAttribute('y1', points.y1);
-                line.setAttribute('x2', points.x2);
-                line.setAttribute('y2', points.y2);
+                line.setAttribute('d', edgePathD);
+                line.setAttribute('fill', 'none');
 
                 // Apply edge style
                 if (edge.style === 'Dotted') {
@@ -1759,8 +1770,9 @@
 
                 // Edge label
                 if (edge.label) {
-                    const mx = (points.x1 + points.x2) / 2;
-                    const my = (points.y1 + points.y2) / 2;
+                    const edgeMid = edgeMidpoint(points);
+                    const mx = edgeMid.x;
+                    const my = edgeMid.y;
 
                     const labelBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
                     const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -1899,11 +1911,14 @@
                 }
             }
 
+            const nameToDir = { top: 'N', bottom: 'S', left: 'W', right: 'E' };
             return {
                 x1: bestFrom.x,
                 y1: bestFrom.y,
                 x2: bestTo.x,
-                y2: bestTo.y
+                y2: bestTo.y,
+                fromDir: nameToDir[bestFrom.name] || 'S',
+                toDir: nameToDir[bestTo.name] || 'N'
             };
         }
 
@@ -6230,11 +6245,10 @@
                 g.setAttribute('data-rel-index', relIdx);
 
                 // Line
-                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                line.setAttribute('x1', pts.x1);
-                line.setAttribute('y1', pts.y1);
-                line.setAttribute('x2', pts.x2);
-                line.setAttribute('y2', pts.y2);
+                const clsEdgePathD = buildEdgePath(pts);
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                line.setAttribute('d', clsEdgePathD);
+                line.setAttribute('fill', 'none');
                 line.setAttribute('stroke', 'var(--edge-color)');
                 line.setAttribute('stroke-width', clsSelectedRelIndex === relIdx ? '2.5' : '1.5');
 
@@ -6244,12 +6258,10 @@
                 }
                 g.appendChild(line);
 
-                // Hit area (wider invisible line for clicking)
-                const hitLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                hitLine.setAttribute('x1', pts.x1);
-                hitLine.setAttribute('y1', pts.y1);
-                hitLine.setAttribute('x2', pts.x2);
-                hitLine.setAttribute('y2', pts.y2);
+                // Hit area (wider invisible path for clicking)
+                const hitLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                hitLine.setAttribute('d', clsEdgePathD);
+                hitLine.setAttribute('fill', 'none');
                 hitLine.setAttribute('stroke', 'transparent');
                 hitLine.setAttribute('stroke-width', '12');
                 hitLine.style.cursor = 'pointer';
@@ -6272,8 +6284,9 @@
 
                 // Label — offset perpendicular to line to avoid overlap with other relationship labels
                 if (rel.label) {
-                    const midX = (pts.x1 + pts.x2) / 2;
-                    const midY = (pts.y1 + pts.y2) / 2;
+                    const clsMid = edgeMidpoint(pts);
+                    const midX = clsMid.x;
+                    const midY = clsMid.y;
                     // Perpendicular offset to separate overlapping labels
                     const lineLen = Math.sqrt((pts.x2 - pts.x1) ** 2 + (pts.y2 - pts.y1) ** 2);
                     const perpX = lineLen > 0 ? -(pts.y2 - pts.y1) / lineLen : 0;
@@ -6380,34 +6393,34 @@
             const dx = toCx - fromCx;
             const dy = toCy - fromCy;
 
-            let x1, y1, x2, y2;
+            let x1, y1, x2, y2, fromDir, toDir;
 
             // Determine best exit/entry ports based on direction
             if (Math.abs(dy) > Math.abs(dx)) {
                 // Predominantly vertical
                 if (dy > 0) {
                     // Target is below
-                    x1 = fromCx; y1 = fromPos.y + fh;
-                    x2 = toCx; y2 = toPos.y;
+                    x1 = fromCx; y1 = fromPos.y + fh; fromDir = 'S';
+                    x2 = toCx; y2 = toPos.y; toDir = 'N';
                 } else {
                     // Target is above
-                    x1 = fromCx; y1 = fromPos.y;
-                    x2 = toCx; y2 = toPos.y + th;
+                    x1 = fromCx; y1 = fromPos.y; fromDir = 'N';
+                    x2 = toCx; y2 = toPos.y + th; toDir = 'S';
                 }
             } else {
                 // Predominantly horizontal
                 if (dx > 0) {
                     // Target is to the right
-                    x1 = fromPos.x + fw; y1 = fromCy;
-                    x2 = toPos.x; y2 = toCy;
+                    x1 = fromPos.x + fw; y1 = fromCy; fromDir = 'E';
+                    x2 = toPos.x; y2 = toCy; toDir = 'W';
                 } else {
                     // Target is to the left
-                    x1 = fromPos.x; y1 = fromCy;
-                    x2 = toPos.x + tw; y2 = toCy;
+                    x1 = fromPos.x; y1 = fromCy; fromDir = 'W';
+                    x2 = toPos.x + tw; y2 = toCy; toDir = 'E';
                 }
             }
 
-            return { x1, y1, x2, y2 };
+            return { x1, y1, x2, y2, fromDir, toDir };
         }
 
         function clsDrawRelationEndMarker(g, px, py, angle, endType) {
@@ -7065,7 +7078,7 @@
         let stSelectedNoteIdx = -1; // currently selected note index
         let stNotePositions = {}; // { noteIndex: { x, y } } - custom note positions from dragging
         let stStatePositions = {}; // { stateId: { x, y, width, height } }
-        let stCurvedEdges = true; // When true, render transitions as Bézier curves
+        let curvedEdges = true; // When true, render edges as Bézier curves (shared across all diagram types)
 
         const ST_BOX_MIN_WIDTH = 120;
         const ST_BOX_HEIGHT = 40;
@@ -7967,7 +7980,7 @@
             g.classList.add('st-transition');
             g.setAttribute('data-trans-index', idx);
 
-            const pathD = stBuildEdgePath(ports);
+            const pathD = buildEdgePath(ports);
             const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
             line.setAttribute('d', pathD);
             line.setAttribute('fill', 'none');
@@ -7987,7 +8000,7 @@
 
             // Label
             if (trans.label) {
-                const mid = stEdgeMidpoint(ports);
+                const mid = edgeMidpoint(ports);
                 const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                 labelText.setAttribute('x', mid.x);
                 labelText.setAttribute('y', mid.y - 6);
@@ -8031,7 +8044,7 @@
         }
 
         // Compute a cubic Bézier control point offset based on port direction
-        function stDirOffset(dir, dist) {
+        function edgeDirOffset(dir, dist) {
             const d = Math.max(30, Math.min(dist * 0.4, 80));
             switch (dir) {
                 case 'N': return { dx: 0, dy: -d };
@@ -8043,13 +8056,13 @@
         }
 
         // Build an SVG path string: straight line or cubic Bézier
-        function stBuildEdgePath(ports) {
-            if (!stCurvedEdges) {
+        function buildEdgePath(ports) {
+            if (!curvedEdges) {
                 return 'M ' + ports.x1 + ',' + ports.y1 + ' L ' + ports.x2 + ',' + ports.y2;
             }
             const dist = Math.hypot(ports.x2 - ports.x1, ports.y2 - ports.y1);
-            const c1 = stDirOffset(ports.fromDir, dist);
-            const c2 = stDirOffset(ports.toDir, dist);
+            const c1 = edgeDirOffset(ports.fromDir, dist);
+            const c2 = edgeDirOffset(ports.toDir, dist);
             const cx1 = ports.x1 + c1.dx;
             const cy1 = ports.y1 + c1.dy;
             const cx2 = ports.x2 + c2.dx;
@@ -8059,13 +8072,13 @@
         }
 
         // Compute the midpoint (and tangent angle) of the Bézier at t=0.5 for label placement
-        function stEdgeMidpoint(ports) {
-            if (!stCurvedEdges) {
+        function edgeMidpoint(ports) {
+            if (!curvedEdges) {
                 return { x: (ports.x1 + ports.x2) / 2, y: (ports.y1 + ports.y2) / 2 };
             }
             const dist = Math.hypot(ports.x2 - ports.x1, ports.y2 - ports.y1);
-            const c1 = stDirOffset(ports.fromDir, dist);
-            const c2 = stDirOffset(ports.toDir, dist);
+            const c1 = edgeDirOffset(ports.fromDir, dist);
+            const c2 = edgeDirOffset(ports.toDir, dist);
             const cx1 = ports.x1 + c1.dx;
             const cy1 = ports.y1 + c1.dy;
             const cx2 = ports.x2 + c2.dx;
@@ -8148,7 +8161,7 @@
             g.setAttribute('data-parent-id', parentId);
             g.setAttribute('data-nested-trans-index', nestedIdx);
 
-            const nestedPathD = stBuildEdgePath(ports);
+            const nestedPathD = buildEdgePath(ports);
             const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
             line.setAttribute('d', nestedPathD);
             line.setAttribute('fill', 'none');
@@ -8167,7 +8180,7 @@
             g.appendChild(hitbox);
 
             if (trans.label) {
-                const mid = stEdgeMidpoint(ports);
+                const mid = edgeMidpoint(ports);
                 const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                 labelText.setAttribute('x', mid.x);
                 labelText.setAttribute('y', mid.y - 6);
@@ -9534,11 +9547,10 @@
             g.setAttribute('data-rel-index', idx);
 
             // Main line
-            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            line.setAttribute('x1', ports.x1);
-            line.setAttribute('y1', ports.y1);
-            line.setAttribute('x2', ports.x2);
-            line.setAttribute('y2', ports.y2);
+            const erEdgePathD = buildEdgePath(ports);
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            line.setAttribute('d', erEdgePathD);
+            line.setAttribute('fill', 'none');
             line.setAttribute('stroke', erSelectedRelIndex === idx ? 'var(--edge-selected)' : 'var(--edge-color)');
             line.setAttribute('stroke-width', erSelectedRelIndex === idx ? '3' : '2');
             if (!rel.isIdentifying) {
@@ -9547,11 +9559,9 @@
             g.appendChild(line);
 
             // Clickable hitbox
-            const hitbox = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            hitbox.setAttribute('x1', ports.x1);
-            hitbox.setAttribute('y1', ports.y1);
-            hitbox.setAttribute('x2', ports.x2);
-            hitbox.setAttribute('y2', ports.y2);
+            const hitbox = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            hitbox.setAttribute('d', erEdgePathD);
+            hitbox.setAttribute('fill', 'none');
             hitbox.setAttribute('stroke', 'transparent');
             hitbox.setAttribute('stroke-width', '12');
             hitbox.style.cursor = 'pointer';
@@ -9589,8 +9599,9 @@
 
             // Relationship label (diamond shape with text)
             if (rel.label) {
-                const midX = (ports.x1 + ports.x2) / 2;
-                const midY = (ports.y1 + ports.y2) / 2;
+                const erMid = edgeMidpoint(ports);
+                const midX = erMid.x;
+                const midY = erMid.y;
 
                 // Diamond background
                 const diamondSize = 8;
@@ -10232,14 +10243,39 @@
             postMessage({ type: 'st_autoLayoutComplete', positions: positions });
         });
 
-        // Curved edges toggle
+        // Curved edges toggle — shared handler for all diagram types
+        function toggleCurvedEdges() {
+            curvedEdges = !curvedEdges;
+            // Sync all toggle buttons active state
+            ['tb-st-toggle-curves', 'tb-fc-toggle-curves', 'tb-cls-toggle-curves', 'tb-er-toggle-curves'].forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) btn.classList.toggle('active', curvedEdges);
+            });
+            // Re-render current diagram
+            if (currentDiagramType === 'state' && stDiagram) renderStateDiagram();
+            else if (currentDiagramType === 'flowchart') renderEdges();
+            else if (currentDiagramType === 'classDiagram' && clsDiagram) renderClassDiagram();
+            else if (currentDiagramType === 'erDiagram' && erDiagram) renderERDiagram();
+        }
+
         const curveBtn = document.getElementById('tb-st-toggle-curves');
         curveBtn.classList.add('active'); // default ON
-        curveBtn.addEventListener('click', function() {
-            stCurvedEdges = !stCurvedEdges;
-            curveBtn.classList.toggle('active', stCurvedEdges);
-            if (stDiagram) renderStateDiagram();
-        });
+        curveBtn.addEventListener('click', toggleCurvedEdges);
+
+        // Flowchart curved edges toggle
+        const fcCurveBtn = document.getElementById('tb-fc-toggle-curves');
+        fcCurveBtn.classList.add('active');
+        fcCurveBtn.addEventListener('click', toggleCurvedEdges);
+
+        // Class diagram curved edges toggle
+        const clsCurveBtn = document.getElementById('tb-cls-toggle-curves');
+        clsCurveBtn.classList.add('active');
+        clsCurveBtn.addEventListener('click', toggleCurvedEdges);
+
+        // ER diagram curved edges toggle
+        const erCurveBtn = document.getElementById('tb-er-toggle-curves');
+        erCurveBtn.classList.add('active');
+        erCurveBtn.addEventListener('click', toggleCurvedEdges);
 
         // ===== ER diagram toolbar buttons =====
         document.getElementById('tb-er-add-entity').addEventListener('click', function() {
