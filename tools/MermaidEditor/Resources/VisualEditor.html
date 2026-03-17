@@ -7559,6 +7559,32 @@
             return allStates.find(s => s.id === stateId) || null;
         }
 
+        // Find the parent composite state that contains a given child state ID
+        function stFindParentComposite(childId) {
+            if (!stDiagram) return null;
+            function search(states) {
+                for (const s of states) {
+                    if (s.nestedStates && s.nestedStates.length > 0) {
+                        if (s.nestedStates.some(ns => ns.id === childId)) return s;
+                        const deeper = search(s.nestedStates);
+                        if (deeper) return deeper;
+                    }
+                }
+                return null;
+            }
+            return search(stDiagram.states);
+        }
+
+        // Expand a composite and all its ancestor composites (for nested composite support)
+        function stExpandCompositeChain(compositeId) {
+            let current = compositeId;
+            while (current) {
+                stExpandCompositeToFitChildren(current);
+                const parent = stFindParentComposite(current);
+                current = parent ? parent.id : null;
+            }
+        }
+
         // Generate a unique state ID with the given prefix (avoids collisions)
         function stNextUniqueId(prefix) {
             const allIds = new Set(stGetAllFlatStates().map(s => s.id));
@@ -8473,6 +8499,9 @@
                 if (draggedState && draggedState.nestedStates && draggedState.nestedStates.length > 0) {
                     stMoveNestedStates(draggedState.nestedStates, dx, dy, stDraggingStateId);
                 }
+                // Auto-expand parent composite(s) to fit the moved child
+                const parentComp = stFindParentComposite(stDraggingStateId);
+                if (parentComp) stExpandCompositeChain(parentComp.id);
                 renderStateDiagram();
             }
         });
@@ -8634,6 +8663,11 @@
                 if (s) {
                     s.type = this.value;
                     s.isExplicit = true;
+                    // Ensure arrays exist when changing to Composite
+                    if (this.value === 'Composite') {
+                        if (!s.nestedStates) s.nestedStates = [];
+                        if (!s.nestedTransitions) s.nestedTransitions = [];
+                    }
                 }
                 postMessage({ type: 'st_stateEdited', stateId: stateId, stateType: this.value });
                 renderStateDiagram();
@@ -8804,7 +8838,7 @@
                                 };
                             }
                             postMessage({ type: 'st_insertStateOnNestedEdge', parentId: parentId, index: nestedIdx, stateId: newId, label: newId });
-                            stExpandCompositeToFitChildren(parentId);
+                            stExpandCompositeChain(parentId);
                         }
                     });
                     // Insert [*] Start/End on nested edge
@@ -8834,7 +8868,7 @@
                                 width: 16, height: 16
                             };
                             postMessage({ type: 'st_insertPseudoOnNestedEdge', parentId: parentId, index: nestedIdx });
-                            stExpandCompositeToFitChildren(parentId);
+                            stExpandCompositeChain(parentId);
                         }
                     });
                     // Insert special states (Fork/Join/Choice) on nested edge
@@ -8858,7 +8892,7 @@
                                     };
                                 }
                                 postMessage({ type: 'st_insertSpecialStateOnNestedEdge', parentId: parentId, index: nestedIdx, stateId: newId, stateType: sType });
-                                stExpandCompositeToFitChildren(parentId);
+                                stExpandCompositeChain(parentId);
                             }
                         });
                     });
@@ -8992,7 +9026,7 @@
                             };
                         }
                         postMessage({ type: 'st_nestedStateCreated', parentId: stateId, stateId: newId, label: newId });
-                        stExpandCompositeToFitChildren(stateId);
+                        stExpandCompositeChain(stateId);
                     });
                 }
                 addStContextMenuSeparator();

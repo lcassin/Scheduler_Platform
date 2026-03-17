@@ -1007,31 +1007,40 @@ public static class MermaidSerializer
         // Composite state
         if (state.Type == StateType.Composite)
         {
-            if (!string.IsNullOrEmpty(state.Label))
+            // Only emit composite block syntax if there are nested states or transitions.
+            // An empty composite block (state X { }) causes Mermaid "roundedWithTitle" error.
+            bool hasContent = state.NestedStates.Count > 0 || state.NestedTransitions.Count > 0;
+            if (hasContent)
             {
-                sb.AppendLine($"{indent}state \"{state.Label}\" as {state.Id} {{");
-            }
-            else
-            {
-                sb.AppendLine($"{indent}state {state.Id} {{");
+                if (!string.IsNullOrEmpty(state.Label))
+                {
+                    sb.AppendLine($"{indent}state \"{state.Label}\" as {state.Id} {{");
+                }
+                else
+                {
+                    sb.AppendLine($"{indent}state {state.Id} {{");
+                }
+
+                var innerIndent = indent + Indent;
+
+                // Write nested states
+                foreach (var nested in state.NestedStates)
+                {
+                    WriteStateDefinition(sb, nested, innerIndent);
+                }
+
+                // Write nested transitions
+                foreach (var transition in state.NestedTransitions)
+                {
+                    sb.AppendLine($"{innerIndent}{FormatStateTransition(transition)}");
+                }
+
+                sb.AppendLine($"{indent}}}");
+                return;
             }
 
-            var innerIndent = indent + Indent;
-
-            // Write nested states
-            foreach (var nested in state.NestedStates)
-            {
-                WriteStateDefinition(sb, nested, innerIndent);
-            }
-
-            // Write nested transitions
-            foreach (var transition in state.NestedTransitions)
-            {
-                sb.AppendLine($"{innerIndent}{FormatStateTransition(transition)}");
-            }
-
-            sb.AppendLine($"{indent}}}");
-            return;
+            // Empty composite — fall through to simple state declaration below
+            // so it renders as a labeled state until content is added
         }
 
         // Simple state with label (using "as" syntax or colon syntax)

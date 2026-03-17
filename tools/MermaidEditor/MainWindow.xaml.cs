@@ -1141,7 +1141,7 @@ Console.WriteLine(""Hello, World!"");
 
     private void CodeEditor_TextChanged(object? sender, EventArgs e)
     {
-        if (_isSwitchingDocuments) return; // Don't mark dirty when switching documents
+        if (_isSwitchingDocuments) return; // Don't mark dirty or trigger re-parse when switching documents / visual editor updates
         
         _isDirty = true;
         if (_activeDocument != null)
