@@ -8638,6 +8638,59 @@
                     addStContextMenuItem('Edit Label', () => {
                         stShowNestedTransitionProperties(parentId, nestedIdx);
                     });
+                    // Insert State on nested edge - splits nested transition into two
+                    addStContextMenuItem('Insert State', () => {
+                        const parentState = stFindState(parentId);
+                        if (parentState && parentState.nestedTransitions && parentState.nestedTransitions[nestedIdx]) {
+                            const trans = parentState.nestedTransitions[nestedIdx];
+                            const newId = stNextUniqueId('State');
+                            // Position the new state at the midpoint of the transition
+                            const fromState = stFindState(trans.fromId);
+                            const toState = stFindState(trans.toId);
+                            const fromBox = fromState ? stGetStateBox(fromState) : null;
+                            const toBox = toState ? stGetStateBox(toState) : null;
+                            if (fromBox && toBox) {
+                                const midX = (fromBox.x + fromBox.width / 2 + toBox.x + toBox.width / 2) / 2 - ST_BOX_MIN_WIDTH / 2;
+                                const midY = (fromBox.y + fromBox.height / 2 + toBox.y + toBox.height / 2) / 2 - ST_BOX_HEIGHT / 2;
+                                stStatePositions[newId] = {
+                                    x: Math.round(midX / SNAP_GRID) * SNAP_GRID,
+                                    y: Math.round(midY / SNAP_GRID) * SNAP_GRID,
+                                    width: ST_BOX_MIN_WIDTH,
+                                    height: ST_BOX_HEIGHT
+                                };
+                            }
+                            postMessage({ type: 'st_insertStateOnNestedEdge', parentId: parentId, index: nestedIdx, stateId: newId, label: newId });
+                        }
+                    });
+                    // Insert Pseudo State on nested edge
+                    addStContextMenuItem('Insert Pseudo State', () => {
+                        const parentState = stFindState(parentId);
+                        if (parentState && parentState.nestedTransitions && parentState.nestedTransitions[nestedIdx]) {
+                            const trans = parentState.nestedTransitions[nestedIdx];
+                            const fromState = stFindState(trans.fromId);
+                            const toState = stFindState(trans.toId);
+                            const fromBox = fromState ? stGetStateBox(fromState) : null;
+                            const toBox = toState ? stGetStateBox(toState) : null;
+                            let midX = ST_LEFT_MARGIN, midY = ST_TOP_MARGIN;
+                            if (fromBox && toBox) {
+                                midX = (fromBox.x + fromBox.width / 2 + toBox.x + toBox.width / 2) / 2;
+                                midY = (fromBox.y + fromBox.height / 2 + toBox.y + toBox.height / 2) / 2;
+                            }
+                            const endKey = '[*]_end_nested_' + parentId + '_' + nestedIdx;
+                            const startKey = '[*]_start_nested_' + parentId + '_' + nestedIdx;
+                            stStatePositions[endKey] = {
+                                x: Math.round(midX / SNAP_GRID) * SNAP_GRID - 10,
+                                y: Math.round((midY - 20) / SNAP_GRID) * SNAP_GRID,
+                                width: 20, height: 20
+                            };
+                            stStatePositions[startKey] = {
+                                x: Math.round(midX / SNAP_GRID) * SNAP_GRID - 8,
+                                y: Math.round((midY + 10) / SNAP_GRID) * SNAP_GRID,
+                                width: 16, height: 16
+                            };
+                            postMessage({ type: 'st_insertPseudoOnNestedEdge', parentId: parentId, index: nestedIdx });
+                        }
+                    });
                     addStContextMenuSeparator();
                     addStContextMenuItem('Delete Transition', () => {
                         postMessage({ type: 'st_nestedTransitionDeleted', parentId: parentId, index: nestedIdx });
