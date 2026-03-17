@@ -3507,7 +3507,7 @@
             // After creation, also send member additions
             if (clipboard.members && clipboard.members.length > 0) {
                 clipboard.members.forEach(m => {
-                    postMessage({ type: 'cls_memberAdded', classId: newId, memberName: m.name, memberType: m.type || 'String', memberVisibility: m.visibility || 'Public', memberKind: m.kind || 'Property' });
+                    postMessage({ type: 'cls_memberAdded', classId: newId, rawText: m.rawText || m.name || '' });
                 });
             }
         }
@@ -3525,7 +3525,7 @@
             // After creation, also send attribute additions
             if (clipboard.attributes && clipboard.attributes.length > 0) {
                 clipboard.attributes.forEach(a => {
-                    postMessage({ type: 'er_attributeAdded', entityName: newName, attrName: a.name, attrType: a.type || 'string', isPK: a.isPK || false, isFK: a.isFK || false });
+                    postMessage({ type: 'er_attributeAdded', entityName: newName, name: a.name || 'field', attrType: a.type || 'string', key: a.key || '', comment: a.comment || '' });
                 });
             }
         }

@@ -551,12 +551,15 @@ public class BackgroundExportService : BackgroundService
 
         if (latestPerAccount)
         {
-            // Use a subquery from the already-filtered query to get the max Job ID per account.
+            // Use a subquery from the already-filtered query to get the latest job per account
+            // by BillingPeriodStartDateTime (matching AdrJobRepository.GetPagedAsync logic).
             // This ensures latestPerAccount respects all applied filters (status, date, vendor, etc.).
-            // Avoids GroupBy+Select(First())+Include which EF Core cannot translate to SQL.
             var latestJobIds = query
                 .GroupBy(j => j.AdrAccountId)
-                .Select(g => g.Max(j => j.Id));
+                .Select(g => g
+                    .OrderByDescending(j => j.BillingPeriodStartDateTime)
+                    .Select(j => j.Id)
+                    .First());
 
             query = query.Where(j => latestJobIds.Contains(j.Id));
         }
