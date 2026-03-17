@@ -123,6 +123,7 @@ public partial class MainWindow : Window
     private StateDiagramModel? _currentStateDiagramModel;
     private ERDiagramModel? _currentERDiagramModel;
     private bool _isVisualEditorUpdating; // Prevent re-entrant updates between text <-> visual
+    private bool _visualEditorHasFocus; // Tracks whether the Visual Editor pane has focus (for toolbar enable/disable)
 
     private const string DefaultMermaidCode= @"flowchart TD
     A[Start] --> B[End]";
@@ -1203,6 +1204,13 @@ Console.WriteLine(""Hello, World!"");
         _markdownPageLoaded = false;
 
         var mermaidCode = CodeEditor.Text;
+
+        // Strip @pos position metadata comments before sending to Mermaid.js renderer.
+        // These are our custom comments (e.g. "%% @pos NodeId 100.0,200.0") that store
+        // visual editor positions. Mermaid.js state diagram parser doesn't handle them
+        // well and they cause rendering errors.
+        mermaidCode = StripPosComments(mermaidCode);
+
         var escapedCode = System.Text.Json.JsonSerializer.Serialize(mermaidCode);
         
         // If page is already loaded, just update the diagram via JavaScript (preserves pan/zoom position)
@@ -1806,6 +1814,31 @@ Console.WriteLine(""Hello, World!"");
         PreviewWebView.WebMessageReceived -= PreviewWebView_WebMessageReceived;
         PreviewWebView.WebMessageReceived += PreviewWebView_WebMessageReceived;
         StatusText.Text = "Mermaid rendered";
+    }
+
+    /// <summary>
+    /// Strips %% @pos metadata comments from Mermaid code before sending to the renderer.
+    /// These comments store visual editor positions and confuse Mermaid.js's state diagram parser.
+    /// </summary>
+    private static string StripPosComments(string mermaidCode)
+    {
+        if (string.IsNullOrEmpty(mermaidCode))
+            return mermaidCode;
+
+        var lines = mermaidCode.Split('\n');
+        var filtered = new System.Text.StringBuilder();
+        foreach (var line in lines)
+        {
+            var trimmed = line.TrimStart();
+            if (trimmed.StartsWith("%%") && trimmed.Contains("@pos"))
+                continue; // Skip @pos metadata lines
+            filtered.AppendLine(line.TrimEnd('\r'));
+        }
+        // Remove the trailing newline added by AppendLine
+        var result = filtered.ToString();
+        if (result.EndsWith(Environment.NewLine))
+            result = result.Substring(0, result.Length - Environment.NewLine.Length);
+        return result;
     }
 
     private async void RenderMarkdown()
@@ -4592,6 +4625,10 @@ Console.WriteLine(""Hello, World!"");
             _visualEditorBridge.ERDiagramModelChanged += VisualEditorBridge_ERDiagramModelChanged;
             _visualEditorBridge.EditorReady += VisualEditorBridge_EditorReady;
 
+            // Wire up focus tracking for code-only toolbar enable/disable
+            VisualEditorWebView.GotFocus += VisualEditorWebView_GotFocus;
+            CodeEditor.GotFocus += CodeEditor_GotFocus;
+
                 // Apply current theme to visual editor
                 await _visualEditorBridge.SetThemeAsync(GetVisualEditorThemeString());
 
@@ -4604,6 +4641,26 @@ Console.WriteLine(""Hello, World!"");
             // Visual editor is optional - silently fail if WebView2 can't init for it
             _visualEditorInitialized = false;
         }
+    }
+
+    /// <summary>
+    /// Called when the Visual Editor WebView receives focus (e.g., user clicks in it).
+    /// Disables code-only toolbar buttons since they don't apply to the visual editor.
+    /// </summary>
+    private void VisualEditorWebView_GotFocus(object sender, RoutedEventArgs e)
+    {
+        _visualEditorHasFocus = true;
+        UpdateCodeOnlyToolbarState();
+    }
+
+    /// <summary>
+    /// Called when the Code Editor receives focus (e.g., user clicks in it).
+    /// Re-enables code-only toolbar buttons.
+    /// </summary>
+    private void CodeEditor_GotFocus(object sender, RoutedEventArgs e)
+    {
+        _visualEditorHasFocus = false;
+        UpdateCodeOnlyToolbarState();
     }
 
     /// <summary>
@@ -4877,14 +4934,14 @@ Console.WriteLine(""Hello, World!"");
         {
             VisualModeToggle.IsEnabled = visualSupported;
             VisualModeToggle.ToolTip = visualSupported
-                ? "Visual Editor"
+                ? "Visual Editor Mode"
                 : "Visual editor is not yet available for this diagram type";
         }
         if (SplitModeToggle != null)
         {
             SplitModeToggle.IsEnabled = visualSupported;
             SplitModeToggle.ToolTip = visualSupported
-                ? "Split View"
+                ? "Split Mode (Visual & Code)"
                 : "Visual editor is not yet available for this diagram type";
         }
 
@@ -4893,14 +4950,14 @@ Console.WriteLine(""Hello, World!"");
         {
             VisualHeaderVisualModeToggle.IsEnabled = visualSupported;
             VisualHeaderVisualModeToggle.ToolTip = visualSupported
-                ? "Visual Editor"
+                ? "Visual Editor Mode"
                 : "Visual editor is not yet available for this diagram type";
         }
         if (VisualHeaderSplitModeToggle != null)
         {
             VisualHeaderSplitModeToggle.IsEnabled = visualSupported;
             VisualHeaderSplitModeToggle.ToolTip = visualSupported
-                ? "Split View"
+                ? "Split Mode (Visual & Code)"
                 : "Visual editor is not yet available for this diagram type";
         }
 
@@ -5281,6 +5338,45 @@ Console.WriteLine(""Hello, World!"");
                 : new GridLength(1, GridUnitType.Star);
             PreviewColumn.MinWidth = 200;
         }
+
+        // Update code-only toolbar enabled state based on mode
+        UpdateCodeOnlyToolbarState();
+    }
+
+    /// <summary>
+    /// Enables or disables code-only toolbar buttons (Edit toolbar: indent, comment, move lines;
+    /// View toolbar: word wrap, line numbers, bracket matching, minimap, spell check)
+    /// based on whether the Code Editor pane currently has focus.
+    /// In Text mode, always enabled. In Visual mode, always disabled.
+    /// In Split mode, depends on which pane has focus.
+    /// </summary>
+    private void UpdateCodeOnlyToolbarState()
+    {
+        bool codeToolbarsEnabled;
+        switch (_visualEditorMode)
+        {
+            case VisualEditorMode.Text:
+                codeToolbarsEnabled = true;
+                break;
+            case VisualEditorMode.Visual:
+                codeToolbarsEnabled = false;
+                break;
+            case VisualEditorMode.Split:
+                // In split mode, default to enabled (code pane is visible);
+                // the GotFocus handlers will toggle as user clicks between panes
+                codeToolbarsEnabled = !_visualEditorHasFocus;
+                break;
+            default:
+                codeToolbarsEnabled = true;
+                break;
+        }
+
+        if (EditToolbarBorder != null)
+            EditToolbarBorder.IsEnabled = codeToolbarsEnabled;
+        if (ViewToggleToolbarBorder != null)
+            ViewToggleToolbarBorder.IsEnabled = codeToolbarsEnabled;
+        if (MarkdownFormattingToolbar != null && _visualEditorMode != VisualEditorMode.Text)
+            MarkdownFormattingToolbar.IsEnabled = codeToolbarsEnabled;
     }
 
     #endregion
@@ -7118,6 +7214,9 @@ Console.WriteLine(""Hello, World!"");
 
     private void RenderMermaidPreview(string code)
     {
+        // Strip @pos metadata comments so they don't confuse Mermaid.js
+        code = StripPosComments(code);
+
         var pvTheme = ThemeManager.CurrentTheme;
         var pvBodyBg = pvTheme switch { AppTheme.Light => "#f5f5f5", AppTheme.Twilight => "#1A1A2E", _ => "#1e1e1e" };
         // Use a lighter diagram card background for dark themes so Mermaid's dark-colored edges/arrows stay visible

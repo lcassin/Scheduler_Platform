@@ -10412,8 +10412,8 @@
             // Re-render current diagram
             if (currentDiagramType === 'state' && stDiagram) renderStateDiagram();
             else if (currentDiagramType === 'flowchart') renderEdges();
-            else if (currentDiagramType === 'classDiagram' && clsDiagram) renderClassDiagram();
-            else if (currentDiagramType === 'erDiagram' && erDiagram) renderERDiagram();
+            else if (currentDiagramType === 'class' && clsDiagram) renderClassDiagram();
+            else if (currentDiagramType === 'er' && erDiagram) renderERDiagram();
         }
 
         const curveBtn = document.getElementById('tb-st-toggle-curves');
