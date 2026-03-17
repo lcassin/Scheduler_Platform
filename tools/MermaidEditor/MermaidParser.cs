@@ -1293,6 +1293,7 @@ public static class MermaidParser
         var lines = text.Split('\n');
         var model = new ClassDiagramModel();
         var knownClasses = new HashSet<string>(StringComparer.Ordinal);
+        var pendingPositions = new Dictionary<string, (double x, double y)>(StringComparer.Ordinal);
         bool foundDeclaration = false;
 
         // Track namespace nesting
@@ -1311,19 +1312,26 @@ public static class MermaidParser
             if (string.IsNullOrWhiteSpace(line))
                 continue;
 
+            // Check for @pos position comments first (before general comments)
+            var posMatch = PosCommentPattern.Match(line);
+            if (posMatch.Success)
+            {
+                var posId = posMatch.Groups[1].Value;
+                var posX = double.Parse(posMatch.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
+                var posY = double.Parse(posMatch.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture);
+                pendingPositions[posId] = (posX, posY);
+                continue;
+            }
+
             // Check for comments (before declaration check)
             var commentMatch = CommentPattern.Match(line);
             if (commentMatch.Success)
             {
-                var commentText = commentMatch.Groups[1].Value;
-                if (!commentText.TrimStart().StartsWith("@pos"))
+                model.Comments.Add(new CommentEntry
                 {
-                    model.Comments.Add(new CommentEntry
-                    {
-                        Text = commentText,
-                        OriginalLineIndex = i
-                    });
-                }
+                    Text = commentMatch.Groups[1].Value,
+                    OriginalLineIndex = i
+                });
                 continue;
             }
 
@@ -1535,6 +1543,17 @@ public static class MermaidParser
 
         if (!foundDeclaration)
             return null;
+
+        // Apply any pending @pos position data to classes
+        foreach (var (posId, (px, py)) in pendingPositions)
+        {
+            var cls = model.Classes.Find(c => c.Id == posId);
+            if (cls != null)
+            {
+                cls.Position = new System.Windows.Point(px, py);
+                cls.HasManualPosition = true;
+            }
+        }
 
         return model;
     }
@@ -1827,6 +1846,7 @@ public static class MermaidParser
         var lines = text.Split('\n');
         var model = new StateDiagramModel();
         var knownStates = new HashSet<string>(StringComparer.Ordinal);
+        var pendingPositions = new Dictionary<string, (double x, double y)>(StringComparer.Ordinal);
         bool foundDeclaration = false;
 
         // Stack for nested composite state parsing
@@ -1846,6 +1866,17 @@ public static class MermaidParser
             // Skip empty lines
             if (string.IsNullOrWhiteSpace(line))
                 continue;
+
+            // Check for @pos position comments first (before general comments)
+            var posMatch = PosCommentPattern.Match(line);
+            if (posMatch.Success)
+            {
+                var posId = posMatch.Groups[1].Value;
+                var posX = double.Parse(posMatch.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
+                var posY = double.Parse(posMatch.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture);
+                pendingPositions[posId] = (posX, posY);
+                continue;
+            }
 
             // Check for comments (before declaration check)
             var commentMatch = CommentPattern.Match(line);
@@ -2098,6 +2129,27 @@ public static class MermaidParser
             }
         }
 
+        // Apply any pending @pos position data to states
+        if (foundDeclaration)
+        {
+            foreach (var (posId, (px, py)) in pendingPositions)
+            {
+                // Search all states recursively
+                StateDefinition? target = null;
+                foreach (var s in model.States)
+                {
+                    if (s.Id == posId) { target = s; break; }
+                    target = FindStateRecursive(s, posId);
+                    if (target != null) break;
+                }
+                if (target != null)
+                {
+                    target.Position = new System.Windows.Point(px, py);
+                    target.HasManualPosition = true;
+                }
+            }
+        }
+
         return foundDeclaration ? model : null;
     }
 
@@ -2208,6 +2260,7 @@ public static class MermaidParser
         var lines = text.Split('\n');
         var model = new ERDiagramModel();
         var knownEntities = new HashSet<string>(StringComparer.Ordinal);
+        var pendingPositions = new Dictionary<string, (double x, double y)>(StringComparer.Ordinal);
         bool foundDeclaration = false;
 
         // Track entity body parsing
@@ -2222,6 +2275,17 @@ public static class MermaidParser
             // Skip empty lines
             if (string.IsNullOrWhiteSpace(line))
                 continue;
+
+            // Check for @pos position comments first (before general comments)
+            var posMatch = PosCommentPattern.Match(line);
+            if (posMatch.Success)
+            {
+                var posId = posMatch.Groups[1].Value;
+                var posX = double.Parse(posMatch.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
+                var posY = double.Parse(posMatch.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture);
+                pendingPositions[posId] = (posX, posY);
+                continue;
+            }
 
             // Check for comments (before declaration check)
             var commentMatch = CommentPattern.Match(line);
@@ -2324,6 +2388,20 @@ public static class MermaidParser
                 EnsureEREntityExists(model, knownEntities, fromEntity);
                 EnsureEREntityExists(model, knownEntities, toEntity);
                 continue;
+            }
+        }
+
+        // Apply any pending @pos position data to entities
+        if (foundDeclaration)
+        {
+            foreach (var (posId, (px, py)) in pendingPositions)
+            {
+                var entity = model.Entities.Find(e => e.Name == posId);
+                if (entity != null)
+                {
+                    entity.Position = new System.Windows.Point(px, py);
+                    entity.HasManualPosition = true;
+                }
             }
         }
 

@@ -5804,7 +5804,10 @@
                             classifier: m.classifier || 'None'
                         })),
                         cssClass: c.cssClass || null,
-                        isExplicit: c.isExplicit !== false
+                        isExplicit: c.isExplicit !== false,
+                        x: c.x || 0,
+                        y: c.y || 0,
+                        hasManualPosition: c.hasManualPosition || false
                     })),
                     relationships: (data.relationships || []).map(r => clsNormalizeRelationship({
                         fromId: r.fromId,
@@ -5830,6 +5833,18 @@
 
                 // Hide property panel from previous diagram
                 propertyPanel.classList.remove('visible');
+
+                // Hydrate saved positions from C# model (if HasManualPosition)
+                if (clsDiagram.classes) {
+                    clsDiagram.classes.forEach(cls => {
+                        if (cls.hasManualPosition && (cls.x || cls.y)) {
+                            clsClassPositions[cls.id] = {
+                                x: cls.x,
+                                y: cls.y
+                            };
+                        }
+                    });
+                }
 
                 // Auto-layout class positions if not already set
                 clsAutoLayoutClasses();
@@ -5865,7 +5880,10 @@
                             classifier: m.classifier || 'None'
                         })),
                         cssClass: c.cssClass || null,
-                        isExplicit: c.isExplicit !== false
+                        isExplicit: c.isExplicit !== false,
+                        x: c.x || 0,
+                        y: c.y || 0,
+                        hasManualPosition: c.hasManualPosition || false
                     })),
                     relationships: (data.relationships || []).map(r => clsNormalizeRelationship({
                         fromId: r.fromId,
@@ -6609,6 +6627,15 @@
             if (!clsDiagram) return;
 
             if (clsDraggingClassId) {
+                const pos = clsClassPositions[clsDraggingClassId];
+                if (pos) {
+                    postMessage({
+                        type: 'cls_classMoved',
+                        classId: clsDraggingClassId,
+                        x: pos.x,
+                        y: pos.y
+                    });
+                }
                 clsDraggingClassId = null;
             }
 
@@ -7124,6 +7151,24 @@
                 // Hide property panel from previous diagram
                 propertyPanel.classList.remove('visible');
 
+                // Hydrate saved positions from C# model (if HasManualPosition)
+                function stHydratePositions(states) {
+                    states.forEach(s => {
+                        if (s.hasManualPosition && (s.x || s.y)) {
+                            stStatePositions[s.id] = {
+                                x: s.x,
+                                y: s.y,
+                                width: stStatePositions[s.id] ? stStatePositions[s.id].width : ST_BOX_MIN_WIDTH,
+                                height: stStatePositions[s.id] ? stStatePositions[s.id].height : ST_BOX_HEIGHT
+                            };
+                        }
+                        if (s.nestedStates && s.nestedStates.length > 0) {
+                            stHydratePositions(s.nestedStates);
+                        }
+                    });
+                }
+                stHydratePositions(stDiagram.states);
+
                 stAutoLayoutStates();
                 updateToolbarForDiagramType();
                 renderStateDiagram();
@@ -7145,7 +7190,10 @@
                     fromId: t.fromId || '',
                     toId: t.toId || '',
                     label: t.label || null
-                }))
+                })),
+                x: s.x || 0,
+                y: s.y || 0,
+                hasManualPosition: s.hasManualPosition || false
             };
         }
 
@@ -8568,6 +8616,15 @@
             }
 
             if (stDraggingStateId) {
+                const pos = stStatePositions[stDraggingStateId];
+                if (pos) {
+                    postMessage({
+                        type: 'st_stateMoved',
+                        stateId: stDraggingStateId,
+                        x: pos.x,
+                        y: pos.y
+                    });
+                }
                 stDraggingStateId = null;
             }
         });
@@ -9194,7 +9251,10 @@
                             name: a.name || '',
                             key: a.key || null,
                             comment: a.comment || null
-                        }))
+                        })),
+                        x: e.x || 0,
+                        y: e.y || 0,
+                        hasManualPosition: e.hasManualPosition || false
                     })),
                     relationships: (data.relationships || []).map(r => ({
                         fromEntity: r.fromEntity || '',
@@ -9219,6 +9279,18 @@
                 // Hide property panel from previous diagram
                 propertyPanel.classList.remove('visible');
 
+                // Hydrate saved positions from C# model (if HasManualPosition)
+                if (erDiagram.entities) {
+                    erDiagram.entities.forEach(entity => {
+                        if (entity.hasManualPosition && (entity.x || entity.y)) {
+                            erEntityPositions[entity.name] = {
+                                x: entity.x,
+                                y: entity.y
+                            };
+                        }
+                    });
+                }
+
                 erAutoLayoutEntities();
                 updateToolbarForDiagramType();
                 renderERDiagram();
@@ -9241,7 +9313,10 @@
                             name: a.name || '',
                             key: a.key || null,
                             comment: a.comment || null
-                        }))
+                        })),
+                        x: e.x || 0,
+                        y: e.y || 0,
+                        hasManualPosition: e.hasManualPosition || false
                     })),
                     relationships: (data.relationships || []).map(r => ({
                         fromEntity: r.fromEntity || '',
@@ -9781,6 +9856,15 @@
             }
 
             if (erDraggingEntityName) {
+                const pos = erEntityPositions[erDraggingEntityName];
+                if (pos) {
+                    postMessage({
+                        type: 'er_entityMoved',
+                        entityName: erDraggingEntityName,
+                        x: pos.x,
+                        y: pos.y
+                    });
+                }
                 erDraggingEntityName = null;
             }
         });

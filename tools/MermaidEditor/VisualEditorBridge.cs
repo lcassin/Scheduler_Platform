@@ -227,7 +227,10 @@ public class VisualEditorBridge
                 Classifier = m.Classifier.ToString()
             }).ToList(),
             CssClass = c.CssClass,
-            IsExplicit = c.IsExplicit
+            IsExplicit = c.IsExplicit,
+            X = c.Position.X,
+            Y = c.Position.Y,
+            HasManualPosition = c.HasManualPosition
         }).ToList();
 
         var relationships = model.Relationships.Select(r => new ClsDiagRelDto
@@ -481,7 +484,10 @@ public class VisualEditorBridge
                 FromId = t.FromId,
                 ToId = t.ToId,
                 Label = t.Label
-            }).ToList()
+            }).ToList(),
+            X = state.Position.X,
+            Y = state.Position.Y,
+            HasManualPosition = state.HasManualPosition
         };
     }
 
@@ -536,7 +542,10 @@ public class VisualEditorBridge
                 Name = a.Name,
                 Key = a.Key,
                 Comment = a.Comment
-            }).ToList()
+            }).ToList(),
+            X = e.Position.X,
+            Y = e.Position.Y,
+            HasManualPosition = e.HasManualPosition
         }).ToList();
 
         var relationships = model.Relationships.Select(r => new ErDiagRelDto
@@ -926,6 +935,10 @@ public class VisualEditorBridge
                     HandleClsAutoLayoutComplete(root);
                     break;
 
+                case "cls_classMoved":
+                    HandleClsClassMoved(root);
+                    break;
+
                 case "cls_classSelected":
                 case "cls_relationshipSelected":
                     // Selection doesn't need model changes
@@ -1020,6 +1033,10 @@ public class VisualEditorBridge
                     break;
 
                 // ===== State Diagram Messages =====
+
+                case "st_stateMoved":
+                    HandleStStateMoved(root);
+                    break;
 
                 case "st_stateCreated":
                     HandleStStateCreated(root);
@@ -1138,6 +1155,10 @@ public class VisualEditorBridge
 
                 case "er_relationshipDeleted":
                     HandleErRelationshipDeleted(root);
+                    break;
+
+                case "er_entityMoved":
+                    HandleErEntityMoved(root);
                     break;
 
                 case "er_autoLayoutComplete":
@@ -1571,22 +1592,152 @@ public class VisualEditorBridge
 
     private void HandleClsAutoLayoutComplete(JsonElement root)
     {
-        // Class diagram positions are managed by JS (clsClassPositions dict).
-        // The C# model doesn't store position data for class diagram nodes.
-        // We just need to raise model changed so the text editor stays in sync.
+        if (!root.TryGetProperty("positions", out var positionsArray))
+        {
+            RaiseClassDiagramModelChanged("cls_autoLayoutComplete");
+            return;
+        }
+
+        PushUndo();
+        foreach (var pos in positionsArray.EnumerateArray())
+        {
+            var classId = pos.GetProperty("classId").GetString();
+            if (string.IsNullOrEmpty(classId)) continue;
+
+            var cls = _classDiagramModel?.Classes.Find(c => c.Id == classId);
+            if (cls == null) continue;
+
+            cls.Position = new System.Windows.Point(
+                pos.GetProperty("x").GetDouble(),
+                pos.GetProperty("y").GetDouble()
+            );
+            cls.HasManualPosition = true;
+        }
+
         RaiseClassDiagramModelChanged("cls_autoLayoutComplete");
     }
 
     private void HandleStAutoLayoutComplete(JsonElement root)
     {
-        // State diagram positions are managed by JS (stStatePositions dict).
+        if (!root.TryGetProperty("positions", out var positionsArray))
+        {
+            RaiseStateDiagramModelChanged("st_autoLayoutComplete");
+            return;
+        }
+
+        PushUndo();
+        foreach (var pos in positionsArray.EnumerateArray())
+        {
+            var stateId = pos.GetProperty("stateId").GetString();
+            if (string.IsNullOrEmpty(stateId)) continue;
+
+            StateDefinition? state = null;
+            if (_stateDiagramModel != null)
+            {
+                foreach (var s in _stateDiagramModel.States)
+                {
+                    if (s.Id == stateId) { state = s; break; }
+                    state = FindStateRecursive(s.NestedStates, stateId);
+                    if (state != null) break;
+                }
+            }
+            if (state == null) continue;
+
+            state.Position = new System.Windows.Point(
+                pos.GetProperty("x").GetDouble(),
+                pos.GetProperty("y").GetDouble()
+            );
+            state.HasManualPosition = true;
+        }
+
         RaiseStateDiagramModelChanged("st_autoLayoutComplete");
     }
 
     private void HandleErAutoLayoutComplete(JsonElement root)
     {
-        // ER diagram positions are managed by JS (erEntityPositions dict).
+        if (!root.TryGetProperty("positions", out var positionsArray))
+        {
+            RaiseERDiagramModelChanged("er_autoLayoutComplete");
+            return;
+        }
+
+        PushUndo();
+        foreach (var pos in positionsArray.EnumerateArray())
+        {
+            var entityName = pos.GetProperty("entityName").GetString();
+            if (string.IsNullOrEmpty(entityName)) continue;
+
+            var entity = _erDiagramModel?.Entities.Find(e => e.Name == entityName);
+            if (entity == null) continue;
+
+            entity.Position = new System.Windows.Point(
+                pos.GetProperty("x").GetDouble(),
+                pos.GetProperty("y").GetDouble()
+            );
+            entity.HasManualPosition = true;
+        }
+
         RaiseERDiagramModelChanged("er_autoLayoutComplete");
+    }
+
+    private void HandleClsClassMoved(JsonElement root)
+    {
+        var classId = root.GetProperty("classId").GetString();
+        var x = root.GetProperty("x").GetDouble();
+        var y = root.GetProperty("y").GetDouble();
+
+        if (string.IsNullOrEmpty(classId)) return;
+
+        var cls = _classDiagramModel?.Classes.Find(c => c.Id == classId);
+        if (cls == null) return;
+
+        PushUndo();
+        cls.Position = new System.Windows.Point(x, y);
+        cls.HasManualPosition = true;
+        RaiseClassDiagramModelChanged("cls_classMoved");
+    }
+
+    private void HandleStStateMoved(JsonElement root)
+    {
+        var stateId = root.GetProperty("stateId").GetString();
+        var x = root.GetProperty("x").GetDouble();
+        var y = root.GetProperty("y").GetDouble();
+
+        if (string.IsNullOrEmpty(stateId)) return;
+
+        StateDefinition? state = null;
+        if (_stateDiagramModel != null)
+        {
+            foreach (var s in _stateDiagramModel.States)
+            {
+                if (s.Id == stateId) { state = s; break; }
+                state = FindStateRecursive(s.NestedStates, stateId);
+                if (state != null) break;
+            }
+        }
+        if (state == null) return;
+
+        PushUndo();
+        state.Position = new System.Windows.Point(x, y);
+        state.HasManualPosition = true;
+        RaiseStateDiagramModelChanged("st_stateMoved");
+    }
+
+    private void HandleErEntityMoved(JsonElement root)
+    {
+        var entityName = root.GetProperty("entityName").GetString();
+        var x = root.GetProperty("x").GetDouble();
+        var y = root.GetProperty("y").GetDouble();
+
+        if (string.IsNullOrEmpty(entityName)) return;
+
+        var entity = _erDiagramModel?.Entities.Find(e => e.Name == entityName);
+        if (entity == null) return;
+
+        PushUndo();
+        entity.Position = new System.Windows.Point(x, y);
+        entity.HasManualPosition = true;
+        RaiseERDiagramModelChanged("er_entityMoved");
     }
 
     // ========== Undo/Redo History ==========
@@ -2089,7 +2240,9 @@ public class VisualEditorBridge
                     Annotation = c.Annotation,
                     GenericType = c.GenericType,
                     CssClass = c.CssClass,
-                    IsExplicit = c.IsExplicit
+                    IsExplicit = c.IsExplicit,
+                    Position = new System.Windows.Point(c.X, c.Y),
+                    HasManualPosition = c.HasManualPosition
                 };
                 if (c.Members != null)
                 {
@@ -2684,7 +2837,9 @@ public class VisualEditorBridge
             Label = dto.Label,
             Type = type,
             CssClass = dto.CssClass,
-            IsExplicit = dto.IsExplicit
+            IsExplicit = dto.IsExplicit,
+            Position = new System.Windows.Point(dto.X, dto.Y),
+            HasManualPosition = dto.HasManualPosition
         };
 
         if (dto.NestedStates != null)
@@ -2912,7 +3067,9 @@ public class VisualEditorBridge
                 var entity = new EREntity
                 {
                     Name = e.Name ?? string.Empty,
-                    IsExplicit = e.IsExplicit
+                    IsExplicit = e.IsExplicit,
+                    Position = new System.Windows.Point(e.X, e.Y),
+                    HasManualPosition = e.HasManualPosition
                 };
                 if (e.Attributes != null)
                 {
@@ -3886,6 +4043,9 @@ public class VisualEditorBridge
         public List<ClsDiagMemberDto>? Members { get; set; }
         public string? CssClass { get; set; }
         public bool IsExplicit { get; set; }
+        public double X { get; set; }
+        public double Y { get; set; }
+        public bool HasManualPosition { get; set; }
     }
 
     private class ClsDiagMemberDto
@@ -3945,6 +4105,9 @@ public class VisualEditorBridge
         public bool IsExplicit { get; set; }
         public List<StDiagStateDto>? NestedStates { get; set; }
         public List<StDiagTransitionDto>? NestedTransitions { get; set; }
+        public double X { get; set; }
+        public double Y { get; set; }
+        public bool HasManualPosition { get; set; }
     }
 
     private class StDiagTransitionDto
@@ -3976,6 +4139,9 @@ public class VisualEditorBridge
         public string? Name { get; set; }
         public bool IsExplicit { get; set; }
         public List<ErDiagAttributeDto>? Attributes { get; set; }
+        public double X { get; set; }
+        public double Y { get; set; }
+        public bool HasManualPosition { get; set; }
     }
 
     private class ErDiagAttributeDto

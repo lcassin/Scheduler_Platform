@@ -737,6 +737,17 @@ public class ClassDefinition
     public bool IsExplicit { get; set; }
 
     /// <summary>
+    /// Position for the visual editor (x, y coordinates).
+    /// </summary>
+    public System.Windows.Point Position { get; set; }
+
+    /// <summary>
+    /// Whether this class has been manually positioned in the visual editor.
+    /// When true, position data is stored as a special comment (%% @pos classId x,y).
+    /// </summary>
+    public bool HasManualPosition { get; set; }
+
+    /// <summary>
     /// Returns the effective display label (Label if set, otherwise Id).
     /// </summary>
     public string DisplayLabel => Label ?? Id;
@@ -1049,6 +1060,17 @@ public class StateDefinition
     public bool IsExplicit { get; set; }
 
     /// <summary>
+    /// Position for the visual editor (x, y coordinates).
+    /// </summary>
+    public System.Windows.Point Position { get; set; }
+
+    /// <summary>
+    /// Whether this state has been manually positioned in the visual editor.
+    /// When true, position data is stored as a special comment (%% @pos stateId x,y).
+    /// </summary>
+    public bool HasManualPosition { get; set; }
+
+    /// <summary>
     /// Display label: uses Label if set, otherwise Id.
     /// </summary>
     public string DisplayLabel => Label ?? Id;
@@ -1186,6 +1208,17 @@ public class EREntity
     /// Whether this entity was explicitly declared (vs. inferred from relationships).
     /// </summary>
     public bool IsExplicit { get; set; }
+
+    /// <summary>
+    /// Position for the visual editor (x, y coordinates).
+    /// </summary>
+    public System.Windows.Point Position { get; set; }
+
+    /// <summary>
+    /// Whether this entity has been manually positioned in the visual editor.
+    /// When true, position data is stored as a special comment (%% @pos entityName x,y).
+    /// </summary>
+    public bool HasManualPosition { get; set; }
 }
 
 /// <summary>
