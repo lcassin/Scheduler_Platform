@@ -1114,6 +1114,10 @@ public class VisualEditorBridge
                     HandleStAutoLayoutComplete(root);
                     break;
 
+                case "st_allPositionsUpdate":
+                    HandleStAllPositionsUpdate(root);
+                    break;
+
                 case "st_stateSelected":
                 case "st_transitionSelected":
                     // Selection doesn't need model changes
@@ -1651,6 +1655,45 @@ public class VisualEditorBridge
         }
 
         RaiseStateDiagramModelChanged("st_autoLayoutComplete");
+    }
+
+    /// <summary>
+    /// Handles bulk position update sent after any state drag ends.
+    /// Updates positions for ALL states so every state gets HasManualPosition=true
+    /// and @pos comments are written for the entire layout.
+    /// </summary>
+    private void HandleStAllPositionsUpdate(JsonElement root)
+    {
+        if (!root.TryGetProperty("positions", out var positionsArray))
+            return;
+
+        if (_stateDiagramModel == null) return;
+
+        foreach (var pos in positionsArray.EnumerateArray())
+        {
+            var stateId = pos.GetProperty("stateId").GetString();
+            if (string.IsNullOrEmpty(stateId)) continue;
+
+            // Skip pseudo-state IDs ([*]_start, [*]_end, etc.) — they are not real states in the model
+            if (stateId.StartsWith("[*]_")) continue;
+
+            StateDefinition? state = null;
+            foreach (var s in _stateDiagramModel.States)
+            {
+                if (s.Id == stateId) { state = s; break; }
+                state = FindStateRecursive(s.NestedStates, stateId);
+                if (state != null) break;
+            }
+            if (state == null) continue;
+
+            state.Position = new System.Windows.Point(
+                pos.GetProperty("x").GetDouble(),
+                pos.GetProperty("y").GetDouble()
+            );
+            state.HasManualPosition = true;
+        }
+
+        // Don't push undo or raise model changed — the st_stateMoved handler already did that
     }
 
     private void HandleErAutoLayoutComplete(JsonElement root)

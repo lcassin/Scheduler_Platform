@@ -7152,6 +7152,7 @@
                 propertyPanel.classList.remove('visible');
 
                 // Hydrate saved positions from C# model (if HasManualPosition)
+                let hasHydratedPositions = false;
                 function stHydratePositions(states) {
                     states.forEach(s => {
                         if (s.hasManualPosition && (s.x || s.y)) {
@@ -7161,6 +7162,7 @@
                                 width: stStatePositions[s.id] ? stStatePositions[s.id].width : ST_BOX_MIN_WIDTH,
                                 height: stStatePositions[s.id] ? stStatePositions[s.id].height : ST_BOX_HEIGHT
                             };
+                            hasHydratedPositions = true;
                         }
                         if (s.nestedStates && s.nestedStates.length > 0) {
                             stHydratePositions(s.nestedStates);
@@ -7169,7 +7171,23 @@
                 }
                 stHydratePositions(stDiagram.states);
 
-                stAutoLayoutStates();
+                if (hasHydratedPositions) {
+                    // Positions were restored from @pos comments — skip dagre auto-layout.
+                    // Only place states that don't already have positions using grid fallback.
+                    stPlaceStatesInGrid(stDiagram.states, ST_LEFT_MARGIN, ST_TOP_MARGIN);
+                    // Expand composites to fit their nested children
+                    function expandAllComposites(states) {
+                        states.forEach(s => {
+                            if (s.nestedStates && s.nestedStates.length > 0) {
+                                expandAllComposites(s.nestedStates);
+                                stExpandCompositeToFitChildren(s.id);
+                            }
+                        });
+                    }
+                    expandAllComposites(stDiagram.states);
+                } else {
+                    stAutoLayoutStates();
+                }
                 updateToolbarForDiagramType();
                 renderStateDiagram();
                 centerView();
@@ -8625,6 +8643,24 @@
                         y: pos.y
                     });
                 }
+                // Send ALL state positions to C# so every state gets HasManualPosition=true
+                // and @pos comments are written for the entire layout, not just the dragged state
+                const allPositions = [];
+                const allStates = stGetAllFlatStates();
+                allStates.forEach(state => {
+                    const sp = stStatePositions[state.id];
+                    if (sp) {
+                        allPositions.push({ stateId: state.id, x: sp.x, y: sp.y, width: sp.width || 0, height: sp.height || 0 });
+                    }
+                });
+                // Include pseudo-state positions
+                Object.keys(stStatePositions).forEach(key => {
+                    if (key.startsWith('[*]_')) {
+                        const sp = stStatePositions[key];
+                        allPositions.push({ stateId: key, x: sp.x, y: sp.y, width: sp.width || 0, height: sp.height || 0 });
+                    }
+                });
+                postMessage({ type: 'st_allPositionsUpdate', positions: allPositions });
                 stDraggingStateId = null;
             }
         });
