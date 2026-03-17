@@ -9025,8 +9025,12 @@
                                 height: ST_BOX_HEIGHT
                             };
                         }
+                        // Add to local model immediately so expand can see it
+                        if (!clickedState.nestedStates) clickedState.nestedStates = [];
+                        clickedState.nestedStates.push({ id: newId, label: newId, type: 'Simple', nestedStates: [], nestedTransitions: [] });
                         postMessage({ type: 'st_nestedStateCreated', parentId: stateId, stateId: newId, label: newId });
                         stExpandCompositeChain(stateId);
+                        renderStateDiagram();
                     });
                 }
                 addStContextMenuSeparator();
