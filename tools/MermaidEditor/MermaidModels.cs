@@ -1016,6 +1016,18 @@ public class StateDiagramModel
     /// Whether the diagram uses stateDiagram-v2 (true) or stateDiagram (false).
     /// </summary>
     public bool IsV2 { get; set; } = true;
+
+    /// <summary>
+    /// Positions of pseudo-state nodes ([*]_start, [*]_end, [*]_start_ParentId, etc.)
+    /// that don't have corresponding StateDefinition objects. Keyed by pseudo-node ID.
+    /// </summary>
+    public Dictionary<string, System.Windows.Point> PseudoNodePositions { get; set; } = new();
+
+    /// <summary>
+    /// Positions of notes that have been manually dragged.
+    /// Keyed by note index (as string), value is the (x,y) position.
+    /// </summary>
+    public Dictionary<string, System.Windows.Point> NotePositions { get; set; } = new();
 }
 
 /// <summary>

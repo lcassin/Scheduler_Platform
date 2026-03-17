@@ -1150,9 +1150,13 @@ public static class MermaidSerializer
         {
             CollectPositionedStates(state, positioned);
         }
-        if (positioned.Count == 0) return;
+
+        bool hasAny = positioned.Count > 0 || model.PseudoNodePositions.Count > 0 || model.NotePositions.Count > 0;
+        if (!hasAny) return;
 
         sb.AppendLine();
+
+        // Write real state positions
         foreach (var state in positioned)
         {
             var x = state.Position.X.ToString("F1", CultureInfo.InvariantCulture);
@@ -1167,6 +1171,22 @@ public static class MermaidSerializer
             {
                 sb.AppendLine($"%% @pos {state.Id} {x},{y}");
             }
+        }
+
+        // Write pseudo-node positions ([*]_start, [*]_end, [*]_start_ParentId, etc.)
+        foreach (var (pseudoId, pos) in model.PseudoNodePositions.OrderBy(p => p.Key))
+        {
+            var x = pos.X.ToString("F1", CultureInfo.InvariantCulture);
+            var y = pos.Y.ToString("F1", CultureInfo.InvariantCulture);
+            sb.AppendLine($"%% @pos {pseudoId} {x},{y}");
+        }
+
+        // Write note positions (note_0, note_1, etc.)
+        foreach (var (noteKey, pos) in model.NotePositions.OrderBy(p => p.Key))
+        {
+            var x = pos.X.ToString("F1", CultureInfo.InvariantCulture);
+            var y = pos.Y.ToString("F1", CultureInfo.InvariantCulture);
+            sb.AppendLine($"%% @pos {noteKey} {x},{y}");
         }
     }
 

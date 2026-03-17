@@ -7322,11 +7322,41 @@
                 }
                 stHydratePositions(stDiagram.states);
 
+                // Hydrate pseudo-node positions from C# model ([*]_start, [*]_end, etc.)
+                if (data.pseudoNodePositions) {
+                    Object.keys(data.pseudoNodePositions).forEach(key => {
+                        const pos = data.pseudoNodePositions[key];
+                        if (pos && pos.length >= 2) {
+                            stStatePositions[key] = {
+                                x: pos[0], y: pos[1],
+                                width: 20, height: 20
+                            };
+                            hasHydratedPositions = true;
+                        }
+                    });
+                }
+
+                // Hydrate note positions from C# model (note_0, note_1, etc.)
+                if (data.notePositions) {
+                    Object.keys(data.notePositions).forEach(key => {
+                        const pos = data.notePositions[key];
+                        if (pos && pos.length >= 2) {
+                            // Extract note index from "note_0", "note_1", etc.
+                            const idx = parseInt(key.replace('note_', ''), 10);
+                            if (!isNaN(idx)) {
+                                stNotePositions[idx] = { x: pos[0], y: pos[1] };
+                            }
+                            hasHydratedPositions = true;
+                        }
+                    });
+                }
+
                 if (hasHydratedPositions) {
                     // Positions were restored from @pos comments — skip dagre auto-layout.
                     // Only place states that don't already have positions using grid fallback.
                     stPlaceStatesInGrid(stDiagram.states, ST_LEFT_MARGIN, ST_TOP_MARGIN);
                     // Place [*] pseudo-nodes (start/end circles) based on transitions
+                    // (only places pseudo nodes that don't already have saved positions)
                     stPlacePseudoNodes();
                     // Expand composites to fit their nested children
                     function expandAllComposites(states) {
@@ -9007,6 +9037,13 @@
                     if (key.startsWith('[*]_')) {
                         const sp = stStatePositions[key];
                         allPositions.push({ stateId: key, x: sp.x, y: sp.y, width: sp.width || 0, height: sp.height || 0 });
+                    }
+                });
+                // Include note positions
+                Object.keys(stNotePositions).forEach(idx => {
+                    const np = stNotePositions[idx];
+                    if (np) {
+                        allPositions.push({ stateId: 'note_' + idx, x: np.x, y: np.y, width: 0, height: 0 });
                     }
                 });
                 postMessage({ type: 'st_allPositionsUpdate', positions: allPositions });
