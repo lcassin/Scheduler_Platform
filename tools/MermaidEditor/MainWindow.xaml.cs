@@ -123,6 +123,7 @@ public partial class MainWindow : Window
     private StateDiagramModel? _currentStateDiagramModel;
     private ERDiagramModel? _currentERDiagramModel;
     private bool _isVisualEditorUpdating; // Prevent re-entrant updates between text <-> visual
+    private bool _visualEditorHasFocus; // Tracks whether the Visual Editor pane has focus (for toolbar enable/disable)
 
     private const string DefaultMermaidCode= @"flowchart TD
     A[Start] --> B[End]";
@@ -4592,6 +4593,10 @@ Console.WriteLine(""Hello, World!"");
             _visualEditorBridge.ERDiagramModelChanged += VisualEditorBridge_ERDiagramModelChanged;
             _visualEditorBridge.EditorReady += VisualEditorBridge_EditorReady;
 
+            // Wire up focus tracking for code-only toolbar enable/disable
+            VisualEditorWebView.GotFocus += VisualEditorWebView_GotFocus;
+            CodeEditor.GotFocus += CodeEditor_GotFocus;
+
                 // Apply current theme to visual editor
                 await _visualEditorBridge.SetThemeAsync(GetVisualEditorThemeString());
 
@@ -4604,6 +4609,26 @@ Console.WriteLine(""Hello, World!"");
             // Visual editor is optional - silently fail if WebView2 can't init for it
             _visualEditorInitialized = false;
         }
+    }
+
+    /// <summary>
+    /// Called when the Visual Editor WebView receives focus (e.g., user clicks in it).
+    /// Disables code-only toolbar buttons since they don't apply to the visual editor.
+    /// </summary>
+    private void VisualEditorWebView_GotFocus(object sender, RoutedEventArgs e)
+    {
+        _visualEditorHasFocus = true;
+        UpdateCodeOnlyToolbarState();
+    }
+
+    /// <summary>
+    /// Called when the Code Editor receives focus (e.g., user clicks in it).
+    /// Re-enables code-only toolbar buttons.
+    /// </summary>
+    private void CodeEditor_GotFocus(object sender, RoutedEventArgs e)
+    {
+        _visualEditorHasFocus = false;
+        UpdateCodeOnlyToolbarState();
     }
 
     /// <summary>
@@ -4877,14 +4902,14 @@ Console.WriteLine(""Hello, World!"");
         {
             VisualModeToggle.IsEnabled = visualSupported;
             VisualModeToggle.ToolTip = visualSupported
-                ? "Visual Editor"
+                ? "Visual Editor Mode"
                 : "Visual editor is not yet available for this diagram type";
         }
         if (SplitModeToggle != null)
         {
             SplitModeToggle.IsEnabled = visualSupported;
             SplitModeToggle.ToolTip = visualSupported
-                ? "Split View"
+                ? "Split Mode (Visual & Code)"
                 : "Visual editor is not yet available for this diagram type";
         }
 
@@ -4893,14 +4918,14 @@ Console.WriteLine(""Hello, World!"");
         {
             VisualHeaderVisualModeToggle.IsEnabled = visualSupported;
             VisualHeaderVisualModeToggle.ToolTip = visualSupported
-                ? "Visual Editor"
+                ? "Visual Editor Mode"
                 : "Visual editor is not yet available for this diagram type";
         }
         if (VisualHeaderSplitModeToggle != null)
         {
             VisualHeaderSplitModeToggle.IsEnabled = visualSupported;
             VisualHeaderSplitModeToggle.ToolTip = visualSupported
-                ? "Split View"
+                ? "Split Mode (Visual & Code)"
                 : "Visual editor is not yet available for this diagram type";
         }
 
@@ -5281,6 +5306,45 @@ Console.WriteLine(""Hello, World!"");
                 : new GridLength(1, GridUnitType.Star);
             PreviewColumn.MinWidth = 200;
         }
+
+        // Update code-only toolbar enabled state based on mode
+        UpdateCodeOnlyToolbarState();
+    }
+
+    /// <summary>
+    /// Enables or disables code-only toolbar buttons (Edit toolbar: indent, comment, move lines;
+    /// View toolbar: word wrap, line numbers, bracket matching, minimap, spell check)
+    /// based on whether the Code Editor pane currently has focus.
+    /// In Text mode, always enabled. In Visual mode, always disabled.
+    /// In Split mode, depends on which pane has focus.
+    /// </summary>
+    private void UpdateCodeOnlyToolbarState()
+    {
+        bool codeToolbarsEnabled;
+        switch (_visualEditorMode)
+        {
+            case VisualEditorMode.Text:
+                codeToolbarsEnabled = true;
+                break;
+            case VisualEditorMode.Visual:
+                codeToolbarsEnabled = false;
+                break;
+            case VisualEditorMode.Split:
+                // In split mode, default to enabled (code pane is visible);
+                // the GotFocus handlers will toggle as user clicks between panes
+                codeToolbarsEnabled = !_visualEditorHasFocus;
+                break;
+            default:
+                codeToolbarsEnabled = true;
+                break;
+        }
+
+        if (EditToolbarBorder != null)
+            EditToolbarBorder.IsEnabled = codeToolbarsEnabled;
+        if (ViewToggleToolbarBorder != null)
+            ViewToggleToolbarBorder.IsEnabled = codeToolbarsEnabled;
+        if (MarkdownFormattingToolbar != null && _visualEditorMode != VisualEditorMode.Text)
+            MarkdownFormattingToolbar.IsEnabled = codeToolbarsEnabled;
     }
 
     #endregion
