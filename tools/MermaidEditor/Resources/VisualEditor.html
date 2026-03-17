@@ -8572,6 +8572,36 @@
                         postMessage({ type: 'st_insertStateOnEdge', index: idx, stateId: newId, label: newId });
                     }
                 });
+                // Insert Pseudo State on Edge - replaces A-->B with A-->[*] and [*]-->B
+                addStContextMenuItem('Insert Pseudo State', () => {
+                    const trans = stDiagram.transitions[idx];
+                    if (trans) {
+                        // Position the pseudo circles at the midpoint of the transition
+                        const fromState = stFindState(trans.fromId);
+                        const toState = stFindState(trans.toId);
+                        const fromBox = fromState ? stGetStateBox(fromState) : null;
+                        const toBox = toState ? stGetStateBox(toState) : null;
+                        let midX = ST_LEFT_MARGIN, midY = ST_TOP_MARGIN;
+                        if (fromBox && toBox) {
+                            midX = (fromBox.x + fromBox.width / 2 + toBox.x + toBox.width / 2) / 2;
+                            midY = (fromBox.y + fromBox.height / 2 + toBox.y + toBox.height / 2) / 2;
+                        }
+                        // Place end pseudo (top) and start pseudo (bottom) near midpoint
+                        const endKey = '[*]_end_' + idx;
+                        const startKey = '[*]_start_' + idx;
+                        stStatePositions[endKey] = {
+                            x: Math.round(midX / SNAP_GRID) * SNAP_GRID - 10,
+                            y: Math.round((midY - 20) / SNAP_GRID) * SNAP_GRID,
+                            width: 20, height: 20
+                        };
+                        stStatePositions[startKey] = {
+                            x: Math.round(midX / SNAP_GRID) * SNAP_GRID - 8,
+                            y: Math.round((midY + 10) / SNAP_GRID) * SNAP_GRID,
+                            width: 16, height: 16
+                        };
+                        postMessage({ type: 'st_insertPseudoOnEdge', index: idx });
+                    }
+                });
                 addStContextMenuSeparator();
                 addStContextMenuItem('Delete Transition', () => {
                     postMessage({ type: 'st_transitionDeleted', index: idx });

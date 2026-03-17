@@ -1033,6 +1033,10 @@ public class VisualEditorBridge
                     HandleStInsertStateOnEdge(root);
                     break;
 
+                case "st_insertPseudoOnEdge":
+                    HandleStInsertPseudoOnEdge(root);
+                    break;
+
                 case "st_stateEdited":
                     HandleStStateEdited(root);
                     break;
@@ -2208,6 +2212,29 @@ public class VisualEditorBridge
         });
 
         RaiseStateDiagramModelChanged("st_insertStateOnEdge");
+    }
+
+    private void HandleStInsertPseudoOnEdge(JsonElement root)
+    {
+        if (_stateDiagramModel == null) return;
+        var index = root.GetProperty("index").GetInt32();
+        if (index < 0 || index >= _stateDiagramModel.Transitions.Count) return;
+
+        PushUndo();
+        var oldTransition = _stateDiagramModel.Transitions[index];
+        var originalTo = oldTransition.ToId;
+
+        // Replace old transition: originalFrom -> [*] (end)
+        oldTransition.ToId = "[*]";
+
+        // Add new transition: [*] (start) -> originalTo
+        _stateDiagramModel.Transitions.Insert(index + 1, new StateTransition
+        {
+            FromId = "[*]",
+            ToId = originalTo
+        });
+
+        RaiseStateDiagramModelChanged("st_insertPseudoOnEdge");
     }
 
     private void HandleStStateEdited(JsonElement root)
