@@ -8622,7 +8622,7 @@
                     s.type = this.value;
                     s.isExplicit = true;
                 }
-                postMessage({ type: 'st_stateEdited', stateId: stateId, type: this.value });
+                postMessage({ type: 'st_stateEdited', stateId: stateId, stateType: this.value });
                 renderStateDiagram();
             });
 

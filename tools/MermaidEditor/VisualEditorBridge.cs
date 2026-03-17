@@ -2365,7 +2365,7 @@ public class VisualEditorBridge
         PushUndo();
         if (root.TryGetProperty("label", out var labelProp))
             state.Label = labelProp.GetString();
-        if (root.TryGetProperty("type", out var typeProp))
+        if (root.TryGetProperty("stateType", out var typeProp))
         {
             var typeStr = typeProp.GetString();
             if (Enum.TryParse<StateType>(typeStr, true, out var st))
