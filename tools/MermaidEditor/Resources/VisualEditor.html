@@ -7009,6 +7009,9 @@
         let stDrawingTransFrom = null; // stateId when drawing a transition
         let stDrawingTransToEnd = false; // true when drawing a transition TO [*] end
         let stDraggingPseudoId = null; // pseudo-state id when dragging a [*] circle
+        let stDraggingNoteIdx = -1; // note index when dragging a note
+        let stSelectedNoteIdx = -1; // currently selected note index
+        let stNotePositions = {}; // { noteIndex: { x, y } } - custom note positions from dragging
         let stStatePositions = {}; // { stateId: { x, y, width, height } }
 
         const ST_BOX_MIN_WIDTH = 120;
@@ -7511,13 +7514,13 @@
             edgesLayer.innerHTML = '';
             subgraphsLayer.innerHTML = '';
 
-            // Render pseudo-states first (deduplicated, draggable groups)
-            stRenderAllPseudoStates();
-
-            // Render states
+            // Render states first (composites append early, nested states on top)
             stDiagram.states.forEach(state => stRenderState(state));
 
-            // Render top-level transitions (no pseudo circle rendering, just lines)
+            // Render pseudo-states ON TOP of states (on nodesLayer so they're above composite fills)
+            stRenderAllPseudoStates();
+
+            // Render top-level transitions
             stDiagram.transitions.forEach((trans, idx) => {
                 stRenderTransition(trans, idx);
             });
@@ -7602,7 +7605,7 @@
             hitbox.setAttribute('fill', 'transparent');
             g.appendChild(hitbox);
 
-            subgraphsLayer.appendChild(g);
+            nodesLayer.appendChild(g);
         }
 
         function stRenderState(state) {
@@ -7687,10 +7690,10 @@
                     g.appendChild(grip);
                 });
 
-                // Append composite box FIRST so nested states render ON TOP
-                nodesLayer.appendChild(g);
+                // Append composite background to subgraphsLayer (behind transitions)
+                subgraphsLayer.appendChild(g);
 
-                // Render nested states (they append after, appearing on top of composite box)
+                // Render nested states on nodesLayer (they appear on top of transitions)
                 if (state.nestedStates) {
                     state.nestedStates.forEach(ns => stRenderState(ns));
                 }
@@ -7961,12 +7964,23 @@
             if (!pos) return;
             const box = state ? stGetStateBox(state) : { x: 0, y: 0, width: 100, height: 40 };
 
-            const noteX = note.position === 'LeftOf' ? box.x - ST_NOTE_WIDTH - 20 : box.x + box.width + 20;
-            const noteY = box.y;
+            // Use custom drag position if available, otherwise compute default position
+            let noteX, noteY;
+            const customPos = stNotePositions[idx];
+            if (customPos) {
+                noteX = customPos.x;
+                noteY = customPos.y;
+            } else {
+                noteX = note.position === 'LeftOf' ? box.x - ST_NOTE_WIDTH - 20 : box.x + box.width + 20;
+                noteY = box.y;
+                // Store the computed default position for dragging
+                stNotePositions[idx] = { x: noteX, y: noteY };
+            }
 
             const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
             g.classList.add('st-note');
             g.setAttribute('data-note-index', idx);
+            g.style.cursor = 'move';
 
             const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
             rect.setAttribute('x', noteX);
@@ -7977,6 +7991,10 @@
             rect.setAttribute('fill', 'var(--note-fill, #ffffcc)');
             rect.setAttribute('stroke', 'var(--note-stroke, #cccc00)');
             rect.setAttribute('stroke-width', '1');
+            if (stSelectedNoteIdx === idx) {
+                rect.setAttribute('stroke', 'var(--node-selected-stroke, #0066ff)');
+                rect.setAttribute('stroke-width', '2');
+            }
             g.appendChild(rect);
 
             // Note text
@@ -7997,8 +8015,8 @@
 
             // Connector line from note to state
             const connLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-            const connFromX = note.position === 'LeftOf' ? noteX + ST_NOTE_WIDTH : noteX;
-            const connToX = note.position === 'LeftOf' ? box.x : box.x + box.width;
+            const connFromX = noteX + ST_NOTE_WIDTH / 2 < box.x + box.width / 2 ? noteX + ST_NOTE_WIDTH : noteX;
+            const connToX = noteX + ST_NOTE_WIDTH / 2 < box.x + box.width / 2 ? box.x : box.x + box.width;
             connLine.setAttribute('x1', connFromX);
             connLine.setAttribute('y1', noteY + ST_NOTE_HEIGHT / 2);
             connLine.setAttribute('x2', connToX);
@@ -8008,7 +8026,7 @@
             connLine.setAttribute('stroke-dasharray', '4,4');
             g.appendChild(connLine);
 
-            subgraphsLayer.appendChild(g);
+            nodesLayer.appendChild(g);
         }
 
         // ===== State Diagram Mouse Interaction =====
@@ -8031,6 +8049,32 @@
                     stDragOffsetX = svgPt.x - stStatePositions[pseudoId].x;
                     stDragOffsetY = svgPt.y - stStatePositions[pseudoId].y;
                     e.preventDefault();
+                    e.stopPropagation();
+                    return;
+                }
+            }
+
+            // Note dragging
+            const noteGroup = e.target.closest('.st-note');
+            if (noteGroup) {
+                const noteIdx = parseInt(noteGroup.getAttribute('data-note-index'), 10);
+                if (noteIdx >= 0 && stDiagram.notes && noteIdx < stDiagram.notes.length) {
+                    const svgPt = getSVGPoint(e);
+                    stDraggingNoteIdx = noteIdx;
+                    const note = stDiagram.notes[noteIdx];
+                    const notePos = stNotePositions[noteIdx];
+                    if (notePos) {
+                        stDragOffsetX = svgPt.x - notePos.x;
+                        stDragOffsetY = svgPt.y - notePos.y;
+                    } else {
+                        stDragOffsetX = 0;
+                        stDragOffsetY = 0;
+                    }
+                    stSelectedNoteIdx = noteIdx;
+                    stShowNoteProperties(noteIdx);
+                    renderStateDiagram();
+                    e.preventDefault();
+                    e.stopPropagation();
                     return;
                 }
             }
@@ -8087,6 +8131,7 @@
             // Click on empty space
             stSelectedStateId = null;
             stSelectedTransIndex = -1;
+            stSelectedNoteIdx = -1;
             propertyPanel.classList.remove('visible');
             renderStateDiagram();
         });
@@ -8110,6 +8155,14 @@
                     x: newX,
                     y: newY
                 };
+                renderStateDiagram();
+                return;
+            }
+
+            if (stDraggingNoteIdx >= 0) {
+                const newX = Math.round((svgPt.x - stDragOffsetX) / SNAP_GRID) * SNAP_GRID;
+                const newY = Math.round((svgPt.y - stDragOffsetY) / SNAP_GRID) * SNAP_GRID;
+                stNotePositions[stDraggingNoteIdx] = { x: newX, y: newY };
                 renderStateDiagram();
                 return;
             }
@@ -8169,6 +8222,10 @@
 
             if (stDraggingPseudoId) {
                 stDraggingPseudoId = null;
+            }
+
+            if (stDraggingNoteIdx >= 0) {
+                stDraggingNoteIdx = -1;
             }
 
             if (stDraggingStateId) {
@@ -9575,6 +9632,7 @@
         });
 
         document.getElementById('tb-st-auto-layout').addEventListener('click', function() {
+            stNotePositions = {}; // Clear custom note positions so they re-compute from new layout
             stDagreAutoLayout();
             renderStateDiagram();
             const positions = [];
@@ -9583,6 +9641,13 @@
                 const pos = stStatePositions[state.id];
                 if (pos) {
                     positions.push({ stateId: state.id, x: pos.x, y: pos.y, width: pos.width || 0, height: pos.height || 0 });
+                }
+            });
+            // Include pseudo-state positions in auto-layout result
+            Object.keys(stStatePositions).forEach(key => {
+                if (key.startsWith('[*]_')) {
+                    const pos = stStatePositions[key];
+                    positions.push({ stateId: key, x: pos.x, y: pos.y, width: pos.width || 0, height: pos.height || 0 });
                 }
             });
             postMessage({ type: 'st_autoLayoutComplete', positions: positions });
