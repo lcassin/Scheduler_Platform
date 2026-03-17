@@ -18,6 +18,7 @@
             --node-selected-stroke: #007ACC;
             --node-hover-stroke: #4A4A4E;
             --edge-color: #6A6A6A;
+            --edge-selected: #007ACC;
             --edge-label-bg: #1E1E1E;
             --edge-label-text: #D4D4D4;
             --toolbar-bg: #2D2D30;
@@ -49,6 +50,7 @@
             --node-selected-stroke: #0078D4;
             --node-hover-stroke: #999999;
             --edge-color: #999999;
+            --edge-selected: #0078D4;
             --edge-label-bg: #F5F5F5;
             --edge-label-text: #1E1E1E;
             --toolbar-bg: #E8E8E8;
@@ -80,6 +82,7 @@
             --node-selected-stroke: #4A90D9;
             --node-hover-stroke: #5A6A8A;
             --edge-color: #5A6A8A;
+            --edge-selected: #4A90D9;
             --edge-label-bg: #1A1A2E;
             --edge-label-text: #D4D4E8;
             --toolbar-bg: #1F2544;
@@ -7104,8 +7107,8 @@
                     preambleLines: data.preambleLines || [],
                     declarationLineIndex: data.declarationLineIndex || 0
                 };
-                // Auto-layout only new states that don't have positions yet
-                stAutoLayoutStates();
+                // Place only new states that don't have positions yet (don't re-run dagre)
+                stPlaceNewStatesOnly(stDiagram.states);
                 renderStateDiagram();
             } catch (err) {
                 console.error('Failed to refresh state diagram:', err);
@@ -7113,6 +7116,55 @@
         };
 
         // updateToolbarForStateDiagram removed - using unified updateToolbarForDiagramType()
+
+        // Place only states that don't already have positions (used on refresh after model changes)
+        function stPlaceNewStatesOnly(states) {
+            states.forEach(s => {
+                if (!stStatePositions[s.id]) {
+                    // Find a reasonable position: below the last existing state
+                    let maxY = ST_TOP_MARGIN;
+                    Object.values(stStatePositions).forEach(pos => {
+                        const bottom = (pos.y || 0) + (pos.height || ST_BOX_HEIGHT);
+                        if (bottom > maxY) maxY = bottom;
+                    });
+                    const size = (() => {
+                        const canvas = document.createElement('canvas');
+                        const ctx = canvas.getContext('2d');
+                        ctx.font = '13px sans-serif';
+                        const textWidth = ctx.measureText(s.label || s.id).width + ST_BOX_PADDING * 2 + 10;
+                        return { width: Math.max(ST_BOX_MIN_WIDTH, Math.ceil(textWidth)), height: ST_BOX_HEIGHT };
+                    })();
+                    stStatePositions[s.id] = {
+                        x: ST_LEFT_MARGIN,
+                        y: maxY + 30,
+                        width: size.width,
+                        height: size.height
+                    };
+                }
+                // Recurse for nested states
+                if (s.nestedStates && s.nestedStates.length > 0) {
+                    s.nestedStates.forEach(ns => {
+                        if (!stStatePositions[ns.id]) {
+                            const parentPos = stStatePositions[s.id];
+                            let maxNY = (parentPos.y || 0) + 35 + ST_COMPOSITE_PADDING;
+                            s.nestedStates.forEach(existing => {
+                                const ep = stStatePositions[existing.id];
+                                if (ep) {
+                                    const bottom = (ep.y || 0) + (ep.height || ST_BOX_HEIGHT);
+                                    if (bottom > maxNY) maxNY = bottom;
+                                }
+                            });
+                            stStatePositions[ns.id] = {
+                                x: (parentPos.x || 0) + ST_COMPOSITE_PADDING,
+                                y: maxNY + 20,
+                                width: ST_BOX_MIN_WIDTH,
+                                height: ST_BOX_HEIGHT
+                            };
+                        }
+                    });
+                }
+            });
+        }
 
         function stAutoLayoutStates() {
             if (!stDiagram) return;
@@ -8458,6 +8510,34 @@
                 addStContextMenuItem('Add Note', () => {
                     postMessage({ type: 'st_noteCreated', stateId: stateId, text: 'Note', position: 'RightOf' });
                 });
+                // Show "Add Nested State" for composite states
+                const clickedState = stFindState(stateId);
+                if (clickedState && (clickedState.type === 'Composite' || (clickedState.nestedStates && clickedState.nestedStates.length > 0))) {
+                    addStContextMenuItem('Add Nested State', () => {
+                        const newId = stNextUniqueId('State');
+                        const parentPos = stStatePositions[stateId];
+                        if (parentPos) {
+                            // Place inside the composite
+                            let maxNY = (parentPos.y || 0) + 35 + ST_COMPOSITE_PADDING;
+                            if (clickedState.nestedStates) {
+                                clickedState.nestedStates.forEach(ns => {
+                                    const ep = stStatePositions[ns.id];
+                                    if (ep) {
+                                        const bottom = (ep.y || 0) + (ep.height || ST_BOX_HEIGHT);
+                                        if (bottom > maxNY) maxNY = bottom;
+                                    }
+                                });
+                            }
+                            stStatePositions[newId] = {
+                                x: (parentPos.x || 0) + ST_COMPOSITE_PADDING,
+                                y: maxNY + 20,
+                                width: ST_BOX_MIN_WIDTH,
+                                height: ST_BOX_HEIGHT
+                            };
+                        }
+                        postMessage({ type: 'st_nestedStateCreated', parentId: stateId, stateId: newId, label: newId });
+                    });
+                }
                 addStContextMenuSeparator();
                 addStContextMenuItem('Delete State', () => {
                     postMessage({ type: 'st_stateDeleted', stateId: stateId });
@@ -8468,6 +8548,59 @@
 
                 addStContextMenuItem('Edit Label', () => {
                     stShowTransitionProperties(idx);
+                });
+                // Insert State on Edge - splits transition into two
+                addStContextMenuItem('Insert State', () => {
+                    const trans = stDiagram.transitions[idx];
+                    if (trans) {
+                        const newId = stNextUniqueId('State');
+                        // Position the new state at the midpoint of the transition
+                        const fromState = stFindState(trans.fromId);
+                        const toState = stFindState(trans.toId);
+                        const fromBox = fromState ? stGetStateBox(fromState) : null;
+                        const toBox = toState ? stGetStateBox(toState) : null;
+                        if (fromBox && toBox) {
+                            const midX = (fromBox.x + fromBox.width / 2 + toBox.x + toBox.width / 2) / 2 - ST_BOX_MIN_WIDTH / 2;
+                            const midY = (fromBox.y + fromBox.height / 2 + toBox.y + toBox.height / 2) / 2 - ST_BOX_HEIGHT / 2;
+                            stStatePositions[newId] = {
+                                x: Math.round(midX / SNAP_GRID) * SNAP_GRID,
+                                y: Math.round(midY / SNAP_GRID) * SNAP_GRID,
+                                width: ST_BOX_MIN_WIDTH,
+                                height: ST_BOX_HEIGHT
+                            };
+                        }
+                        postMessage({ type: 'st_insertStateOnEdge', index: idx, stateId: newId, label: newId });
+                    }
+                });
+                // Insert Pseudo State on Edge - replaces A-->B with A-->[*] and [*]-->B
+                addStContextMenuItem('Insert Pseudo State', () => {
+                    const trans = stDiagram.transitions[idx];
+                    if (trans) {
+                        // Position the pseudo circles at the midpoint of the transition
+                        const fromState = stFindState(trans.fromId);
+                        const toState = stFindState(trans.toId);
+                        const fromBox = fromState ? stGetStateBox(fromState) : null;
+                        const toBox = toState ? stGetStateBox(toState) : null;
+                        let midX = ST_LEFT_MARGIN, midY = ST_TOP_MARGIN;
+                        if (fromBox && toBox) {
+                            midX = (fromBox.x + fromBox.width / 2 + toBox.x + toBox.width / 2) / 2;
+                            midY = (fromBox.y + fromBox.height / 2 + toBox.y + toBox.height / 2) / 2;
+                        }
+                        // Place end pseudo (top) and start pseudo (bottom) near midpoint
+                        const endKey = '[*]_end_' + idx;
+                        const startKey = '[*]_start_' + idx;
+                        stStatePositions[endKey] = {
+                            x: Math.round(midX / SNAP_GRID) * SNAP_GRID - 10,
+                            y: Math.round((midY - 20) / SNAP_GRID) * SNAP_GRID,
+                            width: 20, height: 20
+                        };
+                        stStatePositions[startKey] = {
+                            x: Math.round(midX / SNAP_GRID) * SNAP_GRID - 8,
+                            y: Math.round((midY + 10) / SNAP_GRID) * SNAP_GRID,
+                            width: 16, height: 16
+                        };
+                        postMessage({ type: 'st_insertPseudoOnEdge', index: idx });
+                    }
                 });
                 addStContextMenuSeparator();
                 addStContextMenuItem('Delete Transition', () => {

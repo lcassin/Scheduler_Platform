@@ -1025,6 +1025,18 @@ public class VisualEditorBridge
                     HandleStStateCreated(root);
                     break;
 
+                case "st_nestedStateCreated":
+                    HandleStNestedStateCreated(root);
+                    break;
+
+                case "st_insertStateOnEdge":
+                    HandleStInsertStateOnEdge(root);
+                    break;
+
+                case "st_insertPseudoOnEdge":
+                    HandleStInsertPseudoOnEdge(root);
+                    break;
+
                 case "st_stateEdited":
                     HandleStStateEdited(root);
                     break;
@@ -2134,6 +2146,95 @@ public class VisualEditorBridge
         }
         _stateDiagramModel.States.Add(newState);
         RaiseStateDiagramModelChanged("st_stateCreated");
+    }
+
+    private void HandleStNestedStateCreated(JsonElement root)
+    {
+        if (_stateDiagramModel == null) return;
+        var parentId = root.GetProperty("parentId").GetString();
+        var stateId = root.GetProperty("stateId").GetString();
+        if (string.IsNullOrEmpty(parentId) || string.IsNullOrEmpty(stateId)) return;
+
+        var parent = FindStateRecursive(_stateDiagramModel.States, parentId);
+        if (parent == null) return;
+        if (parent.NestedStates.Any(s => s.Id == stateId)) return;
+
+        PushUndo();
+        // Ensure the parent is marked as Composite
+        if (parent.Type == StateType.Simple)
+            parent.Type = StateType.Composite;
+
+        var newState = new StateDefinition
+        {
+            Id = stateId,
+            IsExplicit = true,
+            Type = StateType.Simple
+        };
+        if (root.TryGetProperty("label", out var labelProp))
+            newState.Label = labelProp.GetString();
+        parent.NestedStates.Add(newState);
+        RaiseStateDiagramModelChanged("st_nestedStateCreated");
+    }
+
+    private void HandleStInsertStateOnEdge(JsonElement root)
+    {
+        if (_stateDiagramModel == null) return;
+        var index = root.GetProperty("index").GetInt32();
+        var stateId = root.GetProperty("stateId").GetString();
+        if (string.IsNullOrEmpty(stateId)) return;
+        if (index < 0 || index >= _stateDiagramModel.Transitions.Count) return;
+
+        PushUndo();
+        var oldTransition = _stateDiagramModel.Transitions[index];
+        var originalFrom = oldTransition.FromId;
+        var originalTo = oldTransition.ToId;
+        var originalLabel = oldTransition.Label;
+
+        // Create the new state
+        var newState = new StateDefinition
+        {
+            Id = stateId,
+            IsExplicit = true,
+            Type = StateType.Simple
+        };
+        if (root.TryGetProperty("label", out var labelProp))
+            newState.Label = labelProp.GetString();
+        _stateDiagramModel.States.Add(newState);
+
+        // Replace old transition: originalFrom -> newState (keep original label)
+        oldTransition.ToId = stateId;
+
+        // Add new transition: newState -> originalTo (no label)
+        _stateDiagramModel.Transitions.Insert(index + 1, new StateTransition
+        {
+            FromId = stateId,
+            ToId = originalTo
+        });
+
+        RaiseStateDiagramModelChanged("st_insertStateOnEdge");
+    }
+
+    private void HandleStInsertPseudoOnEdge(JsonElement root)
+    {
+        if (_stateDiagramModel == null) return;
+        var index = root.GetProperty("index").GetInt32();
+        if (index < 0 || index >= _stateDiagramModel.Transitions.Count) return;
+
+        PushUndo();
+        var oldTransition = _stateDiagramModel.Transitions[index];
+        var originalTo = oldTransition.ToId;
+
+        // Replace old transition: originalFrom -> [*] (end)
+        oldTransition.ToId = "[*]";
+
+        // Add new transition: [*] (start) -> originalTo
+        _stateDiagramModel.Transitions.Insert(index + 1, new StateTransition
+        {
+            FromId = "[*]",
+            ToId = originalTo
+        });
+
+        RaiseStateDiagramModelChanged("st_insertPseudoOnEdge");
     }
 
     private void HandleStStateEdited(JsonElement root)
