@@ -5,86 +5,131 @@
         WindowStartupLocation="CenterOwner"
         Background="{DynamicResource ThemeBackgroundBrush}">
     
-                <Window.Resources>
-                    <!-- Override system colors for ComboBox popup and selection -->
-                    <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="#3E3E42"/>
-                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="#007ACC"/>
-                    <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#FFFFFF"/>
-                    <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}" Color="#3E3E42"/>
-                    <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="#F1F1F1"/>
-        
-                    <!-- Dark ComboBox Toggle Button Template -->
-                    <ControlTemplate x:Key="DarkComboBoxToggleButton" TargetType="ToggleButton">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition/>
-                                <ColumnDefinition Width="20"/>
-                            </Grid.ColumnDefinitions>
-                            <Border x:Name="Border" Grid.ColumnSpan="2" Background="#3E3E42" BorderBrush="#555555" BorderThickness="1" CornerRadius="2"/>
-                            <Border Grid.Column="0" Background="#3E3E42" BorderBrush="Transparent" BorderThickness="0" CornerRadius="2,0,0,2"/>
-                            <Path x:Name="Arrow" Grid.Column="1" Fill="#F1F1F1" HorizontalAlignment="Center" VerticalAlignment="Center" Data="M 0 0 L 4 4 L 8 0 Z"/>
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Border" Property="Background" Value="#4E4E52"/>
-                            </Trigger>
-                            <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="Border" Property="Background" Value="#4E4E52"/>
-                            </Trigger>
-                        </ControlTemplate.Triggers>
-                    </ControlTemplate>
-        
-                    <!-- Dark ComboBox Template -->
-                    <ControlTemplate x:Key="DarkComboBoxTemplate" TargetType="ComboBox">
-                        <Grid>
-                            <ToggleButton x:Name="ToggleButton" Template="{StaticResource DarkComboBoxToggleButton}" 
-                                          Focusable="False" IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" 
-                                          ClickMode="Press"/>
-                            <ContentPresenter x:Name="ContentSite" IsHitTestVisible="False" 
-                                              Content="{TemplateBinding SelectionBoxItem}" 
-                                              ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" 
-                                              ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}" 
-                                              Margin="8,4,28,4" VerticalAlignment="Center" HorizontalAlignment="Left">
-                                <ContentPresenter.Resources>
-                                    <Style TargetType="TextBlock">
-                                        <Setter Property="Foreground" Value="#F1F1F1"/>
-                                    </Style>
-                                </ContentPresenter.Resources>
-                            </ContentPresenter>
-                            <Popup x:Name="Popup" Placement="Bottom" IsOpen="{TemplateBinding IsDropDownOpen}" 
-                                   AllowsTransparency="True" Focusable="False" PopupAnimation="Slide">
-                                <Grid x:Name="DropDown" SnapsToDevicePixels="True" MinWidth="{TemplateBinding ActualWidth}" MaxHeight="{TemplateBinding MaxDropDownHeight}">
-                                    <Border x:Name="DropDownBorder" Background="#2D2D30" BorderBrush="#555555" BorderThickness="1"/>
-                                    <ScrollViewer Margin="2" SnapsToDevicePixels="True">
-                                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/>
-                                    </ScrollViewer>
-                                </Grid>
-                            </Popup>
-                        </Grid>
-                    </ControlTemplate>
-        
-                    <Style TargetType="Label">
-                        <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
-                    </Style>
-                    <Style TargetType="ComboBox">
-                    <Setter Property="Template" Value="{StaticResource DarkComboBoxTemplate}"/>
-                    <Setter Property="Foreground" Value="#F1F1F1"/>
+            <Window.Resources>
+                <!-- Themed Button Style -->
+                <Style TargetType="Button">
+                    <Setter Property="Background" Value="{DynamicResource ThemeToolbarBackgroundBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
+                    <Setter Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}"/>
+                    <Setter Property="BorderThickness" Value="1"/>
+                    <Setter Property="Padding" Value="16,6"/>
+                    <Setter Property="Margin" Value="4,0"/>
+                    <Setter Property="Cursor" Value="Hand"/>
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="Button">
+                                <Border x:Name="border" Background="{TemplateBinding Background}" 
+                                        BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" 
+                                        CornerRadius="3" Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="border" Property="Background" Value="{DynamicResource ThemeHoverBrush}"/>
+                                        <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource ThemeAccentBrush}"/>
+                                    </Trigger>
+                                    <Trigger Property="IsPressed" Value="True">
+                                        <Setter TargetName="border" Property="Background" Value="{DynamicResource ThemeSelectedBrush}"/>
+                                    </Trigger>
+                                    <Trigger Property="IsEnabled" Value="False">
+                                        <Setter Property="Opacity" Value="0.5"/>
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
                 </Style>
-                <Style TargetType="ComboBoxItem">
-                    <Setter Property="Background" Value="#2D2D30"/>
-                    <Setter Property="Foreground" Value="#F1F1F1"/>
-                    <Setter Property="Padding" Value="8,4"/>
-                    <Style.Triggers>
-                        <Trigger Property="IsHighlighted" Value="True">
-                            <Setter Property="Background" Value="#007ACC"/>
-                            <Setter Property="Foreground" Value="#FFFFFF"/>
+
+                <!-- Override system colors for ComboBox popup and selection -->
+                <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="{DynamicResource ThemeBorderColor}"/>
+                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightBrushKey}" Color="{DynamicResource ThemeAccentColor}"/>
+                <SolidColorBrush x:Key="{x:Static SystemColors.HighlightTextBrushKey}" Color="#FFFFFF"/>
+                <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}" Color="{DynamicResource ThemeBorderColor}"/>
+                <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="{DynamicResource ThemeForegroundColor}"/>
+        
+                <!-- Dark ComboBox Toggle Button Template -->
+                <ControlTemplate x:Key="DarkComboBoxToggleButton" TargetType="ToggleButton">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition/>
+                            <ColumnDefinition Width="20"/>
+                        </Grid.ColumnDefinitions>
+                        <Border x:Name="Border" Grid.ColumnSpan="2" Background="{DynamicResource ThemeToolbarBackgroundBrush}" BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1" CornerRadius="2"/>
+                        <Border Grid.Column="0" Background="{DynamicResource ThemeToolbarBackgroundBrush}" BorderBrush="Transparent" BorderThickness="0" CornerRadius="2,0,0,2"/>
+                        <Path x:Name="Arrow" Grid.Column="1" Fill="{DynamicResource ThemeForegroundBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" Data="M 0 0 L 4 4 L 8 0 Z"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Border" Property="Background" Value="{DynamicResource ThemeHoverBrush}"/>
                         </Trigger>
-                        <Trigger Property="IsSelected" Value="True">
-                            <Setter Property="Background" Value="#3E3E42"/>
-                            <Setter Property="Foreground" Value="#F1F1F1"/>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Border" Property="Background" Value="{DynamicResource ThemeHoverBrush}"/>
                         </Trigger>
-                    </Style.Triggers>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+        
+                <!-- Dark ComboBox Template -->
+                <ControlTemplate x:Key="DarkComboBoxTemplate" TargetType="ComboBox">
+                    <Grid>
+                        <ToggleButton x:Name="ToggleButton" Template="{StaticResource DarkComboBoxToggleButton}" 
+                                      Focusable="False" IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}" 
+                                      ClickMode="Press"/>
+                        <ContentPresenter x:Name="ContentSite" IsHitTestVisible="False" 
+                                          Content="{TemplateBinding SelectionBoxItem}" 
+                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" 
+                                          ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}" 
+                                          Margin="8,4,28,4" VerticalAlignment="Center" HorizontalAlignment="Left">
+                            <ContentPresenter.Resources>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
+                                </Style>
+                            </ContentPresenter.Resources>
+                        </ContentPresenter>
+                        <Popup x:Name="Popup" Placement="Bottom" IsOpen="{TemplateBinding IsDropDownOpen}" 
+                               AllowsTransparency="True" Focusable="False" PopupAnimation="Slide">
+                            <Grid x:Name="DropDown" SnapsToDevicePixels="True" MinWidth="{TemplateBinding ActualWidth}" MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                <Border x:Name="DropDownBorder" Background="{DynamicResource ThemeMenuBackgroundBrush}" BorderBrush="{DynamicResource ThemeBorderBrush}" BorderThickness="1"/>
+                                <ScrollViewer Margin="2" SnapsToDevicePixels="True">
+                                    <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/>
+                                </ScrollViewer>
+                            </Grid>
+                        </Popup>
+                    </Grid>
+                </ControlTemplate>
+        
+                <Style TargetType="Label">
+                    <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
                 </Style>
+        <Style TargetType="RadioButton">
+            <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
+            <Setter Property="Margin" Value="0,4"/>
+        </Style>
+        <Style TargetType="CheckBox">
+            <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
+            <Setter Property="Margin" Value="0,4"/>
+        </Style>
+        <Style TargetType="ComboBox">
+            <Setter Property="Template" Value="{StaticResource DarkComboBoxTemplate}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
+        </Style>
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Background" Value="{DynamicResource ThemeMenuBackgroundBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Style.Triggers>
+                <Trigger Property="IsHighlighted" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource ThemeAccentBrush}"/>
+                    <Setter Property="Foreground" Value="#FFFFFF"/>
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="{DynamicResource ThemeBorderBrush}"/>
+                    <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
         <Style TargetType="Button">
             <Setter Property="Background" Value="{DynamicResource ThemeToolbarBackgroundBrush}"/>
             <Setter Property="Foreground" Value="{DynamicResource ThemeForegroundBrush}"/>
@@ -101,17 +146,17 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#3E3E42"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="#007ACC"/>
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource ThemeHoverBrush}"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource ThemeAccentBrush}"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
-                                <Setter TargetName="border" Property="Background" Value="#007ACC"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="#007ACC"/>
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource ThemeAccentBrush}"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource ThemeAccentBrush}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter TargetName="border" Property="Background" Value="#2D2D30"/>
-                                <Setter TargetName="border" Property="BorderBrush" Value="#3E3E42"/>
-                                <Setter Property="Foreground" Value="#656565"/>
+                                <Setter TargetName="border" Property="Background" Value="{DynamicResource ThemeBackgroundBrush}"/>
+                                <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource ThemeBorderBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource ThemeDisabledForegroundBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -130,9 +175,11 @@
                                 <RowDefinition Height="Auto"/>
                                 <RowDefinition Height="*"/>
                             </Grid.RowDefinitions>
+                            <!-- Header -->
                             <TextBlock Grid.Row="0" Text="{TemplateBinding Header}" 
                                        Foreground="{DynamicResource ThemeForegroundBrush}" 
                                        FontSize="12" Margin="0,0,0,6"/>
+                            <!-- Content with single-line border -->
                             <Border Grid.Row="1" 
                                     BorderBrush="{DynamicResource ThemeBorderBrush}" 
                                     BorderThickness="1" CornerRadius="4" Padding="4">
@@ -143,7 +190,6 @@
                 </Setter.Value>
             </Setter>
         </Style>
-
         <!-- Dark ScrollBar Thumb -->
         <Style x:Key="DarkScrollBarThumb" TargetType="Thumb">
             <Setter Property="OverridesDefaultStyle" Value="True"/>
@@ -151,14 +197,14 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Thumb">
-                        <Border x:Name="thumbBorder" Background="#686868" CornerRadius="4" 
+                        <Border x:Name="thumbBorder" Background="{DynamicResource ThemeSliderThumbBrush}" CornerRadius="4" 
                                 Margin="2" MinHeight="18" MinWidth="18"/>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="thumbBorder" Property="Background" Value="#9E9E9E"/>
+                                <Setter TargetName="thumbBorder" Property="Background" Value="{DynamicResource ThemeSliderThumbHoverBrush}"/>
                             </Trigger>
                             <Trigger Property="IsDragging" Value="True">
-                                <Setter TargetName="thumbBorder" Property="Background" Value="#BFBFBF"/>
+                                <Setter TargetName="thumbBorder" Property="Background" Value="{DynamicResource ThemeSliderThumbHoverBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -173,7 +219,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RepeatButton">
-                        <Border x:Name="border" Background="#3E3E42" Height="0" Width="0">
+                        <Border x:Name="border" Background="{DynamicResource ThemeBorderBrush}" Height="0" Width="0">
                             <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                     </ControlTemplate>
@@ -197,7 +243,7 @@
 
         <!-- Dark Vertical ScrollBar Template -->
         <ControlTemplate x:Key="DarkVerticalScrollBar" TargetType="ScrollBar">
-            <Grid Background="#2D2D30">
+            <Grid Background="{DynamicResource ThemeToolbarBackgroundBrush}">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
@@ -221,7 +267,7 @@
 
         <!-- Dark Horizontal ScrollBar Template -->
         <ControlTemplate x:Key="DarkHorizontalScrollBar" TargetType="ScrollBar">
-            <Grid Background="#2D2D30">
+            <Grid Background="{DynamicResource ThemeToolbarBackgroundBrush}">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
@@ -262,57 +308,137 @@
     
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="220"/>
+            <ColumnDefinition Width="250"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
         
         <!-- Settings Panel -->
         <Border Grid.Column="0" Background="{DynamicResource ThemeMenuBackgroundBrush}" Padding="16">
-            <StackPanel>
-                <TextBlock Text="Print Settings" FontSize="18" FontWeight="Bold" 
-                           Foreground="{DynamicResource ThemeForegroundBrush}" Margin="0,0,0,16"/>
-                
-                <!-- Font Size -->
-                <GroupBox Header="Font Size">
-                    <StackPanel Margin="8">
-                        <ComboBox x:Name="FontSizeCombo" SelectionChanged="FontSizeCombo_SelectionChanged">
-                            <ComboBoxItem Content="8 pt"/>
-                            <ComboBoxItem Content="9 pt"/>
-                            <ComboBoxItem Content="10 pt" IsSelected="True"/>
-                            <ComboBoxItem Content="11 pt"/>
-                            <ComboBoxItem Content="12 pt"/>
-                        </ComboBox>
-                    </StackPanel>
-                </GroupBox>
-                
-                <!-- Options -->
-                <GroupBox Header="Options">
-                    <StackPanel Margin="8">
-                        <CheckBox x:Name="ShowLineNumbersCheckBox" Content="Show line numbers" 
-                                  Foreground="{DynamicResource ThemeForegroundBrush}"
-                                  Checked="ShowLineNumbers_Changed" Unchecked="ShowLineNumbers_Changed"
-                                  Margin="0,0,0,8"/>
-                        <CheckBox x:Name="WordWrapCheckBox" Content="Word wrap" IsChecked="True"
-                                  Foreground="{DynamicResource ThemeForegroundBrush}"
-                                  Checked="WordWrap_Changed" Unchecked="WordWrap_Changed"/>
-                    </StackPanel>
-                </GroupBox>
-                
-                <!-- Page Info -->
-                <Border Background="{DynamicResource ThemeToolbarBackgroundBrush}" 
-                        CornerRadius="4" Padding="12" Margin="0,8,0,0">
-                    <StackPanel>
-                        <TextBlock x:Name="LineCountText" Text="Lines: 0" 
-                                   Foreground="{DynamicResource ThemeForegroundBrush}"/>
-                    </StackPanel>
-                </Border>
-                
-                <!-- Buttons -->
-                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,16,0,0">
+            <DockPanel LastChildFill="True">
+                <!-- Buttons pinned to bottom -->
+                <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,12,0,4">
                     <Button x:Name="PrintButton" Content="Print" Click="Print_Click" IsDefault="True"/>
                     <Button Content="Cancel" Click="Cancel_Click" IsCancel="True"/>
                 </StackPanel>
-            </StackPanel>
+                
+                <!-- Page Info pinned above buttons -->
+                <Border DockPanel.Dock="Bottom" Background="{DynamicResource ThemeToolbarBackgroundBrush}" 
+                        CornerRadius="4" Padding="12" Margin="0,8,0,0">
+                    <StackPanel>
+                        <TextBlock x:Name="PageCountText" Text="Pages: 1" 
+                                   Foreground="{DynamicResource ThemeForegroundBrush}"/>
+                        <TextBlock x:Name="LineCountText" Text="Lines: 0" 
+                                   Foreground="{DynamicResource ThemeForegroundBrush}" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Border>
+                
+                <!-- Scrollable settings area fills remaining space -->
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,4,0">
+                    <StackPanel Margin="0,0,4,0">
+                        <TextBlock Text="Print Settings" FontSize="18" FontWeight="Bold" 
+                                   Foreground="{DynamicResource ThemeForegroundBrush}" Margin="0,0,0,16"/>
+                        
+                        <!-- Printer Selection -->
+                        <GroupBox Header="Printer">
+                            <StackPanel Margin="8">
+                                <ComboBox x:Name="PrinterCombo" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" SelectionChanged="PrinterCombo_SelectionChanged"/>
+                            </StackPanel>
+                        </GroupBox>
+                        
+                        <!-- Page Size -->
+                        <GroupBox Header="Page Size">
+                            <StackPanel Margin="8">
+                                <ComboBox x:Name="PageSizeCombo" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" SelectionChanged="PageSizeCombo_SelectionChanged">
+                                    <ComboBoxItem Content="Letter (8.5 x 11 in)" IsSelected="True"/>
+                                    <ComboBoxItem Content="Legal (8.5 x 14 in)"/>
+                                    <ComboBoxItem Content="A4 (210 x 297 mm)"/>
+                                    <ComboBoxItem Content="A3 (297 x 420 mm)"/>
+                                    <ComboBoxItem Content="Tabloid (11 x 17 in)"/>
+                                </ComboBox>
+                            </StackPanel>
+                        </GroupBox>
+                        
+                        <!-- Pages to Print -->
+                        <GroupBox Header="Pages">
+                            <StackPanel Margin="8">
+                                <RadioButton x:Name="AllPagesRadio" Content="All" IsChecked="True"
+                                             Checked="PageRange_Changed"/>
+                                <RadioButton x:Name="PageRangeRadio" Content="Range"
+                                             Checked="PageRange_Changed"/>
+                                <StackPanel Orientation="Horizontal" Margin="20,4,0,0">
+                                    <TextBlock Text="From:" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource ThemeForegroundBrush}" Margin="0,0,4,0"/>
+                                    <TextBox x:Name="FromPageTextBox" Width="40" Text="1" 
+                                             IsEnabled="False" TextChanged="PageRangeValue_Changed"
+                                             Background="{DynamicResource ThemeToolbarBackgroundBrush}"
+                                             Foreground="{DynamicResource ThemeForegroundBrush}"
+                                             BorderBrush="{DynamicResource ThemeBorderBrush}"
+                                             CaretBrush="{DynamicResource ThemeForegroundBrush}"
+                                             Padding="4,2"/>
+                                    <TextBlock Text="To:" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource ThemeForegroundBrush}" Margin="8,0,4,0"/>
+                                    <TextBox x:Name="ToPageTextBox" Width="40" Text="1" 
+                                             IsEnabled="False" TextChanged="PageRangeValue_Changed"
+                                             Background="{DynamicResource ThemeToolbarBackgroundBrush}"
+                                             Foreground="{DynamicResource ThemeForegroundBrush}"
+                                             BorderBrush="{DynamicResource ThemeBorderBrush}"
+                                             CaretBrush="{DynamicResource ThemeForegroundBrush}"
+                                             Padding="4,2"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </GroupBox>
+                        
+                        <!-- Orientation -->
+                        <GroupBox Header="Orientation">
+                            <StackPanel Margin="8">
+                                <RadioButton x:Name="PortraitRadio" Content="Portrait" IsChecked="True" 
+                                             Checked="Orientation_Changed"/>
+                                <RadioButton x:Name="LandscapeRadio" Content="Landscape" 
+                                             Checked="Orientation_Changed"/>
+                            </StackPanel>
+                        </GroupBox>
+                        
+                        <!-- Margins -->
+                        <GroupBox Header="Margins">
+                            <StackPanel Margin="8">
+                                <ComboBox x:Name="MarginsCombo" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" SelectionChanged="MarginsCombo_SelectionChanged">
+                                    <ComboBoxItem Content="Normal (1 inch)" IsSelected="True"/>
+                                    <ComboBoxItem Content="Narrow (0.5 inch)"/>
+                                    <ComboBoxItem Content="Wide (1.5 inch)"/>
+                                    <ComboBoxItem Content="None"/>
+                                </ComboBox>
+                                <TextBlock x:Name="MarginWarningText" Text="" TextWrapping="Wrap"
+                                           Foreground="#FFB74D" FontSize="11" Margin="0,4,0,0"
+                                           Visibility="Collapsed"/>
+                            </StackPanel>
+                        </GroupBox>
+                        
+                        <!-- Font Size -->
+                        <GroupBox Header="Font Size">
+                            <StackPanel Margin="8">
+                                <ComboBox x:Name="FontSizeCombo" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center" SelectionChanged="FontSizeCombo_SelectionChanged">
+                                    <ComboBoxItem Content="8 pt"/>
+                                    <ComboBoxItem Content="9 pt"/>
+                                    <ComboBoxItem Content="10 pt" IsSelected="True"/>
+                                    <ComboBoxItem Content="11 pt"/>
+                                    <ComboBoxItem Content="12 pt"/>
+                                    <ComboBoxItem Content="14 pt"/>
+                                </ComboBox>
+                            </StackPanel>
+                        </GroupBox>
+                        
+                        <!-- Options -->
+                        <GroupBox Header="Options">
+                            <StackPanel Margin="8">
+                                <CheckBox x:Name="ShowLineNumbersCheckBox" Content="Show line numbers" 
+                                          Checked="Options_Changed" Unchecked="Options_Changed"/>
+                                <CheckBox x:Name="WordWrapCheckBox" Content="Word wrap" IsChecked="True"
+                                          Checked="Options_Changed" Unchecked="Options_Changed"/>
+                            </StackPanel>
+                        </GroupBox>
+                    </StackPanel>
+                </ScrollViewer>
+            </DockPanel>
         </Border>
         
         <!-- Preview Panel -->
@@ -321,17 +447,32 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 
                 <TextBlock Grid.Row="0" Text="Preview" FontSize="16" FontWeight="SemiBold" 
                            Foreground="{DynamicResource ThemeForegroundBrush}" Margin="0,0,0,8"/>
                 
                 <!-- Preview Area -->
-                <Border Grid.Row="1" Background="White" CornerRadius="4" Padding="16">
-                    <FlowDocumentScrollViewer x:Name="PreviewViewer" 
-                                              VerticalScrollBarVisibility="Auto"
-                                              HorizontalScrollBarVisibility="Auto"/>
+                <Border Grid.Row="1" Background="{DynamicResource ThemeToolbarBackgroundBrush}" CornerRadius="4">
+                    <ScrollViewer x:Name="PreviewScrollViewer" 
+                                  HorizontalScrollBarVisibility="Auto" 
+                                  VerticalScrollBarVisibility="Auto"
+                                  ScrollChanged="PreviewScrollViewer_ScrollChanged"
+                                  Padding="16">
+                        <StackPanel x:Name="PreviewPagesPanel" HorizontalAlignment="Center">
+                            <!-- Pages will be added here dynamically -->
+                        </StackPanel>
+                    </ScrollViewer>
                 </Border>
+                
+                <!-- Page Navigation -->
+                <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,8,0,0">
+                    <Button x:Name="PrevPageButton" Content="Previous" Click="PrevPage_Click" IsEnabled="False"/>
+                    <TextBlock x:Name="CurrentPageText" Text="Page 1 of 1" VerticalAlignment="Center" 
+                               Foreground="{DynamicResource ThemeForegroundBrush}" Margin="16,0"/>
+                    <Button x:Name="NextPageButton" Content="Next" Click="NextPage_Click" IsEnabled="False"/>
+                </StackPanel>
             </Grid>
         </Border>
     </Grid>

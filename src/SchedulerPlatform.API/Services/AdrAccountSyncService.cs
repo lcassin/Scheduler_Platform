@@ -275,13 +275,18 @@ public class AdrAccountSyncService : IAdrAccountSyncService
             
             progressCallback?.Invoke(totalAccountCount, totalAccountCount);
 
-            // Step 5: Update blacklist flags on active (non-deleted) accounts
+            // Step 4b: Update blacklist flags on active (non-deleted) accounts
             // This runs AFTER we have determined the true active accounts (after deletion phase)
             // so that only active accounts get flagged. Deleted/inactive accounts are skipped.
             await UpdateBlacklistFlagsAsync(subStepCallback, cancellationToken);
 
-            // Step 5b: Cancel/close non-terminal jobs for newly-blacklisted accounts
+            // Step 4c: Cancel/close non-terminal jobs for newly-blacklisted accounts
+            // Must run BEFORE deleted-account cancellation so BlacklistedPendingReview jobs exist
             await CancelJobsForBlacklistedAccountsAsync(subStepCallback, cancellationToken);
+
+            // Step 5: Cancel active jobs for accounts that were just marked as deleted
+            // Runs AFTER blacklist cancellation so BlacklistedPendingReview jobs for deleted accounts are also caught
+            await CancelJobsForDeletedAccountsAsync(subStepCallback, cancellationToken);
 
             // Step 6: Sync AdrAccountRules using lightweight scheduling data
             // PERFORMANCE OPTIMIZATION: Detach account entities from change tracker before rule sync
@@ -335,14 +340,35 @@ public class AdrAccountSyncService : IAdrAccountSyncService
         // Count query must match the streaming query's logic:
         // - Uses ADRInvoiceAccountData.AccountNumber (not Account.AccountNumber)
         // - Same joins and filters as GetAccountSyncQuery()
+        // Count query uses same credential resolution as GetAccountSyncQuery():
+        // Try PrimaryVendor credential first, fall back to MasterVendor credential.
+        // CredentialAccount is NOT used (it's for PIN/SSO type, not credential existence).
         var countQuery = @"
+-- Pre-resolve: one credential per vendor (prefer credentials with passwords, then latest CredentialId)
+;WITH RankedCred AS (
+    SELECT VendorId, CredentialId,
+           ROW_NUMBER() OVER (PARTITION BY VendorId ORDER BY 
+               CASE WHEN [Password] IS NOT NULL AND [Password] != '' THEN 0 ELSE 1 END,
+               CredentialId DESC) AS rn
+    FROM [Credential]
+    WHERE IsActive = 1
+      AND (ExpirationDate IS NULL OR ExpirationDate >= CAST(GETDATE() AS DATE))
+),
+VendorCred AS (
+    SELECT VendorId, CredentialId FROM RankedCred WHERE rn = 1
+)
 SELECT COUNT(DISTINCT CONCAT(AD.VCAccountId, '_', AD.AccountNumber))
 FROM [dbo].[ADRInvoiceAccountData] AD
 INNER JOIN Account A ON AD.VCAccountId = A.AccountId AND A.IsActive = 1
 INNER JOIN Client CL ON A.ClientId = CL.ClientId AND CL.IsActive = 1
-INNER JOIN CredentialAccount CA ON AD.VCAccountId = CA.AccountId
-INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId
-WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL)";
+LEFT OUTER JOIN Vendor V ON A.VendorId = V.VendorId
+LEFT OUTER JOIN VendorXRef VX ON V.VendorId = VX.PrimaryVendorId
+-- Primary credential: pre-resolved to 1 per vendor
+LEFT OUTER JOIN VendorCred PC ON PC.VendorId = A.VendorId
+-- Master credential fallback (only when no primary credential)
+LEFT OUTER JOIN VendorCred MC ON MC.VendorId = VX.MasterVendorId AND PC.CredentialId IS NULL
+WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL)
+  AND COALESCE(PC.CredentialId, MC.CredentialId) IS NOT NULL";
 
         await using var connection = new SqlConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
@@ -362,13 +388,34 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
         AdrAccountSyncResult result,
         CancellationToken cancellationToken)
     {
-        // Query unique clients from external database (only active clients)
+        // Query unique clients from external database (only active clients whose accounts have valid credentials).
+        // Uses same credential resolution as GetAccountSyncQuery(): PrimaryVendor first, MasterVendor fallback.
         var clientQuery = @"
+-- Pre-resolve: one credential per vendor (prefer credentials with passwords, then latest CredentialId)
+;WITH RankedCred AS (
+    SELECT VendorId, CredentialId,
+           ROW_NUMBER() OVER (PARTITION BY VendorId ORDER BY 
+               CASE WHEN [Password] IS NOT NULL AND [Password] != '' THEN 0 ELSE 1 END,
+               CredentialId DESC) AS rn
+    FROM [Credential]
+    WHERE IsActive = 1
+      AND (ExpirationDate IS NULL OR ExpirationDate >= CAST(GETDATE() AS DATE))
+),
+VendorCred AS (
+    SELECT VendorId, CredentialId FROM RankedCred WHERE rn = 1
+)
 SELECT DISTINCT CL.ClientId, CL.ClientName
 FROM [dbo].[ADRInvoiceAccountData] AD
     INNER JOIN Account A ON AD.VCAccountId = A.AccountId AND A.IsActive = 1
     INNER JOIN Client CL ON A.ClientId = CL.ClientId AND CL.IsActive = 1
-WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL)";
+    LEFT OUTER JOIN Vendor V ON A.VendorId = V.VendorId
+    LEFT OUTER JOIN VendorXRef VX ON V.VendorId = VX.PrimaryVendorId
+    -- Primary credential: pre-resolved to 1 per vendor
+    LEFT OUTER JOIN VendorCred PC ON PC.VendorId = A.VendorId
+    -- Master credential fallback (only when no primary credential)
+    LEFT OUTER JOIN VendorCred MC ON MC.VendorId = VX.MasterVendorId AND PC.CredentialId IS NULL
+WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL)
+  AND COALESCE(PC.CredentialId, MC.CredentialId) IS NOT NULL";
 
         var uniqueClients = new List<(int ExternalClientId, string ClientName)>();
         
@@ -702,6 +749,7 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
                   AND (b.[EffectiveEndDate] IS NULL OR b.[EffectiveEndDate] >= {0})
                   AND (
                     (b.[PrimaryVendorCode] IS NOT NULL AND b.[PrimaryVendorCode] <> '' AND b.[PrimaryVendorCode] = a.[PrimaryVendorCode])
+                    OR (b.[MasterVendorCode] IS NOT NULL AND b.[MasterVendorCode] <> '' AND b.[MasterVendorCode] = a.[MasterVendorCode])
                     OR (b.[VMAccountId] IS NOT NULL AND b.[VMAccountId] = a.[VMAccountId])
                     OR (b.[VMAccountNumber] IS NOT NULL AND b.[VMAccountNumber] <> '' AND b.[VMAccountNumber] = a.[VMAccountNumber])
                     OR (b.[CredentialId] IS NOT NULL AND b.[CredentialId] = a.[CredentialId])
@@ -724,6 +772,7 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
                   AND (b.[EffectiveEndDate] IS NULL OR b.[EffectiveEndDate] >= b.[EffectiveStartDate])
                   AND (
                     (b.[PrimaryVendorCode] IS NOT NULL AND b.[PrimaryVendorCode] <> '' AND b.[PrimaryVendorCode] = a.[PrimaryVendorCode])
+                    OR (b.[MasterVendorCode] IS NOT NULL AND b.[MasterVendorCode] <> '' AND b.[MasterVendorCode] = a.[MasterVendorCode])
                     OR (b.[VMAccountId] IS NOT NULL AND b.[VMAccountId] = a.[VMAccountId])
                     OR (b.[VMAccountNumber] IS NOT NULL AND b.[VMAccountNumber] <> '' AND b.[VMAccountNumber] = a.[VMAccountNumber])
                     OR (b.[CredentialId] IS NOT NULL AND b.[CredentialId] = a.[CredentialId])
@@ -740,7 +789,12 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
     }
 
     /// <summary>
-    /// Cancels/closes all non-terminal jobs belonging to currently-blacklisted accounts.
+    /// Handles jobs for currently-blacklisted accounts in two groups:
+    /// 1. Pre-downstream jobs (Pending, CredentialCheckRequested, CredentialVerified, CredentialFailed)
+    ///    → Cancelled immediately since they haven't fired downstream yet.
+    /// 2. Post-downstream jobs (ScrapeRequested, ScrapeInProgress, StatusCheckInProgress, CredentialCheckInProgress)
+    ///    → Set to BlacklistedPendingReview so the status check pipeline continues monitoring them
+    ///    for downstream results. They auto-close at end of billing cycle.
     /// Runs AFTER UpdateBlacklistFlagsAsync so that IsCurrentlyBlacklisted is up to date.
     /// Uses raw SQL for performance — updates directly in the database without loading entities.
     /// </summary>
@@ -748,13 +802,12 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
         Action<string, int, int>? subStepCallback,
         CancellationToken cancellationToken)
     {
-        _logger.LogInformation("Starting cancellation of jobs for blacklisted accounts");
-        subStepCallback?.Invoke("Cancelling blacklisted account jobs", 0, 1);
+        _logger.LogInformation("Starting cancellation/review of jobs for blacklisted accounts");
+        subStepCallback?.Invoke("Processing blacklisted account jobs", 0, 2);
 
         var now = DateTime.UtcNow;
 
-        // Cancel all non-terminal jobs where the account is currently blacklisted.
-        // Terminal statuses (Completed, Failed, Cancelled, NeedsReview) are left untouched.
+        // Step 1: Cancel pre-downstream jobs immediately (haven't fired to external API yet)
         var cancelSql = @"
             UPDATE j
             SET j.[Status] = 'Cancelled',
@@ -765,13 +818,69 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
             INNER JOIN [AdrAccount] a ON j.[AdrAccountId] = a.[AdrAccountId]
             WHERE a.[IsCurrentlyBlacklisted] = 1
               AND j.[IsDeleted] = 0
-              AND j.[Status] IN ('Pending', 'CredentialCheckRequested', 'CredentialCheckInProgress', 
-                                  'CredentialVerified', 'CredentialFailed', 'ScrapeRequested', 
-                                  'ScrapeInProgress', 'StatusCheckInProgress')";
+              AND j.[Status] IN ('Pending', 'CredentialCheckRequested', 'CredentialVerified', 'CredentialFailed')";
 
         var cancelledCount = await _dbContext.Database.ExecuteSqlRawAsync(cancelSql, new object[] { now }, cancellationToken);
-        _logger.LogInformation("Cancelled {Count} non-terminal jobs for blacklisted accounts", cancelledCount);
-        subStepCallback?.Invoke("Cancelling blacklisted account jobs", 1, 1);
+        _logger.LogInformation("Cancelled {Count} pre-downstream jobs for blacklisted accounts", cancelledCount);
+        subStepCallback?.Invoke("Processing blacklisted account jobs", 1, 2);
+
+        // Step 2: Move post-downstream jobs to BlacklistedPendingReview
+        // These jobs have already fired downstream (credential check or scrape sent to external API).
+        // The status check pipeline will continue monitoring them for downstream results and
+        // auto-close them at end of billing cycle.
+        var reviewSql = @"
+            UPDATE j
+            SET j.[Status] = 'BlacklistedPendingReview',
+                j.[ErrorMessage] = 'Account blacklisted - monitoring for downstream results',
+                j.[ModifiedDateTime] = {0},
+                j.[ModifiedBy] = 'System - Blacklist Sync'
+            FROM [AdrJob] j
+            INNER JOIN [AdrAccount] a ON j.[AdrAccountId] = a.[AdrAccountId]
+            WHERE a.[IsCurrentlyBlacklisted] = 1
+              AND j.[IsDeleted] = 0
+              AND j.[Status] IN ('CredentialCheckInProgress', 'ScrapeRequested', 
+                                  'ScrapeInProgress', 'StatusCheckInProgress')";
+
+        var reviewCount = await _dbContext.Database.ExecuteSqlRawAsync(reviewSql, new object[] { now }, cancellationToken);
+        _logger.LogInformation("Moved {Count} post-downstream jobs to BlacklistedPendingReview for blacklisted accounts", reviewCount);
+        subStepCallback?.Invoke("Processing blacklisted account jobs", 2, 2);
+    }
+
+    /// <summary>
+    /// Cancels/closes all non-terminal jobs belonging to deleted accounts.
+    /// Runs AFTER the deletion phase so that IsDeleted is up to date.
+    /// This prevents orphaned jobs from continuing to process for accounts
+    /// that have been removed from the vendor master load table.
+    /// Uses raw SQL for performance — updates directly in the database without loading entities.
+    /// </summary>
+    private async Task CancelJobsForDeletedAccountsAsync(
+        Action<string, int, int>? subStepCallback,
+        CancellationToken cancellationToken)
+    {
+        _logger.LogInformation("Starting cancellation of jobs for deleted accounts");
+        subStepCallback?.Invoke("Cancelling deleted account jobs", 0, 1);
+
+        var now = DateTime.UtcNow;
+
+        // Cancel all non-terminal jobs where the account is deleted.
+        // Terminal statuses (Completed, Failed, Cancelled, NeedsReview) are left untouched.
+        var cancelSql = @"
+            UPDATE j
+            SET j.[Status] = 'Cancelled',
+                j.[ErrorMessage] = 'Account deleted from vendor master during sync',
+                j.[ModifiedDateTime] = {0},
+                j.[ModifiedBy] = 'System - Deleted Account Sync'
+            FROM [AdrJob] j
+            INNER JOIN [AdrAccount] a ON j.[AdrAccountId] = a.[AdrAccountId]
+            WHERE a.[IsDeleted] = 1
+              AND j.[IsDeleted] = 0
+              AND j.[Status] IN ('Pending', 'CredentialCheckRequested', 'CredentialCheckInProgress', 
+                                  'CredentialVerified', 'CredentialFailed', 'ScrapeRequested', 
+                                  'ScrapeInProgress', 'StatusCheckInProgress', 'BlacklistedPendingReview')";
+
+        var cancelledCount = await _dbContext.Database.ExecuteSqlRawAsync(cancelSql, new object[] { now }, cancellationToken);
+        _logger.LogInformation("Cancelled {Count} non-terminal jobs for deleted accounts", cancelledCount);
+        subStepCallback?.Invoke("Cancelling deleted account jobs", 1, 1);
     }
 
     /// <summary>
@@ -1003,7 +1112,48 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
     private static string GetAccountSyncQuery()
     {
         return @"
+		-- Pre-resolve: best credential per account via CredentialAccount linking.
+		-- Priority: 1) prefer credentials with non-null/non-empty passwords,
+		--           2) prefer non-expired credentials,
+		--           3) latest CreatedDate,
+		--           4) latest CredentialId as tiebreaker.
+		-- If all linked credentials have null passwords, we still pick the latest one
+		-- so that downstream processes can create a Zendesk ticket to fix the credential.
+		DROP TABLE IF EXISTS #tmpBestCredential;
+		SELECT AccountId, CredentialId, ExpirationDate
+		INTO #tmpBestCredential
+		FROM (
+			SELECT CA.AccountId, C.CredentialId, C.ExpirationDate,
+			       ROW_NUMBER() OVER (PARTITION BY CA.AccountId ORDER BY 
+			           CASE WHEN C.[Password] IS NOT NULL AND C.[Password] != '' THEN 0 ELSE 1 END,
+			           CASE WHEN C.ExpirationDate IS NULL OR C.ExpirationDate >= CAST(GETDATE() AS DATE) THEN 0 ELSE 1 END,
+			           C.CreatedDate DESC,
+			           C.CredentialId DESC) AS rn
+			FROM CredentialAccount CA
+			INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId
+			INNER JOIN Account A ON CA.AccountId = A.AccountId AND A.IsActive = 1
+		) ranked
+		WHERE rn = 1;
+
 		DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
+
+		-- Vendor-level credential fallback: one row per vendor (prefer passwords, then latest CredentialId).
+		-- Used when no CredentialAccount link exists for the account.
+		-- Tries primary vendor first, then master vendor.
+		DROP TABLE IF EXISTS #tmpVendorCred;
+		SELECT VendorId, CredentialId, ExpirationDate
+		INTO #tmpVendorCred
+		FROM (
+			SELECT VendorId, CredentialId, ExpirationDate,
+			       ROW_NUMBER() OVER (PARTITION BY VendorId ORDER BY 
+			           CASE WHEN [Password] IS NOT NULL AND [Password] != '' THEN 0 ELSE 1 END,
+			           CASE WHEN ExpirationDate IS NULL OR ExpirationDate >= CAST(GETDATE() AS DATE) THEN 0 ELSE 1 END,
+			           CreatedDate DESC,
+			           CredentialId DESC) AS rn
+			FROM [Credential]
+			WHERE IsActive = 1
+		) ranked
+		WHERE rn = 1;
 
 		SELECT [RecId]
 			  ,AD.[InterfaceAccountId]
@@ -1013,20 +1163,32 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
 			  ,AD.[VendorCode] AS PrimaryVendorCode
 			  ,MV.[PrimaryVendorCode] AS MasterVendorCode
 			  ,[VCAccountId] AS AccountId
-			  ,C.[CredentialId]
-			  ,C.ExpirationDate
+			  -- Credential resolution: CredentialAccount first, then vendor-level fallback
+			  ,COALESCE(BC.CredentialId, PC.CredentialId, MC.CredentialId) AS CredentialId
+			  ,COALESCE(BC.ExpirationDate, PCFull.ExpirationDate, MCFull.ExpirationDate) AS ExpirationDate
 			  ,CL.ClientId
 			  ,CL.ClientName
 		INTO #tmpCredentialAccountBilling
 		FROM [dbo].[ADRInvoiceAccountData] AD
 			INNER JOIN Account A ON AD.VCAccountId = A.AccountId AND A.IsActive = 1
 			INNER JOIN Client CL ON A.ClientId = CL.ClientId AND CL.IsActive = 1
-			INNER JOIN CredentialAccount CA ON AD.VCAccountId = CA.AccountId
-			INNER JOIN [Credential] C ON C.IsActive = 1 AND C.CredentialId = CA.CredentialId
+			-- Primary: CredentialAccount linking (direct account->credential)
+			LEFT OUTER JOIN #tmpBestCredential BC ON AD.VCAccountId = BC.AccountId
+			-- Vendor hierarchy for fallback
 			LEFT OUTER JOIN Vendor V ON AD.VendorCode = V.PrimaryVendorCode
 			LEFT OUTER JOIN VendorXRef VX ON V.VendorId = VX.PrimaryVendorId
 			LEFT OUTER JOIN Vendor MV ON VX.MasterVendorId = MV.VendorId
-		WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL);
+			-- Vendor-level fallback: primary vendor credential
+			LEFT OUTER JOIN #tmpVendorCred PC ON PC.VendorId = V.VendorId AND BC.CredentialId IS NULL
+			-- Vendor-level fallback: master vendor credential (only when no primary vendor credential)
+			LEFT OUTER JOIN #tmpVendorCred MC ON MC.VendorId = MV.VendorId AND BC.CredentialId IS NULL AND PC.CredentialId IS NULL
+			-- Get ExpirationDate from full Credential table for vendor-level fallback credentials
+			LEFT OUTER JOIN [Credential] PCFull ON PCFull.CredentialId = PC.CredentialId
+			LEFT OUTER JOIN [Credential] MCFull ON MCFull.CredentialId = MC.CredentialId
+		WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS NULL)
+		  AND COALESCE(BC.CredentialId, PC.CredentialId, MC.CredentialId) IS NOT NULL;
+
+		DROP TABLE IF EXISTS #tmpVendorCred;
 
 		;WITH AccountStats AS (
 			SELECT AccountId,
@@ -1175,6 +1337,7 @@ WHERE (A.SiteId IN (SELECT SiteId FROM [Site] WHERE IsActive = 1) OR A.SiteId IS
 		ORDER BY VMAccountId;
 
 		DROP TABLE IF EXISTS #tmpCredentialAccountBilling;
+		DROP TABLE IF EXISTS #tmpBestCredential;
 		";
     }
 
