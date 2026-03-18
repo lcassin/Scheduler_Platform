@@ -8332,6 +8332,21 @@
             return allStates.find(s => s.id === stateId) || null;
         }
 
+        // Extract the parent composite ID from a pseudo node ID (e.g., '[*]_start_Processing' → 'Processing')
+        // Returns null for top-level pseudo nodes ('[*]_start', '[*]_end') that have no parent composite.
+        function stGetPseudoParentId(pseudoId) {
+            if (!pseudoId) return null;
+            const startPrefix = '[*]_start_';
+            const endPrefix = '[*]_end_';
+            if (pseudoId.startsWith(startPrefix) && pseudoId.length > startPrefix.length) {
+                return pseudoId.substring(startPrefix.length);
+            }
+            if (pseudoId.startsWith(endPrefix) && pseudoId.length > endPrefix.length) {
+                return pseudoId.substring(endPrefix.length);
+            }
+            return null;
+        }
+
         // Find the parent composite state that contains a given child state ID
         function stFindParentComposite(childId) {
             if (!stDiagram) return null;
@@ -9294,6 +9309,9 @@
                     x: newX,
                     y: newY
                 };
+                // Auto-expand/shrink parent composite to fit the moved pseudo node
+                const pseudoParentId = stGetPseudoParentId(stDraggingPseudoId);
+                if (pseudoParentId) stExpandCompositeChain(pseudoParentId);
                 renderStateDiagram();
                 return;
             }
