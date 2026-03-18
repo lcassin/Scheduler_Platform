@@ -1299,6 +1299,49 @@
             }
         };
 
+        // Restore flowchart diagram for undo/redo — uses positions from model data directly
+        window.restoreDiagram = function(jsonData) {
+            try {
+                const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+                diagram.direction = data.direction || 'TD';
+                diagram.nodes = (data.nodes || []).map(n => ({
+                    id: n.id,
+                    label: n.label || n.id,
+                    shape: n.shape || 'Rectangle',
+                    x: n.x || 0,
+                    y: n.y || 0,
+                    width: n.width || 0,
+                    height: n.height || 0,
+                    cssClass: n.cssClass || null
+                }));
+                diagram.edges = (data.edges || []).map(e => ({
+                    from: e.from,
+                    to: e.to,
+                    label: e.label || '',
+                    style: e.style || 'Solid',
+                    arrowType: e.arrowType || 'Arrow'
+                }));
+                diagram.subgraphs = (data.subgraphs || []).map(s => ({
+                    id: s.id,
+                    label: s.label || s.id,
+                    nodeIds: s.nodeIds || [],
+                    direction: s.direction || null
+                }));
+
+                // For undo/redo, only auto-layout if ALL real nodes lack positions
+                const sgIds = new Set(diagram.subgraphs.map(s => s.id));
+                const realNodes = diagram.nodes.filter(n => !sgIds.has(n.id));
+                const allZero = realNodes.every(n => n.x === 0 && n.y === 0);
+                if (allZero && realNodes.length > 0) {
+                    autoLayout();
+                }
+
+                render();
+            } catch (err) {
+                console.error('Failed to restore diagram:', err);
+            }
+        };
+
         // ========== Auto Layout (dagre) ==========
 
         function autoLayout() {
@@ -6008,6 +6051,14 @@
                 // Hide property panel from previous diagram
                 propertyPanel.classList.remove('visible');
 
+                // Reset pick mode and button state when loading a new diagram
+                clsPickingRelSource = false;
+                clsPickingRelFrom = null;
+                document.body.style.cursor = '';
+                const addRelBtn = document.getElementById('tb-cls-add-relation');
+                if (addRelBtn) addRelBtn.classList.remove('active');
+                tempEdge.style.display = 'none';
+
                 // Hydrate saved positions from C# model (if HasManualPosition)
                 if (clsDiagram.classes) {
                     clsDiagram.classes.forEach(cls => {
@@ -6079,6 +6130,66 @@
                 renderClassDiagram();
             } catch (err) {
                 console.error('Failed to refresh class diagram:', err);
+            }
+        };
+
+        // Restore class diagram for undo/redo — forces ALL positions from model data
+        window.restoreClassDiagram = function(jsonData) {
+            try {
+                const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+                clsDiagram = {
+                    direction: data.direction || null,
+                    classes: (data.classes || []).map(c => ({
+                        id: c.id,
+                        label: c.label || null,
+                        annotation: c.annotation || null,
+                        genericType: c.genericType || null,
+                        members: (c.members || []).map(m => ({
+                            rawText: m.rawText || '',
+                            visibility: m.visibility || 'None',
+                            isMethod: m.isMethod || false,
+                            name: m.name || '',
+                            type: m.type || null,
+                            parameters: m.parameters || null,
+                            classifier: m.classifier || 'None'
+                        })),
+                        cssClass: c.cssClass || null,
+                        isExplicit: c.isExplicit !== false,
+                        x: c.x || 0,
+                        y: c.y || 0,
+                        hasManualPosition: c.hasManualPosition || false
+                    })),
+                    relationships: (data.relationships || []).map(r => clsNormalizeRelationship({
+                        fromId: r.fromId,
+                        toId: r.toId,
+                        leftEnd: r.leftEnd || 'None',
+                        rightEnd: r.rightEnd || 'None',
+                        linkStyle: r.linkStyle || 'Solid',
+                        label: r.label || null,
+                        fromCardinality: r.fromCardinality || null,
+                        toCardinality: r.toCardinality || null
+                    })),
+                    namespaces: data.namespaces || [],
+                    notes: data.notes || [],
+                    preambleLines: data.preambleLines || [],
+                    declarationLineIndex: data.declarationLineIndex || 0
+                };
+
+                // Force-hydrate ALL positions from model data (not just hasManualPosition)
+                clsClassPositions = {};
+                if (clsDiagram.classes) {
+                    clsDiagram.classes.forEach(cls => {
+                        if (cls.x || cls.y) {
+                            clsClassPositions[cls.id] = { x: cls.x, y: cls.y };
+                        }
+                    });
+                }
+
+                // Auto-layout only classes that still don't have positions
+                clsAutoLayoutClasses();
+                renderClassDiagram();
+            } catch (err) {
+                console.error('Failed to restore class diagram:', err);
             }
         };
 
@@ -6489,13 +6600,22 @@
                 // align with the curve direction, not the straight line between endpoints.
                 const tangents = edgeTangentAngles(pts);
 
+                // Create a separate marker group that will be rendered on top of nodes
+                // so markers aren't hidden behind class boxes (edges-layer is behind nodes-layer).
+                const markerG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                markerG.classList.add('cls-relationship-markers');
+                markerG.setAttribute('data-rel-index', relIdx);
+
                 // Left end marker (at source/from side) - marker shape extends toward source
                 // startAngle points away from source along curve; we reverse so marker faces the node
-                clsDrawRelationEndMarker(g, pts.x1, pts.y1, tangents.startAngle + Math.PI, rel.leftEnd);
+                clsDrawRelationEndMarker(markerG, pts.x1, pts.y1, tangents.startAngle + Math.PI, rel.leftEnd);
 
                 // Right end marker (at target/to side) - marker shape extends toward target
                 // endAngle points away from target along curve; we reverse so marker faces the node
-                clsDrawRelationEndMarker(g, pts.x2, pts.y2, tangents.endAngle + Math.PI, rel.rightEnd);
+                clsDrawRelationEndMarker(markerG, pts.x2, pts.y2, tangents.endAngle + Math.PI, rel.rightEnd);
+
+                // Append marker group to nodes layer so it renders on top of class boxes
+                nodesLayer.appendChild(markerG);
 
                 // Label — offset perpendicular to line to avoid overlap with other relationship labels
                 if (rel.label) {
@@ -6783,12 +6903,14 @@
                         clsPickingRelFrom = null;
                         document.body.style.cursor = '';
                         document.getElementById('tb-cls-add-relation').classList.remove('active');
+                        tempEdge.style.display = 'none';
                         e.preventDefault();
                         e.stopPropagation();
                         return;
                     } else {
                         // Clicked source again: deselect source, wait for new source
                         clsPickingRelFrom = null;
+                        tempEdge.style.display = 'none';
                         clsSelectedClassId = null;
                         renderClassDiagram();
                         e.preventDefault();
@@ -6801,6 +6923,7 @@
                     clsPickingRelFrom = null;
                     document.body.style.cursor = '';
                     document.getElementById('tb-cls-add-relation').classList.remove('active');
+                    tempEdge.style.display = 'none';
                 }
             }
 
@@ -6867,8 +6990,21 @@
             }
 
             if (clsDrawingRelFrom) {
-                // Show temp edge line
+                // Show temp edge line for grip-drag mode
                 const fromPos = clsClassPositions[clsDrawingRelFrom];
+                if (fromPos) {
+                    const svgPt = getSVGPoint(e);
+                    tempEdge.setAttribute('x1', fromPos.x + (fromPos.width || CLS_BOX_MIN_WIDTH) / 2);
+                    tempEdge.setAttribute('y1', fromPos.y + (fromPos.height || 100) / 2);
+                    tempEdge.setAttribute('x2', svgPt.x);
+                    tempEdge.setAttribute('y2', svgPt.y);
+                    tempEdge.style.display = '';
+                }
+            }
+
+            // Show temp edge line for toolbar two-click workflow
+            if (clsPickingRelFrom) {
+                const fromPos = clsClassPositions[clsPickingRelFrom];
                 if (fromPos) {
                     const svgPt = getSVGPoint(e);
                     tempEdge.setAttribute('x1', fromPos.x + (fromPos.width || CLS_BOX_MIN_WIDTH) / 2);
@@ -7546,6 +7682,92 @@
                 renderStateDiagram();
             } catch (err) {
                 console.error('Failed to refresh state diagram:', err);
+            }
+        };
+
+        // Restore state diagram for undo/redo — forces ALL positions from model data
+        window.restoreStateDiagram = function(jsonData) {
+            try {
+                const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+                stDiagram = {
+                    direction: data.direction || null,
+                    isV2: data.isV2 !== false,
+                    states: (data.states || []).map(s => stParseState(s)),
+                    transitions: (data.transitions || []).map(t => ({
+                        fromId: t.fromId || '',
+                        toId: t.toId || '',
+                        label: t.label || null
+                    })),
+                    notes: (data.notes || []).map(n => ({
+                        text: n.text || '',
+                        stateId: n.stateId || '',
+                        position: n.position || 'RightOf'
+                    })),
+                    preambleLines: data.preambleLines || [],
+                    declarationLineIndex: data.declarationLineIndex || 0
+                };
+
+                // Force-hydrate ALL positions from model data (not just hasManualPosition)
+                stStatePositions = {};
+                stNotePositions = {};
+                stManualNotePositions = new Set();
+                function stForceHydratePositions(states) {
+                    states.forEach(s => {
+                        if (s.x || s.y) {
+                            stStatePositions[s.id] = {
+                                x: s.x,
+                                y: s.y,
+                                width: (s.width > 0) ? s.width : ST_BOX_MIN_WIDTH,
+                                height: (s.height > 0) ? s.height : ST_BOX_HEIGHT
+                            };
+                        }
+                        if (s.nestedStates && s.nestedStates.length > 0) {
+                            stForceHydratePositions(s.nestedStates);
+                        }
+                    });
+                }
+                stForceHydratePositions(stDiagram.states);
+
+                // Force-hydrate pseudo-node positions
+                if (data.pseudoNodePositions) {
+                    Object.keys(data.pseudoNodePositions).forEach(key => {
+                        const pos = data.pseudoNodePositions[key];
+                        if (pos && pos.length >= 2) {
+                            stStatePositions[key] = { x: pos[0], y: pos[1], width: 20, height: 20 };
+                        }
+                    });
+                }
+
+                // Force-hydrate note positions
+                if (data.notePositions) {
+                    Object.keys(data.notePositions).forEach(key => {
+                        const pos = data.notePositions[key];
+                        if (pos && pos.length >= 2) {
+                            const idx = parseInt(key.replace('note_', ''), 10);
+                            if (!isNaN(idx)) {
+                                stNotePositions[idx] = { x: pos[0], y: pos[1] };
+                                stManualNotePositions.add(idx);
+                            }
+                        }
+                    });
+                }
+
+                // Place any states that still don't have positions (new states with 0,0)
+                stPlaceStatesInGrid(stDiagram.states, ST_LEFT_MARGIN, ST_TOP_MARGIN);
+                stPlacePseudoNodes();
+                // Expand composites to fit their nested children
+                function expandAllComposites(states) {
+                    states.forEach(s => {
+                        if (s.nestedStates && s.nestedStates.length > 0) {
+                            expandAllComposites(s.nestedStates);
+                            stExpandCompositeToFitChildren(s.id);
+                        }
+                    });
+                }
+                expandAllComposites(stDiagram.states);
+                renderStateDiagram();
+            } catch (err) {
+                console.error('Failed to restore state diagram:', err);
             }
         };
 
@@ -9738,7 +9960,7 @@
                         x: Math.round(svgPt.x / SNAP_GRID) * SNAP_GRID,
                         y: Math.round(svgPt.y / SNAP_GRID) * SNAP_GRID
                     };
-                    postMessage({ type: 'st_stateCreated', stateId: newId, label: newId, type: 'Simple' });
+                    postMessage({ type: 'st_stateCreated', stateId: newId, label: newId, stateType: 'Simple' });
                 });
                 addStContextMenuItem('Add Fork/Join', () => {
                     const svgPt = getSVGPoint(e);
@@ -9747,7 +9969,7 @@
                         x: Math.round(svgPt.x / SNAP_GRID) * SNAP_GRID,
                         y: Math.round(svgPt.y / SNAP_GRID) * SNAP_GRID
                     };
-                    postMessage({ type: 'st_stateCreated', stateId: newId, type: 'Fork' });
+                    postMessage({ type: 'st_stateCreated', stateId: newId, stateType: 'Fork' });
                 });
                 addStContextMenuItem('Add Choice', () => {
                     const svgPt = getSVGPoint(e);
@@ -9756,7 +9978,7 @@
                         x: Math.round(svgPt.x / SNAP_GRID) * SNAP_GRID,
                         y: Math.round(svgPt.y / SNAP_GRID) * SNAP_GRID
                     };
-                    postMessage({ type: 'st_stateCreated', stateId: newId, type: 'Choice' });
+                    postMessage({ type: 'st_stateCreated', stateId: newId, stateType: 'Choice' });
                 });
                 addStContextMenuSeparator();
                 // [*] pseudo-state transitions
@@ -9960,6 +10182,54 @@
                 renderERDiagram();
             } catch (err) {
                 console.error('Failed to refresh ER diagram:', err);
+            }
+        };
+
+        // Restore ER diagram for undo/redo — forces ALL positions from model data
+        window.restoreERDiagram = function(jsonData) {
+            try {
+                const data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+                erDiagram = {
+                    entities: (data.entities || []).map(e => ({
+                        name: e.name || '',
+                        isExplicit: e.isExplicit !== false,
+                        attributes: (e.attributes || []).map(a => ({
+                            type: a.type || 'string',
+                            name: a.name || '',
+                            key: a.key || null,
+                            comment: a.comment || null
+                        })),
+                        x: e.x || 0,
+                        y: e.y || 0,
+                        hasManualPosition: e.hasManualPosition || false
+                    })),
+                    relationships: (data.relationships || []).map(r => ({
+                        fromEntity: r.fromEntity || '',
+                        toEntity: r.toEntity || '',
+                        leftCardinality: r.leftCardinality || 'ExactlyOne',
+                        rightCardinality: r.rightCardinality || 'ExactlyOne',
+                        isIdentifying: r.isIdentifying || false,
+                        label: r.label || null
+                    })),
+                    preambleLines: data.preambleLines || [],
+                    declarationLineIndex: data.declarationLineIndex || 0
+                };
+
+                // Force-hydrate ALL positions from model data (not just hasManualPosition)
+                erEntityPositions = {};
+                if (erDiagram.entities) {
+                    erDiagram.entities.forEach(entity => {
+                        if (entity.x || entity.y) {
+                            erEntityPositions[entity.name] = { x: entity.x, y: entity.y };
+                        }
+                    });
+                }
+
+                // Auto-layout only entities that still don't have positions
+                erAutoLayoutEntities();
+                renderERDiagram();
+            } catch (err) {
+                console.error('Failed to restore ER diagram:', err);
             }
         };
 
@@ -11087,7 +11357,7 @@
             const newId = stNextUniqueId('State');
             const center = stGetViewportCenterSVG();
             stStatePositions[newId] = { x: center.x, y: center.y, width: ST_BOX_MIN_WIDTH, height: ST_BOX_HEIGHT };
-            postMessage({ type: 'st_stateCreated', stateId: newId, label: newId, type: 'Simple' });
+            postMessage({ type: 'st_stateCreated', stateId: newId, label: newId, stateType: 'Simple' });
         });
 
         document.getElementById('tb-st-add-transition').addEventListener('click', function() {

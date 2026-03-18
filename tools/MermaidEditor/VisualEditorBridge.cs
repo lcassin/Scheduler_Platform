@@ -159,6 +159,16 @@ public class VisualEditorBridge
     }
 
     /// <summary>
+    /// Restores the flowchart diagram for undo/redo (preserves all positions).
+    /// </summary>
+    private async Task RestoreDiagramToEditorAsync()
+    {
+        var json = ConvertModelToJson(_model);
+        var escaped = JsonSerializer.Serialize(json);
+        await _webView.ExecuteScriptAsync($"window.restoreDiagram({escaped})");
+    }
+
+    /// <summary>
     /// Updates the model reference (e.g., after text re-parse) and sends to editor.
     /// </summary>
     /// <param name="newModel">The new FlowchartModel from text parsing.</param>
@@ -180,6 +190,17 @@ public class VisualEditorBridge
         var json = ConvertClassDiagramModelToJson(_classDiagramModel);
         var escaped = JsonSerializer.Serialize(json);
         await _webView.ExecuteScriptAsync($"window.loadClassDiagram({escaped})");
+    }
+
+    /// <summary>
+    /// Restores the class diagram for undo/redo (preserves all positions).
+    /// </summary>
+    private async Task RestoreClassDiagramToEditorAsync()
+    {
+        if (_classDiagramModel == null) return;
+        var json = ConvertClassDiagramModelToJson(_classDiagramModel);
+        var escaped = JsonSerializer.Serialize(json);
+        await _webView.ExecuteScriptAsync($"window.restoreClassDiagram({escaped})");
     }
 
     /// <summary>
@@ -412,6 +433,17 @@ public class VisualEditorBridge
     }
 
     /// <summary>
+    /// Restores the state diagram for undo/redo (preserves all positions).
+    /// </summary>
+    private async Task RestoreStateDiagramToEditorAsync()
+    {
+        if (_stateDiagramModel == null) return;
+        var json = ConvertStateDiagramModelToJson(_stateDiagramModel);
+        var escaped = JsonSerializer.Serialize(json);
+        await _webView.ExecuteScriptAsync($"window.restoreStateDiagram({escaped})");
+    }
+
+    /// <summary>
     /// Refreshes the visual editor with the current state diagram model without resetting the view.
     /// </summary>
     public async Task RefreshStateDiagramAsync()
@@ -521,6 +553,17 @@ public class VisualEditorBridge
     }
 
     /// <summary>
+    /// Restores the ER diagram for undo/redo (preserves all positions).
+    /// </summary>
+    private async Task RestoreERDiagramToEditorAsync()
+    {
+        if (_erDiagramModel == null) return;
+        var json = ConvertERDiagramModelToJson(_erDiagramModel);
+        var escaped = JsonSerializer.Serialize(json);
+        await _webView.ExecuteScriptAsync($"window.restoreERDiagram({escaped})");
+    }
+
+    /// <summary>
     /// Refreshes the visual editor with the current ER diagram model without resetting the view.
     /// </summary>
     public async Task RefreshERDiagramAsync()
@@ -626,31 +669,31 @@ public class VisualEditorBridge
             if (_activeDiagramType == ActiveDiagramType.StateDiagram)
             {
                 RestoreStateDiagramModelFromJson(previousJson);
-                await SendStateDiagramToEditorAsync();
+                await RestoreStateDiagramToEditorAsync();
                 RaiseStateDiagramModelChanged("undo");
             }
             else if (_activeDiagramType == ActiveDiagramType.ERDiagram)
             {
                 RestoreERDiagramModelFromJson(previousJson);
-                await SendERDiagramToEditorAsync();
+                await RestoreERDiagramToEditorAsync();
                 RaiseERDiagramModelChanged("undo");
             }
             else if (_activeDiagramType == ActiveDiagramType.ClassDiagram)
             {
                 RestoreClassDiagramModelFromJson(previousJson);
-                await SendClassDiagramToEditorAsync();
+                await RestoreClassDiagramToEditorAsync();
                 RaiseClassDiagramModelChanged("undo");
             }
             else if (_activeDiagramType == ActiveDiagramType.Sequence)
             {
                 RestoreSequenceModelFromJson(previousJson);
-                await SendSequenceDiagramToEditorAsync();
+                await RefreshSequenceDiagramAsync();
                 RaiseSequenceModelChanged("undo");
             }
             else
             {
                 RestoreModelFromJson(previousJson);
-                await SendDiagramToEditorAsync();
+                await RestoreDiagramToEditorAsync();
                 RaiseModelChanged("undo");
             }
         }
@@ -683,31 +726,31 @@ public class VisualEditorBridge
             if (_activeDiagramType == ActiveDiagramType.StateDiagram)
             {
                 RestoreStateDiagramModelFromJson(redoJson);
-                await SendStateDiagramToEditorAsync();
+                await RestoreStateDiagramToEditorAsync();
                 RaiseStateDiagramModelChanged("redo");
             }
             else if (_activeDiagramType == ActiveDiagramType.ERDiagram)
             {
                 RestoreERDiagramModelFromJson(redoJson);
-                await SendERDiagramToEditorAsync();
+                await RestoreERDiagramToEditorAsync();
                 RaiseERDiagramModelChanged("redo");
             }
             else if (_activeDiagramType == ActiveDiagramType.ClassDiagram)
             {
                 RestoreClassDiagramModelFromJson(redoJson);
-                await SendClassDiagramToEditorAsync();
+                await RestoreClassDiagramToEditorAsync();
                 RaiseClassDiagramModelChanged("redo");
             }
             else if (_activeDiagramType == ActiveDiagramType.Sequence)
             {
                 RestoreSequenceModelFromJson(redoJson);
-                await SendSequenceDiagramToEditorAsync();
+                await RefreshSequenceDiagramAsync();
                 RaiseSequenceModelChanged("redo");
             }
             else
             {
                 RestoreModelFromJson(redoJson);
-                await SendDiagramToEditorAsync();
+                await RestoreDiagramToEditorAsync();
                 RaiseModelChanged("redo");
             }
         }
@@ -2443,7 +2486,7 @@ public class VisualEditorBridge
         };
         if (root.TryGetProperty("label", out var labelProp))
             newState.Label = labelProp.GetString();
-        if (root.TryGetProperty("type", out var typeProp))
+        if (root.TryGetProperty("stateType", out var typeProp))
         {
             var typeStr = typeProp.GetString();
             if (Enum.TryParse<StateType>(typeStr, true, out var st))
