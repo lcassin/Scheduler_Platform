@@ -11150,12 +11150,18 @@
                     <div class="property-label">Attributes</div>
                     <div style="font-size: 11px; color: var(--text-muted, #888);">${entity.attributes.length} attributes</div>
                 </div>
+                <div class="property-row" style="margin-top:8px">
+                    <button class="property-btn" id="er-add-attribute" style="flex:1;padding:4px 8px;cursor:pointer;">+ Attribute</button>
+                </div>
             `;
 
             document.getElementById('er-entity-name').addEventListener('change', function() {
                 if (this.value.trim()) {
                     postMessage({ type: 'er_entityEdited', oldName: entityName, name: this.value.trim() });
                 }
+            });
+            document.getElementById('er-add-attribute').addEventListener('click', function() {
+                postMessage({ type: 'er_attributeAdded', entityName: entityName, attrType: 'string', name: 'newField' });
             });
 
             propertyPanel.classList.add('visible');
