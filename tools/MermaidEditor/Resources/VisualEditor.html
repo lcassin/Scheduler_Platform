@@ -6008,6 +6008,14 @@
                 // Hide property panel from previous diagram
                 propertyPanel.classList.remove('visible');
 
+                // Reset pick mode and button state when loading a new diagram
+                clsPickingRelSource = false;
+                clsPickingRelFrom = null;
+                document.body.style.cursor = '';
+                const addRelBtn = document.getElementById('tb-cls-add-relation');
+                if (addRelBtn) addRelBtn.classList.remove('active');
+                tempEdge.style.display = 'none';
+
                 // Hydrate saved positions from C# model (if HasManualPosition)
                 if (clsDiagram.classes) {
                     clsDiagram.classes.forEach(cls => {
@@ -6489,13 +6497,22 @@
                 // align with the curve direction, not the straight line between endpoints.
                 const tangents = edgeTangentAngles(pts);
 
+                // Create a separate marker group that will be rendered on top of nodes
+                // so markers aren't hidden behind class boxes (edges-layer is behind nodes-layer).
+                const markerG = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                markerG.classList.add('cls-relationship-markers');
+                markerG.setAttribute('data-rel-index', relIdx);
+
                 // Left end marker (at source/from side) - marker shape extends toward source
                 // startAngle points away from source along curve; we reverse so marker faces the node
-                clsDrawRelationEndMarker(g, pts.x1, pts.y1, tangents.startAngle + Math.PI, rel.leftEnd);
+                clsDrawRelationEndMarker(markerG, pts.x1, pts.y1, tangents.startAngle + Math.PI, rel.leftEnd);
 
                 // Right end marker (at target/to side) - marker shape extends toward target
                 // endAngle points away from target along curve; we reverse so marker faces the node
-                clsDrawRelationEndMarker(g, pts.x2, pts.y2, tangents.endAngle + Math.PI, rel.rightEnd);
+                clsDrawRelationEndMarker(markerG, pts.x2, pts.y2, tangents.endAngle + Math.PI, rel.rightEnd);
+
+                // Append marker group to nodes layer so it renders on top of class boxes
+                nodesLayer.appendChild(markerG);
 
                 // Label — offset perpendicular to line to avoid overlap with other relationship labels
                 if (rel.label) {
@@ -6783,12 +6800,14 @@
                         clsPickingRelFrom = null;
                         document.body.style.cursor = '';
                         document.getElementById('tb-cls-add-relation').classList.remove('active');
+                        tempEdge.style.display = 'none';
                         e.preventDefault();
                         e.stopPropagation();
                         return;
                     } else {
                         // Clicked source again: deselect source, wait for new source
                         clsPickingRelFrom = null;
+                        tempEdge.style.display = 'none';
                         clsSelectedClassId = null;
                         renderClassDiagram();
                         e.preventDefault();
@@ -6801,6 +6820,7 @@
                     clsPickingRelFrom = null;
                     document.body.style.cursor = '';
                     document.getElementById('tb-cls-add-relation').classList.remove('active');
+                    tempEdge.style.display = 'none';
                 }
             }
 
@@ -6867,8 +6887,21 @@
             }
 
             if (clsDrawingRelFrom) {
-                // Show temp edge line
+                // Show temp edge line for grip-drag mode
                 const fromPos = clsClassPositions[clsDrawingRelFrom];
+                if (fromPos) {
+                    const svgPt = getSVGPoint(e);
+                    tempEdge.setAttribute('x1', fromPos.x + (fromPos.width || CLS_BOX_MIN_WIDTH) / 2);
+                    tempEdge.setAttribute('y1', fromPos.y + (fromPos.height || 100) / 2);
+                    tempEdge.setAttribute('x2', svgPt.x);
+                    tempEdge.setAttribute('y2', svgPt.y);
+                    tempEdge.style.display = '';
+                }
+            }
+
+            // Show temp edge line for toolbar two-click workflow
+            if (clsPickingRelFrom) {
+                const fromPos = clsClassPositions[clsPickingRelFrom];
                 if (fromPos) {
                     const svgPt = getSVGPoint(e);
                     tempEdge.setAttribute('x1', fromPos.x + (fromPos.width || CLS_BOX_MIN_WIDTH) / 2);
