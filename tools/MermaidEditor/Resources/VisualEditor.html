@@ -3357,7 +3357,18 @@
                     }
                 }
             } else if (currentDiagramType === 'class' && clsDiagram) {
-                if (clsSelectedClassId) {
+                if (clsSelectedClassId && clsSelectedMemberIndex >= 0) {
+                    // Copy just the selected member
+                    const cls = clsDiagram.classes.find(c => c.id === clsSelectedClassId);
+                    if (cls && cls.members && cls.members[clsSelectedMemberIndex]) {
+                        const m = cls.members[clsSelectedMemberIndex];
+                        clipboard = {
+                            type: 'cls_member',
+                            diagramType: 'class',
+                            rawText: m.rawText || m.name || ''
+                        };
+                    }
+                } else if (clsSelectedClassId) {
                     const cls = clsDiagram.classes.find(c => c.id === clsSelectedClassId);
                     if (cls) {
                         clipboard = {
@@ -3383,7 +3394,21 @@
                     }
                 }
             } else if (currentDiagramType === 'er' && erDiagram) {
-                if (erSelectedEntityName) {
+                if (erSelectedEntityName && erSelectedAttrIndex >= 0) {
+                    // Copy just the selected attribute
+                    const ent = erDiagram.entities.find(e => e.name === erSelectedEntityName);
+                    if (ent && ent.attributes && ent.attributes[erSelectedAttrIndex]) {
+                        const a = ent.attributes[erSelectedAttrIndex];
+                        clipboard = {
+                            type: 'er_attribute',
+                            diagramType: 'er',
+                            name: a.name || 'field',
+                            attrType: a.type || 'string',
+                            key: a.key || '',
+                            comment: a.comment || ''
+                        };
+                    }
+                } else if (erSelectedEntityName) {
                     const ent = erDiagram.entities.find(e => e.name === erSelectedEntityName);
                     if (ent) {
                         clipboard = {
@@ -3409,11 +3434,19 @@
             } else if (clipboard.diagramType === 'sequence') {
                 pasteSequenceElement();
             } else if (clipboard.diagramType === 'class') {
-                pasteClassElement();
+                if (clipboard.type === 'cls_member') {
+                    pasteClassMember();
+                } else {
+                    pasteClassElement();
+                }
             } else if (clipboard.diagramType === 'state') {
                 pasteStateElement();
             } else if (clipboard.diagramType === 'er') {
-                pasteERElement();
+                if (clipboard.type === 'er_attribute') {
+                    pasteERAttribute();
+                } else {
+                    pasteERElement();
+                }
             }
         }
 
@@ -3575,6 +3608,14 @@
             postMessage(msg);
         }
 
+        function pasteClassMember() {
+            if (!clsDiagram || !clipboard || clipboard.type !== 'cls_member') return;
+            // Paste the member into the currently selected class (or the class under the cursor)
+            const targetClassId = clsSelectedClassId;
+            if (!targetClassId) return;
+            postMessage({ type: 'cls_memberAdded', classId: targetClassId, rawText: clipboard.rawText || '+newField' });
+        }
+
         function pasteStateElement() {
             if (!stDiagram || clipboard.type !== 'st_state') return;
             const newId = clipboard.label + '_copy';
@@ -3596,6 +3637,21 @@
                 }));
             }
             postMessage(msg);
+        }
+
+        function pasteERAttribute() {
+            if (!erDiagram || !clipboard || clipboard.type !== 'er_attribute') return;
+            // Paste the attribute into the currently selected entity
+            const targetEntity = erSelectedEntityName;
+            if (!targetEntity) return;
+            postMessage({
+                type: 'er_attributeAdded',
+                entityName: targetEntity,
+                name: clipboard.name || 'field',
+                attrType: clipboard.attrType || 'string',
+                key: clipboard.key || '',
+                comment: clipboard.comment || ''
+            });
         }
 
         function deleteSelected() {
@@ -7410,9 +7466,23 @@
                 addClsContextMenuItem('Delete Member', () => {
                     postMessage({ type: 'cls_memberDeleted', classId: classId, memberIndex: memberIdx });
                 });
+                // Member-level copy/paste
+                addClsContextMenuSeparator();
+                addClsContextMenuItem('\u{1F4CB} Copy Member', () => {
+                    clsSelectedClassId = classId;
+                    clsSelectedMemberIndex = memberIdx;
+                    copySelected();
+                });
+                if (clipboard && clipboard.diagramType === 'class' && clipboard.type === 'cls_member') {
+                    addClsContextMenuItem('\u{1F4CB} Paste Member', () => {
+                        clsSelectedClassId = classId;
+                        pasteClassMember();
+                    });
+                }
             } else if (classGroup) {
                 const classId = classGroup.getAttribute('data-class-id');
                 clsSelectedClassId = classId;
+                clsSelectedMemberIndex = -1;
 
                 addClsContextMenuItem('Edit Class', () => {
                     clsShowClassPropertyPanel(classId);
@@ -7452,13 +7522,18 @@
                 });
             }
 
-            // Copy/Paste for class diagrams
-            if (clsSelectedClassId) {
+            // Copy/Paste for class diagrams (class-level and entity-level)
+            if (clsSelectedClassId && clsSelectedMemberIndex < 0) {
                 addClsContextMenuSeparator();
-                addClsContextMenuItem('\u{1F4CB} Copy', () => { copySelected(); });
+                addClsContextMenuItem('\u{1F4CB} Copy Class', () => { copySelected(); });
             }
-            if (clipboard && clipboard.diagramType === 'class') {
-                addClsContextMenuItem('\u{1F4CB} Paste', () => { pasteClipboard(0, 0); });
+            if (clipboard && clipboard.diagramType === 'class' && clipboard.type === 'cls_class') {
+                addClsContextMenuItem('\u{1F4CB} Paste Class', () => { pasteClipboard(0, 0); });
+            }
+            // Show "Paste Member" on class right-click when clipboard has a member
+            if (clsSelectedClassId && clipboard && clipboard.diagramType === 'class' && clipboard.type === 'cls_member') {
+                if (clsSelectedMemberIndex < 0) addClsContextMenuSeparator();
+                addClsContextMenuItem('\u{1F4CB} Paste Member', () => { pasteClassMember(); });
             }
 
             positionContextMenu(contextMenu, e.clientX, e.clientY);
@@ -11148,6 +11223,19 @@
                 addErContextMenuItem('Delete Attribute', () => {
                     postMessage({ type: 'er_attributeDeleted', entityName: entityName, index: attrIdx });
                 });
+                // Attribute-level copy/paste
+                addErContextMenuSeparator();
+                addErContextMenuItem('\u{1F4CB} Copy Attribute', () => {
+                    erSelectedEntityName = entityName;
+                    erSelectedAttrIndex = attrIdx;
+                    copySelected();
+                });
+                if (clipboard && clipboard.diagramType === 'er' && clipboard.type === 'er_attribute') {
+                    addErContextMenuItem('\u{1F4CB} Paste Attribute', () => {
+                        erSelectedEntityName = entityName;
+                        pasteERAttribute();
+                    });
+                }
             } else if (entityGroup) {
                 const entityName = entityGroup.getAttribute('data-entity-name');
                 erSelectedEntityName = entityName;
@@ -11187,13 +11275,18 @@
                 });
             }
 
-            // Copy/Paste for ER diagrams
-            if (erSelectedEntityName) {
+            // Copy/Paste for ER diagrams (entity-level)
+            if (erSelectedEntityName && erSelectedAttrIndex < 0) {
                 addErContextMenuSeparator();
-                addErContextMenuItem('\u{1F4CB} Copy', () => { copySelected(); });
+                addErContextMenuItem('\u{1F4CB} Copy Entity', () => { copySelected(); });
             }
-            if (clipboard && clipboard.diagramType === 'er') {
-                addErContextMenuItem('\u{1F4CB} Paste', () => { pasteClipboard(0, 0); });
+            if (clipboard && clipboard.diagramType === 'er' && clipboard.type === 'er_entity') {
+                addErContextMenuItem('\u{1F4CB} Paste Entity', () => { pasteClipboard(0, 0); });
+            }
+            // Show "Paste Attribute" on entity right-click when clipboard has an attribute
+            if (erSelectedEntityName && clipboard && clipboard.diagramType === 'er' && clipboard.type === 'er_attribute') {
+                if (erSelectedAttrIndex < 0) addErContextMenuSeparator();
+                addErContextMenuItem('\u{1F4CB} Paste Attribute', () => { pasteERAttribute(); });
             }
 
             positionContextMenu(contextMenu, e.clientX, e.clientY);
