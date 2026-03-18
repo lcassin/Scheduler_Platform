@@ -5838,6 +5838,7 @@
                         postMessage({ type: 'seq_fragmentCreated', fragmentType: 'loop', condition: 'condition', sections: [{ label: 'condition', elements: [] }], insertIndex: elIdx + 1 });
                     });
                     // "Move to Fragment" submenu — only show if there are fragments in the diagram
+                    // Lists every section within each fragment as a separate target
                     const fragments = seqDiagram.elements
                         .map((el, idx) => ({ el, idx }))
                         .filter(item => item.el.elementType === 'fragment');
@@ -5849,16 +5850,32 @@
                         const submenu = document.createElement('div');
                         submenu.classList.add('context-submenu');
                         fragments.forEach(f => {
-                            const fragLabel = f.el.fragmentType + (f.el.sections && f.el.sections[0] && f.el.sections[0].label ? ' [' + f.el.sections[0].label + ']' : '');
-                            const subItem = document.createElement('div');
-                            subItem.classList.add('context-menu-item');
-                            subItem.textContent = fragLabel;
-                            subItem.addEventListener('click', function(ev) {
-                                ev.stopPropagation();
-                                contextMenu.classList.remove('visible');
-                                postMessage({ type: 'seq_messageMovedToFragment', messageIndex: elIdx, fragmentIndex: f.idx });
-                            });
-                            submenu.appendChild(subItem);
+                            if (f.el.sections && f.el.sections.length > 0) {
+                                f.el.sections.forEach((sec, secIdx) => {
+                                    const typeName = f.el.fragmentType.charAt(0).toUpperCase() + f.el.fragmentType.slice(1);
+                                    const secLabel = typeName + (sec.label ? ' [' + sec.label + ']' : (secIdx > 0 ? ' [else]' : ''));
+                                    const subItem = document.createElement('div');
+                                    subItem.classList.add('context-menu-item');
+                                    subItem.textContent = secLabel;
+                                    subItem.addEventListener('click', function(ev) {
+                                        ev.stopPropagation();
+                                        contextMenu.classList.remove('visible');
+                                        postMessage({ type: 'seq_messageMovedToFragment', messageIndex: elIdx, fragmentIndex: f.idx, sectionIndex: secIdx });
+                                    });
+                                    submenu.appendChild(subItem);
+                                });
+                            } else {
+                                const fragLabel = f.el.fragmentType + (f.el.sections && f.el.sections[0] && f.el.sections[0].label ? ' [' + f.el.sections[0].label + ']' : '');
+                                const subItem = document.createElement('div');
+                                subItem.classList.add('context-menu-item');
+                                subItem.textContent = fragLabel;
+                                subItem.addEventListener('click', function(ev) {
+                                    ev.stopPropagation();
+                                    contextMenu.classList.remove('visible');
+                                    postMessage({ type: 'seq_messageMovedToFragment', messageIndex: elIdx, fragmentIndex: f.idx });
+                                });
+                                submenu.appendChild(subItem);
+                            }
                         });
                         parentItem.appendChild(submenu);
                         contextMenu.appendChild(parentItem);
@@ -5980,7 +5997,8 @@
             e.preventDefault();
             e.stopPropagation();
             _seqRightClickHandled = false;
-        });
+            return false;
+        }, true);
 
         function addContextMenuItem(label, onClick) {
             const item = document.createElement('div');
