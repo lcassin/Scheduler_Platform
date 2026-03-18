@@ -4595,8 +4595,6 @@ Console.WriteLine(""Hello, World!"");
             await VisualEditorWebView.EnsureCoreWebView2Async();
             _visualEditorInitialized = true;
 
-            // Prevent WebView2 from intercepting Ctrl+C/V so the JS keydown
-            // handler in VisualEditor.html can handle copy/paste for diagram elements.
             // Let Ctrl+C/V/X reach JS keydown handlers instead of being consumed by WebView2
             VisualEditorWebView.PreviewKeyDown += VisualEditorWebView_PreviewKeyDown;
 
