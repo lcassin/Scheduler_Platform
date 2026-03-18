@@ -6995,18 +6995,38 @@ Console.WriteLine(""Hello, World!"");
 
     private void AskAi_Click(object sender, RoutedEventArgs e)
     {
+        var isVisualMode = _visualEditorMode == VisualEditorMode.Visual || _visualEditorMode == VisualEditorMode.Split;
+
         var dialog = new AskAiDialog
         {
             Owner = this,
             EditorContent = CodeEditor.Text,
-            FileType = _currentRenderMode == RenderMode.Mermaid ? "Mermaid" : "Markdown"
+            FileType = _currentRenderMode == RenderMode.Mermaid ? "Mermaid" : "Markdown",
+            IsVisualEditorMode = isVisualMode && _currentRenderMode == RenderMode.Mermaid,
+            DiagramType = _visualEditorBridge != null ? _visualEditorBridge.ActiveDiagramType switch
+            {
+                ActiveDiagramType.Flowchart => "Flowchart",
+                ActiveDiagramType.Sequence => "Sequence",
+                ActiveDiagramType.ClassDiagram => "Class",
+                ActiveDiagramType.StateDiagram => "State",
+                ActiveDiagramType.ERDiagram => "ER",
+                _ => "Flowchart"
+            } : "Flowchart"
         };
 
         if (dialog.ShowDialog() == true && !string.IsNullOrEmpty(dialog.TextToInsert))
         {
-            // Insert the AI-generated text at the current cursor position
-            var offset = CodeEditor.CaretOffset;
-            CodeEditor.Document.Insert(offset, dialog.TextToInsert);
+            if (dialog.ShouldReplaceDiagram)
+            {
+                // Replace entire editor content with AI-generated diagram
+                CodeEditor.Document.Text = dialog.TextToInsert;
+            }
+            else
+            {
+                // Insert the AI-generated text at the current cursor position
+                var offset = CodeEditor.CaretOffset;
+                CodeEditor.Document.Insert(offset, dialog.TextToInsert);
+            }
         }
     }
 

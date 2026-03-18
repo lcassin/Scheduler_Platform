@@ -50,6 +50,24 @@ public partial class AskAiDialog : Window
     /// </summary>
     public string TextToInsert { get; private set; } = "";
 
+    /// <summary>
+    /// When true, the caller should replace the entire editor content instead of inserting at cursor.
+    /// Set when the user clicks "Replace Diagram" in visual editor mode.
+    /// </summary>
+    public bool ShouldReplaceDiagram { get; private set; }
+
+    /// <summary>
+    /// Whether the visual editor is currently active. Set by the caller.
+    /// Enables diagram-type-aware prompting and the "Replace Diagram" button.
+    /// </summary>
+    public bool IsVisualEditorMode { get; set; }
+
+    /// <summary>
+    /// The active diagram type name (e.g., "Flowchart", "Sequence", "Class", "State", "ER").
+    /// Used to tailor the AI system prompt for diagram generation.
+    /// </summary>
+    public string DiagramType { get; set; } = "Flowchart";
+
     public AskAiDialog()
     {
         InitializeComponent();
@@ -97,7 +115,15 @@ public partial class AskAiDialog : Window
         }
         else
         {
-            AddSystemMessage($"Connected to {settings.AiProvider} ({settings.AiModel}). Type your message below.");
+            if (IsVisualEditorMode)
+            {
+                AddSystemMessage($"Connected to {settings.AiProvider} ({settings.AiModel}). Visual Editor mode ({DiagramType} diagram).\nDescribe the diagram you want to generate, or ask for modifications to the current diagram.");
+                ReplaceDiagramButton.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                AddSystemMessage($"Connected to {settings.AiProvider} ({settings.AiModel}). Type your message below.");
+            }
             PromptInput.Focus();
         }
     }
@@ -440,10 +466,7 @@ public partial class AskAiDialog : Window
             _conversationHistory.Add(new ChatMessage
             {
                 Role = "system",
-                TextContent = $"You are a helpful AI assistant integrated into a code editor. The user is working with {FileType} files. " +
-                    "Help them with writing, editing, explaining, and generating content. " +
-                    "When providing code or content to insert, format it clearly. " +
-                    "Be concise and helpful."
+                TextContent = BuildSystemPrompt()
             });
         }
 
@@ -486,7 +509,10 @@ public partial class AskAiDialog : Window
             });
 
             StatusText.Text = "Done";
-            InsertButton.IsEnabled = !string.IsNullOrEmpty(_lastAssistantResponse);
+            var hasResponse = !string.IsNullOrEmpty(_lastAssistantResponse);
+            InsertButton.IsEnabled = hasResponse;
+            if (IsVisualEditorMode)
+                ReplaceDiagramButton.IsEnabled = hasResponse;
         }
         catch (OperationCanceledException)
         {
@@ -539,6 +565,19 @@ public partial class AskAiDialog : Window
         {
             // Extract code blocks if present, otherwise use full response
             TextToInsert = ExtractCodeContent(_lastAssistantResponse);
+            ShouldReplaceDiagram = false;
+            DialogResult = true;
+            Close();
+        }
+    }
+
+    private void ReplaceDiagram_Click(object sender, RoutedEventArgs e)
+    {
+        if (!string.IsNullOrEmpty(_lastAssistantResponse))
+        {
+            // Extract code blocks if present, otherwise use full response
+            TextToInsert = ExtractCodeContent(_lastAssistantResponse);
+            ShouldReplaceDiagram = true;
             DialogResult = true;
             Close();
         }
@@ -548,6 +587,41 @@ public partial class AskAiDialog : Window
     {
         DialogResult = false;
         Close();
+    }
+
+    /// <summary>
+    /// Builds the system prompt based on the current mode (text editor vs visual editor).
+    /// </summary>
+    private string BuildSystemPrompt()
+    {
+        if (IsVisualEditorMode)
+        {
+            var diagramExamples = DiagramType switch
+            {
+                "Flowchart" => "flowchart TD\n    A[Start] --> B{Decision}\n    B -->|Yes| C[Action]\n    B -->|No| D[End]",
+                "Sequence" => "sequenceDiagram\n    Alice->>Bob: Hello\n    Bob-->>Alice: Hi back",
+                "Class" => "classDiagram\n    class Animal {\n        +String name\n        +makeSound()\n    }\n    Animal <|-- Dog",
+                "State" => "stateDiagram-v2\n    [*] --> Idle\n    Idle --> Processing : start\n    Processing --> Done : complete\n    Done --> [*]",
+                "ER" => "erDiagram\n    CUSTOMER ||--o{ ORDER : places\n    ORDER ||--|{ LINE-ITEM : contains",
+                _ => "flowchart TD\n    A[Start] --> B[End]"
+            };
+
+            return $"You are an AI assistant integrated into a Mermaid diagram visual editor. " +
+                $"The user is working with a {DiagramType} diagram. " +
+                $"When generating or modifying diagrams, ALWAYS output valid Mermaid {DiagramType.ToLowerInvariant()} syntax in a code block. " +
+                $"Example format:\n```mermaid\n{diagramExamples}\n```\n" +
+                "Important rules:\n" +
+                "- Always wrap Mermaid code in a ```mermaid code block\n" +
+                "- Generate COMPLETE diagrams (not fragments) when the user asks for a new diagram\n" +
+                "- When modifying, include the full updated diagram\n" +
+                "- Use descriptive node labels and meaningful relationship labels\n" +
+                "- Be concise in explanations but thorough in diagram code";
+        }
+
+        return $"You are a helpful AI assistant integrated into a code editor. The user is working with {FileType} files. " +
+            "Help them with writing, editing, explaining, and generating content. " +
+            "When providing code or content to insert, format it clearly. " +
+            "Be concise and helpful.";
     }
 
     /// <summary>

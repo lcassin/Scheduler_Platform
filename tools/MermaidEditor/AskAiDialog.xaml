@@ -210,14 +210,18 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             
             <Button x:Name="ClearChatButton" Grid.Column="0" Content="Clear Chat" Click="ClearChat_Click"/>
             <Button x:Name="StopButton" Grid.Column="1" Content="Stop" Click="Stop_Click" IsEnabled="False"/>
             
-            <Button x:Name="InsertButton" Grid.Column="3" Content="Insert at Cursor" Click="Insert_Click" 
+            <Button x:Name="ReplaceDiagramButton" Grid.Column="3" Content="Replace Diagram" Click="ReplaceDiagram_Click"
+                    IsEnabled="False" Visibility="Collapsed"
+                    ToolTip="Replace the entire editor content with the AI-generated diagram"/>
+            <Button x:Name="InsertButton" Grid.Column="4" Content="Insert at Cursor" Click="Insert_Click" 
                     IsEnabled="False" ToolTip="Insert the last AI response at the cursor position in the editor"/>
-            <Button x:Name="CloseButton" Grid.Column="4" Content="Close" Click="Close_Click" IsCancel="True"/>
+            <Button x:Name="CloseButton" Grid.Column="5" Content="Close" Click="Close_Click" IsCancel="True"/>
         </Grid>
     </Grid>
 </Window>
