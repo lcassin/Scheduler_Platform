@@ -10,7 +10,10 @@
 
 <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
     <div class="d-flex justify-space-between align-center mb-4">
-        <MudText Typo="Typo.h4">ADR Configuration</MudText>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@CustomIcons.Configuration" Size="Size.Large" />
+            <MudText Typo="Typo.h4">ADR Configuration</MudText>
+        </div>
     </div>
 
     @if (!_hasAccess)

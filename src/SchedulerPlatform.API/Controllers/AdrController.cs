@@ -2059,8 +2059,8 @@ public class AdrController : ControllerBase
         try
         {
             int totalCount, pendingCount, credentialVerifiedCount, scrapeRequestedCount, 
-                completedCount, failedCount, needsReviewCount, credentialFailedCount,
-                credentialCheckRequestedCount, credentialCheckInProgressCount;
+                completedCount, failedCount, cancelledCount, needsReviewCount, credentialFailedCount,
+                credentialCheckRequestedCount, credentialCheckInProgressCount, blacklistedPendingReviewCount;
 
             if (lastOrchestrationRuns.HasValue && lastOrchestrationRuns.Value > 0)
             {
@@ -2092,14 +2092,16 @@ public class AdrController : ControllerBase
                     scrapeRequestedCount = sr + sci;
                     completedCount = statusCounts.TryGetValue("Completed", out var c) ? c : 0;
                     failedCount = statusCounts.TryGetValue("Failed", out var f) ? f : 0;
+                    cancelledCount = statusCounts.TryGetValue("Cancelled", out var can) ? can : 0;
                     needsReviewCount = statusCounts.TryGetValue("NeedsReview", out var nr) ? nr : 0;
+                    blacklistedPendingReviewCount = statusCounts.TryGetValue("BlacklistedPendingReview", out var blpr1) ? blpr1 : 0;
                 }
                 else
                 {
                     // No recent runs, return zeros
                     totalCount = pendingCount = credentialVerifiedCount = credentialFailedCount = 
-                        scrapeRequestedCount = completedCount = failedCount = needsReviewCount = 
-                        credentialCheckRequestedCount = credentialCheckInProgressCount = 0;
+                        scrapeRequestedCount = completedCount = failedCount = cancelledCount = needsReviewCount = 
+                        credentialCheckRequestedCount = credentialCheckInProgressCount = blacklistedPendingReviewCount = 0;
                 }
             }
             else
@@ -2128,15 +2130,17 @@ public class AdrController : ControllerBase
                 scrapeRequestedCount = sr2 + sci2;
                 completedCount = statusCounts.TryGetValue("Completed", out var c2) ? c2 : 0;
                 failedCount = statusCounts.TryGetValue("Failed", out var f2) ? f2 : 0;
+                cancelledCount = statusCounts.TryGetValue("Cancelled", out var can2) ? can2 : 0;
                 needsReviewCount = statusCounts.TryGetValue("NeedsReview", out var nr2) ? nr2 : 0;
+                blacklistedPendingReviewCount = statusCounts.TryGetValue("BlacklistedPendingReview", out var blpr2) ? blpr2 : 0;
             }
 
             // Calculate phase breakdown counts
             // Credential Phase: Pending + CredentialCheckRequested + CredentialCheckInProgress + CredentialVerified + CredentialFailed
             var credentialPhaseCount = pendingCount + credentialCheckRequestedCount + credentialCheckInProgressCount + credentialVerifiedCount + credentialFailedCount;
             
-            // ADR Document Phase: ScrapeRequested (includes StatusCheckInProgress) + Completed + Failed + NeedsReview
-            var adrDocumentPhaseCount = scrapeRequestedCount + completedCount + failedCount + needsReviewCount;
+            // ADR Document Phase: ScrapeRequested (includes StatusCheckInProgress) + Completed + Failed + Cancelled + NeedsReview + BlacklistedPendingReview
+            var adrDocumentPhaseCount = scrapeRequestedCount + completedCount + failedCount + cancelledCount + needsReviewCount + blacklistedPendingReviewCount;
 
             return Ok(new
             {
@@ -2149,7 +2153,9 @@ public class AdrController : ControllerBase
                 scrapeRequestedCount,
                 completedCount,
                 failedCount,
+                cancelledCount,
                 needsReviewCount,
+                blacklistedPendingReviewCount,
                 // Phase breakdown
                 credentialPhaseCount,
                 adrDocumentPhaseCount
@@ -2411,16 +2417,7 @@ public class AdrController : ControllerBase
             }
 
             // Reset job to Pending status so it gets picked up by the orchestrator
-            job.Status = "Pending";
-            job.AdrStatusId = null;
-            job.AdrStatusDescription = null;
-            job.AdrIndexId = null;
-            job.ErrorMessage = null;
-            job.CredentialVerifiedDateTime = null;
-            job.ScrapingCompletedDateTime = null;
-            job.RetryCount = 0;
-            job.ModifiedDateTime = DateTime.UtcNow;
-            job.ModifiedBy = User.Identity?.Name ?? "System Created";
+            ResetJobForRefire(job, User.Identity?.Name ?? "System Created");
 
             await _unitOfWork.AdrJobs.UpdateAsync(job);
             await _unitOfWork.SaveChangesAsync();
@@ -2480,16 +2477,7 @@ public class AdrController : ControllerBase
                     }
 
                     // Reset job to Pending status so it gets picked up by the orchestrator
-                    job.Status = "Pending";
-                    job.AdrStatusId = null;
-                    job.AdrStatusDescription = null;
-                    job.AdrIndexId = null;
-                    job.ErrorMessage = null;
-                    job.CredentialVerifiedDateTime = null;
-                    job.ScrapingCompletedDateTime = null;
-                    job.RetryCount = 0;
-                    job.ModifiedDateTime = DateTime.UtcNow;
-                    job.ModifiedBy = User.Identity?.Name ?? "System Created";
+                    ResetJobForRefire(job, User.Identity?.Name ?? "System Created");
 
                     await _unitOfWork.AdrJobs.UpdateAsync(job);
                     refiredCount++;
@@ -2869,6 +2857,7 @@ public class AdrController : ControllerBase
     {
         try
         {
+            var userTimeZone = await GetCurrentUserTimeZoneAsync();
             var orchestrationRequest = new AdrOrchestrationRequest
             {
                 RequestedBy = User.Identity?.Name ?? "API",
@@ -2878,7 +2867,8 @@ public class AdrController : ControllerBase
                 RunScraping = false,
                 RunStatusCheck = false,
                 RunBulkCredentialVerification = true,
-                TestRunLimit = testrun
+                TestRunLimit = testrun,
+                BillingTimeZoneId = userTimeZone
             };
 
             await _orchestrationQueue.QueueAsync(orchestrationRequest);
@@ -2989,8 +2979,8 @@ public class AdrController : ControllerBase
             
             if (extension == ".csv")
             {
-                // Parse CSV file
-                using var reader = new StreamReader(file.OpenReadStream());
+                // Parse CSV file (detect encoding to handle UTF-8 BOM)
+                using var reader = new StreamReader(file.OpenReadStream(), detectEncodingFromByteOrderMarks: true);
                 var headerLine = await reader.ReadLineAsync();
                 if (string.IsNullOrWhiteSpace(headerLine))
                 {
@@ -3344,6 +3334,7 @@ public class AdrController : ControllerBase
                 });
             }
             
+            var userTimeZone = await GetCurrentUserTimeZoneAsync();
             var orchestrationRequest = new AdrOrchestrationRequest
             {
                 RequestedBy = User.Identity?.Name ?? "Unknown",
@@ -3352,7 +3343,8 @@ public class AdrController : ControllerBase
                 RunCredentialVerification = request?.RunCredentialVerification ?? true,
                 RunScraping = request?.RunScraping ?? true,
                 RunStatusCheck = request?.RunStatusCheck ?? true,
-                CheckAllScrapedStatuses = request?.CheckAllScrapedStatuses ?? false
+                CheckAllScrapedStatuses = request?.CheckAllScrapedStatuses ?? false,
+                BillingTimeZoneId = userTimeZone
             };
 
             await _orchestrationQueue.QueueAsync(orchestrationRequest);
@@ -5367,6 +5359,50 @@ public class AdrController : ControllerBase
         }
 
         #endregion
+
+    #region Private Helpers
+
+    /// <summary>
+    /// Looks up the current user's PreferredTimeZone from the database.
+    /// Returns null if the user cannot be identified or has no timezone set,
+    /// which causes the orchestrator to fall back to its default (Central Standard Time).
+    /// </summary>
+    private async Task<string?> GetCurrentUserTimeZoneAsync()
+    {
+        var username = User.Identity?.Name;
+        if (string.IsNullOrEmpty(username)) return null;
+        
+        var user = await _dbContext.Users
+            .Where(u => u.Email == username || u.Username == username)
+            .Select(u => u.PreferredTimeZone)
+            .FirstOrDefaultAsync();
+        
+        return user;
+    }
+
+    /// <summary>
+    /// Resets all status/tracking fields on an AdrJob so it can be reprocessed by the orchestrator.
+    /// Preserves IsManualRequest so the job retains its original creation context.
+    /// </summary>
+    private static void ResetJobForRefire(AdrJob job, string modifiedBy)
+    {
+        job.Status = "Pending";
+        job.AdrStatusId = null;
+        job.AdrStatusDescription = null;
+        job.AdrIndexId = null;
+        job.ErrorMessage = null;
+        job.CredentialVerifiedDateTime = null;
+        job.ScrapingCompletedDateTime = null;
+        job.RetryCount = 0;
+        // Note: IsManualRequest is intentionally NOT cleared — refiring a job should
+        // preserve whether it was manually created or orchestrator-created.
+        job.LastStatusCheckResponse = null;
+        job.LastStatusCheckDateTime = null;
+        job.ModifiedDateTime = DateTime.UtcNow;
+        job.ModifiedBy = modifiedBy;
+    }
+
+    #endregion
 }
 
 #region Request DTOs

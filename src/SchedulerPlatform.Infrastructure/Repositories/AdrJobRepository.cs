@@ -248,7 +248,16 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
 
             if (!string.IsNullOrWhiteSpace(status))
             {
-                query = query.Where(j => j.Status == status);
+                // Support comma-separated statuses (e.g. "Failed,Cancelled" from Dashboard chart clicks)
+                if (status.Contains(','))
+                {
+                    var statuses = status.Split(',').Select(s => s.Trim()).Where(s => !string.IsNullOrEmpty(s)).ToList();
+                    query = query.Where(j => statuses.Contains(j.Status));
+                }
+                else
+                {
+                    query = query.Where(j => j.Status == status);
+                }
             }
 
             if (billingPeriodStart.HasValue)
@@ -476,10 +485,12 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
         var today = currentDate.Date;
 
         // Get scraping-related jobs that need status check
+        // BlacklistedPendingReview jobs are included so the status check pipeline can monitor
+        // downstream results for blacklisted accounts that already fired to the external API.
         var scrapingJobs = await _dbSet
             .Where(j => !j.IsDeleted &&
                         !j.IsManualRequest &&
-                        (j.Status == "ScrapeRequested" || j.Status == "StatusCheckInProgress" || j.Status == "NeedsReview") &&
+                        (j.Status == "ScrapeRequested" || j.Status == "StatusCheckInProgress" || j.Status == "NeedsReview" || j.Status == "BlacklistedPendingReview") &&
                         !j.ScrapingCompletedDateTime.HasValue &&
                         // At least delayDays since last modification
                         j.ModifiedDateTime <= checkDate)
@@ -514,6 +525,8 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
         // Include "NeedsReview" because the status can be fixed downstream and should be re-checked
         // Include "CredentialCheckInProgress" and "CredentialFailed" to check credential verification status
         // (credentials can be fixed by helpdesk and should be re-checked daily until NextRunDate arrives)
+        // BlacklistedPendingReview jobs are included so manual status checks can also
+        // monitor downstream results for blacklisted accounts that already fired to the external API.
         return await _dbSet
             .Where(j => !j.IsDeleted &&
                         // Include all jobs that need status checking
@@ -521,7 +534,8 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                          j.Status == "StatusCheckInProgress" ||
                          j.Status == "NeedsReview" ||
                          j.Status == "CredentialCheckInProgress" ||
-                         j.Status == "CredentialFailed"))
+                         j.Status == "CredentialFailed" ||
+                         j.Status == "BlacklistedPendingReview"))
             .Include(j => j.AdrAccount)
             .ToListAsync();
     }
@@ -585,5 +599,41 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
         
         // Return as dictionary keyed by AdrAccountId
         return rebillJobs.ToDictionary(j => j.AdrAccountId);
+    }
+
+    public async Task<HashSet<int>> GetAccountIdsWithActiveDownloadJobsAsync(IEnumerable<int> accountIds)
+    {
+        // Active download jobs are non-deleted, non-rebill jobs (AdrJobTypeId != 3 or null)
+        // in a non-final status (not Completed, Failed, Cancelled, Error)
+        var finalStatuses = new[] { "Completed", "Failed", "Cancelled", "Error" };
+        var accountIdList = accountIds.ToList();
+        
+        if (!accountIdList.Any())
+        {
+            return new HashSet<int>();
+        }
+
+        // Process in batches to avoid large IN clauses
+        var result = new HashSet<int>();
+        const int batchSize = 5000;
+        for (int i = 0; i < accountIdList.Count; i += batchSize)
+        {
+            var batch = accountIdList.Skip(i).Take(batchSize).ToList();
+            var batchResult = await _dbSet
+                .Where(j => batch.Contains(j.AdrAccountId) &&
+                            !j.IsDeleted &&
+                            (j.AdrJobTypeId == null || j.AdrJobTypeId != 3) && // Not a rebill job
+                            !finalStatuses.Contains(j.Status))
+                .Select(j => j.AdrAccountId)
+                .Distinct()
+                .ToListAsync();
+            
+            foreach (var id in batchResult)
+            {
+                result.Add(id);
+            }
+        }
+
+        return result;
     }
 }

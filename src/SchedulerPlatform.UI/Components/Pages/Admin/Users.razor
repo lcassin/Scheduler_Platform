@@ -13,7 +13,10 @@
 
 <MudContainer MaxWidth="MaxWidth.ExtraExtraLarge" Class="mt-4">
     <div class="d-flex justify-space-between align-center mb-4">
-        <MudText Typo="Typo.h4">User Management</MudText>
+        <div class="d-flex align-center gap-2">
+            <MudIcon Icon="@CustomIcons.UserManagement" Size="Size.Large" />
+            <MudText Typo="Typo.h4">User Management</MudText>
+        </div>
         @if (_canCreateUsers)
         {
             <MudButton Variant="Variant.Filled"
