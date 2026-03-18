@@ -2066,6 +2066,19 @@ public class VisualEditorBridge
         };
         if (root.TryGetProperty("annotation", out var annProp))
             newClass.Annotation = annProp.GetString();
+
+        // Support optional members array for copy/paste (avoids race condition
+        // where class renders with 0 members before member messages arrive)
+        if (root.TryGetProperty("members", out var membersArr) && membersArr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var memberEl in membersArr.EnumerateArray())
+            {
+                var rawText = memberEl.GetProperty("rawText").GetString() ?? "";
+                var member = ParseClassMemberRawText(rawText);
+                newClass.Members.Add(member);
+            }
+        }
+
         _classDiagramModel.Classes.Add(newClass);
         RaiseClassDiagramModelChanged("cls_classCreated");
     }
@@ -3057,11 +3070,36 @@ public class VisualEditorBridge
         if (_erDiagramModel.Entities.Any(e => e.Name == name)) return;
 
         PushUndo();
-        _erDiagramModel.Entities.Add(new EREntity
+        var entity = new EREntity
         {
             Name = name,
             IsExplicit = true
-        });
+        };
+
+        // Support optional attributes array for copy/paste (avoids race condition
+        // where entity renders with 0 attributes before attribute messages arrive)
+        if (root.TryGetProperty("attributes", out var attrsArr) && attrsArr.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var attrEl in attrsArr.EnumerateArray())
+            {
+                var attr = new ERAttribute
+                {
+                    Name = attrEl.TryGetProperty("name", out var n) ? n.GetString() ?? "field" : "field",
+                    Type = attrEl.TryGetProperty("attrType", out var t) ? t.GetString() ?? "string" : "string"
+                };
+                if (attrEl.TryGetProperty("key", out var k))
+                {
+                    var keyStr = k.GetString();
+                    if (!string.IsNullOrEmpty(keyStr))
+                        attr.Key = keyStr;
+                }
+                if (attrEl.TryGetProperty("comment", out var c))
+                    attr.Comment = c.GetString();
+                entity.Attributes.Add(attr);
+            }
+        }
+
+        _erDiagramModel.Entities.Add(entity);
         RaiseERDiagramModelChanged("er_entityCreated");
     }
 

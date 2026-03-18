@@ -3566,13 +3566,13 @@
         function pasteClassElement() {
             if (!clsDiagram || clipboard.type !== 'cls_class') return;
             const newId = clipboard.label + '_copy';
-            postMessage({ type: 'cls_classCreated', classId: newId });
-            // After creation, also send member additions
+            // Send members along with creation in one message to avoid race condition
+            // where class renders with 0 members before member messages arrive
+            const msg = { type: 'cls_classCreated', classId: newId };
             if (clipboard.members && clipboard.members.length > 0) {
-                clipboard.members.forEach(m => {
-                    postMessage({ type: 'cls_memberAdded', classId: newId, rawText: m.rawText || m.name || '' });
-                });
+                msg.members = clipboard.members.map(m => ({ rawText: m.rawText || m.name || '' }));
             }
+            postMessage(msg);
         }
 
         function pasteStateElement() {
@@ -3584,13 +3584,18 @@
         function pasteERElement() {
             if (!erDiagram || clipboard.type !== 'er_entity') return;
             const newName = clipboard.name + '_COPY';
-            postMessage({ type: 'er_entityCreated', entityName: newName });
-            // After creation, also send attribute additions
+            // Send attributes along with creation in one message to avoid race condition
+            // where entity renders with 0 attributes before attribute messages arrive
+            const msg = { type: 'er_entityCreated', name: newName };
             if (clipboard.attributes && clipboard.attributes.length > 0) {
-                clipboard.attributes.forEach(a => {
-                    postMessage({ type: 'er_attributeAdded', entityName: newName, name: a.name || 'field', attrType: a.type || 'string', key: a.key || '', comment: a.comment || '' });
-                });
+                msg.attributes = clipboard.attributes.map(a => ({
+                    name: a.name || 'field',
+                    attrType: a.type || 'string',
+                    key: a.key || '',
+                    comment: a.comment || ''
+                }));
             }
+            postMessage(msg);
         }
 
         function deleteSelected() {
@@ -6622,13 +6627,13 @@
                 markerG.classList.add('cls-relationship-markers');
                 markerG.setAttribute('data-rel-index', relIdx);
 
-                // Left end marker (at source/from side) - marker shape extends toward source
-                // startAngle points away from source along curve; we reverse so marker faces the node
-                clsDrawRelationEndMarker(markerG, pts.x1, pts.y1, tangents.startAngle + Math.PI, rel.leftEnd);
+                // Left end marker (at source/from side) - marker shape extends away from source
+                // startAngle points away from source along curve; marker base extends along this direction
+                clsDrawRelationEndMarker(markerG, pts.x1, pts.y1, tangents.startAngle, rel.leftEnd);
 
-                // Right end marker (at target/to side) - marker shape extends toward target
-                // endAngle points away from target along curve; we reverse so marker faces the node
-                clsDrawRelationEndMarker(markerG, pts.x2, pts.y2, tangents.endAngle + Math.PI, rel.rightEnd);
+                // Right end marker (at target/to side) - marker shape extends away from target
+                // endAngle points away from target along curve; marker base extends along this direction
+                clsDrawRelationEndMarker(markerG, pts.x2, pts.y2, tangents.endAngle, rel.rightEnd);
 
                 // Append marker group to nodes layer so it renders on top of class boxes
                 nodesLayer.appendChild(markerG);
@@ -10185,6 +10190,7 @@
 
         let erDiagram = null; // When non-null, we're in ER diagram mode
         let erSelectedEntityName = null;
+        let erSelectedAttrIndex = -1; // index of selected attribute within erSelectedEntityName
         let erSelectedRelIndex = -1;
         let erDraggingEntityName = null;
         let erDragOffsetX = 0;
@@ -10564,7 +10570,9 @@
                     attrBg.setAttribute('y', yOffset);
                     attrBg.setAttribute('width', dim.width - 2);
                     attrBg.setAttribute('height', ER_ATTR_HEIGHT);
-                    attrBg.setAttribute('fill', 'transparent');
+                    const isSelectedAttr = (erSelectedEntityName === entity.name && erSelectedAttrIndex === attrIdx);
+                    attrBg.setAttribute('fill', isSelectedAttr ? 'var(--node-selected-stroke, rgba(0,122,204,0.25))' : 'transparent');
+                    if (isSelectedAttr) attrBg.setAttribute('fill-opacity', '0.25');
                     attrBg.style.cursor = 'pointer';
                     attrG.appendChild(attrBg);
 
@@ -10833,6 +10841,7 @@
             if (entityGroup) {
                 const entityName = entityGroup.getAttribute('data-entity-name');
                 erSelectedEntityName = entityName;
+                erSelectedAttrIndex = -1;
                 erSelectedRelIndex = -1;
 
                 // Start dragging
@@ -10854,6 +10863,7 @@
                 const idx = parseInt(relGroup.getAttribute('data-rel-index'), 10);
                 erSelectedRelIndex = idx;
                 erSelectedEntityName = null;
+                erSelectedAttrIndex = -1;
                 erShowRelationshipProperties(idx);
                 renderERDiagram();
                 e.preventDefault();
@@ -10862,6 +10872,7 @@
 
             // Click on empty space
             erSelectedEntityName = null;
+            erSelectedAttrIndex = -1;
             erSelectedRelIndex = -1;
             propertyPanel.classList.remove('visible');
             renderERDiagram();
@@ -10947,7 +10958,10 @@
                 const entityName = attrGroup.getAttribute('data-entity-name');
                 const attrIdx = parseInt(attrGroup.getAttribute('data-attr-index'), 10);
                 erSelectedEntityName = entityName;
+                erSelectedAttrIndex = attrIdx;
+                erSelectedRelIndex = -1;
                 erShowAttributeProperties(entityName, attrIdx);
+                renderERDiagram();
                 e.preventDefault();
                 e.stopPropagation();
                 return;
@@ -10956,6 +10970,7 @@
             if (entityGroup) {
                 const entityName = entityGroup.getAttribute('data-entity-name');
                 erSelectedEntityName = entityName;
+                erSelectedAttrIndex = -1;
                 erSelectedRelIndex = -1;
                 erShowEntityProperties(entityName);
                 e.preventDefault();
@@ -11123,6 +11138,9 @@
             if (attrGroup) {
                 const entityName = attrGroup.getAttribute('data-entity-name');
                 const attrIdx = parseInt(attrGroup.getAttribute('data-attr-index'), 10);
+                erSelectedEntityName = entityName;
+                erSelectedAttrIndex = attrIdx;
+                erSelectedRelIndex = -1;
 
                 addErContextMenuItem('Edit Attribute', () => {
                     erShowAttributeProperties(entityName, attrIdx);
@@ -11133,6 +11151,7 @@
             } else if (entityGroup) {
                 const entityName = entityGroup.getAttribute('data-entity-name');
                 erSelectedEntityName = entityName;
+                erSelectedAttrIndex = -1;
 
                 addErContextMenuItem('Edit Entity', () => {
                     erShowEntityProperties(entityName);
@@ -11591,7 +11610,7 @@
         // ===== ER diagram toolbar buttons =====
         document.getElementById('tb-er-add-entity').addEventListener('click', function() {
             if (!erDiagram) return;
-            postMessage({ type: 'er_entityCreated', entityName: 'ENTITY' + (erDiagram.entities.length + 1) });
+            postMessage({ type: 'er_entityCreated', name: 'ENTITY' + (erDiagram.entities.length + 1) });
         });
 
         let erPickingRelSource = false; // true when toolbar Add Relationship is waiting for source click
