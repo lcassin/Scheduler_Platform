@@ -3507,7 +3507,7 @@
             // After creation, also send member additions
             if (clipboard.members && clipboard.members.length > 0) {
                 clipboard.members.forEach(m => {
-                    postMessage({ type: 'cls_memberAdded', classId: newId, memberName: m.name, memberType: m.type || 'String', memberVisibility: m.visibility || 'Public', memberKind: m.kind || 'Property' });
+                    postMessage({ type: 'cls_memberAdded', classId: newId, rawText: m.rawText || m.name || '' });
                 });
             }
         }
@@ -3525,7 +3525,7 @@
             // After creation, also send attribute additions
             if (clipboard.attributes && clipboard.attributes.length > 0) {
                 clipboard.attributes.forEach(a => {
-                    postMessage({ type: 'er_attributeAdded', entityName: newName, attrName: a.name, attrType: a.type || 'string', isPK: a.isPK || false, isFK: a.isFK || false });
+                    postMessage({ type: 'er_attributeAdded', entityName: newName, name: a.name || 'field', attrType: a.type || 'string', key: a.key || '', comment: a.comment || '' });
                 });
             }
         }
@@ -7255,6 +7255,7 @@
         let stDraggingNoteIdx = -1; // note index when dragging a note
         let stSelectedNoteIdx = -1; // currently selected note index
         let stNotePositions = {}; // { noteIndex: { x, y } } - custom note positions from dragging
+        let stManualNotePositions = new Set(); // indices of notes that were manually dragged (vs auto-computed)
         let stStatePositions = {}; // { stateId: { x, y, width, height } }
         let curvedEdges = true; // When true, render edges as Bézier curves (shared across all diagram types)
 
@@ -7337,6 +7338,7 @@
                 }
 
                 // Hydrate note positions from C# model (note_0, note_1, etc.)
+                stManualNotePositions = new Set();
                 if (data.notePositions) {
                     Object.keys(data.notePositions).forEach(key => {
                         const pos = data.notePositions[key];
@@ -7345,6 +7347,7 @@
                             const idx = parseInt(key.replace('note_', ''), 10);
                             if (!isNaN(idx)) {
                                 stNotePositions[idx] = { x: pos[0], y: pos[1] };
+                                stManualNotePositions.add(idx);
                             }
                             hasHydratedPositions = true;
                         }
@@ -7945,6 +7948,33 @@
             }
 
             stDiagram.states.forEach(state => positionNested(state));
+        }
+
+        // Helper: send ALL state, pseudo, and manually-dragged note positions to C#
+        function stSendAllPositionsUpdate() {
+            const allPositions = [];
+            const allStates = stGetAllFlatStates();
+            allStates.forEach(state => {
+                const sp = stStatePositions[state.id];
+                if (sp) {
+                    allPositions.push({ stateId: state.id, x: sp.x, y: sp.y, width: sp.width || 0, height: sp.height || 0 });
+                }
+            });
+            // Include pseudo-state positions
+            Object.keys(stStatePositions).forEach(key => {
+                if (key.startsWith('[*]_')) {
+                    const sp = stStatePositions[key];
+                    allPositions.push({ stateId: key, x: sp.x, y: sp.y, width: sp.width || 0, height: sp.height || 0 });
+                }
+            });
+            // Include only manually-dragged note positions (not auto-computed defaults)
+            stManualNotePositions.forEach(idx => {
+                const np = stNotePositions[idx];
+                if (np) {
+                    allPositions.push({ stateId: 'note_' + idx, x: np.x, y: np.y, width: 0, height: 0 });
+                }
+            });
+            postMessage({ type: 'st_allPositionsUpdate', positions: allPositions });
         }
 
         function stGetAllFlatStates() {
@@ -8914,6 +8944,7 @@
                 const newX = Math.round((svgPt.x - stDragOffsetX) / SNAP_GRID) * SNAP_GRID;
                 const newY = Math.round((svgPt.y - stDragOffsetY) / SNAP_GRID) * SNAP_GRID;
                 stNotePositions[stDraggingNoteIdx] = { x: newX, y: newY };
+                stManualNotePositions.add(stDraggingNoteIdx);
                 renderStateDiagram();
                 return;
             }
@@ -8985,6 +9016,8 @@
             }
 
             if (stDraggingPseudoId) {
+                // Send all positions to C# so the pseudo node position is persisted
+                stSendAllPositionsUpdate();
                 stDraggingPseudoId = null;
             }
 
@@ -9009,6 +9042,8 @@
                         }
                     }
                 }
+                // Send all positions to C# so the note position is persisted
+                stSendAllPositionsUpdate();
                 stDraggingNoteIdx = -1;
             }
 
@@ -9024,29 +9059,7 @@
                 }
                 // Send ALL state positions to C# so every state gets HasManualPosition=true
                 // and @pos comments are written for the entire layout, not just the dragged state
-                const allPositions = [];
-                const allStates = stGetAllFlatStates();
-                allStates.forEach(state => {
-                    const sp = stStatePositions[state.id];
-                    if (sp) {
-                        allPositions.push({ stateId: state.id, x: sp.x, y: sp.y, width: sp.width || 0, height: sp.height || 0 });
-                    }
-                });
-                // Include pseudo-state positions
-                Object.keys(stStatePositions).forEach(key => {
-                    if (key.startsWith('[*]_')) {
-                        const sp = stStatePositions[key];
-                        allPositions.push({ stateId: key, x: sp.x, y: sp.y, width: sp.width || 0, height: sp.height || 0 });
-                    }
-                });
-                // Include note positions
-                Object.keys(stNotePositions).forEach(idx => {
-                    const np = stNotePositions[idx];
-                    if (np) {
-                        allPositions.push({ stateId: 'note_' + idx, x: np.x, y: np.y, width: 0, height: 0 });
-                    }
-                });
-                postMessage({ type: 'st_allPositionsUpdate', positions: allPositions });
+                stSendAllPositionsUpdate();
                 stDraggingStateId = null;
             }
         });
@@ -10909,6 +10922,7 @@
 
         document.getElementById('tb-st-auto-layout').addEventListener('click', function() {
             stNotePositions = {}; // Clear custom note positions so they re-compute from new layout
+            stManualNotePositions = new Set(); // Clear manual tracking so auto-layout notes aren't persisted
             stDagreAutoLayout();
             renderStateDiagram();
             const positions = [];
