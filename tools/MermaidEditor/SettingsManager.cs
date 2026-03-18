@@ -153,4 +153,11 @@ public class AppSettings
 
     [JsonPropertyName("aiEndpoint")]
     public string AiEndpoint { get; set; } = ""; // Optional custom endpoint (e.g. Azure OpenAI)
+
+    // ── What's New ──
+    [JsonPropertyName("lastSeenWhatsNewVersion")]
+    public string LastSeenWhatsNewVersion { get; set; } = "";
+
+    [JsonPropertyName("showWhatsNewOnStartup")]
+    public bool ShowWhatsNewOnStartup { get; set; } = true;
 }

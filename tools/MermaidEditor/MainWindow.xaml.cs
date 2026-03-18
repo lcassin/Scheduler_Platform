@@ -76,6 +76,7 @@ public partial class MainWindow : Window
     private string? _lastExportDirectory;
     private string? _currentVirtualHostFolder;
     private const string VirtualHostName = "localfiles.mermaideditor";
+    private const string AppVersion = "4.0.0";
     private List<string> _recentFiles = new();
     private const int MaxRecentFiles = 10;
     private static readonly string RecentFilesPath = Path.Combine(
@@ -699,6 +700,9 @@ Console.WriteLine(""Hello, World!"");
             
             // Initialize Visual Editor WebView2
             await InitializeVisualEditorAsync();
+            
+            // Show What's New dialog if version changed
+            ShowWhatsNewIfNeeded();
         }
         catch (Exception ex)
         {
@@ -6777,6 +6781,47 @@ Console.WriteLine(""Hello, World!"");
         {
             MessageBox.Show($"Failed to open browser: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    private void WhatsNew_Click(object sender, RoutedEventArgs e)
+    {
+        ShowWhatsNewDialog(isManual: true);
+    }
+
+    /// <summary>
+    /// Shows the What's New dialog on startup if the app version has changed
+    /// since the user last saw it, and the user hasn't opted out.
+    /// </summary>
+    private void ShowWhatsNewIfNeeded()
+    {
+        var settings = SettingsManager.Current;
+        
+        // If the user already saw this version's notes, skip
+        if (settings.LastSeenWhatsNewVersion == AppVersion)
+            return;
+        
+        // If the user opted out and version hasn't changed, skip
+        // (But if version changed, we always show it once)
+        if (!settings.ShowWhatsNewOnStartup && settings.LastSeenWhatsNewVersion == AppVersion)
+            return;
+        
+        ShowWhatsNewDialog(isManual: false);
+    }
+
+    private void ShowWhatsNewDialog(bool isManual)
+    {
+        var dialog = new WhatsNewDialog
+        {
+            Owner = this
+        };
+
+        dialog.ShowDialog();
+
+        // Update settings based on user choice
+        var settings = SettingsManager.Current;
+        settings.LastSeenWhatsNewVersion = AppVersion;
+        settings.ShowWhatsNewOnStartup = !dialog.DontShowAgain;
+        SettingsManager.Save();
     }
 
     private void About_Click(object sender, RoutedEventArgs e)
