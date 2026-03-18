@@ -1274,9 +1274,9 @@ public static class MermaidSerializer
         var sb = new StringBuilder();
         sb.Append(rel.FromEntity);
         sb.Append(' ');
-        sb.Append(FormatERCardinality(rel.LeftCardinality));
+        sb.Append(FormatERCardinality(rel.LeftCardinality, isRightSide: false));
         sb.Append(rel.IsIdentifying ? "--" : "..");
-        sb.Append(FormatERCardinality(rel.RightCardinality));
+        sb.Append(FormatERCardinality(rel.RightCardinality, isRightSide: true));
         sb.Append(' ');
         sb.Append(rel.ToEntity);
 
@@ -1290,10 +1290,22 @@ public static class MermaidSerializer
 
     /// <summary>
     /// Formats a cardinality enum value to its Mermaid string representation.
-    /// Uses the "left side" form for each cardinality.
+    /// Left side uses: ||, |o, }o, }|  (read left-to-right toward the line)
+    /// Right side uses mirrored forms: ||, o|, o{, |{  (read right-to-left toward the line)
     /// </summary>
-    private static string FormatERCardinality(ERCardinality cardinality)
+    private static string FormatERCardinality(ERCardinality cardinality, bool isRightSide)
     {
+        if (isRightSide)
+        {
+            return cardinality switch
+            {
+                ERCardinality.ExactlyOne => "||",
+                ERCardinality.ZeroOrOne => "o|",
+                ERCardinality.ZeroOrMore => "o{",
+                ERCardinality.OneOrMore => "|{",
+                _ => "||"
+            };
+        }
         return cardinality switch
         {
             ERCardinality.ExactlyOne => "||",
