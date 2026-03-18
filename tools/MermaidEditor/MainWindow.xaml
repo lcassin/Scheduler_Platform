@@ -1219,15 +1219,22 @@
                 </Border>
                 
                 <!-- View/Toggle Toolbar (split view, line numbers, bracket matching, word wrap, minimap) -->
+                <!-- Preview toggle - always enabled, even in Visual/Split mode -->
+                <Border Background="{DynamicResource ThemeToolbarBackgroundBrush}" CornerRadius="4" HorizontalAlignment="Left" Margin="6,0,0,0">
+                    <ToolBarTray Background="Transparent">
+                        <ToolBar Band="1" BandIndex="1" Background="Transparent">
+                            <ToggleButton x:Name="SplitViewToggle" Click="SplitView_Click" ToolTip="Toggle Preview Panel" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4" IsChecked="True">
+                                <TextBlock Text="&#xE8A0;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
+                            </ToggleButton>
+                        </ToolBar>
+                    </ToolBarTray>
+                </Border>
+                <!-- Code-only view toggles - disabled in Visual mode -->
                 <Border x:Name="ViewToggleToolbarBorder" Background="{DynamicResource ThemeToolbarBackgroundBrush}" CornerRadius="4" HorizontalAlignment="Left" Margin="6,0,0,0">
                     <ToolBarTray Background="Transparent">
                         <ToolBar Band="1" BandIndex="1" Background="Transparent">
                             <ToggleButton x:Name="WordWrapToggle" Click="WordWrap_Click" ToolTip="Toggle Word Wrap" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4">
                                 <TextBlock Text="&#xE1A5;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
-                            </ToggleButton>
-                            <Separator Background="{DynamicResource ThemeBorderBrush}" Margin="4,4"/>
-                            <ToggleButton x:Name="SplitViewToggle" Click="SplitView_Click" ToolTip="Toggle Preview Panel" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4" IsChecked="True">
-                                <TextBlock Text="&#xE8A0;" FontFamily="Segoe MDL2 Assets" FontSize="14" VerticalAlignment="Center"/>
                             </ToggleButton>
                             <ToggleButton x:Name="LineNumbersToggle" Click="LineNumbers_Click" ToolTip="Toggle Line Numbers" Style="{StaticResource ToolbarToggleButtonStyle}" Padding="6,4" IsChecked="True">
                                 <TextBlock Text="123" FontFamily="Consolas" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
