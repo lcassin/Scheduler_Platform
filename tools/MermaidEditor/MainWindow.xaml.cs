@@ -4595,6 +4595,9 @@ Console.WriteLine(""Hello, World!"");
             await VisualEditorWebView.EnsureCoreWebView2Async();
             _visualEditorInitialized = true;
 
+            // Let Ctrl+C/V/X reach JS keydown handlers instead of being consumed by WebView2
+            VisualEditorWebView.PreviewKeyDown += VisualEditorWebView_PreviewKeyDown;
+
             // Restore collapsed state after init
             if (wasCollapsed)
             {
@@ -4651,6 +4654,30 @@ Console.WriteLine(""Hello, World!"");
     {
         _visualEditorHasFocus = true;
         UpdateCodeOnlyToolbarState();
+    }
+
+    /// <summary>
+    /// Intercepts Ctrl+C/V/X in the Visual Editor WebView2 and dispatches them
+    /// to the JavaScript keydown handler so diagram copy/paste works.
+    /// WebView2 normally consumes these as browser accelerator keys.
+    /// </summary>
+    private void VisualEditorWebView_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if ((System.Windows.Input.Keyboard.Modifiers & System.Windows.Input.ModifierKeys.Control) != System.Windows.Input.ModifierKeys.Control)
+            return;
+
+        string? key = null;
+        if (e.Key == System.Windows.Input.Key.C) key = "c";
+        else if (e.Key == System.Windows.Input.Key.V) key = "v";
+        else if (e.Key == System.Windows.Input.Key.X) key = "x";
+
+        if (key != null && VisualEditorWebView.CoreWebView2 != null)
+        {
+            // Dispatch the key event to JS so the visual editor's keydown handler runs
+            var js = $"document.dispatchEvent(new KeyboardEvent('keydown', {{ key: '{key}', ctrlKey: true, bubbles: true }}));";
+            _ = VisualEditorWebView.CoreWebView2.ExecuteScriptAsync(js);
+            e.Handled = true;
+        }
     }
 
     /// <summary>
