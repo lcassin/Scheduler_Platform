@@ -1137,6 +1137,10 @@ public class VisualEditorBridge
                     HandleStTransitionDeleted(root);
                     break;
 
+                case "st_nestedTransitionCreated":
+                    HandleStNestedTransitionCreated(root);
+                    break;
+
                 case "st_nestedTransitionEdited":
                     HandleStNestedTransitionEdited(root);
                     break;
@@ -2766,6 +2770,29 @@ public class VisualEditorBridge
         PushUndo();
         _stateDiagramModel.Transitions.RemoveAt(index);
         RaiseStateDiagramModelChanged("st_transitionDeleted");
+    }
+
+    private void HandleStNestedTransitionCreated(JsonElement root)
+    {
+        if (_stateDiagramModel == null) return;
+        var parentId = root.GetProperty("parentId").GetString();
+        var fromId = root.GetProperty("fromId").GetString();
+        var toId = root.GetProperty("toId").GetString();
+        if (string.IsNullOrEmpty(parentId) || string.IsNullOrEmpty(fromId) || string.IsNullOrEmpty(toId)) return;
+
+        var parent = FindStateRecursive(_stateDiagramModel.States, parentId);
+        if (parent == null) return;
+
+        PushUndo();
+        var transition = new StateTransition
+        {
+            FromId = fromId,
+            ToId = toId
+        };
+        if (root.TryGetProperty("label", out var labelProp))
+            transition.Label = labelProp.GetString();
+        parent.NestedTransitions.Add(transition);
+        RaiseStateDiagramModelChanged("st_nestedTransitionCreated");
     }
 
     private void HandleStNestedTransitionEdited(JsonElement root)
