@@ -3353,8 +3353,7 @@
                         clipboard = { type: 'seq_participant', diagramType: 'sequence', label: p.label || p.id, participantType: p.type || 'Participant' };
                     }
                 } else if (seqSelectedMessageIndex >= 0) {
-                    const flatElements = flattenSeqElements();
-                    const el = flatElements[seqSelectedMessageIndex];
+                    const el = seqDiagram.elements[seqSelectedMessageIndex];
                     if (el && el.elementType === 'message') {
                         clipboard = { type: 'seq_message', diagramType: 'sequence', text: el.text, arrowType: el.arrowType };
                     } else if (el && el.elementType === 'note') {
@@ -3370,8 +3369,7 @@
                         }
                     }
                 } else if (seqSelectedFragmentIndex >= 0) {
-                    const flatElements = flattenSeqElements();
-                    const el = flatElements[seqSelectedFragmentIndex];
+                    const el = seqDiagram.elements[seqSelectedFragmentIndex];
                     if (el && el.elementType === 'fragment') {
                         clipboard = {
                             type: 'seq_fragment',
@@ -3384,8 +3382,7 @@
                         };
                     }
                 } else if (seqSelectedNoteIndex >= 0) {
-                    const flatElements = flattenSeqElements();
-                    const el = flatElements[seqSelectedNoteIndex];
+                    const el = seqDiagram.elements[seqSelectedNoteIndex];
                     if (el && el.elementType === 'note') {
                         clipboard = { type: 'seq_note', diagramType: 'sequence', text: el.text, position: el.position || 'RightOf' };
                     }
