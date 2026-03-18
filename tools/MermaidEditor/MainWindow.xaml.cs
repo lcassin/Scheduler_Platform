@@ -6796,13 +6796,8 @@ Console.WriteLine(""Hello, World!"");
     {
         var settings = SettingsManager.Current;
         
-        // If the user already saw this version's notes, skip
-        if (settings.LastSeenWhatsNewVersion == AppVersion)
-            return;
-        
-        // If the user opted out and version hasn't changed, skip
-        // (But if version changed, we always show it once)
-        if (!settings.ShowWhatsNewOnStartup && settings.LastSeenWhatsNewVersion == AppVersion)
+        // If the user opted out for this version, skip
+        if (settings.LastSeenWhatsNewVersion == AppVersion && !settings.ShowWhatsNewOnStartup)
             return;
         
         ShowWhatsNewDialog(isManual: false);
@@ -6817,10 +6812,13 @@ Console.WriteLine(""Hello, World!"");
 
         dialog.ShowDialog();
 
-        // Update settings based on user choice
+        // Only suppress future popups if the user checked "Don't show again"
         var settings = SettingsManager.Current;
-        settings.LastSeenWhatsNewVersion = AppVersion;
-        settings.ShowWhatsNewOnStartup = !dialog.DontShowAgain;
+        if (dialog.DontShowAgain)
+        {
+            settings.LastSeenWhatsNewVersion = AppVersion;
+            settings.ShowWhatsNewOnStartup = false;
+        }
         SettingsManager.Save();
     }
 
