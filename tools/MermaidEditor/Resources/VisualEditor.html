@@ -10969,6 +10969,20 @@
                 }
             }
 
+            // Check for attribute click BEFORE entity click (attribute rows are inside entity groups)
+            const attrGroup = e.target.closest('.er-attribute');
+            if (attrGroup && entityGroup) {
+                const entityName = attrGroup.getAttribute('data-entity-name');
+                const attrIdx = parseInt(attrGroup.getAttribute('data-attr-index'), 10);
+                erSelectedEntityName = entityName;
+                erSelectedAttrIndex = attrIdx;
+                erSelectedRelIndex = -1;
+                erShowAttributeProperties(entityName, attrIdx);
+                renderERDiagram();
+                e.preventDefault();
+                return;
+            }
+
             if (entityGroup) {
                 const entityName = entityGroup.getAttribute('data-entity-name');
                 erSelectedEntityName = entityName;
