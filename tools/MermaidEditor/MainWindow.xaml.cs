@@ -4595,6 +4595,9 @@ Console.WriteLine(""Hello, World!"");
             await VisualEditorWebView.EnsureCoreWebView2Async();
             _visualEditorInitialized = true;
 
+            // Disable WebView2's built-in browser context menu so our custom JS menus show cleanly
+            VisualEditorWebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+
             // Let Ctrl+C/V/X reach JS keydown handlers instead of being consumed by WebView2
             VisualEditorWebView.PreviewKeyDown += VisualEditorWebView_PreviewKeyDown;
 
