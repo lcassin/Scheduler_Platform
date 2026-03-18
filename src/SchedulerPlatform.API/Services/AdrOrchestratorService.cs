@@ -3144,6 +3144,26 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                 return result;
             }
 
+            // Skip accounts that already have an active download job in progress.
+            // A download will retrieve the latest invoice, making a rebill check redundant.
+            var candidateIds = accountsToProcess.Select(a => a.Id).ToList();
+            var accountsWithActiveDownloads = await _unitOfWork.AdrJobs.GetAccountIdsWithActiveDownloadJobsAsync(candidateIds);
+            if (accountsWithActiveDownloads.Count > 0)
+            {
+                var beforeCount = accountsToProcess.Count;
+                accountsToProcess = accountsToProcess.Where(a => !accountsWithActiveDownloads.Contains(a.Id)).ToList();
+                var skippedDownload = beforeCount - accountsToProcess.Count;
+                result.AccountsSkipped += skippedDownload;
+                _logger.LogInformation("Skipped {Count} accounts for rebill — active download job already in progress", skippedDownload);
+            }
+
+            if (!accountsToProcess.Any())
+            {
+                stopwatch.Stop();
+                result.Duration = stopwatch.Elapsed;
+                return result;
+            }
+
             // OPTIMIZATION: Create dictionary for O(1) account lookup instead of O(n) First() calls
             var accountLookup = accountsToProcess.ToDictionary(a => a.Id);
 

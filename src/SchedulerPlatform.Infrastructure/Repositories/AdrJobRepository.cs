@@ -600,4 +600,40 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
         // Return as dictionary keyed by AdrAccountId
         return rebillJobs.ToDictionary(j => j.AdrAccountId);
     }
+
+    public async Task<HashSet<int>> GetAccountIdsWithActiveDownloadJobsAsync(IEnumerable<int> accountIds)
+    {
+        // Active download jobs are non-deleted, non-rebill jobs (AdrJobTypeId != 3 or null)
+        // in a non-final status (not Completed, Failed, Cancelled, Error)
+        var finalStatuses = new[] { "Completed", "Failed", "Cancelled", "Error" };
+        var accountIdList = accountIds.ToList();
+        
+        if (!accountIdList.Any())
+        {
+            return new HashSet<int>();
+        }
+
+        // Process in batches to avoid large IN clauses
+        var result = new HashSet<int>();
+        const int batchSize = 5000;
+        for (int i = 0; i < accountIdList.Count; i += batchSize)
+        {
+            var batch = accountIdList.Skip(i).Take(batchSize).ToList();
+            var batchResult = await _dbSet
+                .Where(j => batch.Contains(j.AdrAccountId) &&
+                            !j.IsDeleted &&
+                            (j.AdrJobTypeId == null || j.AdrJobTypeId != 3) && // Not a rebill job
+                            !finalStatuses.Contains(j.Status))
+                .Select(j => j.AdrAccountId)
+                .Distinct()
+                .ToListAsync();
+            
+            foreach (var id in batchResult)
+            {
+                result.Add(id);
+            }
+        }
+
+        return result;
+    }
 }

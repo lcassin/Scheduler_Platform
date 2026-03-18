@@ -68,4 +68,12 @@ public interface IAdrJobRepository : IRepository<AdrJob>
     /// <param name="accountIds">The list of account IDs to find rebill jobs for</param>
     /// <returns>Dictionary mapping account ID to rebill job (only accounts with existing jobs are included)</returns>
     Task<Dictionary<int, AdrJob>> GetRebillJobsByAccountIdsAsync(IEnumerable<int> accountIds);
+    
+    /// <summary>
+    /// Gets the set of account IDs that have an active (non-final) download job.
+    /// Used by rebill processing to skip accounts that already have a download in progress.
+    /// </summary>
+    /// <param name="accountIds">The list of account IDs to check</param>
+    /// <returns>HashSet of account IDs that have an active download job</returns>
+    Task<HashSet<int>> GetAccountIdsWithActiveDownloadJobsAsync(IEnumerable<int> accountIds);
 }
