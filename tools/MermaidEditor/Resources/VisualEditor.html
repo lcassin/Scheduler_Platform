@@ -473,7 +473,7 @@
             overflow: hidden;
             z-index: 100;
             box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-            pointer-events: none;
+            cursor: pointer;
         }
         .minimap canvas {
             width: 100%;
@@ -1160,6 +1160,10 @@
                                          target.closest('.resize-handle');
                     return isInteractive;
                 }
+            });
+            // Listen for zoom/pan transforms to keep minimap viewport in sync
+            panzoomInstance.on('transform', function() {
+                if (typeof onPanzoomTransform === 'function') onPanzoomTransform();
             });
         }
 
@@ -3854,6 +3858,9 @@
                 });
             }
 
+            // Store bounding box info for click-to-navigate
+            minimapCanvas._diagramBBox = { minX, minY, dw, dh, scale };
+
             // Update viewport indicator
             if (panzoomInstance) {
                 const transform = panzoomInstance.getTransform();
@@ -3863,18 +3870,60 @@
                 const vw = container.width / transform.scale;
                 const vh = container.height / transform.scale;
 
-                const mvx = (vx - minX) * scale;
-                const mvy = (vy - minY) * scale;
-                const mvw = vw * scale;
-                const mvh = vh * scale;
+                // Map viewport rect from diagram space to minimap pixel space
+                // The minimap canvas is 360x240 CSS-pixels displayed at 180x120
+                const displayScaleX = 180 / cw;
+                const displayScaleY = 120 / ch;
+                const mvx = (vx - minX) * scale * displayScaleX;
+                const mvy = (vy - minY) * scale * displayScaleY;
+                const mvw = vw * scale * displayScaleX;
+                const mvh = vh * scale * displayScaleY;
 
                 minimapViewport.style.display = '';
-                minimapViewport.style.left = Math.max(0, mvx / (cw / 180)) + 'px';
-                minimapViewport.style.top = Math.max(0, mvy / (ch / 120)) + 'px';
-                minimapViewport.style.width = Math.min(180, mvw / (cw / 180)) + 'px';
-                minimapViewport.style.height = Math.min(120, mvh / (ch / 120)) + 'px';
+                minimapViewport.style.left = Math.max(0, mvx) + 'px';
+                minimapViewport.style.top = Math.max(0, mvy) + 'px';
+                minimapViewport.style.width = Math.min(180, mvw) + 'px';
+                minimapViewport.style.height = Math.min(120, mvh) + 'px';
             } else {
                 minimapViewport.style.display = 'none';
+            }
+        }
+
+        // ========== Minimap Click-to-Navigate ==========
+        // Click on minimap to pan the main view to that location
+        document.getElementById('minimap').addEventListener('click', function(e) {
+            if (!panzoomInstance || !minimapCanvas._diagramBBox) return;
+            const rect = minimapCanvas.getBoundingClientRect();
+            // Click position within the minimap (0..180, 0..120 CSS pixels)
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+            const bbox = minimapCanvas._diagramBBox;
+            const cw = minimapCanvas.width;  // 360
+            const ch = minimapCanvas.height; // 240
+            // Convert minimap click to diagram-space coordinates
+            const displayScaleX = 180 / cw;
+            const displayScaleY = 120 / ch;
+            const diagramX = (clickX / displayScaleX) / bbox.scale + bbox.minX;
+            const diagramY = (clickY / displayScaleY) / bbox.scale + bbox.minY;
+            // Pan so clicked point is at center of viewport
+            const transform = panzoomInstance.getTransform();
+            const container = canvasContainer.getBoundingClientRect();
+            const newX = container.width / 2 - diagramX * transform.scale;
+            const newY = container.height / 2 - diagramY * transform.scale;
+            panzoomInstance.moveTo(newX, newY);
+            updateMinimap();
+        });
+
+        // Update minimap whenever panzoom transforms (zoom or pan)
+        // Use a throttled listener to avoid excessive redraws
+        let _minimapRafPending = false;
+        function onPanzoomTransform() {
+            if (!_minimapRafPending) {
+                _minimapRafPending = true;
+                requestAnimationFrame(function() {
+                    _minimapRafPending = false;
+                    updateMinimap();
+                });
             }
         }
 
@@ -5872,6 +5921,7 @@
 
         let clsDiagram = null; // When non-null, we're in class diagram mode
         let clsSelectedClassId = null;
+        let clsSelectedMemberIndex = -1; // index into cls.members[] when a member row is selected
         let clsSelectedRelIndex = -1;
         let clsDraggingClassId = null;
         let clsDragOffsetX = 0;
@@ -6302,6 +6352,19 @@
                 } else {
                     fields.forEach((f, fi) => {
                         yOffset += CLS_MEMBER_HEIGHT;
+                        const memberIdx = cls.members.indexOf(f);
+                        // Highlight rect for selected member row
+                        if (clsSelectedClassId === cls.id && clsSelectedMemberIndex === memberIdx) {
+                            const hlRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                            hlRect.setAttribute('x', '1');
+                            hlRect.setAttribute('y', yOffset - CLS_MEMBER_HEIGHT + 4);
+                            hlRect.setAttribute('width', dim.width - 2);
+                            hlRect.setAttribute('height', CLS_MEMBER_HEIGHT);
+                            hlRect.setAttribute('fill', 'var(--accent-color)');
+                            hlRect.setAttribute('opacity', '0.2');
+                            hlRect.setAttribute('rx', '2');
+                            g.appendChild(hlRect);
+                        }
                         const fText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                         fText.setAttribute('x', CLS_BOX_PADDING);
                         fText.setAttribute('y', yOffset);
@@ -6311,7 +6374,7 @@
                         fText.textContent = clsFormatMember(f);
                         fText.classList.add('cls-member');
                         fText.setAttribute('data-class-id', cls.id);
-                        fText.setAttribute('data-member-index', cls.members.indexOf(f));
+                        fText.setAttribute('data-member-index', memberIdx);
                         g.appendChild(fText);
                     });
                 }
@@ -6334,6 +6397,19 @@
                 } else {
                     methods.forEach((m, mi) => {
                         yOffset += CLS_MEMBER_HEIGHT;
+                        const memberIdx = cls.members.indexOf(m);
+                        // Highlight rect for selected member row
+                        if (clsSelectedClassId === cls.id && clsSelectedMemberIndex === memberIdx) {
+                            const hlRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                            hlRect.setAttribute('x', '1');
+                            hlRect.setAttribute('y', yOffset - CLS_MEMBER_HEIGHT + 4);
+                            hlRect.setAttribute('width', dim.width - 2);
+                            hlRect.setAttribute('height', CLS_MEMBER_HEIGHT);
+                            hlRect.setAttribute('fill', 'var(--accent-color)');
+                            hlRect.setAttribute('opacity', '0.2');
+                            hlRect.setAttribute('rx', '2');
+                            g.appendChild(hlRect);
+                        }
                         const mText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
                         mText.setAttribute('x', CLS_BOX_PADDING);
                         mText.setAttribute('y', yOffset);
@@ -6343,7 +6419,7 @@
                         mText.textContent = clsFormatMember(m);
                         mText.classList.add('cls-member');
                         mText.setAttribute('data-class-id', cls.id);
-                        mText.setAttribute('data-member-index', cls.members.indexOf(m));
+                        mText.setAttribute('data-member-index', memberIdx);
                         g.appendChild(mText);
                     });
                 }
@@ -6409,20 +6485,17 @@
                 hitLine.style.cursor = 'pointer';
                 g.appendChild(hitLine);
 
-                // Arrow markers at endpoints
-                // angle: direction from source toward target
-                // reverseAngle: direction from target toward source
-                // End markers point AWAY from the line (toward the node), so:
-                //   - Left end (source side): marker points toward source = use angle (away from target)
-                //   - Right end (target side): marker points toward target = use reverseAngle (away from source)
-                const angle = Math.atan2(pts.y2 - pts.y1, pts.x2 - pts.x1);
-                const reverseAngle = angle + Math.PI;
+                // Arrow markers at endpoints — use Bézier tangent angles so arrowheads
+                // align with the curve direction, not the straight line between endpoints.
+                const tangents = edgeTangentAngles(pts);
 
                 // Left end marker (at source/from side) - marker shape extends toward source
-                clsDrawRelationEndMarker(g, pts.x1, pts.y1, angle, rel.leftEnd);
+                // startAngle points away from source along curve; we reverse so marker faces the node
+                clsDrawRelationEndMarker(g, pts.x1, pts.y1, tangents.startAngle + Math.PI, rel.leftEnd);
 
                 // Right end marker (at target/to side) - marker shape extends toward target
-                clsDrawRelationEndMarker(g, pts.x2, pts.y2, reverseAngle, rel.rightEnd);
+                // endAngle points away from target along curve; we reverse so marker faces the node
+                clsDrawRelationEndMarker(g, pts.x2, pts.y2, tangents.endAngle + Math.PI, rel.rightEnd);
 
                 // Label — offset perpendicular to line to avoid overlap with other relationship labels
                 if (rel.label) {
@@ -6684,30 +6757,68 @@
                 return;
             }
 
-            // Handle toolbar "Add Relationship" pick-source mode
-            if (clsPickingRelSource && classGroup) {
-                const classId = classGroup.getAttribute('data-class-id');
-                if (!clsPickingRelFrom) {
-                    // First click: pick source
-                    clsPickingRelFrom = classId;
-                    clsDrawingRelFrom = classId;
-                    clsSelectedClassId = classId;
-                    renderClassDiagram();
-                    e.preventDefault();
-                    e.stopPropagation();
-                    return;
+            // Handle toolbar "Add Relationship" two-click mode
+            if (clsPickingRelSource) {
+                if (classGroup) {
+                    const classId = classGroup.getAttribute('data-class-id');
+                    if (!clsPickingRelFrom) {
+                        // First click: pick source — highlight it, wait for second click
+                        clsPickingRelFrom = classId;
+                        clsSelectedClassId = classId;
+                        renderClassDiagram();
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return;
+                    } else if (classId !== clsPickingRelFrom) {
+                        // Second click: pick target — create relationship
+                        postMessage({
+                            type: 'cls_relationshipCreated',
+                            fromId: clsPickingRelFrom,
+                            toId: classId,
+                            leftEnd: 'None',
+                            rightEnd: 'Arrow',
+                            linkStyle: 'Solid'
+                        });
+                        clsPickingRelSource = false;
+                        clsPickingRelFrom = null;
+                        document.body.style.cursor = '';
+                        document.getElementById('tb-cls-add-relation').classList.remove('active');
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return;
+                    } else {
+                        // Clicked source again: deselect source, wait for new source
+                        clsPickingRelFrom = null;
+                        clsSelectedClassId = null;
+                        renderClassDiagram();
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return;
+                    }
+                } else {
+                    // Clicked empty space: cancel pick mode
+                    clsPickingRelSource = false;
+                    clsPickingRelFrom = null;
+                    document.body.style.cursor = '';
+                    document.getElementById('tb-cls-add-relation').classList.remove('active');
                 }
             }
-            if (clsPickingRelSource && !classGroup) {
-                // Clicked empty space: cancel pick mode
-                clsPickingRelSource = false;
-                clsPickingRelFrom = null;
-                document.body.style.cursor = '';
-            }
 
-            if (classGroup) {
+            const memberEl = e.target.closest('.cls-member');
+            if (memberEl && classGroup) {
+                // Clicked a member row — highlight just that row (not the whole class box)
+                const classId = classGroup.getAttribute('data-class-id');
+                const memberIdx = parseInt(memberEl.getAttribute('data-member-index'), 10);
+                clsSelectedClassId = classId;
+                clsSelectedMemberIndex = memberIdx;
+                clsSelectedRelIndex = -1;
+                renderClassDiagram();
+                clsShowMemberPropertyPanel(classId, memberIdx);
+                e.stopPropagation();
+            } else if (classGroup) {
                 const classId = classGroup.getAttribute('data-class-id');
                 clsSelectedClassId = classId;
+                clsSelectedMemberIndex = -1;
                 clsSelectedRelIndex = -1;
 
                 // Start dragging
@@ -6726,12 +6837,14 @@
                 const relIdx = parseInt(relGroup.getAttribute('data-rel-index'), 10);
                 clsSelectedRelIndex = relIdx;
                 clsSelectedClassId = null;
+                clsSelectedMemberIndex = -1;
                 renderClassDiagram();
                 clsShowRelPropertyPanel(relIdx);
                 e.stopPropagation();
             } else if (clsDiagram) {
                 // Clicked on empty space
                 clsSelectedClassId = null;
+                clsSelectedMemberIndex = -1;
                 clsSelectedRelIndex = -1;
                 propertyPanel.classList.remove('visible');
                 renderClassDiagram();
@@ -8542,6 +8655,29 @@
                    ' C ' + cx1 + ',' + cy1 + ' ' + cx2 + ',' + cy2 + ' ' + ports.x2 + ',' + ports.y2;
         }
 
+        // Compute tangent angles at both endpoints of the edge path.
+        // For curved Bézier edges, the tangent differs from the straight-line angle.
+        // Returns { startAngle, endAngle } where startAngle points FROM source toward curve,
+        // and endAngle points FROM target toward curve (reversed for marker orientation).
+        function edgeTangentAngles(ports) {
+            const straightAngle = Math.atan2(ports.y2 - ports.y1, ports.x2 - ports.x1);
+            if (!curvedEdges) {
+                return { startAngle: straightAngle, endAngle: straightAngle + Math.PI };
+            }
+            const dist = Math.hypot(ports.x2 - ports.x1, ports.y2 - ports.y1);
+            const c1 = edgeDirOffset(ports.fromDir, dist);
+            const c2 = edgeDirOffset(ports.toDir, dist);
+            const cx1 = ports.x1 + c1.dx;
+            const cy1 = ports.y1 + c1.dy;
+            const cx2 = ports.x2 + c2.dx;
+            const cy2 = ports.y2 + c2.dy;
+            // Tangent at t=0: direction from P0 toward cp1
+            const startAngle = Math.atan2(cy1 - ports.y1, cx1 - ports.x1);
+            // Tangent at t=1: direction from cp2 toward P3 — reversed so marker points toward node
+            const endAngle = Math.atan2(cy2 - ports.y2, cx2 - ports.x2);
+            return { startAngle, endAngle };
+        }
+
         // Compute the midpoint (and tangent angle) of the Bézier at t=0.5 for label placement
         function edgeMidpoint(ports) {
             if (!curvedEdges) {
@@ -10260,36 +10396,53 @@
                 return;
             }
 
-            // Handle toolbar "Add Relationship" pick-source mode
-            if (erPickingRelSource && entityGroup) {
-                const entityName = entityGroup.getAttribute('data-entity-name');
-                if (!erPickingRelFrom) {
-                    // First click: pick source
-                    erPickingRelFrom = entityName;
-                    erDrawingRelFrom = entityName;
-                    erSelectedEntityName = entityName;
-                    const pos = erEntityPositions[entityName];
-                    if (pos) {
-                        const dim = erGetEntityBoxDimensions(erDiagram.entities.find(e => e.name === entityName));
-                        const cx = pos.x + (dim ? dim.width : ER_BOX_MIN_WIDTH) / 2;
-                        const cy = pos.y + (dim ? dim.height : 60) / 2;
-                        tempEdge.setAttribute('x1', cx);
-                        tempEdge.setAttribute('y1', cy);
-                        tempEdge.setAttribute('x2', cx);
-                        tempEdge.setAttribute('y2', cy);
-                        tempEdge.style.display = '';
+            // Handle toolbar "Add Relationship" two-click mode
+            if (erPickingRelSource) {
+                if (entityGroup) {
+                    const entityName = entityGroup.getAttribute('data-entity-name');
+                    if (!erPickingRelFrom) {
+                        // First click: pick source — highlight it, wait for second click
+                        erPickingRelFrom = entityName;
+                        erSelectedEntityName = entityName;
+                        renderERDiagram();
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return;
+                    } else if (entityName !== erPickingRelFrom) {
+                        // Second click: pick target — create relationship
+                        postMessage({
+                            type: 'er_relationshipCreated',
+                            fromEntity: erPickingRelFrom,
+                            toEntity: entityName,
+                            leftCardinality: 'ExactlyOne',
+                            rightCardinality: 'ZeroOrMore',
+                            isIdentifying: false,
+                            label: 'relates'
+                        });
+                        erPickingRelSource = false;
+                        erPickingRelFrom = null;
+                        document.body.style.cursor = '';
+                        document.getElementById('tb-er-add-relationship').classList.remove('active');
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return;
+                    } else {
+                        // Clicked source again: deselect source, wait for new source
+                        erPickingRelFrom = null;
+                        erSelectedEntityName = null;
+                        renderERDiagram();
+                        e.preventDefault();
+                        e.stopPropagation();
+                        return;
                     }
-                    renderERDiagram();
-                    e.preventDefault();
-                    return;
+                } else {
+                    // Clicked empty space: cancel pick mode
+                    erPickingRelSource = false;
+                    erPickingRelFrom = null;
+                    document.body.style.cursor = '';
+                    document.getElementById('tb-er-add-relationship').classList.remove('active');
+                    tempEdge.style.display = 'none';
                 }
-            }
-            if (erPickingRelSource && !entityGroup) {
-                // Clicked empty space: cancel pick mode
-                erPickingRelSource = false;
-                erPickingRelFrom = null;
-                document.body.style.cursor = '';
-                tempEdge.style.display = 'none';
             }
 
             if (entityGroup) {
@@ -10800,27 +10953,49 @@
             if (redoBtn) redoBtn.disabled = !canRedo;
         };
 
-        // Update Delete button enabled state based on current selection
-        function updateDeleteButtonState() {
+        // Update Delete button and diagram-specific button enabled states based on current selection
+        function updateToolbarButtonStates() {
             const deleteBtn = document.getElementById('tb-delete');
-            if (!deleteBtn) return;
-            let hasSelection = false;
-            if (selectedNodeId || selectedEdgeIndex >= 0 || selectedSubgraphId) {
-                hasSelection = true;
-            } else if (currentDiagramType === 'state' && stDiagram) {
-                hasSelection = !!(stSelectedStateId || stSelectedNestedTrans || stSelectedTransIndex >= 0);
-            } else if (currentDiagramType === 'class' && clsDiagram) {
-                hasSelection = !!(clsSelectedClassId || clsSelectedRelIndex >= 0);
-            } else if (currentDiagramType === 'er' && erDiagram) {
-                hasSelection = !!(erSelectedEntityName || erSelectedRelIndex >= 0);
-            } else if (currentDiagramType === 'sequence' && seqDiagram) {
-                hasSelection = !!(seqSelectedParticipantId || seqSelectedFragInnerMsg || seqSelectedMessageIdx >= 0 || seqSelectedNoteIdx >= 0 || seqSelectedFragmentIdx >= 0);
+            if (deleteBtn) {
+                let hasSelection = false;
+                if (selectedNodeId || selectedEdgeIndex >= 0 || selectedSubgraphId) {
+                    hasSelection = true;
+                } else if (currentDiagramType === 'state' && stDiagram) {
+                    hasSelection = !!(stSelectedStateId || stSelectedNestedTrans || stSelectedTransIndex >= 0);
+                } else if (currentDiagramType === 'class' && clsDiagram) {
+                    hasSelection = !!(clsSelectedClassId || clsSelectedRelIndex >= 0);
+                } else if (currentDiagramType === 'er' && erDiagram) {
+                    hasSelection = !!(erSelectedEntityName || erSelectedRelIndex >= 0);
+                } else if (currentDiagramType === 'sequence' && seqDiagram) {
+                    hasSelection = !!(seqSelectedParticipantId || seqSelectedFragInnerMsg || seqSelectedMessageIdx >= 0 || seqSelectedNoteIdx >= 0 || seqSelectedFragmentIdx >= 0);
+                }
+                deleteBtn.disabled = !hasSelection;
             }
-            deleteBtn.disabled = !hasSelection;
+
+            // Context-aware disabled states for diagram-specific buttons
+            // Class diagram buttons
+            const clsAddRelBtn = document.getElementById('tb-cls-add-relation');
+            if (clsAddRelBtn) clsAddRelBtn.disabled = !clsDiagram || clsDiagram.classes.length < 2;
+
+            // ER diagram buttons
+            const erAddRelBtn = document.getElementById('tb-er-add-relationship');
+            if (erAddRelBtn) erAddRelBtn.disabled = !erDiagram || erDiagram.entities.length < 2;
+
+            // Sequence diagram buttons
+            const seqAddMsgBtn = document.getElementById('tb-seq-add-message');
+            if (seqAddMsgBtn) seqAddMsgBtn.disabled = !seqDiagram || seqDiagram.participants.length < 2;
+            const seqAddNoteBtn = document.getElementById('tb-seq-add-note');
+            if (seqAddNoteBtn) seqAddNoteBtn.disabled = !seqDiagram || seqDiagram.participants.length < 1;
+            const seqAddFragBtn = document.getElementById('tb-seq-add-fragment');
+            if (seqAddFragBtn) seqAddFragBtn.disabled = !seqDiagram || seqDiagram.participants.length < 2;
+
+            // State diagram: Add Transition needs at least 1 state
+            const stAddTransBtn = document.getElementById('tb-st-add-transition');
+            if (stAddTransBtn) stAddTransBtn.disabled = !stDiagram || stDiagram.states.length < 1;
         }
 
-        // Poll selection state every 200ms to keep delete button in sync
-        setInterval(updateDeleteButtonState, 200);
+        // Poll selection state every 200ms to keep toolbar buttons in sync
+        setInterval(updateToolbarButtonStates, 200);
 
         // Start with undo/redo disabled (no history yet)
         updateUndoRedoState(false, false);
@@ -10877,6 +11052,7 @@
             clsPickingRelSource = true;
             clsPickingRelFrom = null;
             document.body.style.cursor = 'crosshair';
+            this.classList.add('active');
         });
 
         document.getElementById('tb-cls-auto-layout').addEventListener('click', function() {
@@ -10990,6 +11166,7 @@
             erPickingRelSource = true;
             erPickingRelFrom = null;
             document.body.style.cursor = 'crosshair';
+            this.classList.add('active');
         });
 
         document.getElementById('tb-er-auto-layout').addEventListener('click', function() {

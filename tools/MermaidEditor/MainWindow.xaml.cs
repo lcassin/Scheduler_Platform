@@ -8557,17 +8557,13 @@ Console.WriteLine(""Hello, World!"");
             await SavePreviewScrollPositionAsync(_activeDocument);
         }
         
-        // If we're in Visual or Split mode, revert to Text mode BEFORE switching
-        // documents. This prevents the stale visual editor model from being
-        // serialized back into the wrong document's text buffer.
+        // If we're in Visual or Split mode, serialize the visual model back to text
+        // BEFORE switching documents. This ensures any pending visual changes (e.g.
+        // dragged note positions in State diagrams) are written into the document's
+        // text buffer before the model is cleared.
         if (_visualEditorMode != VisualEditorMode.Text)
         {
-            // Directly set mode to Text without serializing the model back to text —
-            // the current document's text is already correct, we just need to hide
-            // the visual editor and reset the layout.
-            _visualEditorMode = VisualEditorMode.Text;
-            UpdateModeToggleButtons();
-            ApplyVisualEditorLayout();
+            SwitchToTextMode();
         }
         
         // Clear the current models so they don't bleed into the new document
