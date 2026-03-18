@@ -7517,6 +7517,7 @@
         let stDrawingNestedParent = null; // parentId when drawing a nested transition from composite context menu
         let stPickingTransSource = false; // true when toolbar Add Transition is waiting for source click
         let stDraggingPseudoId = null; // pseudo-state id when dragging a [*] circle
+        let stSelectedPseudoId = null; // pseudo-state id when selected (for keyboard delete)
         let stDraggingNoteIdx = -1; // note index when dragging a note
         let stSelectedNoteIdx = -1; // currently selected note index
         let stNotePositions = {}; // { noteIndex: { x, y } } - custom note positions from dragging
@@ -9179,8 +9180,15 @@
                 if (pseudoId && stStatePositions[pseudoId]) {
                     const svgPt = getSVGPoint(e);
                     stDraggingPseudoId = pseudoId;
+                    stSelectedPseudoId = pseudoId;
+                    stSelectedStateId = null;
+                    stSelectedTransIndex = -1;
+                    stSelectedNestedTrans = null;
+                    stSelectedNoteIdx = -1;
                     stDragOffsetX = svgPt.x - stStatePositions[pseudoId].x;
                     stDragOffsetY = svgPt.y - stStatePositions[pseudoId].y;
+                    propertyPanel.classList.remove('visible');
+                    renderStateDiagram();
                     e.preventDefault();
                     e.stopPropagation();
                     return;
@@ -9264,6 +9272,7 @@
                     stSelectedNestedTrans = { parentId, idx: nestedIdx };
                     stSelectedTransIndex = -1;
                     stSelectedStateId = null;
+                    stSelectedPseudoId = null;
                     stShowNestedTransitionProperties(parentId, nestedIdx);
                     renderStateDiagram();
                     e.preventDefault();
@@ -9273,6 +9282,7 @@
                 stSelectedTransIndex = idx;
                 stSelectedNestedTrans = null;
                 stSelectedStateId = null;
+                stSelectedPseudoId = null;
                 stShowTransitionProperties(idx);
                 renderStateDiagram();
                 e.preventDefault();
@@ -9290,6 +9300,7 @@
                 stSelectedStateId = stateId;
                 stSelectedTransIndex = -1;
                 stSelectedNestedTrans = null;
+                stSelectedPseudoId = null;
 
                 // Start dragging
                 const svgPt = getSVGPoint(e);
@@ -9316,6 +9327,7 @@
             stSelectedStateId = null;
             stSelectedTransIndex = -1;
             stSelectedNestedTrans = null;
+            stSelectedPseudoId = null;
             stSelectedNoteIdx = -1;
             propertyPanel.classList.remove('visible');
             renderStateDiagram();
@@ -9701,11 +9713,31 @@
                 if (pseudoId) {
                     const pseudoType = pseudoId.includes('_start') ? 'Start [*]' : 'End [*]';
                     addStContextMenuItem('Delete ' + pseudoType, () => {
-                        // Remove the pseudo state position and re-render
+                        const isStart = pseudoId.includes('_start');
+                        const parentId = stGetPseudoParentId(pseudoId);
+                        if (parentId) {
+                            // Nested pseudo — delete nested transitions involving [*]
+                            const parent = stFindState(parentId);
+                            if (parent && parent.nestedTransitions) {
+                                for (let i = parent.nestedTransitions.length - 1; i >= 0; i--) {
+                                    const t = parent.nestedTransitions[i];
+                                    if ((isStart && t.fromId === '[*]') || (!isStart && t.toId === '[*]')) {
+                                        postMessage({ type: 'st_nestedTransitionDeleted', parentId: parentId, index: i });
+                                    }
+                                }
+                            }
+                        } else {
+                            // Top-level pseudo — delete top-level transitions involving [*]
+                            if (stDiagram && stDiagram.transitions) {
+                                for (let i = stDiagram.transitions.length - 1; i >= 0; i--) {
+                                    const t = stDiagram.transitions[i];
+                                    if ((isStart && t.fromId === '[*]') || (!isStart && t.toId === '[*]')) {
+                                        postMessage({ type: 'st_transitionDeleted', index: i });
+                                    }
+                                }
+                            }
+                        }
                         delete stStatePositions[pseudoId];
-                        // Find and remove transitions involving [*] that correspond to this pseudo
-                        // For pseudo states, we need to reconnect or just remove
-                        renderStateDiagram();
                     });
                 }
             // Check transitions BEFORE states (transitions inside composites overlap
@@ -10099,7 +10131,35 @@
             if (document.activeElement && (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'SELECT')) return;
 
             if (e.key === 'Delete' || e.key === 'Backspace') {
-                if (stSelectedStateId) {
+                if (stSelectedPseudoId) {
+                    // Delete pseudo node and its associated transitions
+                    const pseudoId = stSelectedPseudoId;
+                    const isStart = pseudoId.includes('_start');
+                    const parentId = stGetPseudoParentId(pseudoId);
+                    if (parentId) {
+                        const parent = stFindState(parentId);
+                        if (parent && parent.nestedTransitions) {
+                            for (let i = parent.nestedTransitions.length - 1; i >= 0; i--) {
+                                const t = parent.nestedTransitions[i];
+                                if ((isStart && t.fromId === '[*]') || (!isStart && t.toId === '[*]')) {
+                                    postMessage({ type: 'st_nestedTransitionDeleted', parentId: parentId, index: i });
+                                }
+                            }
+                        }
+                    } else {
+                        if (stDiagram && stDiagram.transitions) {
+                            for (let i = stDiagram.transitions.length - 1; i >= 0; i--) {
+                                const t = stDiagram.transitions[i];
+                                if ((isStart && t.fromId === '[*]') || (!isStart && t.toId === '[*]')) {
+                                    postMessage({ type: 'st_transitionDeleted', index: i });
+                                }
+                            }
+                        }
+                    }
+                    delete stStatePositions[pseudoId];
+                    stSelectedPseudoId = null;
+                    e.preventDefault();
+                } else if (stSelectedStateId) {
                     postMessage({ type: 'st_stateDeleted', stateId: stSelectedStateId });
                     stSelectedStateId = null;
                     e.preventDefault();
