@@ -1217,6 +1217,11 @@
                             postMessage({ type: 'seq_fragmentCreated', fragmentType: 'loop', condition: 'condition', sections: [{ label: 'condition', elements: [] }] });
                         });
                     }
+                    // Paste option in empty-space context menu
+                    if (clipboard && clipboard.diagramType === 'sequence') {
+                        addContextMenuSeparator();
+                        addContextMenuItem('\u{1F4CB} Paste', () => { pasteClipboard(0, 0); });
+                    }
                     positionContextMenu(contextMenu, e.clientX, e.clientY);
                 } else {
                     // For class/state/ER, just suppress the browser menu
@@ -3355,6 +3360,35 @@
                     } else if (el && el.elementType === 'note') {
                         clipboard = { type: 'seq_note', diagramType: 'sequence', text: el.text, position: el.position };
                     }
+                } else if (seqSelectedFragInnerMsg) {
+                    const frag = seqDiagram.elements[seqSelectedFragInnerMsg.fragIdx];
+                    if (frag && frag.sections && frag.sections[seqSelectedFragInnerMsg.secIdx]) {
+                        const sec = frag.sections[seqSelectedFragInnerMsg.secIdx];
+                        if (sec.elements && sec.elements[seqSelectedFragInnerMsg.subIdx]) {
+                            const innerMsg = sec.elements[seqSelectedFragInnerMsg.subIdx];
+                            clipboard = { type: 'seq_message', diagramType: 'sequence', text: innerMsg.text || 'Message', arrowType: innerMsg.arrowType || 'SolidArrow' };
+                        }
+                    }
+                } else if (seqSelectedFragmentIndex >= 0) {
+                    const flatElements = flattenSeqElements();
+                    const el = flatElements[seqSelectedFragmentIndex];
+                    if (el && el.elementType === 'fragment') {
+                        clipboard = {
+                            type: 'seq_fragment',
+                            diagramType: 'sequence',
+                            fragmentType: el.fragmentType || 'loop',
+                            sections: el.sections ? el.sections.map(s => ({
+                                label: s.label || '',
+                                elements: s.elements ? s.elements.map(e => ({ ...e })) : []
+                            })) : [{ label: 'condition', elements: [] }]
+                        };
+                    }
+                } else if (seqSelectedNoteIndex >= 0) {
+                    const flatElements = flattenSeqElements();
+                    const el = flatElements[seqSelectedNoteIndex];
+                    if (el && el.elementType === 'note') {
+                        clipboard = { type: 'seq_note', diagramType: 'sequence', text: el.text, position: el.position || 'RightOf' };
+                    }
                 }
             } else if (currentDiagramType === 'class' && clsDiagram) {
                 if (clsSelectedClassId && clsSelectedMemberIndex >= 0) {
@@ -3593,6 +3627,13 @@
                     _seqPendingNoteSelect = true;
                     postMessage({ type: 'seq_noteCreated', position: clipboard.position, overParticipants: seqDiagram.participants[0].id, text: clipboard.text });
                 }
+            } else if (clipboard.type === 'seq_fragment') {
+                postMessage({
+                    type: 'seq_fragmentCreated',
+                    fragmentType: clipboard.fragmentType || 'loop',
+                    condition: clipboard.sections && clipboard.sections[0] ? clipboard.sections[0].label : 'condition',
+                    sections: clipboard.sections || [{ label: 'condition', elements: [] }]
+                });
             }
         }
 
