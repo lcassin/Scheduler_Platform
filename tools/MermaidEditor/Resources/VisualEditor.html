@@ -836,6 +836,14 @@
             <svg viewBox="0 0 16 16"><polygon points="8,2 14,8 8,14 2,8" fill="none" stroke-width="1.3"/></svg>
             <span class="tooltip">Add Choice</span>
         </button>
+        <button class="toolbar-btn toolbar-state" id="tb-st-add-start" title="Add Start → (select target)" style="display:none">
+            <svg viewBox="0 0 16 16"><circle cx="5" cy="8" r="3.5" fill="currentColor" stroke="none"/><line x1="9" y1="8" x2="14" y2="8" stroke-width="1.3"/><polygon points="14,8 11,5.5 11,10.5" fill="currentColor" stroke="none"/></svg>
+            <span class="tooltip">Start → (select target)</span>
+        </button>
+        <button class="toolbar-btn toolbar-state" id="tb-st-add-end" title="Add → End (select source)" style="display:none">
+            <svg viewBox="0 0 16 16"><line x1="2" y1="8" x2="7" y2="8" stroke-width="1.3"/><polygon points="7,8 4,5.5 4,10.5" fill="currentColor" stroke="none"/><circle cx="11" cy="8" r="3" fill="none" stroke-width="1.5"/><circle cx="11" cy="8" r="1.5" fill="currentColor" stroke="none"/></svg>
+            <span class="tooltip">→ End (select source)</span>
+        </button>
         <button class="toolbar-btn toolbar-state" id="tb-st-add-transition" title="Add Transition" style="display:none">
             <svg viewBox="0 0 16 16"><line x1="2" y1="8" x2="14" y2="8" stroke-width="1.5"/><polygon points="14,8 10,5 10,11" fill="currentColor" stroke="none"/></svg>
             <span class="tooltip">Add Transition</span>
@@ -9386,6 +9394,9 @@
                 tempEdge.style.display = 'none';
                 stDrawingTransFrom = null;
                 stDrawingNestedParent = null;
+                document.body.style.cursor = '';
+                const stStartBtn = document.getElementById('tb-st-add-start');
+                if (stStartBtn) stStartBtn.classList.remove('active');
                 return;
             }
 
@@ -9405,6 +9416,9 @@
                 tempEdge.style.display = 'none';
                 stDrawingTransToEnd = false;
                 stDrawingNestedParent = null;
+                document.body.style.cursor = '';
+                const stEndBtn = document.getElementById('tb-st-add-end');
+                if (stEndBtn) stEndBtn.classList.remove('active');
                 return;
             }
 
@@ -11294,9 +11308,13 @@
             const seqAddFragBtn = document.getElementById('tb-seq-add-fragment');
             if (seqAddFragBtn) seqAddFragBtn.disabled = !seqDiagram || seqDiagram.participants.length < 2;
 
-            // State diagram: Add Transition needs at least 2 states
+            // State diagram: Add Transition needs at least 2 states; Start/End need at least 1
             const stAddTransBtn = document.getElementById('tb-st-add-transition');
             if (stAddTransBtn) stAddTransBtn.disabled = !stDiagram || stDiagram.states.length < 2;
+            const stAddStartBtn = document.getElementById('tb-st-add-start');
+            if (stAddStartBtn) stAddStartBtn.disabled = !stDiagram || stDiagram.states.length < 1;
+            const stAddEndBtn = document.getElementById('tb-st-add-end');
+            if (stAddEndBtn) stAddEndBtn.disabled = !stDiagram || stDiagram.states.length < 1;
         }
 
         // Poll selection state every 200ms to keep toolbar buttons in sync
@@ -11409,6 +11427,34 @@
             const center = stGetViewportCenterSVG();
             stStatePositions[newId] = { x: center.x, y: center.y };
             postMessage({ type: 'st_stateCreated', stateId: newId, stateType: 'Choice' });
+        });
+
+        // Start → (select target): enter draw mode from [*] start
+        document.getElementById('tb-st-add-start').addEventListener('click', function() {
+            if (!stDiagram || stDiagram.states.length < 1) return;
+            stDrawingTransFrom = '[*]';
+            const center = stGetViewportCenterSVG();
+            tempEdge.setAttribute('x1', center.x);
+            tempEdge.setAttribute('y1', center.y);
+            tempEdge.setAttribute('x2', center.x);
+            tempEdge.setAttribute('y2', center.y);
+            tempEdge.style.display = '';
+            document.body.style.cursor = 'crosshair';
+            this.classList.add('active');
+        });
+
+        // → End (select source): enter draw mode to [*] end
+        document.getElementById('tb-st-add-end').addEventListener('click', function() {
+            if (!stDiagram || stDiagram.states.length < 1) return;
+            stDrawingTransToEnd = true;
+            const center = stGetViewportCenterSVG();
+            tempEdge.setAttribute('x1', center.x);
+            tempEdge.setAttribute('y1', center.y);
+            tempEdge.setAttribute('x2', center.x);
+            tempEdge.setAttribute('y2', center.y);
+            tempEdge.style.display = '';
+            document.body.style.cursor = 'crosshair';
+            this.classList.add('active');
         });
 
         document.getElementById('tb-st-add-transition').addEventListener('click', function() {
