@@ -550,6 +550,7 @@ public partial class AskAiDialog : Window
         ChatMessagesPanel.Children.Clear();
         _lastAssistantResponse = "";
         InsertButton.IsEnabled = false;
+        ReplaceDiagramButton.IsEnabled = false;
         StatusText.Text = "";
 
         var settings = SettingsManager.Current;
