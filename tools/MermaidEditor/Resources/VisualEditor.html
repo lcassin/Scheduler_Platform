@@ -9280,6 +9280,12 @@
             }
 
             if (stateGroup) {
+                // If we're in transition-drawing mode, don't start dragging — let mouseup handle it
+                if (stDrawingTransFrom || stDrawingTransToEnd) {
+                    e.preventDefault();
+                    return;
+                }
+
                 const stateId = stateGroup.getAttribute('data-state-id');
                 stSelectedStateId = stateId;
                 stSelectedTransIndex = -1;
