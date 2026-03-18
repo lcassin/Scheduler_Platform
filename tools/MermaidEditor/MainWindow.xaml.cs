@@ -6889,7 +6889,7 @@ Console.WriteLine(""Hello, World!"");
         });
         titlePanel.Children.Add(new TextBlock
         {
-            Text = "Version 3.0.0",
+            Text = $"Version {AppVersion}",
             FontSize = 14,
             Foreground = (SolidColorBrush)System.Windows.Application.Current.Resources["ThemeDisabledForegroundBrush"],
             Margin = new Thickness(0, 4, 0, 0)
@@ -6906,26 +6906,38 @@ Console.WriteLine(""Hello, World!"");
             TextWrapping = TextWrapping.Wrap,
             Foreground = (SolidColorBrush)System.Windows.Application.Current.Resources["ThemeForegroundBrush"],
             Text = "A visual IDE for editing Mermaid diagrams and Markdown files.\n\n" +
-                   "Features:\n" +
+                   "Visual Editor:\n" +
+                   "- Drag-and-drop visual editors for all 5 diagram types\n" +
+                   "  (Flowchart, Sequence, Class, State, ER)\n" +
+                   "- Text / Visual / Split editing modes\n" +
+                   "- Copy/paste, undo/redo, auto-layout, minimap\n" +
+                   "- Node resize, snap-to-grid, curved edges\n" +
+                   "- Context menus and property panels\n\n" +
+                   "Code Editor:\n" +
                    "- Live preview as you type\n" +
-                   "- Mermaid diagram rendering with pan/zoom\n" +
-                   "- Markdown rendering with GitHub styling\n" +
                    "- Syntax highlighting and IntelliSense\n" +
+                   "- Find & Replace, bracket matching, minimap\n" +
+                   "- Spell check with suggestions\n" +
                    "- Click-to-navigate between preview and code\n" +
-                   "- Navigation dropdown for quick section jumping\n" +
+                   "- Navigation dropdown for quick section jumping\n\n" +
+                   "AI Integration:\n" +
+                   "- Ask AI to generate, explain, or modify diagrams\n" +
+                   "- OpenAI and Anthropic support with streaming\n" +
+                   "- Visual editor mode with Replace Diagram\n" +
+                   "- File attachments for multi-modal input\n\n" +
+                   "Export & Print:\n" +
                    "- Export to PNG, SVG, EMF, and Word\n" +
-                   "- Save to PDF via Print Preview\n" +
+                   "- Print Preview with PDF export\n" +
+                   "- Code Print with syntax highlighting\n\n" +
+                   "General:\n" +
+                   "- Dark / Light / Twilight themes\n" +
                    "- Auto-save with session restore\n" +
-                   "- Spell check with suggestions (markdown)\n" +
-                   "- Table generator dialog (markdown)\n" +
-                   "- Ask AI chat with file attachments\n" +
-                   "- Settings/Configuration with theme support\n" +
-                   "- Bracket matching and minimap\n" +
-                   "- Custom SVG toolbar icons\n" +
+                   "- Multi-document tabbed interface\n" +
+                   "- Table generator dialog\n" +
+                   "- Settings dialog for all preferences\n" +
                    "- New document templates for all diagram types\n" +
-                   "- File browser with preview on selection\n" +
                    "- Drag and drop file support\n" +
-                   "- Undo/Redo support\n\n" +
+                   "- What's New dialog on version updates\n\n" +
                    "Supported file types:\n" +
                    "- .mmd, .mermaid - Mermaid diagrams\n" +
                    "- .md - Markdown files\n\n" +
