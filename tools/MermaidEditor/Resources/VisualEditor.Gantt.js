@@ -45,6 +45,11 @@ function renderGanttDiagram() {
     const canvas = document.getElementById('editorCanvas');
     if (!canvas || !ganttModel) return;
 
+    // Show editorCanvas, hide diagram-svg for standalone SVG rendering
+    const diagramSvg = document.getElementById('diagram-svg');
+    if (diagramSvg) diagramSvg.style.display = 'none';
+    canvas.style.display = 'block';
+
     canvas.innerHTML = '';
 
     const isDark = document.body.classList.contains('dark-theme');
@@ -108,7 +113,9 @@ function renderGanttDiagram() {
     }
 
     const totalRows = Math.max(allTasks.length, 1);
-    const timelineWidth = 600;
+    // Make width responsive to container
+    const containerWidth = canvas.clientWidth || window.innerWidth;
+    const timelineWidth = Math.max(200, containerWidth - labelWidth - padding * 2 - 40);
     const totalWidth = labelWidth + timelineWidth + padding * 2;
     const totalHeight = headerHeight + totalRows * rowHeight + padding * 2 + 60; // extra for toolbar
 
@@ -116,8 +123,10 @@ function renderGanttDiagram() {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('width', totalWidth);
     svg.setAttribute('height', totalHeight);
+    svg.setAttribute('viewBox', `0 0 ${totalWidth} ${totalHeight}`);
     svg.style.display = 'block';
-    svg.style.margin = '20px auto';
+    svg.style.maxWidth = '100%';
+    svg.style.height = 'auto';
 
     // Background
     const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -255,8 +264,24 @@ function renderGanttDiagram() {
         labelText.setAttribute('font-size', '12');
         labelText.textContent = task.label || 'Task';
         labelText.style.cursor = 'pointer';
-        const taskIdx = i;
+        // Calculate section-local index for C# bridge compatibility
         const taskSection = task.section;
+        let taskIdx;
+        if (taskSection) {
+            // Count how many tasks with same section appear before this one
+            let localIdx = 0;
+            for (let j = 0; j < i; j++) {
+                if (allTasks[j].section === taskSection) localIdx++;
+            }
+            taskIdx = localIdx;
+        } else {
+            // Count how many unsectioned tasks appear before this one
+            let localIdx = 0;
+            for (let j = 0; j < i; j++) {
+                if (!allTasks[j].section) localIdx++;
+            }
+            taskIdx = localIdx;
+        }
         labelText.addEventListener('click', () => selectGanttTask(taskIdx, taskSection));
         labelText.addEventListener('dblclick', () => editGanttTask(taskIdx, taskSection));
         svg.appendChild(labelText);
@@ -415,7 +440,7 @@ function selectGanttTask(index, section) {
     ganttSelectedTask = { index, section };
     ganttSelectedSection = null;
     renderGanttDiagram();
-    sendMessage({ type: 'gantt_taskSelected', index, section });
+    postMessage({ type: 'gantt_taskSelected', index, section });
 }
 
 function createGanttTask() {
@@ -432,7 +457,7 @@ function createGanttTask() {
     const tags = [];
     if (status && status !== 'none') tags.push(status);
 
-    sendMessage({
+    postMessage({
         type: 'gantt_taskCreated',
         label,
         startDate: startDate || null,
@@ -444,28 +469,13 @@ function createGanttTask() {
 
 function editGanttTask(index, section) {
     if (!ganttModel || !ganttModel.tasks) return;
-    const tasks = section
-        ? ganttModel.tasks.filter(t => t.section === section)
-        : ganttModel.tasks.filter(t => !t.section);
 
-    // Find the task within its section
+    // index is section-local: find matching task within its group
     const sectionTasks = section
         ? ganttModel.tasks.filter(t => t.section === section)
         : ganttModel.tasks.filter(t => !t.section);
 
-    // Calculate the index within the section
-    let sectionIndex = 0;
-    let count = 0;
-    for (let i = 0; i < ganttModel.tasks.length; i++) {
-        const t = ganttModel.tasks[i];
-        if (section ? t.section === section : !t.section) {
-            if (count === 0) { sectionIndex = 0; }
-            count++;
-        }
-    }
-
-    // Use global index to find task
-    const task = ganttModel.tasks[index] || sectionTasks[0];
+    const task = (index >= 0 && index < sectionTasks.length) ? sectionTasks[index] : null;
     if (!task) return;
 
     const label = prompt('Task label:', task.label);
@@ -476,7 +486,7 @@ function editGanttTask(index, section) {
     const statusStr = prompt('Status tags (comma-separated: done,active,crit,milestone):', (task.tags || []).join(','));
     const tags = statusStr ? statusStr.split(',').map(s => s.trim()).filter(s => s) : [];
 
-    sendMessage({
+    postMessage({
         type: 'gantt_taskEdited',
         index,
         section: section || null,
@@ -491,7 +501,7 @@ function deleteGanttTask() {
     if (!ganttSelectedTask) return;
     if (!confirm('Delete this task?')) return;
 
-    sendMessage({
+    postMessage({
         type: 'gantt_taskDeleted',
         index: ganttSelectedTask.index,
         section: ganttSelectedTask.section || null
@@ -503,21 +513,21 @@ function createGanttSection() {
     const name = prompt('Section name:', 'New Section');
     if (!name) return;
 
-    sendMessage({ type: 'gantt_sectionCreated', name });
+    postMessage({ type: 'gantt_sectionCreated', name });
 }
 
 function editGanttSection(name) {
     const newName = prompt('Edit section name:', name);
     if (!newName || newName === name) return;
 
-    sendMessage({ type: 'gantt_sectionEdited', oldName: name, name: newName });
+    postMessage({ type: 'gantt_sectionEdited', oldName: name, name: newName });
 }
 
 function editGanttTitle() {
     const newTitle = prompt('Chart title:', ganttModel.title || '');
     if (newTitle === null) return;
 
-    sendMessage({ type: 'gantt_settingsChanged', title: newTitle });
+    postMessage({ type: 'gantt_settingsChanged', title: newTitle });
 }
 
 function editGanttSettings() {
@@ -528,7 +538,7 @@ function editGanttSettings() {
     const axisFormat = prompt('Axis format:', ganttModel.axisFormat || '%Y-%m-%d');
     const excludes = prompt('Excludes (e.g., weekends):', ganttModel.excludes || '');
 
-    sendMessage({
+    postMessage({
         type: 'gantt_settingsChanged',
         title,
         dateFormat: dateFormat || 'YYYY-MM-DD',

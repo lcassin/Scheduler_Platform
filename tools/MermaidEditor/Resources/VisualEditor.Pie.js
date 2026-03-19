@@ -43,6 +43,11 @@ function renderPieChart() {
     const canvas = document.getElementById('editorCanvas');
     if (!canvas || !pieModel) return;
 
+    // Show editorCanvas, hide diagram-svg for standalone SVG rendering
+    const diagramSvg = document.getElementById('diagram-svg');
+    if (diagramSvg) diagramSvg.style.display = 'none';
+    canvas.style.display = 'block';
+
     canvas.innerHTML = '';
 
     const isDark = document.body.classList.contains('dark-theme');
@@ -60,12 +65,14 @@ function renderPieChart() {
     const centerY = 220;
     const radius = 150;
 
-    // Create SVG
+    // Create SVG - responsive with viewBox
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('width', svgWidth);
     svg.setAttribute('height', svgHeight);
+    svg.setAttribute('viewBox', `0 0 ${svgWidth} ${svgHeight}`);
     svg.style.display = 'block';
-    svg.style.margin = '20px auto';
+    svg.style.maxWidth = '100%';
+    svg.style.height = 'auto';
 
     // Background
     const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -315,7 +322,7 @@ function renderPieToolbar(svg, x, y, width, isDark, textColor) {
 function selectPieSlice(index) {
     pieSelectedSlice = index;
     renderPieChart();
-    sendMessage({ type: 'pie_sliceSelected', index });
+    postMessage({ type: 'pie_sliceSelected', index });
 }
 
 function createPieSlice() {
@@ -329,7 +336,7 @@ function createPieSlice() {
         return;
     }
 
-    sendMessage({ type: 'pie_sliceCreated', label, value });
+    postMessage({ type: 'pie_sliceCreated', label, value });
 }
 
 function editPieSlice(index) {
@@ -346,14 +353,14 @@ function editPieSlice(index) {
         return;
     }
 
-    sendMessage({ type: 'pie_sliceEdited', index, label, value });
+    postMessage({ type: 'pie_sliceEdited', index, label, value });
 }
 
 function deletePieSlice() {
     if (pieSelectedSlice === null) return;
     if (!confirm('Delete this slice?')) return;
 
-    sendMessage({ type: 'pie_sliceDeleted', index: pieSelectedSlice });
+    postMessage({ type: 'pie_sliceDeleted', index: pieSelectedSlice });
     pieSelectedSlice = null;
 }
 
@@ -363,5 +370,5 @@ function editPieSettings() {
 
     const showData = confirm('Show data values in legend?');
 
-    sendMessage({ type: 'pie_settingsChanged', title, showData });
+    postMessage({ type: 'pie_settingsChanged', title, showData });
 }
