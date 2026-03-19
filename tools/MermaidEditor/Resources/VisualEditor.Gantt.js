@@ -18,10 +18,6 @@ window.loadGanttDiagram = function(jsonStr) {
         ganttSelectedSection = null;
         updateToolbarForDiagramType();
         renderGanttDiagram();
-        // Deferred re-render: on first load the container may not have its final
-        // dimensions yet (WebView still sizing), causing a scrunched layout.
-        // Re-render after a short delay to pick up the correct width.
-        setTimeout(function() { if (ganttModel) renderGanttDiagram(); }, 150);
     } catch (e) {
         console.error('Failed to load gantt diagram:', e);
     }

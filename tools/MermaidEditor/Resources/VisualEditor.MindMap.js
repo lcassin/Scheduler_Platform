@@ -16,9 +16,6 @@ window.loadMindMap = function(jsonStr) {
         mindMapSelectedPath = null;
         updateToolbarForDiagramType();
         renderMindMap();
-        // Deferred re-render: on first load the container may not have its final
-        // dimensions yet (WebView still sizing), causing a scrunched layout.
-        setTimeout(function() { if (mindMapModel) renderMindMap(); }, 150);
     } catch (e) {
         console.error('Failed to load mind map:', e);
     }

@@ -1337,6 +1337,52 @@
             }
         };
 
+        // ========== Resize Observer ==========
+        // When the WebView container resizes (e.g. on cold start the container
+        // starts at 0 width and expands once WPF finishes layout), re-render the
+        // active diagram so it picks up the correct container dimensions.
+        (function() {
+            let lastCanvasWidth = 0;
+            const editorCanvas = document.getElementById('editorCanvas');
+            const observeTarget = editorCanvas || canvasContainer;
+            if (observeTarget && typeof ResizeObserver !== 'undefined') {
+                const ro = new ResizeObserver(function(entries) {
+                    for (const entry of entries) {
+                        const w = entry.contentRect.width;
+                        // Only re-render if width changed meaningfully (> 50px difference)
+                        // to avoid infinite loops and minor jitter
+                        if (w > 50 && Math.abs(w - lastCanvasWidth) > 50) {
+                            lastCanvasWidth = w;
+                            if (typeof currentDiagramType !== 'undefined' && currentDiagramType) {
+                                if (currentDiagramType === 'flowchart' && typeof render === 'function') {
+                                    render(); centerView();
+                                } else if (currentDiagramType === 'gantt' && typeof renderGanttDiagram === 'function') {
+                                    renderGanttDiagram();
+                                } else if (currentDiagramType === 'mindmap' && typeof renderMindMap === 'function') {
+                                    renderMindMap();
+                                } else if (currentDiagramType === 'pie' && typeof renderPieChart === 'function') {
+                                    renderPieChart();
+                                } else if (currentDiagramType === 'sequence' && typeof renderSequenceDiagram === 'function') {
+                                    renderSequenceDiagram(); centerView();
+                                } else if (currentDiagramType === 'class' && typeof renderClassDiagram === 'function') {
+                                    renderClassDiagram(); centerView();
+                                } else if (currentDiagramType === 'state' && typeof renderStateDiagram === 'function') {
+                                    renderStateDiagram(); centerView();
+                                } else if (currentDiagramType === 'er' && typeof renderERDiagram === 'function') {
+                                    renderERDiagram(); centerView();
+                                }
+                            }
+                        }
+                    }
+                });
+                ro.observe(observeTarget);
+                // Also observe the other container if both exist
+                if (editorCanvas && editorCanvas !== canvasContainer) {
+                    ro.observe(canvasContainer);
+                }
+            }
+        })();
+
         // ========== Load Diagram from C# ==========
 
         window.loadDiagram = function(jsonData) {
@@ -1392,9 +1438,6 @@
                 updateToolbarForDiagramType();
                 render();
                 centerView();
-                // Deferred re-render: on first load the container may not have its final
-                // dimensions yet (WebView still sizing), causing a scrunched layout.
-                setTimeout(function() { render(); centerView(); }, 150);
             } catch (err) {
                 console.error('Failed to load diagram:', err);
             }
