@@ -1322,3 +1322,284 @@ public enum ERCardinality
     /// <summary>One or more: }| (one or more)</summary>
     OneOrMore
 }
+
+// =============================================
+// Gantt Chart Models (Phase 4)
+// =============================================
+
+/// <summary>
+/// Represents a complete Mermaid gantt chart diagram.
+/// Contains sections with tasks, date format, and axis formatting.
+/// </summary>
+public class GanttModel
+{
+    /// <summary>
+    /// The chart title (optional).
+    /// </summary>
+    public string? Title { get; set; }
+
+    /// <summary>
+    /// The date format string (e.g., "YYYY-MM-DD").
+    /// </summary>
+    public string DateFormat { get; set; } = "YYYY-MM-DD";
+
+    /// <summary>
+    /// The axis format string for timeline display (e.g., "%Y-%m-%d").
+    /// </summary>
+    public string? AxisFormat { get; set; }
+
+    /// <summary>
+    /// Whether to exclude weekends from the timeline.
+    /// </summary>
+    public bool ExcludesWeekends { get; set; }
+
+    /// <summary>
+    /// Custom excludes string (e.g., "weekends", "2024-01-01").
+    /// </summary>
+    public string? Excludes { get; set; }
+
+    /// <summary>
+    /// All sections in the gantt chart.
+    /// </summary>
+    public List<GanttSection> Sections { get; set; } = new();
+
+    /// <summary>
+    /// Tasks not in any section (top-level tasks).
+    /// </summary>
+    public List<GanttTask> Tasks { get; set; } = new();
+
+    /// <summary>
+    /// Comments preserved from the original text.
+    /// </summary>
+    public List<CommentEntry> Comments { get; set; } = new();
+
+    /// <summary>
+    /// Lines before the gantt declaration.
+    /// </summary>
+    public List<string> PreambleLines { get; set; } = new();
+
+    /// <summary>
+    /// The line index of the gantt declaration.
+    /// </summary>
+    public int DeclarationLineIndex { get; set; }
+}
+
+/// <summary>
+/// Represents a section in a gantt chart that groups tasks.
+/// </summary>
+public class GanttSection
+{
+    /// <summary>
+    /// The section name/label.
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Tasks within this section.
+    /// </summary>
+    public List<GanttTask> Tasks { get; set; } = new();
+}
+
+/// <summary>
+/// Represents a task in a gantt chart.
+/// </summary>
+public class GanttTask
+{
+    /// <summary>
+    /// The task display label.
+    /// </summary>
+    public string Label { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Optional task ID for referencing in dependencies.
+    /// </summary>
+    public string? Id { get; set; }
+
+    /// <summary>
+    /// Task status tags (e.g., "done", "active", "crit").
+    /// Multiple tags can be combined.
+    /// </summary>
+    public List<string> Tags { get; set; } = new();
+
+    /// <summary>
+    /// Start date or reference (e.g., "2024-01-01", "after task1").
+    /// </summary>
+    public string? StartDate { get; set; }
+
+    /// <summary>
+    /// End date or duration (e.g., "2024-01-15", "30d", "5d").
+    /// </summary>
+    public string? EndDate { get; set; }
+
+    /// <summary>
+    /// Whether this is a milestone (zero-duration marker).
+    /// </summary>
+    public bool IsMilestone { get; set; }
+}
+
+/// <summary>
+/// Status tags that can appear on gantt tasks.
+/// </summary>
+public enum GanttTaskStatus
+{
+    /// <summary>No special status</summary>
+    Normal,
+
+    /// <summary>Task is completed: done</summary>
+    Done,
+
+    /// <summary>Task is in progress: active</summary>
+    Active,
+
+    /// <summary>Task is critical: crit</summary>
+    Critical,
+
+    /// <summary>Task is a milestone: milestone</summary>
+    Milestone
+}
+
+// =============================================
+// Mind Map Models (Phase 4)
+// =============================================
+
+/// <summary>
+/// Represents a complete Mermaid mind map diagram.
+/// A mind map is a tree structure with a central root node.
+/// </summary>
+public class MindMapModel
+{
+    /// <summary>
+    /// The root node of the mind map.
+    /// </summary>
+    public MindMapNode Root { get; set; } = new();
+
+    /// <summary>
+    /// Comments preserved from the original text.
+    /// </summary>
+    public List<CommentEntry> Comments { get; set; } = new();
+
+    /// <summary>
+    /// Lines before the mindmap declaration.
+    /// </summary>
+    public List<string> PreambleLines { get; set; } = new();
+
+    /// <summary>
+    /// The line index of the mindmap declaration.
+    /// </summary>
+    public int DeclarationLineIndex { get; set; }
+}
+
+/// <summary>
+/// Represents a node in a mind map tree.
+/// </summary>
+public class MindMapNode
+{
+    /// <summary>
+    /// The text label of this node.
+    /// </summary>
+    public string Label { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The shape of this node.
+    /// </summary>
+    public MindMapNodeShape Shape { get; set; } = MindMapNodeShape.Default;
+
+    /// <summary>
+    /// Child nodes branching from this node.
+    /// </summary>
+    public List<MindMapNode> Children { get; set; } = new();
+
+    /// <summary>
+    /// Optional icon for this node (Font Awesome class).
+    /// </summary>
+    public string? Icon { get; set; }
+
+    /// <summary>
+    /// Optional CSS class for this node.
+    /// </summary>
+    public string? CssClass { get; set; }
+}
+
+/// <summary>
+/// Node shapes for mind map nodes.
+/// </summary>
+public enum MindMapNodeShape
+{
+    /// <summary>Default shape (auto based on level)</summary>
+    Default,
+
+    /// <summary>Square: [text]</summary>
+    Square,
+
+    /// <summary>Rounded: (text)</summary>
+    Rounded,
+
+    /// <summary>Circle: ((text))</summary>
+    Circle,
+
+    /// <summary>Bang/explosion: ))text((</summary>
+    Bang,
+
+    /// <summary>Cloud: )text(</summary>
+    Cloud,
+
+    /// <summary>Hexagon: {{text}}</summary>
+    Hexagon
+}
+
+// =============================================
+// Pie Chart Models (Phase 4)
+// =============================================
+
+/// <summary>
+/// Represents a complete Mermaid pie chart diagram.
+/// Contains slices with labels and values.
+/// </summary>
+public class PieChartModel
+{
+    /// <summary>
+    /// The chart title (optional).
+    /// </summary>
+    public string? Title { get; set; }
+
+    /// <summary>
+    /// Whether to show data values on the chart.
+    /// </summary>
+    public bool ShowData { get; set; }
+
+    /// <summary>
+    /// The slices of the pie chart.
+    /// </summary>
+    public List<PieSlice> Slices { get; set; } = new();
+
+    /// <summary>
+    /// Comments preserved from the original text.
+    /// </summary>
+    public List<CommentEntry> Comments { get; set; } = new();
+
+    /// <summary>
+    /// Lines before the pie declaration.
+    /// </summary>
+    public List<string> PreambleLines { get; set; } = new();
+
+    /// <summary>
+    /// The line index of the pie declaration.
+    /// </summary>
+    public int DeclarationLineIndex { get; set; }
+}
+
+/// <summary>
+/// Represents a slice in a pie chart.
+/// </summary>
+public class PieSlice
+{
+    /// <summary>
+    /// The label for this slice (in quotes in Mermaid syntax).
+    /// </summary>
+    public string Label { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The numeric value for this slice.
+    /// </summary>
+    public double Value { get; set; }
+}

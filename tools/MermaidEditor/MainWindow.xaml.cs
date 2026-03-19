@@ -123,6 +123,9 @@ public partial class MainWindow : Window
     private ClassDiagramModel? _currentClassDiagramModel;
     private StateDiagramModel? _currentStateDiagramModel;
     private ERDiagramModel? _currentERDiagramModel;
+    private GanttModel? _currentGanttModel;
+    private MindMapModel? _currentMindMapModel;
+    private PieChartModel? _currentPieChartModel;
     private bool _isVisualEditorUpdating; // Prevent re-entrant updates between text <-> visual
     private bool _visualEditorHasFocus; // Tracks whether the Visual Editor pane has focus (for toolbar enable/disable)
 
@@ -4613,13 +4616,39 @@ Console.WriteLine(""Hello, World!"");
                 VisualEditorPanel.ClearValue(FrameworkElement.HeightProperty);
             }
 
-            // Load the embedded VisualEditor.html resource
+            // Load the embedded VisualEditor.html template and inject per-diagram-type JS files
             var assembly = System.Reflection.Assembly.GetExecutingAssembly();
             using var stream = assembly.GetManifestResourceStream("MermaidEditor.Resources.VisualEditor.html");
             if (stream != null)
             {
                 using var reader = new StreamReader(stream);
                 var html = await reader.ReadToEndAsync();
+
+                // Read each diagram-type JS file and inject into the HTML template
+                var jsFiles = new[]
+                {
+                    "MermaidEditor.Resources.VisualEditor.Sequence.js",
+                    "MermaidEditor.Resources.VisualEditor.Class.js",
+                    "MermaidEditor.Resources.VisualEditor.State.js",
+                    "MermaidEditor.Resources.VisualEditor.ER.js",
+                    "MermaidEditor.Resources.VisualEditor.Gantt.js",
+                    "MermaidEditor.Resources.VisualEditor.MindMap.js",
+                    "MermaidEditor.Resources.VisualEditor.Pie.js",
+                };
+                var injectedJs = new System.Text.StringBuilder();
+                foreach (var jsFile in jsFiles)
+                {
+                    using var jsStream = assembly.GetManifestResourceStream(jsFile);
+                    if (jsStream != null)
+                    {
+                        using var jsReader = new StreamReader(jsStream);
+                        var jsContent = await jsReader.ReadToEndAsync();
+                        injectedJs.AppendLine();
+                        injectedJs.AppendLine(jsContent);
+                    }
+                }
+
+                html = html.Replace("// INJECT_DIAGRAM_SCRIPTS", injectedJs.ToString());
                 VisualEditorWebView.NavigateToString(html);
             }
 
@@ -4633,6 +4662,9 @@ Console.WriteLine(""Hello, World!"");
             _visualEditorBridge.ClassDiagramModelChanged += VisualEditorBridge_ClassDiagramModelChanged;
             _visualEditorBridge.StateDiagramModelChanged += VisualEditorBridge_StateDiagramModelChanged;
             _visualEditorBridge.ERDiagramModelChanged += VisualEditorBridge_ERDiagramModelChanged;
+            _visualEditorBridge.GanttModelChanged += VisualEditorBridge_GanttModelChanged;
+            _visualEditorBridge.MindMapModelChanged += VisualEditorBridge_MindMapModelChanged;
+            _visualEditorBridge.PieChartModelChanged += VisualEditorBridge_PieChartModelChanged;
             _visualEditorBridge.EditorReady += VisualEditorBridge_EditorReady;
 
             // Wire up focus tracking for code-only toolbar enable/disable
@@ -4727,6 +4759,18 @@ Console.WriteLine(""Hello, World!"");
             else if (_currentSequenceDiagramModel != null)
             {
                 await _visualEditorBridge.UpdateSequenceModelAsync(_currentSequenceDiagramModel);
+            }
+            else if (_currentGanttModel != null)
+            {
+                await _visualEditorBridge.UpdateGanttModelAsync(_currentGanttModel);
+            }
+            else if (_currentMindMapModel != null)
+            {
+                await _visualEditorBridge.UpdateMindMapModelAsync(_currentMindMapModel);
+            }
+            else if (_currentPieChartModel != null)
+            {
+                await _visualEditorBridge.UpdatePieChartModelAsync(_currentPieChartModel);
             }
             else if (_currentFlowchartModel != null)
             {
@@ -4938,6 +4982,108 @@ Console.WriteLine(""Hello, World!"");
     }
 
     /// <summary>
+    /// Called when the visual editor modifies the GanttModel.
+    /// Serializes the model back to text and updates the code editor + preview.
+    /// </summary>
+    private async void VisualEditorBridge_GanttModelChanged(object? sender, GanttModelChangedEventArgs e)
+    {
+        if (_isVisualEditorUpdating) return;
+
+        _isVisualEditorUpdating = true;
+        try
+        {
+            var text = MermaidSerializer.SerializeGantt(e.Model);
+
+            if (_visualEditorMode == VisualEditorMode.Visual || _visualEditorMode == VisualEditorMode.Split)
+            {
+                _isSwitchingDocuments = true;
+                try { CodeEditor.Text = text; } finally { _isSwitchingDocuments = false; }
+
+                _isDirty = true;
+                if (_activeDocument != null)
+                {
+                    _activeDocument.IsDirty = true;
+                }
+                UpdateTitle();
+                RenderPreview();
+                await _visualEditorBridge.RefreshGanttAsync();
+            }
+        }
+        finally
+        {
+            _isVisualEditorUpdating = false;
+        }
+    }
+
+    /// <summary>
+    /// Called when the visual editor modifies the MindMapModel.
+    /// Serializes the model back to text and updates the code editor + preview.
+    /// </summary>
+    private async void VisualEditorBridge_MindMapModelChanged(object? sender, MindMapModelChangedEventArgs e)
+    {
+        if (_isVisualEditorUpdating) return;
+
+        _isVisualEditorUpdating = true;
+        try
+        {
+            var text = MermaidSerializer.SerializeMindMap(e.Model);
+
+            if (_visualEditorMode == VisualEditorMode.Visual || _visualEditorMode == VisualEditorMode.Split)
+            {
+                _isSwitchingDocuments = true;
+                try { CodeEditor.Text = text; } finally { _isSwitchingDocuments = false; }
+
+                _isDirty = true;
+                if (_activeDocument != null)
+                {
+                    _activeDocument.IsDirty = true;
+                }
+                UpdateTitle();
+                RenderPreview();
+                await _visualEditorBridge.RefreshMindMapAsync();
+            }
+        }
+        finally
+        {
+            _isVisualEditorUpdating = false;
+        }
+    }
+
+    /// <summary>
+    /// Called when the visual editor modifies the PieChartModel.
+    /// Serializes the model back to text and updates the code editor + preview.
+    /// </summary>
+    private async void VisualEditorBridge_PieChartModelChanged(object? sender, PieChartModelChangedEventArgs e)
+    {
+        if (_isVisualEditorUpdating) return;
+
+        _isVisualEditorUpdating = true;
+        try
+        {
+            var text = MermaidSerializer.SerializePieChart(e.Model);
+
+            if (_visualEditorMode == VisualEditorMode.Visual || _visualEditorMode == VisualEditorMode.Split)
+            {
+                _isSwitchingDocuments = true;
+                try { CodeEditor.Text = text; } finally { _isSwitchingDocuments = false; }
+
+                _isDirty = true;
+                if (_activeDocument != null)
+                {
+                    _activeDocument.IsDirty = true;
+                }
+                UpdateTitle();
+                RenderPreview();
+                await _visualEditorBridge.RefreshPieChartAsync();
+            }
+        }
+        finally
+        {
+            _isVisualEditorUpdating = false;
+        }
+    }
+
+    /// <summary>
     /// Updates the visibility of the visual editor mode toolbar based on the current render mode.
     /// Only visible for Mermaid files.
     /// </summary>
@@ -5046,6 +5192,18 @@ Console.WriteLine(""Hello, World!"");
                 {
                     text = MermaidSerializer.SerializeSequenceDiagram(_currentSequenceDiagramModel);
                 }
+                else if (_currentGanttModel != null)
+                {
+                    text = MermaidSerializer.SerializeGantt(_currentGanttModel);
+                }
+                else if (_currentMindMapModel != null)
+                {
+                    text = MermaidSerializer.SerializeMindMap(_currentMindMapModel);
+                }
+                else if (_currentPieChartModel != null)
+                {
+                    text = MermaidSerializer.SerializePieChart(_currentPieChartModel);
+                }
                 else if (_currentFlowchartModel != null)
                 {
                     text = MermaidSerializer.Serialize(_currentFlowchartModel);
@@ -5120,11 +5278,8 @@ Console.WriteLine(""Hello, World!"");
                 var parsed = MermaidParser.ParseStateDiagram(text);
                 if (parsed != null)
                 {
+                    ClearAllModels();
                     _currentStateDiagramModel = parsed;
-                    _currentERDiagramModel = null;
-                    _currentClassDiagramModel = null;
-                    _currentSequenceDiagramModel = null;
-                    _currentFlowchartModel = null;
                     await _visualEditorBridge.UpdateStateDiagramModelAsync(_currentStateDiagramModel);
                 }
             }
@@ -5133,11 +5288,8 @@ Console.WriteLine(""Hello, World!"");
                 var parsed = MermaidParser.ParseERDiagram(text);
                 if (parsed != null)
                 {
+                    ClearAllModels();
                     _currentERDiagramModel = parsed;
-                    _currentStateDiagramModel = null;
-                    _currentClassDiagramModel = null;
-                    _currentSequenceDiagramModel = null;
-                    _currentFlowchartModel = null;
                     await _visualEditorBridge.UpdateERDiagramModelAsync(_currentERDiagramModel);
                 }
             }
@@ -5146,11 +5298,8 @@ Console.WriteLine(""Hello, World!"");
                 var parsed = MermaidParser.ParseClassDiagram(text);
                 if (parsed != null)
                 {
+                    ClearAllModels();
                     _currentClassDiagramModel = parsed;
-                    _currentStateDiagramModel = null;
-                    _currentERDiagramModel = null;
-                    _currentSequenceDiagramModel = null;
-                    _currentFlowchartModel = null;
                     await _visualEditorBridge.UpdateClassDiagramModelAsync(_currentClassDiagramModel);
                 }
             }
@@ -5159,12 +5308,39 @@ Console.WriteLine(""Hello, World!"");
                 var parsed = MermaidParser.ParseSequenceDiagram(text);
                 if (parsed != null)
                 {
+                    ClearAllModels();
                     _currentSequenceDiagramModel = parsed;
-                    _currentStateDiagramModel = null;
-                    _currentERDiagramModel = null;
-                    _currentClassDiagramModel = null;
-                    _currentFlowchartModel = null;
                     await _visualEditorBridge.UpdateSequenceModelAsync(_currentSequenceDiagramModel);
+                }
+            }
+            else if (IsGanttDiagram(text))
+            {
+                var parsed = MermaidParser.ParseGantt(text);
+                if (parsed != null)
+                {
+                    ClearAllModels();
+                    _currentGanttModel = parsed;
+                    await _visualEditorBridge.UpdateGanttModelAsync(_currentGanttModel);
+                }
+            }
+            else if (IsMindMapDiagram(text))
+            {
+                var parsed = MermaidParser.ParseMindMap(text);
+                if (parsed != null)
+                {
+                    ClearAllModels();
+                    _currentMindMapModel = parsed;
+                    await _visualEditorBridge.UpdateMindMapModelAsync(_currentMindMapModel);
+                }
+            }
+            else if (IsPieChartDiagram(text))
+            {
+                var parsed = MermaidParser.ParsePieChart(text);
+                if (parsed != null)
+                {
+                    ClearAllModels();
+                    _currentPieChartModel = parsed;
+                    await _visualEditorBridge.UpdatePieChartModelAsync(_currentPieChartModel);
                 }
             }
             else
@@ -5172,11 +5348,8 @@ Console.WriteLine(""Hello, World!"");
                 var parsed = MermaidParser.ParseFlowchart(text);
                 if (parsed != null)
                 {
+                    ClearAllModels();
                     _currentFlowchartModel = parsed;
-                    _currentStateDiagramModel = null;
-                    _currentERDiagramModel = null;
-                    _currentSequenceDiagramModel = null;
-                    _currentClassDiagramModel = null;
                     await _visualEditorBridge.UpdateModelAsync(_currentFlowchartModel);
                 }
             }
@@ -5201,8 +5374,9 @@ Console.WriteLine(""Hello, World!"");
         if (_currentRenderMode != RenderMode.Mermaid) return false;
         var text = CodeEditor.Text;
         if (string.IsNullOrWhiteSpace(text)) return true; // empty file — allow visual editor
-        // Flowcharts, sequence diagrams, class diagrams, state diagrams, and ER diagrams have visual editing support
-        return IsFlowchart(text) || IsSequenceDiagram(text) || IsClassDiagram(text) || IsStateDiagram(text) || IsERDiagram(text);
+        // Flowcharts, sequence, class, state, ER, gantt, mindmap, and pie diagrams have visual editing support
+        return IsFlowchart(text) || IsSequenceDiagram(text) || IsClassDiagram(text) || IsStateDiagram(text) || IsERDiagram(text)
+            || IsGanttDiagram(text) || IsMindMapDiagram(text) || IsPieChartDiagram(text);
     }
 
     /// <summary>
@@ -5300,6 +5474,50 @@ Console.WriteLine(""Hello, World!"");
     {
         var line = GetFirstMeaningfulMermaidLine(text);
         return line != null && line.Equals("erDiagram", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Detects whether the given Mermaid text is a gantt chart.
+    /// </summary>
+    private static bool IsGanttDiagram(string text)
+    {
+        var line = GetFirstMeaningfulMermaidLine(text);
+        return line != null && line.Equals("gantt", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Detects whether the given Mermaid text is a mind map.
+    /// </summary>
+    private static bool IsMindMapDiagram(string text)
+    {
+        var line = GetFirstMeaningfulMermaidLine(text);
+        return line != null && line.Equals("mindmap", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Detects whether the given Mermaid text is a pie chart.
+    /// </summary>
+    private static bool IsPieChartDiagram(string text)
+    {
+        var line = GetFirstMeaningfulMermaidLine(text);
+        if (line == null) return false;
+        return line.Equals("pie", StringComparison.OrdinalIgnoreCase)
+            || line.StartsWith("pie ", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Clears all diagram model references. Called before setting a new active model.
+    /// </summary>
+    private void ClearAllModels()
+    {
+        _currentFlowchartModel = null;
+        _currentSequenceDiagramModel = null;
+        _currentClassDiagramModel = null;
+        _currentStateDiagramModel = null;
+        _currentERDiagramModel = null;
+        _currentGanttModel = null;
+        _currentMindMapModel = null;
+        _currentPieChartModel = null;
     }
 
     /// <summary>
@@ -8677,6 +8895,9 @@ Console.WriteLine(""Hello, World!"");
         _currentClassDiagramModel = null;
         _currentStateDiagramModel = null;
         _currentERDiagramModel = null;
+        _currentGanttModel = null;
+        _currentMindMapModel = null;
+        _currentPieChartModel = null;
         
         // Switch to new document
         _activeDocument = doc;
