@@ -43,6 +43,11 @@ function renderMindMap() {
     const canvas = document.getElementById('editorCanvas');
     if (!canvas || !mindMapModel || !mindMapModel.root) return;
 
+    // Show editorCanvas, hide diagram-svg for standalone SVG rendering
+    const diagramSvg = document.getElementById('diagram-svg');
+    if (diagramSvg) diagramSvg.style.display = 'none';
+    canvas.style.display = 'block';
+
     canvas.innerHTML = '';
 
     const isDark = document.body.classList.contains('dark-theme');
@@ -67,8 +72,10 @@ function renderMindMap() {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('width', svgWidth);
     svg.setAttribute('height', svgHeight);
+    svg.setAttribute('viewBox', `0 0 ${svgWidth} ${svgHeight}`);
     svg.style.display = 'block';
-    svg.style.margin = '20px auto';
+    svg.style.maxWidth = '100%';
+    svg.style.height = 'auto';
 
     // Background
     const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -403,7 +410,7 @@ function renderMindMapToolbar(svg, x, y, width, isDark, textColor) {
 function selectMindMapNode(path) {
     mindMapSelectedPath = path;
     renderMindMap();
-    sendMessage({ type: 'mm_nodeSelected', path });
+    postMessage({ type: 'mm_nodeSelected', path });
 }
 
 function createMindMapChild() {
@@ -413,7 +420,7 @@ function createMindMapChild() {
     const shapeOptions = 'Shape (Default/Square/Rounded/Circle/Bang/Cloud/Hexagon):';
     const shape = prompt(shapeOptions, 'Default');
 
-    sendMessage({
+    postMessage({
         type: 'mm_nodeCreated',
         label,
         shape: shape || 'Default',
@@ -430,7 +437,7 @@ function editMindMapNode(path) {
 
     const shape = prompt('Shape (Default/Square/Rounded/Circle/Bang/Cloud/Hexagon):', node.shape || 'Default');
 
-    sendMessage({
+    postMessage({
         type: 'mm_nodeEdited',
         path,
         label,
@@ -445,7 +452,7 @@ function deleteMindMapNode() {
     }
     if (!confirm('Delete this node and all its children?')) return;
 
-    sendMessage({ type: 'mm_nodeDeleted', path: mindMapSelectedPath });
+    postMessage({ type: 'mm_nodeDeleted', path: mindMapSelectedPath });
     mindMapSelectedPath = null;
 }
 
