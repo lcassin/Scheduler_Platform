@@ -52,14 +52,17 @@ function renderPieChart() {
 
     canvas.innerHTML = '';
 
-    const isDark = document.body.classList.contains('dark-theme');
-    const textColor = isDark ? '#cdd6f4' : '#333333';
-    const bgColor = isDark ? '#1e1e2e' : '#ffffff';
+    // Read theme colors from CSS variables (set by theme-light / theme-twilight / default dark)
+    const cs = getComputedStyle(document.documentElement);
+    const cv = (v) => cs.getPropertyValue(v).trim();
+    const textColor = cv('--node-text') || '#D4D4D4';
+    const bgColor = cv('--bg-color') || '#1E1E1E';
+    const isLight = document.body.classList.contains('theme-light');
 
-    // Color palette for slices
-    const sliceColors = isDark
-        ? ['#89b4fa', '#a6e3a1', '#f9e2af', '#f38ba8', '#cba6f7', '#94e2d5', '#fab387', '#74c7ec', '#f5c2e7', '#b4befe']
-        : ['#2196f3', '#4caf50', '#ff9800', '#f44336', '#9c27b0', '#009688', '#ff5722', '#3f51b5', '#e91e63', '#00bcd4'];
+    // Color palette for slices - adapt to current theme
+    const sliceColors = isLight
+        ? ['#2196f3', '#4caf50', '#ff9800', '#f44336', '#9c27b0', '#009688', '#ff5722', '#3f51b5', '#e91e63', '#00bcd4']
+        : ['#89b4fa', '#a6e3a1', '#f9e2af', '#f38ba8', '#cba6f7', '#94e2d5', '#fab387', '#74c7ec', '#f5c2e7', '#b4befe'];
 
     const svgWidth = 600;
     const svgHeight = 500;
@@ -109,7 +112,7 @@ function renderPieChart() {
         emptyCircle.setAttribute('cy', centerY);
         emptyCircle.setAttribute('r', radius);
         emptyCircle.setAttribute('fill', 'none');
-        emptyCircle.setAttribute('stroke', isDark ? '#45475a' : '#cccccc');
+        emptyCircle.setAttribute('stroke', isLight ? '#cccccc' : '#45475a');
         emptyCircle.setAttribute('stroke-width', '2');
         emptyCircle.setAttribute('stroke-dasharray', '5,5');
         svg.appendChild(emptyCircle);
@@ -173,7 +176,7 @@ function renderPieChart() {
             slicePath.setAttribute('stroke-width', '2');
 
             if (isSelected) {
-                slicePath.setAttribute('stroke', isDark ? '#f9e2af' : '#ff9800');
+                slicePath.setAttribute('stroke', isLight ? '#ff9800' : '#f9e2af');
                 slicePath.setAttribute('stroke-width', '3');
             }
 
@@ -270,14 +273,14 @@ function renderPieChart() {
 
     // Toolbar
     const toolbarY = parseFloat(svg.getAttribute('height')) - 45;
-    renderPieToolbar(svg, 10, toolbarY, svgWidth - 20, isDark, textColor);
+    renderPieToolbar(svg, 10, toolbarY, svgWidth - 20, isLight, textColor);
 
     canvas.appendChild(svg);
 }
 
-function renderPieToolbar(svg, x, y, width, isDark, textColor) {
-    const btnBg = isDark ? '#313244' : '#e0e0e0';
-    const btnHover = isDark ? '#45475a' : '#bdbdbd';
+function renderPieToolbar(svg, x, y, width, isLight, textColor) {
+    const btnBg = isLight ? '#e0e0e0' : '#313244';
+    const btnHover = isLight ? '#bdbdbd' : '#45475a';
     const buttons = [
         { label: '+ Add Slice', action: () => createPieSlice() },
         { label: 'Settings', action: () => editPieSettings() }
