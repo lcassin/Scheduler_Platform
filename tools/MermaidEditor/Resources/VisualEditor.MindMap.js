@@ -67,6 +67,81 @@ function _assignBranchColorRecursive(nodeId, branchIdx, color, nodeMap, children
     });
 }
 
+// ========== Mind Map Radial Layout ==========
+// Places root at center, children radiate outward in a circle.
+// Subtrees are laid out recursively with angular sectors.
+
+function mindMapRadialLayout() {
+    if (diagram.nodes.length === 0) return;
+
+    // Build adjacency from edges
+    var nodeMap = {};
+    diagram.nodes.forEach(function(n) { nodeMap[n.id] = n; });
+    var childrenOf = {};
+    diagram.edges.forEach(function(e) {
+        if (!childrenOf[e.from]) childrenOf[e.from] = [];
+        childrenOf[e.from].push(e.to);
+    });
+
+    var root = nodeMap['mm_root'];
+    if (!root) return;
+
+    // Compute subtree sizes (total leaf count) for proportional angle allocation
+    var subtreeSize = {};
+    function computeSubtreeSize(id) {
+        var children = childrenOf[id] || [];
+        if (children.length === 0) {
+            subtreeSize[id] = 1;
+            return 1;
+        }
+        var total = 0;
+        children.forEach(function(cid) { total += computeSubtreeSize(cid); });
+        subtreeSize[id] = total;
+        return total;
+    }
+    computeSubtreeSize('mm_root');
+
+    // Place root at origin
+    root.x = 0;
+    root.y = 0;
+
+    // Radial spacing parameters
+    var baseRadius = 200;  // distance from root to first level
+    var levelSpacing = 180; // additional distance per level
+
+    // Layout a subtree within an angular sector [startAngle, endAngle]
+    function layoutSubtree(nodeId, level, cx, cy, startAngle, endAngle) {
+        var children = childrenOf[nodeId] || [];
+        if (children.length === 0) return;
+
+        var radius = baseRadius + (level - 1) * levelSpacing;
+        var parentSize = subtreeSize[nodeId] || 1;
+        var angleRange = endAngle - startAngle;
+        var currentAngle = startAngle;
+
+        children.forEach(function(childId) {
+            var childNode = nodeMap[childId];
+            if (!childNode) return;
+
+            var childSize = subtreeSize[childId] || 1;
+            var childAngleRange = angleRange * (childSize / parentSize);
+            var midAngle = currentAngle + childAngleRange / 2;
+
+            childNode.x = cx + radius * Math.cos(midAngle);
+            childNode.y = cy + radius * Math.sin(midAngle);
+
+            // Recursively layout grandchildren in a narrower sector from child's position
+            layoutSubtree(childId, level + 1, childNode.x, childNode.y,
+                midAngle - childAngleRange / 2.5, midAngle + childAngleRange / 2.5);
+
+            currentAngle += childAngleRange;
+        });
+    }
+
+    // Layout root's children across full 360 degrees
+    layoutSubtree('mm_root', 1, 0, 0, 0, 2 * Math.PI);
+}
+
 // ========== Mind Map Load/Restore ==========
 // These functions receive flowchart-compatible JSON from C# and load it
 // using the existing flowchart diagram object and render() function.
@@ -111,10 +186,10 @@ window.loadMindMap = function(jsonStr) {
             if (!node.height || node.height < minSize.height) node.height = minSize.height;
         });
 
-        // Auto-layout (dagre handles the tree layout with LR direction)
+        // Radial layout for mind map (root centered, children radiate outward)
         var needsLayout = diagram.nodes.some(function(n) { return n.x === 0 && n.y === 0; });
         if (needsLayout && diagram.nodes.length > 0) {
-            autoLayout();
+            mindMapRadialLayout();
         }
 
         // Assign branch colors for visual distinction
@@ -167,10 +242,10 @@ window.restoreMindMap = function(jsonStr) {
             if (!node.height || node.height < minSize.height) node.height = minSize.height;
         });
 
-        // Auto-layout for restore (all positions are 0 from C#)
+        // Radial layout for restore (all positions are 0 from C#)
         var allZero = diagram.nodes.every(function(n) { return n.x === 0 && n.y === 0; });
         if (allZero && diagram.nodes.length > 0) {
-            autoLayout();
+            mindMapRadialLayout();
         }
 
         _assignMindMapBranchColors();
@@ -217,8 +292,11 @@ window.refreshMindMap = function(jsonStr) {
             if (!node.height || node.height < minSize.height) node.height = minSize.height;
         });
 
-        // Always re-layout on refresh since tree structure may have changed
-        autoLayout();
+        // Re-layout on refresh only if nodes don't have saved positions
+        var allZero = diagram.nodes.every(function(n) { return n.x === 0 && n.y === 0; });
+        if (allZero && diagram.nodes.length > 0) {
+            mindMapRadialLayout();
+        }
         _assignMindMapBranchColors();
         render();
     } catch (e) {
