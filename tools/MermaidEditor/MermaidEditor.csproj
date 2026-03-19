@@ -15,6 +15,13 @@
       <Resource Include="Resources\TemplateThumbnails\*.png" />
       <Resource Include="app.ico" />
       <EmbeddedResource Include="Resources\VisualEditor.html" />
+      <EmbeddedResource Include="Resources\VisualEditor.Sequence.js" />
+      <EmbeddedResource Include="Resources\VisualEditor.Class.js" />
+      <EmbeddedResource Include="Resources\VisualEditor.State.js" />
+      <EmbeddedResource Include="Resources\VisualEditor.ER.js" />
+      <EmbeddedResource Include="Resources\VisualEditor.Gantt.js" />
+      <EmbeddedResource Include="Resources\VisualEditor.MindMap.js" />
+      <EmbeddedResource Include="Resources\VisualEditor.Pie.js" />
       <EmbeddedResource Include="Resources\WhatsNew.md" />
       <EmbeddedResource Include="Icons\*.svg" />
       <EmbeddedResource Include="Dictionaries\*.aff" />
