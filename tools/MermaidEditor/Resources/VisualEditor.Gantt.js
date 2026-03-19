@@ -18,6 +18,10 @@ window.loadGanttDiagram = function(jsonStr) {
         ganttSelectedSection = null;
         updateToolbarForDiagramType();
         renderGanttDiagram();
+        // Deferred re-render: on first load the container may not have its final
+        // dimensions yet (WebView still sizing), causing a scrunched layout.
+        // Re-render after a short delay to pick up the correct width.
+        setTimeout(function() { if (ganttModel) renderGanttDiagram(); }, 150);
     } catch (e) {
         console.error('Failed to load gantt diagram:', e);
     }
@@ -332,8 +336,8 @@ function renderGanttDiagram() {
             bar.addEventListener('click', () => selectGanttTask(taskIdx, taskSection));
             bar.addEventListener('dblclick', () => editGanttTask(taskIdx, taskSection));
 
-            // Highlight selected
-            if (ganttSelectedTask !== null && ganttSelectedTask.index === taskIdx) {
+            // Highlight selected (must match both index AND section)
+            if (ganttSelectedTask !== null && ganttSelectedTask.index === taskIdx && ganttSelectedTask.section === taskSection) {
                 bar.setAttribute('stroke', isLight ? '#ff9800' : '#f9e2af');
                 bar.setAttribute('stroke-width', '2');
             }
@@ -361,10 +365,24 @@ function renderGanttDiagram() {
             }
         }
 
-        // Date info text
+        // Date info text (show friendly names instead of raw IDs)
         const dateInfo = [];
-        if (task.startDate) dateInfo.push(task.startDate);
-        if (task.endDate) dateInfo.push(task.endDate);
+        if (task.startDate) {
+            const afterMatch = task.startDate.match(/^after\s+(\S+)/i);
+            if (afterMatch) {
+                dateInfo.push('after ' + _resolveTaskLabel(afterMatch[1]));
+            } else {
+                dateInfo.push(task.startDate);
+            }
+        }
+        if (task.endDate) {
+            const durMatch = task.endDate.match(/^\d+d$/);
+            if (durMatch) {
+                dateInfo.push(_friendlyDuration(task.endDate));
+            } else {
+                dateInfo.push(task.endDate);
+            }
+        }
         if (dateInfo.length > 0) {
             const dateText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
             dateText.setAttribute('x', barX + (task.isMilestone ? 20 : barWidth + 8));

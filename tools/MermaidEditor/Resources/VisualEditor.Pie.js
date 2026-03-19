@@ -16,6 +16,9 @@ window.loadPieChart = function(jsonStr) {
         pieSelectedSlice = null;
         updateToolbarForDiagramType();
         renderPieChart();
+        // Deferred re-render: on first load the container may not have its final
+        // dimensions yet (WebView still sizing), causing a scrunched layout.
+        setTimeout(function() { if (pieModel) renderPieChart(); }, 150);
     } catch (e) {
         console.error('Failed to load pie chart:', e);
     }
