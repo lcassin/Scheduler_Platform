@@ -1027,6 +1027,12 @@
         function renderStateDiagram() {
             if (!stDiagram) return;
 
+            // Show diagram-svg, hide editorCanvas when rendering standard diagram types
+            var dSvg = document.getElementById('diagram-svg');
+            var eCanvas = document.getElementById('editorCanvas');
+            if (dSvg) dSvg.style.display = '';
+            if (eCanvas) { eCanvas.style.display = 'none'; eCanvas.innerHTML = ''; }
+
             nodesLayer.innerHTML = '';
             edgesLayer.innerHTML = '';
             subgraphsLayer.innerHTML = '';

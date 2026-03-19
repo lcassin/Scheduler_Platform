@@ -43,6 +43,11 @@ function renderPieChart() {
     const canvas = document.getElementById('editorCanvas');
     if (!canvas || !pieModel) return;
 
+    // Show editorCanvas, hide diagram-svg for standalone SVG rendering
+    const diagramSvg = document.getElementById('diagram-svg');
+    if (diagramSvg) diagramSvg.style.display = 'none';
+    canvas.style.display = 'block';
+
     canvas.innerHTML = '';
 
     const isDark = document.body.classList.contains('dark-theme');
@@ -315,7 +320,7 @@ function renderPieToolbar(svg, x, y, width, isDark, textColor) {
 function selectPieSlice(index) {
     pieSelectedSlice = index;
     renderPieChart();
-    sendMessage({ type: 'pie_sliceSelected', index });
+    postMessage({ type: 'pie_sliceSelected', index });
 }
 
 function createPieSlice() {
@@ -329,7 +334,7 @@ function createPieSlice() {
         return;
     }
 
-    sendMessage({ type: 'pie_sliceCreated', label, value });
+    postMessage({ type: 'pie_sliceCreated', label, value });
 }
 
 function editPieSlice(index) {
@@ -346,14 +351,14 @@ function editPieSlice(index) {
         return;
     }
 
-    sendMessage({ type: 'pie_sliceEdited', index, label, value });
+    postMessage({ type: 'pie_sliceEdited', index, label, value });
 }
 
 function deletePieSlice() {
     if (pieSelectedSlice === null) return;
     if (!confirm('Delete this slice?')) return;
 
-    sendMessage({ type: 'pie_sliceDeleted', index: pieSelectedSlice });
+    postMessage({ type: 'pie_sliceDeleted', index: pieSelectedSlice });
     pieSelectedSlice = null;
 }
 
@@ -363,5 +368,5 @@ function editPieSettings() {
 
     const showData = confirm('Show data values in legend?');
 
-    sendMessage({ type: 'pie_settingsChanged', title, showData });
+    postMessage({ type: 'pie_settingsChanged', title, showData });
 }
