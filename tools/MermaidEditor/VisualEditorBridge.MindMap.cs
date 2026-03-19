@@ -5,6 +5,8 @@ namespace MermaidEditor;
 /// <summary>
 /// Mind map handlers for the visual editor bridge.
 /// Handles node CRUD, tree operations, and model restore.
+/// The mind map is rendered using the flowchart infrastructure (nodes + edges + panzoom).
+/// The C# bridge converts the tree model to flowchart-compatible JSON for the JS editor.
 /// </summary>
 public partial class VisualEditorBridge
 {
@@ -23,12 +25,12 @@ public partial class VisualEditorBridge
     public event EventHandler<MindMapModelChangedEventArgs>? MindMapModelChanged;
 
     /// <summary>
-    /// Sends the current MindMapModel to the visual editor as JSON.
+    /// Sends the current MindMapModel to the visual editor as flowchart-compatible JSON.
     /// </summary>
     public async Task SendMindMapToEditorAsync()
     {
         if (_mindMapModel == null) return;
-        var json = ConvertMindMapModelToJson(_mindMapModel);
+        var json = ConvertMindMapToFlowchartJson(_mindMapModel);
         var escaped = JsonSerializer.Serialize(json);
         await _webView.ExecuteScriptAsync($"window.loadMindMap({escaped})");
     }
@@ -39,7 +41,7 @@ public partial class VisualEditorBridge
     private async Task RestoreMindMapToEditorAsync()
     {
         if (_mindMapModel == null) return;
-        var json = ConvertMindMapModelToJson(_mindMapModel);
+        var json = ConvertMindMapToFlowchartJson(_mindMapModel);
         var escaped = JsonSerializer.Serialize(json);
         await _webView.ExecuteScriptAsync($"window.restoreMindMap({escaped})");
     }
@@ -50,7 +52,7 @@ public partial class VisualEditorBridge
     public async Task RefreshMindMapAsync()
     {
         if (_mindMapModel == null) return;
-        var json = ConvertMindMapModelToJson(_mindMapModel);
+        var json = ConvertMindMapToFlowchartJson(_mindMapModel);
         var escaped = JsonSerializer.Serialize(json);
         await _webView.ExecuteScriptAsync($"window.refreshMindMap({escaped})");
     }
@@ -67,8 +69,40 @@ public partial class VisualEditorBridge
         await SendMindMapToEditorAsync();
     }
 
+    // ========== Flowchart-compatible JSON Conversion ==========
+
     /// <summary>
-    /// Converts a MindMapModel to the JSON format expected by the visual editor JS.
+    /// Converts a MindMapModel to flowchart-compatible JSON (nodes + edges).
+    /// Each tree node gets an ID encoding its tree path:
+    /// - Root: "mm_root"
+    /// - Root's 1st child: "mm_0"
+    /// - Root's 2nd child's 3rd child: "mm_1_2"
+    /// This allows the JS to use the full flowchart rendering infrastructure.
+    /// </summary>
+    public static string ConvertMindMapToFlowchartJson(MindMapModel model)
+    {
+        var nodes = new List<MindMapFlowchartNodeDto>();
+        var edges = new List<MindMapFlowchartEdgeDto>();
+
+        FlattenMindMapTree(model.Root, "mm_root", 0, nodes, edges);
+
+        var dto = new MindMapFlowchartDto
+        {
+            Direction = "LR",
+            Nodes = nodes,
+            Edges = edges,
+            Subgraphs = new List<object>(),
+            Styles = new List<object>(),
+            IsMindMap = true,
+            PreambleLines = model.PreambleLines,
+            DeclarationLineIndex = model.DeclarationLineIndex
+        };
+
+        return JsonSerializer.Serialize(dto, JsonOptions);
+    }
+
+    /// <summary>
+    /// Converts a MindMapModel to the original tree JSON format (for undo/redo serialization).
     /// </summary>
     public static string ConvertMindMapModelToJson(MindMapModel model)
     {
@@ -80,6 +114,61 @@ public partial class VisualEditorBridge
         };
 
         return JsonSerializer.Serialize(dto, JsonOptions);
+    }
+
+    private static void FlattenMindMapTree(
+        MindMapNode node, string nodeId, int level,
+        List<MindMapFlowchartNodeDto> nodes, List<MindMapFlowchartEdgeDto> edges)
+    {
+        var shape = MapMindMapShape(node.Shape, level);
+
+        nodes.Add(new MindMapFlowchartNodeDto
+        {
+            Id = nodeId,
+            Label = node.Label,
+            Shape = shape,
+            X = 0,
+            Y = 0,
+            Width = 0,
+            Height = 0,
+            CssClass = node.CssClass,
+            MindMapLevel = level,
+            MindMapShape = node.Shape.ToString()
+        });
+
+        for (int i = 0; i < node.Children.Count; i++)
+        {
+            var childId = nodeId == "mm_root" ? $"mm_{i}" : $"{nodeId}_{i}";
+            var child = node.Children[i];
+
+            edges.Add(new MindMapFlowchartEdgeDto
+            {
+                From = nodeId,
+                To = childId,
+                Label = null,
+                Style = "Solid",
+                ArrowType = "None"
+            });
+
+            FlattenMindMapTree(child, childId, level + 1, nodes, edges);
+        }
+    }
+
+    /// <summary>
+    /// Maps a MindMapNodeShape to a flowchart shape string.
+    /// </summary>
+    private static string MapMindMapShape(MindMapNodeShape shape, int level)
+    {
+        return shape switch
+        {
+            MindMapNodeShape.Square => "Rectangle",
+            MindMapNodeShape.Rounded => "Rounded",
+            MindMapNodeShape.Circle => "Circle",
+            MindMapNodeShape.Hexagon => "Hexagon",
+            MindMapNodeShape.Bang => "Asymmetric",
+            MindMapNodeShape.Cloud => "Stadium",
+            _ => level == 0 ? "Stadium" : "Rounded"
+        };
     }
 
     private static MindMapNodeDto ConvertMindMapNodeToDto(MindMapNode node)
@@ -94,6 +183,19 @@ public partial class VisualEditorBridge
         };
     }
 
+    // ========== Node ID <-> Tree Path Conversion ==========
+
+    /// <summary>
+    /// Converts a flowchart node ID (e.g., "mm_1_2") to a tree path (e.g., [1, 2]).
+    /// "mm_root" returns an empty array (root node).
+    /// </summary>
+    private static int[] NodeIdToPath(string nodeId)
+    {
+        if (nodeId == "mm_root") return Array.Empty<int>();
+        var parts = nodeId.Substring(3).Split('_');
+        return parts.Select(int.Parse).ToArray();
+    }
+
     // ========== Mind Map Message Handlers ==========
 
     private void HandleMindMapNodeCreated(JsonElement root)
@@ -102,8 +204,10 @@ public partial class VisualEditorBridge
         var label = root.GetProperty("label").GetString();
         if (string.IsNullOrEmpty(label)) return;
 
-        var parentPath = root.TryGetProperty("parentPath", out var pp)
-            ? DeserializeIntArray(pp) : null;
+        // The JS sends parentId (flowchart node ID) instead of parentPath
+        var parentId = root.TryGetProperty("parentId", out var pidProp)
+            ? pidProp.GetString() : "mm_root";
+        var parentPath = NodeIdToPath(parentId ?? "mm_root");
 
         PushUndo();
         var newNode = new MindMapNode { Label = label };
@@ -114,7 +218,7 @@ public partial class VisualEditorBridge
                 newNode.Shape = shape;
         }
 
-        var parent = parentPath != null ? FindMindMapNode(parentPath) : _mindMapModel.Root;
+        var parent = parentPath.Length == 0 ? _mindMapModel.Root : FindMindMapNode(parentPath);
         parent?.Children.Add(newNode);
 
         RaiseMindMapModelChanged("mm_nodeCreated");
@@ -123,10 +227,14 @@ public partial class VisualEditorBridge
     private void HandleMindMapNodeEdited(JsonElement root)
     {
         if (_mindMapModel == null) return;
-        var path = root.TryGetProperty("path", out var pp) ? DeserializeIntArray(pp) : null;
-        if (path == null) return;
 
-        var node = FindMindMapNode(path);
+        // The JS sends nodeId (flowchart node ID) instead of path
+        var nodeId = root.TryGetProperty("nodeId", out var nidProp)
+            ? nidProp.GetString() : null;
+        if (nodeId == null) return;
+        var path = NodeIdToPath(nodeId);
+
+        var node = path.Length == 0 ? _mindMapModel.Root : FindMindMapNode(path);
         if (node == null) return;
 
         PushUndo();
@@ -148,11 +256,16 @@ public partial class VisualEditorBridge
     private void HandleMindMapNodeDeleted(JsonElement root)
     {
         if (_mindMapModel == null) return;
-        var path = root.TryGetProperty("path", out var pp) ? DeserializeIntArray(pp) : null;
-        if (path == null || path.Length == 0) return; // Cannot delete root
+
+        // The JS sends nodeId (flowchart node ID) instead of path
+        var nodeId = root.TryGetProperty("nodeId", out var nidProp)
+            ? nidProp.GetString() : null;
+        if (nodeId == null || nodeId == "mm_root") return; // Cannot delete root
+
+        var path = NodeIdToPath(nodeId);
+        if (path.Length == 0) return; // Cannot delete root
 
         PushUndo();
-        // Navigate to parent and remove the child
         var parentPath = path[..^1];
         var childIndex = path[^1];
 
@@ -213,8 +326,6 @@ public partial class VisualEditorBridge
             CssClass = dto.CssClass
         };
 
-        if (!string.IsNullOrEmpty(dto.Shape))
-            Enum.TryParse(dto.Shape, true, out MindMapNodeShape shape);
         if (!string.IsNullOrEmpty(dto.Shape) && Enum.TryParse<MindMapNodeShape>(dto.Shape, true, out var s))
             node.Shape = s;
 
@@ -237,6 +348,7 @@ public partial class VisualEditorBridge
 
     // ========== Mind Map DTOs ==========
 
+    /// <summary>Tree-format DTO for undo/redo serialization.</summary>
     private class MindMapDiagramDto
     {
         public MindMapNodeDto? Root { get; set; }
@@ -251,6 +363,44 @@ public partial class VisualEditorBridge
         public string? Icon { get; set; }
         public string? CssClass { get; set; }
         public List<MindMapNodeDto>? Children { get; set; }
+    }
+
+    /// <summary>Flowchart-compatible DTO sent to JS for rendering.</summary>
+    private class MindMapFlowchartDto
+    {
+        public string Direction { get; set; } = "LR";
+        public List<MindMapFlowchartNodeDto> Nodes { get; set; } = new();
+        public List<MindMapFlowchartEdgeDto> Edges { get; set; } = new();
+        public List<object> Subgraphs { get; set; } = new();
+        public List<object> Styles { get; set; } = new();
+        public bool IsMindMap { get; set; }
+        public List<string>? PreambleLines { get; set; }
+        public int DeclarationLineIndex { get; set; }
+    }
+
+    private class MindMapFlowchartNodeDto
+    {
+        public string Id { get; set; } = string.Empty;
+        public string Label { get; set; } = string.Empty;
+        public string Shape { get; set; } = "Rounded";
+        public double X { get; set; }
+        public double Y { get; set; }
+        public double Width { get; set; }
+        public double Height { get; set; }
+        public string? CssClass { get; set; }
+        /// <summary>Tree level (0 = root) for styling purposes.</summary>
+        public int MindMapLevel { get; set; }
+        /// <summary>Original MindMapNodeShape name for the property panel.</summary>
+        public string? MindMapShape { get; set; }
+    }
+
+    private class MindMapFlowchartEdgeDto
+    {
+        public string From { get; set; } = string.Empty;
+        public string To { get; set; } = string.Empty;
+        public string? Label { get; set; }
+        public string Style { get; set; } = "Solid";
+        public string ArrowType { get; set; } = "None";
     }
 }
 
