@@ -14,11 +14,9 @@ window.loadPieChart = function(jsonStr) {
         currentDiagramType = 'pie';
         pieModel = JSON.parse(jsonStr);
         pieSelectedSlice = null;
+        editorCanvasZoom = 1;
         updateToolbarForDiagramType();
         renderPieChart();
-        // Deferred re-render: on first load the container may not have its final
-        // dimensions yet (WebView still sizing), causing a scrunched layout.
-        setTimeout(function() { if (pieModel) renderPieChart(); }, 150);
     } catch (e) {
         console.error('Failed to load pie chart:', e);
     }
@@ -282,6 +280,14 @@ function renderPieChart() {
     renderPieToolbar(svg, 10, toolbarY, svgWidth - 20, isLight, textColor);
 
     canvas.appendChild(svg);
+
+    // Apply current zoom level and update minimap
+    if (typeof editorCanvasZoom !== 'undefined' && editorCanvasZoom !== 1) {
+        svg.style.transformOrigin = 'top left';
+        svg.style.transform = 'scale(' + editorCanvasZoom + ')';
+        svg.style.maxWidth = 'none';
+    }
+    if (typeof updateMinimap === 'function') updateMinimap();
 }
 
 function renderPieToolbar(svg, x, y, width, isLight, textColor) {

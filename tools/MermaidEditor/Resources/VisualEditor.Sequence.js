@@ -52,9 +52,6 @@
 
                 renderSequenceDiagram();
                 centerView();
-                // Deferred re-render: on first load the container may not have its final
-                // dimensions yet (WebView still sizing), causing a scrunched layout.
-                setTimeout(function() { if (seqDiagram) { renderSequenceDiagram(); centerView(); } }, 150);
             } catch (err) {
                 console.error('Failed to load sequence diagram:', err);
             }

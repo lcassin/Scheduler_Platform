@@ -16,12 +16,9 @@ window.loadGanttDiagram = function(jsonStr) {
         ganttModel = JSON.parse(jsonStr);
         ganttSelectedTask = null;
         ganttSelectedSection = null;
+        editorCanvasZoom = 1;
         updateToolbarForDiagramType();
         renderGanttDiagram();
-        // Deferred re-render: on first load the container may not have its final
-        // dimensions yet (WebView still sizing), causing a scrunched layout.
-        // Re-render after a short delay to pick up the correct width.
-        setTimeout(function() { if (ganttModel) renderGanttDiagram(); }, 150);
     } catch (e) {
         console.error('Failed to load gantt diagram:', e);
     }
@@ -82,47 +79,44 @@ function renderGanttDiagram() {
     const padding = 16;
     const taskBarHeight = 24;
 
-    // Collect all tasks in order
-    const allTasks = [];
-    const sectionStarts = [];
+    // Collect all tasks in order, building a flat list of "rows" which are
+    // either task rows or empty-section placeholder rows.
+    const allTasks = [];       // tasks only (for bar rendering)
+    const sectionStarts = [];  // { name, startIndex, taskCount }
+    const rows = [];           // flat list: each entry is { type: 'task'|'empty-section', task?, sectionName? }
 
-    // Top-level tasks
+    // Gather tasks
     if (ganttModel.tasks) {
-        ganttModel.tasks.forEach(t => {
-            allTasks.push({ ...t, section: null });
-        });
-    }
-
-    // Section tasks
-    if (ganttModel.sections) {
-        ganttModel.sections.forEach(sectionName => {
-            sectionStarts.push({ name: sectionName, startIndex: allTasks.length });
-            const sectionTasks = (ganttModel.tasks || []).filter(t => t.section === sectionName);
-            sectionTasks.forEach(t => {
-                allTasks.push({ ...t });
-            });
-        });
-    }
-
-    // If tasks have section info directly from the DTO
-    if (ganttModel.tasks) {
-        // Re-collect properly: tasks without section first, then by section
-        allTasks.length = 0;
-        sectionStarts.length = 0;
-
         const unsectioned = ganttModel.tasks.filter(t => !t.section);
-        unsectioned.forEach(t => allTasks.push(t));
+        unsectioned.forEach(t => {
+            allTasks.push(t);
+            rows.push({ type: 'task', task: t, sectionName: null });
+        });
 
         if (ganttModel.sections) {
             ganttModel.sections.forEach(sectionName => {
-                sectionStarts.push({ name: sectionName, startIndex: allTasks.length });
                 const sectionTasks = ganttModel.tasks.filter(t => t.section === sectionName);
-                sectionTasks.forEach(t => allTasks.push(t));
+                sectionStarts.push({ name: sectionName, startIndex: rows.length, taskCount: sectionTasks.length });
+                if (sectionTasks.length === 0) {
+                    // Empty section gets a placeholder row so it is visible
+                    rows.push({ type: 'empty-section', task: null, sectionName: sectionName });
+                } else {
+                    sectionTasks.forEach(t => {
+                        allTasks.push(t);
+                        rows.push({ type: 'task', task: t, sectionName: sectionName });
+                    });
+                }
             });
         }
+    } else if (ganttModel.sections) {
+        // No tasks at all but sections exist
+        ganttModel.sections.forEach(sectionName => {
+            sectionStarts.push({ name: sectionName, startIndex: rows.length, taskCount: 0 });
+            rows.push({ type: 'empty-section', task: null, sectionName: sectionName });
+        });
     }
 
-    const totalRows = Math.max(allTasks.length, 1);
+    const totalRows = Math.max(rows.length, 1);
     // Make width responsive to container; use window.innerWidth as fallback when canvas
     // hasn't been laid out yet (e.g. first load from cache before the container is visible)
     const containerWidth = (canvas.clientWidth > 50 ? canvas.clientWidth : null) || (canvas.parentElement && canvas.parentElement.clientWidth > 50 ? canvas.parentElement.clientWidth : null) || window.innerWidth;
@@ -207,27 +201,28 @@ function renderGanttDiagram() {
     // Render section headers and tasks
     let currentSectionIdx = 0;
     const rowStartY = startY + headerHeight;
+    let taskRunningIdx = 0; // index into allTasks (tasks only, no empty-section rows)
 
-    for (let i = 0; i < allTasks.length; i++) {
-        const task = allTasks[i];
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
         const y = rowStartY + i * rowHeight;
 
         // Check if this is the start of a section
         const sectionInfo = sectionStarts.find(s => s.startIndex === i);
         if (sectionInfo) {
-            // Draw section background
-            const sectionEndIdx = sectionStarts.findIndex(s => s.startIndex > i);
-            const sectionTaskCount = sectionEndIdx >= 0
-                ? sectionStarts[sectionEndIdx].startIndex - i
-                : allTasks.length - i;
-
+            // Draw section background spanning all rows in this section
+            const sectionRowCount = Math.max(sectionInfo.taskCount, 1); // at least 1 for empty sections
             const secBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
             secBg.setAttribute('x', padding);
             secBg.setAttribute('y', y);
             secBg.setAttribute('width', labelWidth - 2);
-            secBg.setAttribute('height', sectionTaskCount * rowHeight);
+            secBg.setAttribute('height', sectionRowCount * rowHeight);
             secBg.setAttribute('fill', currentSectionIdx % 2 === 0 ? sectionBg1 : sectionBg2);
             secBg.setAttribute('opacity', '0.5');
+            secBg.style.cursor = 'pointer';
+            const secNameForBg = sectionInfo.name;
+            secBg.addEventListener('click', () => selectGanttSection(secNameForBg));
+            secBg.addEventListener('dblclick', () => editGanttSection(secNameForBg));
             svg.appendChild(secBg);
 
             // Section label
@@ -241,8 +236,23 @@ function renderGanttDiagram() {
             secLabel.textContent = sectionInfo.name;
             secLabel.style.cursor = 'pointer';
             const secName = sectionInfo.name;
+            secLabel.addEventListener('click', () => selectGanttSection(secName));
             secLabel.addEventListener('dblclick', () => editGanttSection(secName));
             svg.appendChild(secLabel);
+
+            // Highlight selected section
+            if (ganttSelectedSection === secName) {
+                const selBorder = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+                selBorder.setAttribute('x', padding);
+                selBorder.setAttribute('y', y);
+                selBorder.setAttribute('width', totalWidth - padding * 2);
+                selBorder.setAttribute('height', sectionRowCount * rowHeight);
+                selBorder.setAttribute('fill', 'none');
+                selBorder.setAttribute('stroke', isLight ? '#ff9800' : '#f9e2af');
+                selBorder.setAttribute('stroke-width', '2');
+                selBorder.setAttribute('rx', '3');
+                svg.appendChild(selBorder);
+            }
 
             currentSectionIdx++;
         }
@@ -267,6 +277,27 @@ function renderGanttDiagram() {
         rowLine.setAttribute('stroke-width', '1');
         svg.appendChild(rowLine);
 
+        // --- Empty section placeholder row ---
+        if (row.type === 'empty-section') {
+            const emptyHint = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            emptyHint.setAttribute('x', padding + 10);
+            emptyHint.setAttribute('y', y + rowHeight / 2 + 5 + (sectionInfo ? 10 : 0));
+            emptyHint.setAttribute('fill', textColor);
+            emptyHint.setAttribute('font-size', '11');
+            emptyHint.setAttribute('opacity', '0.35');
+            emptyHint.setAttribute('font-style', 'italic');
+            emptyHint.textContent = '(no tasks – add one to this section)';
+            emptyHint.style.cursor = 'pointer';
+            const emptySec = row.sectionName;
+            emptyHint.addEventListener('click', () => selectGanttSection(emptySec));
+            emptyHint.addEventListener('dblclick', () => editGanttSection(emptySec));
+            svg.appendChild(emptyHint);
+            continue; // skip task rendering for this row
+        }
+
+        // --- Task row ---
+        const task = row.task;
+
         // Task label
         const labelText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         labelText.setAttribute('x', padding + 10);
@@ -279,17 +310,17 @@ function renderGanttDiagram() {
         const taskSection = task.section;
         let taskIdx;
         if (taskSection) {
-            // Count how many tasks with same section appear before this one
+            // Count how many tasks with same section appear before this one in rows
             let localIdx = 0;
             for (let j = 0; j < i; j++) {
-                if (allTasks[j].section === taskSection) localIdx++;
+                if (rows[j].type === 'task' && rows[j].task && rows[j].task.section === taskSection) localIdx++;
             }
             taskIdx = localIdx;
         } else {
-            // Count how many unsectioned tasks appear before this one
+            // Count how many unsectioned tasks appear before this one in rows
             let localIdx = 0;
             for (let j = 0; j < i; j++) {
-                if (!allTasks[j].section) localIdx++;
+                if (rows[j].type === 'task' && rows[j].task && !rows[j].task.section) localIdx++;
             }
             taskIdx = localIdx;
         }
@@ -306,9 +337,10 @@ function renderGanttDiagram() {
         if (task.isMilestone) barColor = milestoneColor;
 
         // Simple proportional placement (without actual date parsing)
-        const barX = padding + labelWidth + 20 + (i * 40) % (timelineWidth - 150);
-        const barWidth = task.isMilestone ? 16 : Math.max(60, 120 - i * 5);
+        const barX = padding + labelWidth + 20 + (taskRunningIdx * 40) % (timelineWidth - 150);
+        const barWidth = task.isMilestone ? 16 : Math.max(60, 120 - taskRunningIdx * 5);
         const barY = y + (rowHeight - taskBarHeight) / 2 + (sectionInfo ? 5 : 0);
+        taskRunningIdx++;
 
         if (task.isMilestone) {
             // Draw diamond for milestone
@@ -396,7 +428,7 @@ function renderGanttDiagram() {
     }
 
     // Empty state
-    if (allTasks.length === 0) {
+    if (rows.length === 0) {
         const emptyText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
         emptyText.setAttribute('x', totalWidth / 2);
         emptyText.setAttribute('y', rowStartY + 40);
@@ -413,6 +445,14 @@ function renderGanttDiagram() {
     renderGanttToolbar(svg, padding, toolbarY, totalWidth - padding * 2, isLight, textColor);
 
     canvas.appendChild(svg);
+
+    // Apply current zoom level and update minimap
+    if (typeof editorCanvasZoom !== 'undefined' && editorCanvasZoom !== 1) {
+        svg.style.transformOrigin = 'top left';
+        svg.style.transform = 'scale(' + editorCanvasZoom + ')';
+        svg.style.maxWidth = 'none';
+    }
+    if (typeof updateMinimap === 'function') updateMinimap();
 }
 
 function renderGanttToolbar(svg, x, y, width, isLight, textColor) {
@@ -466,6 +506,14 @@ function selectGanttTask(index, section) {
     ganttSelectedSection = null;
     renderGanttDiagram();
     postMessage({ type: 'gantt_taskSelected', index, section });
+}
+
+function selectGanttSection(name) {
+    ganttSelectedTask = null;
+    ganttSelectedSection = name;
+    renderGanttDiagram();
+    // Open edit dialog for the section
+    editGanttSection(name);
 }
 
 // Helper: build a list of all tasks with their IDs and labels for dependency dropdowns
@@ -623,6 +671,44 @@ function _readEndDateValue() {
     return document.getElementById('gantt-dlg-end-date').value.trim() || '5d';
 }
 
+function _buildTaskPositionHtml(sectionName) {
+    // Build "Position" dropdown showing existing tasks in the chosen section
+    // so the user can insert before/after a specific task.
+    const tasks = ganttModel.tasks || [];
+    const sectionTasks = sectionName
+        ? tasks.filter(t => t.section === sectionName)
+        : tasks.filter(t => !t.section);
+    if (sectionTasks.length === 0) return ''; // nothing to position against
+    const options = sectionTasks.map((t, idx) =>
+        `<option value="${idx}">After: ${_escHtml(t.label || 'Task ' + (idx + 1))}</option>`).join('');
+    return `
+        <div class="property-row" id="gantt-dlg-position-row">
+            <div class="property-label">Position</div>
+            <select class="property-select" id="gantt-dlg-position">
+                <option value="end" selected>At End</option>
+                <option value="start">At Start (Before All)</option>
+                ${options.replace(/<option /g, '<option data-insert="after" ')}
+            </select>
+        </div>`;
+}
+
+function _buildSectionPositionHtml() {
+    // Build "Position" dropdown for inserting a section before/after existing ones
+    const sections = ganttModel.sections || [];
+    if (sections.length === 0) return '';
+    const options = sections.map((s, idx) =>
+        `<option value="${idx}">After: ${_escHtml(s)}</option>`).join('');
+    return `
+        <div class="property-row">
+            <div class="property-label">Position</div>
+            <select class="property-select" id="gantt-dlg-sec-position">
+                <option value="end" selected>At End</option>
+                <option value="start">At Start (Before All)</option>
+                ${options.replace(/<option /g, '<option data-insert="after" ')}
+            </select>
+        </div>`;
+}
+
 function createGanttTask() {
     const propertyPanel = document.getElementById('property-panel');
     const propPanelTitle = document.getElementById('property-panel-title');
@@ -661,6 +747,7 @@ function createGanttTask() {
                 ${sectionOptions}
             </select>
         </div>` : ''}
+        <div id="gantt-dlg-position-container">${_buildTaskPositionHtml(null)}</div>
         <div class="property-row" style="margin-top:8px">
             <button class="property-btn" id="gantt-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Add Task</button>
         </div>
@@ -668,17 +755,39 @@ function createGanttTask() {
 
     _wireGanttDialogToggles();
 
+    // Update position dropdown when section changes
+    const secEl = document.getElementById('gantt-dlg-section');
+    if (secEl) {
+        secEl.addEventListener('change', function() {
+            const container = document.getElementById('gantt-dlg-position-container');
+            if (container) container.innerHTML = _buildTaskPositionHtml(this.value || null);
+        });
+    }
+
     document.getElementById('gantt-dlg-ok').addEventListener('click', function() {
         const label = document.getElementById('gantt-dlg-label').value.trim();
         if (!label) return;
         const startDate = _readStartDateValue();
         const endDate = _readEndDateValue();
         const status = document.getElementById('gantt-dlg-status').value;
-        const secEl = document.getElementById('gantt-dlg-section');
-        const sectionName = secEl ? secEl.value : null;
+        const secEl2 = document.getElementById('gantt-dlg-section');
+        const sectionName = secEl2 ? secEl2.value : null;
 
         const tags = [];
         if (status && status !== 'none') tags.push(status);
+
+        // Determine insertion index from position dropdown
+        const posEl = document.getElementById('gantt-dlg-position');
+        let insertAtIndex = null; // null = append at end (default)
+        if (posEl) {
+            const posVal = posEl.value;
+            if (posVal === 'start') {
+                insertAtIndex = 0;
+            } else if (posVal !== 'end') {
+                // "after task at index N" => insert at N+1
+                insertAtIndex = parseInt(posVal) + 1;
+            }
+        }
 
         postMessage({
             type: 'gantt_taskCreated',
@@ -686,7 +795,8 @@ function createGanttTask() {
             startDate: startDate || null,
             endDate: endDate || '5d',
             tags,
-            section: sectionName || null
+            section: sectionName || null,
+            insertAtIndex: insertAtIndex
         });
         propertyPanel.classList.remove('visible');
     });
@@ -809,6 +919,7 @@ function createGanttSection() {
             <div class="property-label">Section Name</div>
             <input class="property-input" id="gantt-dlg-name" value="New Section" />
         </div>
+        ${_buildSectionPositionHtml()}
         <div class="property-row" style="margin-top:8px">
             <button id="gantt-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Add Section</button>
         </div>
@@ -816,7 +927,20 @@ function createGanttSection() {
     document.getElementById('gantt-dlg-ok').addEventListener('click', function() {
         const name = document.getElementById('gantt-dlg-name').value.trim();
         if (!name) return;
-        postMessage({ type: 'gantt_sectionCreated', name });
+
+        // Determine insertion index from position dropdown
+        const posEl = document.getElementById('gantt-dlg-sec-position');
+        let insertAtIndex = null;
+        if (posEl) {
+            const posVal = posEl.value;
+            if (posVal === 'start') {
+                insertAtIndex = 0;
+            } else if (posVal !== 'end') {
+                insertAtIndex = parseInt(posVal) + 1;
+            }
+        }
+
+        postMessage({ type: 'gantt_sectionCreated', name, insertAtIndex: insertAtIndex });
         propertyPanel.classList.remove('visible');
     });
     propertyPanel.classList.add('visible');
@@ -833,14 +957,20 @@ function editGanttSection(name) {
             <div class="property-label">Section Name</div>
             <input class="property-input" id="gantt-dlg-name" value="${_escHtml(name)}" />
         </div>
-        <div class="property-row" style="margin-top:8px">
-            <button id="gantt-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Save</button>
+        <div class="property-row" style="margin-top:8px;display:flex;gap:8px">
+            <button id="gantt-dlg-ok" style="flex:1;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Save</button>
+            <button id="gantt-dlg-delete" style="flex:1;padding:6px;cursor:pointer;background:#f44336;color:#fff;border:none;border-radius:4px">Delete Section</button>
         </div>
     `;
     document.getElementById('gantt-dlg-ok').addEventListener('click', function() {
         const newName = document.getElementById('gantt-dlg-name').value.trim();
         if (!newName || newName === name) { propertyPanel.classList.remove('visible'); return; }
         postMessage({ type: 'gantt_sectionEdited', oldName: name, name: newName });
+        propertyPanel.classList.remove('visible');
+    });
+    document.getElementById('gantt-dlg-delete').addEventListener('click', function() {
+        postMessage({ type: 'gantt_sectionDeleted', name });
+        ganttSelectedSection = null;
         propertyPanel.classList.remove('visible');
     });
     propertyPanel.classList.add('visible');
