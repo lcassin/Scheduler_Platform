@@ -138,6 +138,9 @@
                 updateToolbarForDiagramType();
                 renderStateDiagram();
                 centerView();
+                // Deferred re-render: on first load the container may not have its final
+                // dimensions yet (WebView still sizing), causing a scrunched layout.
+                setTimeout(function() { if (stDiagram) { renderStateDiagram(); centerView(); } }, 150);
             } catch (err) {
                 console.error('Failed to load state diagram:', err);
             }
