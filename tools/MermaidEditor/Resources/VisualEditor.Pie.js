@@ -58,10 +58,13 @@ function renderPieChart() {
     const textColor = cv('--node-text') || '#D4D4D4';
     const bgColor = cv('--bg-color') || '#1E1E1E';
     const isLight = document.body.classList.contains('theme-light');
+    const isTwilight = document.body.classList.contains('theme-twilight');
 
     // Color palette for slices - adapt to current theme
     const sliceColors = isLight
         ? ['#2196f3', '#4caf50', '#ff9800', '#f44336', '#9c27b0', '#009688', '#ff5722', '#3f51b5', '#e91e63', '#00bcd4']
+        : isTwilight
+        ? ['#4A90D9', '#5A9E6F', '#D19A66', '#E06C75', '#B48EAD', '#56B6C2', '#C678DD', '#61AFEF', '#E5C07B', '#98C379']
         : ['#89b4fa', '#a6e3a1', '#f9e2af', '#f38ba8', '#cba6f7', '#94e2d5', '#fab387', '#74c7ec', '#f5c2e7', '#b4befe'];
 
     const svgWidth = 600;
@@ -331,49 +334,120 @@ function selectPieSlice(index) {
 }
 
 function createPieSlice() {
-    const label = prompt('Slice label:', 'New Slice');
-    if (!label) return;
-
-    const valueStr = prompt('Value:', '10');
-    const value = parseFloat(valueStr);
-    if (isNaN(value) || value <= 0) {
-        alert('Please enter a positive number.');
-        return;
-    }
-
-    postMessage({ type: 'pie_sliceCreated', label, value });
+    const propertyPanel = document.getElementById('property-panel');
+    const propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = 'Add Slice';
+    const body = document.querySelector('.property-panel-body');
+    body.innerHTML = `
+        <div class="property-row">
+            <div class="property-label">Label</div>
+            <input class="property-input" id="pie-dlg-label" value="New Slice" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">Value</div>
+            <input class="property-input" id="pie-dlg-value" type="number" min="0.01" step="any" value="10" />
+        </div>
+        <div class="property-row" style="margin-top:8px">
+            <button id="pie-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Add Slice</button>
+        </div>
+    `;
+    document.getElementById('pie-dlg-ok').addEventListener('click', function() {
+        const label = document.getElementById('pie-dlg-label').value.trim();
+        if (!label) return;
+        const value = parseFloat(document.getElementById('pie-dlg-value').value);
+        if (isNaN(value) || value <= 0) return;
+        postMessage({ type: 'pie_sliceCreated', label, value });
+        propertyPanel.classList.remove('visible');
+    });
+    propertyPanel.classList.add('visible');
+    setTimeout(() => document.getElementById('pie-dlg-label').select(), 50);
 }
 
 function editPieSlice(index) {
     if (!pieModel || !pieModel.slices || index >= pieModel.slices.length) return;
     const slice = pieModel.slices[index];
 
-    const label = prompt('Slice label:', slice.label);
-    if (label === null) return;
-
-    const valueStr = prompt('Value:', String(slice.value));
-    const value = parseFloat(valueStr);
-    if (isNaN(value) || value <= 0) {
-        alert('Please enter a positive number.');
-        return;
-    }
-
-    postMessage({ type: 'pie_sliceEdited', index, label, value });
+    const propertyPanel = document.getElementById('property-panel');
+    const propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = 'Edit Slice';
+    const body = document.querySelector('.property-panel-body');
+    body.innerHTML = `
+        <div class="property-row">
+            <div class="property-label">Label</div>
+            <input class="property-input" id="pie-dlg-label" value="${_escHtml(slice.label)}" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">Value</div>
+            <input class="property-input" id="pie-dlg-value" type="number" min="0.01" step="any" value="${slice.value}" />
+        </div>
+        <div class="property-row" style="margin-top:8px">
+            <button id="pie-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Save</button>
+        </div>
+    `;
+    document.getElementById('pie-dlg-ok').addEventListener('click', function() {
+        const label = document.getElementById('pie-dlg-label').value.trim();
+        if (!label) return;
+        const value = parseFloat(document.getElementById('pie-dlg-value').value);
+        if (isNaN(value) || value <= 0) return;
+        postMessage({ type: 'pie_sliceEdited', index, label, value });
+        propertyPanel.classList.remove('visible');
+    });
+    propertyPanel.classList.add('visible');
+    setTimeout(() => document.getElementById('pie-dlg-label').select(), 50);
 }
 
 function deletePieSlice() {
     if (pieSelectedSlice === null) return;
-    if (!confirm('Delete this slice?')) return;
 
-    postMessage({ type: 'pie_sliceDeleted', index: pieSelectedSlice });
-    pieSelectedSlice = null;
+    const propertyPanel = document.getElementById('property-panel');
+    const propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = 'Delete Slice';
+    const body = document.querySelector('.property-panel-body');
+    body.innerHTML = `
+        <div class="property-row"><div class="property-label" style="width:100%;text-align:center">Delete this slice?</div></div>
+        <div class="property-row" style="display:flex;gap:8px;margin-top:8px">
+            <button id="pie-dlg-yes" style="flex:1;padding:6px;cursor:pointer;background:#f44336;color:#fff;border:none;border-radius:4px">Delete</button>
+            <button id="pie-dlg-no" style="flex:1;padding:6px;cursor:pointer;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px">Cancel</button>
+        </div>
+    `;
+    document.getElementById('pie-dlg-yes').addEventListener('click', function() {
+        postMessage({ type: 'pie_sliceDeleted', index: pieSelectedSlice });
+        pieSelectedSlice = null;
+        propertyPanel.classList.remove('visible');
+    });
+    document.getElementById('pie-dlg-no').addEventListener('click', function() {
+        propertyPanel.classList.remove('visible');
+    });
+    propertyPanel.classList.add('visible');
 }
 
 function editPieSettings() {
-    const title = prompt('Chart title:', pieModel.title || '');
-    if (title === null) return;
-
-    const showData = confirm('Show data values in legend?');
-
-    postMessage({ type: 'pie_settingsChanged', title, showData });
+    const propertyPanel = document.getElementById('property-panel');
+    const propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = 'Pie Settings';
+    const body = document.querySelector('.property-panel-body');
+    body.innerHTML = `
+        <div class="property-row">
+            <div class="property-label">Chart Title</div>
+            <input class="property-input" id="pie-dlg-title" value="${_escHtml(pieModel.title || '')}" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">Show Data Values</div>
+            <select class="property-select" id="pie-dlg-showdata">
+                <option value="true" ${pieModel.showData ? 'selected' : ''}>Yes</option>
+                <option value="false" ${!pieModel.showData ? 'selected' : ''}>No</option>
+            </select>
+        </div>
+        <div class="property-row" style="margin-top:8px">
+            <button id="pie-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Save</button>
+        </div>
+    `;
+    document.getElementById('pie-dlg-ok').addEventListener('click', function() {
+        const title = document.getElementById('pie-dlg-title').value.trim();
+        const showData = document.getElementById('pie-dlg-showdata').value === 'true';
+        postMessage({ type: 'pie_settingsChanged', title, showData });
+        propertyPanel.classList.remove('visible');
+    });
+    propertyPanel.classList.add('visible');
+    setTimeout(() => document.getElementById('pie-dlg-title').focus(), 50);
 }

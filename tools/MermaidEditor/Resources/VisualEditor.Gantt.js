@@ -63,12 +63,13 @@ function renderGanttDiagram() {
     const borderColor = cv('--node-stroke') || '#3E3E42';
     const sectionBg1 = cv('--bg-color') || '#1E1E1E';
     const isLight = document.body.classList.contains('theme-light');
+    const isTwilight = document.body.classList.contains('theme-twilight');
     const sectionBg2 = isLight ? '#f8f8f8' : (cv('--subgraph-fill') || '#252536');
-    const taskDoneColor = isLight ? '#4caf50' : '#a6e3a1';
-    const taskActiveColor = cv('--node-selected-stroke') || '#007ACC';
-    const taskCritColor = isLight ? '#f44336' : '#f38ba8';
-    const taskNormalColor = cv('--edge-color') || '#6A6A6A';
-    const milestoneColor = isLight ? '#ff9800' : '#f9e2af';
+    const taskDoneColor = isLight ? '#4caf50' : (isTwilight ? '#74c7ec' : '#a6e3a1');
+    const taskActiveColor = cv('--node-selected-stroke') || (isLight ? '#0078D4' : (isTwilight ? '#4A90D9' : '#007ACC'));
+    const taskCritColor = isLight ? '#f44336' : (isTwilight ? '#e06c75' : '#f38ba8');
+    const taskNormalColor = cv('--edge-color') || (isLight ? '#999999' : (isTwilight ? '#5A6A8A' : '#6A6A6A'));
+    const milestoneColor = isLight ? '#ff9800' : (isTwilight ? '#d19a66' : '#f9e2af');
 
     // Layout constants
     const headerHeight = 50;
@@ -118,8 +119,9 @@ function renderGanttDiagram() {
     }
 
     const totalRows = Math.max(allTasks.length, 1);
-    // Make width responsive to container
-    const containerWidth = canvas.clientWidth || window.innerWidth;
+    // Make width responsive to container; use window.innerWidth as fallback when canvas
+    // hasn't been laid out yet (e.g. first load from cache before the container is visible)
+    const containerWidth = (canvas.clientWidth > 50 ? canvas.clientWidth : null) || (canvas.parentElement && canvas.parentElement.clientWidth > 50 ? canvas.parentElement.clientWidth : null) || window.innerWidth;
     const timelineWidth = Math.max(200, containerWidth - labelWidth - padding * 2 - 40);
     const totalWidth = labelWidth + timelineWidth + padding * 2;
     const totalHeight = headerHeight + totalRows * rowHeight + padding * 2 + 60; // extra for toolbar
@@ -449,27 +451,75 @@ function selectGanttTask(index, section) {
 }
 
 function createGanttTask() {
-    const label = prompt('Task label:', 'New Task');
-    if (!label) return;
+    const propertyPanel = document.getElementById('property-panel');
+    const propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = 'Add Task';
+    const body = document.querySelector('.property-panel-body');
 
-    const startDate = prompt('Start date (YYYY-MM-DD or "after taskId"):', '');
-    const endDate = prompt('End date or duration (e.g., 2024-01-15 or 5d):', '5d');
-    const status = prompt('Status (none/done/active/crit/milestone):', 'active');
-    const sectionName = ganttModel.sections && ganttModel.sections.length > 0
-        ? prompt('Section name (or leave empty for none):', ganttModel.sections[0])
-        : null;
+    const sectionOptions = (ganttModel.sections || []).map(s =>
+        `<option value="${_escHtml(s)}">${_escHtml(s)}</option>`).join('');
 
-    const tags = [];
-    if (status && status !== 'none') tags.push(status);
+    body.innerHTML = `
+        <div class="property-row">
+            <div class="property-label">Label</div>
+            <input class="property-input" id="gantt-dlg-label" value="New Task" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">Start Date</div>
+            <input class="property-input" id="gantt-dlg-start" placeholder="YYYY-MM-DD or after taskId" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">End / Duration</div>
+            <input class="property-input" id="gantt-dlg-end" value="5d" placeholder="e.g. 2024-01-15 or 5d" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">Status</div>
+            <select class="property-select" id="gantt-dlg-status">
+                <option value="active" selected>Active</option>
+                <option value="done">Done</option>
+                <option value="crit">Critical</option>
+                <option value="milestone">Milestone</option>
+                <option value="none">None</option>
+            </select>
+        </div>
+        ${ganttModel.sections && ganttModel.sections.length > 0 ? `
+        <div class="property-row">
+            <div class="property-label">Section</div>
+            <select class="property-select" id="gantt-dlg-section">
+                <option value="">(none)</option>
+                ${sectionOptions}
+            </select>
+        </div>` : ''}
+        <div class="property-row" style="margin-top:8px">
+            <button class="property-btn" id="gantt-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Add Task</button>
+        </div>
+    `;
 
-    postMessage({
-        type: 'gantt_taskCreated',
-        label,
-        startDate: startDate || null,
-        endDate: endDate || '5d',
-        tags,
-        section: sectionName || null
+    document.getElementById('gantt-dlg-ok').addEventListener('click', function() {
+        const label = document.getElementById('gantt-dlg-label').value.trim();
+        if (!label) return;
+        const startDate = document.getElementById('gantt-dlg-start').value.trim();
+        const endDate = document.getElementById('gantt-dlg-end').value.trim();
+        const status = document.getElementById('gantt-dlg-status').value;
+        const secEl = document.getElementById('gantt-dlg-section');
+        const sectionName = secEl ? secEl.value : null;
+
+        const tags = [];
+        if (status && status !== 'none') tags.push(status);
+
+        postMessage({
+            type: 'gantt_taskCreated',
+            label,
+            startDate: startDate || null,
+            endDate: endDate || '5d',
+            tags,
+            section: sectionName || null
+        });
+        propertyPanel.classList.remove('visible');
     });
+
+    propertyPanel.classList.add('visible');
+    setTimeout(() => document.getElementById('gantt-dlg-label').select(), 50);
 }
 
 function editGanttTask(index, section) {
@@ -483,71 +533,185 @@ function editGanttTask(index, section) {
     const task = (index >= 0 && index < sectionTasks.length) ? sectionTasks[index] : null;
     if (!task) return;
 
-    const label = prompt('Task label:', task.label);
-    if (label === null) return;
+    const propertyPanel = document.getElementById('property-panel');
+    const propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = 'Edit Task';
+    const body = document.querySelector('.property-panel-body');
 
-    const startDate = prompt('Start date:', task.startDate || '');
-    const endDate = prompt('End date/duration:', task.endDate || '');
-    const statusStr = prompt('Status tags (comma-separated: done,active,crit,milestone):', (task.tags || []).join(','));
-    const tags = statusStr ? statusStr.split(',').map(s => s.trim()).filter(s => s) : [];
+    const currentTags = (task.tags || []).join(',');
 
-    postMessage({
-        type: 'gantt_taskEdited',
-        index,
-        section: section || null,
-        label,
-        startDate: startDate || null,
-        endDate: endDate || null,
-        tags
+    body.innerHTML = `
+        <div class="property-row">
+            <div class="property-label">Label</div>
+            <input class="property-input" id="gantt-dlg-label" value="${_escHtml(task.label || '')}" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">Start Date</div>
+            <input class="property-input" id="gantt-dlg-start" value="${_escHtml(task.startDate || '')}" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">End / Duration</div>
+            <input class="property-input" id="gantt-dlg-end" value="${_escHtml(task.endDate || '')}" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">Status Tags</div>
+            <input class="property-input" id="gantt-dlg-tags" value="${_escHtml(currentTags)}" placeholder="done,active,crit,milestone" />
+        </div>
+        <div class="property-row" style="margin-top:8px">
+            <button class="property-btn" id="gantt-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Save</button>
+        </div>
+    `;
+
+    document.getElementById('gantt-dlg-ok').addEventListener('click', function() {
+        const label = document.getElementById('gantt-dlg-label').value.trim();
+        if (!label) return;
+        const startDate = document.getElementById('gantt-dlg-start').value.trim();
+        const endDate = document.getElementById('gantt-dlg-end').value.trim();
+        const statusStr = document.getElementById('gantt-dlg-tags').value.trim();
+        const tags = statusStr ? statusStr.split(',').map(s => s.trim()).filter(s => s) : [];
+
+        postMessage({
+            type: 'gantt_taskEdited',
+            index,
+            section: section || null,
+            label,
+            startDate: startDate || null,
+            endDate: endDate || null,
+            tags
+        });
+        propertyPanel.classList.remove('visible');
     });
+
+    propertyPanel.classList.add('visible');
+    setTimeout(() => document.getElementById('gantt-dlg-label').select(), 50);
 }
 
 function deleteGanttTask() {
     if (!ganttSelectedTask) return;
-    if (!confirm('Delete this task?')) return;
 
-    postMessage({
-        type: 'gantt_taskDeleted',
-        index: ganttSelectedTask.index,
-        section: ganttSelectedTask.section || null
+    const propertyPanel = document.getElementById('property-panel');
+    const propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = 'Delete Task';
+    const body = document.querySelector('.property-panel-body');
+    body.innerHTML = `
+        <div class="property-row"><div class="property-label" style="width:100%;text-align:center">Delete this task?</div></div>
+        <div class="property-row" style="display:flex;gap:8px;margin-top:8px">
+            <button id="gantt-dlg-yes" style="flex:1;padding:6px;cursor:pointer;background:#f44336;color:#fff;border:none;border-radius:4px">Delete</button>
+            <button id="gantt-dlg-no" style="flex:1;padding:6px;cursor:pointer;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px">Cancel</button>
+        </div>
+    `;
+    document.getElementById('gantt-dlg-yes').addEventListener('click', function() {
+        postMessage({
+            type: 'gantt_taskDeleted',
+            index: ganttSelectedTask.index,
+            section: ganttSelectedTask.section || null
+        });
+        ganttSelectedTask = null;
+        propertyPanel.classList.remove('visible');
     });
-    ganttSelectedTask = null;
+    document.getElementById('gantt-dlg-no').addEventListener('click', function() {
+        propertyPanel.classList.remove('visible');
+    });
+    propertyPanel.classList.add('visible');
 }
 
 function createGanttSection() {
-    const name = prompt('Section name:', 'New Section');
-    if (!name) return;
-
-    postMessage({ type: 'gantt_sectionCreated', name });
+    const propertyPanel = document.getElementById('property-panel');
+    const propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = 'Add Section';
+    const body = document.querySelector('.property-panel-body');
+    body.innerHTML = `
+        <div class="property-row">
+            <div class="property-label">Section Name</div>
+            <input class="property-input" id="gantt-dlg-name" value="New Section" />
+        </div>
+        <div class="property-row" style="margin-top:8px">
+            <button id="gantt-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Add Section</button>
+        </div>
+    `;
+    document.getElementById('gantt-dlg-ok').addEventListener('click', function() {
+        const name = document.getElementById('gantt-dlg-name').value.trim();
+        if (!name) return;
+        postMessage({ type: 'gantt_sectionCreated', name });
+        propertyPanel.classList.remove('visible');
+    });
+    propertyPanel.classList.add('visible');
+    setTimeout(() => document.getElementById('gantt-dlg-name').select(), 50);
 }
 
 function editGanttSection(name) {
-    const newName = prompt('Edit section name:', name);
-    if (!newName || newName === name) return;
-
-    postMessage({ type: 'gantt_sectionEdited', oldName: name, name: newName });
+    const propertyPanel = document.getElementById('property-panel');
+    const propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = 'Edit Section';
+    const body = document.querySelector('.property-panel-body');
+    body.innerHTML = `
+        <div class="property-row">
+            <div class="property-label">Section Name</div>
+            <input class="property-input" id="gantt-dlg-name" value="${_escHtml(name)}" />
+        </div>
+        <div class="property-row" style="margin-top:8px">
+            <button id="gantt-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Save</button>
+        </div>
+    `;
+    document.getElementById('gantt-dlg-ok').addEventListener('click', function() {
+        const newName = document.getElementById('gantt-dlg-name').value.trim();
+        if (!newName || newName === name) { propertyPanel.classList.remove('visible'); return; }
+        postMessage({ type: 'gantt_sectionEdited', oldName: name, name: newName });
+        propertyPanel.classList.remove('visible');
+    });
+    propertyPanel.classList.add('visible');
+    setTimeout(() => document.getElementById('gantt-dlg-name').select(), 50);
 }
 
 function editGanttTitle() {
-    const newTitle = prompt('Chart title:', ganttModel.title || '');
-    if (newTitle === null) return;
-
-    postMessage({ type: 'gantt_settingsChanged', title: newTitle });
+    editGanttSettings();
 }
 
 function editGanttSettings() {
-    const title = prompt('Chart title:', ganttModel.title || '');
-    if (title === null) return;
-
-    const dateFormat = prompt('Date format:', ganttModel.dateFormat || 'YYYY-MM-DD');
-    const axisFormat = prompt('Axis format:', ganttModel.axisFormat || '%Y-%m-%d');
-    const excludes = prompt('Excludes (e.g., weekends):', ganttModel.excludes || '');
-
-    postMessage({
-        type: 'gantt_settingsChanged',
-        title,
-        dateFormat: dateFormat || 'YYYY-MM-DD',
-        axisFormat: axisFormat || null,
-        excludes: excludes || null
+    const propertyPanel = document.getElementById('property-panel');
+    const propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = 'Gantt Settings';
+    const body = document.querySelector('.property-panel-body');
+    body.innerHTML = `
+        <div class="property-row">
+            <div class="property-label">Chart Title</div>
+            <input class="property-input" id="gantt-dlg-title" value="${_escHtml(ganttModel.title || '')}" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">Date Format</div>
+            <input class="property-input" id="gantt-dlg-datefmt" value="${_escHtml(ganttModel.dateFormat || 'YYYY-MM-DD')}" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">Axis Format</div>
+            <input class="property-input" id="gantt-dlg-axisfmt" value="${_escHtml(ganttModel.axisFormat || '%Y-%m-%d')}" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">Excludes</div>
+            <input class="property-input" id="gantt-dlg-excludes" value="${_escHtml(ganttModel.excludes || '')}" placeholder="e.g. weekends" />
+        </div>
+        <div class="property-row" style="margin-top:8px">
+            <button id="gantt-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Save</button>
+        </div>
+    `;
+    document.getElementById('gantt-dlg-ok').addEventListener('click', function() {
+        const title = document.getElementById('gantt-dlg-title').value.trim();
+        const dateFormat = document.getElementById('gantt-dlg-datefmt').value.trim();
+        const axisFormat = document.getElementById('gantt-dlg-axisfmt').value.trim();
+        const excludes = document.getElementById('gantt-dlg-excludes').value.trim();
+        postMessage({
+            type: 'gantt_settingsChanged',
+            title,
+            dateFormat: dateFormat || 'YYYY-MM-DD',
+            axisFormat: axisFormat || null,
+            excludes: excludes || null
+        });
+        propertyPanel.classList.remove('visible');
     });
+    propertyPanel.classList.add('visible');
+    setTimeout(() => document.getElementById('gantt-dlg-title').focus(), 50);
+}
+
+// HTML escape helper shared across Gantt/MindMap/Pie dialog functions
+function _escHtml(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
