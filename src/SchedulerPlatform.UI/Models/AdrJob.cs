@@ -9,6 +9,7 @@ public class AdrJob
     public string? PrimaryVendorCode { get; set; }
     public string? MasterVendorCode { get; set; }
     public int CredentialId { get; set; }
+    public int? AdrJobTypeId { get; set; }
     public string? PeriodType { get; set; }
     public DateTime BillingPeriodStartDateTime { get; set; }
     public DateTime BillingPeriodEndDateTime { get; set; }
