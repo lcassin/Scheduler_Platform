@@ -58,10 +58,13 @@ function renderMindMap() {
     const textColor = cv('--node-text') || '#D4D4D4';
     const bgColor = cv('--bg-color') || '#1E1E1E';
     const isLight = document.body.classList.contains('theme-light');
+    const isTwilight = document.body.classList.contains('theme-twilight');
 
     // Color palette for different levels - adapt to current theme
     const levelColors = isLight
         ? ['#2196f3', '#4caf50', '#ff9800', '#f44336', '#9c27b0', '#009688', '#ff5722']
+        : isTwilight
+        ? ['#4A90D9', '#5A9E6F', '#D19A66', '#E06C75', '#B48EAD', '#56B6C2', '#D19A66']
         : ['#89b4fa', '#a6e3a1', '#f9e2af', '#f38ba8', '#cba6f7', '#94e2d5', '#fab387'];
 
     // Calculate layout
@@ -419,46 +422,133 @@ function selectMindMapNode(path) {
 }
 
 function createMindMapChild() {
-    const label = prompt('Node label:', 'New Node');
-    if (!label) return;
-
-    const shapeOptions = 'Shape (Default/Square/Rounded/Circle/Bang/Cloud/Hexagon):';
-    const shape = prompt(shapeOptions, 'Default');
-
-    postMessage({
-        type: 'mm_nodeCreated',
-        label,
-        shape: shape || 'Default',
-        parentPath: mindMapSelectedPath || []
+    const propertyPanel = document.getElementById('property-panel');
+    const propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = 'Add Child Node';
+    const body = document.querySelector('.property-panel-body');
+    body.innerHTML = `
+        <div class="property-row">
+            <div class="property-label">Label</div>
+            <input class="property-input" id="mm-dlg-label" value="New Node" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">Shape</div>
+            <select class="property-select" id="mm-dlg-shape">
+                <option value="Default" selected>Default (Rounded)</option>
+                <option value="Square">Square</option>
+                <option value="Rounded">Rounded</option>
+                <option value="Circle">Circle</option>
+                <option value="Bang">Bang</option>
+                <option value="Cloud">Cloud</option>
+                <option value="Hexagon">Hexagon</option>
+            </select>
+        </div>
+        <div class="property-row" style="margin-top:8px">
+            <button id="mm-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Add Node</button>
+        </div>
+    `;
+    document.getElementById('mm-dlg-ok').addEventListener('click', function() {
+        const label = document.getElementById('mm-dlg-label').value.trim();
+        if (!label) return;
+        const shape = document.getElementById('mm-dlg-shape').value;
+        postMessage({
+            type: 'mm_nodeCreated',
+            label,
+            shape: shape || 'Default',
+            parentPath: mindMapSelectedPath || []
+        });
+        propertyPanel.classList.remove('visible');
     });
+    propertyPanel.classList.add('visible');
+    setTimeout(() => document.getElementById('mm-dlg-label').select(), 50);
 }
 
 function editMindMapNode(path) {
     const node = findMindMapNodeByPath(path);
     if (!node) return;
 
-    const label = prompt('Node label:', node.label);
-    if (label === null) return;
-
-    const shape = prompt('Shape (Default/Square/Rounded/Circle/Bang/Cloud/Hexagon):', node.shape || 'Default');
-
-    postMessage({
-        type: 'mm_nodeEdited',
-        path,
-        label,
-        shape: shape || 'Default'
+    const propertyPanel = document.getElementById('property-panel');
+    const propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = 'Edit Node';
+    const body = document.querySelector('.property-panel-body');
+    const currentShape = node.shape || 'Default';
+    body.innerHTML = `
+        <div class="property-row">
+            <div class="property-label">Label</div>
+            <input class="property-input" id="mm-dlg-label" value="${_escHtml(node.label)}" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">Shape</div>
+            <select class="property-select" id="mm-dlg-shape">
+                <option value="Default" ${currentShape === 'Default' ? 'selected' : ''}>Default (Rounded)</option>
+                <option value="Square" ${currentShape === 'Square' ? 'selected' : ''}>Square</option>
+                <option value="Rounded" ${currentShape === 'Rounded' ? 'selected' : ''}>Rounded</option>
+                <option value="Circle" ${currentShape === 'Circle' ? 'selected' : ''}>Circle</option>
+                <option value="Bang" ${currentShape === 'Bang' ? 'selected' : ''}>Bang</option>
+                <option value="Cloud" ${currentShape === 'Cloud' ? 'selected' : ''}>Cloud</option>
+                <option value="Hexagon" ${currentShape === 'Hexagon' ? 'selected' : ''}>Hexagon</option>
+            </select>
+        </div>
+        <div class="property-row" style="margin-top:8px">
+            <button id="mm-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Save</button>
+        </div>
+    `;
+    document.getElementById('mm-dlg-ok').addEventListener('click', function() {
+        const label = document.getElementById('mm-dlg-label').value.trim();
+        if (!label) return;
+        const shape = document.getElementById('mm-dlg-shape').value;
+        postMessage({
+            type: 'mm_nodeEdited',
+            path,
+            label,
+            shape: shape || 'Default'
+        });
+        propertyPanel.classList.remove('visible');
     });
+    propertyPanel.classList.add('visible');
+    setTimeout(() => document.getElementById('mm-dlg-label').select(), 50);
 }
 
 function deleteMindMapNode() {
     if (!mindMapSelectedPath || mindMapSelectedPath.length === 0) {
-        alert('Cannot delete the root node.');
+        // Show info in property panel instead of alert
+        const propertyPanel = document.getElementById('property-panel');
+        const propPanelTitle = document.getElementById('property-panel-title');
+        propPanelTitle.textContent = 'Info';
+        const body = document.querySelector('.property-panel-body');
+        body.innerHTML = `
+            <div class="property-row"><div class="property-label" style="width:100%;text-align:center">Cannot delete the root node.</div></div>
+            <div class="property-row" style="margin-top:8px">
+                <button id="mm-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px">OK</button>
+            </div>
+        `;
+        document.getElementById('mm-dlg-ok').addEventListener('click', function() {
+            propertyPanel.classList.remove('visible');
+        });
+        propertyPanel.classList.add('visible');
         return;
     }
-    if (!confirm('Delete this node and all its children?')) return;
 
-    postMessage({ type: 'mm_nodeDeleted', path: mindMapSelectedPath });
-    mindMapSelectedPath = null;
+    const propertyPanel = document.getElementById('property-panel');
+    const propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = 'Delete Node';
+    const body = document.querySelector('.property-panel-body');
+    body.innerHTML = `
+        <div class="property-row"><div class="property-label" style="width:100%;text-align:center">Delete this node and all its children?</div></div>
+        <div class="property-row" style="display:flex;gap:8px;margin-top:8px">
+            <button id="mm-dlg-yes" style="flex:1;padding:6px;cursor:pointer;background:#f44336;color:#fff;border:none;border-radius:4px">Delete</button>
+            <button id="mm-dlg-no" style="flex:1;padding:6px;cursor:pointer;background:var(--input-bg);color:var(--input-text);border:1px solid var(--input-border);border-radius:4px">Cancel</button>
+        </div>
+    `;
+    document.getElementById('mm-dlg-yes').addEventListener('click', function() {
+        postMessage({ type: 'mm_nodeDeleted', path: mindMapSelectedPath });
+        mindMapSelectedPath = null;
+        propertyPanel.classList.remove('visible');
+    });
+    document.getElementById('mm-dlg-no').addEventListener('click', function() {
+        propertyPanel.classList.remove('visible');
+    });
+    propertyPanel.classList.add('visible');
 }
 
 function findMindMapNodeByPath(path) {
