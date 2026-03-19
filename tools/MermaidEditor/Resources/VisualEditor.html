@@ -989,6 +989,11 @@
         // only fire for the active type. Values: 'flowchart', 'sequence', 'class', 'state', 'er'
         let currentDiagramType = 'flowchart';
 
+        // Helper: mindmap uses the same SVG/panzoom infrastructure as flowchart
+        function _isFlowchartLike() {
+            return currentDiagramType === 'flowchart' || currentDiagramType === 'mindmap';
+        }
+
         // Unified toolbar visibility based on current diagram type
         function updateToolbarForDiagramType() {
             const typeClasses = ['toolbar-flowchart', 'toolbar-sequence', 'toolbar-class', 'toolbar-state', 'toolbar-er', 'toolbar-gantt', 'toolbar-mindmap', 'toolbar-pie'];
@@ -1272,12 +1277,12 @@
             // the target is the container itself (outside the SVG boundary).
             if (e.target === canvasContainer || !svg.contains(e.target)) {
                 // Show the appropriate empty-space context menu
-                if (currentDiagramType === 'flowchart') {
+                if (_isFlowchartLike()) {
                     selectedNodeId = null;
                     selectedEdgeIndex = -1;
                     selectedSubgraphId = null;
                     render();
-                    showContextMenu(e.clientX, e.clientY);
+                    if (currentDiagramType === 'flowchart') showContextMenu(e.clientX, e.clientY);
                 } else if (currentDiagramType === 'sequence' && seqDiagram) {
                     contextMenu.innerHTML = '';
                     addContextMenuItem('Add Participant', () => {
@@ -1352,12 +1357,10 @@
             }
             // Re-render the current diagram so it picks up the new CSS variable values
             if (typeof currentDiagramType !== 'undefined') {
-                if (currentDiagramType === 'flowchart' && typeof render === 'function') {
+                if (_isFlowchartLike() && typeof render === 'function') {
                     render();
                 } else if (currentDiagramType === 'gantt' && typeof renderGanttDiagram === 'function') {
                     renderGanttDiagram();
-                } else if (currentDiagramType === 'mindmap' && typeof renderMindMap === 'function') {
-                    renderMindMap();
                 } else if (currentDiagramType === 'pie' && typeof renderPieChart === 'function') {
                     renderPieChart();
                 }
@@ -1381,12 +1384,10 @@
                         if (w > 50 && Math.abs(w - lastCanvasWidth) > 50) {
                             lastCanvasWidth = w;
                             if (typeof currentDiagramType !== 'undefined' && currentDiagramType) {
-                                if (currentDiagramType === 'flowchart' && typeof render === 'function') {
+                                if (_isFlowchartLike() && typeof render === 'function') {
                                     render(); centerView();
                                 } else if (currentDiagramType === 'gantt' && typeof renderGanttDiagram === 'function') {
                                     renderGanttDiagram();
-                                } else if (currentDiagramType === 'mindmap' && typeof renderMindMap === 'function') {
-                                    renderMindMap();
                                 } else if (currentDiagramType === 'pie' && typeof renderPieChart === 'function') {
                                     renderPieChart();
                                 } else if (currentDiagramType === 'sequence' && typeof renderSequenceDiagram === 'function') {
@@ -1720,6 +1721,15 @@
                 if (selectedNodeId === node.id || selectedNodeIds.includes(node.id)) {
                     shape.classList.add('selected');
                 }
+                // Apply branch color for mindmap nodes
+                if (currentDiagramType === 'mindmap' && node._branchColor) {
+                    const shapeEls = shape.tagName === 'g' ? shape.querySelectorAll('.node-shape') : [shape];
+                    shapeEls.forEach(el => {
+                        el.style.fill = node._branchColor;
+                        el.style.fillOpacity = '0.25';
+                        el.style.stroke = node._branchColor;
+                    });
+                }
                 g.appendChild(shape);
 
                 // Create label (supports multi-line via <br/> tags)
@@ -2011,6 +2021,14 @@
                     line.setAttribute('stroke-dasharray', '6,3');
                 } else if (edge.style === 'Thick') {
                     line.setAttribute('stroke-width', '3');
+                }
+
+                // Apply branch color for mindmap edges
+                if (currentDiagramType === 'mindmap') {
+                    const fromNode = diagram.nodes.find(n => n.id === edge.from);
+                    if (fromNode && fromNode._branchColor) {
+                        line.style.stroke = fromNode._branchColor;
+                    }
                 }
 
                 if (selectedEdgeIndex === idx) {
@@ -2330,8 +2348,8 @@
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
             let hasContent = false;
 
-            if (currentDiagramType === 'flowchart') {
-                const sgIds = new Set(diagram.subgraphs.map(s => s.id));
+            if (_isFlowchartLike()) {
+                const sgIds = new Set((diagram.subgraphs || []).map(s => s.id));
                 const realNodes = diagram.nodes.filter(n => !sgIds.has(n.id));
                 realNodes.forEach(n => {
                     const hw = (n.width || 80) / 2;
@@ -2342,7 +2360,7 @@
                     maxY = Math.max(maxY, n.y + hh);
                     hasContent = true;
                 });
-                diagram.subgraphs.forEach(sg => {
+                (diagram.subgraphs || []).forEach(sg => {
                     if (sg._rx !== undefined) {
                         minX = Math.min(minX, sg._rx);
                         minY = Math.min(minY, sg._ry);
@@ -2530,7 +2548,7 @@
 
         // Node click/drag
         svg.addEventListener('mousedown', function(e) {
-            if (currentDiagramType !== 'flowchart') return;
+            if (!_isFlowchartLike()) return;
             const nodeGroup = e.target.closest('.node-group');
             const edgeHit = e.target.closest('[data-edge-index]');
             const connectionPt = e.target.closest('.connection-point');
@@ -2660,7 +2678,7 @@
         });
 
         svg.addEventListener('mousemove', function(e) {
-            if (currentDiagramType !== 'flowchart') return;
+            if (!_isFlowchartLike()) return;
             if (isResizing && resizeNodeId) {
                 const pt = getSVGPoint(e);
                 const dx = pt.x - resizeStartX;
@@ -2742,7 +2760,7 @@
         });
 
         svg.addEventListener('mouseup', function(e) {
-            if (currentDiagramType !== 'flowchart') return;
+            if (!_isFlowchartLike()) return;
             if (isResizing && resizeNodeId) {
                 const node = diagram.nodes.find(n => n.id === resizeNodeId);
                 if (node) {
@@ -2836,11 +2854,15 @@
 
         // Double-click to edit label
         svg.addEventListener('dblclick', function(e) {
-            if (currentDiagramType !== 'flowchart') return;
+            if (!_isFlowchartLike()) return;
             const nodeGroup = e.target.closest('.node-group');
             if (nodeGroup) {
                 const nodeId = nodeGroup.getAttribute('data-node-id');
-                startInlineEdit(nodeId);
+                if (currentDiagramType === 'mindmap') {
+                    editMindMapNode(nodeId);
+                } else {
+                    startInlineEdit(nodeId);
+                }
                 return;
             }
 
@@ -2863,7 +2885,7 @@
             e.stopPropagation();
         });
 
-        // Context menu - flowchart
+        // Context menu - flowchart (not mindmap)
         svg.addEventListener('contextmenu', function(e) {
             if (currentDiagramType !== 'flowchart') return;
             const pt = getSVGPoint(e);
@@ -2902,7 +2924,7 @@
 
         // Keyboard shortcuts
         document.addEventListener('keydown', function(e) {
-            if (currentDiagramType !== 'flowchart') return;
+            if (!_isFlowchartLike()) return;
             // Don't handle shortcuts when editing text
             if (inlineEditor.style.display !== 'none') return;
 
@@ -2992,6 +3014,13 @@
         function showPropertyPanel() {
             _isPropPanelUpdating = true;
             try {
+                // For mindmap, show the mindmap-specific edit panel
+                if (currentDiagramType === 'mindmap' && selectedNodeId) {
+                    editMindMapNode(selectedNodeId);
+                    _isPropPanelUpdating = false;
+                    return;
+                }
+
                 // Restore default panel body if it was replaced by another diagram type
                 if (!document.contains(propLabel)) {
                     restoreDefaultPropertyPanelBody();
@@ -4100,6 +4129,11 @@
         }
 
         function deleteSelected() {
+            // Mindmap elements - route through mindmap handler
+            if (currentDiagramType === 'mindmap' && selectedNodeId) {
+                deleteMindMapNode();
+                return;
+            }
             // Flowchart elements
             if (selectedNodeId) {
                 const nodeId = selectedNodeId;
@@ -4232,9 +4266,9 @@
 
             const isDark = !document.body.classList.contains('theme-light');
 
-            if (currentDiagramType === 'flowchart') {
+            if (_isFlowchartLike()) {
                 // Draw edges (resolve subgraph IDs to first contained node)
-                const sgIds = new Set(diagram.subgraphs.map(s => s.id));
+                const sgIds = new Set((diagram.subgraphs || []).map(s => s.id));
                 minimapCtx.strokeStyle = isDark ? '#555' : '#bbb';
                 minimapCtx.lineWidth = 1;
                 diagram.edges.forEach(edge => {
@@ -4250,10 +4284,16 @@
                     const fromNode = diagram.nodes.find(n => n.id === fromId);
                     const toNode = diagram.nodes.find(n => n.id === toId);
                     if (!fromNode || !toNode) return;
+                    // Use branch color for mindmap edges
+                    if (currentDiagramType === 'mindmap' && fromNode._branchColor) {
+                        minimapCtx.strokeStyle = fromNode._branchColor;
+                    }
                     minimapCtx.beginPath();
                     minimapCtx.moveTo((fromNode.x - minX) * scale, (fromNode.y - minY) * scale);
                     minimapCtx.lineTo((toNode.x - minX) * scale, (toNode.y - minY) * scale);
                     minimapCtx.stroke();
+                    // Reset stroke for next edge
+                    if (currentDiagramType === 'mindmap') minimapCtx.strokeStyle = isDark ? '#555' : '#bbb';
                 });
 
                 // Draw nodes (skip proxy nodes)
@@ -4264,7 +4304,13 @@
                     const nw = (n.width || 80) * scale;
                     const nh = (n.height || 40) * scale;
                     const isSelected = (n.id === selectedNodeId || selectedNodeIds.includes(n.id));
-                    minimapCtx.fillStyle = isSelected ? (isDark ? '#007ACC' : '#0078D4') : (isDark ? '#3E3E42' : '#CCCCCC');
+                    if (isSelected) {
+                        minimapCtx.fillStyle = isDark ? '#007ACC' : '#0078D4';
+                    } else if (currentDiagramType === 'mindmap' && n._branchColor) {
+                        minimapCtx.fillStyle = n._branchColor;
+                    } else {
+                        minimapCtx.fillStyle = isDark ? '#3E3E42' : '#CCCCCC';
+                    }
                     minimapCtx.fillRect(nx - nw / 2, ny - nh / 2, nw, nh);
                 });
             } else if (currentDiagramType === 'sequence' && seqDiagram) {

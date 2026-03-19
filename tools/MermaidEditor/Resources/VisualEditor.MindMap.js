@@ -4,6 +4,69 @@
 // C# bridge converts the tree model to flowchart-compatible nodes+edges
 // ============================================================
 
+// ========== Mind Map Branch Colors ==========
+// Mermaid-like color palette for each root-child branch
+var _mmBranchColors = [
+    '#E6194B', // red
+    '#3CB44B', // green
+    '#FFE119', // yellow
+    '#4363D8', // blue
+    '#F58231', // orange
+    '#911EB4', // purple
+    '#42D4F4', // cyan
+    '#F032E6', // magenta
+    '#BFEF45', // lime
+    '#FABEBE', // pink
+    '#469990', // teal
+    '#E6BEFF', // lavender
+    '#9A6324', // brown
+    '#800000', // maroon
+    '#AAFFC3', // mint
+    '#808000', // olive
+    '#FFD8B1', // apricot
+    '#000075', // navy
+];
+
+function _assignMindMapBranchColors() {
+    // Build a map from node ID to node for quick lookup
+    var nodeMap = {};
+    diagram.nodes.forEach(function(n) { nodeMap[n.id] = n; });
+    
+    // Build parent→children map from edges
+    var childrenOf = {};
+    diagram.edges.forEach(function(e) {
+        if (!childrenOf[e.from]) childrenOf[e.from] = [];
+        childrenOf[e.from].push(e.to);
+    });
+    
+    // Find root node (mm_root)
+    var root = nodeMap['mm_root'];
+    if (!root) return;
+    
+    // Root gets no branch color (uses default theme)
+    root._branchColor = null;
+    root._branchIndex = -1;
+    
+    // Each root-child gets a unique branch color
+    var rootChildren = childrenOf['mm_root'] || [];
+    rootChildren.forEach(function(childId, branchIdx) {
+        var color = _mmBranchColors[branchIdx % _mmBranchColors.length];
+        // Assign color to this child and all its descendants
+        _assignBranchColorRecursive(childId, branchIdx, color, nodeMap, childrenOf);
+    });
+}
+
+function _assignBranchColorRecursive(nodeId, branchIdx, color, nodeMap, childrenOf) {
+    var node = nodeMap[nodeId];
+    if (!node) return;
+    node._branchColor = color;
+    node._branchIndex = branchIdx;
+    var children = childrenOf[nodeId] || [];
+    children.forEach(function(cid) {
+        _assignBranchColorRecursive(cid, branchIdx, color, nodeMap, childrenOf);
+    });
+}
+
 // ========== Mind Map Load/Restore ==========
 // These functions receive flowchart-compatible JSON from C# and load it
 // using the existing flowchart diagram object and render() function.
@@ -53,6 +116,9 @@ window.loadMindMap = function(jsonStr) {
         if (needsLayout && diagram.nodes.length > 0) {
             autoLayout();
         }
+
+        // Assign branch colors for visual distinction
+        _assignMindMapBranchColors();
 
         selectedNodeId = null;
         selectedEdgeIndex = -1;
@@ -107,6 +173,7 @@ window.restoreMindMap = function(jsonStr) {
             autoLayout();
         }
 
+        _assignMindMapBranchColors();
         render();
     } catch (e) {
         console.error('Failed to restore mind map:', e);
@@ -152,6 +219,7 @@ window.refreshMindMap = function(jsonStr) {
 
         // Always re-layout on refresh since tree structure may have changed
         autoLayout();
+        _assignMindMapBranchColors();
         render();
     } catch (e) {
         console.error('Failed to refresh mind map:', e);
