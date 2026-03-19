@@ -141,21 +141,24 @@
                 <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ClearFilters" StartIcon="@Icons.Material.Filled.Clear">
                     Clear
                 </MudButton>
-                <MudCheckBox @bind-Value="_forceRefire" Label="Force Refire" Color="Color.Warning" Dense="true"
-                             Title="Clear execution history to bypass idempotency check (use when downstream issues require re-processing)" />
                 @if (_selectedJobs.Any())
                 {
                     @if (_isRefiring)
                     {
                         <MudButton Variant="Variant.Filled" Color="Color.Warning" Disabled="true">
                             <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                            Refiring...
+                            Processing...
                         </MudButton>
                     }
                     else
                     {
-                        <MudButton Variant="Variant.Filled" Color="@(_forceRefire ? Color.Error : Color.Warning)" OnClick="RefireSelectedJobs" StartIcon="@Icons.Material.Filled.Replay">
-                            @(_forceRefire ? "Force " : "")Refire Selected (@_selectedJobs.Count)
+                        <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="() => RefireSelectedJobs(false)" StartIcon="@Icons.Material.Filled.Replay"
+                                   Title="Reset selected jobs to Pending so the next orchestration picks them up">
+                            ReQueue Selected (@_selectedJobs.Count)
+                        </MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Error" OnClick="() => RefireSelectedJobs(true)" StartIcon="@Icons.Material.Filled.RestartAlt"
+                                   Title="Clear execution history and reset selected jobs to Pending for a fresh start">
+                            ReStart Selected (@_selectedJobs.Count)
                         </MudButton>
                     }
                 }
@@ -335,7 +338,8 @@
                                                                             <MudMenuItem Icon="@Icons.Material.Filled.List" OnClick="() => ViewJobHistory(context)">View Job History</MudMenuItem>
                                                                         }
                                                                         <MudMenuItem Icon="@Icons.Material.Filled.AccountBalance" OnClick="() => ViewAccount(context)">View Account</MudMenuItem>
-                                                                        <MudMenuItem Icon="@Icons.Material.Filled.Replay" OnClick="() => RefireJob(context)">Refire Job</MudMenuItem>
+                                                                        <MudMenuItem Icon="@Icons.Material.Filled.Replay" OnClick="() => RefireJob(context, false)">ReQueue Job</MudMenuItem>
+                                                                        <MudMenuItem Icon="@Icons.Material.Filled.RestartAlt" OnClick="() => RefireJob(context, true)">ReStart Job</MudMenuItem>
                                                                         <MudMenuItem Icon="@Icons.Material.Filled.Refresh" OnClick="() => CheckJobStatus(context)">Check Status</MudMenuItem>
                                                                     </MudMenu>
                                                                 </MudTd>
@@ -375,7 +379,6 @@
     private bool _initialLoadComplete = false;
     private bool _isExporting = false;
     private bool _isRefiring = false;
-    private bool _forceRefire = false;
     private string? _searchMasterVendorCode;
     private string? _searchPrimaryVendorCode;
     private string? _searchAccountNumber;
@@ -968,24 +971,24 @@
         }
     }
 
-    private async Task RefireJob(AdrJob job)
+    private async Task RefireJob(AdrJob job, bool forceRefire)
     {
         try
         {
-            var result = await AdrService.RefireJobAsync(job.Id, _forceRefire);
-            var message = _forceRefire 
-                ? $"Job {job.Id} force refired successfully (execution history cleared). It will be picked up by the next orchestration run."
-                : $"Job {job.Id} refired successfully. It will be picked up by the next orchestration run.";
+            var result = await AdrService.RefireJobAsync(job.Id, forceRefire);
+            var message = forceRefire 
+                ? $"Job {job.Id} restarted (execution history cleared). It will be picked up by the next orchestration run."
+                : $"Job {job.Id} requeued. It will be picked up by the next orchestration run.";
             Snackbar.Add(message, Severity.Success);
             await _table.ReloadServerData();
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Failed to refire job: {ex.Message}", Severity.Error);
+            Snackbar.Add($"Failed to process job: {ex.Message}", Severity.Error);
         }
     }
 
-    private async Task RefireSelectedJobs()
+    private async Task RefireSelectedJobs(bool forceRefire)
     {
         if (!_selectedJobs.Any())
         {
@@ -998,11 +1001,11 @@
         try
         {
             var jobIds = _selectedJobs.Select(j => j.Id).ToList();
-            var result = await AdrService.RefireJobsBulkAsync(jobIds, _forceRefire);
+            var result = await AdrService.RefireJobsBulkAsync(jobIds, forceRefire);
             
-            var message = _forceRefire 
-                ? $"{result.RefiredCount} job(s) force refired successfully (execution history cleared). They will be picked up by the next orchestration run."
-                : $"{result.RefiredCount} job(s) refired successfully. They will be picked up by the next orchestration run.";
+            var message = forceRefire 
+                ? $"{result.RefiredCount} job(s) restarted (execution history cleared). They will be picked up by the next orchestration run."
+                : $"{result.RefiredCount} job(s) requeued. They will be picked up by the next orchestration run.";
             Snackbar.Add(message, Severity.Success);
             
             if (result.Errors != null && result.Errors.Any())
@@ -1018,7 +1021,7 @@
         }
         catch (Exception ex)
         {
-            Snackbar.Add($"Failed to refire jobs: {ex.Message}", Severity.Error);
+            Snackbar.Add($"Failed to process jobs: {ex.Message}", Severity.Error);
         }
         finally
         {
