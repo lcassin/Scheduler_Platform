@@ -248,7 +248,14 @@
                                 </div>
                             </MudTd>
                 <MudTd DataLabel="Billing Period">
-                    <MudText Typo="Typo.body2">@context.BillingPeriodStartDateTime.ToString("MM/dd/yy") - @context.BillingPeriodEndDateTime.ToString("MM/dd/yy")</MudText>
+                    @if (context.AdrJobTypeId == 3)
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Rebill</MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2">@context.BillingPeriodStartDateTime.ToString("MM/dd/yy") - @context.BillingPeriodEndDateTime.ToString("MM/dd/yy")</MudText>
+                    }
                 </MudTd>
                 <MudTd DataLabel="Period Type">
                     @if (!string.IsNullOrEmpty(context.PeriodType))
