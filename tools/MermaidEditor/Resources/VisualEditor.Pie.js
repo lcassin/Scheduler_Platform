@@ -69,7 +69,7 @@ function renderPieChart() {
         : ['#89b4fa', '#a6e3a1', '#f9e2af', '#f38ba8', '#cba6f7', '#94e2d5', '#fab387', '#74c7ec', '#f5c2e7', '#b4befe'];
 
     const svgWidth = 600;
-    const svgHeight = 500;
+    const svgHeight = 520;
     const centerX = svgWidth / 2;
     const centerY = 220;
     const radius = 150;
@@ -223,7 +223,8 @@ function renderPieChart() {
                 labelText.style.pointerEvents = 'none';
 
                 const percentage = ((slice.value / total) * 100).toFixed(1);
-                labelText.textContent = `${percentage}%`;
+                // Show value alongside percentage when showData is enabled
+                labelText.textContent = pieModel.showData ? `${percentage}% (${slice.value})` : `${percentage}%`;
                 svg.appendChild(labelText);
             }
 
@@ -267,10 +268,11 @@ function renderPieChart() {
             svg.appendChild(label);
         });
 
-        // Adjust SVG height for legend
-        const neededHeight = legendStartY + slices.length * legendItemHeight + 60;
+        // Adjust SVG height for legend + toolbar (toolbar needs ~50px at bottom)
+        const neededHeight = legendStartY + slices.length * legendItemHeight + 80;
         if (neededHeight > svgHeight) {
             svg.setAttribute('height', neededHeight);
+            svg.setAttribute('viewBox', `0 0 ${svgWidth} ${neededHeight}`);
             bg.setAttribute('height', neededHeight);
         }
     }
@@ -339,6 +341,11 @@ function renderPieToolbar(svg, x, y, width, isLight, textColor) {
 function selectPieSlice(index) {
     pieSelectedSlice = index;
     renderPieChart();
+    // Show/hide edit & delete buttons in top toolbar
+    var editBtn = document.getElementById('tb-pie-edit-slice');
+    var delBtn = document.getElementById('tb-pie-delete-slice');
+    if (editBtn) editBtn.style.display = (index !== null) ? '' : 'none';
+    if (delBtn) delBtn.style.display = (index !== null) ? '' : 'none';
     postMessage({ type: 'pie_sliceSelected', index });
 }
 

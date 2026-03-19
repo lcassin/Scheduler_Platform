@@ -934,6 +934,14 @@
             <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.5" fill="none" stroke-width="1.3"/><path d="M8,2 V4 M8,12 V14 M2,8 H4 M12,8 H14 M3.8,3.8 L5.2,5.2 M10.8,10.8 L12.2,12.2 M3.8,12.2 L5.2,10.8 M10.8,5.2 L12.2,3.8" stroke-width="1.2"/></svg>
             <span class="tooltip">Settings</span>
         </button>
+        <button class="toolbar-btn toolbar-pie" id="tb-pie-edit-slice" title="Edit Selected Slice" style="display:none">
+            <svg viewBox="0 0 16 16"><path d="M2,12 L11,3 L13,5 L4,14 L1,15 Z" fill="none" stroke-width="1.2"/><line x1="9.5" y1="4.5" x2="11.5" y2="6.5" stroke-width="1"/></svg>
+            <span class="tooltip">Edit Slice</span>
+        </button>
+        <button class="toolbar-btn toolbar-pie" id="tb-pie-delete-slice" title="Delete Selected Slice" style="display:none">
+            <svg viewBox="0 0 16 16"><path d="M5,3 V2 h6 v1 h3 v1.5 H2 V3 h3z M3,5.5 h10 l-0.8,9 H3.8 L3,5.5z M6.5,7 v5.5 M9.5,7 v5.5" fill="none" stroke-width="1.2"/></svg>
+            <span class="tooltip">Delete Slice</span>
+        </button>
         <div class="toolbar-sep"></div>
         <button class="toolbar-btn" id="tb-delete" title="Delete Selected (Del)">
             <svg viewBox="0 0 16 16"><path d="M5,3 V2 h6 v1 h3 v1.5 H2 V3 h3z M3,5.5 h10 l-0.8,9 H3.8 L3,5.5z M6.5,7 v5.5 M9.5,7 v5.5" fill="none" stroke-width="1.2"/></svg>
@@ -4774,6 +4782,8 @@
         // Pie toolbar buttons
         document.getElementById('tb-pie-add-slice').addEventListener('click', function() { createPieSlice(); });
         document.getElementById('tb-pie-settings').addEventListener('click', function() { editPieSettings(); });
+        document.getElementById('tb-pie-edit-slice').addEventListener('click', function() { if (pieSelectedSlice !== null) editPieSlice(pieSelectedSlice); });
+        document.getElementById('tb-pie-delete-slice').addEventListener('click', function() { if (pieSelectedSlice !== null) deletePieSlice(); });
 
         document.getElementById('tb-zoom-in').addEventListener('click', function() {
             if (_isEditorCanvasDiagram()) {
