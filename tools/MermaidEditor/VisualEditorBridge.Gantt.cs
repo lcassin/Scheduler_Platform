@@ -147,6 +147,11 @@ public partial class VisualEditorBridge
         }
         task.IsMilestone = task.Tags.Contains("milestone");
 
+        // Read optional insertAtIndex for positional insertion
+        int? insertAtIndex = null;
+        if (root.TryGetProperty("insertAtIndex", out var idxProp) && idxProp.ValueKind == JsonValueKind.Number)
+            insertAtIndex = idxProp.GetInt32();
+
         // Add to section if specified
         if (root.TryGetProperty("section", out var secProp))
         {
@@ -156,14 +161,20 @@ public partial class VisualEditorBridge
                 var section = _ganttModel.Sections.Find(s => s.Name == sectionName);
                 if (section != null)
                 {
-                    section.Tasks.Add(task);
+                    if (insertAtIndex.HasValue && insertAtIndex.Value >= 0 && insertAtIndex.Value < section.Tasks.Count)
+                        section.Tasks.Insert(insertAtIndex.Value, task);
+                    else
+                        section.Tasks.Add(task);
                     RaiseGanttModelChanged("gantt_taskCreated");
                     return;
                 }
             }
         }
 
-        _ganttModel.Tasks.Add(task);
+        if (insertAtIndex.HasValue && insertAtIndex.Value >= 0 && insertAtIndex.Value < _ganttModel.Tasks.Count)
+            _ganttModel.Tasks.Insert(insertAtIndex.Value, task);
+        else
+            _ganttModel.Tasks.Add(task);
         RaiseGanttModelChanged("gantt_taskCreated");
     }
 
@@ -228,7 +239,15 @@ public partial class VisualEditorBridge
         if (string.IsNullOrEmpty(name)) return;
 
         PushUndo();
-        _ganttModel.Sections.Add(new GanttSection { Name = name });
+        int? insertAtIndex = null;
+        if (root.TryGetProperty("insertAtIndex", out var idxProp) && idxProp.ValueKind == JsonValueKind.Number)
+            insertAtIndex = idxProp.GetInt32();
+
+        var newSection = new GanttSection { Name = name };
+        if (insertAtIndex.HasValue && insertAtIndex.Value >= 0 && insertAtIndex.Value < _ganttModel.Sections.Count)
+            _ganttModel.Sections.Insert(insertAtIndex.Value, newSection);
+        else
+            _ganttModel.Sections.Add(newSection);
         RaiseGanttModelChanged("gantt_sectionCreated");
     }
 
