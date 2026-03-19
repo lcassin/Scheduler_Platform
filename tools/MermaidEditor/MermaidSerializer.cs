@@ -1574,6 +1574,9 @@ public static class MermaidSerializer
         // Write trailing comments
         WriteMindMapTrailingComments(sb, model);
 
+        // Write @pos position comments at the very end
+        WriteMindMapPositionComments(sb, model);
+
         return sb.ToString().TrimEnd('\r', '\n') + Environment.NewLine;
     }
 
@@ -1640,6 +1643,22 @@ public static class MermaidSerializer
                     sb.AppendLine($"%%{comment.Text}");
                 }
             }
+        }
+    }
+
+    /// <summary>
+    /// Writes %% @pos comments for mind map nodes that have been manually positioned in the visual editor.
+    /// </summary>
+    private static void WriteMindMapPositionComments(StringBuilder sb, MindMapModel model)
+    {
+        if (!model.HasPositionData || model.NodePositions.Count == 0) return;
+
+        sb.AppendLine();
+        foreach (var kvp in model.NodePositions.OrderBy(k => k.Key))
+        {
+            var x = Math.Round(kvp.Value.X, 1).ToString(CultureInfo.InvariantCulture);
+            var y = Math.Round(kvp.Value.Y, 1).ToString(CultureInfo.InvariantCulture);
+            sb.AppendLine($"%% @pos {kvp.Key} {x},{y}");
         }
     }
 

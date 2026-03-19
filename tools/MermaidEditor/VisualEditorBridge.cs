@@ -367,7 +367,10 @@ public partial class VisualEditorBridge
                     break;
 
                 case "nodeMoved":
-                    HandleNodeMoved(root);
+                    if (_activeDiagramType == ActiveDiagramType.MindMap)
+                        HandleMindMapNodeMoved(root);
+                    else
+                        HandleNodeMoved(root);
                     break;
 
                 case "nodeEdited":
@@ -411,7 +414,10 @@ public partial class VisualEditorBridge
                     break;
 
                 case "autoLayoutComplete":
-                    HandleAutoLayoutComplete(root);
+                    if (_activeDiagramType == ActiveDiagramType.MindMap)
+                        HandleMindMapAutoLayoutComplete(root);
+                    else
+                        HandleAutoLayoutComplete(root);
                     break;
 
                 case "nodeResized":
@@ -792,6 +798,10 @@ public partial class VisualEditorBridge
                     break;
 
                 case "mm_nodeSelected":
+                    break;
+
+                case "mm_autoLayoutComplete":
+                    HandleMindMapAutoLayoutComplete(root);
                     break;
 
                 // ===== Pie Chart Messages =====

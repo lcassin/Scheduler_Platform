@@ -2680,6 +2680,18 @@ public static class MermaidParser
             if (string.IsNullOrWhiteSpace(line))
                 continue;
 
+            // Check for @pos position comments first
+            var posMatch = PosCommentPattern.Match(line);
+            if (posMatch.Success)
+            {
+                var posNodeId = posMatch.Groups[1].Value;
+                var px = double.Parse(posMatch.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture);
+                var py = double.Parse(posMatch.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture);
+                model.NodePositions[posNodeId] = new System.Windows.Point(px, py);
+                model.HasPositionData = true;
+                continue;
+            }
+
             // Check for comments
             var commentMatch = CommentPattern.Match(line);
             if (commentMatch.Success)

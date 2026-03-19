@@ -86,6 +86,19 @@ public partial class VisualEditorBridge
 
         FlattenMindMapTree(model.Root, "mm_root", 0, nodes, edges);
 
+        // Apply saved positions from the model
+        if (model.HasPositionData && model.NodePositions.Count > 0)
+        {
+            foreach (var node in nodes)
+            {
+                if (model.NodePositions.TryGetValue(node.Id, out var pos))
+                {
+                    node.X = pos.X;
+                    node.Y = pos.Y;
+                }
+            }
+        }
+
         var dto = new MindMapFlowchartDto
         {
             Direction = "LR",
@@ -338,6 +351,48 @@ public partial class VisualEditorBridge
         }
 
         return node;
+    }
+
+    // ========== Mind Map Position Handlers ==========
+
+    private void HandleMindMapNodeMoved(JsonElement root)
+    {
+        if (_mindMapModel == null) return;
+
+        var nodeId = root.GetProperty("nodeId").GetString();
+        var x = root.GetProperty("x").GetDouble();
+        var y = root.GetProperty("y").GetDouble();
+
+        if (string.IsNullOrEmpty(nodeId)) return;
+
+        PushUndo();
+        _mindMapModel.NodePositions[nodeId] = new System.Windows.Point(x, y);
+        _mindMapModel.HasPositionData = true;
+        RaiseMindMapModelChanged("mm_nodeMoved");
+    }
+
+    private void HandleMindMapAutoLayoutComplete(JsonElement root)
+    {
+        if (_mindMapModel == null) return;
+
+        if (!root.TryGetProperty("positions", out var positionsArray))
+            return;
+
+        PushUndo();
+
+        _mindMapModel.NodePositions.Clear();
+        foreach (var pos in positionsArray.EnumerateArray())
+        {
+            var nodeId = pos.GetProperty("nodeId").GetString();
+            if (string.IsNullOrEmpty(nodeId)) continue;
+
+            var x = pos.GetProperty("x").GetDouble();
+            var y = pos.GetProperty("y").GetDouble();
+            _mindMapModel.NodePositions[nodeId] = new System.Windows.Point(x, y);
+        }
+
+        _mindMapModel.HasPositionData = _mindMapModel.NodePositions.Count > 0;
+        RaiseMindMapModelChanged("mm_autoLayoutComplete");
     }
 
     private void RaiseMindMapModelChanged(string changeType)

@@ -3517,11 +3517,11 @@
             _mmMenuItem('\u{1F4CB} Paste Node', function() { pasteClipboard(contextMenuX, contextMenuY); }, !clipboard);
             _mmSep();
             _mmMenuItem('\u{2633} Auto Layout', function() {
-                autoLayout();
+                mindMapRadialLayout();
                 _assignMindMapBranchColors();
                 render();
                 const positions = diagram.nodes.map(function(n) { return { nodeId: n.id, x: n.x, y: n.y, width: n.width, height: n.height }; });
-                postMessage({ type: 'autoLayoutComplete', positions: positions });
+                postMessage({ type: 'mm_autoLayoutComplete', positions: positions });
             });
 
             positionContextMenu(contextMenu, x, y);

@@ -1487,6 +1487,17 @@ public class MindMapModel
     /// The line index of the mindmap declaration.
     /// </summary>
     public int DeclarationLineIndex { get; set; }
+
+    /// <summary>
+    /// When true, position data is stored as a special comment (%% @pos nodeId x,y).
+    /// </summary>
+    public bool HasPositionData { get; set; }
+
+    /// <summary>
+    /// Stored positions keyed by path-based node ID (e.g., "mm_root", "mm_0", "mm_1_2").
+    /// These are persisted as %% @pos comments and used to restore visual editor positions.
+    /// </summary>
+    public Dictionary<string, System.Windows.Point> NodePositions { get; set; } = new();
 }
 
 /// <summary>
