@@ -680,6 +680,13 @@ public static class MermaidParser
     /// </summary>
     private static void EnsureNodeExists(string id, string? label, NodeShape shape, FlowchartModel model, HashSet<string> knownNodes)
     {
+        // Strip surrounding double quotes from labels (used to escape special characters)
+        // e.g. "New Node (copy)" → New Node (copy)
+        if (label != null && label.Length >= 2 && label.StartsWith('"') && label.EndsWith('"'))
+        {
+            label = label[1..^1];
+        }
+
         if (knownNodes.Contains(id))
         {
             // Update label/shape if this is a more specific definition

@@ -165,7 +165,14 @@ public static class MermaidSerializer
         if (node.Label == null)
             return node.Id;
 
+        // Quote labels that contain Mermaid shape delimiter characters to prevent parse errors
+        // e.g. "New Node (copy)" inside a rounded shape would produce node3(New Node (copy))
+        // which the parser interprets (copy) as nested shape syntax.
         var label = node.Label;
+        if (label.IndexOfAny(['(', ')', '[', ']', '{', '}']) >= 0)
+        {
+            label = $"\"{label}\"";
+        }
 
         var shapePart = node.Shape switch
         {

@@ -924,7 +924,7 @@
 
         // Unified toolbar visibility based on current diagram type
         function updateToolbarForDiagramType() {
-            const typeClasses = ['toolbar-flowchart', 'toolbar-sequence', 'toolbar-class', 'toolbar-state', 'toolbar-er'];
+            const typeClasses = ['toolbar-flowchart', 'toolbar-sequence', 'toolbar-class', 'toolbar-state', 'toolbar-er', 'toolbar-gantt', 'toolbar-mindmap', 'toolbar-pie'];
             const activeClass = 'toolbar-' + currentDiagramType;
             typeClasses.forEach(cls => {
                 document.querySelectorAll('.' + cls).forEach(btn => {
@@ -1305,6 +1305,11 @@
                     nodeIds: s.nodeIds || [],
                     direction: s.direction || null
                 }));
+                diagram.styles = (data.styles || []).map(s => ({
+                    isClassDef: s.isClassDef || false,
+                    target: s.target || '',
+                    styleString: s.styleString || ''
+                }));
 
                 // Auto-layout if real nodes (not subgraph proxy nodes) don't have positions
                 const sgIds = new Set(diagram.subgraphs.map(s => s.id));
@@ -1349,6 +1354,11 @@
                     label: s.label || s.id,
                     nodeIds: s.nodeIds || [],
                     direction: s.direction || null
+                }));
+                diagram.styles = (data.styles || []).map(s => ({
+                    isClassDef: s.isClassDef || false,
+                    target: s.target || '',
+                    styleString: s.styleString || ''
                 }));
 
                 // For undo/redo, only auto-layout if ALL real nodes lack positions
@@ -1770,6 +1780,20 @@
             if (shape.tagName !== 'g') {
                 shape.classList.add('node-shape');
             }
+
+            // Apply per-node fill color from styles
+            const fillColor = getNodeFillColor(node);
+            if (fillColor) {
+                if (shape.tagName === 'g') {
+                    // For group shapes (DoubleCircle, Subroutine, Cylindrical), apply to child .node-shape elements
+                    shape.querySelectorAll('.node-shape').forEach(child => {
+                        child.style.fill = fillColor;
+                    });
+                } else {
+                    shape.style.fill = fillColor;
+                }
+            }
+
             return shape;
         }
 
@@ -1831,20 +1855,18 @@
                     line.setAttribute('stroke-width', '3');
                 }
 
-                // Apply arrow type
-                if (edge.arrowType === 'Arrow') {
-                    line.setAttribute('marker-end', selectedEdgeIndex === idx ? 'url(#arrowhead-selected)' : 'url(#arrowhead)');
-                } else if (edge.arrowType === 'Circle') {
-                    line.setAttribute('marker-end', 'url(#circle-end)');
-                } else if (edge.arrowType === 'Cross') {
-                    line.setAttribute('marker-end', 'url(#cross-end)');
-                }
-
                 if (selectedEdgeIndex === idx) {
                     line.classList.add('selected');
                 }
 
                 g.appendChild(line);
+
+                // Draw arrowhead manually using Bézier tangent so it aligns
+                // with the curve direction instead of relying on SVG markers
+                // which can mis-orient on curved paths.
+                const isSelected = (selectedEdgeIndex === idx);
+                const tangents = edgeTangentAngles(points);
+                drawFlowchartEndMarker(g, points.x2, points.y2, tangents.endAngle, edge.arrowType, isSelected);
 
                 // Edge label
                 if (edge.label) {
@@ -1886,6 +1908,57 @@
 
                 edgesLayer.appendChild(g);
             });
+        }
+
+        // Draw a flowchart arrow/circle/cross marker at the given point,
+        // oriented along the given angle (from edgeTangentAngles).
+        function drawFlowchartEndMarker(parentG, px, py, angle, arrowType, isSelected) {
+            const edgeColor = getComputedStyle(document.documentElement).getPropertyValue('--edge-color').trim() || '#6A6A6A';
+            const selectedColor = getComputedStyle(document.documentElement).getPropertyValue('--node-selected-stroke').trim() || '#007ACC';
+            const color = isSelected ? selectedColor : edgeColor;
+            const size = 10;
+
+            if (arrowType === 'Arrow') {
+                // Filled triangle arrowhead, tip at (px, py), opening along angle
+                const halfAngle = 0.45; // ~26 degrees
+                const p1x = px + size * Math.cos(angle + halfAngle);
+                const p1y = py + size * Math.sin(angle + halfAngle);
+                const p2x = px + size * Math.cos(angle - halfAngle);
+                const p2y = py + size * Math.sin(angle - halfAngle);
+                const tri = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                tri.setAttribute('points', `${px},${py} ${p1x},${p1y} ${p2x},${p2y}`);
+                tri.setAttribute('fill', color);
+                tri.setAttribute('stroke', 'none');
+                parentG.appendChild(tri);
+            } else if (arrowType === 'Circle') {
+                // Circle at endpoint, offset along angle so edge of circle sits at (px, py)
+                const r = 4;
+                const cx = px + r * Math.cos(angle);
+                const cy = py + r * Math.sin(angle);
+                const circ = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circ.setAttribute('cx', cx);
+                circ.setAttribute('cy', cy);
+                circ.setAttribute('r', r);
+                circ.setAttribute('fill', color);
+                circ.setAttribute('stroke', 'none');
+                parentG.appendChild(circ);
+            } else if (arrowType === 'Cross') {
+                // X-cross at endpoint
+                const d = 5;
+                const cx = px + d * Math.cos(angle);
+                const cy = py + d * Math.sin(angle);
+                const cross = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                const x1 = cx - d * 0.7, y1 = cy - d * 0.7;
+                const x2 = cx + d * 0.7, y2 = cy + d * 0.7;
+                const x3 = cx + d * 0.7, y3 = cy - d * 0.7;
+                const x4 = cx - d * 0.7, y4 = cy + d * 0.7;
+                cross.setAttribute('d', `M${x1},${y1} L${x2},${y2} M${x3},${y3} L${x4},${y4}`);
+                cross.setAttribute('stroke', color);
+                cross.setAttribute('stroke-width', '2');
+                cross.setAttribute('fill', 'none');
+                parentG.appendChild(cross);
+            }
+            // 'Open' or unrecognised: no marker
         }
 
         function getEdgePoints(fromNode, toNode) {
@@ -2747,8 +2820,25 @@
         }
 
         function getNodeFillColor(node) {
-            // Default color
-            return '#4a9eff';
+            // Check diagram.styles for an inline style targeting this node
+            if (diagram.styles && diagram.styles.length > 0) {
+                // Look for inline style (isClassDef === false) targeting this node's id
+                const inlineStyle = diagram.styles.find(s => !s.isClassDef && s.target === node.id);
+                if (inlineStyle && inlineStyle.styleString) {
+                    const fillMatch = inlineStyle.styleString.match(/fill\s*:\s*(#[0-9a-fA-F]{3,8})/i);
+                    if (fillMatch) return fillMatch[1];
+                }
+                // Check classDef styles: find class assigned to this node, then look up the classDef
+                if (node.cssClass) {
+                    const classDef = diagram.styles.find(s => s.isClassDef && s.target === node.cssClass);
+                    if (classDef && classDef.styleString) {
+                        const fillMatch = classDef.styleString.match(/fill\s*:\s*(#[0-9a-fA-F]{3,8})/i);
+                        if (fillMatch) return fillMatch[1];
+                    }
+                }
+            }
+            // Fall back to theme CSS variable
+            return getComputedStyle(document.documentElement).getPropertyValue('--node-fill').trim() || '#4a9eff';
         }
 
         // Named property panel event handlers (extracted for re-attachment after panel restore)
@@ -2838,6 +2928,20 @@
 
         function applyNodeFillColor(color) {
             if (!selectedNodeId) return;
+            // Update local diagram styles immediately so re-render shows the color
+            if (!diagram.styles) diagram.styles = [];
+            const existing = diagram.styles.find(s => !s.isClassDef && s.target === selectedNodeId);
+            if (existing) {
+                // Update the fill in the existing style string
+                if (/fill\s*:/i.test(existing.styleString)) {
+                    existing.styleString = existing.styleString.replace(/fill\s*:\s*#[0-9a-fA-F]{3,8}/i, 'fill:' + color);
+                } else {
+                    existing.styleString = existing.styleString ? existing.styleString + ',fill:' + color : 'fill:' + color;
+                }
+            } else {
+                diagram.styles.push({ isClassDef: false, target: selectedNodeId, styleString: 'fill:' + color });
+            }
+            render();
             postMessage({
                 type: 'nodeStyleChanged',
                 nodeId: selectedNodeId,

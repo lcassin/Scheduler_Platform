@@ -12,9 +12,11 @@ let ganttSelectedSection = null;
 
 window.loadGanttDiagram = function(jsonStr) {
     try {
+        currentDiagramType = 'gantt';
         ganttModel = JSON.parse(jsonStr);
         ganttSelectedTask = null;
         ganttSelectedSection = null;
+        updateToolbarForDiagramType();
         renderGanttDiagram();
     } catch (e) {
         console.error('Failed to load gantt diagram:', e);
@@ -52,18 +54,21 @@ function renderGanttDiagram() {
 
     canvas.innerHTML = '';
 
-    const isDark = document.body.classList.contains('dark-theme');
-    const bgColor = isDark ? '#1e1e2e' : '#ffffff';
-    const textColor = isDark ? '#cdd6f4' : '#333333';
-    const headerBg = isDark ? '#313244' : '#f0f0f0';
-    const borderColor = isDark ? '#45475a' : '#cccccc';
-    const sectionBg1 = isDark ? '#1e1e2e' : '#ffffff';
-    const sectionBg2 = isDark ? '#252536' : '#f8f8f8';
-    const taskDoneColor = isDark ? '#a6e3a1' : '#4caf50';
-    const taskActiveColor = isDark ? '#89b4fa' : '#2196f3';
-    const taskCritColor = isDark ? '#f38ba8' : '#f44336';
-    const taskNormalColor = isDark ? '#74c7ec' : '#42a5f5';
-    const milestoneColor = isDark ? '#f9e2af' : '#ff9800';
+    // Read theme colors from CSS variables (set by theme-light / theme-twilight / default dark)
+    const cs = getComputedStyle(document.documentElement);
+    const cv = (v) => cs.getPropertyValue(v).trim();
+    const bgColor = cv('--bg-color') || '#1E1E1E';
+    const textColor = cv('--node-text') || '#D4D4D4';
+    const headerBg = cv('--toolbar-bg') || '#2D2D30';
+    const borderColor = cv('--node-stroke') || '#3E3E42';
+    const sectionBg1 = cv('--bg-color') || '#1E1E1E';
+    const isLight = document.body.classList.contains('theme-light');
+    const sectionBg2 = isLight ? '#f8f8f8' : (cv('--subgraph-fill') || '#252536');
+    const taskDoneColor = isLight ? '#4caf50' : '#a6e3a1';
+    const taskActiveColor = cv('--node-selected-stroke') || '#007ACC';
+    const taskCritColor = isLight ? '#f44336' : '#f38ba8';
+    const taskNormalColor = cv('--edge-color') || '#6A6A6A';
+    const milestoneColor = isLight ? '#ff9800' : '#f9e2af';
 
     // Layout constants
     const headerHeight = 50;
@@ -242,7 +247,7 @@ function renderGanttDiagram() {
         rowBg.setAttribute('y', y);
         rowBg.setAttribute('width', timelineWidth);
         rowBg.setAttribute('height', rowHeight);
-        rowBg.setAttribute('fill', i % 2 === 0 ? 'transparent' : (isDark ? 'rgba(255,255,255,0.02)' : 'rgba(0,0,0,0.02)'));
+        rowBg.setAttribute('fill', i % 2 === 0 ? 'transparent' : (isLight ? 'rgba(0,0,0,0.02)' : 'rgba(255,255,255,0.02)'));
         svg.appendChild(rowBg);
 
         // Row border
@@ -327,7 +332,7 @@ function renderGanttDiagram() {
 
             // Highlight selected
             if (ganttSelectedTask !== null && ganttSelectedTask.index === taskIdx) {
-                bar.setAttribute('stroke', isDark ? '#f9e2af' : '#ff9800');
+                bar.setAttribute('stroke', isLight ? '#ff9800' : '#f9e2af');
                 bar.setAttribute('stroke-width', '2');
             }
             svg.appendChild(bar);
@@ -338,7 +343,7 @@ function renderGanttDiagram() {
                 check.setAttribute('x', barX + barWidth / 2);
                 check.setAttribute('y', barY + taskBarHeight / 2 + 4);
                 check.setAttribute('text-anchor', 'middle');
-                check.setAttribute('fill', isDark ? '#1e1e2e' : '#ffffff');
+                check.setAttribute('fill', isLight ? '#ffffff' : '#1e1e2e');
                 check.setAttribute('font-size', '12');
                 check.textContent = 'Done';
                 svg.appendChild(check);
@@ -347,7 +352,7 @@ function renderGanttDiagram() {
                 activeLabel.setAttribute('x', barX + barWidth / 2);
                 activeLabel.setAttribute('y', barY + taskBarHeight / 2 + 4);
                 activeLabel.setAttribute('text-anchor', 'middle');
-                activeLabel.setAttribute('fill', isDark ? '#1e1e2e' : '#ffffff');
+                activeLabel.setAttribute('fill', isLight ? '#ffffff' : '#1e1e2e');
                 activeLabel.setAttribute('font-size', '11');
                 activeLabel.textContent = 'Active';
                 svg.appendChild(activeLabel);
@@ -385,14 +390,14 @@ function renderGanttDiagram() {
 
     // Toolbar area at bottom
     const toolbarY = startY + headerHeight + totalRows * rowHeight + 20;
-    renderGanttToolbar(svg, padding, toolbarY, totalWidth - padding * 2, isDark, textColor);
+    renderGanttToolbar(svg, padding, toolbarY, totalWidth - padding * 2, isLight, textColor);
 
     canvas.appendChild(svg);
 }
 
-function renderGanttToolbar(svg, x, y, width, isDark, textColor) {
-    const btnBg = isDark ? '#313244' : '#e0e0e0';
-    const btnHover = isDark ? '#45475a' : '#bdbdbd';
+function renderGanttToolbar(svg, x, y, width, isLight, textColor) {
+    const btnBg = isLight ? '#e0e0e0' : '#313244';
+    const btnHover = isLight ? '#bdbdbd' : '#45475a';
     const buttons = [
         { label: '+ Add Task', action: () => createGanttTask() },
         { label: '+ Add Section', action: () => createGanttSection() },

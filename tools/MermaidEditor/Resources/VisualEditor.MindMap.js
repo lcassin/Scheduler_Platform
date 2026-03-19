@@ -11,8 +11,10 @@ let mindMapSelectedPath = null; // Array of indices from root
 
 window.loadMindMap = function(jsonStr) {
     try {
+        currentDiagramType = 'mindmap';
         mindMapModel = JSON.parse(jsonStr);
         mindMapSelectedPath = null;
+        updateToolbarForDiagramType();
         renderMindMap();
     } catch (e) {
         console.error('Failed to load mind map:', e);
@@ -50,14 +52,17 @@ function renderMindMap() {
 
     canvas.innerHTML = '';
 
-    const isDark = document.body.classList.contains('dark-theme');
-    const textColor = isDark ? '#cdd6f4' : '#333333';
-    const bgColor = isDark ? '#1e1e2e' : '#ffffff';
+    // Read theme colors from CSS variables (set by theme-light / theme-twilight / default dark)
+    const cs = getComputedStyle(document.documentElement);
+    const cv = (v) => cs.getPropertyValue(v).trim();
+    const textColor = cv('--node-text') || '#D4D4D4';
+    const bgColor = cv('--bg-color') || '#1E1E1E';
+    const isLight = document.body.classList.contains('theme-light');
 
-    // Color palette for different levels
-    const levelColors = isDark
-        ? ['#89b4fa', '#a6e3a1', '#f9e2af', '#f38ba8', '#cba6f7', '#94e2d5', '#fab387']
-        : ['#2196f3', '#4caf50', '#ff9800', '#f44336', '#9c27b0', '#009688', '#ff5722'];
+    // Color palette for different levels - adapt to current theme
+    const levelColors = isLight
+        ? ['#2196f3', '#4caf50', '#ff9800', '#f44336', '#9c27b0', '#009688', '#ff5722']
+        : ['#89b4fa', '#a6e3a1', '#f9e2af', '#f38ba8', '#cba6f7', '#94e2d5', '#fab387'];
 
     // Calculate layout
     const layout = calculateMindMapLayout(mindMapModel.root, 0);
@@ -90,13 +95,13 @@ function renderMindMap() {
     const offsetY = -bounds.minY + margin;
 
     // Draw connections first (behind nodes)
-    drawMindMapConnections(svg, layout, offsetX, offsetY, levelColors, isDark);
+    drawMindMapConnections(svg, layout, offsetX, offsetY, levelColors, isLight);
 
     // Draw nodes
-    drawMindMapNodes(svg, layout, offsetX, offsetY, levelColors, textColor, isDark);
+    drawMindMapNodes(svg, layout, offsetX, offsetY, levelColors, textColor, isLight);
 
     // Toolbar
-    renderMindMapToolbar(svg, 10, svgHeight - 50, svgWidth - 20, isDark, textColor);
+    renderMindMapToolbar(svg, 10, svgHeight - 50, svgWidth - 20, isLight, textColor);
 
     canvas.appendChild(svg);
 }
@@ -200,8 +205,8 @@ function getMindMapBounds(layout) {
     return { minX, maxX, minY, maxY };
 }
 
-function drawMindMapConnections(svg, layout, offsetX, offsetY, colors, isDark) {
-    const lineColor = isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)';
+function drawMindMapConnections(svg, layout, offsetX, offsetY, colors, isLight) {
+    const lineColor = isLight ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.2)';
 
     function drawConnections(parent) {
         (parent.children || []).forEach(child => {
@@ -229,7 +234,7 @@ function drawMindMapConnections(svg, layout, offsetX, offsetY, colors, isDark) {
     drawConnections(layout);
 }
 
-function drawMindMapNodes(svg, layout, offsetX, offsetY, colors, textColor, isDark) {
+function drawMindMapNodes(svg, layout, offsetX, offsetY, colors, textColor, isLight) {
     function drawNode(nodeLayout) {
         const x = nodeLayout.x + offsetX;
         const y = nodeLayout.y + offsetY;
@@ -307,13 +312,13 @@ function drawMindMapNodes(svg, layout, offsetX, offsetY, colors, textColor, isDa
             nodeElement.setAttribute('fill', color);
             nodeElement.setAttribute('opacity', '0.9');
         } else {
-            nodeElement.setAttribute('fill', isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)');
+            nodeElement.setAttribute('fill', isLight ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.05)');
             nodeElement.setAttribute('stroke', color);
             nodeElement.setAttribute('stroke-width', '2');
         }
 
         if (isSelected) {
-            nodeElement.setAttribute('stroke', isDark ? '#f9e2af' : '#ff9800');
+            nodeElement.setAttribute('stroke', isLight ? '#ff9800' : '#f9e2af');
             nodeElement.setAttribute('stroke-width', '3');
         }
 
@@ -334,7 +339,7 @@ function drawMindMapNodes(svg, layout, offsetX, offsetY, colors, textColor, isDa
         text.setAttribute('x', x + w / 2);
         text.setAttribute('y', y + h / 2 + 5);
         text.setAttribute('text-anchor', 'middle');
-        text.setAttribute('fill', level === 0 ? (isDark ? '#1e1e2e' : '#ffffff') : textColor);
+        text.setAttribute('fill', level === 0 ? (isLight ? '#ffffff' : '#1e1e2e') : textColor);
         text.setAttribute('font-size', level === 0 ? '15' : '12');
         text.setAttribute('font-weight', level === 0 ? 'bold' : 'normal');
         text.textContent = nodeLayout.node.label;
@@ -362,9 +367,9 @@ function drawMindMapNodes(svg, layout, offsetX, offsetY, colors, textColor, isDa
     drawNode(layout);
 }
 
-function renderMindMapToolbar(svg, x, y, width, isDark, textColor) {
-    const btnBg = isDark ? '#313244' : '#e0e0e0';
-    const btnHover = isDark ? '#45475a' : '#bdbdbd';
+function renderMindMapToolbar(svg, x, y, width, isLight, textColor) {
+    const btnBg = isLight ? '#e0e0e0' : '#313244';
+    const btnHover = isLight ? '#bdbdbd' : '#45475a';
     const buttons = [
         { label: '+ Add Child', action: () => createMindMapChild() },
         { label: 'Edit Node', action: () => { if (mindMapSelectedPath) editMindMapNode(mindMapSelectedPath); } }
