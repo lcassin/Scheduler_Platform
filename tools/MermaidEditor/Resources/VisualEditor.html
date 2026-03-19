@@ -129,6 +129,23 @@
 
         #diagram-svg:active { cursor: grabbing; }
 
+        /* Scrollbar theming for editorCanvas (Gantt/MindMap/Pie) */
+        #editorCanvas::-webkit-scrollbar { width: 10px; height: 10px; }
+        #editorCanvas::-webkit-scrollbar-track { background: #2D2D30; }
+        #editorCanvas::-webkit-scrollbar-thumb { background: #555; border-radius: 5px; }
+        #editorCanvas::-webkit-scrollbar-thumb:hover { background: #777; }
+        #editorCanvas::-webkit-scrollbar-corner { background: #2D2D30; }
+
+        .theme-light #editorCanvas::-webkit-scrollbar-track { background: #E8E8E8; }
+        .theme-light #editorCanvas::-webkit-scrollbar-thumb { background: #BBBBBB; border-radius: 5px; }
+        .theme-light #editorCanvas::-webkit-scrollbar-thumb:hover { background: #999; }
+        .theme-light #editorCanvas::-webkit-scrollbar-corner { background: #E8E8E8; }
+
+        .theme-twilight #editorCanvas::-webkit-scrollbar-track { background: #1F2544; }
+        .theme-twilight #editorCanvas::-webkit-scrollbar-thumb { background: #3D4A6B; border-radius: 5px; }
+        .theme-twilight #editorCanvas::-webkit-scrollbar-thumb:hover { background: #5A6A8A; }
+        .theme-twilight #editorCanvas::-webkit-scrollbar-corner { background: #1F2544; }
+
         /* Grid pattern */
         .grid-pattern { stroke: var(--grid-dot-color); }
 
@@ -2404,6 +2421,15 @@
                         hasContent = true;
                     }
                 });
+            } else if (_isEditorCanvasDiagram()) {
+                // For gantt/mindmap/pie: derive bounding box from the SVG inside editorCanvas
+                const ecSvg = _getEditorCanvasSvg();
+                if (ecSvg) {
+                    const w = parseFloat(ecSvg.getAttribute('width')) || 800;
+                    const h = parseFloat(ecSvg.getAttribute('height')) || 600;
+                    minX = 0; minY = 0; maxX = w; maxY = h;
+                    hasContent = true;
+                }
             }
 
             return hasContent ? { minX, minY, maxX, maxY } : null;

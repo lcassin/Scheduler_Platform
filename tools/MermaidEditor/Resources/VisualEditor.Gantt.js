@@ -459,22 +459,23 @@ function renderGanttDiagram() {
     }
     if (typeof updateMinimap === 'function') updateMinimap();
 
-    // Cold-start fix: on first load, the container may still be 0-width when
-    // this render runs (display was 'none' → 'block' and layout hasn't
-    // happened yet). Schedule a deferred check: if the container width changed
-    // meaningfully after layout, re-render with the correct dimensions.
+    // Cold-start fix: on first load the container may still be 0-width when
+    // this render runs (display was 'none' → 'block' and WebView2/WPF layout
+    // hasn't completed yet). requestAnimationFrame is too early for the WPF
+    // layout pass, so we use a 200ms setTimeout as a pragmatic fallback.
+    // If the container width changed meaningfully, re-render once.
     const renderedWidth = containerWidth;
     _ganttLastRenderedWidth = renderedWidth;
-    requestAnimationFrame(function() {
+    setTimeout(function() {
         if (!ganttModel) return;
-        const ec = document.getElementById('editorCanvas');
+        var ec = document.getElementById('editorCanvas');
         if (!ec) return;
-        const postLayoutWidth = ec.clientWidth;
+        var postLayoutWidth = ec.clientWidth;
         if (postLayoutWidth > 50 && Math.abs(postLayoutWidth - renderedWidth) > 50) {
             _ganttLastRenderedWidth = postLayoutWidth;
             renderGanttDiagram();
         }
-    });
+    }, 200);
 }
 
 function renderGanttToolbar(svg, x, y, width, isLight, textColor) {
