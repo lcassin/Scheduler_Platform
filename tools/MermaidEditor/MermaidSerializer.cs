@@ -1438,20 +1438,18 @@ public static class MermaidSerializer
             sb.AppendLine($"{Indent}excludes {model.Excludes}");
         }
 
-        // Write top-level tasks (before any section)
-        foreach (var task in model.Tasks)
+        // Write top-level tasks (before any section), aligned
+        if (model.Tasks.Count > 0)
         {
-            sb.AppendLine($"{Indent}{FormatGanttTask(task)}");
+            WriteAlignedGanttTasks(sb, model.Tasks);
         }
 
-        // Write sections with their tasks
+        // Write sections with their tasks, aligned within each section
         foreach (var section in model.Sections)
         {
+            sb.AppendLine();
             sb.AppendLine($"{Indent}section {section.Name}");
-            foreach (var task in section.Tasks)
-            {
-                sb.AppendLine($"{Indent}{FormatGanttTask(task)}");
-            }
+            WriteAlignedGanttTasks(sb, section.Tasks);
         }
 
         // Write trailing comments
@@ -1484,6 +1482,36 @@ public static class MermaidSerializer
             parts.Add(task.EndDate);
 
         return $"{task.Label} :{string.Join(", ", parts)}";
+    }
+
+    /// <summary>
+    /// Writes a list of gantt tasks with aligned colon separators for readability.
+    /// E.g., "Requirements gathering :a1, 2024-01-01, 7d"
+    ///        "Design phase           :a2, after a1, 10d"
+    /// </summary>
+    private static void WriteAlignedGanttTasks(StringBuilder sb, List<GanttTask> tasks)
+    {
+        if (tasks.Count == 0) return;
+
+        // Build the metadata part for each task (everything after the colon)
+        var taskParts = tasks.Select(t =>
+        {
+            var parts = new List<string>();
+            parts.AddRange(t.Tags);
+            if (!string.IsNullOrEmpty(t.Id)) parts.Add(t.Id);
+            if (!string.IsNullOrEmpty(t.StartDate)) parts.Add(t.StartDate);
+            if (!string.IsNullOrEmpty(t.EndDate)) parts.Add(t.EndDate);
+            return new { Label = t.Label, Meta = string.Join(", ", parts) };
+        }).ToList();
+
+        // Find the longest label to pad the others
+        var maxLabelLen = taskParts.Max(tp => tp.Label.Length);
+
+        foreach (var tp in taskParts)
+        {
+            var paddedLabel = tp.Label.PadRight(maxLabelLen);
+            sb.AppendLine($"{Indent}{paddedLabel} :{tp.Meta}");
+        }
     }
 
     private static void WriteGanttCommentsBeforeLine(StringBuilder sb, GanttModel model, int lineIndex)

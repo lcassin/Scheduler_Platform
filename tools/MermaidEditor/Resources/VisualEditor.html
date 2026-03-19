@@ -1311,8 +1311,16 @@
                     styleString: s.styleString || ''
                 }));
 
-                // Auto-layout if real nodes (not subgraph proxy nodes) don't have positions
+                // Auto-size nodes whose width/height is missing or too small for their label
                 const sgIds = new Set(diagram.subgraphs.map(s => s.id));
+                diagram.nodes.forEach(node => {
+                    if (sgIds.has(node.id)) return;
+                    const minSize = estimateNodeSize(node);
+                    if (!node.width || node.width < minSize.width) node.width = minSize.width;
+                    if (!node.height || node.height < minSize.height) node.height = minSize.height;
+                });
+
+                // Auto-layout if real nodes (not subgraph proxy nodes) don't have positions
                 const realNodes = diagram.nodes.filter(n => !sgIds.has(n.id));
                 const needsLayout = realNodes.some(n => n.x === 0 && n.y === 0);
                 if (needsLayout && realNodes.length > 0) {
@@ -1361,8 +1369,16 @@
                     styleString: s.styleString || ''
                 }));
 
-                // For undo/redo, only auto-layout if ALL real nodes lack positions
+                // Auto-size nodes whose width/height is missing or too small for their label
                 const sgIds = new Set(diagram.subgraphs.map(s => s.id));
+                diagram.nodes.forEach(node => {
+                    if (sgIds.has(node.id)) return;
+                    const minSize = estimateNodeSize(node);
+                    if (!node.width || node.width < minSize.width) node.width = minSize.width;
+                    if (!node.height || node.height < minSize.height) node.height = minSize.height;
+                });
+
+                // For undo/redo, only auto-layout if ALL real nodes lack positions
                 const realNodes = diagram.nodes.filter(n => !sgIds.has(n.id));
                 const allZero = realNodes.every(n => n.x === 0 && n.y === 0);
                 if (allZero && realNodes.length > 0) {
