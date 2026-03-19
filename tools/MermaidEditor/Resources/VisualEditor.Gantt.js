@@ -55,7 +55,7 @@ function renderGanttDiagram() {
     canvas.innerHTML = '';
 
     // Read theme colors from CSS variables (set by theme-light / theme-twilight / default dark)
-    const cs = getComputedStyle(document.documentElement);
+    const cs = getComputedStyle(document.body);
     const cv = (v) => cs.getPropertyValue(v).trim();
     const bgColor = cv('--bg-color') || '#1E1E1E';
     const textColor = cv('--node-text') || '#D4D4D4';
@@ -450,6 +450,161 @@ function selectGanttTask(index, section) {
     postMessage({ type: 'gantt_taskSelected', index, section });
 }
 
+// Helper: build a list of all tasks with their IDs and labels for dependency dropdowns
+function _getGanttTaskOptions() {
+    if (!ganttModel || !ganttModel.tasks) return [];
+    return ganttModel.tasks
+        .filter(t => t.id || t.label)
+        .map(t => ({ id: t.id || '', label: t.label || t.id || 'Untitled', section: t.section || '' }));
+}
+
+// Helper: resolve a task ID to its label for display
+function _resolveTaskLabel(taskId) {
+    if (!taskId || !ganttModel || !ganttModel.tasks) return taskId;
+    const task = ganttModel.tasks.find(t => t.id === taskId);
+    return task ? (task.label || taskId) : taskId;
+}
+
+// Helper: parse a startDate value to determine its type and value
+function _parseStartDate(startDate) {
+    if (!startDate) return { mode: 'date', date: '', taskId: '' };
+    const afterMatch = startDate.match(/^after\s+(\S+)/i);
+    if (afterMatch) return { mode: 'after', date: '', taskId: afterMatch[1] };
+    return { mode: 'date', date: startDate, taskId: '' };
+}
+
+// Helper: parse an endDate value to determine if it's a duration or date
+function _parseEndDate(endDate) {
+    if (!endDate) return { mode: 'duration', value: '5d', date: '' };
+    if (/^\d+d$/.test(endDate)) return { mode: 'duration', value: endDate, date: '' };
+    return { mode: 'date', value: '', date: endDate };
+}
+
+// Helper: build the Start Date section HTML with mode toggle
+function _buildStartDateHtml(parsed, taskOptions) {
+    const isAfter = parsed.mode === 'after';
+    const taskOptionHtml = taskOptions.map(t => {
+        const sel = (t.id === parsed.taskId) ? ' selected' : '';
+        const sectionHint = t.section ? ` (${_escHtml(t.section)})` : '';
+        return `<option value="${_escHtml(t.id)}"${sel}>${_escHtml(t.label)}${sectionHint}</option>`;
+    }).join('');
+    const hasTaskOptions = taskOptions.length > 0;
+
+    return `
+        <div class="property-row">
+            <div class="property-label">Start</div>
+            <select class="property-select" id="gantt-dlg-start-mode" style="margin-bottom:4px">
+                <option value="date"${!isAfter ? ' selected' : ''}>Specific Date</option>
+                ${hasTaskOptions ? `<option value="after"${isAfter ? ' selected' : ''}>After Task</option>` : ''}
+            </select>
+            <div id="gantt-dlg-start-date-wrap" style="${isAfter ? 'display:none' : ''}">
+                <input type="date" class="property-input" id="gantt-dlg-start-date" value="${_escHtml(parsed.date)}" />
+            </div>
+            <div id="gantt-dlg-start-after-wrap" style="${!isAfter ? 'display:none' : ''}">
+                <select class="property-select" id="gantt-dlg-start-after">
+                    <option value="">(select a task)</option>
+                    ${taskOptionHtml}
+                </select>
+            </div>
+        </div>`;
+}
+
+// Helper: build the End / Duration section HTML with mode toggle
+function _buildEndDateHtml(parsed) {
+    const isDuration = parsed.mode === 'duration';
+    const commonDurations = ['1d', '2d', '3d', '5d', '7d', '10d', '14d', '21d', '30d'];
+    const isCommon = isDuration && commonDurations.includes(parsed.value);
+    const durationOpts = commonDurations.map(d => {
+        const sel = (d === parsed.value) ? ' selected' : '';
+        const friendly = _friendlyDuration(d);
+        return `<option value="${d}"${sel}>${friendly}</option>`;
+    }).join('');
+
+    return `
+        <div class="property-row">
+            <div class="property-label">End</div>
+            <select class="property-select" id="gantt-dlg-end-mode" style="margin-bottom:4px">
+                <option value="duration"${isDuration ? ' selected' : ''}>Duration</option>
+                <option value="date"${!isDuration ? ' selected' : ''}>Specific Date</option>
+            </select>
+            <div id="gantt-dlg-end-dur-wrap" style="${!isDuration ? 'display:none' : ''}">
+                <select class="property-select" id="gantt-dlg-end-dur" style="margin-bottom:4px">
+                    ${durationOpts}
+                    <option value="custom"${isDuration && !isCommon ? ' selected' : ''}>Custom...</option>
+                </select>
+                <input class="property-input" id="gantt-dlg-end-dur-custom" placeholder="e.g. 15d"
+                    value="${isDuration && !isCommon ? _escHtml(parsed.value) : ''}"
+                    style="${isDuration && !isCommon ? '' : 'display:none'}" />
+            </div>
+            <div id="gantt-dlg-end-date-wrap" style="${isDuration ? 'display:none' : ''}">
+                <input type="date" class="property-input" id="gantt-dlg-end-date" value="${!isDuration ? _escHtml(parsed.date) : ''}" />
+            </div>
+        </div>`;
+}
+
+// Helper: convert "5d" to "5 days" etc.
+function _friendlyDuration(d) {
+    const m = d.match(/^(\d+)d$/);
+    if (!m) return d;
+    const n = parseInt(m[1]);
+    if (n === 1) return '1 day';
+    if (n === 7) return '1 week';
+    if (n === 14) return '2 weeks';
+    if (n === 21) return '3 weeks';
+    if (n === 30) return '1 month';
+    return n + ' days';
+}
+
+// Helper: wire up the mode toggle event listeners for start/end fields
+function _wireGanttDialogToggles() {
+    const startMode = document.getElementById('gantt-dlg-start-mode');
+    if (startMode) {
+        startMode.addEventListener('change', function() {
+            const isAfter = this.value === 'after';
+            document.getElementById('gantt-dlg-start-date-wrap').style.display = isAfter ? 'none' : '';
+            document.getElementById('gantt-dlg-start-after-wrap').style.display = isAfter ? '' : 'none';
+        });
+    }
+    const endMode = document.getElementById('gantt-dlg-end-mode');
+    if (endMode) {
+        endMode.addEventListener('change', function() {
+            const isDur = this.value === 'duration';
+            document.getElementById('gantt-dlg-end-dur-wrap').style.display = isDur ? '' : 'none';
+            document.getElementById('gantt-dlg-end-date-wrap').style.display = isDur ? 'none' : '';
+        });
+    }
+    const durSelect = document.getElementById('gantt-dlg-end-dur');
+    if (durSelect) {
+        durSelect.addEventListener('change', function() {
+            const custom = document.getElementById('gantt-dlg-end-dur-custom');
+            if (custom) custom.style.display = this.value === 'custom' ? '' : 'none';
+        });
+    }
+}
+
+// Helper: read the start date value from the dialog
+function _readStartDateValue() {
+    const mode = document.getElementById('gantt-dlg-start-mode').value;
+    if (mode === 'after') {
+        const taskId = document.getElementById('gantt-dlg-start-after').value;
+        return taskId ? 'after ' + taskId : null;
+    }
+    return document.getElementById('gantt-dlg-start-date').value.trim() || null;
+}
+
+// Helper: read the end date / duration value from the dialog
+function _readEndDateValue() {
+    const mode = document.getElementById('gantt-dlg-end-mode').value;
+    if (mode === 'duration') {
+        const sel = document.getElementById('gantt-dlg-end-dur').value;
+        if (sel === 'custom') {
+            return document.getElementById('gantt-dlg-end-dur-custom').value.trim() || '5d';
+        }
+        return sel || '5d';
+    }
+    return document.getElementById('gantt-dlg-end-date').value.trim() || '5d';
+}
+
 function createGanttTask() {
     const propertyPanel = document.getElementById('property-panel');
     const propPanelTitle = document.getElementById('property-panel-title');
@@ -459,19 +614,17 @@ function createGanttTask() {
     const sectionOptions = (ganttModel.sections || []).map(s =>
         `<option value="${_escHtml(s)}">${_escHtml(s)}</option>`).join('');
 
+    const taskOptions = _getGanttTaskOptions();
+    const startParsed = _parseStartDate('');
+    const endParsed = _parseEndDate('5d');
+
     body.innerHTML = `
         <div class="property-row">
             <div class="property-label">Label</div>
             <input class="property-input" id="gantt-dlg-label" value="New Task" />
         </div>
-        <div class="property-row">
-            <div class="property-label">Start Date</div>
-            <input class="property-input" id="gantt-dlg-start" placeholder="YYYY-MM-DD or after taskId" />
-        </div>
-        <div class="property-row">
-            <div class="property-label">End / Duration</div>
-            <input class="property-input" id="gantt-dlg-end" value="5d" placeholder="e.g. 2024-01-15 or 5d" />
-        </div>
+        ${_buildStartDateHtml(startParsed, taskOptions)}
+        ${_buildEndDateHtml(endParsed)}
         <div class="property-row">
             <div class="property-label">Status</div>
             <select class="property-select" id="gantt-dlg-status">
@@ -495,11 +648,13 @@ function createGanttTask() {
         </div>
     `;
 
+    _wireGanttDialogToggles();
+
     document.getElementById('gantt-dlg-ok').addEventListener('click', function() {
         const label = document.getElementById('gantt-dlg-label').value.trim();
         if (!label) return;
-        const startDate = document.getElementById('gantt-dlg-start').value.trim();
-        const endDate = document.getElementById('gantt-dlg-end').value.trim();
+        const startDate = _readStartDateValue();
+        const endDate = _readEndDateValue();
         const status = document.getElementById('gantt-dlg-status').value;
         const secEl = document.getElementById('gantt-dlg-section');
         const sectionName = secEl ? secEl.value : null;
@@ -538,37 +693,48 @@ function editGanttTask(index, section) {
     propPanelTitle.textContent = 'Edit Task';
     const body = document.querySelector('.property-panel-body');
 
-    const currentTags = (task.tags || []).join(',');
+    // Build task options for "After Task" dropdown, excluding the current task
+    const taskOptions = _getGanttTaskOptions().filter(t => t.id !== task.id);
+    const startParsed = _parseStartDate(task.startDate || '');
+    const endParsed = _parseEndDate(task.endDate || '');
+
+    // Determine current status from tags
+    const statusTags = ['done', 'active', 'crit', 'milestone'];
+    const currentStatus = (task.tags || []).find(t => statusTags.includes(t)) || 'none';
 
     body.innerHTML = `
         <div class="property-row">
             <div class="property-label">Label</div>
             <input class="property-input" id="gantt-dlg-label" value="${_escHtml(task.label || '')}" />
         </div>
+        ${_buildStartDateHtml(startParsed, taskOptions)}
+        ${_buildEndDateHtml(endParsed)}
         <div class="property-row">
-            <div class="property-label">Start Date</div>
-            <input class="property-input" id="gantt-dlg-start" value="${_escHtml(task.startDate || '')}" />
-        </div>
-        <div class="property-row">
-            <div class="property-label">End / Duration</div>
-            <input class="property-input" id="gantt-dlg-end" value="${_escHtml(task.endDate || '')}" />
-        </div>
-        <div class="property-row">
-            <div class="property-label">Status Tags</div>
-            <input class="property-input" id="gantt-dlg-tags" value="${_escHtml(currentTags)}" placeholder="done,active,crit,milestone" />
+            <div class="property-label">Status</div>
+            <select class="property-select" id="gantt-dlg-status">
+                <option value="none"${currentStatus === 'none' ? ' selected' : ''}>None</option>
+                <option value="active"${currentStatus === 'active' ? ' selected' : ''}>Active</option>
+                <option value="done"${currentStatus === 'done' ? ' selected' : ''}>Done</option>
+                <option value="crit"${currentStatus === 'crit' ? ' selected' : ''}>Critical</option>
+                <option value="milestone"${currentStatus === 'milestone' ? ' selected' : ''}>Milestone</option>
+            </select>
         </div>
         <div class="property-row" style="margin-top:8px">
             <button class="property-btn" id="gantt-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Save</button>
         </div>
     `;
 
+    _wireGanttDialogToggles();
+
     document.getElementById('gantt-dlg-ok').addEventListener('click', function() {
         const label = document.getElementById('gantt-dlg-label').value.trim();
         if (!label) return;
-        const startDate = document.getElementById('gantt-dlg-start').value.trim();
-        const endDate = document.getElementById('gantt-dlg-end').value.trim();
-        const statusStr = document.getElementById('gantt-dlg-tags').value.trim();
-        const tags = statusStr ? statusStr.split(',').map(s => s.trim()).filter(s => s) : [];
+        const startDate = _readStartDateValue();
+        const endDate = _readEndDateValue();
+        const status = document.getElementById('gantt-dlg-status').value;
+
+        const tags = [];
+        if (status && status !== 'none') tags.push(status);
 
         postMessage({
             type: 'gantt_taskEdited',

@@ -383,6 +383,37 @@ public partial class VisualEditorBridge
             }
         }
 
+        // Apply text color as an inline style
+        if (root.TryGetProperty("textColor", out var textColorProp))
+        {
+            var textColor = textColorProp.GetString();
+            if (!string.IsNullOrEmpty(textColor))
+            {
+                var existingStyle = _model.Styles.Find(s => !s.IsClassDef && s.Target == nodeId);
+                if (existingStyle != null)
+                {
+                    // Preserve existing properties, only replace color (not fill-color, stroke-color, etc.)
+                    var props = existingStyle.StyleString
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries)
+                        .Select(p => p.Trim())
+                        .Where(p => !System.Text.RegularExpressions.Regex.IsMatch(p, @"^color\s*:", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
+                        .ToList();
+                    props.Add($"color:{textColor}");
+                    existingStyle.StyleString = string.Join(",", props);
+                }
+                else
+                {
+                    _model.Styles.Add(new StyleDefinition
+                    {
+                        IsClassDef = false,
+                        Target = nodeId,
+                        StyleString = $"color:{textColor}"
+                    });
+                }
+                changed = true;
+            }
+        }
+
         if (changed)
         {
             RaiseModelChanged("nodeStyleChanged");
