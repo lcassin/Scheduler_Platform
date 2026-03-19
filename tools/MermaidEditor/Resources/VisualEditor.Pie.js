@@ -65,12 +65,14 @@ function renderPieChart() {
     const centerY = 220;
     const radius = 150;
 
-    // Create SVG
+    // Create SVG - responsive with viewBox
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('width', svgWidth);
     svg.setAttribute('height', svgHeight);
+    svg.setAttribute('viewBox', `0 0 ${svgWidth} ${svgHeight}`);
     svg.style.display = 'block';
-    svg.style.margin = '20px auto';
+    svg.style.maxWidth = '100%';
+    svg.style.height = 'auto';
 
     // Background
     const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');

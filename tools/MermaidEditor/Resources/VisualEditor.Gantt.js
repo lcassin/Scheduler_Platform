@@ -113,7 +113,9 @@ function renderGanttDiagram() {
     }
 
     const totalRows = Math.max(allTasks.length, 1);
-    const timelineWidth = 600;
+    // Make width responsive to container
+    const containerWidth = canvas.clientWidth || window.innerWidth;
+    const timelineWidth = Math.max(200, containerWidth - labelWidth - padding * 2 - 40);
     const totalWidth = labelWidth + timelineWidth + padding * 2;
     const totalHeight = headerHeight + totalRows * rowHeight + padding * 2 + 60; // extra for toolbar
 
@@ -121,8 +123,10 @@ function renderGanttDiagram() {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.setAttribute('width', totalWidth);
     svg.setAttribute('height', totalHeight);
+    svg.setAttribute('viewBox', `0 0 ${totalWidth} ${totalHeight}`);
     svg.style.display = 'block';
-    svg.style.margin = '20px auto';
+    svg.style.maxWidth = '100%';
+    svg.style.height = 'auto';
 
     // Background
     const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
