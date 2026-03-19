@@ -765,6 +765,13 @@
                     <input type="text" class="property-input" id="prop-fill-color-text" placeholder="#hex" style="flex:1" />
                 </div>
             </div>
+            <div class="property-row" id="prop-text-color-row">
+                <div class="property-label">Text Color</div>
+                <div class="property-color-row">
+                    <input type="color" class="property-color-input" id="prop-text-color" value="#d4d4d4" />
+                    <input type="text" class="property-input" id="prop-text-color-text" placeholder="#hex" style="flex:1" />
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1023,6 +1030,9 @@
         let propStyleRow = document.getElementById('prop-style-row');
         let propFillColor = document.getElementById('prop-fill-color');
         let propFillColorText = document.getElementById('prop-fill-color-text');
+        let propTextColorRow = document.getElementById('prop-text-color-row');
+        let propTextColor = document.getElementById('prop-text-color');
+        let propTextColorText = document.getElementById('prop-text-color-text');
         const propPanelTitle = document.getElementById('property-panel-title');
         const propPanelClose = document.getElementById('property-panel-close');
         const minimapCanvas = document.getElementById('minimap-canvas');
@@ -1048,11 +1058,16 @@
             propStyleRow = document.getElementById('prop-style-row');
             propFillColor = document.getElementById('prop-fill-color');
             propFillColorText = document.getElementById('prop-fill-color-text');
+            propTextColorRow = document.getElementById('prop-text-color-row');
+            propTextColor = document.getElementById('prop-text-color');
+            propTextColorText = document.getElementById('prop-text-color-text');
             // Re-attach event listeners for property panel inputs
             propLabel.addEventListener('change', handlePropLabelChange);
             propShape.addEventListener('change', handlePropShapeChange);
             propFillColor.addEventListener('input', handlePropFillColorInput);
             propFillColorText.addEventListener('change', handlePropFillColorTextChange);
+            propTextColor.addEventListener('input', handlePropTextColorInput);
+            propTextColorText.addEventListener('change', handlePropTextColorTextChange);
             // Re-init shape picker elements and dropdown
             shapePickerSelected = document.getElementById('shape-picker-selected');
             shapePickerDropdown = document.getElementById('shape-picker-dropdown');
@@ -1307,6 +1322,18 @@
                 document.body.classList.add('theme-light');
             } else if (theme === 'twilight') {
                 document.body.classList.add('theme-twilight');
+            }
+            // Re-render the current diagram so it picks up the new CSS variable values
+            if (typeof currentDiagramType !== 'undefined') {
+                if (currentDiagramType === 'flowchart' && typeof render === 'function') {
+                    render();
+                } else if (currentDiagramType === 'gantt' && typeof renderGanttDiagram === 'function') {
+                    renderGanttDiagram();
+                } else if (currentDiagramType === 'mindmap' && typeof renderMindMap === 'function') {
+                    renderMindMap();
+                } else if (currentDiagramType === 'pie' && typeof renderPieChart === 'function') {
+                    renderPieChart();
+                }
             }
         };
 
@@ -1628,6 +1655,13 @@
                 text.setAttribute('x', '0');
                 text.setAttribute('y', '0');
                 setTextWithLineBreaks(text, node.label || node.id);
+
+                // Apply per-node text color from styles
+                const textColor = getNodeTextColor(node);
+                if (textColor) {
+                    text.style.fill = textColor;
+                }
+
                 g.appendChild(text);
 
                 // Connection points (N, S, E, W)
@@ -1964,8 +1998,8 @@
         // Draw a flowchart arrow/circle/cross marker at the given point,
         // oriented along the given angle (from edgeTangentAngles).
         function drawFlowchartEndMarker(parentG, px, py, angle, arrowType, isSelected) {
-            const edgeColor = getComputedStyle(document.documentElement).getPropertyValue('--edge-color').trim() || '#6A6A6A';
-            const selectedColor = getComputedStyle(document.documentElement).getPropertyValue('--node-selected-stroke').trim() || '#007ACC';
+            const edgeColor = getComputedStyle(document.body).getPropertyValue('--edge-color').trim() || '#6A6A6A';
+            const selectedColor = getComputedStyle(document.body).getPropertyValue('--node-selected-stroke').trim() || '#007ACC';
             const color = isSelected ? selectedColor : edgeColor;
             const size = 10;
 
@@ -2833,11 +2867,17 @@
                     updateShapePickerDisplay(node.shape || 'Rectangle');
                     propShapeRow.style.display = '';
                     propStyleRow.style.display = '';
+                    propTextColorRow.style.display = '';
 
                     // Set color from node style if available
                     const fillColor = getNodeFillColor(node);
                     propFillColor.value = fillColor;
                     propFillColorText.value = fillColor;
+
+                    // Set text color from node style if available
+                    const textColor = getNodeTextColor(node);
+                    propTextColor.value = textColor;
+                    propTextColorText.value = textColor;
 
                     propertyPanel.classList.add('visible');
                 } else if (selectedEdgeIndex >= 0 && selectedEdgeIndex < diagram.edges.length) {
@@ -2846,6 +2886,7 @@
                     propLabel.value = edge.label || '';
                     propShapeRow.style.display = 'none';
                     propStyleRow.style.display = 'none';
+                    propTextColorRow.style.display = 'none';
 
                     propertyPanel.classList.add('visible');
                 } else if (selectedSubgraphId) {
@@ -2856,6 +2897,7 @@
                     propLabel.value = sg.label || sg.id;
                     propShapeRow.style.display = 'none';
                     propStyleRow.style.display = 'none';
+                    propTextColorRow.style.display = 'none';
 
                     propertyPanel.classList.add('visible');
                 } else {
@@ -2889,7 +2931,30 @@
                 }
             }
             // Fall back to theme CSS variable
-            return getComputedStyle(document.documentElement).getPropertyValue('--node-fill').trim() || '#4a9eff';
+            return getComputedStyle(document.body).getPropertyValue('--node-fill').trim() || '#4a9eff';
+        }
+
+        function getNodeTextColor(node) {
+            // Check diagram.styles for an inline style targeting this node
+            if (diagram.styles && diagram.styles.length > 0) {
+                // Look for inline style (isClassDef === false) targeting this node's id
+                const inlineStyle = diagram.styles.find(s => !s.isClassDef && s.target === node.id);
+                if (inlineStyle && inlineStyle.styleString) {
+                    // Match "color:" but NOT "fill-color:", "stroke-color:", "background-color:" etc.
+                    const colorMatch = inlineStyle.styleString.match(/(?:^|,)\s*color\s*:\s*(#[0-9a-fA-F]{3,8})/i);
+                    if (colorMatch) return colorMatch[1];
+                }
+                // Check classDef styles
+                if (node.cssClass) {
+                    const classDef = diagram.styles.find(s => s.isClassDef && s.target === node.cssClass);
+                    if (classDef && classDef.styleString) {
+                        const colorMatch = classDef.styleString.match(/(?:^|,)\s*color\s*:\s*(#[0-9a-fA-F]{3,8})/i);
+                        if (colorMatch) return colorMatch[1];
+                    }
+                }
+            }
+            // Fall back to theme CSS variable
+            return getComputedStyle(document.body).getPropertyValue('--node-text').trim() || '#d4d4d4';
         }
 
         // Named property panel event handlers (extracted for re-attachment after panel restore)
@@ -2972,10 +3037,27 @@
             }
         }
 
+        function handlePropTextColorInput() {
+            if (_isPropPanelUpdating) return;
+            propTextColorText.value = propTextColor.value;
+            applyNodeTextColor(propTextColor.value);
+        }
+
+        function handlePropTextColorTextChange() {
+            if (_isPropPanelUpdating) return;
+            const val = propTextColorText.value.trim();
+            if (/^#[0-9a-fA-F]{3,6}$/.test(val)) {
+                propTextColor.value = val;
+                applyNodeTextColor(val);
+            }
+        }
+
         propLabel.addEventListener('change', handlePropLabelChange);
         propShape.addEventListener('change', handlePropShapeChange);
         propFillColor.addEventListener('input', handlePropFillColorInput);
         propFillColorText.addEventListener('change', handlePropFillColorTextChange);
+        propTextColor.addEventListener('input', handlePropTextColorInput);
+        propTextColorText.addEventListener('change', handlePropTextColorTextChange);
 
         function applyNodeFillColor(color) {
             if (!selectedNodeId) return;
@@ -2997,6 +3079,29 @@
                 type: 'nodeStyleChanged',
                 nodeId: selectedNodeId,
                 fillColor: color
+            });
+        }
+
+        function applyNodeTextColor(color) {
+            if (!selectedNodeId) return;
+            // Update local diagram styles immediately so re-render shows the color
+            if (!diagram.styles) diagram.styles = [];
+            const existing = diagram.styles.find(s => !s.isClassDef && s.target === selectedNodeId);
+            if (existing) {
+                // Update color in existing style string (match standalone "color:" not "fill-color:" etc.)
+                if (/(?:^|,)\s*color\s*:/i.test(existing.styleString)) {
+                    existing.styleString = existing.styleString.replace(/(^|,)\s*color\s*:\s*#[0-9a-fA-F]{3,8}/i, '$1color:' + color);
+                } else {
+                    existing.styleString = existing.styleString ? existing.styleString + ',color:' + color : 'color:' + color;
+                }
+            } else {
+                diagram.styles.push({ isClassDef: false, target: selectedNodeId, styleString: 'color:' + color });
+            }
+            render();
+            postMessage({
+                type: 'nodeStyleChanged',
+                nodeId: selectedNodeId,
+                textColor: color
             });
         }
 

@@ -53,7 +53,7 @@ function renderPieChart() {
     canvas.innerHTML = '';
 
     // Read theme colors from CSS variables (set by theme-light / theme-twilight / default dark)
-    const cs = getComputedStyle(document.documentElement);
+    const cs = getComputedStyle(document.body);
     const cv = (v) => cs.getPropertyValue(v).trim();
     const textColor = cv('--node-text') || '#D4D4D4';
     const bgColor = cv('--bg-color') || '#1E1E1E';
