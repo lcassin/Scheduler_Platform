@@ -461,21 +461,42 @@ function renderGanttDiagram() {
 
     // Cold-start fix: on first load the container may still be 0-width when
     // this render runs (display was 'none' → 'block' and WebView2/WPF layout
-    // hasn't completed yet). requestAnimationFrame is too early for the WPF
-    // layout pass, so we use a 200ms setTimeout as a pragmatic fallback.
-    // If the container width changed meaningfully, re-render once.
+    // hasn't completed yet).  Use a ResizeObserver to detect when the container
+    // actually gets a real size, then re-render.  A cascade of setTimeout
+    // fallbacks covers browsers/environments where ResizeObserver fires late.
     const renderedWidth = containerWidth;
     _ganttLastRenderedWidth = renderedWidth;
-    setTimeout(function() {
-        if (!ganttModel) return;
+
+    // Helper: re-render once if the container width changed meaningfully
+    function _ganttCheckResize() {
+        if (!ganttModel) return false;
         var ec = document.getElementById('editorCanvas');
-        if (!ec) return;
+        if (!ec) return false;
         var postLayoutWidth = ec.clientWidth;
         if (postLayoutWidth > 50 && Math.abs(postLayoutWidth - renderedWidth) > 50) {
             _ganttLastRenderedWidth = postLayoutWidth;
             renderGanttDiagram();
+            return true; // did re-render
         }
-    }, 200);
+        return false;
+    }
+
+    // Strategy 1: ResizeObserver – fires as soon as layout actually changes
+    if (typeof ResizeObserver !== 'undefined') {
+        var _ganttResizeObs = new ResizeObserver(function() {
+            if (_ganttCheckResize()) {
+                _ganttResizeObs.disconnect();
+            }
+        });
+        _ganttResizeObs.observe(canvas);
+        // Safety: disconnect after 5s to avoid leaking observers
+        setTimeout(function() { _ganttResizeObs.disconnect(); }, 5000);
+    }
+
+    // Strategy 2: cascading timeouts (200ms, 500ms, 1000ms) as fallback
+    setTimeout(function() { _ganttCheckResize(); }, 200);
+    setTimeout(function() { _ganttCheckResize(); }, 500);
+    setTimeout(function() { _ganttCheckResize(); }, 1000);
 }
 
 function renderGanttToolbar(svg, x, y, width, isLight, textColor) {
