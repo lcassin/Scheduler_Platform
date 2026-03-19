@@ -996,6 +996,8 @@
         let isDrawingEdge = false;
         let drawEdgeFromId = null;
         let panzoomInstance = null;
+        // Zoom state for editorCanvas-based diagrams (gantt, mindmap, pie)
+        let editorCanvasZoom = 1;
         let contextMenuX = 0;
         let contextMenuY = 0;
         let selectedNodeIds = [];  // For multi-select (Ctrl+A)
@@ -2410,6 +2412,11 @@
         // ========== Center View ==========
 
         function centerView() {
+            // Handle editorCanvas-based diagrams (gantt, mindmap, pie)
+            if (_isEditorCanvasDiagram()) {
+                _editorCanvasFitToView();
+                return;
+            }
             if (!panzoomInstance) return;
 
             const bbox = getDiagramBoundingBox();
@@ -2431,6 +2438,59 @@
             // Reset zoom to 1 first, then apply new transform
             panzoomInstance.zoomAbs(0, 0, targetScale);
             panzoomInstance.moveTo(vw / 2 - cx * targetScale, vh / 2 - cy * targetScale);
+        }
+
+        // ========== EditorCanvas Zoom Helpers ==========
+        // Used by gantt, mindmap, and pie diagrams which render their own SVG
+        // inside the editorCanvas div (which uses overflow:auto for panning).
+
+        function _isEditorCanvasDiagram() {
+            return currentDiagramType === 'gantt' || currentDiagramType === 'mindmap' || currentDiagramType === 'pie';
+        }
+
+        function _getEditorCanvasSvg() {
+            const ec = document.getElementById('editorCanvas');
+            return ec ? ec.querySelector('svg') : null;
+        }
+
+        function _applyEditorCanvasZoom(newZoom) {
+            const svgEl = _getEditorCanvasSvg();
+            if (!svgEl) return;
+            editorCanvasZoom = Math.max(0.2, Math.min(5, newZoom));
+            svgEl.style.transformOrigin = 'top left';
+            svgEl.style.transform = 'scale(' + editorCanvasZoom + ')';
+            // Remove maxWidth constraint so the scaled SVG can exceed the container
+            svgEl.style.maxWidth = 'none';
+            // Update minimap after zoom change
+            updateMinimap();
+        }
+
+        function _editorCanvasZoomIn() {
+            _applyEditorCanvasZoom(editorCanvasZoom * 1.3);
+        }
+
+        function _editorCanvasZoomOut() {
+            _applyEditorCanvasZoom(editorCanvasZoom / 1.3);
+        }
+
+        function _editorCanvasFitToView() {
+            const svgEl = _getEditorCanvasSvg();
+            const ec = document.getElementById('editorCanvas');
+            if (!svgEl || !ec) return;
+            // Get the natural (unscaled) size of the SVG
+            const naturalW = parseFloat(svgEl.getAttribute('width')) || svgEl.getBBox().width || 800;
+            const naturalH = parseFloat(svgEl.getAttribute('height')) || svgEl.getBBox().height || 600;
+            const containerW = ec.clientWidth;
+            const containerH = ec.clientHeight;
+            if (naturalW <= 0 || naturalH <= 0 || containerW <= 0 || containerH <= 0) return;
+            const padding = 20;
+            const scaleX = (containerW - padding * 2) / naturalW;
+            const scaleY = (containerH - padding * 2) / naturalH;
+            const targetScale = Math.min(scaleX, scaleY, 2);
+            _applyEditorCanvasZoom(targetScale);
+            // Scroll to top-left
+            ec.scrollTop = 0;
+            ec.scrollLeft = 0;
         }
 
         // ========== Event Handlers ==========
@@ -4330,11 +4390,64 @@
                 });
             }
 
+            } else if (_isEditorCanvasDiagram()) {
+                // Render editorCanvas SVG thumbnail for gantt/mindmap/pie
+                const ecSvg = _getEditorCanvasSvg();
+                if (ecSvg) {
+                    const naturalW = parseFloat(ecSvg.getAttribute('width')) || 800;
+                    const naturalH = parseFloat(ecSvg.getAttribute('height')) || 600;
+                    const ecScale = Math.min(cw / naturalW, ch / naturalH);
+                    // Draw rectangles representing the diagram content
+                    minimapCtx.fillStyle = isDark ? '#3E3E42' : '#CCCCCC';
+                    minimapCtx.fillRect(0, 0, naturalW * ecScale, naturalH * ecScale);
+                    // Draw a lighter inner area to represent content
+                    minimapCtx.fillStyle = isDark ? '#2D2D30' : '#E0E0E0';
+                    const inset = 4;
+                    minimapCtx.fillRect(inset, inset, naturalW * ecScale - inset * 2, naturalH * ecScale - inset * 2);
+                    // Store bbox for click-to-navigate
+                    minimapCanvas._diagramBBox = { minX: 0, minY: 0, dw: naturalW, dh: naturalH, scale: ecScale };
+                    minimapCanvas._isEditorCanvas = true;
+                } else {
+                    minimapViewport.style.display = 'none';
+                    return;
+                }
+            }
+
             // Store bounding box info for click-to-navigate
-            minimapCanvas._diagramBBox = { minX, minY, dw, dh, scale };
+            if (!minimapCanvas._isEditorCanvas) {
+                minimapCanvas._diagramBBox = { minX, minY, dw, dh, scale };
+            }
 
             // Update viewport indicator
-            if (panzoomInstance) {
+            if (_isEditorCanvasDiagram()) {
+                // For editorCanvas diagrams, compute viewport from scroll position and zoom
+                const ec = document.getElementById('editorCanvas');
+                const ecSvg = _getEditorCanvasSvg();
+                if (ec && ecSvg && minimapCanvas._diagramBBox) {
+                    const bbox = minimapCanvas._diagramBBox;
+                    const naturalW = parseFloat(ecSvg.getAttribute('width')) || 800;
+                    const naturalH = parseFloat(ecSvg.getAttribute('height')) || 600;
+                    const ecScale = bbox.scale;
+                    const displayScaleX = 180 / cw;
+                    const displayScaleY = 120 / ch;
+                    // Viewport in natural SVG coordinates
+                    const vx = ec.scrollLeft / editorCanvasZoom;
+                    const vy = ec.scrollTop / editorCanvasZoom;
+                    const vw = ec.clientWidth / editorCanvasZoom;
+                    const vh = ec.clientHeight / editorCanvasZoom;
+                    const mvx = vx * ecScale * displayScaleX;
+                    const mvy = vy * ecScale * displayScaleY;
+                    const mvw = vw * ecScale * displayScaleX;
+                    const mvh = vh * ecScale * displayScaleY;
+                    minimapViewport.style.display = '';
+                    minimapViewport.style.left = Math.max(0, mvx) + 'px';
+                    minimapViewport.style.top = Math.max(0, mvy) + 'px';
+                    minimapViewport.style.width = Math.min(180, mvw) + 'px';
+                    minimapViewport.style.height = Math.min(120, mvh) + 'px';
+                } else {
+                    minimapViewport.style.display = 'none';
+                }
+            } else if (panzoomInstance) {
                 const transform = panzoomInstance.getTransform();
                 const container = canvasContainer.getBoundingClientRect();
                 const vx = (-transform.x / transform.scale);
@@ -4359,31 +4472,40 @@
             } else {
                 minimapViewport.style.display = 'none';
             }
+            minimapCanvas._isEditorCanvas = false;
         }
 
         // ========== Minimap Click-to-Navigate ==========
         // Click on minimap to pan the main view to that location
         document.getElementById('minimap').addEventListener('click', function(e) {
-            if (!panzoomInstance || !minimapCanvas._diagramBBox) return;
+            if (!minimapCanvas._diagramBBox) return;
             const rect = minimapCanvas.getBoundingClientRect();
-            // Click position within the minimap (0..180, 0..120 CSS pixels)
             const clickX = e.clientX - rect.left;
             const clickY = e.clientY - rect.top;
             const bbox = minimapCanvas._diagramBBox;
             const cw = minimapCanvas.width;  // 360
             const ch = minimapCanvas.height; // 240
-            // Convert minimap click to diagram-space coordinates
             const displayScaleX = 180 / cw;
             const displayScaleY = 120 / ch;
             const diagramX = (clickX / displayScaleX) / bbox.scale + bbox.minX;
             const diagramY = (clickY / displayScaleY) / bbox.scale + bbox.minY;
-            // Pan so clicked point is at center of viewport
-            const transform = panzoomInstance.getTransform();
-            const container = canvasContainer.getBoundingClientRect();
-            const newX = container.width / 2 - diagramX * transform.scale;
-            const newY = container.height / 2 - diagramY * transform.scale;
-            panzoomInstance.moveTo(newX, newY);
-            updateMinimap();
+
+            if (_isEditorCanvasDiagram()) {
+                // Scroll editorCanvas to show the clicked point centered
+                const ec = document.getElementById('editorCanvas');
+                if (ec) {
+                    ec.scrollLeft = diagramX * editorCanvasZoom - ec.clientWidth / 2;
+                    ec.scrollTop = diagramY * editorCanvasZoom - ec.clientHeight / 2;
+                    updateMinimap();
+                }
+            } else if (panzoomInstance) {
+                const transform = panzoomInstance.getTransform();
+                const container = canvasContainer.getBoundingClientRect();
+                const newX = container.width / 2 - diagramX * transform.scale;
+                const newY = container.height / 2 - diagramY * transform.scale;
+                panzoomInstance.moveTo(newX, newY);
+                updateMinimap();
+            }
         });
 
         // Update minimap whenever panzoom transforms (zoom or pan)
@@ -4398,6 +4520,13 @@
                 });
             }
         }
+
+        // Update minimap when editorCanvas is scrolled (pan for gantt/mindmap/pie)
+        document.getElementById('editorCanvas').addEventListener('scroll', function() {
+            if (_isEditorCanvasDiagram()) {
+                onPanzoomTransform();
+            }
+        });
 
 
         // INJECT_DIAGRAM_SCRIPTS
@@ -4623,8 +4752,9 @@
         document.getElementById('tb-pie-settings').addEventListener('click', function() { editPieSettings(); });
 
         document.getElementById('tb-zoom-in').addEventListener('click', function() {
-            if (panzoomInstance) {
-                const transform = panzoomInstance.getTransform();
+            if (_isEditorCanvasDiagram()) {
+                _editorCanvasZoomIn();
+            } else if (panzoomInstance) {
                 const vw = canvasContainer.clientWidth / 2;
                 const vh = canvasContainer.clientHeight / 2;
                 panzoomInstance.smoothZoom(vw, vh, 1.3);
@@ -4632,7 +4762,9 @@
         });
 
         document.getElementById('tb-zoom-out').addEventListener('click', function() {
-            if (panzoomInstance) {
+            if (_isEditorCanvasDiagram()) {
+                _editorCanvasZoomOut();
+            } else if (panzoomInstance) {
                 const vw = canvasContainer.clientWidth / 2;
                 const vh = canvasContainer.clientHeight / 2;
                 panzoomInstance.smoothZoom(vw, vh, 0.7);
@@ -4642,6 +4774,16 @@
         document.getElementById('tb-zoom-fit').addEventListener('click', function() {
             centerView();
         });
+
+        // Mouse-wheel zoom for editorCanvas-based diagrams
+        document.getElementById('editorCanvas').addEventListener('wheel', function(e) {
+            if (!_isEditorCanvasDiagram()) return;
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                const factor = e.deltaY < 0 ? 1.1 : 0.9;
+                _applyEditorCanvasZoom(editorCanvasZoom * factor);
+            }
+        }, { passive: false });
 
         // Clear edge-draw active state when edge drawing ends
         const origMouseUp = svg.onmouseup;

@@ -14,6 +14,7 @@ window.loadMindMap = function(jsonStr) {
         currentDiagramType = 'mindmap';
         mindMapModel = JSON.parse(jsonStr);
         mindMapSelectedPath = null;
+        editorCanvasZoom = 1;
         updateToolbarForDiagramType();
         renderMindMap();
     } catch (e) {
@@ -107,6 +108,14 @@ function renderMindMap() {
     renderMindMapToolbar(svg, 10, svgHeight - 50, svgWidth - 20, isLight, textColor);
 
     canvas.appendChild(svg);
+
+    // Apply current zoom level and update minimap
+    if (typeof editorCanvasZoom !== 'undefined' && editorCanvasZoom !== 1) {
+        svg.style.transformOrigin = 'top left';
+        svg.style.transform = 'scale(' + editorCanvasZoom + ')';
+        svg.style.maxWidth = 'none';
+    }
+    if (typeof updateMinimap === 'function') updateMinimap();
 }
 
 function calculateMindMapLayout(node, level, path) {
