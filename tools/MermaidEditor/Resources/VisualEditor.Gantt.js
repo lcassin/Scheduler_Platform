@@ -44,10 +44,6 @@ window.refreshGanttDiagram = function(jsonStr) {
 
 // ========== Gantt Rendering ==========
 
-// Track the width used for the last Gantt render so we can detect if a
-// deferred re-render is needed (cold-start: container goes from 0→real width
-// after the initial render because display was 'none' when loadGanttDiagram ran).
-let _ganttLastRenderedWidth = 0;
 
 function renderGanttDiagram() {
     const canvas = document.getElementById('editorCanvas');
@@ -122,10 +118,11 @@ function renderGanttDiagram() {
     }
 
     const totalRows = Math.max(rows.length, 1);
-    // Make width responsive to container; use window.innerWidth as fallback when canvas
-    // hasn't been laid out yet (e.g. first load from cache before the container is visible)
-    const containerWidth = (canvas.clientWidth > 50 ? canvas.clientWidth : null) || (canvas.parentElement && canvas.parentElement.clientWidth > 50 ? canvas.parentElement.clientWidth : null) || window.innerWidth;
-    const timelineWidth = Math.max(200, containerWidth - labelWidth - padding * 2 - 40);
+    // Use a fixed minimum width for the Gantt chart so it always renders at a
+    // readable size regardless of whether the container has been laid out yet.
+    // The editorCanvas div has overflow:auto so scrollbars appear if the SVG
+    // is wider than the viewport.
+    const timelineWidth = Math.max(600, 800);
     const totalWidth = labelWidth + timelineWidth + padding * 2;
     const totalHeight = headerHeight + totalRows * rowHeight + padding * 2 + 60; // extra for toolbar
 
@@ -135,8 +132,6 @@ function renderGanttDiagram() {
     svg.setAttribute('height', totalHeight);
     svg.setAttribute('viewBox', `0 0 ${totalWidth} ${totalHeight}`);
     svg.style.display = 'block';
-    svg.style.maxWidth = '100%';
-    svg.style.height = 'auto';
 
     // Background
     const bg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -455,48 +450,9 @@ function renderGanttDiagram() {
     if (typeof editorCanvasZoom !== 'undefined' && editorCanvasZoom !== 1) {
         svg.style.transformOrigin = 'top left';
         svg.style.transform = 'scale(' + editorCanvasZoom + ')';
-        svg.style.maxWidth = 'none';
     }
     if (typeof updateMinimap === 'function') updateMinimap();
 
-    // Cold-start fix: on first load the container may still be 0-width when
-    // this render runs (display was 'none' → 'block' and WebView2/WPF layout
-    // hasn't completed yet).  Use a ResizeObserver to detect when the container
-    // actually gets a real size, then re-render.  A cascade of setTimeout
-    // fallbacks covers browsers/environments where ResizeObserver fires late.
-    const renderedWidth = containerWidth;
-    _ganttLastRenderedWidth = renderedWidth;
-
-    // Helper: re-render once if the container width changed meaningfully
-    function _ganttCheckResize() {
-        if (!ganttModel) return false;
-        var ec = document.getElementById('editorCanvas');
-        if (!ec) return false;
-        var postLayoutWidth = ec.clientWidth;
-        if (postLayoutWidth > 50 && Math.abs(postLayoutWidth - renderedWidth) > 50) {
-            _ganttLastRenderedWidth = postLayoutWidth;
-            renderGanttDiagram();
-            return true; // did re-render
-        }
-        return false;
-    }
-
-    // Strategy 1: ResizeObserver – fires as soon as layout actually changes
-    if (typeof ResizeObserver !== 'undefined') {
-        var _ganttResizeObs = new ResizeObserver(function() {
-            if (_ganttCheckResize()) {
-                _ganttResizeObs.disconnect();
-            }
-        });
-        _ganttResizeObs.observe(canvas);
-        // Safety: disconnect after 5s to avoid leaking observers
-        setTimeout(function() { _ganttResizeObs.disconnect(); }, 5000);
-    }
-
-    // Strategy 2: cascading timeouts (200ms, 500ms, 1000ms) as fallback
-    setTimeout(function() { _ganttCheckResize(); }, 200);
-    setTimeout(function() { _ganttCheckResize(); }, 500);
-    setTimeout(function() { _ganttCheckResize(); }, 1000);
 }
 
 function renderGanttToolbar(svg, x, y, width, isLight, textColor) {

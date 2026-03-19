@@ -2493,8 +2493,6 @@
             editorCanvasZoom = Math.max(0.2, Math.min(5, newZoom));
             svgEl.style.transformOrigin = 'top left';
             svgEl.style.transform = 'scale(' + editorCanvasZoom + ')';
-            // Remove maxWidth constraint so the scaled SVG can exceed the container
-            svgEl.style.maxWidth = 'none';
             // Update minimap after zoom change
             updateMinimap();
         }
@@ -4423,22 +4421,43 @@
                     minimapCtx.stroke();
                 });
             } else if (_isEditorCanvasDiagram()) {
-                // Render editorCanvas SVG thumbnail for gantt/mindmap/pie
+                // Render editorCanvas SVG as a real thumbnail image in the minimap
                 const ecSvg = _getEditorCanvasSvg();
                 if (ecSvg) {
                     const naturalW = parseFloat(ecSvg.getAttribute('width')) || 800;
                     const naturalH = parseFloat(ecSvg.getAttribute('height')) || 600;
                     const ecScale = Math.min(cw / naturalW, ch / naturalH);
-                    // Draw rectangles representing the diagram content
-                    minimapCtx.fillStyle = isDark ? '#3E3E42' : '#CCCCCC';
-                    minimapCtx.fillRect(0, 0, naturalW * ecScale, naturalH * ecScale);
-                    // Draw a lighter inner area to represent content
-                    minimapCtx.fillStyle = isDark ? '#2D2D30' : '#E0E0E0';
-                    const inset = 4;
-                    minimapCtx.fillRect(inset, inset, naturalW * ecScale - inset * 2, naturalH * ecScale - inset * 2);
-                    // Store bbox for click-to-navigate
+                    // Store bbox for click-to-navigate (set early so viewport indicator works)
                     minimapCanvas._diagramBBox = { minX: 0, minY: 0, dw: naturalW, dh: naturalH, scale: ecScale };
                     minimapCanvas._isEditorCanvas = true;
+
+                    // Render SVG as an image onto the minimap canvas
+                    try {
+                        const svgClone = ecSvg.cloneNode(true);
+                        // Remove any transform (zoom) from the clone so we get natural size
+                        svgClone.style.transform = '';
+                        svgClone.style.transformOrigin = '';
+                        const svgData = new XMLSerializer().serializeToString(svgClone);
+                        const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+                        const url = URL.createObjectURL(svgBlob);
+                        const img = new Image();
+                        img.onload = function() {
+                            // Draw the SVG image scaled to fit the minimap canvas
+                            minimapCtx.drawImage(img, 0, 0, naturalW * ecScale, naturalH * ecScale);
+                            URL.revokeObjectURL(url);
+                        };
+                        img.onerror = function() {
+                            // Fallback: draw a simple rectangle if SVG rendering fails
+                            minimapCtx.fillStyle = isDark ? '#3E3E42' : '#CCCCCC';
+                            minimapCtx.fillRect(0, 0, naturalW * ecScale, naturalH * ecScale);
+                            URL.revokeObjectURL(url);
+                        };
+                        img.src = url;
+                    } catch (ex) {
+                        // Fallback: draw a simple rectangle
+                        minimapCtx.fillStyle = isDark ? '#3E3E42' : '#CCCCCC';
+                        minimapCtx.fillRect(0, 0, naturalW * ecScale, naturalH * ecScale);
+                    }
                 } else {
                     minimapViewport.style.display = 'none';
                     return;
@@ -4559,6 +4578,60 @@
                 onPanzoomTransform();
             }
         });
+
+        // ========== Drag-to-Pan for editorCanvas ==========
+        // Allow click-and-drag to scroll the editorCanvas (Gantt/MindMap/Pie)
+        (function() {
+            const ec = document.getElementById('editorCanvas');
+            let isPanning = false;
+            let panStartX = 0;
+            let panStartY = 0;
+            let scrollStartX = 0;
+            let scrollStartY = 0;
+
+            ec.addEventListener('mousedown', function(e) {
+                if (!_isEditorCanvasDiagram()) return;
+                // Only pan on left-click on the background (not on interactive elements)
+                if (e.button !== 0) return;
+                // Don't pan if clicking on a button or interactive SVG element
+                const tag = e.target.tagName.toLowerCase();
+                if (tag === 'button' || e.target.closest('foreignObject') || e.target.closest('[onclick]') || e.target.closest('[data-action]')) return;
+                isPanning = true;
+                panStartX = e.clientX;
+                panStartY = e.clientY;
+                scrollStartX = ec.scrollLeft;
+                scrollStartY = ec.scrollTop;
+                ec.style.cursor = 'grabbing';
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', function(e) {
+                if (!isPanning) return;
+                const dx = e.clientX - panStartX;
+                const dy = e.clientY - panStartY;
+                ec.scrollLeft = scrollStartX - dx;
+                ec.scrollTop = scrollStartY - dy;
+            });
+
+            document.addEventListener('mouseup', function() {
+                if (isPanning) {
+                    isPanning = false;
+                    ec.style.cursor = '';
+                }
+            });
+
+            // Set grab cursor when hovering over editorCanvas in diagram mode
+            ec.addEventListener('mouseenter', function() {
+                if (_isEditorCanvasDiagram() && !isPanning) {
+                    ec.style.cursor = 'grab';
+                }
+            });
+            ec.addEventListener('mouseleave', function() {
+                if (!isPanning) {
+                    ec.style.cursor = '';
+                }
+            });
+        })();
 
 
         // INJECT_DIAGRAM_SCRIPTS
