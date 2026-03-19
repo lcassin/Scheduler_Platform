@@ -12,9 +12,11 @@ let ganttSelectedSection = null;
 
 window.loadGanttDiagram = function(jsonStr) {
     try {
+        currentDiagramType = 'gantt';
         ganttModel = JSON.parse(jsonStr);
         ganttSelectedTask = null;
         ganttSelectedSection = null;
+        updateToolbarForDiagramType();
         renderGanttDiagram();
     } catch (e) {
         console.error('Failed to load gantt diagram:', e);

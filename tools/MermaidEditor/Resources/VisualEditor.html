@@ -924,7 +924,7 @@
 
         // Unified toolbar visibility based on current diagram type
         function updateToolbarForDiagramType() {
-            const typeClasses = ['toolbar-flowchart', 'toolbar-sequence', 'toolbar-class', 'toolbar-state', 'toolbar-er'];
+            const typeClasses = ['toolbar-flowchart', 'toolbar-sequence', 'toolbar-class', 'toolbar-state', 'toolbar-er', 'toolbar-gantt', 'toolbar-mindmap', 'toolbar-pie'];
             const activeClass = 'toolbar-' + currentDiagramType;
             typeClasses.forEach(cls => {
                 document.querySelectorAll('.' + cls).forEach(btn => {

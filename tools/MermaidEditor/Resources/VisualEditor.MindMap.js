@@ -11,8 +11,10 @@ let mindMapSelectedPath = null; // Array of indices from root
 
 window.loadMindMap = function(jsonStr) {
     try {
+        currentDiagramType = 'mindmap';
         mindMapModel = JSON.parse(jsonStr);
         mindMapSelectedPath = null;
+        updateToolbarForDiagramType();
         renderMindMap();
     } catch (e) {
         console.error('Failed to load mind map:', e);

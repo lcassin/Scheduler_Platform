@@ -11,8 +11,10 @@ let pieSelectedSlice = null; // index
 
 window.loadPieChart = function(jsonStr) {
     try {
+        currentDiagramType = 'pie';
         pieModel = JSON.parse(jsonStr);
         pieSelectedSlice = null;
+        updateToolbarForDiagramType();
         renderPieChart();
     } catch (e) {
         console.error('Failed to load pie chart:', e);
