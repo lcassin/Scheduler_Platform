@@ -2446,7 +2446,7 @@
         // ========== Center View ==========
 
         function centerView() {
-            // Handle editorCanvas-based diagrams (gantt, mindmap, pie)
+            // Handle editorCanvas-based diagrams (gantt, pie)
             if (_isEditorCanvasDiagram()) {
                 _editorCanvasFitToView();
                 return;
@@ -2475,11 +2475,12 @@
         }
 
         // ========== EditorCanvas Zoom Helpers ==========
-        // Used by gantt, mindmap, and pie diagrams which render their own SVG
+        // Used by gantt and pie diagrams which render their own SVG
         // inside the editorCanvas div (which uses overflow:auto for panning).
+        // Note: mindmap now uses the flowchart infrastructure (panzoom SVG).
 
         function _isEditorCanvasDiagram() {
-            return currentDiagramType === 'gantt' || currentDiagramType === 'mindmap' || currentDiagramType === 'pie';
+            return currentDiagramType === 'gantt' || currentDiagramType === 'pie';
         }
 
         function _getEditorCanvasSvg() {
@@ -4847,9 +4848,9 @@
         document.getElementById('tb-gantt-add-section').addEventListener('click', function() { createGanttSection(); });
         document.getElementById('tb-gantt-settings').addEventListener('click', function() { editGanttSettings(); });
 
-        // MindMap toolbar buttons
+        // MindMap toolbar buttons (use flowchart's selectedNodeId)
         document.getElementById('tb-mm-add-child').addEventListener('click', function() { createMindMapChild(); });
-        document.getElementById('tb-mm-edit-node').addEventListener('click', function() { if (mindMapSelectedPath) editMindMapNode(mindMapSelectedPath); });
+        document.getElementById('tb-mm-edit-node').addEventListener('click', function() { if (selectedNodeId) editMindMapNode(selectedNodeId); });
         document.getElementById('tb-mm-delete-node').addEventListener('click', function() { deleteMindMapNode(); });
 
         // Pie toolbar buttons
