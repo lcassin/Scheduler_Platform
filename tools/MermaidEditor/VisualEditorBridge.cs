@@ -14,7 +14,10 @@ public enum ActiveDiagramType
     Sequence,
     ClassDiagram,
     StateDiagram,
-    ERDiagram
+    ERDiagram,
+    Gantt,
+    MindMap,
+    Pie
 }
 
 /// <summary>
@@ -212,6 +215,24 @@ public partial class VisualEditorBridge
                 await RefreshSequenceDiagramAsync();
                 RaiseSequenceModelChanged("undo");
             }
+            else if (_activeDiagramType == ActiveDiagramType.Gantt)
+            {
+                RestoreGanttModelFromJson(previousJson);
+                await RestoreGanttToEditorAsync();
+                RaiseGanttModelChanged("undo");
+            }
+            else if (_activeDiagramType == ActiveDiagramType.MindMap)
+            {
+                RestoreMindMapModelFromJson(previousJson);
+                await RestoreMindMapToEditorAsync();
+                RaiseMindMapModelChanged("undo");
+            }
+            else if (_activeDiagramType == ActiveDiagramType.Pie)
+            {
+                RestorePieChartModelFromJson(previousJson);
+                await RestorePieChartToEditorAsync();
+                RaisePieChartModelChanged("undo");
+            }
             else
             {
                 RestoreModelFromJson(previousJson);
@@ -269,6 +290,24 @@ public partial class VisualEditorBridge
                 await RefreshSequenceDiagramAsync();
                 RaiseSequenceModelChanged("redo");
             }
+            else if (_activeDiagramType == ActiveDiagramType.Gantt)
+            {
+                RestoreGanttModelFromJson(redoJson);
+                await RestoreGanttToEditorAsync();
+                RaiseGanttModelChanged("redo");
+            }
+            else if (_activeDiagramType == ActiveDiagramType.MindMap)
+            {
+                RestoreMindMapModelFromJson(redoJson);
+                await RestoreMindMapToEditorAsync();
+                RaiseMindMapModelChanged("redo");
+            }
+            else if (_activeDiagramType == ActiveDiagramType.Pie)
+            {
+                RestorePieChartModelFromJson(redoJson);
+                await RestorePieChartToEditorAsync();
+                RaisePieChartModelChanged("redo");
+            }
             else
             {
                 RestoreModelFromJson(redoJson);
@@ -295,6 +334,12 @@ public partial class VisualEditorBridge
             return ConvertClassDiagramModelToJson(_classDiagramModel);
         if (_activeDiagramType == ActiveDiagramType.Sequence && _sequenceModel != null)
             return ConvertSequenceModelToJson(_sequenceModel);
+        if (_activeDiagramType == ActiveDiagramType.Gantt && _ganttModel != null)
+            return ConvertGanttModelToJson(_ganttModel);
+        if (_activeDiagramType == ActiveDiagramType.MindMap && _mindMapModel != null)
+            return ConvertMindMapModelToJson(_mindMapModel);
+        if (_activeDiagramType == ActiveDiagramType.Pie && _pieChartModel != null)
+            return ConvertPieChartModelToJson(_pieChartModel);
         return ConvertModelToJson(_model);
     }
 
@@ -696,6 +741,78 @@ public partial class VisualEditorBridge
                 case "er_entitySelected":
                 case "er_relationshipSelected":
                     // Selection doesn't need model changes
+                    break;
+
+                // ===== Gantt Chart Messages =====
+
+                case "gantt_taskCreated":
+                    HandleGanttTaskCreated(root);
+                    break;
+
+                case "gantt_taskEdited":
+                    HandleGanttTaskEdited(root);
+                    break;
+
+                case "gantt_taskDeleted":
+                    HandleGanttTaskDeleted(root);
+                    break;
+
+                case "gantt_sectionCreated":
+                    HandleGanttSectionCreated(root);
+                    break;
+
+                case "gantt_sectionEdited":
+                    HandleGanttSectionEdited(root);
+                    break;
+
+                case "gantt_sectionDeleted":
+                    HandleGanttSectionDeleted(root);
+                    break;
+
+                case "gantt_settingsChanged":
+                    HandleGanttSettingsChanged(root);
+                    break;
+
+                case "gantt_taskSelected":
+                case "gantt_sectionSelected":
+                    break;
+
+                // ===== Mind Map Messages =====
+
+                case "mm_nodeCreated":
+                    HandleMindMapNodeCreated(root);
+                    break;
+
+                case "mm_nodeEdited":
+                    HandleMindMapNodeEdited(root);
+                    break;
+
+                case "mm_nodeDeleted":
+                    HandleMindMapNodeDeleted(root);
+                    break;
+
+                case "mm_nodeSelected":
+                    break;
+
+                // ===== Pie Chart Messages =====
+
+                case "pie_sliceCreated":
+                    HandlePieSliceCreated(root);
+                    break;
+
+                case "pie_sliceEdited":
+                    HandlePieSliceEdited(root);
+                    break;
+
+                case "pie_sliceDeleted":
+                    HandlePieSliceDeleted(root);
+                    break;
+
+                case "pie_settingsChanged":
+                    HandlePieSettingsChanged(root);
+                    break;
+
+                case "pie_sliceSelected":
                     break;
             }
         }

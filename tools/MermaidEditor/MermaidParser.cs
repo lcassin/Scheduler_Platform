@@ -2458,4 +2458,442 @@ public static class MermaidParser
         knownEntities.Add(entityName);
         model.Entities.Add(new EREntity { Name = entityName });
     }
+
+    // =============================================
+    // Gantt Chart Parser (Phase 4)
+    // =============================================
+
+    // --- Gantt patterns ---
+    private static readonly Regex GanttDeclaration = new(@"^\s*gantt\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex GanttTitlePattern = new(@"^\s*title\s+(.+)$", RegexOptions.Compiled);
+    private static readonly Regex GanttDateFormatPattern = new(@"^\s*dateFormat\s+(.+)$", RegexOptions.Compiled);
+    private static readonly Regex GanttAxisFormatPattern = new(@"^\s*axisFormat\s+(.+)$", RegexOptions.Compiled);
+    private static readonly Regex GanttExcludesPattern = new(@"^\s*excludes\s+(.+)$", RegexOptions.Compiled);
+    private static readonly Regex GanttSectionPattern = new(@"^\s*section\s+(.+)$", RegexOptions.Compiled);
+    private static readonly Regex GanttTickIntervalPattern = new(@"^\s*tickInterval\s+(.+)$", RegexOptions.Compiled);
+    // Task pattern: label :metadata
+    private static readonly Regex GanttTaskPattern = new(@"^\s*(.+?)\s*:\s*(.+)$", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Parses Mermaid gantt chart text into a GanttModel.
+    /// </summary>
+    public static GanttModel? ParseGantt(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        var lines = text.Split('\n');
+        var model = new GanttModel();
+        bool foundDeclaration = false;
+        GanttSection? currentSection = null;
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var rawLine = lines[i];
+            var line = rawLine.TrimEnd('\r');
+
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            // Check for comments
+            var commentMatch = CommentPattern.Match(line);
+            if (commentMatch.Success)
+            {
+                model.Comments.Add(new CommentEntry
+                {
+                    Text = commentMatch.Groups[1].Value,
+                    OriginalLineIndex = i
+                });
+                continue;
+            }
+
+            // Look for gantt declaration
+            if (!foundDeclaration)
+            {
+                var declMatch = GanttDeclaration.Match(line);
+                if (declMatch.Success)
+                {
+                    foundDeclaration = true;
+                    model.DeclarationLineIndex = i;
+                    continue;
+                }
+
+                model.PreambleLines.Add(line);
+                continue;
+            }
+
+            var trimmed = line.Trim();
+
+            // Title
+            var titleMatch = GanttTitlePattern.Match(trimmed);
+            if (titleMatch.Success)
+            {
+                model.Title = titleMatch.Groups[1].Value.Trim();
+                continue;
+            }
+
+            // Date format
+            var dfMatch = GanttDateFormatPattern.Match(trimmed);
+            if (dfMatch.Success)
+            {
+                model.DateFormat = dfMatch.Groups[1].Value.Trim();
+                continue;
+            }
+
+            // Axis format
+            var afMatch = GanttAxisFormatPattern.Match(trimmed);
+            if (afMatch.Success)
+            {
+                model.AxisFormat = afMatch.Groups[1].Value.Trim();
+                continue;
+            }
+
+            // Excludes
+            var exMatch = GanttExcludesPattern.Match(trimmed);
+            if (exMatch.Success)
+            {
+                var excludesStr = exMatch.Groups[1].Value.Trim();
+                model.Excludes = excludesStr;
+                if (excludesStr.Contains("weekends", StringComparison.OrdinalIgnoreCase))
+                    model.ExcludesWeekends = true;
+                continue;
+            }
+
+            // Tick interval (just skip, we preserve it but don't model it specially)
+            if (GanttTickIntervalPattern.IsMatch(trimmed))
+                continue;
+
+            // Section
+            var sectionMatch = GanttSectionPattern.Match(trimmed);
+            if (sectionMatch.Success)
+            {
+                currentSection = new GanttSection { Name = sectionMatch.Groups[1].Value.Trim() };
+                model.Sections.Add(currentSection);
+                continue;
+            }
+
+            // Task: label :metadata (comma-separated parts)
+            var taskMatch = GanttTaskPattern.Match(trimmed);
+            if (taskMatch.Success)
+            {
+                var task = ParseGanttTask(taskMatch.Groups[1].Value.Trim(), taskMatch.Groups[2].Value.Trim());
+                if (currentSection != null)
+                    currentSection.Tasks.Add(task);
+                else
+                    model.Tasks.Add(task);
+                continue;
+            }
+        }
+
+        return foundDeclaration ? model : null;
+    }
+
+    /// <summary>
+    /// Parses a gantt task from its label and metadata string.
+    /// Metadata format: [id,] [done|active|crit|milestone,]... startDate, endDateOrDuration
+    /// </summary>
+    private static GanttTask ParseGanttTask(string label, string metadata)
+    {
+        var task = new GanttTask { Label = label };
+        var parts = metadata.Split(',').Select(p => p.Trim()).Where(p => !string.IsNullOrEmpty(p)).ToList();
+
+        // Parse metadata parts in order
+        // Known tags: done, active, crit, milestone
+        // If a part looks like an ID (single word, not a tag, not a date): it's the ID
+        // The last 1-2 parts are startDate and endDate/duration
+        var tags = new List<string>();
+        var dateParts = new List<string>();
+        string? taskId = null;
+
+        foreach (var part in parts)
+        {
+            var lowerPart = part.ToLowerInvariant();
+            if (lowerPart == "done" || lowerPart == "active" || lowerPart == "crit" || lowerPart == "milestone")
+            {
+                tags.Add(lowerPart);
+            }
+            else if (lowerPart.StartsWith("after ") || lowerPart.Contains('-') || lowerPart.EndsWith('d') || lowerPart.EndsWith('h') || lowerPart.EndsWith('w'))
+            {
+                // Looks like a date, duration, or dependency reference
+                dateParts.Add(part);
+            }
+            else if (taskId == null && !part.Contains(' ') && dateParts.Count == 0)
+            {
+                // Likely a task ID
+                taskId = part;
+            }
+            else
+            {
+                dateParts.Add(part);
+            }
+        }
+
+        task.Tags = tags;
+        task.Id = taskId;
+        task.IsMilestone = tags.Contains("milestone");
+
+        if (dateParts.Count >= 2)
+        {
+            task.StartDate = dateParts[0];
+            task.EndDate = dateParts[1];
+        }
+        else if (dateParts.Count == 1)
+        {
+            task.EndDate = dateParts[0];
+        }
+
+        return task;
+    }
+
+    // =============================================
+    // Mind Map Parser (Phase 4)
+    // =============================================
+
+    private static readonly Regex MindMapDeclaration = new(@"^\s*mindmap\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// Parses Mermaid mind map text into a MindMapModel.
+    /// Mind maps use indentation-based hierarchy.
+    /// </summary>
+    public static MindMapModel? ParseMindMap(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        var lines = text.Split('\n');
+        var model = new MindMapModel();
+        bool foundDeclaration = false;
+        var nodeStack = new List<(int indent, MindMapNode node)>();
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var rawLine = lines[i];
+            var line = rawLine.TrimEnd('\r');
+
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            // Check for comments
+            var commentMatch = CommentPattern.Match(line);
+            if (commentMatch.Success)
+            {
+                model.Comments.Add(new CommentEntry
+                {
+                    Text = commentMatch.Groups[1].Value,
+                    OriginalLineIndex = i
+                });
+                continue;
+            }
+
+            // Look for mindmap declaration
+            if (!foundDeclaration)
+            {
+                var declMatch = MindMapDeclaration.Match(line);
+                if (declMatch.Success)
+                {
+                    foundDeclaration = true;
+                    model.DeclarationLineIndex = i;
+                    continue;
+                }
+
+                model.PreambleLines.Add(line);
+                continue;
+            }
+
+            // Skip icon/class directives (::icon(...) or :::className)
+            var trimmed = line.TrimStart();
+            if (trimmed.StartsWith("::icon(") || (trimmed.StartsWith(":::") && !trimmed.Contains('[')))
+            {
+                // Apply icon/class to the most recent node
+                if (nodeStack.Count > 0)
+                {
+                    var lastNode = nodeStack[nodeStack.Count - 1].node;
+                    if (trimmed.StartsWith("::icon("))
+                    {
+                        var iconMatch = Regex.Match(trimmed, @"::icon\((.+?)\)");
+                        if (iconMatch.Success)
+                            lastNode.Icon = iconMatch.Groups[1].Value;
+                    }
+                    else if (trimmed.StartsWith(":::"))
+                    {
+                        lastNode.CssClass = trimmed[3..].Trim();
+                    }
+                }
+                continue;
+            }
+
+            // Calculate indentation level
+            int indent = 0;
+            foreach (char c in line)
+            {
+                if (c == ' ') indent++;
+                else if (c == '\t') indent += 4;
+                else break;
+            }
+
+            // Parse node text and shape
+            var nodeText = trimmed;
+            var node = ParseMindMapNodeText(nodeText);
+
+            // Build tree based on indentation
+            // Pop stack until we find a parent with less indent
+            while (nodeStack.Count > 0 && nodeStack[nodeStack.Count - 1].indent >= indent)
+            {
+                nodeStack.RemoveAt(nodeStack.Count - 1);
+            }
+
+            if (nodeStack.Count == 0)
+            {
+                // This is the root node
+                model.Root = node;
+            }
+            else
+            {
+                // Add as child of the last node in the stack
+                nodeStack[nodeStack.Count - 1].node.Children.Add(node);
+            }
+
+            nodeStack.Add((indent, node));
+        }
+
+        return foundDeclaration ? model : null;
+    }
+
+    /// <summary>
+    /// Parses a mind map node's text and determines its shape.
+    /// </summary>
+    private static MindMapNode ParseMindMapNodeText(string text)
+    {
+        var node = new MindMapNode();
+
+        // Try to match shapes:
+        // ((text)) = circle
+        // (text) = rounded
+        // [text] = square
+        // ))text(( = bang
+        // )text( = cloud
+        // {{text}} = hexagon
+        if (text.StartsWith("((") && text.EndsWith("))"))
+        {
+            node.Label = text[2..^2];
+            node.Shape = MindMapNodeShape.Circle;
+        }
+        else if (text.StartsWith("{{") && text.EndsWith("}}"))
+        {
+            node.Label = text[2..^2];
+            node.Shape = MindMapNodeShape.Hexagon;
+        }
+        else if (text.StartsWith("))") && text.EndsWith("(("))
+        {
+            node.Label = text[2..^2];
+            node.Shape = MindMapNodeShape.Bang;
+        }
+        else if (text.StartsWith(")") && text.EndsWith("("))
+        {
+            node.Label = text[1..^1];
+            node.Shape = MindMapNodeShape.Cloud;
+        }
+        else if (text.StartsWith("(") && text.EndsWith(")"))
+        {
+            node.Label = text[1..^1];
+            node.Shape = MindMapNodeShape.Rounded;
+        }
+        else if (text.StartsWith("[") && text.EndsWith("]"))
+        {
+            node.Label = text[1..^1];
+            node.Shape = MindMapNodeShape.Square;
+        }
+        else
+        {
+            node.Label = text;
+            node.Shape = MindMapNodeShape.Default;
+        }
+
+        return node;
+    }
+
+    // =============================================
+    // Pie Chart Parser (Phase 4)
+    // =============================================
+
+    private static readonly Regex PieDeclaration = new(@"^\s*pie(?:\s+showData)?\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex PieTitlePattern = new(@"^\s*title\s+(.+)$", RegexOptions.Compiled);
+    private static readonly Regex PieSlicePattern = new(@"^\s*""([^""]+)""\s*:\s*([\d.]+)\s*$", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Parses Mermaid pie chart text into a PieChartModel.
+    /// </summary>
+    public static PieChartModel? ParsePieChart(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        var lines = text.Split('\n');
+        var model = new PieChartModel();
+        bool foundDeclaration = false;
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var rawLine = lines[i];
+            var line = rawLine.TrimEnd('\r');
+
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            // Check for comments
+            var commentMatch = CommentPattern.Match(line);
+            if (commentMatch.Success)
+            {
+                model.Comments.Add(new CommentEntry
+                {
+                    Text = commentMatch.Groups[1].Value,
+                    OriginalLineIndex = i
+                });
+                continue;
+            }
+
+            // Look for pie declaration
+            if (!foundDeclaration)
+            {
+                var declMatch = PieDeclaration.Match(line);
+                if (declMatch.Success)
+                {
+                    foundDeclaration = true;
+                    model.DeclarationLineIndex = i;
+                    if (line.Contains("showData", StringComparison.OrdinalIgnoreCase))
+                        model.ShowData = true;
+                    continue;
+                }
+
+                model.PreambleLines.Add(line);
+                continue;
+            }
+
+            var trimmed = line.Trim();
+
+            // Title
+            var titleMatch = PieTitlePattern.Match(trimmed);
+            if (titleMatch.Success)
+            {
+                model.Title = titleMatch.Groups[1].Value.Trim();
+                continue;
+            }
+
+            // Slice: "Label" : value
+            var sliceMatch = PieSlicePattern.Match(trimmed);
+            if (sliceMatch.Success)
+            {
+                var value = double.TryParse(sliceMatch.Groups[2].Value, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : 0;
+                model.Slices.Add(new PieSlice
+                {
+                    Label = sliceMatch.Groups[1].Value,
+                    Value = value
+                });
+                continue;
+            }
+        }
+
+        return foundDeclaration ? model : null;
+    }
 }

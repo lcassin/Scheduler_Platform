@@ -1383,4 +1383,304 @@ public static class MermaidSerializer
             sb.AppendLine($"%% @pos {entity.Name} {x},{y}");
         }
     }
+
+    // =============================================
+    // Gantt Chart Serializer (Phase 4)
+    // =============================================
+
+    /// <summary>
+    /// Serializes a GanttModel to valid Mermaid gantt chart text.
+    /// </summary>
+    public static string SerializeGantt(GanttModel model)
+    {
+        if (model == null)
+            return string.Empty;
+
+        var sb = new StringBuilder();
+
+        // Write preamble lines
+        foreach (var preambleLine in model.PreambleLines)
+        {
+            sb.AppendLine(preambleLine);
+        }
+
+        // Write comments before declaration
+        WriteGanttCommentsBeforeLine(sb, model, model.DeclarationLineIndex);
+
+        // Write gantt declaration
+        sb.AppendLine("gantt");
+
+        // Write title
+        if (!string.IsNullOrEmpty(model.Title))
+        {
+            sb.AppendLine($"{Indent}title {model.Title}");
+        }
+
+        // Write date format
+        sb.AppendLine($"{Indent}dateFormat {model.DateFormat}");
+
+        // Write axis format
+        if (!string.IsNullOrEmpty(model.AxisFormat))
+        {
+            sb.AppendLine($"{Indent}axisFormat {model.AxisFormat}");
+        }
+
+        // Write excludes
+        if (!string.IsNullOrEmpty(model.Excludes))
+        {
+            sb.AppendLine($"{Indent}excludes {model.Excludes}");
+        }
+
+        // Write top-level tasks (before any section)
+        foreach (var task in model.Tasks)
+        {
+            sb.AppendLine($"{Indent}{FormatGanttTask(task)}");
+        }
+
+        // Write sections with their tasks
+        foreach (var section in model.Sections)
+        {
+            sb.AppendLine($"{Indent}section {section.Name}");
+            foreach (var task in section.Tasks)
+            {
+                sb.AppendLine($"{Indent}{FormatGanttTask(task)}");
+            }
+        }
+
+        // Write trailing comments
+        WriteGanttTrailingComments(sb, model);
+
+        return sb.ToString().TrimEnd('\r', '\n') + Environment.NewLine;
+    }
+
+    /// <summary>
+    /// Formats a gantt task as a Mermaid string.
+    /// Format: label :metadata (e.g., "Task 1 :done, task1, 2024-01-01, 2024-01-15")
+    /// </summary>
+    private static string FormatGanttTask(GanttTask task)
+    {
+        var parts = new List<string>();
+
+        // Add tags (done, active, crit, milestone)
+        parts.AddRange(task.Tags);
+
+        // Add ID if present
+        if (!string.IsNullOrEmpty(task.Id))
+            parts.Add(task.Id);
+
+        // Add start date
+        if (!string.IsNullOrEmpty(task.StartDate))
+            parts.Add(task.StartDate);
+
+        // Add end date/duration
+        if (!string.IsNullOrEmpty(task.EndDate))
+            parts.Add(task.EndDate);
+
+        return $"{task.Label} :{string.Join(", ", parts)}";
+    }
+
+    private static void WriteGanttCommentsBeforeLine(StringBuilder sb, GanttModel model, int lineIndex)
+    {
+        foreach (var comment in model.Comments.Where(c => c.OriginalLineIndex < lineIndex))
+        {
+            sb.AppendLine($"%%{comment.Text}");
+        }
+    }
+
+    private static void WriteGanttTrailingComments(StringBuilder sb, GanttModel model)
+    {
+        if (model.Comments.Count > 0)
+        {
+            var trailingComments = model.Comments
+                .Where(c => c.OriginalLineIndex > model.DeclarationLineIndex)
+                .OrderBy(c => c.OriginalLineIndex)
+                .ToList();
+
+            if (trailingComments.Count > 0)
+            {
+                sb.AppendLine();
+                foreach (var comment in trailingComments)
+                {
+                    sb.AppendLine($"%%{comment.Text}");
+                }
+            }
+        }
+    }
+
+    // =============================================
+    // Mind Map Serializer (Phase 4)
+    // =============================================
+
+    /// <summary>
+    /// Serializes a MindMapModel to valid Mermaid mind map text.
+    /// </summary>
+    public static string SerializeMindMap(MindMapModel model)
+    {
+        if (model == null)
+            return string.Empty;
+
+        var sb = new StringBuilder();
+
+        // Write preamble lines
+        foreach (var preambleLine in model.PreambleLines)
+        {
+            sb.AppendLine(preambleLine);
+        }
+
+        // Write comments before declaration
+        WriteMindMapCommentsBeforeLine(sb, model, model.DeclarationLineIndex);
+
+        // Write mindmap declaration
+        sb.AppendLine("mindmap");
+
+        // Write tree recursively with indentation
+        WriteMindMapNode(sb, model.Root, Indent);
+
+        // Write trailing comments
+        WriteMindMapTrailingComments(sb, model);
+
+        return sb.ToString().TrimEnd('\r', '\n') + Environment.NewLine;
+    }
+
+    /// <summary>
+    /// Recursively writes a mind map node and its children.
+    /// </summary>
+    private static void WriteMindMapNode(StringBuilder sb, MindMapNode node, string indent)
+    {
+        // Format node with shape
+        var formattedText = node.Shape switch
+        {
+            MindMapNodeShape.Square => $"[{node.Label}]",
+            MindMapNodeShape.Rounded => $"({node.Label})",
+            MindMapNodeShape.Circle => $"(({node.Label}))",
+            MindMapNodeShape.Bang => $")){node.Label}((",
+            MindMapNodeShape.Cloud => $"){node.Label}(",
+            MindMapNodeShape.Hexagon => $"{{{{{node.Label}}}}}",
+            _ => node.Label
+        };
+
+        sb.AppendLine($"{indent}{formattedText}");
+
+        // Write icon if present
+        if (!string.IsNullOrEmpty(node.Icon))
+        {
+            sb.AppendLine($"{indent}{Indent}::icon({node.Icon})");
+        }
+
+        // Write CSS class if present
+        if (!string.IsNullOrEmpty(node.CssClass))
+        {
+            sb.AppendLine($"{indent}{Indent}:::{node.CssClass}");
+        }
+
+        // Write children recursively with increased indentation
+        foreach (var child in node.Children)
+        {
+            WriteMindMapNode(sb, child, indent + Indent);
+        }
+    }
+
+    private static void WriteMindMapCommentsBeforeLine(StringBuilder sb, MindMapModel model, int lineIndex)
+    {
+        foreach (var comment in model.Comments.Where(c => c.OriginalLineIndex < lineIndex))
+        {
+            sb.AppendLine($"%%{comment.Text}");
+        }
+    }
+
+    private static void WriteMindMapTrailingComments(StringBuilder sb, MindMapModel model)
+    {
+        if (model.Comments.Count > 0)
+        {
+            var trailingComments = model.Comments
+                .Where(c => c.OriginalLineIndex > model.DeclarationLineIndex)
+                .OrderBy(c => c.OriginalLineIndex)
+                .ToList();
+
+            if (trailingComments.Count > 0)
+            {
+                sb.AppendLine();
+                foreach (var comment in trailingComments)
+                {
+                    sb.AppendLine($"%%{comment.Text}");
+                }
+            }
+        }
+    }
+
+    // =============================================
+    // Pie Chart Serializer (Phase 4)
+    // =============================================
+
+    /// <summary>
+    /// Serializes a PieChartModel to valid Mermaid pie chart text.
+    /// </summary>
+    public static string SerializePieChart(PieChartModel model)
+    {
+        if (model == null)
+            return string.Empty;
+
+        var sb = new StringBuilder();
+
+        // Write preamble lines
+        foreach (var preambleLine in model.PreambleLines)
+        {
+            sb.AppendLine(preambleLine);
+        }
+
+        // Write comments before declaration
+        WritePieChartCommentsBeforeLine(sb, model, model.DeclarationLineIndex);
+
+        // Write pie declaration
+        if (model.ShowData)
+            sb.AppendLine("pie showData");
+        else
+            sb.AppendLine("pie");
+
+        // Write title
+        if (!string.IsNullOrEmpty(model.Title))
+        {
+            sb.AppendLine($"{Indent}title {model.Title}");
+        }
+
+        // Write slices
+        foreach (var slice in model.Slices)
+        {
+            var valueStr = slice.Value.ToString("G", CultureInfo.InvariantCulture);
+            sb.AppendLine($"{Indent}\"{slice.Label}\" : {valueStr}");
+        }
+
+        // Write trailing comments
+        WritePieChartTrailingComments(sb, model);
+
+        return sb.ToString().TrimEnd('\r', '\n') + Environment.NewLine;
+    }
+
+    private static void WritePieChartCommentsBeforeLine(StringBuilder sb, PieChartModel model, int lineIndex)
+    {
+        foreach (var comment in model.Comments.Where(c => c.OriginalLineIndex < lineIndex))
+        {
+            sb.AppendLine($"%%{comment.Text}");
+        }
+    }
+
+    private static void WritePieChartTrailingComments(StringBuilder sb, PieChartModel model)
+    {
+        if (model.Comments.Count > 0)
+        {
+            var trailingComments = model.Comments
+                .Where(c => c.OriginalLineIndex > model.DeclarationLineIndex)
+                .OrderBy(c => c.OriginalLineIndex)
+                .ToList();
+
+            if (trailingComments.Count > 0)
+            {
+                sb.AppendLine();
+                foreach (var comment in trailingComments)
+                {
+                    sb.AppendLine($"%%{comment.Text}");
+                }
+            }
+        }
+    }
 }
