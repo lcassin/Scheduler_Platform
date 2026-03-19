@@ -1003,6 +1003,12 @@
                     btn.style.display = (cls === activeClass) ? '' : 'none';
                 });
             });
+            // Hide the generic delete button for diagram types that have their own delete button
+            const genericDelete = document.getElementById('tb-delete');
+            if (genericDelete) {
+                const typesWithOwnDelete = ['mindmap', 'pie'];
+                genericDelete.style.display = typesWithOwnDelete.includes(currentDiagramType) ? 'none' : '';
+            }
         }
 
         // ========== State ==========
@@ -1282,7 +1288,11 @@
                     selectedEdgeIndex = -1;
                     selectedSubgraphId = null;
                     render();
-                    if (currentDiagramType === 'flowchart') showContextMenu(e.clientX, e.clientY);
+                    if (currentDiagramType === 'mindmap') {
+                        showMindMapContextMenu(e.clientX, e.clientY);
+                    } else if (currentDiagramType === 'flowchart') {
+                        showContextMenu(e.clientX, e.clientY);
+                    }
                 } else if (currentDiagramType === 'sequence' && seqDiagram) {
                     contextMenu.innerHTML = '';
                     addContextMenuItem('Add Participant', () => {
@@ -1747,27 +1757,29 @@
 
                 g.appendChild(text);
 
-                // Connection points (N, S, E, W)
-                const hw = (node.width || 80) / 2;
-                const hh = (node.height || 40) / 2;
-                const cpPositions = [
-                    { cx: 0, cy: -hh },  // top
-                    { cx: 0, cy: hh },   // bottom
-                    { cx: -hw, cy: 0 },  // left
-                    { cx: hw, cy: 0 }    // right
-                ];
-                cpPositions.forEach(pos => {
-                    const cp = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                    cp.classList.add('connection-point');
-                    cp.setAttribute('cx', pos.cx);
-                    cp.setAttribute('cy', pos.cy);
-                    cp.setAttribute('r', '5');
-                    cp.setAttribute('data-node-id', node.id);
-                    g.appendChild(cp);
-                });
+                // Connection points (N, S, E, W) - skip for mindmap (edges are tree-based)
+                if (currentDiagramType !== 'mindmap') {
+                    const hw2 = (node.width || 80) / 2;
+                    const hh2 = (node.height || 40) / 2;
+                    const cpPositions = [
+                        { cx: 0, cy: -hh2 },  // top
+                        { cx: 0, cy: hh2 },   // bottom
+                        { cx: -hw2, cy: 0 },  // left
+                        { cx: hw2, cy: 0 }    // right
+                    ];
+                    cpPositions.forEach(pos => {
+                        const cp = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                        cp.classList.add('connection-point');
+                        cp.setAttribute('cx', pos.cx);
+                        cp.setAttribute('cy', pos.cy);
+                        cp.setAttribute('r', '5');
+                        cp.setAttribute('data-node-id', node.id);
+                        g.appendChild(cp);
+                    });
+                }
 
-                // Resize handles (shown when selected)
-                if (selectedNodeId === node.id && !selectedNodeIds.length) {
+                // Resize handles (shown when selected, not for mindmap - tree layout controls sizing)
+                if (selectedNodeId === node.id && !selectedNodeIds.length && currentDiagramType !== 'mindmap') {
                     const rhSize = 6;
                     const rhPositions = [
                         { cx: -hw, cy: -hh, cls: 'rh-nw' },
@@ -2577,6 +2589,8 @@
             }
 
             if (connectionPt) {
+                // Mindmap does not allow drawing edges between nodes
+                if (currentDiagramType === 'mindmap') return;
                 // Start drawing edge from a node or subgraph
                 e.stopPropagation();
                 e.preventDefault();
@@ -2885,9 +2899,9 @@
             e.stopPropagation();
         });
 
-        // Context menu - flowchart (not mindmap)
+        // Context menu - flowchart and mindmap
         svg.addEventListener('contextmenu', function(e) {
-            if (currentDiagramType !== 'flowchart') return;
+            if (!_isFlowchartLike()) return;
             const pt = getSVGPoint(e);
             contextMenuX = pt.x;
             contextMenuY = pt.y;
@@ -2897,12 +2911,16 @@
             const edgeGroup = e.target.closest('.edge-group');
             if (nodeGroup) {
                 selectNode(nodeGroup.getAttribute('data-node-id'));
-            } else if (edgeGroup) {
+            } else if (edgeGroup && currentDiagramType !== 'mindmap') {
                 const idx = parseInt(edgeGroup.getAttribute('data-edge-index'));
                 selectEdge(idx);
             }
 
-            showContextMenu(e.clientX, e.clientY);
+            if (currentDiagramType === 'mindmap') {
+                showMindMapContextMenu(e.clientX, e.clientY);
+            } else {
+                showContextMenu(e.clientX, e.clientY);
+            }
         });
 
         // Context menu item clicks (single delegated handler for all flowchart context menu items)
@@ -3460,6 +3478,51 @@
             const pasteMenu = document.getElementById('paste-menu');
             copyMenu.style.display = (selectedNodeId || selectedSubgraphId || selectedEdgeIndex >= 0) ? '' : 'none';
             pasteMenu.style.display = clipboard ? '' : 'none';
+
+            positionContextMenu(contextMenu, x, y);
+        }
+
+        function showMindMapContextMenu(x, y) {
+            contextMenu.innerHTML = '';
+
+            function _mmMenuItem(label, onClick, disabled) {
+                const item = document.createElement('div');
+                item.classList.add('context-menu-item');
+                if (disabled) item.classList.add('disabled');
+                item.textContent = label;
+                item.addEventListener('click', function(ev) {
+                    ev.stopPropagation();
+                    if (!disabled) {
+                        contextMenu.classList.remove('visible');
+                        onClick();
+                    }
+                });
+                contextMenu.appendChild(item);
+            }
+            function _mmSep() {
+                const sep = document.createElement('div');
+                sep.classList.add('context-menu-separator');
+                contextMenu.appendChild(sep);
+            }
+
+            const hasNode = !!selectedNodeId;
+            const isRoot = (selectedNodeId === 'mm_root');
+
+            _mmMenuItem('\u{1F333} Add Child Node', function() { createMindMapChild(); }, !hasNode);
+            _mmSep();
+            _mmMenuItem('\u{270E} Edit Node', function() { if (selectedNodeId) editMindMapNode(selectedNodeId); }, !hasNode);
+            _mmMenuItem('\u{1F5D1} Delete Node', function() { deleteMindMapNode(); }, !hasNode || isRoot);
+            _mmSep();
+            _mmMenuItem('\u{1F4CB} Copy Node', function() { copySelected(); }, !hasNode);
+            _mmMenuItem('\u{1F4CB} Paste Node', function() { pasteClipboard(contextMenuX, contextMenuY); }, !clipboard);
+            _mmSep();
+            _mmMenuItem('\u{2633} Auto Layout', function() {
+                autoLayout();
+                _assignMindMapBranchColors();
+                render();
+                const positions = diagram.nodes.map(function(n) { return { nodeId: n.id, x: n.x, y: n.y, width: n.width, height: n.height }; });
+                postMessage({ type: 'autoLayoutComplete', positions: positions });
+            });
 
             positionContextMenu(contextMenu, x, y);
         }
