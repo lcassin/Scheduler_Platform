@@ -4683,6 +4683,41 @@ Console.WriteLine(""Hello, World!"");
             // Now that visual editor is initialized, refresh toolbar visibility
             // (SetRenderModeFromFile may have already run before init completed)
             UpdateVisualEditorModeToolbarVisibility();
+
+            // Apply the visual editor mode for the active document now that WebView2 is ready.
+            // During session restore (InitializeDocumentTabs), _visualEditorInitialized was false,
+            // so SwitchToDocument couldn't apply the saved mode. Apply it now.
+            if (_activeDocument != null && _activeDocument.RenderMode == RenderMode.Mermaid
+                && IsVisualEditorSupportedForCurrentDiagram())
+            {
+                var targetMode = _activeDocument.SavedVisualEditorMode;
+
+                // If the document was in Text mode, check if the user's default setting
+                // should override (e.g., DefaultEditorMode = "Visual")
+                if (targetMode == VisualEditorMode.Text)
+                {
+                    var defaultMode = SettingsManager.Current.DefaultEditorMode;
+                    if (defaultMode == "Visual") targetMode = VisualEditorMode.Visual;
+                    else if (defaultMode == "Split") targetMode = VisualEditorMode.Split;
+                }
+
+                if (targetMode == VisualEditorMode.Visual)
+                {
+                    _ = Dispatcher.InvokeAsync(async () =>
+                    {
+                        await Task.Delay(600);
+                        SwitchToVisualMode();
+                    });
+                }
+                else if (targetMode == VisualEditorMode.Split)
+                {
+                    _ = Dispatcher.InvokeAsync(async () =>
+                    {
+                        await Task.Delay(600);
+                        SwitchToSplitMode();
+                    });
+                }
+            }
         }
         catch (Exception)
         {
@@ -9539,7 +9574,8 @@ Console.WriteLine(""Hello, World!"");
                     PreviewScrollLeft = doc.PreviewScrollLeft,
                     PreviewScrollTop = doc.PreviewScrollTop,
                     PreviewPanX = doc.PreviewPanX,
-                    PreviewPanY = doc.PreviewPanY
+                    PreviewPanY = doc.PreviewPanY,
+                    VisualEditorMode = doc.SavedVisualEditorMode.ToString()
                 }).ToList()
             };
             
@@ -9639,6 +9675,12 @@ Console.WriteLine(""Hello, World!"");
                     doc.PreviewScrollTop = docState.PreviewScrollTop;
                     doc.PreviewPanX = docState.PreviewPanX;
                     doc.PreviewPanY = docState.PreviewPanY;
+                    
+                    // Restore visual editor mode
+                    if (Enum.TryParse<VisualEditorMode>(docState.VisualEditorMode, out var veMode))
+                    {
+                        doc.SavedVisualEditorMode = veMode;
+                    }
                     
                     restoredDocs.Add(doc);
                 }
@@ -10043,4 +10085,5 @@ public class SessionDocumentState
     public double PreviewScrollTop { get; set; }
     public double PreviewPanX { get; set; }
     public double PreviewPanY { get; set; }
+    public string VisualEditorMode { get; set; } = "Text";
 }
