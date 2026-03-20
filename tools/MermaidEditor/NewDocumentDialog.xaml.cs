@@ -205,11 +205,15 @@ public partial class NewDocumentDialog : Window
         Close();
     }
 
-    private void BlankDiagramTypeCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    private string _selectedBlankDiagramType = "Flowchart";
+
+    private void DiagramTypeItem_Click(object sender, RoutedEventArgs e)
     {
-        if (BlankDiagramTypeCombo?.SelectedItem is System.Windows.Controls.ComboBoxItem item)
+        if (sender is System.Windows.Controls.Button button && button.Tag is string type)
         {
-            var type = item.Content?.ToString() ?? "Flowchart";
+            _selectedBlankDiagramType = type;
+
+            // Update the label text
             if (BlankDiagramTypeLabel != null)
                 BlankDiagramTypeLabel.Text = type;
 
@@ -241,16 +245,16 @@ public partial class NewDocumentDialog : Window
                 }
                 catch { /* Ignore if icon not found */ }
             }
+
+            // Close the popup
+            if (DiagramTypeDropdownToggle != null)
+                DiagramTypeDropdownToggle.IsChecked = false;
         }
     }
 
     private string GetBlankTemplateForSelectedType()
     {
-        var selectedType = "Flowchart";
-        if (BlankDiagramTypeCombo?.SelectedItem is System.Windows.Controls.ComboBoxItem item)
-        {
-            selectedType = item.Content?.ToString() ?? "Flowchart";
-        }
+        var selectedType = _selectedBlankDiagramType;
 
         return selectedType switch
         {
@@ -291,13 +295,7 @@ public partial class NewDocumentDialog : Window
     ""Category A"" : 40
     ""Category B"" : 35
     ""Category C"" : 25",
-            "Mind Map" => @"mindmap
-    root((Central Topic))
-        Branch A
-            Leaf 1
-            Leaf 2
-        Branch B
-            Leaf 3",
+            "Mind Map" => "mindmap\r\n  root((Central Topic))\r\n    Branch A\r\n      Leaf 1\r\n      Leaf 2\r\n    Branch B\r\n      Leaf 3",
             "Timeline" => @"timeline
     title My Timeline
     section Phase 1
