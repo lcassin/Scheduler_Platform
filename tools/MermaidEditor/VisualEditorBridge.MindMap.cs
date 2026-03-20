@@ -188,7 +188,6 @@ public partial class VisualEditorBridge
     {
         return new MindMapNodeDto
         {
-            Id = node.Id,
             Label = node.Label,
             Shape = node.Shape.ToString(),
             Icon = node.Icon,
@@ -335,7 +334,6 @@ public partial class VisualEditorBridge
     {
         var node = new MindMapNode
         {
-            Id = dto.Id,
             Label = dto.Label ?? string.Empty,
             Icon = dto.Icon,
             CssClass = dto.CssClass
@@ -415,7 +413,6 @@ public partial class VisualEditorBridge
 
     private class MindMapNodeDto
     {
-        public string? Id { get; set; }
         public string? Label { get; set; }
         public string? Shape { get; set; }
         public string? Icon { get; set; }

@@ -1506,12 +1506,6 @@ public class MindMapModel
 public class MindMapNode
 {
     /// <summary>
-    /// Optional ID prefix for this node (e.g., "root" in "root((Central Topic))").
-    /// In Mermaid mindmap syntax, nodes can have an identifier before the shape brackets.
-    /// </summary>
-    public string? Id { get; set; }
-
-    /// <summary>
     /// The text label of this node.
     /// </summary>
     public string Label { get; set; } = string.Empty;
