@@ -393,6 +393,9 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
                 "RetryCount" => sortDescending 
                     ? finalQuery.OrderByDescending(j => j.RetryCount) 
                     : finalQuery.OrderBy(j => j.RetryCount),
+                "ScrapingCompletedDateTime" => sortDescending
+                    ? finalQuery.OrderByDescending(j => j.ScrapingCompletedDateTime ?? DateTime.MinValue)
+                    : finalQuery.OrderBy(j => j.ScrapingCompletedDateTime ?? DateTime.MaxValue),
                 _ => sortDescending 
                     ? finalQuery.OrderByDescending(j => j.Id) 
                     : finalQuery.OrderBy(j => j.Id)
