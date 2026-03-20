@@ -830,7 +830,7 @@ public class BackgroundExportService : BackgroundService
                     b.Reason ?? "",
                     b.IsActive,
                     b.EffectiveStartDate,
-                    b.EffectiveEndDate,
+                    IsPerpetualBlacklist(b.EffectiveStartDate, b.EffectiveEndDate) ? "Perpetual" : (object?)b.EffectiveEndDate,
                     b.CreatedBy ?? "",
                     b.CreatedDateTime
                 });
@@ -840,11 +840,21 @@ public class BackgroundExportService : BackgroundService
             data = ExcelExportHelper.CreateCsvExport(
                 string.Join(",", headers),
                 entries,
-                b => $"{b.Id},{b.VMAccountId},{ExcelExportHelper.CsvEscape(b.VMAccountNumber)},{b.CredentialId},{ExcelExportHelper.CsvEscape(b.MasterVendorCode)},{ExcelExportHelper.CsvEscape(b.PrimaryVendorCode)},{ExcelExportHelper.CsvEscape(b.Reason)},{b.IsActive},{b.EffectiveStartDate?.ToString("MM/dd/yyyy") ?? ""},{b.EffectiveEndDate?.ToString("MM/dd/yyyy") ?? ""},{ExcelExportHelper.CsvEscape(b.CreatedBy)},{b.CreatedDateTime:MM/dd/yyyy HH:mm}");
+                b => $"{b.Id},{b.VMAccountId},{ExcelExportHelper.CsvEscape(b.VMAccountNumber)},{b.CredentialId},{ExcelExportHelper.CsvEscape(b.MasterVendorCode)},{ExcelExportHelper.CsvEscape(b.PrimaryVendorCode)},{ExcelExportHelper.CsvEscape(b.Reason)},{b.IsActive},{b.EffectiveStartDate?.ToString("MM/dd/yyyy") ?? ""},{(IsPerpetualBlacklist(b.EffectiveStartDate, b.EffectiveEndDate) ? "Perpetual" : b.EffectiveEndDate?.ToString("MM/dd/yyyy") ?? "")},{ExcelExportHelper.CsvEscape(b.CreatedBy)},{b.CreatedDateTime:MM/dd/yyyy HH:mm}");
         }
 
         _queue.UpdateStatus(request.RequestId, s => s.RecordsProcessed = entries.Count);
 
         return (data, fileName, contentType);
+    }
+
+    /// <summary>
+    /// Determines if a blacklist entry is perpetual based on a 150-year span between start and end dates.
+    /// </summary>
+    private static bool IsPerpetualBlacklist(DateTime? startDate, DateTime? endDate)
+    {
+        if (!startDate.HasValue || !endDate.HasValue)
+            return false;
+        return endDate.Value.Year - startDate.Value.Year == 150;
     }
 }

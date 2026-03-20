@@ -193,7 +193,11 @@
                         }
                     </MudTd>
                     <MudTd DataLabel="Effective Dates">
-                        @if (context.EffectiveStartDate.HasValue || context.EffectiveEndDate.HasValue)
+                        @if (IsPerpetualEntry(context))
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Filled">Perpetual</MudChip>
+                        }
+                        else if (context.EffectiveStartDate.HasValue || context.EffectiveEndDate.HasValue)
                         {
                             <MudText Typo="Typo.body2">
                                 @(context.EffectiveStartDate?.ToString("MM/dd/yyyy") ?? "N/A") - 
@@ -304,22 +308,31 @@
                                   RequiredError="Reason is required"
                                   HelperText="Explain why this entry is blacklisted" />
                 </MudItem>
-                <MudItem xs="12" sm="6">
-                    <MudDatePicker @bind-Date="_editingEntry.EffectiveStartDate" 
-                                   Label="Effective Start Date" 
-                                   Variant="Variant.Outlined"
-                                   Required="true"
-                                   RequiredError="Effective Start Date is required"
-                                   HelperText="When the blacklist becomes active" />
+                <MudItem xs="12">
+                    <MudSwitch T="bool" Value="_isPerpetual" 
+                               Label="Perpetual Blackout" 
+                               Color="Color.Warning"
+                               ValueChanged="OnPerpetualToggled" />
                 </MudItem>
-                <MudItem xs="12" sm="6">
-                    <MudDatePicker @bind-Date="_editingEntry.EffectiveEndDate" 
-                                   Label="Effective End Date" 
-                                   Variant="Variant.Outlined"
-                                   Required="true"
-                                   RequiredError="Effective End Date is required"
-                                   HelperText="When the blacklist expires" />
-                </MudItem>
+                @if (!_isPerpetual)
+                {
+                    <MudItem xs="12" sm="6">
+                        <MudDatePicker @bind-Date="_editingEntry.EffectiveStartDate" 
+                                       Label="Effective Start Date" 
+                                       Variant="Variant.Outlined"
+                                       Required="true"
+                                       RequiredError="Effective Start Date is required"
+                                       HelperText="When the blacklist becomes active" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudDatePicker @bind-Date="_editingEntry.EffectiveEndDate" 
+                                       Label="Effective End Date" 
+                                       Variant="Variant.Outlined"
+                                       Required="true"
+                                       RequiredError="Effective End Date is required"
+                                       HelperText="When the blacklist expires" />
+                    </MudItem>
+                }
                 <MudItem xs="12">
                     <MudTextField @bind-Value="_editingEntry.Notes" 
                                   Label="Notes" 
@@ -350,6 +363,7 @@
     private bool _saving = false;
     private bool _hasAccess = false;
     private bool _dialogVisible = false;
+    private bool _isPerpetual = false;
     
     private string? _searchMasterVendorCode;
     private string? _searchPrimaryVendorCode;
@@ -541,6 +555,7 @@
             ExclusionType = "All",
             IsActive = true
         };
+        _isPerpetual = false;
         _dialogVisible = true;
     }
 
@@ -561,6 +576,7 @@
             EffectiveEndDate = entry.EffectiveEndDate,
             Notes = entry.Notes
         };
+        _isPerpetual = IsPerpetualEntry(entry);
         _dialogVisible = true;
     }
 
@@ -598,6 +614,13 @@
             {
                 Snackbar.Add("Reason is required", Severity.Warning);
                 return;
+            }
+            
+            // Set perpetual dates if toggle is on
+            if (_isPerpetual)
+            {
+                _editingEntry.EffectiveStartDate = DateTime.Today;
+                _editingEntry.EffectiveEndDate = DateTime.Today.AddYears(150);
             }
             
             // Validate effective dates are provided
@@ -689,6 +712,34 @@
     {
         return _editingEntry != null && 
                !string.IsNullOrWhiteSpace(_editingEntry.PrimaryVendorCode);
+    }
+
+    private static bool IsPerpetualEntry(BlacklistEntryModel entry)
+    {
+        if (!entry.EffectiveStartDate.HasValue || !entry.EffectiveEndDate.HasValue)
+            return false;
+        
+        // A 150-year span between start and end dates indicates a perpetual blacklist
+        var yearDiff = entry.EffectiveEndDate.Value.Year - entry.EffectiveStartDate.Value.Year;
+        return yearDiff == 150;
+    }
+
+    private void OnPerpetualToggled(bool value)
+    {
+        _isPerpetual = value;
+        if (_editingEntry == null) return;
+        
+        if (value)
+        {
+            // Set perpetual dates
+            _editingEntry.EffectiveStartDate = DateTime.Today;
+            _editingEntry.EffectiveEndDate = DateTime.Today.AddYears(150);
+        }
+        else
+        {
+            // Null out end date to force user to enter a valid one
+            _editingEntry.EffectiveEndDate = null;
+        }
     }
 
     private Color GetExclusionTypeColor(string? exclusionType)
