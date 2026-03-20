@@ -172,10 +172,14 @@ function renderTimelineDiagram() {
     const lineStartY = currentY;
 
     let colorIdx = 0;
+    let currentSectionColor = null; // tracks color for events within a section
 
     // Render rows
     allRows.forEach((row) => {
         if (row.type === 'section-header') {
+            // Advance color for each new section; all events in this section share it
+            currentSectionColor = periodColors[colorIdx % periodColors.length];
+            colorIdx++;
             // Section header background
             const secBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
             secBg.setAttribute('x', padding);
@@ -247,8 +251,9 @@ function renderTimelineDiagram() {
         const rows = Math.ceil(Math.max(numEvents, 1) / 3);
         const rowHeight = Math.max(eventRowHeight, rows * (eventBubbleHeight + eventGap) + 20);
         const rowCenterY = currentY + rowHeight / 2;
-        const color = periodColors[colorIdx % periodColors.length];
-        colorIdx++;
+        // Events in a section share the section's color; top-level events rotate individually
+        const color = currentSectionColor ? currentSectionColor : periodColors[colorIdx % periodColors.length];
+        if (!currentSectionColor) colorIdx++;
 
         const isSelected = timelineSelectedEvent !== null &&
             timelineSelectedEvent.index === row.index &&
