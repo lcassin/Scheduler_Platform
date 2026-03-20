@@ -3,23 +3,23 @@ namespace SchedulerPlatform.Core.Domain.Enums;
 /// <summary>
 /// ADR API status codes - must match the ADRStatus table in the ADR database.
 /// Reference:
-///   1  Inserted                        IsError=0  IsFinal=0
-///   2  Inserted with Priority          IsError=0  IsFinal=0
-///   3  Invalid CredentialID            IsError=1  IsFinal=0
-///   4  Cannot Connect To VCM           IsError=1  IsFinal=0
-///   5  Cannot Insert Into Queue        IsError=1  IsFinal=0
-///   6  Sent To AI                      IsError=0  IsFinal=0
-///   7  Cannot Connect To AI            IsError=1  IsFinal=0
-///   8  Cannot Save Result              IsError=1  IsFinal=0
+///   1  Inserted                        IsError=0  IsFinal=0  (still in queue)
+///   2  Inserted with Priority          IsError=0  IsFinal=0  (still in queue)
+///   3  Invalid CredentialID            IsError=1  IsFinal=0  (manual refire only)
+///   4  Cannot Connect To VCM           IsError=1  IsFinal=0  (auto-refire)
+///   5  Cannot Insert Into Queue        IsError=1  IsFinal=0  (auto-refire)
+///   6  Sent To AI                      IsError=0  IsFinal=0  (still in queue)
+///   7  Cannot Connect To AI            IsError=1  IsFinal=0  (auto-refire)
+///   8  Cannot Save Result              IsError=1  IsFinal=0  (auto-refire)
 ///   9  Needs Human Review              IsError=1  IsFinal=1
-///  10  Received From AI                IsError=0  IsFinal=0
+///  10  Received From AI                IsError=0  IsFinal=0  (still in queue)
 ///  11  Document Retrieval Complete     IsError=0  IsFinal=1
 ///  12  AI Canceled                     IsError=0  IsFinal=1
-///  13  Login Attempt Succeeded         IsError=0  IsFinal=1
-///  14  No Documents Found              IsError=0  IsFinal=1
-///  15  Failed to Process All Documents IsError=1  IsFinal=0
-///  16  No Documents Processed          IsError=1  IsFinal=0
-///  17  AI Timeout                      IsError=1  IsFinal=0
+///  13  Login Attempt Succeeded         IsError=0  IsFinal=0  (auto-refire - cred check only, scrape still needed)
+///  14  No Documents Found              IsError=0  IsFinal=0  (auto-refire - docs may arrive later)
+///  15  Failed to Process All Documents IsError=1  IsFinal=0  (auto-refire)
+///  16  No Documents Processed          IsError=1  IsFinal=0  (auto-refire)
+///  17  AI Timeout                      IsError=1  IsFinal=0  (auto-refire)
 /// </summary>
 public enum AdrStatus
 {
@@ -84,12 +84,14 @@ public enum AdrStatus
     AiCanceled = 12,
     
     /// <summary>
-    /// Credential verification succeeded (IsFinal = true). Used for credential check jobs.
+    /// Credential verification succeeded. Used for credential check jobs.
+    /// Not final for scrape jobs - the scrape still needs to happen. (auto-refire)
     /// </summary>
     LoginAttemptSucceeded = 13,
     
     /// <summary>
-    /// No documents found for this scrape attempt. Not an error. (IsFinal = true)
+    /// No documents found for this scrape attempt. Not an error.
+    /// Not final - documents may arrive later within the billing window. (auto-refire)
     /// </summary>
     NoDocumentsFound = 14,
     
@@ -104,7 +106,7 @@ public enum AdrStatus
     NoDocumentsProcessed = 16,
     
     /// <summary>
-    /// AI processing timed out (IsError = true). Requires automatic re-fire regardless of billing window.
+    /// AI processing timed out (IsError = true). Requires automatic re-fire. (auto-refire)
     /// </summary>
     AiTimeout = 17
 }
@@ -144,10 +146,41 @@ public static class AdrStatusExtensions
             AdrStatus.NeedsHumanReview => true,          // 9
             AdrStatus.Complete => true,                   // 11
             AdrStatus.AiCanceled => true,                // 12 - not an error, but final
-            AdrStatus.LoginAttemptSucceeded => true,     // 13
-            AdrStatus.NoDocumentsFound => true,          // 14 - not an error, but final
+            // Note: 13 (LoginAttemptSucceeded) and 14 (NoDocumentsFound) are NOT final - they trigger auto-refire
             _ => false
         };
+    }
+    
+    /// <summary>
+    /// Returns true if this status should trigger an automatic re-fire of the scrape request.
+    /// These statuses indicate transient errors, timeouts, or incomplete processing that
+    /// warrants retrying the same billing range. Jobs with these statuses are reverted to
+    /// CredentialVerified so the scraping step picks them up and re-fires.
+    /// </summary>
+    public static bool ShouldRefire(this AdrStatus status)
+    {
+        return status switch
+        {
+            AdrStatus.CannotConnectToVcm => true,        // 4 - VCM connection error, retry
+            AdrStatus.CannotInsertIntoQueue => true,     // 5 - Queue error, retry
+            AdrStatus.CannotConnectToAi => true,         // 7 - AI connection error, retry
+            AdrStatus.CannotSaveResult => true,          // 8 - Storage error, retry
+            AdrStatus.LoginAttemptSucceeded => true,     // 13 - Cred check only, scrape still needed
+            AdrStatus.NoDocumentsFound => true,          // 14 - Docs may arrive later
+            AdrStatus.FailedToProcessAllDocuments => true, // 15 - Partial failure, retry
+            AdrStatus.NoDocumentsProcessed => true,      // 16 - Processing failure, retry
+            AdrStatus.AiTimeout => true,                  // 17 - AI timed out, retry
+            _ => false
+        };
+    }
+    
+    /// <summary>
+    /// Gets the set of all StatusIds that should trigger automatic re-fire.
+    /// Useful for database queries where the enum isn't available.
+    /// </summary>
+    public static HashSet<int> GetRefireStatusIds()
+    {
+        return new HashSet<int> { 4, 5, 7, 8, 13, 14, 15, 16, 17 };
     }
     
     /// <summary>

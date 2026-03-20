@@ -70,11 +70,11 @@ public interface IAdrJobRepository : IRepository<AdrJob>
     Task<Dictionary<int, AdrJob>> GetRebillJobsByAccountIdsAsync(IEnumerable<int> accountIds);
     
     /// <summary>
-    /// Gets jobs that need AI Timeout retry (StatusId 17).
-    /// These jobs bypass the normal !IsManualRequest and billing window filters
-    /// because AI Timeout requires immediate re-fire regardless of those constraints.
+    /// Gets jobs that need automatic re-fire (statuses 4,5,7,8,13,14,15,16,17).
+    /// These jobs were reverted to CredentialVerified by the status check step and need re-firing.
+    /// They bypass the normal !IsManualRequest and billing window filters.
     /// </summary>
-    Task<IEnumerable<AdrJob>> GetAiTimeoutRetryJobsAsync();
+    Task<IEnumerable<AdrJob>> GetRetryJobsAsync();
     
     /// <summary>
     /// Gets the set of account IDs that have an active (non-final) download job.

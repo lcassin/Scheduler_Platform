@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SchedulerPlatform.Core.Domain.Entities;
+using SchedulerPlatform.Core.Domain.Enums;
 using SchedulerPlatform.Core.Domain.Interfaces;
 using SchedulerPlatform.Infrastructure.Data;
 
@@ -601,15 +602,19 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
         return rebillJobs.ToDictionary(j => j.AdrAccountId);
     }
 
-    public async Task<IEnumerable<AdrJob>> GetAiTimeoutRetryJobsAsync()
+    private static readonly HashSet<int> RefireStatusIds = AdrStatusExtensions.GetRefireStatusIds();
+    
+    public async Task<IEnumerable<AdrJob>> GetRetryJobsAsync()
     {
-        // AI Timeout retries bypass the normal !IsManualRequest and billing window filters.
-        // These jobs had StatusId 17 (AI Timeout) during status check and were reverted to CredentialVerified.
-        // AdrStatusId == 17 is the marker that distinguishes them from normal CredentialVerified jobs.
+        // Auto-refire jobs bypass the normal !IsManualRequest and billing window filters.
+        // These jobs had a refire-eligible status (4,5,7,8,13,14,15,16,17) during status check 
+        // and were reverted to CredentialVerified. The AdrStatusId marker distinguishes them 
+        // from normal CredentialVerified jobs that haven't been scraped yet.
         return await _dbSet
             .Where(j => !j.IsDeleted && 
                         j.Status == "CredentialVerified" && 
-                        j.AdrStatusId == 17)
+                        j.AdrStatusId.HasValue &&
+                        RefireStatusIds.Contains(j.AdrStatusId.Value))
             .Include(j => j.AdrAccount)
             .ToListAsync();
     }
