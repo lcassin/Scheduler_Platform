@@ -292,10 +292,12 @@ public partial class NewDocumentDialog : Window
         Task 2 :a2, after a1, 5d",
             "Pie" => @"pie showData
     title Distribution
-    ""Category A"" : 40
-    ""Category B"" : 35
-    ""Category C"" : 25",
-            "Mind Map" => "mindmap\r\n  root((Central Topic))\r\n    Branch A\r\n      Leaf 1\r\n      Leaf 2\r\n    Branch B\r\n      Leaf 3",
+    ""Category A"" : 50
+    ""Category B"" : 50",
+            "MindMap" => @"mindmap
+    root(Central Topic)
+        Branch A
+        Branch B",
             "Timeline" => @"timeline
     title My Timeline
     section Phase 1
