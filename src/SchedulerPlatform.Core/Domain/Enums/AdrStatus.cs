@@ -19,6 +19,7 @@ namespace SchedulerPlatform.Core.Domain.Enums;
 ///  14  No Documents Found              IsError=0  IsFinal=1
 ///  15  Failed to Process All Documents IsError=1  IsFinal=0
 ///  16  No Documents Processed          IsError=1  IsFinal=0
+///  17  AI Timeout                      IsError=1  IsFinal=0
 /// </summary>
 public enum AdrStatus
 {
@@ -100,7 +101,12 @@ public enum AdrStatus
     /// <summary>
     /// No documents were processed (IsError = true)
     /// </summary>
-    NoDocumentsProcessed = 16
+    NoDocumentsProcessed = 16,
+    
+    /// <summary>
+    /// AI processing timed out (IsError = true). Requires automatic re-fire regardless of billing window.
+    /// </summary>
+    AiTimeout = 17
 }
 
 /// <summary>
@@ -123,6 +129,7 @@ public static class AdrStatusExtensions
             AdrStatus.NeedsHumanReview => true,          // 9
             AdrStatus.FailedToProcessAllDocuments => true, // 15
             AdrStatus.NoDocumentsProcessed => true,      // 16
+            AdrStatus.AiTimeout => true,                  // 17
             _ => false
         };
     }
@@ -166,6 +173,7 @@ public static class AdrStatusExtensions
             AdrStatus.NoDocumentsFound => "No Documents Found",
             AdrStatus.FailedToProcessAllDocuments => "Failed to Process All Documents",
             AdrStatus.NoDocumentsProcessed => "No Documents Processed",
+            AdrStatus.AiTimeout => "AI Timeout",
             _ => "Unknown"
         };
     }

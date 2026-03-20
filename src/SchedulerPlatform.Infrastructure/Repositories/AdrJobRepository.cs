@@ -601,6 +601,19 @@ public class AdrJobRepository : Repository<AdrJob>, IAdrJobRepository
         return rebillJobs.ToDictionary(j => j.AdrAccountId);
     }
 
+    public async Task<IEnumerable<AdrJob>> GetAiTimeoutRetryJobsAsync()
+    {
+        // AI Timeout retries bypass the normal !IsManualRequest and billing window filters.
+        // These jobs had StatusId 17 (AI Timeout) during status check and were reverted to CredentialVerified.
+        // AdrStatusId == 17 is the marker that distinguishes them from normal CredentialVerified jobs.
+        return await _dbSet
+            .Where(j => !j.IsDeleted && 
+                        j.Status == "CredentialVerified" && 
+                        j.AdrStatusId == 17)
+            .Include(j => j.AdrAccount)
+            .ToListAsync();
+    }
+
     public async Task<HashSet<int>> GetAccountIdsWithActiveDownloadJobsAsync(IEnumerable<int> accountIds)
     {
         // Active download jobs are non-deleted, non-rebill jobs (AdrJobTypeId != 3 or null)

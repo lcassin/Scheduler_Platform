@@ -1030,6 +1030,26 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             _logger.LogInformation("Starting invoice scraping with {MaxParallel} parallel workers", maxParallel);
 
             var jobsReadyForScraping = (await _unitOfWork.AdrJobs.GetJobsReadyForScrapingAsync(GetBillingToday(billingTimeZoneId))).ToList();
+            
+            // Include AI Timeout retries - these bypass the normal !IsManualRequest and billing window filters.
+            // Jobs with AdrStatusId=17 were reverted to CredentialVerified by the status check step and need re-firing.
+            var aiTimeoutRetries = (await _unitOfWork.AdrJobs.GetAiTimeoutRetryJobsAsync()).ToList();
+            if (aiTimeoutRetries.Any())
+            {
+                var existingIds = new HashSet<int>(jobsReadyForScraping.Select(j => j.Id));
+                var addedCount = 0;
+                foreach (var retryJob in aiTimeoutRetries)
+                {
+                    if (existingIds.Add(retryJob.Id))
+                    {
+                        jobsReadyForScraping.Add(retryJob);
+                        addedCount++;
+                    }
+                }
+                _logger.LogInformation("Found {Count} AI Timeout retry jobs to re-fire ({Added} new, {Existing} already in scraping queue)", 
+                    aiTimeoutRetries.Count, addedCount, aiTimeoutRetries.Count - addedCount);
+            }
+            
             var totalJobsFound = jobsReadyForScraping.Count;
             _logger.LogInformation("Found {Count} jobs ready for scraping", totalJobsFound);
 
@@ -1714,11 +1734,26 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     }
                     else
                     {
-                        // Job is still processing - check if billing window has been exhausted
+                        // Job is still processing - check if it's an AI Timeout or if billing window has been exhausted
                         var billingToday = GetBillingToday(billingTimeZoneId);
                         var windowEnd = job.NextRangeEndDateTime?.Date ?? billingToday;
                         
-                        if (billingToday > windowEnd)
+                        if (statusResult.StatusId == (int)AdrStatus.AiTimeout)
+                        {
+                            // AI Timeout (StatusId 17): The downstream AI timed out and won't process further.
+                            // Must re-fire the scrape request regardless of billing window or manual status.
+                            // Revert to CredentialVerified so Step 5 (scraping) picks it up and re-fires.
+                            // Soft-delete previous DownloadInvoice executions so idempotency check passes.
+                            await _unitOfWork.AdrJobExecutions.DeleteByJobIdAsync(job.Id);
+                            job.Status = "CredentialVerified";
+                            job.RetryCount++;
+                            result.JobsStillProcessing++;
+                            
+                            _logger.LogInformation(
+                                "Job {JobId}: AI Timeout (StatusId 17), re-queuing for re-fire (RetryCount={RetryCount}, BillingWindowExpired={WindowExpired})",
+                                job.Id, job.RetryCount, billingToday > windowEnd);
+                        }
+                        else if (billingToday > windowEnd)
                         {
                             // Billing window exhausted without finding a bill
                             // Mark job as NoInvoiceFound and advance rule to next cycle
@@ -1747,6 +1782,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.ModifiedBy = "System Created";
 
                     // Create tracking execution record for this status check
+                    // Note: For AI Timeout, we create the status check execution AFTER soft-deleting
+                    // the scrape executions, so the status check record itself is preserved.
                     if (!string.IsNullOrEmpty(orchestrationRequestId))
                     {
                         var execution = new AdrJobExecution
@@ -2236,11 +2273,26 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     }
                     else
                     {
-                        // Job is still processing - check if billing window has been exhausted
+                        // Job is still processing - check if it's an AI Timeout or if billing window has been exhausted
                         var billingToday = GetBillingToday(billingTimeZoneId);
                         var windowEnd = job.NextRangeEndDateTime?.Date ?? billingToday;
                         
-                        if (billingToday > windowEnd)
+                        if (statusResult.StatusId == (int)AdrStatus.AiTimeout)
+                        {
+                            // AI Timeout (StatusId 17): The downstream AI timed out and won't process further.
+                            // Must re-fire the scrape request regardless of billing window or manual status.
+                            // Revert to CredentialVerified so Step 5 (scraping) picks it up and re-fires.
+                            // Soft-delete previous DownloadInvoice executions so idempotency check passes.
+                            await _unitOfWork.AdrJobExecutions.DeleteByJobIdAsync(job.Id);
+                            job.Status = "CredentialVerified";
+                            job.RetryCount++;
+                            result.JobsStillProcessing++;
+                            
+                            _logger.LogInformation(
+                                "Job {JobId}: AI Timeout (StatusId 17), re-queuing for re-fire (RetryCount={RetryCount}, BillingWindowExpired={WindowExpired})",
+                                job.Id, job.RetryCount, billingToday > windowEnd);
+                        }
+                        else if (billingToday > windowEnd)
                         {
                             // Billing window exhausted without finding a bill
                             // Mark job as NoInvoiceFound and advance rule to next cycle
@@ -2269,6 +2321,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.ModifiedBy = "System Created";
 
                     // Create tracking execution record for this manual status check
+                    // Note: For AI Timeout, we create the status check execution AFTER soft-deleting
+                    // the scrape executions, so the status check record itself is preserved.
                     if (!string.IsNullOrEmpty(orchestrationRequestId))
                     {
                         var execution = new AdrJobExecution
@@ -3941,7 +3995,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             8 => true,   // Cannot Save Result (IsError=1)
             15 => true,  // Failed to Process All Documents (IsError=1)
             16 => true,  // No Documents Processed (IsError=1)
-            _ => false   // 1 (Inserted), 2 (Inserted With Priority), 6 (Sent To AI), 10 (Received From AI)
+            // Note: StatusId 17 (AI Timeout) is intentionally NOT final - it triggers automatic re-fire
+            _ => false   // 1 (Inserted), 2 (Inserted With Priority), 6 (Sent To AI), 10 (Received From AI), 17 (AI Timeout)
         };
     }
 
