@@ -1598,9 +1598,13 @@ public static class MermaidSerializer
             _ => isRoot ? (node.Label == "root" ? "" : $"(({node.Label}))") : node.Label
         };
 
-        // Prepend "root" keyword for the root node
-        var prefix = isRoot ? "root" : "";
-        sb.AppendLine($"{indent}{prefix}{formattedText}");
+        // Prepend ID prefix if present (e.g., "root" in "root((Central Topic))")
+        if (!string.IsNullOrEmpty(node.Id))
+        {
+            formattedText = node.Id + formattedText;
+        }
+
+        sb.AppendLine($"{indent}{formattedText}");
 
         // Write icon if present
         if (!string.IsNullOrEmpty(node.Icon))
