@@ -326,6 +326,28 @@ window.refreshMindMap = function(jsonStr) {
         var allZero = diagram.nodes.every(function(n) { return n.x === 0 && n.y === 0; });
         if (allZero && diagram.nodes.length > 0) {
             mindMapRadialLayout();
+        } else {
+            // Position any newly added nodes near their parent instead of (0,0)
+            var nodeMap = {};
+            diagram.nodes.forEach(function(n) { nodeMap[n.id] = n; });
+            diagram.nodes.forEach(function(n) {
+                if (n.x === 0 && n.y === 0 && !savedPositions[n.id]) {
+                    // This is a new node - find its parent via edges
+                    var parentEdge = diagram.edges.find(function(e) { return e.to === n.id; });
+                    if (parentEdge) {
+                        var parent = nodeMap[parentEdge.from];
+                        if (parent && (parent.x !== 0 || parent.y !== 0)) {
+                            // Count existing siblings to spread new nodes out
+                            var siblingEdges = diagram.edges.filter(function(e) { return e.from === parentEdge.from; });
+                            var siblingIndex = siblingEdges.indexOf(parentEdge);
+                            var angle = (siblingIndex / Math.max(siblingEdges.length, 1)) * 2 * Math.PI;
+                            var offset = 150;
+                            n.x = parent.x + offset * Math.cos(angle);
+                            n.y = parent.y + offset * Math.sin(angle);
+                        }
+                    }
+                }
+            });
         }
         _assignMindMapBranchColors();
         render();
