@@ -203,9 +203,13 @@ window.loadMindMap = function(jsonStr) {
         });
 
         // Radial layout for mind map (root centered, children radiate outward)
-        var needsLayout = diagram.nodes.some(function(n) { return n.x === 0 && n.y === 0; });
-        if (needsLayout && diagram.nodes.length > 0) {
+        // Only apply if ALL nodes lack positions (fresh load without saved positions)
+        var allZero = diagram.nodes.every(function(n) { return n.x === 0 && n.y === 0; });
+        if (allZero && diagram.nodes.length > 0) {
             mindMapRadialLayout();
+            // Send all positions to C# so they get saved in NodePositions for persistence
+            var positions = diagram.nodes.map(function(n) { return { nodeId: n.id, x: n.x, y: n.y, width: n.width, height: n.height }; });
+            postMessage({ type: 'mm_autoLayoutComplete', positions: positions });
         }
 
         // Assign branch colors for visual distinction
@@ -275,16 +279,26 @@ window.refreshMindMap = function(jsonStr) {
     try {
         var data = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
 
+        // Save current node positions before replacing diagram data
+        var savedPositions = {};
+        diagram.nodes.forEach(function(n) {
+            savedPositions[n.id] = { x: n.x, y: n.y, width: n.width, height: n.height };
+        });
+
         diagram.direction = data.direction || 'LR';
         diagram.nodes = (data.nodes || []).map(function(n) {
+            // Prefer position from C# model (n.x/n.y), then fall back to previously rendered position
+            var saved = savedPositions[n.id];
+            var x = (n.x && n.x !== 0) ? n.x : (saved ? saved.x : 0);
+            var y = (n.y && n.y !== 0) ? n.y : (saved ? saved.y : 0);
             return {
                 id: n.id,
                 label: n.label || n.id,
                 shape: n.shape || 'Rounded',
-                x: n.x || 0,
-                y: n.y || 0,
-                width: n.width || 0,
-                height: n.height || 0,
+                x: x,
+                y: y,
+                width: n.width || (saved ? saved.width : 0) || 0,
+                height: n.height || (saved ? saved.height : 0) || 0,
                 cssClass: n.cssClass || null,
                 mindMapLevel: n.mindMapLevel || 0,
                 mindMapShape: n.mindMapShape || 'Default'
@@ -308,7 +322,7 @@ window.refreshMindMap = function(jsonStr) {
             if (!node.height || node.height < minSize.height) node.height = minSize.height;
         });
 
-        // Re-layout on refresh only if nodes don't have saved positions
+        // Only re-layout if ALL nodes have no position (fresh diagram with no saved positions)
         var allZero = diagram.nodes.every(function(n) { return n.x === 0 && n.y === 0; });
         if (allZero && diagram.nodes.length > 0) {
             mindMapRadialLayout();
