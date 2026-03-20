@@ -5321,6 +5321,10 @@ Console.WriteLine(""Hello, World!"");
                 {
                     text = MermaidSerializer.SerializePieChart(_currentPieChartModel);
                 }
+                else if (_currentTimelineModel != null)
+                {
+                    text = MermaidSerializer.SerializeTimeline(_currentTimelineModel);
+                }
                 else if (_currentFlowchartModel != null)
                 {
                     text = MermaidSerializer.Serialize(_currentFlowchartModel);
@@ -9035,6 +9039,7 @@ Console.WriteLine(""Hello, World!"");
         _currentGanttModel = null;
         _currentMindMapModel = null;
         _currentPieChartModel = null;
+        _currentTimelineModel = null;
         
         // Switch to new document
         _activeDocument = doc;
