@@ -70,6 +70,13 @@ public interface IAdrJobRepository : IRepository<AdrJob>
     Task<Dictionary<int, AdrJob>> GetRebillJobsByAccountIdsAsync(IEnumerable<int> accountIds);
     
     /// <summary>
+    /// Gets jobs that need automatic re-fire (statuses 4,5,7,8,13,14,15,16,17).
+    /// These jobs were reverted to CredentialVerified by the status check step and need re-firing.
+    /// They bypass the normal !IsManualRequest and billing window filters.
+    /// </summary>
+    Task<IEnumerable<AdrJob>> GetRetryJobsAsync();
+    
+    /// <summary>
     /// Gets the set of account IDs that have an active (non-final) download job.
     /// Used by rebill processing to skip accounts that already have a download in progress.
     /// </summary>

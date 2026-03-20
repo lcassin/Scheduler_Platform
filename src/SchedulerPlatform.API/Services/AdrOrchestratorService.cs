@@ -1030,6 +1030,27 @@ public class AdrOrchestratorService : IAdrOrchestratorService
             _logger.LogInformation("Starting invoice scraping with {MaxParallel} parallel workers", maxParallel);
 
             var jobsReadyForScraping = (await _unitOfWork.AdrJobs.GetJobsReadyForScrapingAsync(GetBillingToday(billingTimeZoneId))).ToList();
+            
+            // Include auto-refire retry jobs - these bypass the normal !IsManualRequest and billing window filters.
+            // Jobs with refire-eligible AdrStatusId (4,5,7,8,13,14,15,16,17) were reverted to CredentialVerified 
+            // by the status check step and need re-firing.
+            var retryJobs = (await _unitOfWork.AdrJobs.GetRetryJobsAsync()).ToList();
+            if (retryJobs.Any())
+            {
+                var existingIds = new HashSet<int>(jobsReadyForScraping.Select(j => j.Id));
+                var addedCount = 0;
+                foreach (var retryJob in retryJobs)
+                {
+                    if (existingIds.Add(retryJob.Id))
+                    {
+                        jobsReadyForScraping.Add(retryJob);
+                        addedCount++;
+                    }
+                }
+                _logger.LogInformation("Found {Count} auto-refire retry jobs ({Added} new, {Existing} already in scraping queue)", 
+                    retryJobs.Count, addedCount, retryJobs.Count - addedCount);
+            }
+            
             var totalJobsFound = jobsReadyForScraping.Count;
             _logger.LogInformation("Found {Count} jobs ready for scraping", totalJobsFound);
 
@@ -1694,16 +1715,6 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                                 "Job {JobId}: AI Canceled (StatusId 12: {Description}), marking as Cancelled",
                                 job.Id, statusResult.StatusDescription);
                         }
-                        else if (statusResult.StatusId == (int)AdrStatus.NoDocumentsFound)
-                        {
-                            // StatusId 14: No Documents Found - not an error, just nothing to retrieve
-                            job.Status = "NoInvoiceFound";
-                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
-                            result.JobsNeedingReview++;
-                            _logger.LogInformation(
-                                "Job {JobId}: No Documents Found (StatusId 14), marking as NoInvoiceFound",
-                                job.Id);
-                        }
                         else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
                         {
                             // Don't set ScrapingCompletedDateTime - NeedsReview can be fixed downstream
@@ -1714,11 +1725,28 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     }
                     else
                     {
-                        // Job is still processing - check if billing window has been exhausted
+                        // Job is not final - check if it should be auto-refired or if billing window is exhausted
                         var billingToday = GetBillingToday(billingTimeZoneId);
                         var windowEnd = job.NextRangeEndDateTime?.Date ?? billingToday;
+                        var statusEnum = Enum.IsDefined(typeof(AdrStatus), statusResult.StatusId ?? 0) 
+                            ? (AdrStatus)(statusResult.StatusId ?? 0) : (AdrStatus?)null;
                         
-                        if (billingToday > windowEnd)
+                        if (statusEnum.HasValue && statusEnum.Value.ShouldRefire())
+                        {
+                            // Auto-refire statuses (4,5,7,8,13,14,15,16,17):
+                            // These indicate transient errors, timeouts, or incomplete processing.
+                            // Revert to CredentialVerified so Step 5 (scraping) picks it up and re-fires.
+                            // Soft-delete previous DownloadInvoice executions so idempotency check passes.
+                            await _unitOfWork.AdrJobExecutions.DeleteByJobIdAsync(job.Id);
+                            job.Status = "CredentialVerified";
+                            job.RetryCount++;
+                            result.JobsStillProcessing++;
+                            
+                            _logger.LogInformation(
+                                "Job {JobId}: Auto-refire status {StatusId} ({Description}), re-queuing for re-fire (RetryCount={RetryCount}, BillingWindowExpired={WindowExpired})",
+                                job.Id, statusResult.StatusId, statusResult.StatusDescription, job.RetryCount, billingToday > windowEnd);
+                        }
+                        else if (billingToday > windowEnd)
                         {
                             // Billing window exhausted without finding a bill
                             // Mark job as NoInvoiceFound and advance rule to next cycle
@@ -1747,6 +1775,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.ModifiedBy = "System Created";
 
                     // Create tracking execution record for this status check
+                    // Note: For auto-refire statuses, we create the status check execution AFTER soft-deleting
+                    // the scrape executions, so the status check record itself is preserved.
                     if (!string.IsNullOrEmpty(orchestrationRequestId))
                     {
                         var execution = new AdrJobExecution
@@ -2187,16 +2217,6 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                                 "Job {JobId}: AI Canceled (StatusId 12: {Description}), marking as Cancelled",
                                 job.Id, statusResult.StatusDescription);
                         }
-                        else if (statusResult.StatusId == (int)AdrStatus.NoDocumentsFound)
-                        {
-                            // StatusId 14: No Documents Found - not an error, just nothing to retrieve
-                            job.Status = "NoInvoiceFound";
-                            job.ScrapingCompletedDateTime = DateTime.UtcNow;
-                            result.JobsNeedingReview++;
-                            _logger.LogInformation(
-                                "Job {JobId}: No Documents Found (StatusId 14), marking as NoInvoiceFound",
-                                job.Id);
-                        }
                         else if (statusResult.StatusId == (int)AdrStatus.NeedsHumanReview)
                         {
                             // StatusId 9: Needs Human Review
@@ -2205,18 +2225,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             job.Status = "NeedsReview";
                             result.JobsNeedingReview++;
                         }
-                        else if (statusResult.StatusId == 3 || statusResult.StatusId == 4 || statusResult.StatusId == 5 ||
-                                 statusResult.StatusId == 7 || statusResult.StatusId == 8 ||
-                                 statusResult.StatusId == 15 || statusResult.StatusId == 16)
+                        else if (statusResult.StatusId == 3)
                         {
-                            // Error statuses (per ADR API IsError=1):
-                            // StatusId 3: Invalid CredentialID
-                            // StatusId 4: Cannot Connect To VCM
-                            // StatusId 5: Cannot Insert Into Queue
-                            // StatusId 7: Cannot Connect To AI
-                            // StatusId 8: Cannot Save Result
-                            // StatusId 15: Failed to Process All Documents
-                            // StatusId 16: No Documents Processed
+                            // StatusId 3: Invalid CredentialID - manual refire only (user must fix credential)
                             job.Status = "Failed";
                             job.ScrapingCompletedDateTime = DateTime.UtcNow;
                             result.Errors++;
@@ -2236,11 +2247,28 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     }
                     else
                     {
-                        // Job is still processing - check if billing window has been exhausted
+                        // Job is not final - check if it should be auto-refired or if billing window is exhausted
                         var billingToday = GetBillingToday(billingTimeZoneId);
                         var windowEnd = job.NextRangeEndDateTime?.Date ?? billingToday;
+                        var statusEnum = Enum.IsDefined(typeof(AdrStatus), statusResult.StatusId ?? 0) 
+                            ? (AdrStatus)(statusResult.StatusId ?? 0) : (AdrStatus?)null;
                         
-                        if (billingToday > windowEnd)
+                        if (statusEnum.HasValue && statusEnum.Value.ShouldRefire())
+                        {
+                            // Auto-refire statuses (4,5,7,8,13,14,15,16,17):
+                            // These indicate transient errors, timeouts, or incomplete processing.
+                            // Revert to CredentialVerified so Step 5 (scraping) picks it up and re-fires.
+                            // Soft-delete previous DownloadInvoice executions so idempotency check passes.
+                            await _unitOfWork.AdrJobExecutions.DeleteByJobIdAsync(job.Id);
+                            job.Status = "CredentialVerified";
+                            job.RetryCount++;
+                            result.JobsStillProcessing++;
+                            
+                            _logger.LogInformation(
+                                "Job {JobId}: Auto-refire status {StatusId} ({Description}), re-queuing for re-fire (RetryCount={RetryCount}, BillingWindowExpired={WindowExpired})",
+                                job.Id, statusResult.StatusId, statusResult.StatusDescription, job.RetryCount, billingToday > windowEnd);
+                        }
+                        else if (billingToday > windowEnd)
                         {
                             // Billing window exhausted without finding a bill
                             // Mark job as NoInvoiceFound and advance rule to next cycle
@@ -2269,6 +2297,8 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                     job.ModifiedBy = "System Created";
 
                     // Create tracking execution record for this manual status check
+                    // Note: For auto-refire statuses, we create the status check execution AFTER soft-deleting
+                    // the scrape executions, so the status check record itself is preserved.
                     if (!string.IsNullOrEmpty(orchestrationRequestId))
                     {
                         var execution = new AdrJobExecution
@@ -3915,33 +3945,34 @@ public class AdrOrchestratorService : IAdrOrchestratorService
     
     /// <summary>
     /// Determines if a StatusId represents a final state for the scheduler (job is done processing).
-    /// This combines the ADR API's IsFinal=1 statuses with error statuses that the scheduler treats as terminal.
     /// 
-    /// ADR API IsFinal=1: 9 (Needs Human Review), 11 (Complete), 12 (AI Canceled), 13 (Login Attempt Succeeded), 14 (No Documents Found)
-    /// Scheduler-terminal errors: 3 (Invalid CredentialID), 4 (Cannot Connect To VCM), 5 (Cannot Insert Into Queue),
-    ///                            7 (Cannot Connect To AI), 8 (Cannot Save Result), 15 (Failed to Process All Documents),
-    ///                            16 (No Documents Processed)
-    /// Still processing: 1 (Inserted), 2 (Inserted With Priority), 6 (Sent To AI), 10 (Received From AI)
+    /// True final (no retry):
+    ///   3  Invalid CredentialID (manual refire only - user must fix credential)
+    ///   9  Needs Human Review
+    ///   11 Document Retrieval Complete
+    ///   12 AI Canceled
+    /// 
+    /// Auto-refire (NOT final - scheduler will revert to CredentialVerified and re-fire):
+    ///   4,5,7,8    Connection/queue/storage errors
+    ///   13         Login Attempt Succeeded (cred check only, scrape still needed)
+    ///   14         No Documents Found (docs may arrive later)
+    ///   15,16      Document processing failures
+    ///   17         AI Timeout
+    /// 
+    /// Still processing (NOT final - still in downstream queue):
+    ///   1,2,6,10
     /// </summary>
     private static bool IsFinalStatus(int statusId)
     {
         return statusId switch
         {
-            // ADR API IsFinal=1 statuses
+            3 => true,   // Invalid CredentialID - manual refire only (user must fix credential)
             9 => true,   // Needs Human Review (IsError=1, IsFinal=1)
             11 => true,  // Document Retrieval Complete (IsError=0, IsFinal=1)
             12 => true,  // AI Canceled (IsError=0, IsFinal=1) - NOT an error
-            13 => true,  // Login Attempt Succeeded (IsError=0, IsFinal=1)
-            14 => true,  // No Documents Found (IsError=0, IsFinal=1) - NOT an error
-            // Error statuses the scheduler treats as terminal (ADR API IsFinal=0 but scheduler stops checking)
-            3 => true,   // Invalid CredentialID (IsError=1)
-            4 => true,   // Cannot Connect To VCM (IsError=1)
-            5 => true,   // Cannot Insert Into Queue (IsError=1)
-            7 => true,   // Cannot Connect To AI (IsError=1)
-            8 => true,   // Cannot Save Result (IsError=1)
-            15 => true,  // Failed to Process All Documents (IsError=1)
-            16 => true,  // No Documents Processed (IsError=1)
-            _ => false   // 1 (Inserted), 2 (Inserted With Priority), 6 (Sent To AI), 10 (Received From AI)
+            // Auto-refire statuses are NOT final: 4,5,7,8,13,14,15,16,17
+            // Still processing statuses are NOT final: 1,2,6,10
+            _ => false
         };
     }
 
