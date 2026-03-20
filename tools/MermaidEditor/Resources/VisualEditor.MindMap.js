@@ -106,8 +106,8 @@ function mindMapRadialLayout() {
     root.y = 0;
 
     // Radial spacing parameters
-    var baseRadius = 200;  // distance from root to first level
-    var levelSpacing = 180; // additional distance per level
+    var baseRadius = 120;  // distance from root to first level
+    var levelSpacing = 100; // additional distance per level
 
     // Layout a subtree within an angular sector [startAngle, endAngle]
     function layoutSubtree(nodeId, level, cx, cy, startAngle, endAngle) {

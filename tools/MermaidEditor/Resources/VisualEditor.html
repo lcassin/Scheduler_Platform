@@ -3042,9 +3042,8 @@
         function showPropertyPanel() {
             _isPropPanelUpdating = true;
             try {
-                // For mindmap, show the mindmap-specific edit panel
-                if (currentDiagramType === 'mindmap' && selectedNodeId) {
-                    editMindMapNode(selectedNodeId);
+                // For mindmap, single-click only selects — double-click opens edit panel
+                if (currentDiagramType === 'mindmap') {
                     _isPropPanelUpdating = false;
                     return;
                 }
