@@ -253,7 +253,7 @@ public partial class NewDocumentDialog : Window
     ""Category A"" : 50
     ""Category B"" : 50",
             "MindMap" => @"mindmap
-    root((Central Topic))
+    root(Central Topic)
         Branch A
         Branch B",
             "Timeline" => @"timeline

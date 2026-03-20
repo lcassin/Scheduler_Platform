@@ -1560,7 +1560,8 @@ public static class MermaidSerializer
         };
 
         // Prepend ID prefix if present (e.g., "root" in "root((Central Topic))")
-        if (!string.IsNullOrEmpty(node.Id))
+        // Don't prepend for Default-shaped nodes — the Id would merge with the label text
+        if (!string.IsNullOrEmpty(node.Id) && node.Shape != MindMapNodeShape.Default)
         {
             formattedText = node.Id + formattedText;
         }
