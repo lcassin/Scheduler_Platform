@@ -619,10 +619,8 @@
             // Set perpetual dates if toggle is on
             if (_isPerpetual)
             {
-                // Preserve existing start date for entries that already have one
-                if (!_editingEntry.EffectiveStartDate.HasValue)
-                    _editingEntry.EffectiveStartDate = DateTime.Today;
-                _editingEntry.EffectiveEndDate = _editingEntry.EffectiveStartDate.Value.AddYears(150);
+                _editingEntry.EffectiveStartDate = DateTime.Today;
+                _editingEntry.EffectiveEndDate = DateTime.Today.AddYears(150);
             }
             
             // Validate effective dates are provided
@@ -733,14 +731,14 @@
         
         if (value)
         {
-            // Set perpetual dates — preserve existing start date if present
-            if (!_editingEntry.EffectiveStartDate.HasValue)
-                _editingEntry.EffectiveStartDate = DateTime.Today;
-            _editingEntry.EffectiveEndDate = _editingEntry.EffectiveStartDate.Value.AddYears(150);
+            // Toggle ON: set start=today, end=today+150 years
+            _editingEntry.EffectiveStartDate = DateTime.Today;
+            _editingEntry.EffectiveEndDate = DateTime.Today.AddYears(150);
         }
         else
         {
-            // Null out end date to force user to enter a valid one
+            // Toggle OFF: set start=today, clear end date to force user entry
+            _editingEntry.EffectiveStartDate = DateTime.Today;
             _editingEntry.EffectiveEndDate = null;
         }
     }
