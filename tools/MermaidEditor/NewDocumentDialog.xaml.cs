@@ -27,6 +27,9 @@ public partial class NewDocumentDialog : Window
         SourceInitialized += NewDocumentDialog_SourceInitialized;
         LoadRecentFiles();
         PopulateRecentFilesList();
+        
+        // Default to Flowchart in the diagram type dropdown
+        DiagramTypeComboBox.SelectedIndex = 0;
     }
 
     private void NewDocumentDialog_SourceInitialized(object? sender, EventArgs e)
@@ -207,8 +210,92 @@ public partial class NewDocumentDialog : Window
 
     private void BlankMermaid_Click(object sender, RoutedEventArgs e)
     {
-        SetTemplateAndClose(@"flowchart TD
-    A[Start] --> B[End]");
+        var selectedType = "Flowchart";
+        if (DiagramTypeComboBox.SelectedItem is ComboBoxItem item && item.Tag is string tag)
+        {
+            selectedType = tag;
+        }
+
+        SetTemplateAndClose(GetBlankTemplateForType(selectedType));
+    }
+
+    private void DiagramTypeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        // Selection changed — the BlankMermaid_Click will use the selected type
+    }
+
+    private static string GetBlankTemplateForType(string diagramType)
+    {
+        return diagramType switch
+        {
+            "Flowchart" => @"flowchart TD
+    A[Start] --> B[End]",
+            "Sequence" => @"sequenceDiagram
+    participant A as Alice
+    participant B as Bob
+    A->>B: Hello",
+            "Class" => @"classDiagram
+    class MyClass {
+        +String name
+    }",
+            "State" => @"stateDiagram-v2
+    [*] --> Idle
+    Idle --> [*]",
+            "ER" => @"erDiagram
+    ENTITY1 ||--o{ ENTITY2 : has",
+            "Gantt" => @"gantt
+    title Project
+    dateFormat YYYY-MM-DD
+    section Tasks
+        Task 1 : a1, 2024-01-01, 7d",
+            "Pie" => @"pie
+    title Distribution
+    ""Category A"" : 50
+    ""Category B"" : 50",
+            "MindMap" => @"mindmap
+    root((Central Topic))
+        Branch A
+        Branch B",
+            "Timeline" => @"timeline
+    title Timeline
+    2024 : Event A
+    2025 : Event B",
+            "GitGraph" => @"gitGraph
+    commit
+    branch develop
+    commit
+    checkout main
+    merge develop",
+            "Journey" => @"journey
+    title User Journey
+    section Getting Started
+        Step 1: 5: User
+        Step 2: 3: User",
+            "Quadrant" => @"quadrant-beta
+    title Quadrant Chart
+    x-axis Low --> High
+    y-axis Low --> High
+    quadrant-1 Do First
+    quadrant-2 Schedule
+    quadrant-3 Delegate
+    quadrant-4 Eliminate
+    Item A: [0.7, 0.8]
+    Item B: [0.3, 0.4]",
+            "Requirement" => @"requirementDiagram
+    requirement req1 {
+        id: 1
+        text: Requirement 1
+        risk: high
+        verifymethod: test
+    }",
+            "C4" => @"C4Context
+    title System Context
+    Person(user, ""User"", ""A user"")
+    System(system, ""System"", ""The system"")
+    Rel(user, system, ""Uses"")",
+            _ => @"flowchart TD
+    A[Start] --> B[End]"
+        };
     }
 
     private void BlankMarkdown_Click(object sender, RoutedEventArgs e)

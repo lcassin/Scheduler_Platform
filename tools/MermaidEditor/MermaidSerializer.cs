@@ -1559,6 +1559,12 @@ public static class MermaidSerializer
             _ => node.Label
         };
 
+        // Prepend ID prefix if present (e.g., "root" in "root((Central Topic))")
+        if (!string.IsNullOrEmpty(node.Id))
+        {
+            formattedText = node.Id + formattedText;
+        }
+
         sb.AppendLine($"{indent}{formattedText}");
 
         // Write icon if present
