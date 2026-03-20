@@ -7,6 +7,7 @@
 let timelineModel = null;
 let timelineSelectedEvent = null; // { index, section } or null
 let timelineSelectedSection = null; // section name or null
+let timelineClipboard = null; // { type: 'event'|'section', data: ... }
 
 // ========== Timeline Load/Restore ==========
 
@@ -185,6 +186,9 @@ function renderTimelineDiagram() {
             secBg.setAttribute('rx', '4');
             secBg.style.cursor = 'pointer';
             const secName = row.sectionName;
+            secBg.setAttribute('data-tl-type', 'section');
+            secBg.setAttribute('data-tl-section', secName);
+            secBg.setAttribute('data-tl-section-index', String(row.sectionIdx !== undefined ? row.sectionIdx : 0));
             secBg.addEventListener('click', (e) => { e.stopPropagation(); selectTimelineSection(secName); });
             secBg.addEventListener('dblclick', (e) => { e.stopPropagation(); editTimelineSection(secName); });
             svg.appendChild(secBg);
@@ -198,6 +202,9 @@ function renderTimelineDiagram() {
             secLabel.setAttribute('font-weight', 'bold');
             secLabel.textContent = row.sectionName;
             secLabel.style.cursor = 'pointer';
+            secLabel.setAttribute('data-tl-type', 'section');
+            secLabel.setAttribute('data-tl-section', secName);
+            secLabel.setAttribute('data-tl-section-index', String(row.sectionIdx !== undefined ? row.sectionIdx : 0));
             secLabel.addEventListener('click', (e) => { e.stopPropagation(); selectTimelineSection(secName); });
             secLabel.addEventListener('dblclick', (e) => { e.stopPropagation(); editTimelineSection(secName); });
             svg.appendChild(secLabel);
@@ -271,6 +278,9 @@ function renderTimelineDiagram() {
         periodText.style.cursor = 'pointer';
         const evtIdx = row.index;
         const evtSection = row.section;
+        periodText.setAttribute('data-tl-type', 'event');
+        periodText.setAttribute('data-tl-index', String(evtIdx));
+        periodText.setAttribute('data-tl-section', evtSection || '');
         periodText.addEventListener('click', (e) => { e.stopPropagation(); selectTimelineEvent(evtIdx, evtSection); });
         periodText.addEventListener('dblclick', (e) => { e.stopPropagation(); editTimelineEvent(evtIdx, evtSection); });
         svg.appendChild(periodText);
@@ -296,6 +306,9 @@ function renderTimelineDiagram() {
                 bubble.setAttribute('opacity', isSelected ? '1' : '0.75');
                 bubble.setAttribute('rx', '14');
                 bubble.style.cursor = 'pointer';
+                bubble.setAttribute('data-tl-type', 'event');
+                bubble.setAttribute('data-tl-index', String(evtIdx));
+                bubble.setAttribute('data-tl-section', evtSection || '');
                 bubble.addEventListener('click', (e) => { e.stopPropagation(); selectTimelineEvent(evtIdx, evtSection); });
                 bubble.addEventListener('dblclick', (e) => { e.stopPropagation(); editTimelineEvent(evtIdx, evtSection); });
                 bubble.addEventListener('mouseenter', () => bubble.setAttribute('opacity', '1'));
@@ -770,4 +783,254 @@ function editTimelineSettings() {
     });
     propertyPanel.classList.add('visible');
     setTimeout(() => document.getElementById('tl-dlg-title').select(), 50);
+}
+
+// ========== Timeline Context Menu ==========
+
+function _tlAddCtxItem(label, onClick) {
+    const contextMenu = document.getElementById('context-menu');
+    const item = document.createElement('div');
+    item.classList.add('context-menu-item');
+    item.textContent = label;
+    item.addEventListener('click', function(e) {
+        e.stopPropagation();
+        contextMenu.classList.remove('visible');
+        onClick();
+    });
+    contextMenu.appendChild(item);
+}
+
+function _tlAddCtxSeparator() {
+    const contextMenu = document.getElementById('context-menu');
+    const sep = document.createElement('div');
+    sep.classList.add('context-menu-separator');
+    contextMenu.appendChild(sep);
+}
+
+function _tlGetEventList(sectionName) {
+    if (sectionName) {
+        const sec = timelineModel.sections ? timelineModel.sections.find(s => s.name === sectionName) : null;
+        return sec ? (sec.events || []) : [];
+    }
+    return timelineModel.events || [];
+}
+
+function _tlGetSectionIndex(sectionName) {
+    if (!timelineModel.sections) return -1;
+    return timelineModel.sections.findIndex(s => s.name === sectionName);
+}
+
+function _tlCopyEvent(index, sectionName) {
+    const events = _tlGetEventList(sectionName);
+    if (index >= 0 && index < events.length) {
+        const evt = events[index];
+        timelineClipboard = {
+            type: 'event',
+            data: { timePeriod: evt.timePeriod, events: evt.events.slice(), section: sectionName }
+        };
+    }
+}
+
+function _tlCopySection(sectionName) {
+    const secIdx = _tlGetSectionIndex(sectionName);
+    if (secIdx < 0) return;
+    const sec = timelineModel.sections[secIdx];
+    timelineClipboard = {
+        type: 'section',
+        data: {
+            name: sec.name + ' (Copy)',
+            events: sec.events ? sec.events.map(e => ({ timePeriod: e.timePeriod, events: e.events.slice() })) : []
+        }
+    };
+}
+
+function _tlPasteEvent(insertAtIndex, sectionName) {
+    if (!timelineClipboard || timelineClipboard.type !== 'event') return;
+    const d = timelineClipboard.data;
+    postMessage({
+        type: 'tl_eventCreated',
+        timePeriod: d.timePeriod,
+        events: d.events.slice(),
+        section: sectionName || null,
+        insertAtIndex: insertAtIndex
+    });
+}
+
+function _tlPasteSection(insertAtIndex) {
+    if (!timelineClipboard || timelineClipboard.type !== 'section') return;
+    const d = timelineClipboard.data;
+    // Create the section first
+    postMessage({
+        type: 'tl_sectionCreated',
+        name: d.name,
+        insertAtIndex: insertAtIndex
+    });
+    // Note: events within the section will need to be added separately after the section is created
+    // For simplicity, we create an empty section copy; the user can then add events
+}
+
+function showTimelineContextMenu(e) {
+    if (currentDiagramType !== 'timeline') return;
+    if (!timelineModel) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const contextMenu = document.getElementById('context-menu');
+    contextMenu.innerHTML = '';
+
+    const target = e.target;
+
+    // Check if right-clicked on an event element
+    const tlType = target.getAttribute('data-tl-type') ||
+        (target.parentElement ? target.parentElement.getAttribute('data-tl-type') : null);
+    const tlIndex = target.getAttribute('data-tl-index') ||
+        (target.parentElement ? target.parentElement.getAttribute('data-tl-index') : null);
+    const tlSection = target.getAttribute('data-tl-section') ||
+        (target.parentElement ? target.parentElement.getAttribute('data-tl-section') : null);
+    const tlSectionIndex = target.getAttribute('data-tl-section-index') ||
+        (target.parentElement ? target.parentElement.getAttribute('data-tl-section-index') : null);
+
+    if (tlType === 'event' && tlIndex !== null) {
+        const idx = parseInt(tlIndex, 10);
+        const section = tlSection || null;
+
+        // Select the event
+        selectTimelineEvent(idx, section);
+
+        _tlAddCtxItem('\u270E Edit Event', () => { editTimelineEvent(idx, section); });
+        _tlAddCtxItem('\u{1F5D1} Delete Event', () => {
+            timelineSelectedEvent = { index: idx, section: section };
+            deleteTimelineEvent();
+        });
+        _tlAddCtxSeparator();
+        _tlAddCtxItem('\u{1F4CB} Copy Event', () => { _tlCopyEvent(idx, section); });
+        _tlAddCtxSeparator();
+        _tlAddCtxItem('\u2191 Insert Event Above', () => {
+            postMessage({
+                type: 'tl_eventCreated',
+                timePeriod: 'New',
+                events: ['New Event'],
+                section: section,
+                insertAtIndex: idx
+            });
+        });
+        _tlAddCtxItem('\u2193 Insert Event Below', () => {
+            postMessage({
+                type: 'tl_eventCreated',
+                timePeriod: 'New',
+                events: ['New Event'],
+                section: section,
+                insertAtIndex: idx + 1
+            });
+        });
+        _tlAddCtxItem('\u2191 Insert Section Above', () => {
+            // Find which section this event belongs to and insert before it
+            if (section) {
+                const secIdx = _tlGetSectionIndex(section);
+                if (secIdx >= 0) {
+                    postMessage({ type: 'tl_sectionCreated', name: 'New Section', insertAtIndex: secIdx });
+                }
+            } else {
+                postMessage({ type: 'tl_sectionCreated', name: 'New Section', insertAtIndex: 0 });
+            }
+        });
+
+        // Paste options
+        if (timelineClipboard) {
+            _tlAddCtxSeparator();
+            if (timelineClipboard.type === 'event') {
+                _tlAddCtxItem('\u{1F4CB} Paste Event Above', () => { _tlPasteEvent(idx, section); });
+                _tlAddCtxItem('\u{1F4CB} Paste Event Below', () => { _tlPasteEvent(idx + 1, section); });
+            } else if (timelineClipboard.type === 'section') {
+                if (section) {
+                    const secIdx = _tlGetSectionIndex(section);
+                    _tlAddCtxItem('\u{1F4CB} Paste Section Above', () => { _tlPasteSection(secIdx); });
+                    _tlAddCtxItem('\u{1F4CB} Paste Section Below', () => { _tlPasteSection(secIdx + 1); });
+                }
+            }
+        }
+
+    } else if (tlType === 'section' && tlSection) {
+        const sectionName = tlSection;
+        const secIdx = tlSectionIndex !== null ? parseInt(tlSectionIndex, 10) : _tlGetSectionIndex(sectionName);
+
+        // Select the section
+        selectTimelineSection(sectionName);
+
+        _tlAddCtxItem('\u270E Edit Section', () => { editTimelineSection(sectionName); });
+        _tlAddCtxItem('\u{1F5D1} Delete Section', () => {
+            timelineSelectedSection = sectionName;
+            deleteTimelineSection();
+        });
+        _tlAddCtxSeparator();
+        _tlAddCtxItem('\u{1F4CB} Copy Section', () => { _tlCopySection(sectionName); });
+        _tlAddCtxSeparator();
+        _tlAddCtxItem('\u2191 Insert Section Above', () => {
+            postMessage({ type: 'tl_sectionCreated', name: 'New Section', insertAtIndex: secIdx });
+        });
+        _tlAddCtxItem('\u2193 Insert Section Below', () => {
+            postMessage({ type: 'tl_sectionCreated', name: 'New Section', insertAtIndex: secIdx + 1 });
+        });
+        _tlAddCtxSeparator();
+        _tlAddCtxItem('\u2191 Insert Event at Top of Section', () => {
+            postMessage({
+                type: 'tl_eventCreated',
+                timePeriod: 'New',
+                events: ['New Event'],
+                section: sectionName,
+                insertAtIndex: 0
+            });
+        });
+        _tlAddCtxItem('\u2193 Insert Event at Bottom of Section', () => {
+            const evts = _tlGetEventList(sectionName);
+            postMessage({
+                type: 'tl_eventCreated',
+                timePeriod: 'New',
+                events: ['New Event'],
+                section: sectionName,
+                insertAtIndex: null // append at end
+            });
+        });
+
+        // Paste options
+        if (timelineClipboard) {
+            _tlAddCtxSeparator();
+            if (timelineClipboard.type === 'event') {
+                _tlAddCtxItem('\u{1F4CB} Paste Event at Top', () => { _tlPasteEvent(0, sectionName); });
+                const evts = _tlGetEventList(sectionName);
+                _tlAddCtxItem('\u{1F4CB} Paste Event at Bottom', () => { _tlPasteEvent(null, sectionName); });
+            } else if (timelineClipboard.type === 'section') {
+                _tlAddCtxItem('\u{1F4CB} Paste Section Above', () => { _tlPasteSection(secIdx); });
+                _tlAddCtxItem('\u{1F4CB} Paste Section Below', () => { _tlPasteSection(secIdx + 1); });
+            }
+        }
+
+    } else {
+        // Empty space - show general context menu
+        _tlAddCtxItem('+ Add Event', () => { createTimelineEvent(); });
+        _tlAddCtxItem('+ Add Section', () => { createTimelineSection(); });
+        _tlAddCtxItem('\u2699 Settings', () => { editTimelineSettings(); });
+
+        if (timelineClipboard) {
+            _tlAddCtxSeparator();
+            if (timelineClipboard.type === 'event') {
+                _tlAddCtxItem('\u{1F4CB} Paste Event at Top', () => {
+                    _tlPasteEvent(0, null);
+                });
+                _tlAddCtxItem('\u{1F4CB} Paste Event at Bottom', () => {
+                    _tlPasteEvent(null, null);
+                });
+            } else if (timelineClipboard.type === 'section') {
+                _tlAddCtxItem('\u{1F4CB} Paste Section at Top', () => {
+                    _tlPasteSection(0);
+                });
+                _tlAddCtxItem('\u{1F4CB} Paste Section at Bottom', () => {
+                    _tlPasteSection(null);
+                });
+            }
+        }
+    }
+
+    positionContextMenu(contextMenu, e.clientX, e.clientY);
 }

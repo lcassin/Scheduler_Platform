@@ -1351,9 +1351,18 @@
                         addContextMenuItem('\u{1F4CB} Paste', () => { pasteClipboard(0, 0); });
                     }
                     positionContextMenu(contextMenu, e.clientX, e.clientY);
+                } else if (currentDiagramType === 'timeline' && timelineModel) {
+                    showTimelineContextMenu(e);
                 } else {
                     // For class/state/ER, just suppress the browser menu
                     // (their context menus are handled on-SVG only)
+                }
+            }
+            // Also handle right-click inside editorCanvas for canvas-based diagrams
+            if (currentDiagramType === 'timeline' && timelineModel) {
+                const editorCanvas = document.getElementById('editorCanvas');
+                if (editorCanvas && editorCanvas.contains(e.target)) {
+                    showTimelineContextMenu(e);
                 }
             }
         });
