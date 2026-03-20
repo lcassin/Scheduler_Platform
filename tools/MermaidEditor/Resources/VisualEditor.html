@@ -925,6 +925,14 @@
             <svg viewBox="0 0 16 16"><path d="M5,3 V2 h6 v1 h3 v1.5 H2 V3 h3z M3,5.5 h10 l-0.8,9 H3.8 L3,5.5z M6.5,7 v5.5 M9.5,7 v5.5" fill="none" stroke-width="1.2"/></svg>
             <span class="tooltip">Delete Node</span>
         </button>
+        <button class="toolbar-btn toolbar-mindmap" id="tb-mm-auto-layout" title="Auto Layout" style="display:none">
+            <svg viewBox="0 0 16 16"><rect x="1" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1.2"/><rect x="10" y="1" width="5" height="4" rx="0.5" fill="none" stroke-width="1.2"/><rect x="5.5" y="11" width="5" height="4" rx="0.5" fill="none" stroke-width="1.2"/><line x1="3.5" y1="5" x2="3.5" y2="7" stroke-width="1"/><line x1="12.5" y1="5" x2="12.5" y2="7" stroke-width="1"/><line x1="3.5" y1="7" x2="12.5" y2="7" stroke-width="1"/><line x1="8" y1="7" x2="8" y2="11" stroke-width="1"/></svg>
+            <span class="tooltip">Auto Layout</span>
+        </button>
+        <button class="toolbar-btn toolbar-mindmap" id="tb-mm-toggle-curves" title="Toggle Curved Edges" style="display:none">
+            <svg viewBox="0 0 16 16"><path d="M3,13 Q3,3 13,3" fill="none" stroke-width="1.5"/><polygon points="13,3 10,1 11,5" fill="currentColor" stroke="none"/></svg>
+            <span class="tooltip">Curved Edges</span>
+        </button>
         <!-- Pie-specific buttons -->
         <button class="toolbar-btn toolbar-pie" id="tb-pie-add-slice" title="Add Slice" style="display:none">
             <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke-width="1.2"/><line x1="8" y1="8" x2="8" y2="2" stroke-width="1"/><line x1="8" y1="8" x2="13.2" y2="11" stroke-width="1"/><line x1="13" y1="13" x2="15" y2="13" stroke-width="1.3"/><line x1="14" y1="12" x2="14" y2="14" stroke-width="1.3"/></svg>
@@ -1781,6 +1789,8 @@
                 // Resize handles (shown when selected, not for mindmap - tree layout controls sizing)
                 if (selectedNodeId === node.id && !selectedNodeIds.length && currentDiagramType !== 'mindmap') {
                     const rhSize = 6;
+                    const hw = (node.width || 80) / 2;
+                    const hh = (node.height || 40) / 2;
                     const rhPositions = [
                         { cx: -hw, cy: -hh, cls: 'rh-nw' },
                         { cx:  hw, cy: -hh, cls: 'rh-ne' },
@@ -4922,13 +4932,14 @@
         function toggleCurvedEdges() {
             curvedEdges = !curvedEdges;
             // Sync all toggle buttons active state
-            ['tb-st-toggle-curves', 'tb-fc-toggle-curves', 'tb-cls-toggle-curves', 'tb-er-toggle-curves'].forEach(id => {
+            ['tb-st-toggle-curves', 'tb-fc-toggle-curves', 'tb-cls-toggle-curves', 'tb-er-toggle-curves', 'tb-mm-toggle-curves'].forEach(id => {
                 const btn = document.getElementById(id);
                 if (btn) btn.classList.toggle('active', curvedEdges);
             });
             // Re-render current diagram
             if (currentDiagramType === 'state' && stDiagram) renderStateDiagram();
             else if (currentDiagramType === 'flowchart') renderEdges();
+            else if (currentDiagramType === 'mindmap') renderEdges();
             else if (currentDiagramType === 'class' && clsDiagram) renderClassDiagram();
             else if (currentDiagramType === 'er' && erDiagram) renderERDiagram();
         }
@@ -4961,6 +4972,15 @@
         document.getElementById('tb-mm-add-child').addEventListener('click', function() { createMindMapChild(); });
         document.getElementById('tb-mm-edit-node').addEventListener('click', function() { if (selectedNodeId) editMindMapNode(selectedNodeId); });
         document.getElementById('tb-mm-delete-node').addEventListener('click', function() { deleteMindMapNode(); });
+        document.getElementById('tb-mm-auto-layout').addEventListener('click', function() {
+            mindMapRadialLayout();
+            render();
+            var positions = diagram.nodes.map(function(n) { return { nodeId: n.id, x: n.x, y: n.y, width: n.width, height: n.height }; });
+            postMessage({ type: 'mm_autoLayoutComplete', positions: positions });
+        });
+        const mmCurveBtn = document.getElementById('tb-mm-toggle-curves');
+        mmCurveBtn.classList.add('active');
+        mmCurveBtn.addEventListener('click', toggleCurvedEdges);
 
         // Pie toolbar buttons
         document.getElementById('tb-pie-add-slice').addEventListener('click', function() { createPieSlice(); });

@@ -2937,6 +2937,12 @@ Console.WriteLine(""Hello, World!"");
                         await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.fitToWindow()");
                     }
                 });
+
+                // Apply default editor mode for new Mermaid files
+                if (dialog.IsMermaid)
+                {
+                    ApplyDefaultEditorMode();
+                }
             }
         }
     }
@@ -5167,6 +5173,35 @@ Console.WriteLine(""Hello, World!"");
     private void SplitMode_Click(object sender, RoutedEventArgs e)
     {
         SwitchToSplitMode();
+    }
+
+    /// <summary>
+    /// Applies the user's default editor mode setting (from Settings) when creating a new Mermaid file.
+    /// </summary>
+    private void ApplyDefaultEditorMode()
+    {
+        var mode = SettingsManager.Current.DefaultEditorMode;
+        switch (mode)
+        {
+            case "Visual":
+                // Delay slightly to let the document fully initialize before switching
+                _ = Dispatcher.InvokeAsync(async () =>
+                {
+                    await Task.Delay(600);
+                    SwitchToVisualMode();
+                });
+                break;
+            case "Split":
+                _ = Dispatcher.InvokeAsync(async () =>
+                {
+                    await Task.Delay(600);
+                    SwitchToSplitMode();
+                });
+                break;
+            default: // "Code"
+                // Already in text/code mode by default, nothing to do
+                break;
+        }
     }
 
     /// <summary>
@@ -9366,6 +9401,12 @@ Console.WriteLine(""Hello, World!"");
                             await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.fitToWindow()");
                         }
                     });
+
+                    // Apply default editor mode for new Mermaid files
+                    if (dialog.IsMermaid)
+                    {
+                        ApplyDefaultEditorMode();
+                    }
                 }
             }
             // If no template selected, keep the blank document

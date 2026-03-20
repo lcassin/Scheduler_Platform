@@ -68,6 +68,7 @@ public partial class SettingsDialog : Window
         // Appearance
         SelectComboItemByContent(ThemeCombo, settings.Theme);
         SelectComboItemByContent(DefaultFileTypeCombo, settings.DefaultFileType);
+        SelectComboItemByContent(DefaultEditorModeCombo, settings.DefaultEditorMode);
 
         // Editor
         SelectComboItemByContent(FontFamilyCombo, settings.EditorFontFamily);
@@ -96,6 +97,7 @@ public partial class SettingsDialog : Window
         // Appearance
         settings.Theme = GetComboSelectedContent(ThemeCombo) ?? "Dark";
         settings.DefaultFileType = GetComboSelectedContent(DefaultFileTypeCombo) ?? "Mermaid";
+        settings.DefaultEditorMode = GetComboSelectedContent(DefaultEditorModeCombo) ?? "Code";
 
         // Editor
         settings.EditorFontFamily = GetComboSelectedContent(FontFamilyCombo) ?? "Consolas";

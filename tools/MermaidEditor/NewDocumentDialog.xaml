@@ -143,15 +143,44 @@
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                         <StackPanel>
                             <TextBlock Text="Blank" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,0,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="BlankMermaid_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/blank.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Blank Mermaid Diagram" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Start with an empty .mmd file" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
+                            <Grid Margin="4,0,4,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0" Style="{StaticResource TemplateButtonStyle}" Click="BlankMermaid_Click" Margin="0">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image x:Name="BlankDiagramTypeIcon" Source="Resources/TemplateThumbnails/flowchart.png" Width="36" Height="36" Margin="0,0,10,0"/>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="Blank Mermaid Diagram" FontWeight="SemiBold"/>
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="Create blank " Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
+                                                <TextBlock x:Name="BlankDiagramTypeLabel" Text="Flowchart" Foreground="{DynamicResource ThemeAccentBrush}" FontSize="11" FontWeight="SemiBold"/>
+                                            </StackPanel>
+                                        </StackPanel>
                                     </StackPanel>
-                                </StackPanel>
-                            </Button>
+                                </Button>
+                                <ComboBox x:Name="BlankDiagramTypeCombo" Grid.Column="1" Width="130" Margin="4,0,0,0"
+                                          VerticalAlignment="Center" SelectionChanged="BlankDiagramTypeCombo_SelectionChanged"
+                                          Background="{DynamicResource ThemeToolbarBackgroundBrush}"
+                                          Foreground="{DynamicResource ThemeForegroundBrush}"
+                                          BorderBrush="{DynamicResource ThemeBorderBrush}">
+                                    <ComboBoxItem Content="Flowchart" IsSelected="True"/>
+                                    <ComboBoxItem Content="Sequence"/>
+                                    <ComboBoxItem Content="Class"/>
+                                    <ComboBoxItem Content="State"/>
+                                    <ComboBoxItem Content="ER"/>
+                                    <ComboBoxItem Content="Gantt"/>
+                                    <ComboBoxItem Content="Pie"/>
+                                    <ComboBoxItem Content="Mind Map"/>
+                                    <ComboBoxItem Content="Timeline"/>
+                                    <ComboBoxItem Content="Git Graph"/>
+                                    <ComboBoxItem Content="Journey"/>
+                                    <ComboBoxItem Content="Quadrant"/>
+                                    <ComboBoxItem Content="Requirement"/>
+                                    <ComboBoxItem Content="C4"/>
+                                </ComboBox>
+                            </Grid>
                             <Button Style="{StaticResource TemplateButtonStyle}" Click="BlankMarkdown_Click">
                                 <StackPanel Orientation="Horizontal">
                                     <Image Source="Resources/TemplateThumbnails/markdown.png" Width="36" Height="36" Margin="0,0,10,0"/>

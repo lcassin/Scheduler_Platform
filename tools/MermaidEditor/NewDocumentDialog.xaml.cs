@@ -205,10 +205,144 @@ public partial class NewDocumentDialog : Window
         Close();
     }
 
+    private void BlankDiagramTypeCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (BlankDiagramTypeCombo?.SelectedItem is System.Windows.Controls.ComboBoxItem item)
+        {
+            var type = item.Content?.ToString() ?? "Flowchart";
+            if (BlankDiagramTypeLabel != null)
+                BlankDiagramTypeLabel.Text = type;
+
+            // Update the icon to match the selected diagram type
+            if (BlankDiagramTypeIcon != null)
+            {
+                var iconName = type switch
+                {
+                    "Flowchart" => "flowchart",
+                    "Sequence" => "sequence",
+                    "Class" => "class",
+                    "State" => "state",
+                    "ER" => "erdiagram",
+                    "Gantt" => "gantt",
+                    "Pie" => "pie",
+                    "Mind Map" => "mindmap",
+                    "Timeline" => "timeline",
+                    "Git Graph" => "gitgraph",
+                    "Journey" => "journey",
+                    "Quadrant" => "quadrant",
+                    "Requirement" => "requirement",
+                    "C4" => "c4",
+                    _ => "blank"
+                };
+                try
+                {
+                    BlankDiagramTypeIcon.Source = new System.Windows.Media.Imaging.BitmapImage(
+                        new Uri($"Resources/TemplateThumbnails/{iconName}.png", UriKind.Relative));
+                }
+                catch { /* Ignore if icon not found */ }
+            }
+        }
+    }
+
+    private string GetBlankTemplateForSelectedType()
+    {
+        var selectedType = "Flowchart";
+        if (BlankDiagramTypeCombo?.SelectedItem is System.Windows.Controls.ComboBoxItem item)
+        {
+            selectedType = item.Content?.ToString() ?? "Flowchart";
+        }
+
+        return selectedType switch
+        {
+            "Flowchart" => @"flowchart TD
+    A[Start] --> B[End]",
+            "Sequence" => @"sequenceDiagram
+    participant A as Alice
+    participant B as Bob
+    A->>B: Hello
+    B-->>A: Hi there",
+            "Class" => @"classDiagram
+    class MyClass {
+        +String name
+        +doSomething() void
+    }",
+            "State" => @"stateDiagram-v2
+    [*] --> Idle
+    Idle --> Active : start
+    Active --> Idle : stop",
+            "ER" => @"erDiagram
+    CUSTOMER ||--o{ ORDER : places
+    CUSTOMER {
+        int id PK
+        string name
+    }
+    ORDER {
+        int id PK
+        date created
+    }",
+            "Gantt" => @"gantt
+    title My Project
+    dateFormat YYYY-MM-DD
+    section Phase 1
+        Task 1 :a1, 2024-01-01, 7d
+        Task 2 :a2, after a1, 5d",
+            "Pie" => @"pie showData
+    title Distribution
+    ""Category A"" : 40
+    ""Category B"" : 35
+    ""Category C"" : 25",
+            "Mind Map" => @"mindmap
+    root((Central Topic))
+        Branch A
+            Leaf 1
+            Leaf 2
+        Branch B
+            Leaf 3",
+            "Timeline" => @"timeline
+    title My Timeline
+    section Phase 1
+        Event A : Description A
+        Event B : Description B
+    section Phase 2
+        Event C : Description C",
+            "Git Graph" => @"gitGraph
+    commit id: ""Initial""
+    branch develop
+    commit id: ""Feature""
+    checkout main
+    merge develop",
+            "Journey" => @"journey
+    title User Journey
+    section Getting Started
+        Sign up: 5: User
+        First login: 4: User
+    section Using App
+        Create item: 3: User
+        Share item: 4: User",
+            "Quadrant" => @"quadrantChart
+    title Priority Matrix
+    x-axis Low Effort --> High Effort
+    y-axis Low Impact --> High Impact
+    quadrant-1 Do First
+    quadrant-2 Schedule
+    quadrant-3 Delegate
+    quadrant-4 Eliminate
+    Item A: [0.8, 0.9]
+    Item B: [0.3, 0.7]",
+            "Requirement" => "requirementDiagram\r\n\r\n    requirement my_req {\r\n    id: 1\r\n    text: Sample requirement\r\n    risk: medium\r\n    verifymethod: test\r\n    }",
+            "C4" => @"C4Context
+    title System Context
+    Person(user, ""User"", ""A user of the system"")
+    System(system, ""My System"", ""Main application"")
+    Rel(user, system, ""Uses"")",
+            _ => @"flowchart TD
+    A[Start] --> B[End]"
+        };
+    }
+
     private void BlankMermaid_Click(object sender, RoutedEventArgs e)
     {
-        SetTemplateAndClose(@"flowchart TD
-    A[Start] --> B[End]");
+        SetTemplateAndClose(GetBlankTemplateForSelectedType());
     }
 
     private void BlankMarkdown_Click(object sender, RoutedEventArgs e)

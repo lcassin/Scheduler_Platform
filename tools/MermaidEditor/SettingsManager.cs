@@ -154,6 +154,10 @@ public class AppSettings
     [JsonPropertyName("aiEndpoint")]
     public string AiEndpoint { get; set; } = ""; // Optional custom endpoint (e.g. Azure OpenAI)
 
+    // ── Default Editor Mode ──
+    [JsonPropertyName("defaultEditorMode")]
+    public string DefaultEditorMode { get; set; } = "Code"; // "Code", "Visual", "Split"
+
     // ── What's New ──
     [JsonPropertyName("lastSeenWhatsNewVersion")]
     public string LastSeenWhatsNewVersion { get; set; } = "";
