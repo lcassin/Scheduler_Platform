@@ -571,7 +571,7 @@ public class BackgroundExportService : BackgroundService
 
         var jobs = await query.OrderByDescending(j => j.Id).ToListAsync(cancellationToken);
 
-        var headers = new[] { "Job ID", "Account #", "VM Account ID", "Interface Account ID", "Client", "Master Vendor Code", "Primary Vendor Code", "Period Type", "Next Run", "Range Start", "Range End", "Status", "Is Manual", "Manual Reason", "Created", "Modified" };
+        var headers = new[] { "Job ID", "Account #", "VM Account ID", "Interface Account ID", "Client", "Master Vendor Code", "Primary Vendor Code", "Period Type", "Next Run", "Range Start", "Range End", "Status", "Completed Date", "Is Manual", "Manual Reason", "Created", "Modified" };
 
         var isExcel = request.Format.Equals("excel", StringComparison.OrdinalIgnoreCase);
         var contentType = isExcel
@@ -602,6 +602,7 @@ public class BackgroundExportService : BackgroundService
                     IsRebillJob(j) ? "-" : (object?)j.NextRangeStartDateTime,
                     IsRebillJob(j) ? "-" : (object?)j.NextRangeEndDateTime,
                     j.Status ?? "",
+                    j.ScrapingCompletedDateTime,
                     j.IsManualRequest,
                     j.ManualRequestReason ?? "",
                     j.CreatedDateTime,
@@ -613,7 +614,7 @@ public class BackgroundExportService : BackgroundService
             data = ExcelExportHelper.CreateCsvExport(
                 string.Join(",", headers),
                 jobs,
-                j => $"{j.Id},{ExcelExportHelper.CsvEscape(j.AdrAccount?.VMAccountNumber)},{j.AdrAccount?.VMAccountId},{ExcelExportHelper.CsvEscape(j.AdrAccount?.InterfaceAccountId)},{ExcelExportHelper.CsvEscape(j.AdrAccount?.ClientName)},{ExcelExportHelper.CsvEscape(j.AdrAccount?.MasterVendorCode)},{ExcelExportHelper.CsvEscape(j.AdrAccount?.PrimaryVendorCode)},{ExcelExportHelper.CsvEscape(j.AdrAccount?.PeriodType)},{j.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{(IsRebillJob(j) ? "-" : j.NextRangeStartDateTime?.ToString("MM/dd/yyyy") ?? "")},{(IsRebillJob(j) ? "-" : j.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? "")},{ExcelExportHelper.CsvEscape(j.Status)},{j.IsManualRequest},{ExcelExportHelper.CsvEscape(j.ManualRequestReason)},{j.CreatedDateTime:MM/dd/yyyy HH:mm},{j.ModifiedDateTime:MM/dd/yyyy HH:mm}");
+                j => $"{j.Id},{ExcelExportHelper.CsvEscape(j.AdrAccount?.VMAccountNumber)},{j.AdrAccount?.VMAccountId},{ExcelExportHelper.CsvEscape(j.AdrAccount?.InterfaceAccountId)},{ExcelExportHelper.CsvEscape(j.AdrAccount?.ClientName)},{ExcelExportHelper.CsvEscape(j.AdrAccount?.MasterVendorCode)},{ExcelExportHelper.CsvEscape(j.AdrAccount?.PrimaryVendorCode)},{ExcelExportHelper.CsvEscape(j.AdrAccount?.PeriodType)},{j.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{(IsRebillJob(j) ? "-" : j.NextRangeStartDateTime?.ToString("MM/dd/yyyy") ?? "")},{(IsRebillJob(j) ? "-" : j.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? "")},{ExcelExportHelper.CsvEscape(j.Status)},{j.ScrapingCompletedDateTime?.ToString("MM/dd/yyyy") ?? ""},{j.IsManualRequest},{ExcelExportHelper.CsvEscape(j.ManualRequestReason)},{j.CreatedDateTime:MM/dd/yyyy HH:mm},{j.ModifiedDateTime:MM/dd/yyyy HH:mm}");
         }
 
         _queue.UpdateStatus(request.RequestId, s => s.RecordsProcessed = jobs.Count);

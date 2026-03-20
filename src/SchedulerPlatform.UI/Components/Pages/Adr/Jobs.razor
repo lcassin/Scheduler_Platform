@@ -199,6 +199,7 @@
                             <MudTh><MudTableSortLabel SortLabel="PeriodType" T="AdrJob">Period Type</MudTableSortLabel></MudTh>
                             <MudTh><MudTableSortLabel SortLabel="NextRunDateTime" T="AdrJob">Next Run</MudTableSortLabel></MudTh>
                             <MudTh><MudTableSortLabel SortLabel="Status" T="AdrJob">Status</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="ScrapingCompletedDateTime" T="AdrJob">Completed</MudTableSortLabel></MudTh>
                             <MudTh>Next Action</MudTh>
                             <MudTh><MudTableSortLabel SortLabel="AdrStatusId" T="AdrJob">ADR Status</MudTableSortLabel></MudTh>
                             <MudTh><MudTableSortLabel SortLabel="RetryCount" T="AdrJob">Retry Count</MudTableSortLabel></MudTh>
@@ -294,6 +295,16 @@
                                         }
                                     </div>
                                 </MudTd>
+                <MudTd DataLabel="Completed">
+                    @if (context.ScrapingCompletedDateTime.HasValue)
+                    {
+                        <MudText Typo="Typo.body2">@context.ScrapingCompletedDateTime.Value.ToString("MM/dd/yyyy")</MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">-</MudText>
+                    }
+                </MudTd>
                 <MudTd DataLabel="Next Action">
                     @{
                         var (action, actionDate, actionColor) = GetNextAction(context);
