@@ -1359,7 +1359,7 @@
                 }
             }
             // Also handle right-click inside editorCanvas for canvas-based diagrams
-            if (currentDiagramType === 'timeline' && timelineModel) {
+            else if (currentDiagramType === 'timeline' && timelineModel) {
                 const editorCanvas = document.getElementById('editorCanvas');
                 if (editorCanvas && editorCanvas.contains(e.target)) {
                     showTimelineContextMenu(e);
