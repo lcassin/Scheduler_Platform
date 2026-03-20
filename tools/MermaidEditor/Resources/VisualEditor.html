@@ -163,6 +163,11 @@
             stroke-width: 2.5;
             filter: drop-shadow(0 0 4px rgba(0, 122, 204, 0.4));
         }
+        .node-shape.mm-selected {
+            stroke: var(--node-selected-stroke) !important;
+            stroke-width: 3.5 !important;
+            filter: drop-shadow(0 0 6px var(--node-selected-stroke)) drop-shadow(0 0 12px rgba(0, 122, 204, 0.5)) !important;
+        }
         .node-label {
             fill: var(--node-text);
             font-size: 13px;
@@ -1741,11 +1746,16 @@
                 }
                 // Apply branch color for mindmap nodes
                 if (currentDiagramType === 'mindmap' && node._branchColor) {
+                    const isSelected = (selectedNodeId === node.id || selectedNodeIds.includes(node.id));
                     const shapeEls = shape.tagName === 'g' ? shape.querySelectorAll('.node-shape') : [shape];
                     shapeEls.forEach(el => {
                         el.style.fill = node._branchColor;
                         el.style.fillOpacity = '0.25';
-                        el.style.stroke = node._branchColor;
+                        if (isSelected) {
+                            el.classList.add('mm-selected');
+                        } else {
+                            el.style.stroke = node._branchColor;
+                        }
                     });
                 }
                 g.appendChild(shape);
