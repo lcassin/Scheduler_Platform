@@ -299,7 +299,7 @@
                                 <ToggleButton x:Name="DiagramTypeDropdownToggle" 
                                               Style="{StaticResource DropdownToggleStyle}"
                                               HorizontalAlignment="Right" VerticalAlignment="Stretch"
-                                              Width="28"/>
+                                              Width="28" Margin="0,5,5,5"/>
                                 <!-- Popup dropdown with diagram type list -->
                                 <Popup IsOpen="{Binding IsChecked, ElementName=DiagramTypeDropdownToggle}"
                                        PlacementTarget="{Binding ElementName=DiagramTypeDropdownToggle}"
