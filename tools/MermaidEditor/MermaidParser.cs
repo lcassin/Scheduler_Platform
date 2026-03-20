@@ -2935,4 +2935,112 @@ public static class MermaidParser
 
         return foundDeclaration ? model : null;
     }
+
+    // =============================================
+    // Timeline Diagram Parser
+    // =============================================
+
+    private static readonly Regex TimelineDeclaration = new(@"^\s*timeline\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex TimelineTitlePattern = new(@"^\s*title\s+(.+)$", RegexOptions.Compiled);
+    private static readonly Regex TimelineSectionPattern = new(@"^\s*section\s+(.+)$", RegexOptions.Compiled);
+    // Event pattern: time period : event1 : event2 ...
+    private static readonly Regex TimelineEventPattern = new(@"^\s*(.+?)\s*:\s*(.+)$", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Parses Mermaid timeline text into a TimelineModel.
+    /// Timeline syntax:
+    ///   timeline
+    ///       title My Timeline
+    ///       section Section Name
+    ///       2024 : Event A : Event B
+    ///       2025 : Event C
+    /// </summary>
+    public static TimelineModel? ParseTimeline(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        var lines = text.Split('\n');
+        var model = new TimelineModel();
+        bool foundDeclaration = false;
+        TimelineSection? currentSection = null;
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var rawLine = lines[i];
+            var line = rawLine.TrimEnd('\r');
+
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            // Check for comments
+            var commentMatch = CommentPattern.Match(line);
+            if (commentMatch.Success)
+            {
+                model.Comments.Add(new CommentEntry
+                {
+                    Text = commentMatch.Groups[1].Value,
+                    OriginalLineIndex = i
+                });
+                continue;
+            }
+
+            // Look for timeline declaration
+            if (!foundDeclaration)
+            {
+                var declMatch = TimelineDeclaration.Match(line);
+                if (declMatch.Success)
+                {
+                    foundDeclaration = true;
+                    model.DeclarationLineIndex = i;
+                    continue;
+                }
+
+                model.PreambleLines.Add(line);
+                continue;
+            }
+
+            var trimmed = line.Trim();
+
+            // Title
+            var titleMatch = TimelineTitlePattern.Match(trimmed);
+            if (titleMatch.Success)
+            {
+                model.Title = titleMatch.Groups[1].Value.Trim();
+                continue;
+            }
+
+            // Section
+            var sectionMatch = TimelineSectionPattern.Match(trimmed);
+            if (sectionMatch.Success)
+            {
+                currentSection = new TimelineSection { Name = sectionMatch.Groups[1].Value.Trim() };
+                model.Sections.Add(currentSection);
+                continue;
+            }
+
+            // Event: timePeriod : event1 : event2 ...
+            var eventMatch = TimelineEventPattern.Match(trimmed);
+            if (eventMatch.Success)
+            {
+                var timePeriod = eventMatch.Groups[1].Value.Trim();
+                var eventsStr = eventMatch.Groups[2].Value;
+                var events = eventsStr.Split(':').Select(e => e.Trim()).Where(e => !string.IsNullOrEmpty(e)).ToList();
+
+                var timelineEvent = new TimelineEvent
+                {
+                    TimePeriod = timePeriod,
+                    Events = events
+                };
+
+                if (currentSection != null)
+                    currentSection.Events.Add(timelineEvent);
+                else
+                    model.Events.Add(timelineEvent);
+                continue;
+            }
+        }
+
+        return foundDeclaration ? model : null;
+    }
 }

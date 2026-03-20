@@ -17,7 +17,8 @@ public enum ActiveDiagramType
     ERDiagram,
     Gantt,
     MindMap,
-    Pie
+    Pie,
+    Timeline
 }
 
 /// <summary>
@@ -233,6 +234,12 @@ public partial class VisualEditorBridge
                 await RestorePieChartToEditorAsync();
                 RaisePieChartModelChanged("undo");
             }
+            else if (_activeDiagramType == ActiveDiagramType.Timeline)
+            {
+                RestoreTimelineModelFromJson(previousJson);
+                await RestoreTimelineToEditorAsync();
+                RaiseTimelineModelChanged("undo");
+            }
             else
             {
                 RestoreModelFromJson(previousJson);
@@ -308,6 +315,12 @@ public partial class VisualEditorBridge
                 await RestorePieChartToEditorAsync();
                 RaisePieChartModelChanged("redo");
             }
+            else if (_activeDiagramType == ActiveDiagramType.Timeline)
+            {
+                RestoreTimelineModelFromJson(redoJson);
+                await RestoreTimelineToEditorAsync();
+                RaiseTimelineModelChanged("redo");
+            }
             else
             {
                 RestoreModelFromJson(redoJson);
@@ -340,6 +353,8 @@ public partial class VisualEditorBridge
             return ConvertMindMapModelToJson(_mindMapModel);
         if (_activeDiagramType == ActiveDiagramType.Pie && _pieChartModel != null)
             return ConvertPieChartModelToJson(_pieChartModel);
+        if (_activeDiagramType == ActiveDiagramType.Timeline && _timelineModel != null)
+            return ConvertTimelineModelToJson(_timelineModel);
         return ConvertModelToJson(_model);
     }
 
@@ -823,6 +838,40 @@ public partial class VisualEditorBridge
                     break;
 
                 case "pie_sliceSelected":
+                    break;
+
+                // ===== Timeline Diagram Messages =====
+
+                case "tl_eventCreated":
+                    HandleTimelineEventCreated(root);
+                    break;
+
+                case "tl_eventEdited":
+                    HandleTimelineEventEdited(root);
+                    break;
+
+                case "tl_eventDeleted":
+                    HandleTimelineEventDeleted(root);
+                    break;
+
+                case "tl_sectionCreated":
+                    HandleTimelineSectionCreated(root);
+                    break;
+
+                case "tl_sectionEdited":
+                    HandleTimelineSectionEdited(root);
+                    break;
+
+                case "tl_sectionDeleted":
+                    HandleTimelineSectionDeleted(root);
+                    break;
+
+                case "tl_settingsChanged":
+                    HandleTimelineSettingsChanged(root);
+                    break;
+
+                case "tl_eventSelected":
+                case "tl_sectionSelected":
                     break;
             }
         }

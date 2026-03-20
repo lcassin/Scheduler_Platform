@@ -1744,4 +1744,101 @@ public static class MermaidSerializer
             }
         }
     }
+
+    // =============================================
+    // Timeline Diagram Serializer
+    // =============================================
+
+    /// <summary>
+    /// Serializes a TimelineModel to valid Mermaid timeline text.
+    /// </summary>
+    public static string SerializeTimeline(TimelineModel model)
+    {
+        if (model == null)
+            return string.Empty;
+
+        var sb = new StringBuilder();
+
+        // Write preamble lines
+        foreach (var preambleLine in model.PreambleLines)
+        {
+            sb.AppendLine(preambleLine);
+        }
+
+        // Write comments before declaration
+        WriteTimelineCommentsBeforeLine(sb, model, model.DeclarationLineIndex);
+
+        // Write timeline declaration
+        sb.AppendLine("timeline");
+
+        // Write title
+        if (!string.IsNullOrEmpty(model.Title))
+        {
+            sb.AppendLine($"{Indent}title {model.Title}");
+        }
+
+        // Write top-level events (before any section)
+        foreach (var evt in model.Events)
+        {
+            WriteTimelineEvent(sb, evt);
+        }
+
+        // Write sections with their events
+        foreach (var section in model.Sections)
+        {
+            sb.AppendLine($"{Indent}section {section.Name}");
+            foreach (var evt in section.Events)
+            {
+                WriteTimelineEvent(sb, evt);
+            }
+        }
+
+        // Write trailing comments
+        WriteTimelineTrailingComments(sb, model);
+
+        return sb.ToString().TrimEnd('\r', '\n') + Environment.NewLine;
+    }
+
+    /// <summary>
+    /// Writes a single timeline event in the format: timePeriod : event1 : event2
+    /// </summary>
+    private static void WriteTimelineEvent(StringBuilder sb, TimelineEvent evt)
+    {
+        if (evt.Events.Count > 0)
+        {
+            sb.AppendLine($"{Indent}{Indent}{evt.TimePeriod} : {string.Join(" : ", evt.Events)}");
+        }
+        else
+        {
+            sb.AppendLine($"{Indent}{Indent}{evt.TimePeriod}");
+        }
+    }
+
+    private static void WriteTimelineCommentsBeforeLine(StringBuilder sb, TimelineModel model, int lineIndex)
+    {
+        foreach (var comment in model.Comments.Where(c => c.OriginalLineIndex < lineIndex))
+        {
+            sb.AppendLine($"%%{comment.Text}");
+        }
+    }
+
+    private static void WriteTimelineTrailingComments(StringBuilder sb, TimelineModel model)
+    {
+        if (model.Comments.Count > 0)
+        {
+            var trailingComments = model.Comments
+                .Where(c => c.OriginalLineIndex > model.DeclarationLineIndex)
+                .OrderBy(c => c.OriginalLineIndex)
+                .ToList();
+
+            if (trailingComments.Count > 0)
+            {
+                sb.AppendLine();
+                foreach (var comment in trailingComments)
+                {
+                    sb.AppendLine($"%%{comment.Text}");
+                }
+            }
+        }
+    }
 }

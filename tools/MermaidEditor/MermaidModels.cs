@@ -1614,3 +1614,84 @@ public class PieSlice
     /// </summary>
     public double Value { get; set; }
 }
+
+// =============================================
+// Timeline Diagram Models
+// =============================================
+
+/// <summary>
+/// Represents a Mermaid timeline diagram.
+/// Timeline syntax:
+///   timeline
+///       title My Timeline
+///       section Section Name
+///       2024 : Event A : Event B
+///       2025 : Event C
+/// </summary>
+public class TimelineModel
+{
+    /// <summary>
+    /// The diagram title (optional).
+    /// </summary>
+    public string? Title { get; set; }
+
+    /// <summary>
+    /// Sections in the timeline. Events not in any section go into a default section with an empty name.
+    /// </summary>
+    public List<TimelineSection> Sections { get; set; } = new();
+
+    /// <summary>
+    /// Top-level events that appear before any section declaration.
+    /// </summary>
+    public List<TimelineEvent> Events { get; set; } = new();
+
+    /// <summary>
+    /// Comments preserved from the original text.
+    /// </summary>
+    public List<CommentEntry> Comments { get; set; } = new();
+
+    /// <summary>
+    /// Lines before the timeline declaration.
+    /// </summary>
+    public List<string> PreambleLines { get; set; } = new();
+
+    /// <summary>
+    /// The line index of the timeline declaration.
+    /// </summary>
+    public int DeclarationLineIndex { get; set; }
+}
+
+/// <summary>
+/// Represents a section in a timeline diagram.
+/// </summary>
+public class TimelineSection
+{
+    /// <summary>
+    /// The section name/label.
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Events within this section.
+    /// </summary>
+    public List<TimelineEvent> Events { get; set; } = new();
+}
+
+/// <summary>
+/// Represents a single time period entry in a timeline.
+/// Each entry has a time period (date/label) and one or more events that occurred at that time.
+/// Mermaid syntax: 2024 : Event A : Event B
+/// </summary>
+public class TimelineEvent
+{
+    /// <summary>
+    /// The time period label (e.g., "2024", "January", "Phase 1").
+    /// </summary>
+    public string TimePeriod { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The events/descriptions that occurred at this time period.
+    /// Multiple events are separated by colons in Mermaid syntax.
+    /// </summary>
+    public List<string> Events { get; set; } = new();
+}
