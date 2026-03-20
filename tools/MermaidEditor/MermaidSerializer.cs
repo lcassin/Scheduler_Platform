@@ -1568,8 +1568,8 @@ public static class MermaidSerializer
         // Write mindmap declaration
         sb.AppendLine("mindmap");
 
-        // Write tree recursively with indentation
-        WriteMindMapNode(sb, model.Root, Indent);
+        // Write root node with "root" keyword prefix, then children
+        WriteMindMapNode(sb, model.Root, Indent, isRoot: true);
 
         // Write trailing comments
         WriteMindMapTrailingComments(sb, model);
@@ -1583,7 +1583,7 @@ public static class MermaidSerializer
     /// <summary>
     /// Recursively writes a mind map node and its children.
     /// </summary>
-    private static void WriteMindMapNode(StringBuilder sb, MindMapNode node, string indent)
+    private static void WriteMindMapNode(StringBuilder sb, MindMapNode node, string indent, bool isRoot = false)
     {
         // Format node with shape
         var formattedText = node.Shape switch
@@ -1594,10 +1594,13 @@ public static class MermaidSerializer
             MindMapNodeShape.Bang => $")){node.Label}((",
             MindMapNodeShape.Cloud => $"){node.Label}(",
             MindMapNodeShape.Hexagon => $"{{{{{node.Label}}}}}",
-            _ => node.Label
+            // Default shape: for root node, use circle; for others, plain label
+            _ => isRoot ? (node.Label == "root" ? "" : $"(({node.Label}))") : node.Label
         };
 
-        sb.AppendLine($"{indent}{formattedText}");
+        // Prepend "root" keyword for the root node
+        var prefix = isRoot ? "root" : "";
+        sb.AppendLine($"{indent}{prefix}{formattedText}");
 
         // Write icon if present
         if (!string.IsNullOrEmpty(node.Icon))
@@ -1614,7 +1617,7 @@ public static class MermaidSerializer
         // Write children recursively with increased indentation
         foreach (var child in node.Children)
         {
-            WriteMindMapNode(sb, child, indent + Indent);
+            WriteMindMapNode(sb, child, indent + Indent, false);
         }
     }
 

@@ -2763,7 +2763,27 @@ public static class MermaidParser
 
             if (nodeStack.Count == 0)
             {
-                // This is the root node
+                // This is the root node - strip "root" keyword prefix if present
+                // In Mermaid mindmap syntax, root nodes can be written as:
+                //   root((text)) = root keyword + circle shape
+                //   root(text)   = root keyword + rounded shape
+                //   root         = root keyword, label is "root", default shape
+                if (trimmed.StartsWith("root") &&
+                    (trimmed.Length == 4 || !char.IsLetterOrDigit(trimmed[4])))
+                {
+                    var afterRoot = trimmed.Substring(4);
+                    if (afterRoot.Length > 0)
+                    {
+                        // Re-parse without the "root" prefix to get the actual shape
+                        node = ParseMindMapNodeText(afterRoot);
+                    }
+                    else
+                    {
+                        // Just "root" alone - label is "root", default shape
+                        node.Label = "root";
+                        node.Shape = MindMapNodeShape.Default;
+                    }
+                }
                 model.Root = node;
             }
             else
