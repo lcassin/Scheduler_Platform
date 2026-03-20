@@ -324,6 +324,22 @@
                                 <ComboBoxItem Content="Markdown"/>
                             </ComboBox>
                         </Grid>
+                        <TextBlock Text="Default Editor Mode" Style="{StaticResource SectionHeader}"/>
+                        <TextBlock Text="Choose which editor mode to use when creating new Mermaid files:"
+                                   Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="120"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Editor mode:" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="DefaultEditorModeCombo" Grid.Column="1" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center">
+                                <ComboBoxItem Content="Code"/>
+                                <ComboBoxItem Content="Visual"/>
+                                <ComboBoxItem Content="Split"/>
+                            </ComboBox>
+                        </Grid>
                     </StackPanel>
                 </ScrollViewer>
             </TabItem>
