@@ -731,13 +731,14 @@
         
         if (value)
         {
-            // Set perpetual dates
+            // Toggle ON: set start=today, end=today+150 years
             _editingEntry.EffectiveStartDate = DateTime.Today;
             _editingEntry.EffectiveEndDate = DateTime.Today.AddYears(150);
         }
         else
         {
-            // Null out end date to force user to enter a valid one
+            // Toggle OFF: set start=today, clear end date to force user entry
+            _editingEntry.EffectiveStartDate = DateTime.Today;
             _editingEntry.EffectiveEndDate = null;
         }
     }

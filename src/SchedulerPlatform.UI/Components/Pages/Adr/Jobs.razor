@@ -199,6 +199,7 @@
                             <MudTh><MudTableSortLabel SortLabel="PeriodType" T="AdrJob">Period Type</MudTableSortLabel></MudTh>
                             <MudTh><MudTableSortLabel SortLabel="NextRunDateTime" T="AdrJob">Next Run</MudTableSortLabel></MudTh>
                             <MudTh><MudTableSortLabel SortLabel="Status" T="AdrJob">Status</MudTableSortLabel></MudTh>
+                            <MudTh><MudTableSortLabel SortLabel="ScrapingCompletedDateTime" T="AdrJob">Completed</MudTableSortLabel></MudTh>
                             <MudTh>Next Action</MudTh>
                             <MudTh><MudTableSortLabel SortLabel="AdrStatusId" T="AdrJob">ADR Status</MudTableSortLabel></MudTh>
                             <MudTh><MudTableSortLabel SortLabel="RetryCount" T="AdrJob">Retry Count</MudTableSortLabel></MudTh>
@@ -248,9 +249,9 @@
                                 </div>
                             </MudTd>
                 <MudTd DataLabel="Billing Period">
-                    @if (context.AdrJobTypeId == 3)
+                    @if (context.AdrJobTypeId == 3 || IsRebillJob(context))
                     {
-                        <MudText Typo="Typo.body2" Color="Color.Secondary">Rebill</MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">-</MudText>
                     }
                     else
                     {
@@ -294,6 +295,16 @@
                                         }
                                     </div>
                                 </MudTd>
+                <MudTd DataLabel="Completed">
+                    @if (context.ScrapingCompletedDateTime.HasValue)
+                    {
+                        <MudText Typo="Typo.body2">@context.ScrapingCompletedDateTime.Value.ToString("MM/dd/yyyy")</MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">-</MudText>
+                    }
+                </MudTd>
                 <MudTd DataLabel="Next Action">
                     @{
                         var (action, actionDate, actionColor) = GetNextAction(context);
@@ -1034,6 +1045,24 @@
         {
             _isRefiring = false;
         }
+    }
+
+    /// <summary>
+    /// Detects rebill jobs by status prefix or placeholder date range (01/01/2000 - 12/31/2099).
+    /// Fallback for when AdrJobTypeId is not returned by the API.
+    /// </summary>
+    private static bool IsRebillJob(AdrJob job)
+    {
+        // Check status-based detection (rebill jobs have statuses like RebillActive, RebillPending, etc.)
+        if (job.Status?.StartsWith("Rebill", StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+        
+        // Check placeholder date range detection
+        if (job.BillingPeriodStartDateTime.Year == 2000 && job.BillingPeriodStartDateTime.Month == 1 && job.BillingPeriodStartDateTime.Day == 1 &&
+            job.BillingPeriodEndDateTime.Year == 2099 && job.BillingPeriodEndDateTime.Month == 12 && job.BillingPeriodEndDateTime.Day == 31)
+            return true;
+        
+        return false;
     }
 
     private string GetRequestTypeName(int requestTypeId) => requestTypeId switch
