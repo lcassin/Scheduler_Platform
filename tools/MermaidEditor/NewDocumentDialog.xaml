@@ -280,15 +280,128 @@
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                         <StackPanel>
                             <TextBlock Text="Blank" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="12" Margin="4,0,0,4"/>
-                            <Button Style="{StaticResource TemplateButtonStyle}" Click="BlankMermaid_Click">
-                                <StackPanel Orientation="Horizontal">
-                                    <Image Source="Resources/TemplateThumbnails/blank.png" Width="36" Height="36" Margin="0,0,10,0"/>
-                                    <StackPanel VerticalAlignment="Center">
-                                        <TextBlock Text="Blank Mermaid Diagram" FontWeight="SemiBold"/>
-                                        <TextBlock Text="Start with an empty .mmd file" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
+                            <!-- Split-button: Blank Mermaid Diagram with diagram type dropdown overlay -->
+                            <Grid>
+                                <Button Style="{StaticResource TemplateButtonStyle}" Click="BlankMermaid_Click">
+                                    <StackPanel Orientation="Horizontal">
+                                        <Image x:Name="BlankDiagramTypeIcon" Source="Resources/TemplateThumbnails/flowchart.png" Width="36" Height="36" Margin="0,0,10,0"/>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="Blank Mermaid Diagram — " FontWeight="SemiBold"/>
+                                                <TextBlock x:Name="BlankDiagramTypeLabel" Text="Flowchart" FontWeight="SemiBold" 
+                                                           Foreground="{DynamicResource ThemePurpleAccentBrush}"/>
+                                            </StackPanel>
+                                            <TextBlock Text="Start with a minimal diagram of the selected type" Foreground="{DynamicResource ThemeDisabledForegroundBrush}" FontSize="11"/>
+                                        </StackPanel>
                                     </StackPanel>
-                                </StackPanel>
-                            </Button>
+                                </Button>
+                                <!-- Dropdown toggle arrow on the right side of the button -->
+                                <ToggleButton x:Name="DiagramTypeDropdownToggle" 
+                                              Style="{StaticResource DropdownToggleStyle}"
+                                              HorizontalAlignment="Right" VerticalAlignment="Stretch"
+                                              Width="28"/>
+                                <!-- Popup dropdown with diagram type list -->
+                                <Popup IsOpen="{Binding IsChecked, ElementName=DiagramTypeDropdownToggle}"
+                                       PlacementTarget="{Binding ElementName=DiagramTypeDropdownToggle}"
+                                       Placement="Bottom"
+                                       StaysOpen="False"
+                                       AllowsTransparency="True"
+                                       PopupAnimation="Slide">
+                                    <Border Background="{DynamicResource ThemeToolbarBackgroundBrush}" 
+                                            BorderBrush="{DynamicResource ThemeBorderBrush}" 
+                                            BorderThickness="1" CornerRadius="4" Padding="2"
+                                            Margin="0,2,0,0">
+                                        <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto">
+                                            <StackPanel>
+                                                <Button Style="{StaticResource DropdownItemStyle}" Tag="Flowchart" Click="DiagramTypeItem_Click">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Image Source="Resources/TemplateThumbnails/flowchart.png" Width="20" Height="20" Margin="0,0,8,0"/>
+                                                        <TextBlock Text="Flowchart" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button Style="{StaticResource DropdownItemStyle}" Tag="Sequence" Click="DiagramTypeItem_Click">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Image Source="Resources/TemplateThumbnails/sequence.png" Width="20" Height="20" Margin="0,0,8,0"/>
+                                                        <TextBlock Text="Sequence" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button Style="{StaticResource DropdownItemStyle}" Tag="Class" Click="DiagramTypeItem_Click">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Image Source="Resources/TemplateThumbnails/class.png" Width="20" Height="20" Margin="0,0,8,0"/>
+                                                        <TextBlock Text="Class" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button Style="{StaticResource DropdownItemStyle}" Tag="State" Click="DiagramTypeItem_Click">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Image Source="Resources/TemplateThumbnails/state.png" Width="20" Height="20" Margin="0,0,8,0"/>
+                                                        <TextBlock Text="State" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button Style="{StaticResource DropdownItemStyle}" Tag="ER" Click="DiagramTypeItem_Click">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Image Source="Resources/TemplateThumbnails/erdiagram.png" Width="20" Height="20" Margin="0,0,8,0"/>
+                                                        <TextBlock Text="ER Diagram" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button Style="{StaticResource DropdownItemStyle}" Tag="Gantt" Click="DiagramTypeItem_Click">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Image Source="Resources/TemplateThumbnails/gantt.png" Width="20" Height="20" Margin="0,0,8,0"/>
+                                                        <TextBlock Text="Gantt" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button Style="{StaticResource DropdownItemStyle}" Tag="Pie" Click="DiagramTypeItem_Click">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Image Source="Resources/TemplateThumbnails/pie.png" Width="20" Height="20" Margin="0,0,8,0"/>
+                                                        <TextBlock Text="Pie Chart" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button Style="{StaticResource DropdownItemStyle}" Tag="MindMap" Click="DiagramTypeItem_Click">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Image Source="Resources/TemplateThumbnails/mindmap.png" Width="20" Height="20" Margin="0,0,8,0"/>
+                                                        <TextBlock Text="Mind Map" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button Style="{StaticResource DropdownItemStyle}" Tag="Timeline" Click="DiagramTypeItem_Click">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Image Source="Resources/TemplateThumbnails/timeline.png" Width="20" Height="20" Margin="0,0,8,0"/>
+                                                        <TextBlock Text="Timeline" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button Style="{StaticResource DropdownItemStyle}" Tag="Git Graph" Click="DiagramTypeItem_Click">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Image Source="Resources/TemplateThumbnails/gitgraph.png" Width="20" Height="20" Margin="0,0,8,0"/>
+                                                        <TextBlock Text="Git Graph" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button Style="{StaticResource DropdownItemStyle}" Tag="Journey" Click="DiagramTypeItem_Click">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Image Source="Resources/TemplateThumbnails/journey.png" Width="20" Height="20" Margin="0,0,8,0"/>
+                                                        <TextBlock Text="Journey" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button Style="{StaticResource DropdownItemStyle}" Tag="Quadrant" Click="DiagramTypeItem_Click">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Image Source="Resources/TemplateThumbnails/quadrant.png" Width="20" Height="20" Margin="0,0,8,0"/>
+                                                        <TextBlock Text="Quadrant" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button Style="{StaticResource DropdownItemStyle}" Tag="Requirement" Click="DiagramTypeItem_Click">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Image Source="Resources/TemplateThumbnails/requirement.png" Width="20" Height="20" Margin="0,0,8,0"/>
+                                                        <TextBlock Text="Requirement" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+                                                <Button Style="{StaticResource DropdownItemStyle}" Tag="C4" Click="DiagramTypeItem_Click">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Image Source="Resources/TemplateThumbnails/c4.png" Width="20" Height="20" Margin="0,0,8,0"/>
+                                                        <TextBlock Text="C4 Context" VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Button>
+                                            </StackPanel>
+                                        </ScrollViewer>
+                                    </Border>
+                                </Popup>
+                            </Grid>
                             <Button Style="{StaticResource TemplateButtonStyle}" Click="BlankMarkdown_Click">
                                 <StackPanel Orientation="Horizontal">
                                     <Image Source="Resources/TemplateThumbnails/markdown.png" Width="36" Height="36" Margin="0,0,10,0"/>

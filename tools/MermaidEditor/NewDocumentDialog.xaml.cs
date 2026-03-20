@@ -229,7 +229,7 @@ public partial class NewDocumentDialog : Window
                     "ER" => "erdiagram",
                     "Gantt" => "gantt",
                     "Pie" => "pie",
-                    "Mind Map" => "mindmap",
+                    "MindMap" => "mindmap",
                     "Timeline" => "timeline",
                     "Git Graph" => "gitgraph",
                     "Journey" => "journey",
@@ -342,8 +342,7 @@ public partial class NewDocumentDialog : Window
 
     private void BlankMermaid_Click(object sender, RoutedEventArgs e)
     {
-        SetTemplateAndClose(@"flowchart TD
-    A[Start] --> B[End]");
+        SetTemplateAndClose(GetBlankTemplateForSelectedType());
     }
 
     private void BlankMarkdown_Click(object sender, RoutedEventArgs e)
