@@ -1731,9 +1731,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         var statusEnum = Enum.IsDefined(typeof(AdrStatus), statusResult.StatusId ?? 0) 
                             ? (AdrStatus)(statusResult.StatusId ?? 0) : (AdrStatus?)null;
                         
-                        if (statusEnum.HasValue && statusEnum.Value.ShouldRefire())
+                        if (statusEnum.HasValue && statusEnum.Value.ShouldRefire() && billingToday <= windowEnd)
                         {
-                            // Auto-refire statuses (4,5,7,8,13,14,15,16,17):
+                            // Auto-refire statuses (4,5,7,8,13,14,15,16,17) while billing window is still open:
                             // These indicate transient errors, timeouts, or incomplete processing.
                             // Revert to CredentialVerified so Step 5 (scraping) picks it up and re-fires.
                             // Soft-delete previous DownloadInvoice executions so idempotency check passes.
@@ -1743,20 +1743,20 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             result.JobsStillProcessing++;
                             
                             _logger.LogInformation(
-                                "Job {JobId}: Auto-refire status {StatusId} ({Description}), re-queuing for re-fire (RetryCount={RetryCount}, BillingWindowExpired={WindowExpired})",
-                                job.Id, statusResult.StatusId, statusResult.StatusDescription, job.RetryCount, billingToday > windowEnd);
+                                "Job {JobId}: Auto-refire status {StatusId} ({Description}), re-queuing for re-fire (RetryCount={RetryCount})",
+                                job.Id, statusResult.StatusId, statusResult.StatusDescription, job.RetryCount);
                         }
                         else if (billingToday > windowEnd)
                         {
-                            // Billing window exhausted without finding a bill
+                            // Billing window exhausted - no more retries regardless of status
                             // Mark job as NoInvoiceFound and advance rule to next cycle
                             job.Status = "NoInvoiceFound";
                             job.ScrapingCompletedDateTime = DateTime.UtcNow;
                             result.JobsNeedingReview++; // Count as needing review for reporting
                             
                             _logger.LogInformation(
-                                "Job {JobId}: Billing window exhausted (ended {WindowEnd}), marking as NoInvoiceFound and advancing rule",
-                                job.Id, windowEnd);
+                                "Job {JobId}: Billing window exhausted (ended {WindowEnd}, status {StatusId}), marking as NoInvoiceFound and advancing rule",
+                                job.Id, windowEnd, statusResult.StatusId);
                             
                             // Advance the rule to the next billing cycle using pre-loaded rules (no DB round-trip)
                             AdvanceRuleToNextCycleSync(job, rulesById, billingTimeZoneId);
@@ -2253,9 +2253,9 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         var statusEnum = Enum.IsDefined(typeof(AdrStatus), statusResult.StatusId ?? 0) 
                             ? (AdrStatus)(statusResult.StatusId ?? 0) : (AdrStatus?)null;
                         
-                        if (statusEnum.HasValue && statusEnum.Value.ShouldRefire())
+                        if (statusEnum.HasValue && statusEnum.Value.ShouldRefire() && billingToday <= windowEnd)
                         {
-                            // Auto-refire statuses (4,5,7,8,13,14,15,16,17):
+                            // Auto-refire statuses (4,5,7,8,13,14,15,16,17) while billing window is still open:
                             // These indicate transient errors, timeouts, or incomplete processing.
                             // Revert to CredentialVerified so Step 5 (scraping) picks it up and re-fires.
                             // Soft-delete previous DownloadInvoice executions so idempotency check passes.
@@ -2265,20 +2265,20 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                             result.JobsStillProcessing++;
                             
                             _logger.LogInformation(
-                                "Job {JobId}: Auto-refire status {StatusId} ({Description}), re-queuing for re-fire (RetryCount={RetryCount}, BillingWindowExpired={WindowExpired})",
-                                job.Id, statusResult.StatusId, statusResult.StatusDescription, job.RetryCount, billingToday > windowEnd);
+                                "Job {JobId}: Auto-refire status {StatusId} ({Description}), re-queuing for re-fire (RetryCount={RetryCount})",
+                                job.Id, statusResult.StatusId, statusResult.StatusDescription, job.RetryCount);
                         }
                         else if (billingToday > windowEnd)
                         {
-                            // Billing window exhausted without finding a bill
+                            // Billing window exhausted - no more retries regardless of status
                             // Mark job as NoInvoiceFound and advance rule to next cycle
                             job.Status = "NoInvoiceFound";
                             job.ScrapingCompletedDateTime = DateTime.UtcNow;
                             result.JobsNeedingReview++; // Count as needing review for reporting
                             
                             _logger.LogInformation(
-                                "Job {JobId}: Billing window exhausted (ended {WindowEnd}), marking as NoInvoiceFound and advancing rule",
-                                job.Id, windowEnd);
+                                "Job {JobId}: Billing window exhausted (ended {WindowEnd}, status {StatusId}), marking as NoInvoiceFound and advancing rule",
+                                job.Id, windowEnd, statusResult.StatusId);
                             
                             // Advance the rule to the next billing cycle using pre-loaded rules (no DB round-trip)
                             AdvanceRuleToNextCycleSync(job, rulesById, billingTimeZoneId);
@@ -3895,9 +3895,13 @@ public class AdrOrchestratorService : IAdrOrchestratorService
                         result.IsSuccess = true;
                         result.IsError = apiResponse.IsError;
                         
-                        // Determine IsFinal based on StatusId since the API may not return IsFinal field
-                        // Final statuses: Complete (11), NeedsHumanReview (9), and error states like "Cannot Insert Into Queue" (5)
-                        result.IsFinal = apiResponse.IsFinal || IsFinalStatus(apiResponse.StatusId);
+                        // Determine IsFinal based on StatusId since the API may not return IsFinal field.
+                        // Auto-refire statuses are NEVER final for the scheduler, even if the ADR API 
+                        // returns IsFinal=true (e.g. statuses 13 and 14 may have IsFinal=1 in the API).
+                        var statusEnumValue = Enum.IsDefined(typeof(AdrStatus), apiResponse.StatusId) 
+                            ? (AdrStatus)apiResponse.StatusId : (AdrStatus?)null;
+                        var isRefireStatus = statusEnumValue.HasValue && statusEnumValue.Value.ShouldRefire();
+                        result.IsFinal = !isRefireStatus && (apiResponse.IsFinal || IsFinalStatus(apiResponse.StatusId));
                     }
                     else
                     {
