@@ -140,6 +140,22 @@ function mindMapRadialLayout() {
 
     // Layout root's children across full 360 degrees
     layoutSubtree('mm_root', 1, 0, 0, 0, 2 * Math.PI);
+
+    // Shift all nodes so the bounding box is in positive space with padding
+    var shiftMinX = Infinity, shiftMinY = Infinity;
+    diagram.nodes.forEach(function(n) {
+        var hw = (n.width || 80) / 2;
+        var hh = (n.height || 40) / 2;
+        shiftMinX = Math.min(shiftMinX, n.x - hw);
+        shiftMinY = Math.min(shiftMinY, n.y - hh);
+    });
+    var pad = 100;
+    var dx = -shiftMinX + pad;
+    var dy = -shiftMinY + pad;
+    diagram.nodes.forEach(function(n) {
+        n.x += dx;
+        n.y += dy;
+    });
 }
 
 // ========== Mind Map Load/Restore ==========
