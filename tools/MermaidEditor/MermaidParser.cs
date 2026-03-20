@@ -2805,78 +2805,49 @@ public static class MermaidParser
     {
         var node = new MindMapNode();
 
-        // In Mermaid mindmap syntax, nodes can have an optional ID prefix before shape brackets.
-        // e.g., "root((Central Topic))" has ID "root" with circle shape containing "Central Topic".
-        // First, try to extract an ID prefix (alphanumeric text before the first shape bracket).
-        string? idPrefix = null;
-        var shapeText = text;
-
-        // Find the first occurrence of a shape-opening bracket sequence
-        int shapeStart = -1;
-        for (int i = 0; i < text.Length; i++)
-        {
-            char c = text[i];
-            if (c == '(' || c == '[' || c == '{' || c == ')')
-            {
-                shapeStart = i;
-                break;
-            }
-        }
-
-        // If there's text before the first bracket, it's an ID prefix
-        if (shapeStart > 0)
-        {
-            idPrefix = text[..shapeStart];
-            shapeText = text[shapeStart..];
-        }
-
-        // Try to match shapes on the remaining text:
+        // Try to match shapes:
         // ((text)) = circle
         // (text) = rounded
         // [text] = square
         // ))text(( = bang
         // )text( = cloud
         // {{text}} = hexagon
-        if (shapeText.StartsWith("((") && shapeText.EndsWith("))"))
+        if (text.StartsWith("((") && text.EndsWith("))"))
         {
-            node.Label = shapeText[2..^2];
+            node.Label = text[2..^2];
             node.Shape = MindMapNodeShape.Circle;
         }
-        else if (shapeText.StartsWith("{{") && shapeText.EndsWith("}}"))
+        else if (text.StartsWith("{{") && text.EndsWith("}}"))
         {
-            node.Label = shapeText[2..^2];
+            node.Label = text[2..^2];
             node.Shape = MindMapNodeShape.Hexagon;
         }
-        else if (shapeText.StartsWith("))") && shapeText.EndsWith("(("))
+        else if (text.StartsWith("))") && text.EndsWith("(("))
         {
-            node.Label = shapeText[2..^2];
+            node.Label = text[2..^2];
             node.Shape = MindMapNodeShape.Bang;
         }
-        else if (shapeText.StartsWith(")") && shapeText.EndsWith("("))
+        else if (text.StartsWith(")") && text.EndsWith("("))
         {
-            node.Label = shapeText[1..^1];
+            node.Label = text[1..^1];
             node.Shape = MindMapNodeShape.Cloud;
         }
-        else if (shapeText.StartsWith("(") && shapeText.EndsWith(")"))
+        else if (text.StartsWith("(") && text.EndsWith(")"))
         {
-            node.Label = shapeText[1..^1];
+            node.Label = text[1..^1];
             node.Shape = MindMapNodeShape.Rounded;
         }
-        else if (shapeText.StartsWith("[") && shapeText.EndsWith("]"))
+        else if (text.StartsWith("[") && text.EndsWith("]"))
         {
-            node.Label = shapeText[1..^1];
+            node.Label = text[1..^1];
             node.Shape = MindMapNodeShape.Square;
         }
         else
         {
-            // No shape brackets found — entire text is the label
             node.Label = text;
             node.Shape = MindMapNodeShape.Default;
-            // No ID prefix when there's no shape
-            idPrefix = null;
         }
 
-        node.Id = idPrefix;
         return node;
     }
 
