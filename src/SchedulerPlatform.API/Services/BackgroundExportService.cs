@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
 using Microsoft.EntityFrameworkCore;
+using SchedulerPlatform.Core.Domain.Entities;
 using SchedulerPlatform.Infrastructure.Data;
 
 namespace SchedulerPlatform.API.Services;
@@ -598,8 +599,8 @@ public class BackgroundExportService : BackgroundService
                     j.AdrAccount?.PrimaryVendorCode ?? "",
                     j.AdrAccount?.PeriodType ?? "",
                     j.NextRunDateTime,
-                    j.NextRangeStartDateTime,
-                    j.NextRangeEndDateTime,
+                    IsRebillJob(j) ? "-" : (object?)j.NextRangeStartDateTime,
+                    IsRebillJob(j) ? "-" : (object?)j.NextRangeEndDateTime,
                     j.Status ?? "",
                     j.IsManualRequest,
                     j.ManualRequestReason ?? "",
@@ -612,7 +613,7 @@ public class BackgroundExportService : BackgroundService
             data = ExcelExportHelper.CreateCsvExport(
                 string.Join(",", headers),
                 jobs,
-                j => $"{j.Id},{ExcelExportHelper.CsvEscape(j.AdrAccount?.VMAccountNumber)},{j.AdrAccount?.VMAccountId},{ExcelExportHelper.CsvEscape(j.AdrAccount?.InterfaceAccountId)},{ExcelExportHelper.CsvEscape(j.AdrAccount?.ClientName)},{ExcelExportHelper.CsvEscape(j.AdrAccount?.MasterVendorCode)},{ExcelExportHelper.CsvEscape(j.AdrAccount?.PrimaryVendorCode)},{ExcelExportHelper.CsvEscape(j.AdrAccount?.PeriodType)},{j.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{j.NextRangeStartDateTime?.ToString("MM/dd/yyyy") ?? ""},{j.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? ""},{ExcelExportHelper.CsvEscape(j.Status)},{j.IsManualRequest},{ExcelExportHelper.CsvEscape(j.ManualRequestReason)},{j.CreatedDateTime:MM/dd/yyyy HH:mm},{j.ModifiedDateTime:MM/dd/yyyy HH:mm}");
+                j => $"{j.Id},{ExcelExportHelper.CsvEscape(j.AdrAccount?.VMAccountNumber)},{j.AdrAccount?.VMAccountId},{ExcelExportHelper.CsvEscape(j.AdrAccount?.InterfaceAccountId)},{ExcelExportHelper.CsvEscape(j.AdrAccount?.ClientName)},{ExcelExportHelper.CsvEscape(j.AdrAccount?.MasterVendorCode)},{ExcelExportHelper.CsvEscape(j.AdrAccount?.PrimaryVendorCode)},{ExcelExportHelper.CsvEscape(j.AdrAccount?.PeriodType)},{j.NextRunDateTime?.ToString("MM/dd/yyyy") ?? ""},{(IsRebillJob(j) ? "-" : j.NextRangeStartDateTime?.ToString("MM/dd/yyyy") ?? "")},{(IsRebillJob(j) ? "-" : j.NextRangeEndDateTime?.ToString("MM/dd/yyyy") ?? "")},{ExcelExportHelper.CsvEscape(j.Status)},{j.IsManualRequest},{ExcelExportHelper.CsvEscape(j.ManualRequestReason)},{j.CreatedDateTime:MM/dd/yyyy HH:mm},{j.ModifiedDateTime:MM/dd/yyyy HH:mm}");
         }
 
         _queue.UpdateStatus(request.RequestId, s => s.RecordsProcessed = jobs.Count);
@@ -846,6 +847,20 @@ public class BackgroundExportService : BackgroundService
         _queue.UpdateStatus(request.RequestId, s => s.RecordsProcessed = entries.Count);
 
         return (data, fileName, contentType);
+    }
+
+    /// <summary>
+    /// Detects rebill jobs by AdrJobTypeId or placeholder date range (01/01/2000 - 12/31/2099).
+    /// </summary>
+    private static bool IsRebillJob(AdrJob job)
+    {
+        if (job.AdrJobTypeId == 3)
+            return true;
+        // Fallback: detect placeholder dates used by CreateRebillJobEntity
+        if (job.BillingPeriodStartDateTime.Year == 2000 && job.BillingPeriodStartDateTime.Month == 1 && job.BillingPeriodStartDateTime.Day == 1 &&
+            job.BillingPeriodEndDateTime.Year == 2099 && job.BillingPeriodEndDateTime.Month == 12 && job.BillingPeriodEndDateTime.Day == 31)
+            return true;
+        return false;
     }
 
     /// <summary>
