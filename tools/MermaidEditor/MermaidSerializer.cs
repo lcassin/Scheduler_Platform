@@ -1559,6 +1559,13 @@ public static class MermaidSerializer
             _ => node.Label
         };
 
+        // Prepend ID prefix if present (e.g., "root" in "root((Central Topic))")
+        // Don't prepend for Default-shaped nodes — the Id would merge with the label text
+        if (!string.IsNullOrEmpty(node.Id) && node.Shape != MindMapNodeShape.Default)
+        {
+            formattedText = node.Id + formattedText;
+        }
+
         sb.AppendLine($"{indent}{formattedText}");
 
         // Write icon if present
