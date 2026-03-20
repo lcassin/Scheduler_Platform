@@ -460,6 +460,64 @@ function selectTimelineSection(sectionName) {
     postMessage({ type: 'tl_sectionSelected', section: sectionName });
 }
 
+function _buildEventPositionHtml(sectionName) {
+    // Build "Position" dropdown showing existing events in the chosen section
+    // so the user can insert before/after a specific event.
+    let events;
+    if (sectionName) {
+        const sec = timelineModel.sections ? timelineModel.sections.find(s => s.name === sectionName) : null;
+        events = sec ? (sec.events || []) : [];
+    } else {
+        events = timelineModel.events || [];
+    }
+    if (events.length === 0) return '';
+    const options = events.map((e, idx) =>
+        `<option value="${idx}">After: ${_escHtml(e.timePeriod)}</option>`).join('');
+    return `
+        <div class="property-row" id="tl-dlg-position-row">
+            <div class="property-label">Position</div>
+            <select class="property-select" id="tl-dlg-position">
+                <option value="end" selected>At End</option>
+                <option value="start">At Start (Before All)</option>
+                ${options}
+            </select>
+        </div>`;
+}
+
+function _buildSectionPositionHtml() {
+    const sections = timelineModel.sections || [];
+    if (sections.length === 0) return '';
+    const options = sections.map((s, idx) =>
+        `<option value="${idx}">After: ${_escHtml(s.name)}</option>`).join('');
+    return `
+        <div class="property-row">
+            <div class="property-label">Position</div>
+            <select class="property-select" id="tl-dlg-sec-position">
+                <option value="end" selected>At End</option>
+                <option value="start">At Start (Before All)</option>
+                ${options}
+            </select>
+        </div>`;
+}
+
+function _readEventInsertIndex() {
+    const posEl = document.getElementById('tl-dlg-position');
+    if (!posEl) return null;
+    const val = posEl.value;
+    if (val === 'start') return 0;
+    if (val !== 'end') return parseInt(val) + 1;
+    return null; // null = append at end
+}
+
+function _readSectionInsertIndex() {
+    const posEl = document.getElementById('tl-dlg-sec-position');
+    if (!posEl) return null;
+    const val = posEl.value;
+    if (val === 'start') return 0;
+    if (val !== 'end') return parseInt(val) + 1;
+    return null;
+}
+
 function createTimelineEvent() {
     const propertyPanel = document.getElementById('property-panel');
     const propPanelTitle = document.getElementById('property-panel-title');
@@ -488,17 +546,29 @@ Event B</textarea>
             <div class="property-label">Section</div>
             <select class="property-input" id="tl-dlg-section">${sectionOptions}</select>
         </div>
+        <div id="tl-dlg-position-container">${_buildEventPositionHtml(null)}</div>
         <div class="property-row" style="margin-top:8px">
             <button id="tl-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Add Event</button>
         </div>
     `;
+
+    // Update position dropdown when section changes
+    const secEl = document.getElementById('tl-dlg-section');
+    if (secEl) {
+        secEl.addEventListener('change', function() {
+            const container = document.getElementById('tl-dlg-position-container');
+            if (container) container.innerHTML = _buildEventPositionHtml(this.value || null);
+        });
+    }
+
     document.getElementById('tl-dlg-ok').addEventListener('click', function() {
         const period = document.getElementById('tl-dlg-period').value.trim();
         if (!period) return;
         const eventsText = document.getElementById('tl-dlg-events').value.trim();
         const events = eventsText.split('\n').map(e => e.trim()).filter(e => e.length > 0);
         const section = document.getElementById('tl-dlg-section').value || null;
-        postMessage({ type: 'tl_eventCreated', timePeriod: period, events, section });
+        const insertAtIndex = _readEventInsertIndex();
+        postMessage({ type: 'tl_eventCreated', timePeriod: period, events, section, insertAtIndex });
         propertyPanel.classList.remove('visible');
     });
     propertyPanel.classList.add('visible');
@@ -611,6 +681,7 @@ function createTimelineSection() {
             <div class="property-label">Section Name</div>
             <input class="property-input" id="tl-dlg-secname" value="New Section" />
         </div>
+        ${_buildSectionPositionHtml()}
         <div class="property-row" style="margin-top:8px">
             <button id="tl-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Add Section</button>
         </div>
@@ -618,7 +689,8 @@ function createTimelineSection() {
     document.getElementById('tl-dlg-ok').addEventListener('click', function() {
         const name = document.getElementById('tl-dlg-secname').value.trim();
         if (!name) return;
-        postMessage({ type: 'tl_sectionCreated', name });
+        const insertAtIndex = _readSectionInsertIndex();
+        postMessage({ type: 'tl_sectionCreated', name, insertAtIndex });
         propertyPanel.classList.remove('visible');
     });
     propertyPanel.classList.add('visible');

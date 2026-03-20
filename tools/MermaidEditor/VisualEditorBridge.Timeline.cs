@@ -125,17 +125,30 @@ public partial class VisualEditorBridge
         if (root.TryGetProperty("section", out var secProp) && secProp.ValueKind == JsonValueKind.String)
             sectionName = secProp.GetString();
 
+        // Read optional insertAtIndex
+        int? insertAtIndex = null;
+        if (root.TryGetProperty("insertAtIndex", out var idxProp) && idxProp.ValueKind == JsonValueKind.Number)
+            insertAtIndex = idxProp.GetInt32();
+
         if (!string.IsNullOrEmpty(sectionName))
         {
             var section = _timelineModel.Sections.FirstOrDefault(s => s.Name == sectionName);
             if (section != null)
-                section.Events.Add(newEvent);
+            {
+                if (insertAtIndex.HasValue && insertAtIndex.Value >= 0 && insertAtIndex.Value <= section.Events.Count)
+                    section.Events.Insert(insertAtIndex.Value, newEvent);
+                else
+                    section.Events.Add(newEvent);
+            }
             else
                 _timelineModel.Events.Add(newEvent);
         }
         else
         {
-            _timelineModel.Events.Add(newEvent);
+            if (insertAtIndex.HasValue && insertAtIndex.Value >= 0 && insertAtIndex.Value <= _timelineModel.Events.Count)
+                _timelineModel.Events.Insert(insertAtIndex.Value, newEvent);
+            else
+                _timelineModel.Events.Add(newEvent);
         }
 
         RaiseTimelineModelChanged("tl_eventCreated");
@@ -251,7 +264,18 @@ public partial class VisualEditorBridge
         if (string.IsNullOrEmpty(name)) return;
 
         PushUndo();
-        _timelineModel.Sections.Add(new TimelineSection { Name = name });
+
+        // Read optional insertAtIndex
+        int? insertAtIndex = null;
+        if (root.TryGetProperty("insertAtIndex", out var idxProp) && idxProp.ValueKind == JsonValueKind.Number)
+            insertAtIndex = idxProp.GetInt32();
+
+        var newSection = new TimelineSection { Name = name };
+        if (insertAtIndex.HasValue && insertAtIndex.Value >= 0 && insertAtIndex.Value <= _timelineModel.Sections.Count)
+            _timelineModel.Sections.Insert(insertAtIndex.Value, newSection);
+        else
+            _timelineModel.Sections.Add(newSection);
+
         RaiseTimelineModelChanged("tl_sectionCreated");
     }
 
