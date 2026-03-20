@@ -5040,7 +5040,13 @@ Console.WriteLine(""Hello, World!"");
                 }
                 UpdateTitle();
                 RenderPreview();
-                await _visualEditorBridge.RefreshMindMapAsync();
+
+                // Skip refresh for position-only changes - JS already has the correct visual state.
+                // Only refresh for structural changes (node create/edit/delete) that change the tree.
+                if (e.ChangeType != "mm_nodeMoved" && e.ChangeType != "mm_autoLayoutComplete")
+                {
+                    await _visualEditorBridge.RefreshMindMapAsync();
+                }
             }
         }
         finally
