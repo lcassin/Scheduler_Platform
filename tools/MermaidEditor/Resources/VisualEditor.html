@@ -1393,6 +1393,8 @@
                     showTimelineContextMenu(e);
                 } else if (currentDiagramType === 'journey' && journeyModel) {
                     showJourneyContextMenu(e);
+                } else if (currentDiagramType === 'quadrant' && quadrantModel) {
+                    showQuadrantContextMenu(e);
                 } else {
                     // For class/state/ER, just suppress the browser menu
                     // (their context menus are handled on-SVG only)
@@ -1409,6 +1411,12 @@
                 const editorCanvas = document.getElementById('editorCanvas');
                 if (editorCanvas && editorCanvas.contains(e.target)) {
                     showJourneyContextMenu(e);
+                }
+            }
+            else if (currentDiagramType === 'quadrant' && quadrantModel) {
+                const editorCanvas = document.getElementById('editorCanvas');
+                if (editorCanvas && editorCanvas.contains(e.target)) {
+                    showQuadrantContextMenu(e);
                 }
             }
         });
@@ -2606,7 +2614,7 @@
         // Note: mindmap now uses the flowchart infrastructure (panzoom SVG).
 
         function _isEditorCanvasDiagram() {
-            return currentDiagramType === 'gantt' || currentDiagramType === 'pie' || currentDiagramType === 'timeline' || currentDiagramType === 'journey';
+            return currentDiagramType === 'gantt' || currentDiagramType === 'pie' || currentDiagramType === 'timeline' || currentDiagramType === 'journey' || currentDiagramType === 'quadrant';
         }
 
         function _getEditorCanvasSvg() {
@@ -5098,6 +5106,12 @@
             else if (typeof journeySelectedSection !== 'undefined' && journeySelectedSection !== null && typeof deleteJourneySection === 'function') deleteJourneySection();
         });
         document.getElementById('tb-jn-settings').addEventListener('click', function() { if (typeof editJourneySettings === 'function') editJourneySettings(); });
+
+        // Quadrant toolbar buttons
+        document.getElementById('qcAddPoint').addEventListener('click', function() { if (typeof createQuadrantPoint === 'function') createQuadrantPoint(); });
+        document.getElementById('qcEdit').addEventListener('click', function() { if (typeof quadrantSelectedPoint !== 'undefined' && quadrantSelectedPoint !== null && typeof editQuadrantPoint === 'function') editQuadrantPoint(quadrantSelectedPoint); });
+        document.getElementById('qcDelete').addEventListener('click', function() { if (typeof quadrantSelectedPoint !== 'undefined' && quadrantSelectedPoint !== null && typeof deleteQuadrantPoint === 'function') deleteQuadrantPoint(quadrantSelectedPoint); });
+        document.getElementById('qcSettings').addEventListener('click', function() { if (typeof editQuadrantSettings === 'function') editQuadrantSettings(); });
 
         document.getElementById('tb-zoom-in').addEventListener('click', function() {
             if (_isEditorCanvasDiagram()) {
