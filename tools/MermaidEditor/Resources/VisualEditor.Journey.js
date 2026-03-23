@@ -132,7 +132,7 @@ function renderJourneyDiagram() {
     });
     totalHeight += 80; // toolbar space
 
-    const totalWidth = Math.max(700, padding + labelWidth + scoreBarWidth + actorWidth + 100);
+    const totalWidth = Math.max(720, padding + labelWidth + scoreBarWidth + actorWidth + 120);
 
     // Create SVG
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -178,7 +178,7 @@ function renderJourneyDiagram() {
     const colHeaders = [
         { label: 'Task', x: padding + 10 },
         { label: 'Score', x: padding + labelWidth + 10 },
-        { label: 'Actors', x: padding + labelWidth + scoreBarWidth + 30 }
+        { label: 'Actors', x: padding + labelWidth + scoreBarWidth + 48 }
     ];
     colHeaders.forEach(col => {
         const hText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -367,9 +367,20 @@ function renderJourneyDiagram() {
         scoreFill.style.pointerEvents = 'none';
         svg.appendChild(scoreFill);
 
-        // Score text on bar
+        // Score emoji + number
+        const scoreEmojis = ['\u{1F621}', '\u{1F61F}', '\u{1F610}', '\u{1F642}', '\u{1F600}']; // 😡😟😐🙂😀
+        const scoreEmoji = scoreEmojis[score - 1] || '';
+
+        const emojiText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        emojiText.setAttribute('x', barX + scoreBarWidth + 8);
+        emojiText.setAttribute('y', rowCenterY + 5);
+        emojiText.setAttribute('font-size', '14');
+        emojiText.textContent = scoreEmoji;
+        emojiText.style.pointerEvents = 'none';
+        svg.appendChild(emojiText);
+
         const scoreText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        scoreText.setAttribute('x', barX + scoreBarWidth + 8);
+        scoreText.setAttribute('x', barX + scoreBarWidth + 26);
         scoreText.setAttribute('y', rowCenterY + 4);
         scoreText.setAttribute('fill', scoreColor);
         scoreText.setAttribute('font-size', '12');
@@ -379,7 +390,7 @@ function renderJourneyDiagram() {
         svg.appendChild(scoreText);
 
         // Actors
-        const actorsX = padding + labelWidth + scoreBarWidth + 30;
+        const actorsX = padding + labelWidth + scoreBarWidth + 48;
         const actorsText = (task.actors || []).join(', ');
         if (actorsText) {
             const actorLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
