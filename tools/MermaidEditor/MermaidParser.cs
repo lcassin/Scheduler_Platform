@@ -3164,4 +3164,150 @@ public static class MermaidParser
 
         return foundDeclaration ? model : null;
     }
+
+    // =============================================
+    // Quadrant Chart Parser
+    // =============================================
+
+    private static readonly Regex QuadrantDeclaration = new(@"^\s*quadrantChart\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex QuadrantTitlePattern = new(@"^\s*title\s+(.+)$", RegexOptions.Compiled);
+    // x-axis Low Effort --> High Effort  OR  x-axis Low Effort
+    private static readonly Regex QuadrantXAxisPattern = new(@"^\s*x-axis\s+(.+?)(?:\s*-->\s*(.+))?\s*$", RegexOptions.Compiled);
+    // y-axis Low Impact --> High Impact  OR  y-axis Low Impact
+    private static readonly Regex QuadrantYAxisPattern = new(@"^\s*y-axis\s+(.+?)(?:\s*-->\s*(.+))?\s*$", RegexOptions.Compiled);
+    // quadrant-1 Do First
+    private static readonly Regex QuadrantLabelPattern = new(@"^\s*quadrant-([1-4])\s+(.+)$", RegexOptions.Compiled);
+    // Point Label: [0.8, 0.9]
+    private static readonly Regex QuadrantPointPattern = new(@"^\s*(.+?)\s*:\s*\[\s*([\d.]+)\s*,\s*([\d.]+)\s*\]", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Parses Mermaid quadrant chart text into a QuadrantChartModel.
+    /// Quadrant syntax:
+    ///   quadrantChart
+    ///       title Priority Matrix
+    ///       x-axis Low Effort --> High Effort
+    ///       y-axis Low Impact --> High Impact
+    ///       quadrant-1 Do First
+    ///       quadrant-2 Schedule
+    ///       quadrant-3 Delegate
+    ///       quadrant-4 Eliminate
+    ///       Item A: [0.8, 0.9]
+    /// </summary>
+    public static QuadrantChartModel? ParseQuadrantChart(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        var lines = text.Split('\n');
+        var model = new QuadrantChartModel();
+        bool foundDeclaration = false;
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var rawLine = lines[i];
+            var line = rawLine.TrimEnd('\r');
+
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            // Check for comments
+            var commentMatch = CommentPattern.Match(line);
+            if (commentMatch.Success)
+            {
+                model.Comments.Add(new CommentEntry
+                {
+                    Text = commentMatch.Groups[1].Value,
+                    OriginalLineIndex = i
+                });
+                continue;
+            }
+
+            // Look for quadrantChart declaration
+            if (!foundDeclaration)
+            {
+                var declMatch = QuadrantDeclaration.Match(line);
+                if (declMatch.Success)
+                {
+                    foundDeclaration = true;
+                    model.DeclarationLineIndex = i;
+                    continue;
+                }
+
+                model.PreambleLines.Add(line);
+                continue;
+            }
+
+            var trimmed = line.Trim();
+
+            // Title
+            var titleMatch = QuadrantTitlePattern.Match(trimmed);
+            if (titleMatch.Success)
+            {
+                model.Title = titleMatch.Groups[1].Value.Trim();
+                continue;
+            }
+
+            // X-axis
+            var xAxisMatch = QuadrantXAxisPattern.Match(trimmed);
+            if (xAxisMatch.Success)
+            {
+                model.XAxisLeft = xAxisMatch.Groups[1].Value.Trim();
+                if (xAxisMatch.Groups[2].Success && !string.IsNullOrWhiteSpace(xAxisMatch.Groups[2].Value))
+                    model.XAxisRight = xAxisMatch.Groups[2].Value.Trim();
+                continue;
+            }
+
+            // Y-axis
+            var yAxisMatch = QuadrantYAxisPattern.Match(trimmed);
+            if (yAxisMatch.Success)
+            {
+                model.YAxisBottom = yAxisMatch.Groups[1].Value.Trim();
+                if (yAxisMatch.Groups[2].Success && !string.IsNullOrWhiteSpace(yAxisMatch.Groups[2].Value))
+                    model.YAxisTop = yAxisMatch.Groups[2].Value.Trim();
+                continue;
+            }
+
+            // Quadrant labels
+            var quadrantMatch = QuadrantLabelPattern.Match(trimmed);
+            if (quadrantMatch.Success)
+            {
+                var num = quadrantMatch.Groups[1].Value;
+                var label = quadrantMatch.Groups[2].Value.Trim();
+                switch (num)
+                {
+                    case "1": model.Quadrant1 = label; break;
+                    case "2": model.Quadrant2 = label; break;
+                    case "3": model.Quadrant3 = label; break;
+                    case "4": model.Quadrant4 = label; break;
+                }
+                continue;
+            }
+
+            // Points: Label: [x, y]
+            var pointMatch = QuadrantPointPattern.Match(trimmed);
+            if (pointMatch.Success)
+            {
+                var label = pointMatch.Groups[1].Value.Trim();
+                // Strip :::className from label if present
+                var classIdx = label.IndexOf(":::", StringComparison.Ordinal);
+                if (classIdx >= 0) label = label.Substring(0, classIdx).Trim();
+
+                if (double.TryParse(pointMatch.Groups[2].Value, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out var x) &&
+                    double.TryParse(pointMatch.Groups[3].Value, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out var y))
+                {
+                    model.Points.Add(new QuadrantPoint
+                    {
+                        Label = label,
+                        X = Math.Clamp(x, 0.0, 1.0),
+                        Y = Math.Clamp(y, 0.0, 1.0)
+                    });
+                }
+                continue;
+            }
+        }
+
+        return foundDeclaration ? model : null;
+    }
 }
