@@ -728,123 +728,84 @@ function _qcPastePoint(insertAtIndex) {
 
 // ========== Quadrant Context Menu Helpers ==========
 
-function _qcAddCtxItem(menu, label, action, enabled) {
+function _qcAddCtxItem(label, onClick) {
+    const contextMenu = document.getElementById('context-menu');
     const item = document.createElement('div');
-    item.className = 'context-menu-item' + (enabled === false ? ' disabled' : '');
-    item.setAttribute('data-action', action);
+    item.classList.add('context-menu-item');
     item.textContent = label;
-    if (enabled !== false) {
-        item.style.cursor = 'pointer';
-    }
-    menu.appendChild(item);
-    return item;
+    item.addEventListener('click', function(e) {
+        e.stopPropagation();
+        contextMenu.classList.remove('visible');
+        onClick();
+    });
+    contextMenu.appendChild(item);
 }
 
-function _qcAddCtxSeparator(menu) {
+function _qcAddCtxDisabledItem(label) {
+    const contextMenu = document.getElementById('context-menu');
+    const item = document.createElement('div');
+    item.classList.add('context-menu-item', 'disabled');
+    item.textContent = label;
+    contextMenu.appendChild(item);
+}
+
+function _qcAddCtxSeparator() {
+    const contextMenu = document.getElementById('context-menu');
     const sep = document.createElement('div');
-    sep.className = 'context-menu-separator';
-    menu.appendChild(sep);
+    sep.classList.add('context-menu-separator');
+    contextMenu.appendChild(sep);
 }
 
 // ========== Quadrant Context Menu ==========
 
 function showQuadrantContextMenu(e) {
     if (currentDiagramType !== 'quadrant') return;
+    if (!quadrantModel) return;
+
     e.preventDefault();
     e.stopPropagation();
+
+    const contextMenu = document.getElementById('context-menu');
+    contextMenu.innerHTML = '';
 
     // Find what was right-clicked
     const target = e.target.closest ? e.target.closest('[data-qc-type]') : null;
     const qcType = target ? target.getAttribute('data-qc-type') : null;
     const qcIndex = target ? parseInt(target.getAttribute('data-qc-index'), 10) : -1;
 
-    // Remove any existing context menu
-    const existingMenu = document.querySelector('.visual-editor-context-menu');
-    if (existingMenu) existingMenu.remove();
-
-    const menu = document.createElement('div');
-    menu.className = 'visual-editor-context-menu';
-    menu.style.position = 'fixed';
-    menu.style.left = e.clientX + 'px';
-    menu.style.top = e.clientY + 'px';
-    menu.style.zIndex = '10000';
-
     if (qcType === 'point' && qcIndex >= 0) {
         // Point context menu
         quadrantSelectedPoint = qcIndex;
         renderQuadrantDiagram();
 
-        _qcAddCtxItem(menu, 'Edit Point', 'editPoint');
-        _qcAddCtxItem(menu, 'Delete Point', 'deletePoint');
-        _qcAddCtxSeparator(menu);
-        _qcAddCtxItem(menu, 'Copy Point', 'copyPoint');
-        _qcAddCtxItem(menu, 'Paste Above', 'pasteAbove', !!quadrantClipboard);
-        _qcAddCtxItem(menu, 'Paste Below', 'pasteBelow', !!quadrantClipboard);
-        _qcAddCtxSeparator(menu);
-        _qcAddCtxItem(menu, 'Insert Point Above', 'insertAbove');
-        _qcAddCtxItem(menu, 'Insert Point Below', 'insertBelow');
+        _qcAddCtxItem('\u270E Edit Point', () => { editQuadrantPoint(qcIndex); });
+        _qcAddCtxItem('\u{1F5D1} Delete Point', () => { deleteQuadrantPoint(qcIndex); });
+        _qcAddCtxSeparator();
+        _qcAddCtxItem('\u{1F4CB} Copy Point', () => { _qcCopyPoint(qcIndex); });
+        _qcAddCtxSeparator();
+        if (quadrantClipboard) {
+            _qcAddCtxItem('\u{1F4CB} Paste Above', () => { _qcPastePoint(qcIndex); });
+            _qcAddCtxItem('\u{1F4CB} Paste Below', () => { _qcPastePoint(qcIndex + 1); });
+        } else {
+            _qcAddCtxDisabledItem('\u{1F4CB} Paste Above');
+            _qcAddCtxDisabledItem('\u{1F4CB} Paste Below');
+        }
+        _qcAddCtxSeparator();
+        _qcAddCtxItem('\u2191 Insert Point Above', () => { createQuadrantPointAtIndex(qcIndex); });
+        _qcAddCtxItem('\u2193 Insert Point Below', () => { createQuadrantPointAtIndex(qcIndex + 1); });
     } else {
         // Empty area context menu
-        _qcAddCtxItem(menu, 'Add Point', 'addPoint');
-        _qcAddCtxItem(menu, 'Edit Settings', 'editSettings');
-        _qcAddCtxSeparator(menu);
-        _qcAddCtxItem(menu, 'Paste', 'paste', !!quadrantClipboard);
+        _qcAddCtxItem('+ Add Point', () => { createQuadrantPoint(); });
+        _qcAddCtxItem('\u2699 Edit Settings', () => { editQuadrantSettings(); });
+        _qcAddCtxSeparator();
+        if (quadrantClipboard) {
+            _qcAddCtxItem('\u{1F4CB} Paste', () => { _qcPastePoint(-1); });
+        } else {
+            _qcAddCtxDisabledItem('\u{1F4CB} Paste');
+        }
     }
 
-    // Delegated click handler (rule #2)
-    menu.addEventListener('click', (ev) => {
-        const actionEl = ev.target.closest('[data-action]');
-        if (!actionEl) return;
-        const action = actionEl.getAttribute('data-action');
-        if (!action) return;
-        if (actionEl.classList.contains('disabled')) return;
-
-        menu.remove();
-
-        switch (action) {
-            case 'editPoint':
-                editQuadrantPoint(qcIndex);
-                break;
-            case 'deletePoint':
-                deleteQuadrantPoint(qcIndex);
-                break;
-            case 'copyPoint':
-                _qcCopyPoint(qcIndex);
-                break;
-            case 'pasteAbove':
-                _qcPastePoint(qcIndex);
-                break;
-            case 'pasteBelow':
-                _qcPastePoint(qcIndex + 1);
-                break;
-            case 'insertAbove':
-                createQuadrantPointAtIndex(qcIndex);
-                break;
-            case 'insertBelow':
-                createQuadrantPointAtIndex(qcIndex + 1);
-                break;
-            case 'addPoint':
-                createQuadrantPoint();
-                break;
-            case 'editSettings':
-                editQuadrantSettings();
-                break;
-            case 'paste':
-                _qcPastePoint(-1);
-                break;
-        }
-    });
-
-    // Close on outside click
-    const closeHandler = (ev) => {
-        if (!menu.contains(ev.target)) {
-            menu.remove();
-            document.removeEventListener('click', closeHandler, true);
-        }
-    };
-    setTimeout(() => document.addEventListener('click', closeHandler, true), 10);
-
-    document.body.appendChild(menu);
+    positionContextMenu(contextMenu, e.clientX, e.clientY);
 }
 
 function createQuadrantPointAtIndex(insertIdx) {

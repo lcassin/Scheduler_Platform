@@ -4808,7 +4808,7 @@
                 if (e.button !== 0) return;
                 // Don't pan if clicking on a button or interactive SVG element
                 const tag = e.target.tagName.toLowerCase();
-                if (tag === 'button' || e.target.closest('foreignObject') || e.target.closest('[onclick]') || e.target.closest('[data-action]')) return;
+                if (tag === 'button' || e.target.closest('foreignObject') || e.target.closest('[onclick]') || e.target.closest('[data-action]') || e.target.closest('[data-qc-type]') || e.target.closest('[data-tl-type]') || e.target.closest('[data-jn-type]')) return;
                 isPanning = true;
                 panStartX = e.clientX;
                 panStartY = e.clientY;
@@ -5112,6 +5112,31 @@
         document.getElementById('qcEdit').addEventListener('click', function() { if (typeof quadrantSelectedPoint !== 'undefined' && quadrantSelectedPoint !== null && typeof editQuadrantPoint === 'function') editQuadrantPoint(quadrantSelectedPoint); });
         document.getElementById('qcDelete').addEventListener('click', function() { if (typeof quadrantSelectedPoint !== 'undefined' && quadrantSelectedPoint !== null && typeof deleteQuadrantPoint === 'function') deleteQuadrantPoint(quadrantSelectedPoint); });
         document.getElementById('qcSettings').addEventListener('click', function() { if (typeof editQuadrantSettings === 'function') editQuadrantSettings(); });
+
+        // Quadrant keyboard shortcuts (rule #23: Delete from keyboard)
+        document.addEventListener('keydown', function(e) {
+            if (currentDiagramType !== 'quadrant') return;
+            // Don't handle shortcuts when property panel is open with focused input
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                if (typeof quadrantSelectedPoint !== 'undefined' && quadrantSelectedPoint !== null && typeof deleteQuadrantPoint === 'function') {
+                    deleteQuadrantPoint(quadrantSelectedPoint);
+                }
+                e.preventDefault();
+            } else if (e.key === 'Escape') {
+                if (typeof quadrantSelectedPoint !== 'undefined') {
+                    quadrantSelectedPoint = null;
+                    if (typeof renderQuadrantDiagram === 'function') renderQuadrantDiagram();
+                }
+            } else if (e.key === 'z' && (e.ctrlKey || e.metaKey)) {
+                postMessage({ type: 'undo' });
+                e.preventDefault();
+            } else if (e.key === 'y' && (e.ctrlKey || e.metaKey)) {
+                postMessage({ type: 'redo' });
+                e.preventDefault();
+            }
+        });
 
         document.getElementById('tb-zoom-in').addEventListener('click', function() {
             if (_isEditorCanvasDiagram()) {
