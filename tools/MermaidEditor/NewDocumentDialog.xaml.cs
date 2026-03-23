@@ -287,9 +287,12 @@ public partial class NewDocumentDialog : Window
             "Gantt" => @"gantt
     title My Project
     dateFormat YYYY-MM-DD
+    axisFormat %m/%d
+    tickInterval 1day
     section Phase 1
         Task 1 :a1, 2024-01-01, 7d
-        Task 2 :a2, after a1, 5d",
+        Task 2 :a2, after a1, 5d
+        Finalization :crit, a3, after a2, 2d",
             "Pie" => @"pie showData
     title Distribution
     ""Category A"" : 50
@@ -946,6 +949,8 @@ config:
 gantt
     title Project Timeline
     dateFormat YYYY-MM-DD
+    axisFormat %m/%d
+    tickInterval 1week
     excludes weekends
 
     section Planning
