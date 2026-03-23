@@ -178,7 +178,7 @@ function renderJourneyDiagram() {
     const colHeaders = [
         { label: 'Task', x: padding + 10 },
         { label: 'Score', x: padding + labelWidth + 10 },
-        { label: 'Actors', x: padding + labelWidth + scoreBarWidth + 30 }
+        { label: 'Actors', x: padding + labelWidth + scoreBarWidth + 40 }
     ];
     colHeaders.forEach(col => {
         const hText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
@@ -370,21 +370,21 @@ function renderJourneyDiagram() {
         // Score emoji inside bar at fill endpoint (moves right as score increases)
         const scoreEmojis = ['\u{1F621}', '\u{1F61F}', '\u{1F610}', '\u{1F642}', '\u{1F600}']; // 😡😟😐🙂😀
         const scoreEmoji = scoreEmojis[score - 1] || '';
-        const emojiSize = 16;
-        // Position emoji at the fill endpoint, clamped so it stays within the bar
-        const emojiX = barX + fillWidth - emojiSize + 2;
+        const emojiSize = 24; // ~8px larger than scoreBarHeight (16) so it pops
+        // Position emoji centered on the fill endpoint
+        const emojiX = barX + fillWidth - emojiSize / 2;
 
         const emojiText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        emojiText.setAttribute('x', Math.max(barX + 2, emojiX));
-        emojiText.setAttribute('y', rowCenterY + 6);
+        emojiText.setAttribute('x', Math.max(barX, emojiX));
+        emojiText.setAttribute('y', rowCenterY + 8);
         emojiText.setAttribute('font-size', String(emojiSize));
         emojiText.textContent = scoreEmoji;
         emojiText.style.pointerEvents = 'none';
         svg.appendChild(emojiText);
 
-        // Score number (right of bar)
+        // Score number (right of bar, extra spacing so emoji at score=5 doesn't overlap)
         const scoreText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-        scoreText.setAttribute('x', barX + scoreBarWidth + 8);
+        scoreText.setAttribute('x', barX + scoreBarWidth + 18);
         scoreText.setAttribute('y', rowCenterY + 4);
         scoreText.setAttribute('fill', scoreColor);
         scoreText.setAttribute('font-size', '12');
@@ -394,7 +394,7 @@ function renderJourneyDiagram() {
         svg.appendChild(scoreText);
 
         // Actors
-        const actorsX = padding + labelWidth + scoreBarWidth + 30;
+        const actorsX = padding + labelWidth + scoreBarWidth + 40;
         const actorsText = (task.actors || []).join(', ');
         if (actorsText) {
             const actorLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
