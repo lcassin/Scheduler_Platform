@@ -1938,4 +1938,103 @@ public static class MermaidSerializer
             }
         }
     }
+
+    // =============================================
+    // Quadrant Chart Serializer
+    // =============================================
+
+    public static string SerializeQuadrantChart(QuadrantChartModel model)
+    {
+        if (model == null)
+            return string.Empty;
+
+        var sb = new StringBuilder();
+
+        // Write preamble lines
+        foreach (var preambleLine in model.PreambleLines)
+        {
+            sb.AppendLine(preambleLine);
+        }
+
+        // Write comments before declaration
+        WriteQuadrantCommentsBeforeLine(sb, model, model.DeclarationLineIndex);
+
+        // Write quadrantChart declaration
+        sb.AppendLine("quadrantChart");
+
+        // Write title
+        if (!string.IsNullOrEmpty(model.Title))
+        {
+            sb.AppendLine($"{Indent}title {model.Title}");
+        }
+
+        // Write x-axis
+        if (!string.IsNullOrEmpty(model.XAxisLeft))
+        {
+            if (!string.IsNullOrEmpty(model.XAxisRight))
+                sb.AppendLine($"{Indent}x-axis {model.XAxisLeft} --> {model.XAxisRight}");
+            else
+                sb.AppendLine($"{Indent}x-axis {model.XAxisLeft}");
+        }
+
+        // Write y-axis
+        if (!string.IsNullOrEmpty(model.YAxisBottom))
+        {
+            if (!string.IsNullOrEmpty(model.YAxisTop))
+                sb.AppendLine($"{Indent}y-axis {model.YAxisBottom} --> {model.YAxisTop}");
+            else
+                sb.AppendLine($"{Indent}y-axis {model.YAxisBottom}");
+        }
+
+        // Write quadrant labels
+        if (!string.IsNullOrEmpty(model.Quadrant1))
+            sb.AppendLine($"{Indent}quadrant-1 {model.Quadrant1}");
+        if (!string.IsNullOrEmpty(model.Quadrant2))
+            sb.AppendLine($"{Indent}quadrant-2 {model.Quadrant2}");
+        if (!string.IsNullOrEmpty(model.Quadrant3))
+            sb.AppendLine($"{Indent}quadrant-3 {model.Quadrant3}");
+        if (!string.IsNullOrEmpty(model.Quadrant4))
+            sb.AppendLine($"{Indent}quadrant-4 {model.Quadrant4}");
+
+        // Write points
+        foreach (var point in model.Points)
+        {
+            var xStr = point.X.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+            var yStr = point.Y.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+            sb.AppendLine($"{Indent}{point.Label}: [{xStr}, {yStr}]");
+        }
+
+        // Write trailing comments
+        WriteQuadrantTrailingComments(sb, model);
+
+        return sb.ToString().TrimEnd('\r', '\n') + Environment.NewLine;
+    }
+
+    private static void WriteQuadrantCommentsBeforeLine(StringBuilder sb, QuadrantChartModel model, int lineIndex)
+    {
+        foreach (var comment in model.Comments.Where(c => c.OriginalLineIndex < lineIndex))
+        {
+            sb.AppendLine($"%%{comment.Text}");
+        }
+    }
+
+    private static void WriteQuadrantTrailingComments(StringBuilder sb, QuadrantChartModel model)
+    {
+        if (model.Comments.Count > 0)
+        {
+            var trailingComments = model.Comments
+                .Where(c => c.OriginalLineIndex > model.DeclarationLineIndex)
+                .OrderBy(c => c.OriginalLineIndex)
+                .ToList();
+
+            if (trailingComments.Count > 0)
+            {
+                sb.AppendLine();
+                foreach (var comment in trailingComments)
+                {
+                    sb.AppendLine($"%%{comment.Text}");
+                }
+            }
+        }
+    }
 }

@@ -19,7 +19,8 @@ public enum ActiveDiagramType
     MindMap,
     Pie,
     Timeline,
-    Journey
+    Journey,
+    QuadrantChart
 }
 
 /// <summary>
@@ -247,6 +248,12 @@ public partial class VisualEditorBridge
                 await RestoreJourneyToEditorAsync();
                 RaiseJourneyModelChanged("undo");
             }
+            else if (_activeDiagramType == ActiveDiagramType.QuadrantChart)
+            {
+                RestoreQuadrantChartModelFromJson(previousJson);
+                await RestoreQuadrantChartToEditorAsync();
+                RaiseQuadrantChartModelChanged("undo");
+            }
             else
             {
                 RestoreModelFromJson(previousJson);
@@ -334,6 +341,12 @@ public partial class VisualEditorBridge
                 await RestoreJourneyToEditorAsync();
                 RaiseJourneyModelChanged("redo");
             }
+            else if (_activeDiagramType == ActiveDiagramType.QuadrantChart)
+            {
+                RestoreQuadrantChartModelFromJson(redoJson);
+                await RestoreQuadrantChartToEditorAsync();
+                RaiseQuadrantChartModelChanged("redo");
+            }
             else
             {
                 RestoreModelFromJson(redoJson);
@@ -370,6 +383,8 @@ public partial class VisualEditorBridge
             return ConvertTimelineModelToJson(_timelineModel);
         if (_activeDiagramType == ActiveDiagramType.Journey && _journeyModel != null)
             return ConvertJourneyModelToJson(_journeyModel);
+        if (_activeDiagramType == ActiveDiagramType.QuadrantChart && _quadrantChartModel != null)
+            return ConvertQuadrantChartModelToJson(_quadrantChartModel);
         return ConvertModelToJson(_model);
     }
 
@@ -921,6 +936,31 @@ public partial class VisualEditorBridge
 
                 case "jn_taskSelected":
                 case "jn_sectionSelected":
+                    break;
+
+                // ===== Quadrant Chart Messages =====
+
+                case "qc_pointCreated":
+                    HandleQuadrantPointCreated(root);
+                    break;
+
+                case "qc_pointEdited":
+                    HandleQuadrantPointEdited(root);
+                    break;
+
+                case "qc_pointDeleted":
+                    HandleQuadrantPointDeleted(root);
+                    break;
+
+                case "qc_pointMoved":
+                    HandleQuadrantPointMoved(root);
+                    break;
+
+                case "qc_settingsChanged":
+                    HandleQuadrantSettingsChanged(root);
+                    break;
+
+                case "qc_pointSelected":
                     break;
             }
         }

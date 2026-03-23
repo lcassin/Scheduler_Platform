@@ -128,6 +128,7 @@ public partial class MainWindow : Window
     private PieChartModel? _currentPieChartModel;
     private TimelineModel? _currentTimelineModel;
     private JourneyModel? _currentJourneyModel;
+    private QuadrantChartModel? _currentQuadrantChartModel;
     private bool _isVisualEditorUpdating; // Prevent re-entrant updates between text <-> visual
     private bool _visualEditorHasFocus; // Tracks whether the Visual Editor pane has focus (for toolbar enable/disable)
 
@@ -4644,6 +4645,7 @@ Console.WriteLine(""Hello, World!"");
                     "MermaidEditor.Resources.VisualEditor.Pie.js",
                     "MermaidEditor.Resources.VisualEditor.Timeline.js",
                     "MermaidEditor.Resources.VisualEditor.Journey.js",
+                    "MermaidEditor.Resources.VisualEditor.Quadrant.js",
                 };
                 var injectedJs = new System.Text.StringBuilder();
                 foreach (var jsFile in jsFiles)
@@ -4677,6 +4679,7 @@ Console.WriteLine(""Hello, World!"");
             _visualEditorBridge.PieChartModelChanged += VisualEditorBridge_PieChartModelChanged;
             _visualEditorBridge.TimelineModelChanged += VisualEditorBridge_TimelineModelChanged;
             _visualEditorBridge.JourneyModelChanged += VisualEditorBridge_JourneyModelChanged;
+            _visualEditorBridge.QuadrantChartModelChanged += VisualEditorBridge_QuadrantChartModelChanged;
             _visualEditorBridge.EditorReady += VisualEditorBridge_EditorReady;
 
             // Wire up focus tracking for code-only toolbar enable/disable
@@ -5213,6 +5216,40 @@ Console.WriteLine(""Hello, World!"");
     }
 
     /// <summary>
+    /// Called when the visual editor modifies the QuadrantChartModel.
+    /// Serializes the model back to text and updates the code editor + preview.
+    /// </summary>
+    private async void VisualEditorBridge_QuadrantChartModelChanged(object? sender, QuadrantChartModelChangedEventArgs e)
+    {
+        if (_isVisualEditorUpdating) return;
+
+        _isVisualEditorUpdating = true;
+        try
+        {
+            var text = MermaidSerializer.SerializeQuadrantChart(e.Model);
+
+            if (_visualEditorMode == VisualEditorMode.Visual || _visualEditorMode == VisualEditorMode.Split)
+            {
+                _isSwitchingDocuments = true;
+                try { CodeEditor.Text = text; } finally { _isSwitchingDocuments = false; }
+
+                _isDirty = true;
+                if (_activeDocument != null)
+                {
+                    _activeDocument.IsDirty = true;
+                }
+                UpdateTitle();
+                RenderPreview();
+                await _visualEditorBridge.RefreshQuadrantChartAsync();
+            }
+        }
+        finally
+        {
+            _isVisualEditorUpdating = false;
+        }
+    }
+
+    /// <summary>
     /// Updates the visibility of the visual editor mode toolbar based on the current render mode.
     /// Only visible for Mermaid files.
     /// </summary>
@@ -5529,6 +5566,16 @@ Console.WriteLine(""Hello, World!"");
                     await _visualEditorBridge.UpdateJourneyModelAsync(_currentJourneyModel);
                 }
             }
+            else if (IsQuadrantChartDiagram(text))
+            {
+                var parsed = MermaidParser.ParseQuadrantChart(text);
+                if (parsed != null)
+                {
+                    ClearAllModels();
+                    _currentQuadrantChartModel = parsed;
+                    await _visualEditorBridge.UpdateQuadrantChartModelAsync(_currentQuadrantChartModel);
+                }
+            }
             else
             {
                 var parsed = MermaidParser.ParseFlowchart(text);
@@ -5562,7 +5609,8 @@ Console.WriteLine(""Hello, World!"");
         if (string.IsNullOrWhiteSpace(text)) return true; // empty file — allow visual editor
         // Flowcharts, sequence, class, state, ER, gantt, mindmap, and pie diagrams have visual editing support
         return IsFlowchart(text) || IsSequenceDiagram(text) || IsClassDiagram(text) || IsStateDiagram(text) || IsERDiagram(text)
-            || IsGanttDiagram(text) || IsMindMapDiagram(text) || IsPieChartDiagram(text) || IsTimelineDiagram(text) || IsJourneyDiagram(text);
+            || IsGanttDiagram(text) || IsMindMapDiagram(text) || IsPieChartDiagram(text) || IsTimelineDiagram(text) || IsJourneyDiagram(text)
+            || IsQuadrantChartDiagram(text);
     }
 
     /// <summary>
@@ -5710,6 +5758,15 @@ Console.WriteLine(""Hello, World!"");
     }
 
     /// <summary>
+    /// Detects whether the given Mermaid text is a quadrant chart.
+    /// </summary>
+    private static bool IsQuadrantChartDiagram(string text)
+    {
+        var line = GetFirstMeaningfulMermaidLine(text);
+        return line != null && line.Equals("quadrantChart", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Clears all diagram model references. Called before setting a new active model.
     /// </summary>
     private void ClearAllModels()
@@ -5724,6 +5781,7 @@ Console.WriteLine(""Hello, World!"");
         _currentPieChartModel = null;
         _currentTimelineModel = null;
         _currentJourneyModel = null;
+        _currentQuadrantChartModel = null;
     }
 
     /// <summary>

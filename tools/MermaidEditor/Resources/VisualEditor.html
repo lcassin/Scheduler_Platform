@@ -980,6 +980,23 @@
             <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.5" fill="none" stroke-width="1.3"/><path d="M8,2 V4 M8,12 V14 M2,8 H4 M12,8 H14 M3.8,3.8 L5.2,5.2 M10.8,10.8 L12.2,12.2 M3.8,12.2 L5.2,10.8 M10.8,5.2 L12.2,3.8" stroke-width="1.2"/></svg>
             <span class="tooltip">Settings</span>
         </button>
+        <!-- Quadrant-specific buttons -->
+        <button class="toolbar-btn toolbar-quadrant" id="qcAddPoint" title="Add Point" style="display:none">
+            <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2" fill="currentColor" stroke="none"/><line x1="8" y1="2" x2="8" y2="14" stroke-width="0.5" stroke-dasharray="2,2"/><line x1="2" y1="8" x2="14" y2="8" stroke-width="0.5" stroke-dasharray="2,2"/><line x1="12" y1="12" x2="14" y2="12" stroke-width="1.3"/><line x1="13" y1="11" x2="13" y2="13" stroke-width="1.3"/></svg>
+            <span class="tooltip">Add Point</span>
+        </button>
+        <button class="toolbar-btn toolbar-quadrant" id="qcEdit" title="Edit Selected" style="display:none">
+            <svg viewBox="0 0 16 16"><path d="M2,12 L11,3 L13,5 L4,14 L1,15 Z" fill="none" stroke-width="1.2"/><line x1="9.5" y1="4.5" x2="11.5" y2="6.5" stroke-width="1"/></svg>
+            <span class="tooltip">Edit Selected</span>
+        </button>
+        <button class="toolbar-btn toolbar-quadrant" id="qcDelete" title="Delete Selected" style="display:none">
+            <svg viewBox="0 0 16 16"><path d="M5,3 V2 h6 v1 h3 v1.5 H2 V3 h3z M3,5.5 h10 l-0.8,9 H3.8 L3,5.5z M6.5,7 v5.5 M9.5,7 v5.5" fill="none" stroke-width="1.2"/></svg>
+            <span class="tooltip">Delete Selected</span>
+        </button>
+        <button class="toolbar-btn toolbar-quadrant" id="qcSettings" title="Quadrant Settings" style="display:none">
+            <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="2.5" fill="none" stroke-width="1.3"/><path d="M8,2 V4 M8,12 V14 M2,8 H4 M12,8 H14 M3.8,3.8 L5.2,5.2 M10.8,10.8 L12.2,12.2 M3.8,12.2 L5.2,10.8 M10.8,5.2 L12.2,3.8" stroke-width="1.2"/></svg>
+            <span class="tooltip">Settings</span>
+        </button>
         <!-- Pie-specific buttons -->
         <button class="toolbar-btn toolbar-pie" id="tb-pie-add-slice" title="Add Slice" style="display:none">
             <svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="none" stroke-width="1.2"/><line x1="8" y1="8" x2="8" y2="2" stroke-width="1"/><line x1="8" y1="8" x2="13.2" y2="11" stroke-width="1"/><line x1="13" y1="13" x2="15" y2="13" stroke-width="1.3"/><line x1="14" y1="12" x2="14" y2="14" stroke-width="1.3"/></svg>
@@ -1051,7 +1068,7 @@
 
         // Unified toolbar visibility based on current diagram type
         function updateToolbarForDiagramType() {
-            const typeClasses = ['toolbar-flowchart', 'toolbar-sequence', 'toolbar-class', 'toolbar-state', 'toolbar-er', 'toolbar-gantt', 'toolbar-mindmap', 'toolbar-pie', 'toolbar-timeline', 'toolbar-journey'];
+            const typeClasses = ['toolbar-flowchart', 'toolbar-sequence', 'toolbar-class', 'toolbar-state', 'toolbar-er', 'toolbar-gantt', 'toolbar-mindmap', 'toolbar-pie', 'toolbar-timeline', 'toolbar-journey', 'toolbar-quadrant'];
             const activeClass = 'toolbar-' + currentDiagramType;
             typeClasses.forEach(cls => {
                 document.querySelectorAll('.' + cls).forEach(btn => {
@@ -1061,7 +1078,7 @@
             // Hide the generic delete button for diagram types that have their own delete button
             const genericDelete = document.getElementById('tb-delete');
             if (genericDelete) {
-                const typesWithOwnDelete = ['mindmap', 'pie', 'timeline', 'journey'];
+                const typesWithOwnDelete = ['mindmap', 'pie', 'timeline', 'journey', 'quadrant'];
                 genericDelete.style.display = typesWithOwnDelete.includes(currentDiagramType) ? 'none' : '';
             }
         }

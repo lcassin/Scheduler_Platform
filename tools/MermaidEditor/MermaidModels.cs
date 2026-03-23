@@ -1784,3 +1784,112 @@ public class JourneyTask
     /// </summary>
     public List<string> Actors { get; set; } = new();
 }
+
+// =============================================
+// Quadrant Chart Models
+// =============================================
+
+/// <summary>
+/// Represents a Mermaid quadrant chart diagram.
+/// Syntax:
+///   quadrantChart
+///       title Priority Matrix
+///       x-axis Low Effort --> High Effort
+///       y-axis Low Impact --> High Impact
+///       quadrant-1 Do First
+///       quadrant-2 Schedule
+///       quadrant-3 Delegate
+///       quadrant-4 Eliminate
+///       Item A: [0.8, 0.9]
+///       Item B: [0.3, 0.7]
+/// </summary>
+public class QuadrantChartModel
+{
+    /// <summary>
+    /// The diagram title (optional).
+    /// </summary>
+    public string? Title { get; set; }
+
+    /// <summary>
+    /// X-axis left label (e.g., "Low Effort").
+    /// </summary>
+    public string? XAxisLeft { get; set; }
+
+    /// <summary>
+    /// X-axis right label (e.g., "High Effort"). Optional.
+    /// </summary>
+    public string? XAxisRight { get; set; }
+
+    /// <summary>
+    /// Y-axis bottom label (e.g., "Low Impact").
+    /// </summary>
+    public string? YAxisBottom { get; set; }
+
+    /// <summary>
+    /// Y-axis top label (e.g., "High Impact"). Optional.
+    /// </summary>
+    public string? YAxisTop { get; set; }
+
+    /// <summary>
+    /// Label for quadrant 1 (top-right).
+    /// </summary>
+    public string? Quadrant1 { get; set; }
+
+    /// <summary>
+    /// Label for quadrant 2 (top-left).
+    /// </summary>
+    public string? Quadrant2 { get; set; }
+
+    /// <summary>
+    /// Label for quadrant 3 (bottom-left).
+    /// </summary>
+    public string? Quadrant3 { get; set; }
+
+    /// <summary>
+    /// Label for quadrant 4 (bottom-right).
+    /// </summary>
+    public string? Quadrant4 { get; set; }
+
+    /// <summary>
+    /// Data points plotted on the chart.
+    /// </summary>
+    public List<QuadrantPoint> Points { get; set; } = new();
+
+    /// <summary>
+    /// Comments preserved from the original text.
+    /// </summary>
+    public List<CommentEntry> Comments { get; set; } = new();
+
+    /// <summary>
+    /// Lines before the quadrantChart declaration.
+    /// </summary>
+    public List<string> PreambleLines { get; set; } = new();
+
+    /// <summary>
+    /// The line index of the quadrantChart declaration.
+    /// </summary>
+    public int DeclarationLineIndex { get; set; }
+}
+
+/// <summary>
+/// Represents a data point in a quadrant chart.
+/// Syntax: Label: [x, y]
+/// x and y are in the range 0.0 to 1.0.
+/// </summary>
+public class QuadrantPoint
+{
+    /// <summary>
+    /// The point label/name.
+    /// </summary>
+    public string Label { get; set; } = string.Empty;
+
+    /// <summary>
+    /// X coordinate (0.0 to 1.0).
+    /// </summary>
+    public double X { get; set; }
+
+    /// <summary>
+    /// Y coordinate (0.0 to 1.0).
+    /// </summary>
+    public double Y { get; set; }
+}

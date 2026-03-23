@@ -24,6 +24,7 @@
       <EmbeddedResource Include="Resources\VisualEditor.Pie.js" />
       <EmbeddedResource Include="Resources\VisualEditor.Timeline.js" />
       <EmbeddedResource Include="Resources\VisualEditor.Journey.js" />
+      <EmbeddedResource Include="Resources\VisualEditor.Quadrant.js" />
       <EmbeddedResource Include="Resources\WhatsNew.md" />
       <EmbeddedResource Include="Icons\*.svg" />
       <EmbeddedResource Include="Dictionaries\*.aff" />
