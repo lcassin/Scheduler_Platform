@@ -1695,3 +1695,87 @@ public class TimelineEvent
     /// </summary>
     public List<string> Events { get; set; } = new();
 }
+
+// =============================================
+// Journey Diagram Models
+// =============================================
+
+/// <summary>
+/// Represents a Mermaid journey (user journey) diagram.
+/// Journey syntax:
+///   journey
+///       title User Purchase Journey
+///       section Discovery
+///           Visit website: 5: User
+///           Browse products: 4: User, Admin
+/// </summary>
+public class JourneyModel
+{
+    /// <summary>
+    /// The diagram title (optional).
+    /// </summary>
+    public string? Title { get; set; }
+
+    /// <summary>
+    /// Sections in the journey. Tasks not in any section go into Tasks list.
+    /// </summary>
+    public List<JourneySection> Sections { get; set; } = new();
+
+    /// <summary>
+    /// Top-level tasks that appear before any section declaration.
+    /// </summary>
+    public List<JourneyTask> Tasks { get; set; } = new();
+
+    /// <summary>
+    /// Comments preserved from the original text.
+    /// </summary>
+    public List<CommentEntry> Comments { get; set; } = new();
+
+    /// <summary>
+    /// Lines before the journey declaration.
+    /// </summary>
+    public List<string> PreambleLines { get; set; } = new();
+
+    /// <summary>
+    /// The line index of the journey declaration.
+    /// </summary>
+    public int DeclarationLineIndex { get; set; }
+}
+
+/// <summary>
+/// Represents a section in a journey diagram.
+/// </summary>
+public class JourneySection
+{
+    /// <summary>
+    /// The section name/label.
+    /// </summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Tasks within this section.
+    /// </summary>
+    public List<JourneyTask> Tasks { get; set; } = new();
+}
+
+/// <summary>
+/// Represents a single task/activity in a journey diagram.
+/// Mermaid syntax: Task name: score: actor1, actor2
+/// </summary>
+public class JourneyTask
+{
+    /// <summary>
+    /// The task label/description.
+    /// </summary>
+    public string Label { get; set; } = string.Empty;
+
+    /// <summary>
+    /// The satisfaction score (1-5, where 1 = frustrated and 5 = happy).
+    /// </summary>
+    public int Score { get; set; } = 3;
+
+    /// <summary>
+    /// The actors/participants involved in this task.
+    /// </summary>
+    public List<string> Actors { get; set; } = new();
+}

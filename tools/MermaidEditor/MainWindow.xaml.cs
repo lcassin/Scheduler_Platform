@@ -127,6 +127,7 @@ public partial class MainWindow : Window
     private MindMapModel? _currentMindMapModel;
     private PieChartModel? _currentPieChartModel;
     private TimelineModel? _currentTimelineModel;
+    private JourneyModel? _currentJourneyModel;
     private bool _isVisualEditorUpdating; // Prevent re-entrant updates between text <-> visual
     private bool _visualEditorHasFocus; // Tracks whether the Visual Editor pane has focus (for toolbar enable/disable)
 
@@ -4642,6 +4643,7 @@ Console.WriteLine(""Hello, World!"");
                     "MermaidEditor.Resources.VisualEditor.MindMap.js",
                     "MermaidEditor.Resources.VisualEditor.Pie.js",
                     "MermaidEditor.Resources.VisualEditor.Timeline.js",
+                    "MermaidEditor.Resources.VisualEditor.Journey.js",
                 };
                 var injectedJs = new System.Text.StringBuilder();
                 foreach (var jsFile in jsFiles)
@@ -4674,6 +4676,7 @@ Console.WriteLine(""Hello, World!"");
             _visualEditorBridge.MindMapModelChanged += VisualEditorBridge_MindMapModelChanged;
             _visualEditorBridge.PieChartModelChanged += VisualEditorBridge_PieChartModelChanged;
             _visualEditorBridge.TimelineModelChanged += VisualEditorBridge_TimelineModelChanged;
+            _visualEditorBridge.JourneyModelChanged += VisualEditorBridge_JourneyModelChanged;
             _visualEditorBridge.EditorReady += VisualEditorBridge_EditorReady;
 
             // Wire up focus tracking for code-only toolbar enable/disable
@@ -4819,6 +4822,10 @@ Console.WriteLine(""Hello, World!"");
             else if (_currentTimelineModel != null)
             {
                 await _visualEditorBridge.UpdateTimelineModelAsync(_currentTimelineModel);
+            }
+            else if (_currentJourneyModel != null)
+            {
+                await _visualEditorBridge.UpdateJourneyModelAsync(_currentJourneyModel);
             }
             else if (_currentFlowchartModel != null)
             {
@@ -5172,6 +5179,40 @@ Console.WriteLine(""Hello, World!"");
     }
 
     /// <summary>
+    /// Called when the visual editor modifies the JourneyModel.
+    /// Serializes the model back to text and updates the code editor + preview.
+    /// </summary>
+    private async void VisualEditorBridge_JourneyModelChanged(object? sender, JourneyModelChangedEventArgs e)
+    {
+        if (_isVisualEditorUpdating) return;
+
+        _isVisualEditorUpdating = true;
+        try
+        {
+            var text = MermaidSerializer.SerializeJourney(e.Model);
+
+            if (_visualEditorMode == VisualEditorMode.Visual || _visualEditorMode == VisualEditorMode.Split)
+            {
+                _isSwitchingDocuments = true;
+                try { CodeEditor.Text = text; } finally { _isSwitchingDocuments = false; }
+
+                _isDirty = true;
+                if (_activeDocument != null)
+                {
+                    _activeDocument.IsDirty = true;
+                }
+                UpdateTitle();
+                RenderPreview();
+                await _visualEditorBridge.RefreshJourneyAsync();
+            }
+        }
+        finally
+        {
+            _isVisualEditorUpdating = false;
+        }
+    }
+
+    /// <summary>
     /// Updates the visibility of the visual editor mode toolbar based on the current render mode.
     /// Only visible for Mermaid files.
     /// </summary>
@@ -5325,6 +5366,10 @@ Console.WriteLine(""Hello, World!"");
                 {
                     text = MermaidSerializer.SerializeTimeline(_currentTimelineModel);
                 }
+                else if (_currentJourneyModel != null)
+                {
+                    text = MermaidSerializer.SerializeJourney(_currentJourneyModel);
+                }
                 else if (_currentFlowchartModel != null)
                 {
                     text = MermaidSerializer.Serialize(_currentFlowchartModel);
@@ -5474,6 +5519,16 @@ Console.WriteLine(""Hello, World!"");
                     await _visualEditorBridge.UpdateTimelineModelAsync(_currentTimelineModel);
                 }
             }
+            else if (IsJourneyDiagram(text))
+            {
+                var parsed = MermaidParser.ParseJourney(text);
+                if (parsed != null)
+                {
+                    ClearAllModels();
+                    _currentJourneyModel = parsed;
+                    await _visualEditorBridge.UpdateJourneyModelAsync(_currentJourneyModel);
+                }
+            }
             else
             {
                 var parsed = MermaidParser.ParseFlowchart(text);
@@ -5507,7 +5562,7 @@ Console.WriteLine(""Hello, World!"");
         if (string.IsNullOrWhiteSpace(text)) return true; // empty file — allow visual editor
         // Flowcharts, sequence, class, state, ER, gantt, mindmap, and pie diagrams have visual editing support
         return IsFlowchart(text) || IsSequenceDiagram(text) || IsClassDiagram(text) || IsStateDiagram(text) || IsERDiagram(text)
-            || IsGanttDiagram(text) || IsMindMapDiagram(text) || IsPieChartDiagram(text) || IsTimelineDiagram(text);
+            || IsGanttDiagram(text) || IsMindMapDiagram(text) || IsPieChartDiagram(text) || IsTimelineDiagram(text) || IsJourneyDiagram(text);
     }
 
     /// <summary>
@@ -5646,6 +5701,15 @@ Console.WriteLine(""Hello, World!"");
     }
 
     /// <summary>
+    /// Detects whether the given Mermaid text is a journey diagram.
+    /// </summary>
+    private static bool IsJourneyDiagram(string text)
+    {
+        var line = GetFirstMeaningfulMermaidLine(text);
+        return line != null && line.Equals("journey", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Clears all diagram model references. Called before setting a new active model.
     /// </summary>
     private void ClearAllModels()
@@ -5659,6 +5723,7 @@ Console.WriteLine(""Hello, World!"");
         _currentMindMapModel = null;
         _currentPieChartModel = null;
         _currentTimelineModel = null;
+        _currentJourneyModel = null;
     }
 
     /// <summary>
@@ -9040,6 +9105,7 @@ Console.WriteLine(""Hello, World!"");
         _currentMindMapModel = null;
         _currentPieChartModel = null;
         _currentTimelineModel = null;
+        _currentJourneyModel = null;
         
         // Switch to new document
         _activeDocument = doc;

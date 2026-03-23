@@ -1841,4 +1841,95 @@ public static class MermaidSerializer
             }
         }
     }
+
+    // =============================================
+    // Journey Diagram Serializer
+    // =============================================
+
+    /// <summary>
+    /// Serializes a JourneyModel to valid Mermaid journey text.
+    /// </summary>
+    public static string SerializeJourney(JourneyModel model)
+    {
+        if (model == null)
+            return string.Empty;
+
+        var sb = new StringBuilder();
+
+        // Write preamble lines
+        foreach (var preambleLine in model.PreambleLines)
+        {
+            sb.AppendLine(preambleLine);
+        }
+
+        // Write comments before declaration
+        WriteJourneyCommentsBeforeLine(sb, model, model.DeclarationLineIndex);
+
+        // Write journey declaration
+        sb.AppendLine("journey");
+
+        // Write title
+        if (!string.IsNullOrEmpty(model.Title))
+        {
+            sb.AppendLine($"{Indent}title {model.Title}");
+        }
+
+        // Write top-level tasks (before any section)
+        foreach (var task in model.Tasks)
+        {
+            WriteJourneyTask(sb, task);
+        }
+
+        // Write sections with their tasks
+        foreach (var section in model.Sections)
+        {
+            sb.AppendLine($"{Indent}section {section.Name}");
+            foreach (var task in section.Tasks)
+            {
+                WriteJourneyTask(sb, task);
+            }
+        }
+
+        // Write trailing comments
+        WriteJourneyTrailingComments(sb, model);
+
+        return sb.ToString().TrimEnd('\r', '\n') + Environment.NewLine;
+    }
+
+    /// <summary>
+    /// Writes a single journey task in the format: label: score: actor1, actor2
+    /// </summary>
+    private static void WriteJourneyTask(StringBuilder sb, JourneyTask task)
+    {
+        var actorsPart = task.Actors.Count > 0 ? $": {string.Join(", ", task.Actors)}" : "";
+        sb.AppendLine($"{Indent}{Indent}{task.Label}: {task.Score}{actorsPart}");
+    }
+
+    private static void WriteJourneyCommentsBeforeLine(StringBuilder sb, JourneyModel model, int lineIndex)
+    {
+        foreach (var comment in model.Comments.Where(c => c.OriginalLineIndex < lineIndex))
+        {
+            sb.AppendLine($"%%{comment.Text}");
+        }
+    }
+
+    private static void WriteJourneyTrailingComments(StringBuilder sb, JourneyModel model)
+    {
+        if (model.Comments.Count > 0)
+        {
+            var trailingComments = model.Comments
+                .Where(c => c.OriginalLineIndex > model.DeclarationLineIndex)
+                .OrderBy(c => c.OriginalLineIndex)
+                .ToList();
+
+            if (trailingComments.Count > 0)
+            {
+                sb.AppendLine();
+                foreach (var comment in trailingComments)
+                {
+                    sb.AppendLine($"%%{comment.Text}");
+                }
+            }
+        }
+    }
 }

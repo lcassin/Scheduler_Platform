@@ -3043,4 +3043,121 @@ public static class MermaidParser
 
         return foundDeclaration ? model : null;
     }
+
+    // =============================================
+    // Journey Diagram Parser
+    // =============================================
+
+    private static readonly Regex JourneyDeclaration = new(@"^\s*journey\s*$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+    private static readonly Regex JourneyTitlePattern = new(@"^\s*title\s+(.+)$", RegexOptions.Compiled);
+    private static readonly Regex JourneySectionPattern = new(@"^\s*section\s+(.+)$", RegexOptions.Compiled);
+    // Task pattern: label : score : actor1, actor2
+    private static readonly Regex JourneyTaskPattern = new(@"^\s*(.+?)\s*:\s*(\d+)\s*(?::\s*(.+))?\s*$", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Parses Mermaid journey text into a JourneyModel.
+    /// Journey syntax:
+    ///   journey
+    ///       title User Purchase Journey
+    ///       section Discovery
+    ///           Visit website: 5: User
+    ///           Browse products: 4: User, Admin
+    /// </summary>
+    public static JourneyModel? ParseJourney(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        var lines = text.Split('\n');
+        var model = new JourneyModel();
+        bool foundDeclaration = false;
+        JourneySection? currentSection = null;
+
+        for (int i = 0; i < lines.Length; i++)
+        {
+            var rawLine = lines[i];
+            var line = rawLine.TrimEnd('\r');
+
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
+            // Check for comments
+            var commentMatch = CommentPattern.Match(line);
+            if (commentMatch.Success)
+            {
+                model.Comments.Add(new CommentEntry
+                {
+                    Text = commentMatch.Groups[1].Value,
+                    OriginalLineIndex = i
+                });
+                continue;
+            }
+
+            // Look for journey declaration
+            if (!foundDeclaration)
+            {
+                var declMatch = JourneyDeclaration.Match(line);
+                if (declMatch.Success)
+                {
+                    foundDeclaration = true;
+                    model.DeclarationLineIndex = i;
+                    continue;
+                }
+
+                model.PreambleLines.Add(line);
+                continue;
+            }
+
+            var trimmed = line.Trim();
+
+            // Title
+            var titleMatch = JourneyTitlePattern.Match(trimmed);
+            if (titleMatch.Success)
+            {
+                model.Title = titleMatch.Groups[1].Value.Trim();
+                continue;
+            }
+
+            // Section
+            var sectionMatch = JourneySectionPattern.Match(trimmed);
+            if (sectionMatch.Success)
+            {
+                currentSection = new JourneySection { Name = sectionMatch.Groups[1].Value.Trim() };
+                model.Sections.Add(currentSection);
+                continue;
+            }
+
+            // Task: label : score : actor1, actor2
+            var taskMatch = JourneyTaskPattern.Match(trimmed);
+            if (taskMatch.Success)
+            {
+                var label = taskMatch.Groups[1].Value.Trim();
+                var score = int.TryParse(taskMatch.Groups[2].Value, out var s) ? Math.Clamp(s, 1, 5) : 3;
+                var actors = new List<string>();
+
+                if (taskMatch.Groups[3].Success && !string.IsNullOrWhiteSpace(taskMatch.Groups[3].Value))
+                {
+                    actors = taskMatch.Groups[3].Value.Split(',')
+                        .Select(a => a.Trim())
+                        .Where(a => !string.IsNullOrEmpty(a))
+                        .ToList();
+                }
+
+                var task = new JourneyTask
+                {
+                    Label = label,
+                    Score = score,
+                    Actors = actors
+                };
+
+                if (currentSection != null)
+                    currentSection.Tasks.Add(task);
+                else
+                    model.Tasks.Add(task);
+                continue;
+            }
+        }
+
+        return foundDeclaration ? model : null;
+    }
 }

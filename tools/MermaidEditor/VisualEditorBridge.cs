@@ -18,7 +18,8 @@ public enum ActiveDiagramType
     Gantt,
     MindMap,
     Pie,
-    Timeline
+    Timeline,
+    Journey
 }
 
 /// <summary>
@@ -240,6 +241,12 @@ public partial class VisualEditorBridge
                 await RestoreTimelineToEditorAsync();
                 RaiseTimelineModelChanged("undo");
             }
+            else if (_activeDiagramType == ActiveDiagramType.Journey)
+            {
+                RestoreJourneyModelFromJson(previousJson);
+                await RestoreJourneyToEditorAsync();
+                RaiseJourneyModelChanged("undo");
+            }
             else
             {
                 RestoreModelFromJson(previousJson);
@@ -321,6 +328,12 @@ public partial class VisualEditorBridge
                 await RestoreTimelineToEditorAsync();
                 RaiseTimelineModelChanged("redo");
             }
+            else if (_activeDiagramType == ActiveDiagramType.Journey)
+            {
+                RestoreJourneyModelFromJson(redoJson);
+                await RestoreJourneyToEditorAsync();
+                RaiseJourneyModelChanged("redo");
+            }
             else
             {
                 RestoreModelFromJson(redoJson);
@@ -355,6 +368,8 @@ public partial class VisualEditorBridge
             return ConvertPieChartModelToJson(_pieChartModel);
         if (_activeDiagramType == ActiveDiagramType.Timeline && _timelineModel != null)
             return ConvertTimelineModelToJson(_timelineModel);
+        if (_activeDiagramType == ActiveDiagramType.Journey && _journeyModel != null)
+            return ConvertJourneyModelToJson(_journeyModel);
         return ConvertModelToJson(_model);
     }
 
@@ -872,6 +887,40 @@ public partial class VisualEditorBridge
 
                 case "tl_eventSelected":
                 case "tl_sectionSelected":
+                    break;
+
+                // ===== Journey Diagram Messages =====
+
+                case "jn_taskCreated":
+                    HandleJourneyTaskCreated(root);
+                    break;
+
+                case "jn_taskEdited":
+                    HandleJourneyTaskEdited(root);
+                    break;
+
+                case "jn_taskDeleted":
+                    HandleJourneyTaskDeleted(root);
+                    break;
+
+                case "jn_sectionCreated":
+                    HandleJourneySectionCreated(root);
+                    break;
+
+                case "jn_sectionEdited":
+                    HandleJourneySectionEdited(root);
+                    break;
+
+                case "jn_sectionDeleted":
+                    HandleJourneySectionDeleted(root);
+                    break;
+
+                case "jn_settingsChanged":
+                    HandleJourneySettingsChanged(root);
+                    break;
+
+                case "jn_taskSelected":
+                case "jn_sectionSelected":
                     break;
             }
         }
