@@ -3136,7 +3136,7 @@ public static class MermaidParser
             if (taskMatch.Success)
             {
                 var label = taskMatch.Groups[1].Value.Trim();
-                var score = int.TryParse(taskMatch.Groups[2].Value, out var s) ? Math.Clamp(s, 1, 5) : 3;
+                var score = int.TryParse(taskMatch.Groups[2].Value, out var s) ? Math.Clamp(s, 0, 5) : 3;
                 var actors = new List<string>();
 
                 if (taskMatch.Groups[3].Success && !string.IsNullOrWhiteSpace(taskMatch.Groups[3].Value))

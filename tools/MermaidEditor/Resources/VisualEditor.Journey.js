@@ -66,12 +66,12 @@ function renderJourneyDiagram() {
     const isLight = document.body.classList.contains('theme-light');
     const isTwilight = document.body.classList.contains('theme-twilight');
 
-    // Score colors (1=red/frustrated to 5=green/happy)
+    // Score colors (0=grey/none, 1=red/frustrated to 5=green/happy)
     const scoreColors = isLight
-        ? ['#f44336', '#ff9800', '#ffeb3b', '#8bc34a', '#4caf50']
+        ? ['#9e9e9e', '#f44336', '#ff9800', '#ffeb3b', '#8bc34a', '#4caf50']
         : isTwilight
-        ? ['#E06C75', '#D19A66', '#E5C07B', '#98C379', '#5A9E6F']
-        : ['#f38ba8', '#fab387', '#f9e2af', '#a6e3a1', '#89b4fa'];
+        ? ['#6B6B6B', '#E06C75', '#D19A66', '#E5C07B', '#98C379', '#5A9E6F']
+        : ['#585b70', '#f38ba8', '#fab387', '#f9e2af', '#a6e3a1', '#89b4fa'];
 
     // Section colors (rotating palette for section headers)
     const sectionColors = isLight
@@ -289,8 +289,8 @@ function renderJourneyDiagram() {
         // Task row
         const task = row.task;
         const rowCenterY = currentY + taskRowHeight / 2;
-        const score = Math.max(1, Math.min(5, task.score || 3));
-        const scoreColor = scoreColors[score - 1];
+        const score = Math.max(0, Math.min(5, task.score != null ? task.score : 3));
+        const scoreColor = scoreColors[score] || scoreColors[0];
 
         const isSelected = journeySelectedTask !== null &&
             journeySelectedTask.index === row.index &&
@@ -368,8 +368,8 @@ function renderJourneyDiagram() {
         svg.appendChild(scoreFill);
 
         // Score emoji inside bar at fill endpoint (moves right as score increases)
-        const scoreEmojis = ['\u{1F621}', '\u{1F61F}', '\u{1F610}', '\u{1F642}', '\u{1F600}']; // 😡😟😐🙂😀
-        const scoreEmoji = scoreEmojis[score - 1] || '';
+        const scoreEmojis = ['\u{1F480}', '\u{1F621}', '\u{1F61F}', '\u{1F610}', '\u{1F642}', '\u{1F600}']; // 💀😡😟😐🙂😀
+        const scoreEmoji = scoreEmojis[score] || '';
         const emojiSize = 24; // ~8px larger than scoreBarHeight (16) so it pops
         // Position emoji centered on the fill endpoint
         const emojiX = barX + fillWidth - emojiSize / 2;
@@ -607,8 +607,9 @@ function createJourneyTask() {
             <input class="property-input" id="jn-dlg-label" value="New Task" />
         </div>
         <div class="property-row">
-            <div class="property-label">Score (1-5)</div>
+            <div class="property-label">Score (0-5)</div>
             <select class="property-select" id="jn-dlg-score">
+                <option value="0">0 - None</option>
                 <option value="1">1 - Frustrated</option>
                 <option value="2">2 - Unhappy</option>
                 <option value="3" selected>3 - Neutral</option>
@@ -684,10 +685,10 @@ function editJourneyTask(index, section) {
 
     // Score options
     let scoreOptions = '';
-    const scoreLabels = ['1 - Frustrated', '2 - Unhappy', '3 - Neutral', '4 - Happy', '5 - Very Happy'];
-    for (let i = 1; i <= 5; i++) {
+    const scoreLabels = ['0 - None', '1 - Frustrated', '2 - Unhappy', '3 - Neutral', '4 - Happy', '5 - Very Happy'];
+    for (let i = 0; i <= 5; i++) {
         const sel = task.score === i ? 'selected' : '';
-        scoreOptions += `<option value="${i}" ${sel}>${scoreLabels[i-1]}</option>`;
+        scoreOptions += `<option value="${i}" ${sel}>${scoreLabels[i]}</option>`;
     }
 
     body.innerHTML = `
@@ -696,7 +697,7 @@ function editJourneyTask(index, section) {
             <input class="property-input" id="jn-dlg-label" value="${_escHtml(task.label)}" />
         </div>
         <div class="property-row">
-            <div class="property-label">Score (1-5)</div>
+            <div class="property-label">Score (0-5)</div>
             <select class="property-select" id="jn-dlg-score">${scoreOptions}</select>
         </div>
         <div class="property-row">
