@@ -1432,6 +1432,12 @@ public static class MermaidSerializer
             sb.AppendLine($"{Indent}axisFormat {model.AxisFormat}");
         }
 
+        // Write tick interval
+        if (!string.IsNullOrEmpty(model.TickInterval))
+        {
+            sb.AppendLine($"{Indent}tickInterval {model.TickInterval}");
+        }
+
         // Write excludes
         if (!string.IsNullOrEmpty(model.Excludes))
         {

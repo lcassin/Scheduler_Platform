@@ -207,10 +207,12 @@ function renderJourneyDiagram() {
 
     // Render rows
     let currentSectionColorIdx = -1;
+    let currentSectionColor = null;
     allRows.forEach((row) => {
         if (row.type === 'section-header') {
             currentSectionColorIdx = row.colorIdx;
-            const secColor = sectionColors[currentSectionColorIdx % sectionColors.length];
+            currentSectionColor = sectionColors[currentSectionColorIdx % sectionColors.length];
+            const secColor = currentSectionColor;
 
             // Section header background
             const secBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
@@ -294,13 +296,24 @@ function renderJourneyDiagram() {
             journeySelectedTask.index === row.index &&
             journeySelectedTask.section === row.section;
 
-        // Row background on hover/select
+        // Section color tint for task row (matching Mermaid's per-section coloring)
+        const taskSectionColor = currentSectionColor;
+        const _hexToRgba = (hex, alpha) => {
+            const r = parseInt(hex.slice(1,3), 16);
+            const g = parseInt(hex.slice(3,5), 16);
+            const b = parseInt(hex.slice(5,7), 16);
+            return `rgba(${r},${g},${b},${alpha})`;
+        };
+        const sectionTint = taskSectionColor ? _hexToRgba(taskSectionColor, isLight ? 0.08 : 0.06) : 'transparent';
+        const sectionTintHover = taskSectionColor ? _hexToRgba(taskSectionColor, isLight ? 0.14 : 0.12) : (isLight ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.03)');
+
+        // Row background with section color tint
         const rowBg = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         rowBg.setAttribute('x', padding);
         rowBg.setAttribute('y', currentY);
         rowBg.setAttribute('width', totalWidth - padding * 2);
         rowBg.setAttribute('height', taskRowHeight);
-        rowBg.setAttribute('fill', isSelected ? (isLight ? 'rgba(33,150,243,0.08)' : 'rgba(137,180,250,0.08)') : 'transparent');
+        rowBg.setAttribute('fill', isSelected ? (isLight ? 'rgba(33,150,243,0.12)' : 'rgba(137,180,250,0.12)') : sectionTint);
         rowBg.setAttribute('rx', '4');
         rowBg.style.cursor = 'pointer';
         rowBg.setAttribute('data-jn-type', 'task');
@@ -309,10 +322,10 @@ function renderJourneyDiagram() {
         rowBg.addEventListener('click', (e) => { e.stopPropagation(); selectJourneyTask(row.index, row.section); });
         rowBg.addEventListener('dblclick', (e) => { e.stopPropagation(); editJourneyTask(row.index, row.section); });
         rowBg.addEventListener('mouseenter', () => {
-            if (!isSelected) rowBg.setAttribute('fill', isLight ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.03)');
+            if (!isSelected) rowBg.setAttribute('fill', sectionTintHover);
         });
         rowBg.addEventListener('mouseleave', () => {
-            if (!isSelected) rowBg.setAttribute('fill', 'transparent');
+            if (!isSelected) rowBg.setAttribute('fill', sectionTint);
         });
         svg.appendChild(rowBg);
 

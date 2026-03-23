@@ -2566,9 +2566,13 @@ public static class MermaidParser
                 continue;
             }
 
-            // Tick interval (just skip, we preserve it but don't model it specially)
-            if (GanttTickIntervalPattern.IsMatch(trimmed))
+            // Tick interval
+            var tiMatch = GanttTickIntervalPattern.Match(trimmed);
+            if (tiMatch.Success)
+            {
+                model.TickInterval = tiMatch.Groups[1].Value.Trim();
                 continue;
+            }
 
             // Section
             var sectionMatch = GanttSectionPattern.Match(trimmed);

@@ -5106,13 +5106,19 @@
             centerView();
         });
 
-        // Mouse-wheel zoom for editorCanvas-based diagrams
+        // Mouse-wheel for editorCanvas-based diagrams: Ctrl+wheel = zoom, plain wheel = scroll
         document.getElementById('editorCanvas').addEventListener('wheel', function(e) {
             if (!_isEditorCanvasDiagram()) return;
             if (e.ctrlKey || e.metaKey) {
                 e.preventDefault();
                 const factor = e.deltaY < 0 ? 1.1 : 0.9;
                 _applyEditorCanvasZoom(editorCanvasZoom * factor);
+            } else {
+                // Ensure native scroll works by programmatically scrolling
+                // (some SVG children may swallow wheel events)
+                e.preventDefault();
+                this.scrollTop += e.deltaY;
+                this.scrollLeft += e.deltaX;
             }
         }, { passive: false });
 

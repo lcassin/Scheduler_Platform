@@ -1349,6 +1349,11 @@ public class GanttModel
     public string? AxisFormat { get; set; }
 
     /// <summary>
+    /// The tick interval for the axis (e.g., "1day", "1week", "1month").
+    /// </summary>
+    public string? TickInterval { get; set; }
+
+    /// <summary>
     /// Whether to exclude weekends from the timeline.
     /// </summary>
     public bool ExcludesWeekends { get; set; }
