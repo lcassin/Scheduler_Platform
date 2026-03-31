@@ -1391,11 +1391,12 @@ Console.WriteLine(""Hello, World!"");
                     var tScrollTop = _activeDocument.PreviewScrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture);
                     var tPanX = _activeDocument.PreviewPanX.ToString(System.Globalization.CultureInfo.InvariantCulture);
                     var tPanY = _activeDocument.PreviewPanY.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var tFit = _activeDocument.PreviewFitToWindow ? "true" : "false";
                     
                     await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
                         (function() {{
                             if (typeof updateDiagram === 'function') {{
-                                updateDiagram({escapedCode}, {tZoom}, {tScrollLeft}, {tScrollTop}, {tPanX}, {tPanY});
+                                updateDiagram({escapedCode}, {tZoom}, {tScrollLeft}, {tScrollTop}, {tPanX}, {tPanY}, {tFit});
                             }}
                         }})();
                     ");
@@ -1438,6 +1439,8 @@ Console.WriteLine(""Hello, World!"");
         var targetZoom = (_isSwitchingDocuments && _activeDocument != null) 
             ? _activeDocument.PreviewZoom.ToString(System.Globalization.CultureInfo.InvariantCulture) 
             : "1";
+        var targetFitToWindow = (_isSwitchingDocuments && _activeDocument != null && _activeDocument.PreviewFitToWindow) 
+            ? "true" : "false";
 
         var theme = ThemeManager.CurrentTheme;
         var bodyBg = theme switch { AppTheme.Light => "#f5f5f5", AppTheme.Twilight => "#1A1A2E", _ => "#1e1e1e" };
@@ -1554,6 +1557,7 @@ Console.WriteLine(""Hello, World!"");
         var targetPanX = {targetPanX};
         var targetPanY = {targetPanY};
         var targetZoom = {targetZoom};
+        var fitAfterRender = {targetFitToWindow};
         
         // Don't set theme here - let frontmatter config take precedence
         // Mermaid will parse ---config:--- frontmatter automatically
@@ -1579,7 +1583,7 @@ Console.WriteLine(""Hello, World!"");
             // Clear the pre element (updateDiagram will recreate it)
             diagram.innerHTML = '';
             // Use updateDiagram with the target restore positions
-            window.updateDiagram(code, targetZoom, targetScrollLeft, targetScrollTop, targetPanX, targetPanY);
+            window.updateDiagram(code, targetZoom, targetScrollLeft, targetScrollTop, targetPanX, targetPanY, fitAfterRender);
         }}).catch(() => {{
             // Fallback: just initialize panzoom on whatever is rendered
             const diagram = document.getElementById('diagram');
@@ -1847,7 +1851,8 @@ Console.WriteLine(""Hello, World!"");
         // Optional targetZoom parameter allows overriding the zoom level (used when switching documents)
         // Optional targetScrollLeft/targetScrollTop parameters allow overriding scroll position (used when switching documents)
         // Optional targetPanX/targetPanY parameters allow overriding pan position (used when switching documents)
-        window.updateDiagram = function(newCode, targetZoom, targetScrollLeft, targetScrollTop, targetPanX, targetPanY) {{
+        // Optional fitAfterRender parameter: if true, call fitToWindow() after render instead of restoring saved zoom/pan
+        window.updateDiagram = function(newCode, targetZoom, targetScrollLeft, targetScrollTop, targetPanX, targetPanY, fitAfterRender) {{
             // Increment render generation to invalidate any pending callbacks from previous renders
             var thisGen = ++window._renderGen;
             
@@ -1945,15 +1950,22 @@ Console.WriteLine(""Hello, World!"");
                                 boundsPadding: 0.1
                             }});
                             
-                            // Restore zoom level
-                            window.panzoomInstance.zoomAbs(0, 0, savedZoom);
-                            window.currentZoom = savedZoom;
+                            // Restore zoom level (or fit to window if requested)
+                            if (fitAfterRender) {{
+                                // Re-calculate fit-to-window for this newly rendered diagram
+                                window.fitToWindow();
+                            }} else {{
+                                window.panzoomInstance.zoomAbs(0, 0, savedZoom);
+                                window.currentZoom = savedZoom;
+                            }}
                             
                             // Restore pan position (the drag/translate position)
                             // Use setTimeout to ensure panzoom is fully initialized
                             setTimeout(function() {{
                                 if (thisGen !== window._renderGen) return;
-                                window.panzoomInstance.moveTo(savedPanX, savedPanY);
+                                if (!fitAfterRender) {{
+                                    window.panzoomInstance.moveTo(savedPanX, savedPanY);
+                                }}
                                 
                                 // Notify C# that diagram is ready, passing the target scroll and pan positions
                                 // C# will restore the scroll position to ensure proper timing
@@ -2007,11 +2019,17 @@ Console.WriteLine(""Hello, World!"");
                                 bounds: false,
                                 boundsPadding: 0.1
                             }});
-                            window.panzoomInstance.zoomAbs(0, 0, savedZoom);
-                            window.currentZoom = savedZoom;
+                            if (fitAfterRender) {{
+                                window.fitToWindow();
+                            }} else {{
+                                window.panzoomInstance.zoomAbs(0, 0, savedZoom);
+                                window.currentZoom = savedZoom;
+                            }}
                             setTimeout(function() {{
                                 if (thisGen !== window._renderGen) return;
-                                window.panzoomInstance.moveTo(savedPanX, savedPanY);
+                                if (!fitAfterRender) {{
+                                    window.panzoomInstance.moveTo(savedPanX, savedPanY);
+                                }}
                                 window.chrome.webview.postMessage({{ 
                                     type: 'diagramReady', 
                                     targetScrollLeft: savedScrollLeft, 
@@ -7384,6 +7402,7 @@ Console.WriteLine(""Hello, World!"");
         if (_activeDocument != null)
         {
             _activeDocument.PreviewZoom = _currentZoom;
+            _activeDocument.PreviewFitToWindow = false; // Manual zoom clears fit-to-window
         }
         await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.resetView()");
         UpdateZoomUI();
@@ -7392,6 +7411,8 @@ Console.WriteLine(""Hello, World!"");
     private async void FitToWindow_Click(object sender, RoutedEventArgs e)
     {
         if (!_webViewInitialized) return;
+        // Mark this document as using "fit to window" mode so it can be re-applied when switching tabs
+        if (_activeDocument != null) _activeDocument.PreviewFitToWindow = true;
         await PreviewWebView.CoreWebView2.ExecuteScriptAsync("window.fitToWindow()");
     }
     
@@ -7403,6 +7424,7 @@ Console.WriteLine(""Hello, World!"");
         if (_activeDocument != null)
         {
             _activeDocument.PreviewZoom = _currentZoom;
+            _activeDocument.PreviewFitToWindow = false; // Manual zoom clears fit-to-window
         }
         await PreviewWebView.CoreWebView2.ExecuteScriptAsync($"window.setZoom({_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)})");
         ZoomLevelText.Text = $"{e.NewValue:F0}%";
@@ -7414,6 +7436,7 @@ Console.WriteLine(""Hello, World!"");
         if (_activeDocument != null)
         {
             _activeDocument.PreviewZoom = _currentZoom;
+            _activeDocument.PreviewFitToWindow = false; // Manual zoom clears fit-to-window
         }
         await PreviewWebView.CoreWebView2.ExecuteScriptAsync($"window.setZoom({_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)})");
         UpdateZoomUI();
@@ -10045,6 +10068,7 @@ Console.WriteLine(""Hello, World!"");
                     PreviewScrollTop = doc.PreviewScrollTop,
                     PreviewPanX = doc.PreviewPanX,
                     PreviewPanY = doc.PreviewPanY,
+                    PreviewFitToWindow = doc.PreviewFitToWindow,
                     VisualEditorMode = doc.SavedVisualEditorMode.ToString()
                 }).ToList()
             };
@@ -10145,6 +10169,7 @@ Console.WriteLine(""Hello, World!"");
                     doc.PreviewScrollTop = docState.PreviewScrollTop;
                     doc.PreviewPanX = docState.PreviewPanX;
                     doc.PreviewPanY = docState.PreviewPanY;
+                    doc.PreviewFitToWindow = docState.PreviewFitToWindow;
                     
                     // Restore visual editor mode
                     if (Enum.TryParse<VisualEditorMode>(docState.VisualEditorMode, out var veMode))
@@ -10344,6 +10369,7 @@ public class DocumentModel : System.ComponentModel.INotifyPropertyChanged
     
     // Preview state
     public double PreviewZoom { get; set; } = 1.0;
+    public bool PreviewFitToWindow { get; set; }
     
     // Visual editor mode (Text/Visual/Split) - persisted per document
     public VisualEditorMode SavedVisualEditorMode { get; set; } = VisualEditorMode.Text;
@@ -10555,5 +10581,6 @@ public class SessionDocumentState
     public double PreviewScrollTop { get; set; }
     public double PreviewPanX { get; set; }
     public double PreviewPanY { get; set; }
+    public bool PreviewFitToWindow { get; set; }
     public string VisualEditorMode { get; set; } = "Text";
 }
