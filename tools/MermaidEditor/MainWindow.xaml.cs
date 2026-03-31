@@ -1538,8 +1538,19 @@ Console.WriteLine(""Hello, World!"");
                 const zenuml = await import('https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.0/dist/mermaid-zenuml.esm.min.mjs');
                 await mermaid.registerExternalDiagrams([zenuml.default]);
             }} catch(e) {{ /* ZenUML plugin not available, continue without it */ }}
+            
+            // Set minWidth on diagram div BEFORE mermaid.run() so wide diagrams
+            // (Gantt, etc.) have enough space to render correctly.
+            // Skip for architecture-beta diagrams which use container width for layout.
+            var diagram = document.getElementById('diagram');
+            var codeText = document.querySelector('#diagram pre.mermaid');
+            var isArchitecture = codeText && /^\s*architecture/m.test(codeText.textContent);
+            if (!isArchitecture) {{
+                diagram.style.minWidth = '2000px';
+            }}
+            
             mermaid.initialize({{ 
-                startOnLoad: true,
+                startOnLoad: false,
                 securityLevel: 'loose'
             }});
             await mermaid.run();
@@ -1550,35 +1561,13 @@ Console.WriteLine(""Hello, World!"");
             const diagram = document.getElementById('diagram');
             const svg = document.querySelector('#diagram svg');
             
-            // Auto-size the container to fit the actual SVG content
+            // Size the SVG using getBBox (same approach as updateDiagram fast path)
             if (svg) {{
                 try {{
-                    // Actually remove Mermaid's inline width/min-width styles using removeProperty
-                    // Setting to '' doesn't work - must use removeProperty to truly remove inline styles
-                    svg.style.removeProperty('width');
-                    svg.style.removeProperty('min-width');
-                    svg.style.removeProperty('max-width');
-                    svg.style.removeProperty('height');
-                    svg.style.removeProperty('min-height');
-                    
-                    // Get dimensions from viewBox if available (more reliable for gantt charts)
-                    const viewBox = svg.getAttribute('viewBox');
-                    if (viewBox) {{
-                        const parts = viewBox.split(' ').map(Number);
-                        if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) {{
-                            const padding = 20;
-                            svg.setAttribute('width', parts[2] + padding);
-                            svg.setAttribute('height', parts[3] + padding);
-                        }}
-                    }} else {{
-                        // Fall back to getBBox for diagrams without viewBox
-                        const bbox = svg.getBBox();
-                        if (bbox && bbox.width > 0 && bbox.height > 0) {{
-                            const padding = 20;
-                            svg.setAttribute('width', bbox.width + padding);
-                            svg.setAttribute('height', bbox.height + padding);
-                            svg.setAttribute('viewBox', `${{bbox.x - padding/2}} ${{bbox.y - padding/2}} ${{bbox.width + padding}} ${{bbox.height + padding}}`);
-                        }}
+                    const bbox = svg.getBBox();
+                    if (bbox && bbox.width > 0 && bbox.height > 0) {{
+                        svg.style.width = (bbox.width + 40) + 'px';
+                        svg.style.height = (bbox.height + 40) + 'px';
                     }}
                 }} catch (e) {{
                     // getBBox may fail in some cases, just continue
@@ -1872,7 +1861,10 @@ Console.WriteLine(""Hello, World!"");
             // Clear existing content and add new mermaid code
             diagram.innerHTML = '<pre class=""mermaid"">' + newCode.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>';
             diagram.classList.remove('has-error');
-            diagram.style.minWidth = '2000px';
+            // Set minWidth for wide diagrams, but skip for architecture diagrams
+            // which use container width for layout and get distorted by forced width
+            var isArch = /^\s*architecture/m.test(newCode);
+            diagram.style.minWidth = isArch ? '' : '2000px';
             diagram.style.width = '';
             
             // Reset any transform on diagram before re-rendering
