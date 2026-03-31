@@ -1374,21 +1374,43 @@ Console.WriteLine(""Hello, World!"");
 
         var escapedCode = System.Text.Json.JsonSerializer.Serialize(mermaidCode);
         
-        // If page is already loaded, just update the diagram via JavaScript (preserves pan/zoom position)
-        // When switching documents, always use full page reload to ensure correct layout
-        // (the updateDiagram fast path uses minWidth:2000px which distorts architecture diagrams)
-        if (_mermaidPageLoaded && !_hasNavigatedAway && !_isSwitchingDocuments)
+        // If page is already loaded, just update the diagram via JavaScript.
+        // This works for both normal edits (preserves current pan/zoom) and document switching
+        // (passes saved target pan/zoom/scroll values). Using the fast path for document switching
+        // avoids a full page reload which would destroy and recreate the panzoom instance,
+        // making zoom/pan restoration more reliable.
+        if (_mermaidPageLoaded && !_hasNavigatedAway)
         {
             try
             {
-                // Update diagram without reloading the page - pan/zoom position is preserved
-                await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
-                    (function() {{
-                        if (typeof updateDiagram === 'function') {{
-                            updateDiagram({escapedCode});
-                        }}
-                    }})();
-                ");
+                if (_isSwitchingDocuments && _activeDocument != null)
+                {
+                    // Switching documents: pass saved zoom/pan/scroll values for restoration
+                    var tZoom = _activeDocument.PreviewZoom.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var tScrollLeft = _activeDocument.PreviewScrollLeft.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var tScrollTop = _activeDocument.PreviewScrollTop.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var tPanX = _activeDocument.PreviewPanX.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    var tPanY = _activeDocument.PreviewPanY.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                    
+                    await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
+                        (function() {{
+                            if (typeof updateDiagram === 'function') {{
+                                updateDiagram({escapedCode}, {tZoom}, {tScrollLeft}, {tScrollTop}, {tPanX}, {tPanY});
+                            }}
+                        }})();
+                    ");
+                }
+                else
+                {
+                    // Normal edit: no target positions needed (preserves current zoom/pan)
+                    await PreviewWebView.CoreWebView2.ExecuteScriptAsync($@"
+                        (function() {{
+                            if (typeof updateDiagram === 'function') {{
+                                updateDiagram({escapedCode});
+                            }}
+                        }})();
+                    ");
+                }
                 StatusText.Text = "Mermaid rendered";
                 UpdateZoomUI();
                 return;
