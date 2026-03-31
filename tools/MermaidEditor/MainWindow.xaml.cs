@@ -1523,6 +1523,8 @@ Console.WriteLine(""Hello, World!"");
         // Use window-level variables so they can be accessed from C# via ExecuteScriptAsync
         window.panzoomInstance = null;
         window.currentZoom = {_currentZoom.ToString(System.Globalization.CultureInfo.InvariantCulture)};
+        // Render generation counter to prevent stale callbacks from previous renders
+        window._renderGen = 0;
         
         // Target positions for restoration when switching documents
         var targetScrollLeft = {targetScrollLeft};
@@ -1533,66 +1535,32 @@ Console.WriteLine(""Hello, World!"");
         
         // Don't set theme here - let frontmatter config take precedence
         // Mermaid will parse ---config:--- frontmatter automatically
-        async function initAndRun() {{
+        // Register ZenUML plugin first, then use updateDiagram for actual rendering.
+        // This ensures we use the exact same rendering path as the fast-update path,
+        // which correctly handles all diagram types including architecture and ZenUML.
+        async function initPlugins() {{
             try {{
                 const zenuml = await import('https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.0/dist/mermaid-zenuml.esm.min.mjs');
                 await mermaid.registerExternalDiagrams([zenuml.default]);
             }} catch(e) {{ /* ZenUML plugin not available, continue without it */ }}
-            
-            // Set minWidth on diagram div BEFORE mermaid.run() so wide diagrams
-            // (Gantt, etc.) have enough space to render correctly.
-            // Architecture diagrams use container width for layout, so use viewport width
-            // instead of 2000px (which would distort them).
-            var diagram = document.getElementById('diagram');
-            var container = document.getElementById('container');
-            var codeText = document.querySelector('#diagram pre.mermaid');
-            var isArchitecture = codeText && /^\s*architecture/m.test(codeText.textContent);
-            if (isArchitecture) {{
-                // Use window.innerWidth for architecture since container may not be laid out yet
-                diagram.style.minWidth = (window.innerWidth - 60) + 'px';
-            }} else {{
-                diagram.style.minWidth = '2000px';
-            }}
-            
             mermaid.initialize({{ 
                 startOnLoad: false,
                 securityLevel: 'loose'
             }});
-            await mermaid.run();
-            return true;
         }}
-        initAndRun().then(() => {{
-            const container = document.getElementById('container');
+        initPlugins().then(() => {{
             const diagram = document.getElementById('diagram');
-            const svg = document.querySelector('#diagram svg');
-            
-            // Size the SVG and shrink #diagram back to fit content
-            // (same approach as updateDiagram fast path: getBBox → set SVG size → set diagram to auto)
-            if (svg) {{
-                try {{
-                    const bbox = svg.getBBox();
-                    if (bbox && bbox.width > 0 && bbox.height > 0) {{
-                        const svgWidth = bbox.width + 40;
-                        const svgHeight = bbox.height + 40;
-                        svg.style.width = svgWidth + 'px';
-                        svg.style.height = svgHeight + 'px';
-                        svg.style.minWidth = svgWidth + 'px';
-                        svg.style.minHeight = svgHeight + 'px';
-                        svg.removeAttribute('max-width');
-                        // Shrink #diagram back from 2000px to fit actual content
-                        diagram.style.minWidth = 'auto';
-                        diagram.style.width = 'auto';
-                    }}
-                }} catch (e) {{
-                    // getBBox may fail in some cases, just continue
-                }}
-            }} else {{
-                // No SVG found (e.g. ZenUML renders to DOM elements, not SVG)
-                // Still shrink #diagram back from 2000px to fit actual rendered content
-                diagram.style.minWidth = 'auto';
-                diagram.style.width = 'auto';
-            }}
-            
+            // Get the mermaid code from the pre element, then use updateDiagram
+            // which handles all diagram types correctly (architecture, ZenUML, Gantt, etc.)
+            var codeEl = document.querySelector('#diagram pre.mermaid');
+            var code = codeEl ? codeEl.textContent : '';
+            // Clear the pre element (updateDiagram will recreate it)
+            diagram.innerHTML = '';
+            // Use updateDiagram with the target restore positions
+            window.updateDiagram(code, targetZoom, targetScrollLeft, targetScrollTop, targetPanX, targetPanY);
+        }}).catch(() => {{
+            // Fallback: just initialize panzoom on whatever is rendered
+            const diagram = document.getElementById('diagram');
             window.panzoomInstance = panzoom(diagram, {{
                 maxZoom: 10,
                 minZoom: 0.1,
@@ -1858,6 +1826,9 @@ Console.WriteLine(""Hello, World!"");
         // Optional targetScrollLeft/targetScrollTop parameters allow overriding scroll position (used when switching documents)
         // Optional targetPanX/targetPanY parameters allow overriding pan position (used when switching documents)
         window.updateDiagram = function(newCode, targetZoom, targetScrollLeft, targetScrollTop, targetPanX, targetPanY) {{
+            // Increment render generation to invalidate any pending callbacks from previous renders
+            var thisGen = ++window._renderGen;
+            
             // Save current panzoom transform (only zoom level, not position - position causes issues when diagram size changes)
             // If targetZoom is provided, use that instead of the current zoom (for document switching)
             let savedZoom = (typeof targetZoom === 'number') ? targetZoom : window.currentZoom;
@@ -1897,14 +1868,18 @@ Console.WriteLine(""Hello, World!"");
             
             // Re-render mermaid
             mermaid.run().then(() => {{
+                // Check if this render is still current (prevents stale callbacks when switching tabs quickly)
+                if (thisGen !== window._renderGen) return;
                 // Use requestAnimationFrame to ensure SVG is fully rendered
                 requestAnimationFrame(() => {{
+                    if (thisGen !== window._renderGen) return;
                     const svg = document.querySelector('#diagram svg');
                     
                     // Fix SVG and container dimensions after render
                     if (svg) {{
                         // Wait another frame to ensure text is fully rendered
                         requestAnimationFrame(() => {{
+                            if (thisGen !== window._renderGen) return;
                             let svgWidth = 0;
                             let svgHeight = 0;
                             
@@ -1955,6 +1930,7 @@ Console.WriteLine(""Hello, World!"");
                             // Restore pan position (the drag/translate position)
                             // Use setTimeout to ensure panzoom is fully initialized
                             setTimeout(function() {{
+                                if (thisGen !== window._renderGen) return;
                                 window.panzoomInstance.moveTo(savedPanX, savedPanY);
                                 
                                 // Notify C# that diagram is ready, passing the target scroll and pan positions
@@ -1972,6 +1948,37 @@ Console.WriteLine(""Hello, World!"");
                                 window.currentZoom = e.getTransform().scale;
                                 window.chrome.webview.postMessage({{ type: 'zoom', level: window.currentZoom }});
                             }});
+                        }});
+                    }} else {{
+                        // No SVG found (e.g. ZenUML renders to DOM elements, not SVG)
+                        // Still shrink #diagram back from 2000px to fit actual rendered content
+                        diagram.style.minWidth = 'auto';
+                        diagram.style.width = 'auto';
+                        
+                        // Set up panzoom for non-SVG content too
+                        window.panzoomInstance = panzoom(diagram, {{
+                            maxZoom: 10,
+                            minZoom: 0.1,
+                            initialZoom: 1,
+                            bounds: false,
+                            boundsPadding: 0.1
+                        }});
+                        window.panzoomInstance.zoomAbs(0, 0, savedZoom);
+                        window.currentZoom = savedZoom;
+                        setTimeout(function() {{
+                            if (thisGen !== window._renderGen) return;
+                            window.panzoomInstance.moveTo(savedPanX, savedPanY);
+                            window.chrome.webview.postMessage({{ 
+                                type: 'diagramReady', 
+                                targetScrollLeft: savedScrollLeft, 
+                                targetScrollTop: savedScrollTop,
+                                targetPanX: savedPanX,
+                                targetPanY: savedPanY
+                            }});
+                        }}, 50);
+                        window.panzoomInstance.on('zoom', function(e) {{
+                            window.currentZoom = e.getTransform().scale;
+                            window.chrome.webview.postMessage({{ type: 'zoom', level: window.currentZoom }});
                         }});
                     }}
                 }});
