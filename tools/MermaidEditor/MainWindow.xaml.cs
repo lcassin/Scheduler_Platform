@@ -1541,11 +1541,15 @@ Console.WriteLine(""Hello, World!"");
             
             // Set minWidth on diagram div BEFORE mermaid.run() so wide diagrams
             // (Gantt, etc.) have enough space to render correctly.
-            // Skip for architecture-beta diagrams which use container width for layout.
+            // Architecture diagrams use container width for layout, so use viewport width
+            // instead of 2000px (which would distort them).
             var diagram = document.getElementById('diagram');
+            var container = document.getElementById('container');
             var codeText = document.querySelector('#diagram pre.mermaid');
             var isArchitecture = codeText && /^\s*architecture/m.test(codeText.textContent);
-            if (!isArchitecture) {{
+            if (isArchitecture) {{
+                diagram.style.minWidth = container.clientWidth + 'px';
+            }} else {{
                 diagram.style.minWidth = '2000px';
             }}
             
@@ -1875,10 +1879,10 @@ Console.WriteLine(""Hello, World!"");
             // Clear existing content and add new mermaid code
             diagram.innerHTML = '<pre class=""mermaid"">' + newCode.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>';
             diagram.classList.remove('has-error');
-            // Set minWidth for wide diagrams, but skip for architecture diagrams
-            // which use container width for layout and get distorted by forced width
+            // Set minWidth for wide diagrams. Architecture diagrams use container
+            // width for layout, so use container width instead of 2000px.
             var isArch = /^\s*architecture/m.test(newCode);
-            diagram.style.minWidth = isArch ? '' : '2000px';
+            diagram.style.minWidth = isArch ? (container.clientWidth + 'px') : '2000px';
             diagram.style.width = '';
             
             // Reset any transform on diagram before re-rendering
