@@ -562,6 +562,52 @@ Console.WriteLine(""Hello, World!"");
             ("treemap-beta", "Treemap diagram (beta)"),
             ("venn-beta", "Venn diagram (beta)"),
             
+            // Sankey keywords
+            ("source", "Sankey source node"),
+            ("target", "Sankey target node"),
+            
+            // XY Chart keywords
+            ("x-axis", "Define x-axis labels or range"),
+            ("y-axis", "Define y-axis labels or range"),
+            ("line", "Line data series"),
+            ("bar", "Bar data series"),
+            
+            // Block diagram keywords
+            ("columns", "Set number of columns in block layout"),
+            ("block", "Define a block element"),
+            ("space", "Empty space placeholder in block layout"),
+            
+            // Packet diagram keywords
+            ("0-15", "Packet bit range (example)"),
+            ("0-31", "Packet bit range (example)"),
+            
+            // Kanban keywords
+            ("column", "Define a Kanban column"),
+            ("task", "Define a task within a Kanban column"),
+            
+            // Architecture keywords
+            ("service", "Define a service node"),
+            ("group", "Group services together"),
+            ("junction", "Define a junction point"),
+            
+            // ZenUML keywords
+            ("@Actor", "Define an actor (ZenUML)"),
+            ("@Starter", "Define a starter participant (ZenUML)"),
+            ("@return", "Return message (ZenUML)"),
+            ("new", "Create new participant (ZenUML)"),
+            
+            // Radar chart keywords
+            ("axis", "Define radar axis"),
+            ("curve", "Define a data curve on radar"),
+            ("max", "Set maximum axis value"),
+            
+            // Treemap keywords
+            ("treemap-beta", "Treemap diagram (beta)"),
+            
+            // Venn keywords
+            ("set", "Define a set in Venn diagram"),
+            ("intersection", "Define intersection label"),
+            
             ("subgraph", "Define a subgraph"),
             ("end", "End subgraph/block"),
             ("direction", "Set direction (TB, TD, BT, RL, LR)"),
@@ -1395,6 +1441,7 @@ Console.WriteLine(""Hello, World!"");
 <head>
     <meta charset=""UTF-8"">
     <script src=""https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js""></script>
+    <script src=""https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.0/dist/mermaid-zenuml.esm.min.mjs"" type=""module""></script>
     <script src=""https://cdn.jsdelivr.net/npm/panzoom@9.4.3/dist/panzoom.min.js""></script>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
@@ -1478,12 +1525,19 @@ Console.WriteLine(""Hello, World!"");
         
         // Don't set theme here - let frontmatter config take precedence
         // Mermaid will parse ---config:--- frontmatter automatically
-        mermaid.initialize({{ 
-            startOnLoad: true,
-            securityLevel: 'loose'
-        }});
-        
-        mermaid.run().then(() => {{
+        async function initAndRun() {{
+            try {{
+                const zenuml = await import('https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.0/dist/mermaid-zenuml.esm.min.mjs');
+                await mermaid.registerExternalDiagrams([zenuml.default]);
+            }} catch(e) {{ /* ZenUML plugin not available, continue without it */ }}
+            mermaid.initialize({{ 
+                startOnLoad: true,
+                securityLevel: 'loose'
+            }});
+            await mermaid.run();
+            return true;
+        }}
+        initAndRun().then(() => {{
             const container = document.getElementById('container');
             const diagram = document.getElementById('diagram');
             const svg = document.querySelector('#diagram svg');
@@ -2054,6 +2108,7 @@ Console.WriteLine(""Hello, World!"");
     <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/json.min.js""></script>
     <script src=""https://cdn.jsdelivr.net/npm/highlight.js@11/lib/languages/sql.min.js""></script>
     <script src=""https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js""></script>
+    <script src=""https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.0/dist/mermaid-zenuml.esm.min.mjs"" type=""module""></script>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         html, body {{ 
@@ -2138,18 +2193,25 @@ Console.WriteLine(""Hello, World!"");
     <article class=""markdown-body"" id=""content""></article>
     <script>
         // Initialize mermaid for rendering embedded diagrams in markdown
-        mermaid.initialize({{ 
-            startOnLoad: false,
-            theme: 'default',
-            securityLevel: 'loose',
-            fontFamily: 'Segoe UI, Helvetica, Arial, sans-serif'
-        }});
+        async function initMermaid() {{
+            try {{
+                const zenuml = await import('https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.0/dist/mermaid-zenuml.esm.min.mjs');
+                await mermaid.registerExternalDiagrams([zenuml.default]);
+            }} catch(e) {{ /* ZenUML plugin not available, continue without it */ }}
+            mermaid.initialize({{ 
+                startOnLoad: false,
+                theme: 'default',
+                securityLevel: 'loose',
+                fontFamily: 'Segoe UI, Helvetica, Arial, sans-serif'
+            }});
+        }}
         
         // Counter for unique mermaid diagram IDs
         var mermaidCounter = 0;
         
         // Find all mermaid code blocks and render them as diagrams
         async function renderMermaidBlocks() {{
+            await initMermaid();
             const content = document.getElementById('content');
             const codeBlocks = content.querySelectorAll('pre code.language-mermaid');
             
@@ -7910,6 +7972,7 @@ Console.WriteLine(""Hello, World!"");
 <html>
 <head>
     <script src=""https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js""></script>
+    <script src=""https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.0/dist/mermaid-zenuml.esm.min.mjs"" type=""module""></script>
     <script src=""https://cdn.jsdelivr.net/npm/panzoom@9.4.3/dist/panzoom.min.js""></script>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
@@ -7956,12 +8019,20 @@ Console.WriteLine(""Hello, World!"");
         </div>
     </div>
     <script>
-        mermaid.initialize({{ 
-            startOnLoad: true, 
-            theme: '{pvMermaidTheme}', 
-            securityLevel: 'loose'
-        }});
-        mermaid.run().then(() => {{
+        async function initAndRunPreview() {{
+            try {{
+                const zenuml = await import('https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.0/dist/mermaid-zenuml.esm.min.mjs');
+                await mermaid.registerExternalDiagrams([zenuml.default]);
+            }} catch(e) {{ /* ZenUML plugin not available, continue without it */ }}
+            mermaid.initialize({{ 
+                startOnLoad: true, 
+                theme: '{pvMermaidTheme}', 
+                securityLevel: 'loose'
+            }});
+            await mermaid.run();
+            return true;
+        }}
+        initAndRunPreview().then(() => {{
             const diagram = document.getElementById('diagram');
             const svg = document.querySelector('#diagram svg');
             

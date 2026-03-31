@@ -407,26 +407,25 @@ Bio-conversion,Gas,81.144",
     }",
             "Radar" => @"radar-beta
     title Skills Assessment
-    axis1[""JavaScript""]
-    axis2[""CSS""]
-    axis3[""HTML""]
-    axis4[""React""]
-    axis5[""Node.js""]
-    curve1[""Current""] { 80, 60, 90, 70, 50 }
-    curve2[""Target""] { 90, 80, 95, 85, 75 }",
+    axis js[""JavaScript""], css[""CSS""], html[""HTML""], react[""React""], node[""Node.js""]
+    curve a[""Current""]{80, 60, 90, 70, 50}
+    curve b[""Target""]{90, 80, 95, 85, 75}
+    max 100",
             "Treemap" => @"treemap-beta
-    root[""Project""]
-        [""Frontend""]
-            [""React""]
-            [""CSS""]
-        [""Backend""]
-            [""API""]
-            [""Database""]",
+    ""Project""
+        ""Frontend""
+            ""React"": 30
+            ""CSS"": 20
+        ""Backend""
+            ""API"": 25
+            ""Database"": 25",
             "Venn" => @"venn-beta
-    title Team Skills
-    set1[""Frontend""] { A, B, C }
-    set2[""Backend""] { C, D, E }
-    set3[""DevOps""] { E, F, G }",
+    title ""Team Skills""
+    set Frontend
+    set Backend
+    set DevOps
+    union Frontend,Backend[""Full-Stack""]
+    union Backend,DevOps[""SRE""]",
             _ => @"flowchart TD
     A[Start] --> B[End]"
         };
@@ -1451,65 +1450,74 @@ Thermal generation,District heating,46.184
     {
         SetTemplateAndClose(@"radar-beta
     title Technology Assessment
-    axis1[""Performance""]
-    axis2[""Scalability""]
-    axis3[""Security""]
-    axis4[""Usability""]
-    axis5[""Cost""]
-    axis6[""Maintainability""]
-    curve1[""Solution A""] { 80, 90, 70, 85, 60, 75 }
-    curve2[""Solution B""] { 65, 75, 90, 70, 80, 85 }
-    curve3[""Solution C""] { 90, 60, 80, 65, 70, 80 }
+    axis perf[""Performance""], scale[""Scalability""], sec[""Security""]
+    axis usab[""Usability""], cost[""Cost""], maint[""Maintainability""]
+    curve a[""Solution A""]{80, 90, 70, 85, 60, 75}
+    curve b[""Solution B""]{65, 75, 90, 70, 80, 85}
+    curve c[""Solution C""]{90, 60, 80, 65, 70, 80}
+    max 100
 
     %% Radar Chart Elements:
     %% title - Chart title
-    %% axis[""Label""] - Define an axis (min 3)
-    %% curve[""Name""] { val1, val2, ... } - Data series (0-100)
-    %% Values correspond to axes in order");
+    %% axis id[""Label""], id2[""Label""] - Define axes (min 3)
+    %% curve id[""Name""]{val1, val2, ...} - Data series
+    %% max N - Set maximum axis value
+    %% graticule polygon|circle - Grid shape");
     }
 
     private void Treemap_Click(object sender, RoutedEventArgs e)
     {
         SetTemplateAndClose(@"treemap-beta
-    root[""Company Budget""]
-        [""Engineering""]
-            [""Frontend Team""]
-            [""Backend Team""]
-            [""DevOps""]
-            [""QA""]
-        [""Marketing""]
-            [""Digital""]
-            [""Content""]
-            [""Events""]
-        [""Sales""]
-            [""Enterprise""]
-            [""SMB""]
-        [""Operations""]
-            [""HR""]
-            [""Finance""]
-            [""Legal""]
+    ""Company Budget""
+        ""Engineering""
+            ""Frontend Team"": 40
+            ""Backend Team"": 35
+            ""DevOps"": 15
+            ""QA"": 10
+        ""Marketing""
+            ""Digital"": 25
+            ""Content"": 15
+            ""Events"": 10
+        ""Sales""
+            ""Enterprise"": 30
+            ""SMB"": 20
+        ""Operations""
+            ""HR"": 15
+            ""Finance"": 20
+            ""Legal"": 10
 
     %% Treemap Elements:
-    %% root[""Label""] - Root node (required)
-    %%     [""Label""] - Child node (indent for nesting)
-    %% Nesting depth determines hierarchy
+    %% ""Section"" - Parent/section node
+    %%     ""Leaf"": value - Leaf node with size value
+    %% Hierarchy created by indentation
     %% Leaf sizes are proportional within their parent");
     }
 
     private void Venn_Click(object sender, RoutedEventArgs e)
     {
         SetTemplateAndClose(@"venn-beta
-    title Development Team Skills
+    title ""Development Team Skills""
 
-    set1[""Frontend""] { HTML, CSS, JavaScript, React, Vue }
-    set2[""Backend""] { JavaScript, Python, Java, SQL, REST }
-    set3[""DevOps""] { Docker, K8s, CI_CD, AWS, Python }
+    set Frontend[""Frontend""]
+        text f1[""React""]
+        text f2[""CSS""]
+    set Backend[""Backend""]
+        text b1[""API""]
+        text b2[""SQL""]
+    set DevOps[""DevOps""]
+        text d1[""Docker""]
+        text d2[""AWS""]
+    union Frontend,Backend[""Full-Stack""]
+        text fb1[""Node.js""]
+    union Backend,DevOps[""SRE""]
+        text bd1[""Monitoring""]
 
     %% Venn Diagram Elements:
-    %% title - Diagram title
-    %% set[""Label""] { item1, item2, ... } - Define a set
-    %% Shared items between sets create overlapping regions
-    %% Supports 2-3 sets with automatic overlap calculation");
+    %% title ""Title"" - Diagram title
+    %% set Name[""Label""] - Define a set
+    %%     text id[""Label""] - Text inside set
+    %% union A,B[""Label""] - Overlap of two sets
+    %% style Name fill:#color - Custom styling");
     }
 
     private void OpenExistingFile_Click(object sender, RoutedEventArgs e)
