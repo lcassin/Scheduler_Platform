@@ -640,7 +640,7 @@ function deleteQuadrantPoint(index) {
     body.innerHTML = `
         <div class="property-row">
             <div class="property-label">Delete point "${(point.label || '').replace(/</g, '&lt;')}"?</div>
-            <div style="opacity:0.6;font-size:12px">Position: [${point.x.toFixed(2)}, ${point.y.toFixed(2)}]</div>
+            <div style="opacity:0.6;font-size:12px;color:var(--node-text)">Position: [${point.x.toFixed(2)}, ${point.y.toFixed(2)}]</div>
         </div>
         <div class="property-row" style="margin-top:8px">
             <button id="qc-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:#d9534f;color:#fff;border:none;border-radius:4px">Delete</button>
@@ -668,10 +668,12 @@ function editQuadrantSettings() {
     const body = document.querySelector('.property-panel-body');
 
     body.innerHTML = `
+        <div style="font-weight:bold;font-size:12px;color:var(--node-text);margin-bottom:4px;padding-bottom:4px;border-bottom:1px solid var(--toolbar-border)">General</div>
         <div class="property-row">
             <div class="property-label">Title</div>
             <input class="property-input" id="qcTitle" value="${(quadrantModel.title || '').replace(/"/g, '&quot;')}" />
         </div>
+        <div style="font-weight:bold;font-size:12px;color:var(--node-text);margin-top:12px;margin-bottom:4px;padding-bottom:4px;border-bottom:1px solid var(--toolbar-border)">Axis Labels</div>
         <div class="property-row">
             <div class="property-label">X-Axis Left</div>
             <input class="property-input" id="qcXAxisLeft" value="${(quadrantModel.xAxisLeft || '').replace(/"/g, '&quot;')}" />
@@ -688,23 +690,24 @@ function editQuadrantSettings() {
             <div class="property-label">Y-Axis Top</div>
             <input class="property-input" id="qcYAxisTop" value="${(quadrantModel.yAxisTop || '').replace(/"/g, '&quot;')}" />
         </div>
+        <div style="font-weight:bold;font-size:12px;color:var(--node-text);margin-top:12px;margin-bottom:4px;padding-bottom:4px;border-bottom:1px solid var(--toolbar-border)">Quadrant Labels</div>
         <div class="property-row">
-            <div class="property-label">Quadrant 1 (top-right)</div>
+            <div class="property-label">Q1 (top-right)</div>
             <input class="property-input" id="qcQ1" value="${(quadrantModel.quadrant1 || '').replace(/"/g, '&quot;')}" />
         </div>
         <div class="property-row">
-            <div class="property-label">Quadrant 2 (top-left)</div>
+            <div class="property-label">Q2 (top-left)</div>
             <input class="property-input" id="qcQ2" value="${(quadrantModel.quadrant2 || '').replace(/"/g, '&quot;')}" />
         </div>
         <div class="property-row">
-            <div class="property-label">Quadrant 3 (bottom-left)</div>
+            <div class="property-label">Q3 (bottom-left)</div>
             <input class="property-input" id="qcQ3" value="${(quadrantModel.quadrant3 || '').replace(/"/g, '&quot;')}" />
         </div>
         <div class="property-row">
-            <div class="property-label">Quadrant 4 (bottom-right)</div>
+            <div class="property-label">Q4 (bottom-right)</div>
             <input class="property-input" id="qcQ4" value="${(quadrantModel.quadrant4 || '').replace(/"/g, '&quot;')}" />
         </div>
-        <div class="property-row" style="margin-top:8px">
+        <div class="property-row" style="margin-top:12px">
             <button id="qc-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Save Settings</button>
         </div>
     `;

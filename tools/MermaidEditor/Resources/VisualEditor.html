@@ -4740,8 +4740,13 @@
         }
 
         // ========== Minimap Click-to-Navigate ==========
+        // Prevent minimap clicks from bubbling to editorCanvas drag-to-pan
+        document.getElementById('minimap').addEventListener('mousedown', function(e) {
+            e.stopPropagation();
+        });
         // Click on minimap to pan the main view to that location
         document.getElementById('minimap').addEventListener('click', function(e) {
+            e.stopPropagation();
             if (!minimapCanvas._diagramBBox) return;
             const rect = minimapCanvas.getBoundingClientRect();
             const clickX = e.clientX - rect.left;
