@@ -756,7 +756,7 @@ function _qcCopyPoint(index) {
     const pt = quadrantModel.points[index];
     quadrantClipboard = {
         type: 'point',
-        data: { label: pt.label + ' (copy)', x: pt.x, y: pt.y }
+        data: { label: pt.label + ' - copy', x: pt.x, y: pt.y }
     };
 }
 
