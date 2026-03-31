@@ -1951,35 +1951,60 @@ Console.WriteLine(""Hello, World!"");
                         }});
                     }} else {{
                         // No SVG found (e.g. ZenUML renders to DOM elements, not SVG)
-                        // Still shrink #diagram back from 2000px to fit actual rendered content
-                        diagram.style.minWidth = 'auto';
-                        diagram.style.width = 'auto';
-                        
-                        // Set up panzoom for non-SVG content too
-                        window.panzoomInstance = panzoom(diagram, {{
-                            maxZoom: 10,
-                            minZoom: 0.1,
-                            initialZoom: 1,
-                            bounds: false,
-                            boundsPadding: 0.1
-                        }});
-                        window.panzoomInstance.zoomAbs(0, 0, savedZoom);
-                        window.currentZoom = savedZoom;
-                        setTimeout(function() {{
+                        // ZenUML renders asynchronously - wait for content to be fully laid out
+                        // before measuring and shrinking the container.
+                        var setupNonSvg = function() {{
                             if (thisGen !== window._renderGen) return;
-                            window.panzoomInstance.moveTo(savedPanX, savedPanY);
-                            window.chrome.webview.postMessage({{ 
-                                type: 'diagramReady', 
-                                targetScrollLeft: savedScrollLeft, 
-                                targetScrollTop: savedScrollTop,
-                                targetPanX: savedPanX,
-                                targetPanY: savedPanY
+                            
+                            // Find the rendered content element (ZenUML creates child divs)
+                            var contentEl = diagram.firstElementChild;
+                            if (!contentEl || contentEl.classList.contains('mermaid')) {{
+                                // Content not rendered yet (still the pre.mermaid element) - retry
+                                setTimeout(setupNonSvg, 100);
+                                return;
+                            }}
+                            
+                            // Measure actual content dimensions while container is still wide (2000px)
+                            var contentWidth = contentEl.scrollWidth || contentEl.offsetWidth;
+                            var contentHeight = contentEl.scrollHeight || contentEl.offsetHeight;
+                            
+                            // Shrink diagram to fit content (add padding for breathing room)
+                            if (contentWidth > 0) {{
+                                diagram.style.minWidth = (contentWidth + 20) + 'px';
+                                diagram.style.width = (contentWidth + 20) + 'px';
+                            }} else {{
+                                diagram.style.minWidth = 'auto';
+                                diagram.style.width = 'auto';
+                            }}
+                            
+                            // Set up panzoom for non-SVG content
+                            window.panzoomInstance = panzoom(diagram, {{
+                                maxZoom: 10,
+                                minZoom: 0.1,
+                                initialZoom: 1,
+                                bounds: false,
+                                boundsPadding: 0.1
                             }});
-                        }}, 50);
-                        window.panzoomInstance.on('zoom', function(e) {{
-                            window.currentZoom = e.getTransform().scale;
-                            window.chrome.webview.postMessage({{ type: 'zoom', level: window.currentZoom }});
-                        }});
+                            window.panzoomInstance.zoomAbs(0, 0, savedZoom);
+                            window.currentZoom = savedZoom;
+                            setTimeout(function() {{
+                                if (thisGen !== window._renderGen) return;
+                                window.panzoomInstance.moveTo(savedPanX, savedPanY);
+                                window.chrome.webview.postMessage({{ 
+                                    type: 'diagramReady', 
+                                    targetScrollLeft: savedScrollLeft, 
+                                    targetScrollTop: savedScrollTop,
+                                    targetPanX: savedPanX,
+                                    targetPanY: savedPanY
+                                }});
+                            }}, 50);
+                            window.panzoomInstance.on('zoom', function(e) {{
+                                window.currentZoom = e.getTransform().scale;
+                                window.chrome.webview.postMessage({{ type: 'zoom', level: window.currentZoom }});
+                            }});
+                        }};
+                        // Give ZenUML time to render its DOM content
+                        setTimeout(setupNonSvg, 300);
                     }}
                 }});
             }}).catch(err => {{
