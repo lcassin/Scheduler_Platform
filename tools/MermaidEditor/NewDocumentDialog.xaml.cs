@@ -27,6 +27,7 @@ public partial class NewDocumentDialog : Window
         SourceInitialized += NewDocumentDialog_SourceInitialized;
         LoadRecentFiles();
         PopulateRecentFilesList();
+        PopulateTemplates();
     }
 
     private void NewDocumentDialog_SourceInitialized(object? sender, EventArgs e)
@@ -1516,6 +1517,164 @@ Thermal generation,District heating,46.184
     %%     text id[""Label""] - Text inside set
     %% union A,B[""Label""] - Overlap of two sets
     %% style Name fill:#color - Custom styling");
+    }
+
+    private void PopulateTemplates()
+    {
+        var categories = new (string Category, (string Name, string Description, string Icon, RoutedEventHandler Click)[] Templates)[]
+        {
+            ("Markdown", new[]
+            {
+                ("Markdown Cheat Sheet", "All markdown syntax with live preview examples", "markdown.png", (RoutedEventHandler)MarkdownCheatSheet_Click),
+            }),
+            ("Flowcharts & Process", new[]
+            {
+                ("Flowchart", "Basic flowchart with nodes and connections", "flowchart.png", (RoutedEventHandler)Flowchart_Click),
+                ("Flowchart (Advanced)", "Flowchart with subgraphs and styling", "flowchart.png", (RoutedEventHandler)FlowchartAdvanced_Click),
+                ("State Diagram", "State machine with transitions", "state.png", (RoutedEventHandler)StateDiagram_Click),
+                ("Block Diagram", "Block-based system layout", "block.png", (RoutedEventHandler)BlockDiagram_Click),
+            }),
+            ("Sequence & Interaction", new[]
+            {
+                ("Sequence Diagram", "Interactions between participants", "sequence.png", (RoutedEventHandler)Sequence_Click),
+                ("ZenUML Sequence Diagram", "Code-like sequence diagram syntax", "zenuml.png", (RoutedEventHandler)ZenUML_Click),
+                ("User Journey", "User experience journey map", "journey.png", (RoutedEventHandler)Journey_Click),
+                ("Git Graph", "Git branch and commit visualization", "gitgraph.png", (RoutedEventHandler)GitGraph_Click),
+            }),
+            ("Charts & Data", new[]
+            {
+                ("Pie Chart", "Simple pie chart with percentages", "pie.png", (RoutedEventHandler)Pie_Click),
+                ("XY Chart", "Bar and line charts with axes", "xychart.png", (RoutedEventHandler)XYChart_Click),
+                ("Quadrant Chart", "Four-quadrant analysis chart", "quadrant.png", (RoutedEventHandler)Quadrant_Click),
+                ("Radar Chart", "Multi-axis spider/radar comparison chart", "radar.png", (RoutedEventHandler)Radar_Click),
+                ("Sankey Diagram", "Flow and energy distribution visualization", "sankey.png", (RoutedEventHandler)Sankey_Click),
+                ("Venn Diagram", "Overlapping set relationships", "venn.png", (RoutedEventHandler)Venn_Click),
+                ("Treemap", "Hierarchical data as nested rectangles", "treemap.png", (RoutedEventHandler)Treemap_Click),
+            }),
+            ("Project & Timeline", new[]
+            {
+                ("Gantt Chart", "Project timeline with tasks", "gantt.png", (RoutedEventHandler)Gantt_Click),
+                ("Timeline", "Chronological timeline of events", "timeline.png", (RoutedEventHandler)Timeline_Click),
+                ("Kanban Board", "Task board with columns and cards", "kanban.png", (RoutedEventHandler)Kanban_Click),
+            }),
+            ("Structure & Architecture", new[]
+            {
+                ("Class Diagram", "UML class diagram with relationships", "class.png", (RoutedEventHandler)ClassDiagram_Click),
+                ("ER Diagram", "Database entity relationship diagram", "erdiagram.png", (RoutedEventHandler)ERDiagram_Click),
+                ("Mind Map", "Hierarchical mind map", "mindmap.png", (RoutedEventHandler)Mindmap_Click),
+                ("C4 Context Diagram", "System context with people and systems", "c4.png", (RoutedEventHandler)C4_Click),
+                ("Architecture Diagram", "System architecture with services and connections", "architecture.png", (RoutedEventHandler)Architecture_Click),
+                ("Requirement Diagram", "Requirements traceability", "requirement.png", (RoutedEventHandler)Requirement_Click),
+                ("Packet Diagram", "Network packet structure visualization", "packet.png", (RoutedEventHandler)Packet_Click),
+            }),
+        };
+
+        foreach (var (category, templates) in categories)
+        {
+            var categoryPanel = new StackPanel();
+
+            var header = new TextBlock
+            {
+                Text = category,
+                Foreground = (System.Windows.Media.Brush)FindResource("ThemeDisabledForegroundBrush"),
+                FontSize = 12,
+                Margin = new Thickness(4, 12, 0, 4)
+            };
+            categoryPanel.Children.Add(header);
+
+            foreach (var (name, description, icon, click) in templates)
+            {
+                var btn = new System.Windows.Controls.Button
+                {
+                    Style = (Style)FindResource("TemplateButtonStyle"),
+                    Tag = $"{name}|{description}|{category}".ToLowerInvariant()
+                };
+
+                var outerStack = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+
+                var img = new System.Windows.Controls.Image
+                {
+                    Width = 36,
+                    Height = 36,
+                    Margin = new Thickness(0, 0, 10, 0)
+                };
+                try
+                {
+                    img.Source = new System.Windows.Media.Imaging.BitmapImage(
+                        new Uri($"Resources/TemplateThumbnails/{icon}", UriKind.Relative));
+                }
+                catch { /* Ignore if icon not found */ }
+                outerStack.Children.Add(img);
+
+                var textStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+                textStack.Children.Add(new TextBlock { Text = name, FontWeight = FontWeights.SemiBold });
+                textStack.Children.Add(new TextBlock
+                {
+                    Text = description,
+                    Foreground = (System.Windows.Media.Brush)FindResource("ThemeDisabledForegroundBrush"),
+                    FontSize = 11
+                });
+                outerStack.Children.Add(textStack);
+
+                btn.Content = outerStack;
+                btn.Click += click;
+                categoryPanel.Children.Add(btn);
+            }
+
+            DynamicTemplatesPanel.Children.Add(categoryPanel);
+        }
+    }
+
+    private void TemplateSearch_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        var searchText = TemplateSearchBox?.Text?.Trim().ToLowerInvariant() ?? "";
+
+        // Show/hide search placeholder
+        if (SearchPlaceholder != null)
+            SearchPlaceholder.Visibility = string.IsNullOrEmpty(searchText) ? Visibility.Visible : Visibility.Collapsed;
+
+        // Filter blank section items
+        if (BlankSectionHeader != null)
+        {
+            bool blankMermaidMatch = string.IsNullOrEmpty(searchText)
+                || "blank mermaid diagram flowchart".Contains(searchText, StringComparison.OrdinalIgnoreCase);
+            bool blankMarkdownMatch = string.IsNullOrEmpty(searchText)
+                || "blank markdown document".Contains(searchText, StringComparison.OrdinalIgnoreCase);
+
+            BlankSectionHeader.Visibility = (blankMermaidMatch || blankMarkdownMatch) ? Visibility.Visible : Visibility.Collapsed;
+            BlankMermaidGrid.Visibility = blankMermaidMatch ? Visibility.Visible : Visibility.Collapsed;
+            BlankMarkdownButton.Visibility = blankMarkdownMatch ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        // Filter dynamic templates
+        if (DynamicTemplatesPanel == null) return;
+
+        foreach (var child in DynamicTemplatesPanel.Children)
+        {
+            if (child is StackPanel categoryPanel)
+            {
+                bool anyVisible = false;
+
+                foreach (var item in categoryPanel.Children)
+                {
+                    if (item is System.Windows.Controls.Button btn)
+                    {
+                        bool matches = string.IsNullOrEmpty(searchText)
+                            || (btn.Tag is string tag && tag.Contains(searchText));
+                        btn.Visibility = matches ? Visibility.Visible : Visibility.Collapsed;
+                        if (matches) anyVisible = true;
+                    }
+                }
+
+                // Show/hide category header
+                if (categoryPanel.Children.Count > 0 && categoryPanel.Children[0] is TextBlock catHeader)
+                {
+                    catHeader.Visibility = anyVisible ? Visibility.Visible : Visibility.Collapsed;
+                }
+
+                categoryPanel.Visibility = anyVisible ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
     }
 
     private void OpenExistingFile_Click(object sender, RoutedEventArgs e)
