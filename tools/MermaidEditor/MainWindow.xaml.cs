@@ -1891,7 +1891,9 @@ Console.WriteLine(""Hello, World!"");
             // Clear existing content and add new mermaid code
             diagram.innerHTML = '<pre class=""mermaid"">' + newCode.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</pre>';
             diagram.classList.remove('has-error');
-            diagram.style.minWidth = '';
+            // Use the container's actual width as minWidth so Gantt/wide diagrams render
+            // at full width, but architecture diagrams don't get forced to an arbitrary 2000px
+            diagram.style.minWidth = container.clientWidth + 'px';
             diagram.style.width = '';
             
             // Reset any transform on diagram before re-rendering
