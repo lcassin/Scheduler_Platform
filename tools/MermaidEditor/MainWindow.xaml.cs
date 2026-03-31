@@ -442,8 +442,6 @@ Console.WriteLine(""Hello, World!"");
             "<Word>interfaceRequirement</Word><Word>physicalRequirement</Word><Word>designConstraint</Word>" +
             "<Word>element</Word><Word>satisfies</Word><Word>traces</Word><Word>contains</Word>" +
             "<Word>derives</Word><Word>refines</Word><Word>verifies</Word><Word>copies</Word>" +
-            // Kanban keywords
-            "<Word>column</Word><Word>task</Word>" +
             // Block diagram keywords
             "<Word>columns</Word><Word>space</Word>" +
             // Architecture keywords
@@ -455,6 +453,9 @@ Console.WriteLine(""Hello, World!"");
             // XY Chart keywords
             "<Word>x-axis</Word><Word>y-axis</Word>" +
             "</Keywords>" +
+            // Kanban column/task with optional numeric suffix (column1, task2, etc.)
+            "<Rule color=\"Keyword\">\\bcolumn\\d*\\b</Rule>" +
+            "<Rule color=\"Keyword\">\\btask\\d*\\b</Rule>" +
             "</RuleSet>" +
             "</SyntaxDefinition>";
 
@@ -7886,8 +7887,6 @@ Console.WriteLine(""Hello, World!"");
             "<Word>interfaceRequirement</Word><Word>physicalRequirement</Word><Word>designConstraint</Word>" +
             "<Word>element</Word><Word>satisfies</Word><Word>traces</Word><Word>contains</Word>" +
             "<Word>derives</Word><Word>refines</Word><Word>verifies</Word><Word>copies</Word>" +
-            // Kanban keywords
-            "<Word>column</Word><Word>task</Word>" +
             // Block diagram keywords
             "<Word>columns</Word><Word>space</Word>" +
             // Architecture keywords
@@ -7899,6 +7898,9 @@ Console.WriteLine(""Hello, World!"");
             // XY Chart keywords
             "<Word>x-axis</Word><Word>y-axis</Word>" +
             "</Keywords>" +
+            // Kanban column/task with optional numeric suffix (column1, task2, etc.)
+            "<Rule color=\"Keyword\">\\bcolumn\\d*\\b</Rule>" +
+            "<Rule color=\"Keyword\">\\btask\\d*\\b</Rule>" +
             "</RuleSet>" +
             "</SyntaxDefinition>";
 
