@@ -427,6 +427,9 @@ Console.WriteLine(""Hello, World!"");
             "<Word>journey</Word><Word>gantt</Word><Word>pie</Word><Word>mindmap</Word>" +
             "<Word>timeline</Word><Word>gitGraph</Word><Word>quadrantChart</Word>" +
             "<Word>requirementDiagram</Word><Word>C4Context</Word><Word>C4Container</Word><Word>C4Component</Word><Word>C4Dynamic</Word><Word>C4Deployment</Word>" +
+            "<Word>sankey-beta</Word><Word>xychart-beta</Word><Word>block-beta</Word><Word>packet-beta</Word>" +
+            "<Word>kanban</Word><Word>architecture-beta</Word><Word>zenuml</Word>" +
+            "<Word>radar-beta</Word><Word>treemap-beta</Word><Word>venn-beta</Word>" +
             "</Keywords>" +
             "<Keywords color=\"Keyword\">" +
             "<Word>subgraph</Word><Word>end</Word><Word>direction</Word>" +
@@ -552,6 +555,12 @@ Console.WriteLine(""Hello, World!"");
             ("sankey-beta", "Sankey diagram (beta)"),
             ("xychart-beta", "XY chart (beta)"),
             ("block-beta", "Block diagram (beta)"),
+            ("packet-beta", "Packet diagram (beta)"),
+            ("kanban", "Kanban board"),
+            ("architecture-beta", "Architecture diagram (beta)"),
+            ("radar-beta", "Radar/spider chart (beta)"),
+            ("treemap-beta", "Treemap diagram (beta)"),
+            ("venn-beta", "Venn diagram (beta)"),
             
             ("subgraph", "Define a subgraph"),
             ("end", "End subgraph/block"),
@@ -936,7 +945,12 @@ Console.WriteLine(""Hello, World!"");
             // Check if this is an anchor link (hash-only navigation)
             // WebView2 turns "#anchor" into "https://localfiles.mermaideditor/#anchor"
             var hashIndex = uri.IndexOf('#');
-            if (hashIndex >= 0 && !_isRenderingContent)
+            var baseUrl = hashIndex >= 0 ? uri.Substring(0, hashIndex) : uri;
+            var isLocalAnchor = string.IsNullOrEmpty(baseUrl) 
+                || baseUrl.Equals($"https://{VirtualHostName}/", StringComparison.OrdinalIgnoreCase)
+                || baseUrl.Equals($"https://{VirtualHostName}", StringComparison.OrdinalIgnoreCase)
+                || baseUrl.Equals("about:blank", StringComparison.OrdinalIgnoreCase);
+            if (hashIndex >= 0 && isLocalAnchor && !_isRenderingContent)
             {
                 var anchor = uri.Substring(hashIndex + 1);
                 if (!string.IsNullOrEmpty(anchor))
@@ -7748,6 +7762,9 @@ Console.WriteLine(""Hello, World!"");
             "<Word>journey</Word><Word>gantt</Word><Word>pie</Word><Word>mindmap</Word>" +
             "<Word>timeline</Word><Word>gitGraph</Word><Word>quadrantChart</Word>" +
             "<Word>requirementDiagram</Word><Word>C4Context</Word><Word>C4Container</Word><Word>C4Component</Word><Word>C4Dynamic</Word><Word>C4Deployment</Word>" +
+            "<Word>sankey-beta</Word><Word>xychart-beta</Word><Word>block-beta</Word><Word>packet-beta</Word>" +
+            "<Word>kanban</Word><Word>architecture-beta</Word><Word>zenuml</Word>" +
+            "<Word>radar-beta</Word><Word>treemap-beta</Word><Word>venn-beta</Word>" +
             "</Keywords>" +
             "<Keywords color=\"Keyword\">" +
             "<Word>subgraph</Word><Word>end</Word><Word>direction</Word>" +
