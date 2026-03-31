@@ -475,12 +475,7 @@ function renderQuadrantDiagram() {
             const pt = quadrantModel.points[ds.index];
             if (Math.abs(pt.x - ds.origX) > 0.005 || Math.abs(pt.y - ds.origY) > 0.005) {
                 // Send move message to C#
-                window.chrome.webview.postMessage(JSON.stringify({
-                    type: 'qc_pointMoved',
-                    index: ds.index,
-                    x: pt.x,
-                    y: pt.y
-                }));
+                postMessage({ type: 'qc_pointMoved', index: ds.index, x: pt.x, y: pt.y });
             }
         }
     });
@@ -492,12 +487,7 @@ function renderQuadrantDiagram() {
             if (quadrantModel.points && ds.index < quadrantModel.points.length) {
                 const pt = quadrantModel.points[ds.index];
                 if (Math.abs(pt.x - ds.origX) > 0.005 || Math.abs(pt.y - ds.origY) > 0.005) {
-                    window.chrome.webview.postMessage(JSON.stringify({
-                        type: 'qc_pointMoved',
-                        index: ds.index,
-                        x: pt.x,
-                        y: pt.y
-                    }));
+                    postMessage({ type: 'qc_pointMoved', index: ds.index, x: pt.x, y: pt.y });
                 }
             }
         }
@@ -551,32 +541,40 @@ function createQuadrantPoint(defaultX, defaultY) {
     const x = typeof defaultX === 'number' ? defaultX : 0.5;
     const y = typeof defaultY === 'number' ? defaultY : 0.5;
 
-    showPropertyPanel('Add Point', (body, onDone) => {
-        body.innerHTML = `
-            <div class="property-panel-body">
-                <label>Label:</label>
-                <input type="text" id="qcPointLabel" value="New Point" style="width:100%"/>
-                <label>X (0-1):</label>
-                <input type="number" id="qcPointX" value="${x.toFixed(2)}" min="0" max="1" step="0.01" style="width:100%"/>
-                <label>Y (0-1):</label>
-                <input type="number" id="qcPointY" value="${y.toFixed(2)}" min="0" max="1" step="0.01" style="width:100%"/>
-                ${_qcBuildPointPositionHtml()}
-            </div>`;
-        onDone(() => {
-            const label = document.getElementById('qcPointLabel').value.trim() || 'New Point';
-            const px = Math.max(0, Math.min(1, parseFloat(document.getElementById('qcPointX').value) || 0.5));
-            const py = Math.max(0, Math.min(1, parseFloat(document.getElementById('qcPointY').value) || 0.5));
-            const insertIdx = _qcReadPointInsertIndex();
+    const propertyPanel = document.getElementById('property-panel');
+    const propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = 'Add Point';
+    const body = document.querySelector('.property-panel-body');
 
-            window.chrome.webview.postMessage(JSON.stringify({
-                type: 'qc_pointCreated',
-                label: label,
-                x: px,
-                y: py,
-                insertAtIndex: insertIdx
-            }));
-        });
+    body.innerHTML = `
+        <div class="property-row">
+            <div class="property-label">Label</div>
+            <input class="property-input" id="qcPointLabel" value="New Point" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">X (0–1)</div>
+            <input class="property-input" type="number" id="qcPointX" value="${x.toFixed(2)}" min="0" max="1" step="0.01" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">Y (0–1)</div>
+            <input class="property-input" type="number" id="qcPointY" value="${y.toFixed(2)}" min="0" max="1" step="0.01" />
+        </div>
+        <div id="qc-dlg-position-container">${_qcBuildPointPositionHtml()}</div>
+        <div class="property-row" style="margin-top:8px">
+            <button id="qc-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Add Point</button>
+        </div>
+    `;
+
+    document.getElementById('qc-dlg-ok').addEventListener('click', function() {
+        const label = document.getElementById('qcPointLabel').value.trim() || 'New Point';
+        const px = Math.max(0, Math.min(1, parseFloat(document.getElementById('qcPointX').value) || 0.5));
+        const py = Math.max(0, Math.min(1, parseFloat(document.getElementById('qcPointY').value) || 0.5));
+        const insertIdx = _qcReadPointInsertIndex();
+        postMessage({ type: 'qc_pointCreated', label: label, x: px, y: py, insertAtIndex: insertIdx });
+        propertyPanel.classList.remove('visible');
     });
+    propertyPanel.classList.add('visible');
+    setTimeout(() => document.getElementById('qcPointLabel').select(), 50);
 }
 
 function editQuadrantPoint(index) {
@@ -585,31 +583,39 @@ function editQuadrantPoint(index) {
 
     const point = quadrantModel.points[index];
 
-    showPropertyPanel('Edit Point', (body, onDone) => {
-        body.innerHTML = `
-            <div class="property-panel-body">
-                <label>Label:</label>
-                <input type="text" id="qcPointLabel" value="${(point.label || '').replace(/"/g, '&quot;')}" style="width:100%"/>
-                <label>X (0-1):</label>
-                <input type="number" id="qcPointX" value="${point.x.toFixed(2)}" min="0" max="1" step="0.01" style="width:100%"/>
-                <label>Y (0-1):</label>
-                <input type="number" id="qcPointY" value="${point.y.toFixed(2)}" min="0" max="1" step="0.01" style="width:100%"/>
-            </div>`;
-        onDone(() => {
-            if (!quadrantModel || !quadrantModel.points || index >= quadrantModel.points.length) return;
-            const label = document.getElementById('qcPointLabel').value.trim() || point.label;
-            const px = Math.max(0, Math.min(1, parseFloat(document.getElementById('qcPointX').value) || point.x));
-            const py = Math.max(0, Math.min(1, parseFloat(document.getElementById('qcPointY').value) || point.y));
+    const propertyPanel = document.getElementById('property-panel');
+    const propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = 'Edit Point';
+    const body = document.querySelector('.property-panel-body');
 
-            window.chrome.webview.postMessage(JSON.stringify({
-                type: 'qc_pointEdited',
-                index: index,
-                label: label,
-                x: px,
-                y: py
-            }));
-        });
+    body.innerHTML = `
+        <div class="property-row">
+            <div class="property-label">Label</div>
+            <input class="property-input" id="qcPointLabel" value="${(point.label || '').replace(/"/g, '&quot;')}" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">X (0–1)</div>
+            <input class="property-input" type="number" id="qcPointX" value="${point.x.toFixed(2)}" min="0" max="1" step="0.01" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">Y (0–1)</div>
+            <input class="property-input" type="number" id="qcPointY" value="${point.y.toFixed(2)}" min="0" max="1" step="0.01" />
+        </div>
+        <div class="property-row" style="margin-top:8px">
+            <button id="qc-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Save</button>
+        </div>
+    `;
+
+    document.getElementById('qc-dlg-ok').addEventListener('click', function() {
+        if (!quadrantModel || !quadrantModel.points || index >= quadrantModel.points.length) return;
+        const label = document.getElementById('qcPointLabel').value.trim() || point.label;
+        const px = Math.max(0, Math.min(1, parseFloat(document.getElementById('qcPointX').value) || point.x));
+        const py = Math.max(0, Math.min(1, parseFloat(document.getElementById('qcPointY').value) || point.y));
+        postMessage({ type: 'qc_pointEdited', index: index, label: label, x: px, y: py });
+        propertyPanel.classList.remove('visible');
     });
+    propertyPanel.classList.add('visible');
+    setTimeout(() => document.getElementById('qcPointLabel').select(), 50);
 }
 
 function deleteQuadrantPoint(index) {
@@ -620,21 +626,28 @@ function deleteQuadrantPoint(index) {
 
     const point = quadrantModel.points[index];
 
-    showPropertyPanel('Delete Point', (body, onDone) => {
-        body.innerHTML = `
-            <div class="property-panel-body">
-                <p>Delete point "<strong>${(point.label || '').replace(/</g, '&lt;')}</strong>"?</p>
-                <p style="opacity:0.6;font-size:12px">Position: [${point.x.toFixed(2)}, ${point.y.toFixed(2)}]</p>
-            </div>`;
-        onDone(() => {
-            if (!quadrantModel || !quadrantModel.points || index >= quadrantModel.points.length) return;
-            window.chrome.webview.postMessage(JSON.stringify({
-                type: 'qc_pointDeleted',
-                index: index
-            }));
-            quadrantSelectedPoint = null;
-        });
+    const propertyPanel = document.getElementById('property-panel');
+    const propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = 'Delete Point';
+    const body = document.querySelector('.property-panel-body');
+
+    body.innerHTML = `
+        <div class="property-row">
+            <div class="property-label">Delete point "${(point.label || '').replace(/</g, '&lt;')}"?</div>
+            <div style="opacity:0.6;font-size:12px">Position: [${point.x.toFixed(2)}, ${point.y.toFixed(2)}]</div>
+        </div>
+        <div class="property-row" style="margin-top:8px">
+            <button id="qc-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:#d9534f;color:#fff;border:none;border-radius:4px">Delete</button>
+        </div>
+    `;
+
+    document.getElementById('qc-dlg-ok').addEventListener('click', function() {
+        if (!quadrantModel || !quadrantModel.points || index >= quadrantModel.points.length) return;
+        postMessage({ type: 'qc_pointDeleted', index: index });
+        quadrantSelectedPoint = null;
+        propertyPanel.classList.remove('visible');
     });
+    propertyPanel.classList.add('visible');
 }
 
 // ========== Quadrant Settings ==========
@@ -643,43 +656,70 @@ function editQuadrantSettings() {
     if (currentDiagramType !== 'quadrant') return;
     if (!quadrantModel) return;
 
-    showPropertyPanel('Quadrant Chart Settings', (body, onDone) => {
-        body.innerHTML = `
-            <div class="property-panel-body">
-                <label>Title:</label>
-                <input type="text" id="qcTitle" value="${(quadrantModel.title || '').replace(/"/g, '&quot;')}" style="width:100%"/>
-                <label>X-Axis Left:</label>
-                <input type="text" id="qcXAxisLeft" value="${(quadrantModel.xAxisLeft || '').replace(/"/g, '&quot;')}" style="width:100%"/>
-                <label>X-Axis Right:</label>
-                <input type="text" id="qcXAxisRight" value="${(quadrantModel.xAxisRight || '').replace(/"/g, '&quot;')}" style="width:100%"/>
-                <label>Y-Axis Bottom:</label>
-                <input type="text" id="qcYAxisBottom" value="${(quadrantModel.yAxisBottom || '').replace(/"/g, '&quot;')}" style="width:100%"/>
-                <label>Y-Axis Top:</label>
-                <input type="text" id="qcYAxisTop" value="${(quadrantModel.yAxisTop || '').replace(/"/g, '&quot;')}" style="width:100%"/>
-                <label>Quadrant 1 (top-right):</label>
-                <input type="text" id="qcQ1" value="${(quadrantModel.quadrant1 || '').replace(/"/g, '&quot;')}" style="width:100%"/>
-                <label>Quadrant 2 (top-left):</label>
-                <input type="text" id="qcQ2" value="${(quadrantModel.quadrant2 || '').replace(/"/g, '&quot;')}" style="width:100%"/>
-                <label>Quadrant 3 (bottom-left):</label>
-                <input type="text" id="qcQ3" value="${(quadrantModel.quadrant3 || '').replace(/"/g, '&quot;')}" style="width:100%"/>
-                <label>Quadrant 4 (bottom-right):</label>
-                <input type="text" id="qcQ4" value="${(quadrantModel.quadrant4 || '').replace(/"/g, '&quot;')}" style="width:100%"/>
-            </div>`;
-        onDone(() => {
-            window.chrome.webview.postMessage(JSON.stringify({
-                type: 'qc_settingsChanged',
-                title: document.getElementById('qcTitle').value.trim() || null,
-                xAxisLeft: document.getElementById('qcXAxisLeft').value.trim() || null,
-                xAxisRight: document.getElementById('qcXAxisRight').value.trim() || null,
-                yAxisBottom: document.getElementById('qcYAxisBottom').value.trim() || null,
-                yAxisTop: document.getElementById('qcYAxisTop').value.trim() || null,
-                quadrant1: document.getElementById('qcQ1').value.trim() || null,
-                quadrant2: document.getElementById('qcQ2').value.trim() || null,
-                quadrant3: document.getElementById('qcQ3').value.trim() || null,
-                quadrant4: document.getElementById('qcQ4').value.trim() || null
-            }));
+    const propertyPanel = document.getElementById('property-panel');
+    const propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = 'Quadrant Chart Settings';
+    const body = document.querySelector('.property-panel-body');
+
+    body.innerHTML = `
+        <div class="property-row">
+            <div class="property-label">Title</div>
+            <input class="property-input" id="qcTitle" value="${(quadrantModel.title || '').replace(/"/g, '&quot;')}" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">X-Axis Left</div>
+            <input class="property-input" id="qcXAxisLeft" value="${(quadrantModel.xAxisLeft || '').replace(/"/g, '&quot;')}" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">X-Axis Right</div>
+            <input class="property-input" id="qcXAxisRight" value="${(quadrantModel.xAxisRight || '').replace(/"/g, '&quot;')}" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">Y-Axis Bottom</div>
+            <input class="property-input" id="qcYAxisBottom" value="${(quadrantModel.yAxisBottom || '').replace(/"/g, '&quot;')}" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">Y-Axis Top</div>
+            <input class="property-input" id="qcYAxisTop" value="${(quadrantModel.yAxisTop || '').replace(/"/g, '&quot;')}" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">Quadrant 1 (top-right)</div>
+            <input class="property-input" id="qcQ1" value="${(quadrantModel.quadrant1 || '').replace(/"/g, '&quot;')}" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">Quadrant 2 (top-left)</div>
+            <input class="property-input" id="qcQ2" value="${(quadrantModel.quadrant2 || '').replace(/"/g, '&quot;')}" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">Quadrant 3 (bottom-left)</div>
+            <input class="property-input" id="qcQ3" value="${(quadrantModel.quadrant3 || '').replace(/"/g, '&quot;')}" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">Quadrant 4 (bottom-right)</div>
+            <input class="property-input" id="qcQ4" value="${(quadrantModel.quadrant4 || '').replace(/"/g, '&quot;')}" />
+        </div>
+        <div class="property-row" style="margin-top:8px">
+            <button id="qc-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Save Settings</button>
+        </div>
+    `;
+
+    document.getElementById('qc-dlg-ok').addEventListener('click', function() {
+        postMessage({
+            type: 'qc_settingsChanged',
+            title: document.getElementById('qcTitle').value.trim() || null,
+            xAxisLeft: document.getElementById('qcXAxisLeft').value.trim() || null,
+            xAxisRight: document.getElementById('qcXAxisRight').value.trim() || null,
+            yAxisBottom: document.getElementById('qcYAxisBottom').value.trim() || null,
+            yAxisTop: document.getElementById('qcYAxisTop').value.trim() || null,
+            quadrant1: document.getElementById('qcQ1').value.trim() || null,
+            quadrant2: document.getElementById('qcQ2').value.trim() || null,
+            quadrant3: document.getElementById('qcQ3').value.trim() || null,
+            quadrant4: document.getElementById('qcQ4').value.trim() || null
         });
+        propertyPanel.classList.remove('visible');
     });
+    propertyPanel.classList.add('visible');
+    setTimeout(() => document.getElementById('qcTitle').select(), 50);
 }
 
 // ========== Quadrant Position Helpers ==========
@@ -717,13 +757,13 @@ function _qcCopyPoint(index) {
 function _qcPastePoint(insertAtIndex) {
     if (!quadrantClipboard || quadrantClipboard.type !== 'point') return;
     const data = quadrantClipboard.data;
-    window.chrome.webview.postMessage(JSON.stringify({
+    postMessage({
         type: 'qc_pointCreated',
         label: data.label,
         x: Math.max(0, Math.min(1, data.x + 0.05)),
         y: Math.max(0, Math.min(1, data.y - 0.05)),
         insertAtIndex: insertAtIndex !== undefined ? insertAtIndex : -1
-    }));
+    });
 }
 
 // ========== Quadrant Context Menu Helpers ==========
@@ -811,30 +851,38 @@ function showQuadrantContextMenu(e) {
 function createQuadrantPointAtIndex(insertIdx) {
     if (currentDiagramType !== 'quadrant') return;
 
-    showPropertyPanel('Add Point', (body, onDone) => {
-        body.innerHTML = `
-            <div class="property-panel-body">
-                <label>Label:</label>
-                <input type="text" id="qcPointLabel" value="New Point" style="width:100%"/>
-                <label>X (0-1):</label>
-                <input type="number" id="qcPointX" value="0.50" min="0" max="1" step="0.01" style="width:100%"/>
-                <label>Y (0-1):</label>
-                <input type="number" id="qcPointY" value="0.50" min="0" max="1" step="0.01" style="width:100%"/>
-            </div>`;
-        onDone(() => {
-            const label = document.getElementById('qcPointLabel').value.trim() || 'New Point';
-            const px = Math.max(0, Math.min(1, parseFloat(document.getElementById('qcPointX').value) || 0.5));
-            const py = Math.max(0, Math.min(1, parseFloat(document.getElementById('qcPointY').value) || 0.5));
+    const propertyPanel = document.getElementById('property-panel');
+    const propPanelTitle = document.getElementById('property-panel-title');
+    propPanelTitle.textContent = 'Add Point';
+    const body = document.querySelector('.property-panel-body');
 
-            window.chrome.webview.postMessage(JSON.stringify({
-                type: 'qc_pointCreated',
-                label: label,
-                x: px,
-                y: py,
-                insertAtIndex: insertIdx
-            }));
-        });
+    body.innerHTML = `
+        <div class="property-row">
+            <div class="property-label">Label</div>
+            <input class="property-input" id="qcPointLabel" value="New Point" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">X (0–1)</div>
+            <input class="property-input" type="number" id="qcPointX" value="0.50" min="0" max="1" step="0.01" />
+        </div>
+        <div class="property-row">
+            <div class="property-label">Y (0–1)</div>
+            <input class="property-input" type="number" id="qcPointY" value="0.50" min="0" max="1" step="0.01" />
+        </div>
+        <div class="property-row" style="margin-top:8px">
+            <button id="qc-dlg-ok" style="width:100%;padding:6px;cursor:pointer;background:var(--node-selected-stroke);color:#fff;border:none;border-radius:4px">Add Point</button>
+        </div>
+    `;
+
+    document.getElementById('qc-dlg-ok').addEventListener('click', function() {
+        const label = document.getElementById('qcPointLabel').value.trim() || 'New Point';
+        const px = Math.max(0, Math.min(1, parseFloat(document.getElementById('qcPointX').value) || 0.5));
+        const py = Math.max(0, Math.min(1, parseFloat(document.getElementById('qcPointY').value) || 0.5));
+        postMessage({ type: 'qc_pointCreated', label: label, x: px, y: py, insertAtIndex: insertIdx });
+        propertyPanel.classList.remove('visible');
     });
+    propertyPanel.classList.add('visible');
+    setTimeout(() => document.getElementById('qcPointLabel').select(), 50);
 }
 
 // ========== Quadrant Minimap Support ==========
