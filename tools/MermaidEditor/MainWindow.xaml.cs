@@ -1561,13 +1561,22 @@ Console.WriteLine(""Hello, World!"");
             const diagram = document.getElementById('diagram');
             const svg = document.querySelector('#diagram svg');
             
-            // Size the SVG using getBBox (same approach as updateDiagram fast path)
+            // Size the SVG and shrink #diagram back to fit content
+            // (same approach as updateDiagram fast path: getBBox → set SVG size → set diagram to auto)
             if (svg) {{
                 try {{
                     const bbox = svg.getBBox();
                     if (bbox && bbox.width > 0 && bbox.height > 0) {{
-                        svg.style.width = (bbox.width + 40) + 'px';
-                        svg.style.height = (bbox.height + 40) + 'px';
+                        const svgWidth = bbox.width + 40;
+                        const svgHeight = bbox.height + 40;
+                        svg.style.width = svgWidth + 'px';
+                        svg.style.height = svgHeight + 'px';
+                        svg.style.minWidth = svgWidth + 'px';
+                        svg.style.minHeight = svgHeight + 'px';
+                        svg.removeAttribute('max-width');
+                        // Shrink #diagram back from 2000px to fit actual content
+                        diagram.style.minWidth = 'auto';
+                        diagram.style.width = 'auto';
                     }}
                 }} catch (e) {{
                     // getBBox may fail in some cases, just continue
