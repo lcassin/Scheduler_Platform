@@ -962,10 +962,35 @@ Console.WriteLine(""Hello, World!"");
                         $"}})()");
                     
                     // Also scroll the code editor to the same heading
-                    // Decode the anchor back to heading text for matching
-                    var headingText = Uri.UnescapeDataString(anchor)
-                        .Replace("-", " ");
-                    FindAndHighlightInEditor(null, headingText);
+                    // Instead of lossy reverse-conversion, search heading lines in source
+                    // and generate anchors from them to compare with the clicked anchor
+                    var decodedAnchor = Uri.UnescapeDataString(anchor).ToLowerInvariant();
+                    var sourceText = CodeEditor.Text;
+                    var sourceLines = sourceText.Split('\n');
+                    string? matchedHeadingText = null;
+                    foreach (var srcLine in sourceLines)
+                    {
+                        var trimmed = srcLine.TrimStart();
+                        if (trimmed.StartsWith("#"))
+                        {
+                            // Extract heading text after # symbols
+                            var headingContent = trimmed.TrimStart('#').Trim();
+                            // Generate anchor using same algorithm as Markdown renderers:
+                            // lowercase, strip non-word chars except hyphens/spaces, replace spaces with hyphens
+                            var generatedAnchor = headingContent.ToLowerInvariant();
+                            generatedAnchor = System.Text.RegularExpressions.Regex.Replace(generatedAnchor, @"[^\w\s-]", "");
+                            generatedAnchor = System.Text.RegularExpressions.Regex.Replace(generatedAnchor, @"\s+", "-");
+                            if (generatedAnchor == decodedAnchor)
+                            {
+                                matchedHeadingText = headingContent;
+                                break;
+                            }
+                        }
+                    }
+                    if (matchedHeadingText != null)
+                    {
+                        FindAndHighlightInEditor(null, matchedHeadingText, "heading");
+                    }
                 }
             }
         }
